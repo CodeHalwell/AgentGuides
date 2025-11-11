@@ -1,10 +1,62 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Jekyll
+_site/
+.jekyll-cache/
+.jekyll-metadata
+Gemfile.lock
 
-# Virtual environments
+# Ruby
+*.gem
+.ruby-version
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.env
 .venv
+env/
+venv/
+ENV/
+
+# Node
+node_modules/
+npm-debug.log
+package-lock.json
+yarn.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+.tmp/
+*.log
+*.pid
+*.seed
+*.pid.lock

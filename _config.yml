@@ -1,0 +1,54 @@
+# Jekyll Configuration for GitHub Pages
+
+# Site settings
+title: Agent Guides
+description: Comprehensive AI Agent Framework Documentation
+url: "https://CodeHalwell.github.io/agentguides"
+baseurl: "/agentguides"
+
+# Build settings
+markdown: kramdown
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Exclude files from build
+exclude:
+  - .gitignore
+  - .git
+  - main.py
+  - pyproject.toml
+
+# Include directories
+include:
+  - _pages
+
+# Theme settings
+theme: jekyll-theme-minimal
+
+# Navigation
+nav_links:
+  - title: Home
+    url: /agentguides/
+  - title: All Guides
+    url: /agentguides/guides/
+  - title: Quick Start
+    url: /agentguides/quick-start/
+  - title: Framework Comparison
+    url: /agentguides/frameworks/
+
+# Collections
+collections:
+  guides:
+    output: true
+    permalink: /guide/:name/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "guides"
+    values:
+      layout: "guide"
+

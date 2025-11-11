@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if page.title %}{{ page.title }} | {% endif %}Agent Guides</title>
+    <meta name="description" content="{% if page.description %}{{ page.description }}{% else %}Comprehensive AI Agent Framework Documentation{% endif %}">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ site.baseurl }}/favicon.ico">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="{{ site.baseurl }}/assets/css/style.css">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="{% if page.title %}{{ page.title }}{% else %}Agent Guides{% endif %}">
+    <meta property="og:description" content="{% if page.description %}{{ page.description }}{% else %}Comprehensive AI Agent Framework Documentation{% endif %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ site.url }}{{ page.url }}">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% if page.title %}{{ page.title }}{% else %}Agent Guides{% endif %}">
+    <meta name="twitter:description" content="{% if page.description %}{{ page.description }}{% else %}Comprehensive AI Agent Framework Documentation{% endif %}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="{{ site.baseurl }}/" class="navbar-brand">
+                🤖 Agent Guides
+            </a>
+            <ul class="navbar-menu">
+                <li><a href="{{ site.baseurl }}/">Home</a></li>
+                <li><a href="{{ site.baseurl }}/guides">Guides</a></li>
+                <li><a href="{{ site.baseurl }}/frameworks">Compare</a></li>
+                <li><a href="{{ site.baseurl }}/quick-start">Quick Start</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        {{ content }}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2024 Agent Guides. Made with ❤️ for the AI agents community.</p>
+            <p><a href="https://github.com/">GitHub</a> | <a href="#">Contributing</a> | <a href="#">License</a></p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="{{ site.baseurl }}/assets/js/main.js"></script>
+</body>
+</html>
+
