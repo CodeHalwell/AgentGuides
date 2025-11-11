@@ -19,6 +19,20 @@ exclude:
   - .git
   - main.py
   - pyproject.toml
+  - vendor
+  - node_modules
+  - __pycache__
+  - .venv
+  - env
+  - venv
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - GITHUB_PAGES_SETUP.md
+  - RESTRUCTURING_SUMMARY.md
+  - QUICK_REFERENCE.md
+  - COMPLETION_REPORT.md
+  - WHAT_WAS_DONE.txt
 
 # Include directories
 include:
