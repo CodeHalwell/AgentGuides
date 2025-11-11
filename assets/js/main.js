@@ -46,32 +46,7 @@ function highlightCode() {
         
         // Set data-lang attribute for CSS badge
         pre.setAttribute('data-lang', language);
-        
-        // Add line numbers
-        addLineNumbers(code);
     });
-}
-
-// Add line numbers to code blocks
-function addLineNumbers(codeElement) {
-    if (!codeElement) return;
-    
-    const lines = codeElement.textContent.split('\n');
-    const lineNumbers = document.createElement('span');
-    lineNumbers.className = 'line-numbers';
-    
-    let html = '';
-    lines.forEach((line, index) => {
-        if (line.trim() !== '' || index !== lines.length - 1) {
-            html += `<span class="line-number">${index + 1}</span>`;
-        }
-    });
-    
-    lineNumbers.innerHTML = html;
-    
-    if (codeElement.parentElement.querySelector('.line-numbers')) {
-        codeElement.parentElement.querySelector('.line-numbers').remove();
-    }
 }
 
 // ===== SMOOTH SCROLLING FOR ANCHOR LINKS =====
@@ -93,50 +68,84 @@ function smoothScroll() {
 // ===== ENHANCED COPY BUTTON FUNCTIONALITY =====
 function setupCopyButtons() {
     document.querySelectorAll('pre').forEach(pre => {
+        // Skip if button already exists
+        if (pre.querySelector('.copy-button')) return;
+        
         // Create copy button
         const button = document.createElement('button');
         button.className = 'copy-button';
-        button.innerHTML = '📋 Copy';
+        button.innerHTML = 'Copy';
         button.setAttribute('aria-label', 'Copy code to clipboard');
+        button.setAttribute('type', 'button');
         
         // Add click handler
-        button.addEventListener('click', (e) => {
+        button.addEventListener('click', async (e) => {
             e.preventDefault();
+            e.stopPropagation();
+            
             const code = pre.querySelector('code');
-            const text = code.textContent;
+            if (!code) return;
+            
+            // Get the actual code content, removing any line number elements
+            let text = '';
+            
+            // If there are line number elements, extract only the code
+            const lineNumberElements = code.querySelectorAll('.line-number');
+            if (lineNumberElements.length > 0) {
+                // Clone the code element and remove line numbers
+                const codeClone = code.cloneNode(true);
+                codeClone.querySelectorAll('.line-number, .line-numbers').forEach(el => el.remove());
+                text = codeClone.textContent;
+            } else {
+                // Just get the text content
+                text = code.textContent;
+            }
+            
+            // Clean up the text: remove leading/trailing whitespace
+            text = text.trim();
             
             // Copy to clipboard
-            navigator.clipboard.writeText(text).then(() => {
+            try {
+                await navigator.clipboard.writeText(text);
+                
                 // Show success state
                 button.classList.add('copied');
-                button.innerHTML = '✅ Copied!';
+                button.innerHTML = 'Copied!';
                 
                 // Reset after 2 seconds
                 setTimeout(() => {
                     button.classList.remove('copied');
-                    button.innerHTML = '📋 Copy';
+                    button.innerHTML = 'Copy';
                 }, 2000);
-            }).catch(() => {
+            } catch (err) {
                 // Fallback for older browsers
                 const textarea = document.createElement('textarea');
                 textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
                 document.body.appendChild(textarea);
                 textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
                 
-                button.classList.add('copied');
-                button.innerHTML = '✅ Copied!';
-                setTimeout(() => {
-                    button.classList.remove('copied');
-                    button.innerHTML = '📋 Copy';
-                }, 2000);
-            });
+                try {
+                    document.execCommand('copy');
+                    button.classList.add('copied');
+                    button.innerHTML = 'Copied!';
+                    setTimeout(() => {
+                        button.classList.remove('copied');
+                        button.innerHTML = 'Copy';
+                    }, 2000);
+                } catch (e) {
+                    console.error('Copy failed:', e);
+                } finally {
+                    document.body.removeChild(textarea);
+                }
+            }
         });
         
         // Add keyboard accessibility
         button.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
                 button.click();
             }
         });

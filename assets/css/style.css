@@ -345,139 +345,94 @@ blockquote {
     color: var(--danger-color);
 }
 
-/* ===== ENHANCED CODE BLOCK STYLING ===== */
+/* ===== ENHANCED CODE BLOCK STYLING - DARK MODE ===== */
 
 /* Code Block Base Styling */
 pre, code.hljs {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+    font-family: 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
 }
 
 pre {
     position: relative;
     font-size: 0.95rem;
-    line-height: 1.6;
+    line-height: 1.7;
     letter-spacing: 0.3px;
     -webkit-font-smoothing: antialiased;
-    padding: 1.5rem;
+    padding: 1.75rem;
+    padding-top: 3rem;
     margin: 1.5rem 0;
-    background: linear-gradient(135deg, #f8f8f8 0%, #fafafa 100%);
+    background: #282c34;
+    border: 1px solid #3e4451;
     border-left: 4px solid var(--primary-color);
-    border-radius: 0 4px 4px 0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     overflow-x: auto;
 }
 
-/* Syntax Highlighting Colors (Highlight.js) */
+/* Syntax Highlighting - Let Highlight.js handle colors */
 .hljs {
-    background: transparent;
+    background: transparent !important;
     padding: 0;
+    color: #abb2bf;
 }
 
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-literal,
-.hljs-section,
-.hljs-link {
-    color: var(--primary-color);
-    font-weight: 600;
-}
-
-.hljs-string,
-.hljs-attribute {
-    color: #00aa00;
-}
-
-.hljs-number {
-    color: #ff6600;
-}
-
-.hljs-comment {
-    color: #999999;
-    font-style: italic;
-}
-
-.hljs-title,
-.hljs-name,
-.hljs-function {
-    color: var(--primary-color);
-}
-
-.hljs-variable {
-    color: var(--text-color);
-}
-
-.hljs-meta,
-.hljs-meta-string {
-    color: #999999;
-}
-
-/* Copy Button Enhancement */
+/* Copy Button Enhancement - Dark Mode */
 .copy-button {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(0, 102, 204, 0.1);
-    border: 1px solid var(--primary-color);
-    color: var(--primary-color);
-    padding: 6px 12px;
-    border-radius: 4px;
+    top: 12px;
+    right: 12px;
+    background: rgba(96, 165, 250, 0.15);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    color: #60a5fa;
+    padding: 8px 16px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
-    transition: all 0.2s ease;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    z-index: 10;
-}
-
-pre:hover .copy-button,
-code:hover .copy-button {
+    transition: all 0.25s ease;
     opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
+    z-index: 10;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .copy-button:hover {
-    background: var(--primary-color);
-    color: white;
-    transform: scale(1.05);
+    background: rgba(96, 165, 250, 0.25);
+    border-color: #60a5fa;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(96, 165, 250, 0.2);
 }
 
 .copy-button:active {
-    transform: scale(0.95);
+    transform: translateY(0);
 }
 
 .copy-button.copied {
-    background: var(--success-color);
-    border-color: var(--success-color);
-    color: white;
+    background: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+    color: #22c55e;
 }
 
 .copy-button.copied::after {
     content: ' ✓';
 }
 
-/* Language Badge */
+/* Language Badge - Dark Mode */
 pre::before {
     content: attr(data-lang);
     position: absolute;
-    top: 8px;
-    right: 90px;
-    background: var(--primary-color);
-    color: white;
-    padding: 4px 12px;
-    border-radius: 12px;
+    top: 12px;
+    left: 12px;
+    background: rgba(139, 92, 246, 0.2);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: #a78bfa;
+    padding: 6px 14px;
+    border-radius: 6px;
     font-size: 0.7rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
+    letter-spacing: 0.5px;
     z-index: 9;
-}
-
-pre:hover::before {
-    opacity: 1;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* Code Block Inline Styling */
@@ -490,23 +445,23 @@ code:not(.hljs) {
     color: var(--primary-color);
 }
 
-/* Scrollbar Styling */
+/* Scrollbar Styling - Dark Mode */
 pre::-webkit-scrollbar {
-    height: 8px;
+    height: 10px;
 }
 
 pre::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
+    background: #1e2127;
+    border-radius: 5px;
 }
 
 pre::-webkit-scrollbar-thumb {
-    background: var(--primary-color);
-    border-radius: 4px;
+    background: #4b5563;
+    border-radius: 5px;
 }
 
 pre::-webkit-scrollbar-thumb:hover {
-    background: var(--primary-dark);
+    background: #60a5fa;
 }
 
 /* Callout Boxes */
