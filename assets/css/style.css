@@ -345,6 +345,322 @@ blockquote {
     color: var(--danger-color);
 }
 
+/* ===== ENHANCED CODE BLOCK STYLING ===== */
+
+/* Code Block Base Styling */
+pre, code.hljs {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+}
+
+pre {
+    position: relative;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    letter-spacing: 0.3px;
+    -webkit-font-smoothing: antialiased;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    background: linear-gradient(135deg, #f8f8f8 0%, #fafafa 100%);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 0 4px 4px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    overflow-x: auto;
+}
+
+/* Syntax Highlighting Colors (Highlight.js) */
+.hljs {
+    background: transparent;
+    padding: 0;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.hljs-string,
+.hljs-attribute {
+    color: #00aa00;
+}
+
+.hljs-number {
+    color: #ff6600;
+}
+
+.hljs-comment {
+    color: #999999;
+    font-style: italic;
+}
+
+.hljs-title,
+.hljs-name,
+.hljs-function {
+    color: var(--primary-color);
+}
+
+.hljs-variable {
+    color: var(--text-color);
+}
+
+.hljs-meta,
+.hljs-meta-string {
+    color: #999999;
+}
+
+/* Copy Button Enhancement */
+.copy-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 102, 204, 0.1);
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 10;
+}
+
+pre:hover .copy-button,
+code:hover .copy-button {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.copy-button:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: scale(1.05);
+}
+
+.copy-button:active {
+    transform: scale(0.95);
+}
+
+.copy-button.copied {
+    background: var(--success-color);
+    border-color: var(--success-color);
+    color: white;
+}
+
+.copy-button.copied::after {
+    content: ' ✓';
+}
+
+/* Language Badge */
+pre::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: 8px;
+    right: 90px;
+    background: var(--primary-color);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    z-index: 9;
+}
+
+pre:hover::before {
+    opacity: 1;
+}
+
+/* Code Block Inline Styling */
+code:not(.hljs) {
+    background: var(--code-bg);
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: var(--primary-color);
+}
+
+/* Scrollbar Styling */
+pre::-webkit-scrollbar {
+    height: 8px;
+}
+
+pre::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+pre::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+pre::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
+/* Callout Boxes */
+.callout {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    margin: 1.5rem 0;
+    border-left: 4px solid;
+    border-radius: 4px;
+    align-items: flex-start;
+}
+
+.callout-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.callout-content {
+    flex: 1;
+}
+
+.callout-content strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.callout-info {
+    border-left-color: var(--primary-color);
+    background: var(--primary-light);
+    color: var(--primary-color);
+}
+
+.callout-success {
+    border-left-color: var(--success-color);
+    background: #e8f5e9;
+    color: var(--success-color);
+}
+
+.callout-warning {
+    border-left-color: var(--warning-color);
+    background: #fff3e0;
+    color: #ff9800;
+}
+
+.callout-danger {
+    border-left-color: var(--danger-color);
+    background: #ffebee;
+    color: var(--danger-color);
+}
+
+/* Code Tabs (for multi-language examples) */
+.code-tabs {
+    position: relative;
+    margin: 1.5rem 0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.tab-button {
+    background: #e6e6e6;
+    border: none;
+    padding: 8px 16px;
+    margin-right: 4px;
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.tab-button:hover {
+    background: #d0d0d0;
+}
+
+.tab-button.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-content pre {
+    margin: 0;
+    border-radius: 0 0 4px 4px;
+}
+
+/* Diff View for Before/After */
+.code-diff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.diff-remove,
+.diff-add {
+    position: relative;
+}
+
+.diff-remove pre {
+    background: linear-gradient(135deg, #ffe6e6 0%, #fff0f0 100%);
+    border-left-color: #cc0000;
+}
+
+.diff-add pre {
+    background: linear-gradient(135deg, #e6ffe6 0%, #f0fff0 100%);
+    border-left-color: #00cc00;
+}
+
+.diff-badge {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    z-index: 10;
+}
+
+.diff-remove .diff-badge {
+    background: #ffcccc;
+    color: #990000;
+}
+
+.diff-add .diff-badge {
+    background: #ccffcc;
+    color: #009900;
+}
+
+/* Section Dividers */
+h2 {
+    position: relative;
+    padding-top: 1.5rem;
+}
+
+h2::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent 0%, #e6f0ff 50%, transparent 100%);
+}
+
 /* Footer */
 .footer {
     background: #f8f9fa;

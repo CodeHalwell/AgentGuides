@@ -1,51 +1,163 @@
-// Agent Guides - Main JavaScript
+// Agent Guides - Enhanced Main JavaScript
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Add smooth scrolling for anchor links
+    // ===== SYNTAX HIGHLIGHTING =====
+    highlightCode();
+    
+    // ===== SMOOTH SCROLLING =====
+    smoothScroll();
+    
+    // ===== COPY BUTTON FUNCTIONALITY =====
+    setupCopyButtons();
+    
+    // ===== TABLE OF CONTENTS =====
+    generateTableOfContents();
+    
+    // ===== CODE TAB FUNCTIONALITY =====
+    setupCodeTabs();
+});
+
+// ===== SYNTAX HIGHLIGHTING =====
+function highlightCode() {
+    // Use Highlight.js if available
+    if (typeof hljs !== 'undefined') {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    }
+    
+    // Add language badges and line numbers
+    document.querySelectorAll('pre').forEach((pre, index) => {
+        // Detect language from code fence or class
+        const code = pre.querySelector('code');
+        let language = 'code';
+        
+        if (code && code.classList.length > 0) {
+            // Extract language from class like 'language-python'
+            const langClass = Array.from(code.classList).find(cls => cls.startsWith('language-'));
+            if (langClass) {
+                language = langClass.replace('language-', '').toUpperCase();
+            } else if (code.classList.contains('hljs-python')) {
+                language = 'PYTHON';
+            } else if (code.classList.contains('hljs-bash')) {
+                language = 'BASH';
+            }
+        }
+        
+        // Set data-lang attribute for CSS badge
+        pre.setAttribute('data-lang', language);
+        
+        // Add line numbers
+        addLineNumbers(code);
+    });
+}
+
+// Add line numbers to code blocks
+function addLineNumbers(codeElement) {
+    if (!codeElement) return;
+    
+    const lines = codeElement.textContent.split('\n');
+    const lineNumbers = document.createElement('span');
+    lineNumbers.className = 'line-numbers';
+    
+    let html = '';
+    lines.forEach((line, index) => {
+        if (line.trim() !== '' || index !== lines.length - 1) {
+            html += `<span class="line-number">${index + 1}</span>`;
+        }
+    });
+    
+    lineNumbers.innerHTML = html;
+    
+    if (codeElement.parentElement.querySelector('.line-numbers')) {
+        codeElement.parentElement.querySelector('.line-numbers').remove();
+    }
+}
+
+// ===== SMOOTH SCROLLING FOR ANCHOR LINKS =====
+function smoothScroll() {
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
             const target = document.querySelector(this.getAttribute('href'));
             if (target) {
                 e.preventDefault();
                 target.scrollIntoView({
-                    behavior: 'smooth'
+                    behavior: 'smooth',
+                    block: 'start'
                 });
             }
         });
     });
+}
 
-    // Add syntax highlighting for code blocks
-    highlightCode();
-
-    // Add table of contents for long pages
-    generateTableOfContents();
-});
-
-function highlightCode() {
-    const codeBlocks = document.querySelectorAll('pre code');
-    codeBlocks.forEach(block => {
-        // Add line numbers
-        const lines = block.textContent.split('\n');
-        let numberedContent = '';
-        lines.forEach((line, index) => {
-            if (line.trim() !== '') {
-                numberedContent += `<span class="line-number">${index + 1}</span>${line}\n`;
-            } else {
-                numberedContent += line + '\n';
+// ===== ENHANCED COPY BUTTON FUNCTIONALITY =====
+function setupCopyButtons() {
+    document.querySelectorAll('pre').forEach(pre => {
+        // Create copy button
+        const button = document.createElement('button');
+        button.className = 'copy-button';
+        button.innerHTML = '📋 Copy';
+        button.setAttribute('aria-label', 'Copy code to clipboard');
+        
+        // Add click handler
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            const code = pre.querySelector('code');
+            const text = code.textContent;
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(text).then(() => {
+                // Show success state
+                button.classList.add('copied');
+                button.innerHTML = '✅ Copied!';
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    button.innerHTML = '📋 Copy';
+                }, 2000);
+            }).catch(() => {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                
+                button.classList.add('copied');
+                button.innerHTML = '✅ Copied!';
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    button.innerHTML = '📋 Copy';
+                }, 2000);
+            });
+        });
+        
+        // Add keyboard accessibility
+        button.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                button.click();
             }
         });
-        block.innerHTML = numberedContent;
+        
+        pre.appendChild(button);
     });
 }
 
+// ===== GENERATE TABLE OF CONTENTS =====
 function generateTableOfContents() {
     const headings = document.querySelectorAll('h2, h3');
     if (headings.length < 3) return;
-
-    const toc = document.createElement('div');
+    
+    const toc = document.createElement('aside');
     toc.className = 'table-of-contents';
-    toc.innerHTML = '<h3>Table of Contents</h3><ul>';
-
+    toc.setAttribute('role', 'navigation');
+    toc.setAttribute('aria-label', 'Table of Contents');
+    toc.innerHTML = '<h3>Table of Contents</h3><ul></ul>';
+    
+    const tocList = toc.querySelector('ul');
+    
     headings.forEach((heading, index) => {
         if (!heading.id) {
             heading.id = `heading-${index}`;
@@ -60,31 +172,112 @@ function generateTableOfContents() {
         a.textContent = heading.textContent;
         
         li.appendChild(a);
-        toc.querySelector('ul').appendChild(li);
+        tocList.appendChild(li);
     });
-
-    toc.innerHTML += '</ul>';
-
+    
     const firstH2 = document.querySelector('h2');
     if (firstH2) {
         firstH2.parentNode.insertBefore(toc, firstH2);
     }
 }
 
-// Copy button for code blocks
-document.querySelectorAll('pre').forEach(pre => {
-    const button = document.createElement('button');
-    button.className = 'copy-button';
-    button.textContent = '📋 Copy';
-    button.addEventListener('click', () => {
-        const code = pre.querySelector('code').textContent;
-        navigator.clipboard.writeText(code).then(() => {
-            button.textContent = '✓ Copied!';
-            setTimeout(() => {
-                button.textContent = '📋 Copy';
-            }, 2000);
+// ===== CODE TAB FUNCTIONALITY =====
+function setupCodeTabs() {
+    document.querySelectorAll('.code-tabs').forEach(tabContainer => {
+        const buttons = tabContainer.querySelectorAll('.tab-button');
+        const contents = tabContainer.querySelectorAll('.tab-content');
+        
+        buttons.forEach((button, index) => {
+            button.addEventListener('click', () => {
+                // Remove active class from all buttons and contents
+                buttons.forEach(btn => btn.classList.remove('active'));
+                contents.forEach(content => content.classList.remove('active'));
+                
+                // Add active class to clicked button and corresponding content
+                button.classList.add('active');
+                contents[index].classList.add('active');
+            });
         });
+        
+        // Set first tab as active by default
+        if (buttons.length > 0) {
+            buttons[0].classList.add('active');
+            contents[0].classList.add('active');
+        }
     });
-    pre.appendChild(button);
+}
+
+// ===== ENHANCED ACCESSIBILITY =====
+
+// Skip to main content link (hidden but accessible)
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.querySelector('.skip-link')) {
+        const skipLink = document.createElement('a');
+        skipLink.className = 'skip-link';
+        skipLink.href = '#main';
+        skipLink.textContent = 'Skip to main content';
+        document.body.prepend(skipLink);
+    }
+    
+    // Add main landmark if missing
+    const main = document.querySelector('main');
+    if (main && !main.id) {
+        main.id = 'main';
+    }
 });
 
+// ===== KEYBOARD NAVIGATION =====
+document.addEventListener('keydown', function(e) {
+    // Escape key to close any open modals/popovers
+    if (e.key === 'Escape') {
+        // Handle escape events here if needed
+    }
+    
+    // Alt + C for copy (when focused on code block)
+    if (e.altKey && e.key === 'c') {
+        const copyButton = document.querySelector('.copy-button');
+        if (copyButton && copyButton === document.activeElement) {
+            copyButton.click();
+        }
+    }
+});
+
+// ===== PERFORMANCE MONITORING =====
+function trackPerformance() {
+    if (typeof PerformanceObserver !== 'undefined') {
+        // Largest Contentful Paint
+        new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                console.log('LCP:', entry.renderTime || entry.loadTime);
+            }
+        }).observe({ entryTypes: ['largest-contentful-paint'] });
+        
+        // Cumulative Layout Shift
+        let cls = 0;
+        new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+                if (!entry.hadRecentInput) {
+                    cls += entry.value;
+                    console.log('CLS:', cls);
+                }
+            }
+        }).observe({ entryTypes: ['layout-shift'] });
+    }
+}
+
+// ===== RESPONSIVE BEHAVIOR =====
+function handleResponsive() {
+    const isMobile = window.innerWidth < 768;
+    
+    // Adjust code block behavior on mobile
+    document.querySelectorAll('pre').forEach(pre => {
+        if (isMobile) {
+            pre.style.fontSize = '0.85rem';
+        } else {
+            pre.style.fontSize = '';
+        }
+    });
+}
+
+window.addEventListener('resize', handleResponsive);
+window.addEventListener('load', handleResponsive);
