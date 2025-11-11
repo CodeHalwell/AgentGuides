@@ -15,6 +15,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ===== CODE TAB FUNCTIONALITY =====
     setupCodeTabs();
+    
+    // ===== SIDEBAR TOGGLE =====
+    setupSidebar();
 });
 
 // ===== SYNTAX HIGHLIGHTING =====
@@ -272,6 +275,39 @@ function trackPerformance() {
             }
         }).observe({ entryTypes: ['layout-shift'] });
     }
+}
+
+// ===== SIDEBAR TOGGLE =====
+function setupSidebar() {
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebar = document.getElementById('sidebar');
+    
+    if (!sidebarToggle || !sidebar) return;
+    
+    // Toggle sidebar on button click
+    sidebarToggle.addEventListener('click', function() {
+        sidebar.classList.toggle('active');
+    });
+    
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        const isMobile = window.innerWidth < 768;
+        if (isMobile && 
+            sidebar.classList.contains('active') && 
+            !sidebar.contains(event.target) && 
+            !sidebarToggle.contains(event.target)) {
+            sidebar.classList.remove('active');
+        }
+    });
+    
+    // Highlight active page in sidebar
+    const currentPath = window.location.pathname;
+    document.querySelectorAll('.sidebar-menu a').forEach(link => {
+        if (link.getAttribute('href') === currentPath || 
+            currentPath.includes(link.getAttribute('href'))) {
+            link.classList.add('active');
+        }
+    });
 }
 
 // ===== RESPONSIVE BEHAVIOR =====

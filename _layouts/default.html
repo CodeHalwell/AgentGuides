@@ -43,9 +43,49 @@
         </div>
     </nav>
 
-    <main class="container">
-        {{ content }}
-    </main>
+    <div class="page-wrapper">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-section">
+                <h4 class="sidebar-title">Getting Started</h4>
+                <ul class="sidebar-menu">
+                    <li><a href="{{ site.baseurl }}/">Home</a></li>
+                    <li><a href="{{ site.baseurl }}/quick-start">Quick Start</a></li>
+                    <li><a href="{{ site.baseurl }}/frameworks">Compare Frameworks</a></li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-section">
+                <h4 class="sidebar-title">Popular Frameworks</h4>
+                <ul class="sidebar-menu">
+                    <li><a href="{{ site.baseurl }}/OpenAI_Agents_SDK_Guides/">OpenAI Agents</a></li>
+                    <li><a href="{{ site.baseurl }}/SmolAgents_Guide/">SmolAgents</a></li>
+                    <li><a href="{{ site.baseurl }}/CrewAI_Guide/">CrewAI</a></li>
+                    <li><a href="{{ site.baseurl }}/LangGraph_Guide/">LangGraph</a></li>
+                    <li><a href="{{ site.baseurl }}/PydanticAI_Guide/">PydanticAI</a></li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-section">
+                <h4 class="sidebar-title">All Guides</h4>
+                <ul class="sidebar-menu">
+                    <li><a href="{{ site.baseurl }}/guides">View All Frameworks</a></li>
+                    <li><a href="{{ site.baseurl }}/AG2_Guide/">AG2</a></li>
+                    <li><a href="{{ site.baseurl }}/LlamaIndex_Guide/">LlamaIndex</a></li>
+                    <li><a href="{{ site.baseurl }}/Haystack_Guide/">Haystack</a></li>
+                    <li><a href="{{ site.baseurl }}/Semantic_Kernel_Guide/">Semantic Kernel</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <main class="container">
+            {{ content }}
+        </main>
+    </div>
+
+    <!-- Mobile Sidebar Toggle -->
+    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+        ☰
+    </button>
 
     <footer class="footer">
         <div class="footer-content">
