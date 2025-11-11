@@ -36,6 +36,16 @@ jobs:
         id: pages
         uses: actions/configure-pages@v4
 
+      - name: Copy docs to root for Jekyll
+        run: |
+          cp -r docs/* .
+          # Fix relative links from ../Guide to ./Guide
+          sed -i 's|\.\./\([A-Z]\)|\./\1|g' *.md
+          sed -i 's|(\./guides)|{{ site.baseurl }}/guides|g' *.md
+          sed -i 's|(\./frameworks)|{{ site.baseurl }}/frameworks|g' *.md  
+          sed -i 's|(\./quick-start)|{{ site.baseurl }}/quick-start|g' *.md
+          ls -la
+
       - name: Build with Jekyll
         run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
         env:

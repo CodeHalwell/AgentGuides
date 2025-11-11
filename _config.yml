@@ -3,8 +3,8 @@
 # Site settings
 title: Agent Guides
 description: Comprehensive AI Agent Framework Documentation
-url: "https://CodeHalwell.github.io/agentguides"
-baseurl: "/agentguides"
+url: "https://CodeHalwell.github.io/AgentGuides"
+baseurl: "/AgentGuides"
 
 # Build settings
 markdown: kramdown
