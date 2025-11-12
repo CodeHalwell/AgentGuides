@@ -10,6 +10,7 @@ Latest: 1.1.0
 Last verified: 2025-11
 
 ```csharp
+{% raw %}
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
@@ -26,5 +27,5 @@ app.MapGet("/stream", async (HttpResponse resp, string q) =>
 });
 
 app.Run();
+{% endraw %}
 ```
-
