@@ -812,4 +812,3 @@ Response        Response + Cache
 ---
 
 This diagrams document provides visual representations of all major LlamaIndex components and workflows. Each diagram illustrates the flow of data and control through different aspects of the framework.
-

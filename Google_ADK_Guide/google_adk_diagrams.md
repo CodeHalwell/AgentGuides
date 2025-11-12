@@ -646,4 +646,3 @@ User Receives Response
 ---
 
 *These diagrams provide visual representations of key ADK concepts and architectures. Refer to the comprehensive and production guides for detailed explanations.*
-

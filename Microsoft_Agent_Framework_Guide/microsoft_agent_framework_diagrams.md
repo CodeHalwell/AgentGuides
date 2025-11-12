@@ -937,4 +937,3 @@ These diagrams illustrate:
 - `microsoft_agent_framework_comprehensive_guide.md` - Core concepts & code
 - `microsoft_agent_framework_production_guide.md` - Deployment & scaling
 - `microsoft_agent_framework_recipes.md` - Practical code patterns
-

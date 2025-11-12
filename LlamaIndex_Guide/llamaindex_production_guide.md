@@ -1199,6 +1199,7 @@ def test_query_performance():
 ### GitHub Actions Pipeline
 
 ```yaml
+{% raw %}
 # .github/workflows/deploy.yml
 name: Deploy LlamaIndex
 
@@ -1296,10 +1297,10 @@ jobs:
         kubectl rollout status deployment/llamaindex-api
       env:
         KUBECONFIG: ${{ secrets.KUBE_CONFIG }}
+{% endraw %}
 ```
 {% endraw %}
 
 ---
 
 This production guide provides comprehensive strategies for deploying and maintaining LlamaIndex applications at scale. Each section includes ready-to-use code examples and best practices for production environments.
-

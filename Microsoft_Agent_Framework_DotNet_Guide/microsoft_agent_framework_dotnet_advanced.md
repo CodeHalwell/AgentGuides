@@ -91,6 +91,7 @@ spec:
 ## CI/CD (GitHub Actions)
 
 ```yaml
+{% raw %}
 name: build-and-deploy
 on:
   push:
@@ -124,6 +125,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
+{% endraw %}
 ```
 {% endraw %}
 
@@ -133,4 +135,3 @@ jobs:
 - Network egress allowlisting for tool calls
 - Encrypt logs; avoid sensitive data in traces
 - Rotate keys regularly; monitor for anomalies
-

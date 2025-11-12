@@ -59,4 +59,3 @@ description: "Least-privilege IAM policies for Bedrock Agents and Knowledge Base
   ]
 }
 ```
-

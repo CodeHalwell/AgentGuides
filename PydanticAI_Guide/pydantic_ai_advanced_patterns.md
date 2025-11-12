@@ -866,4 +866,3 @@ async def run_with_middleware(query: str, user_id: str):
 
 These patterns demonstrate expert-level usage of Pydantic AI for complex, production-grade applications.
 
-

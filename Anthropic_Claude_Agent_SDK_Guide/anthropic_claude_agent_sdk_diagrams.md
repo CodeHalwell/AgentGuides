@@ -969,4 +969,3 @@ If one pod fails:
 ---
 
 **These diagrams provide visual references for understanding the Claude Agent SDK architecture and execution patterns. Refer back to them when designing your agent systems.**
-

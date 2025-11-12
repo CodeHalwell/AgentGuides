@@ -1101,4 +1101,3 @@ print(result)
 
 These recipes provide practical, copy-paste-ready patterns for common SmolAgents use cases. Adapt them to your specific requirements and combine them to build complex agentic workflows.
 
-

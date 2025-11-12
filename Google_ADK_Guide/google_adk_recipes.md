@@ -991,4 +991,3 @@ model = "gemini-2.5-pro"  # More expensive
 ---
 
 *These recipes provide practical starting points for common ADK use cases. Adapt and extend them for your specific requirements.*
-

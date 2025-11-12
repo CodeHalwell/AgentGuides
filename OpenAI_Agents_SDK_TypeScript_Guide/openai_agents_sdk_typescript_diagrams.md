@@ -467,4 +467,3 @@ Type Layers:
 ---
 
 These diagrams provide visual reference for understanding the OpenAI Agents SDK architecture, execution flows, and integration patterns.
-

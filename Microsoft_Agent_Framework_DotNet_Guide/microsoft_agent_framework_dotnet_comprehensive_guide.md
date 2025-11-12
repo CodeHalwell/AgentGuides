@@ -823,4 +823,3 @@ public class SKWrapperTool
 -   **Gradual Adoption:** You don't need to rewrite your entire application at once. You can start by wrapping your existing Semantic Kernel plugins as tools and using them within a new Agent Framework orchestrator.
 -   **State Management:** Migrate your conversation history and memory from SK's storage solutions to the Agent Framework's `IAgentMemory` providers to take advantage of the unified memory system.
 -   **Orchestration:** Replace SK's `Planner` with the Agent Framework's more explicit multi-agent orchestration patterns or `Workflow` engine for more predictable and controllable execution.
-

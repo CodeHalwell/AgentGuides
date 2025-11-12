@@ -660,6 +660,7 @@ class AccessControl:
 ### GitHub Actions Example
 
 ```yaml
+{% raw %}
 name: Deploy Mistral Agents
 
 on:
@@ -705,11 +706,11 @@ jobs:
       - name: Deploy to ECS
         run: |
           ./scripts/deploy.sh
+{% endraw %}
 ```
 {% endraw %}
 
 ---
 
 **This production guide provides everything needed to deploy and maintain Mistral Agents API at scale.**
-
 

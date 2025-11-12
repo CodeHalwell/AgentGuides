@@ -882,6 +882,7 @@ Semantic functions use natural language prompts to define AI-driven behaviour. T
 #### .NET Semantic Functions
 
 ```csharp
+{% raw %}
 using Microsoft.SemanticKernel;
 
 public class SemanticFunctionsExample
@@ -938,9 +939,11 @@ Language: {{$language}}
 Documentation style: {{$style}}
 
 Generate documentation for this {{$language}} code:
+{% endraw %}
 ```
 {{$code}}
 ```
+{% raw %}
 
 Ensure the documentation follows {{$style}} conventions.";
 
@@ -960,11 +963,13 @@ Ensure the documentation follows {{$style}} conventions.";
         return result.ToString() ?? "";
     }
 }
+{% endraw %}
 ```
 
 #### Python Semantic Functions
 
 ```python
+{% raw %}
 from semantic_kernel import Kernel
 from semantic_kernel.functions import kernel_function
 from typing import Any
@@ -1013,9 +1018,11 @@ Language: {{$language}}
 Documentation style: {{$style}}
 
 Generate documentation for this {{$language}} code:
+{% endraw %}
 ```
 {{$code}}
 ```
+{% raw %}
 
 Ensure the documentation follows {{$style}} conventions."""
         
@@ -1031,6 +1038,7 @@ Ensure the documentation follows {{$style}} conventions."""
             style=style
         )
         return str(result) if result else ""
+{% endraw %}
 ```
 
 ### 2.3 Native Functions with Code
@@ -2102,4 +2110,3 @@ public class CommunicatingAgent
 ---
 
 **Note:** This comprehensive guide has been abbreviated due to token constraints. The full version includes extensive code examples, diagrams, architecture patterns, and production-ready implementations for all 14 sections. Please see the accompanying files for diagrams, production guidance, and practical recipes.
-

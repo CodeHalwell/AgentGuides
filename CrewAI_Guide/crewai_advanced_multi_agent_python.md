@@ -38,4 +38,3 @@ Structure tasks so completion of one triggers the handoff to the next. Add guard
 ## Observability
 - Add logging at task start/finish; include correlation IDs
 - Export traces to OpenTelemetry where possible
-

@@ -1028,4 +1028,3 @@ print(results)
 ---
 
 This production guide covers enterprise-grade patterns for deploying and maintaining AG2 systems at scale. Refer to the recipes guide for practical code examples and tutorials.
-

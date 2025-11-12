@@ -950,4 +950,3 @@ Agent Handles Request
 ```
 
 This comprehensive diagrams guide provides visual clarity for understanding OpenAI Agents SDK architectures and patterns.
-

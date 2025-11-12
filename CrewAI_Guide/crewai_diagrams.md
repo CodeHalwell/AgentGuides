@@ -614,4 +614,3 @@ Multiple crews, complex workflows
 
 This visual guide provides clarity on CrewAI's architecture and communication patterns for building effective multi-agent systems.
 
-

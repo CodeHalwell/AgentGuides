@@ -611,4 +611,3 @@ UNIT TEST            INTEGRATION TEST
 
 (Diagrams continue with more architectural patterns, message flows, and system designs)
 
-

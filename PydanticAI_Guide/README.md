@@ -573,4 +573,3 @@ Happy agent building! 🚀
 
 ## Streaming Examples
 - [pydantic_ai_streaming_server_fastapi.md](pydantic_ai_streaming_server_fastapi.md)
-

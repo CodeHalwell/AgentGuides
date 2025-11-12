@@ -57,6 +57,7 @@ print(result)
 
 {% raw %}
 ```python
+{% raw %}
 calc_plugin = kernel.create_plugin("calc")
 
 @calc_plugin.define_native_function
@@ -64,6 +65,7 @@ async def add(a: int, b: int) -> int:
     return a + b
 
 semantic = kernel.create_function_from_prompt("Summarize: {{$input}} in 3 bullet points")
+{% endraw %}
 ```
 {% endraw %}
 
@@ -71,6 +73,7 @@ semantic = kernel.create_function_from_prompt("Summarize: {{$input}} in 3 bullet
 - Ask models for JSON matching Pydantic models; validate and retry on failure.
 
 ```python
+{% raw %}
 from pydantic import BaseModel
 
 class Summary(BaseModel):
@@ -80,6 +83,7 @@ prompt = "Return a JSON object {\"bullets\": string[]} summarizing: {{$input}}"
 fn = kernel.create_function_from_prompt(prompt)
 raw = await kernel.invoke_async(fn, input_text="LangGraph overview")
 data = Summary.model_validate_json(str(raw))
+{% endraw %}
 ```
 
 ## Memory

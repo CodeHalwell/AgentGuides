@@ -398,4 +398,3 @@ Choose your path above and dive in! Start with the [Comprehensive Guide](./micro
 
 ## Advanced Guides
 - [microsoft_agent_framework_python_advanced.md](microsoft_agent_framework_python_advanced.md)
-

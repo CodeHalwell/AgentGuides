@@ -784,6 +784,7 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 ### 10.1 Template Variable Substitution
 
 ```
+{% raw %}
 ┌────────────────────────────────────────────────┐
 │     Prompt Template Variable Flow              │
 ├────────────────────────────────────────────────┤
@@ -810,9 +811,9 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 │  └────────────────────────────────────────┘  │
 │                                               │
 └────────────────────────────────────────────────┘
+{% endraw %}
 ```
 
 ---
 
 This comprehensive diagram document illustrates the key architectural patterns and flows in Semantic Kernel, helping developers understand how components interact and orchestrate together.
-

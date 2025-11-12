@@ -1500,4 +1500,3 @@ agent = Agent(
 
 This guide provides comprehensive coverage of CrewAI fundamentals and patterns. Refer to official documentation for advanced features and updates.
 
-

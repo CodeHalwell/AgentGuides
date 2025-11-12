@@ -1233,4 +1233,3 @@ async function trackQuery(prompt: string, userId: string) {
 ```
 
 This production guide provides the foundation for hardened, scalable Claude Agent SDK deployments.
-

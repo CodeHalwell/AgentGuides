@@ -82,6 +82,7 @@ spec:
 ### GitHub Actions
 
 ```yaml
+{% raw %}
 name: deploy
 on: { push: { branches: [ main ] } }
 jobs:
@@ -104,6 +105,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
+{% endraw %}
 ```
 {% endraw %}
 

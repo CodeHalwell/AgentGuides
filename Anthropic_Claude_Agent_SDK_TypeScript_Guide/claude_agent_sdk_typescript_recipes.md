@@ -1103,4 +1103,3 @@ console.log('Security report generated');
 ```
 
 These recipes provide production-ready patterns for common agent use cases. Each can be customised and extended for specific requirements.
-

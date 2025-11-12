@@ -29,4 +29,3 @@ def route(task: str) -> str:
 
 ## Recovery
 - Retry transient retriever/LLM errors; dead-letter on repeated failure
-

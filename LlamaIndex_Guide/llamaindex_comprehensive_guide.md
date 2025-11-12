@@ -2154,6 +2154,7 @@ print(f"Tags: {blog_post.tags}")
 ### 24.1 Using JSON Mode
 
 ```python
+{% raw %}
 from llama_index.llms.openai import OpenAI
 from json import loads
 from pydantic import BaseModel
@@ -2204,6 +2205,7 @@ Expected format:
 response = llm.complete(prompt_with_structure)
 parsed = loads(str(response))
 print(f"Structured JSON: {parsed}")
+{% endraw %}
 ```
 
 ---
@@ -3911,4 +3913,3 @@ print(f"Passing: {result.passing}")
 *(Continued in the next section with Production deployment, testing, and optimization...)*
 
 This concludes the comprehensive guide section. Each topic includes conceptual explanations, complete code examples, RAG implementation details, and real-world patterns.
-

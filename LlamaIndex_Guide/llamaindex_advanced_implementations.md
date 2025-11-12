@@ -198,4 +198,3 @@ def tool_with_fallback(query: str) -> str:
 # Create a tool from the resilient function
 resilient_tool = FunctionTool.from_defaults(tool_with_fallback, name="resilient_search")
 ```
-

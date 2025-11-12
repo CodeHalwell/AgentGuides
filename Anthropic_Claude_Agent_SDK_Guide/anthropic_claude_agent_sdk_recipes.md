@@ -1010,4 +1010,3 @@ asyncio.run(main())
 ---
 
 **These recipes provide production-ready starting points for your Claude Agent SDK applications. Modify them for your specific needs.**
-

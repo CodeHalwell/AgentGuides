@@ -1293,4 +1293,3 @@ For detailed code examples and implementation patterns, refer to:
 - `microsoft_agent_framework_comprehensive_guide.md` - Core concepts
 - `microsoft_agent_framework_recipes.md` - Practical code examples
 - `microsoft_agent_framework_diagrams.md` - Architecture visualisations
-

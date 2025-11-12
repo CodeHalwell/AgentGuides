@@ -1637,4 +1637,3 @@ This comprehensive guide continues with:
 - `pydantic_ai_recipes.md` - Real-world code examples and patterns
 - `pydantic_ai_diagrams.md` - Architecture and flow diagrams
 
-

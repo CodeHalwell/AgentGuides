@@ -1646,4 +1646,3 @@ response = await manager.execute_for_tenant(
 ---
 
 *This production guide provides comprehensive patterns and practices for deploying ADK agents at scale. Refer to specific sections for detailed implementation guidance.*
-

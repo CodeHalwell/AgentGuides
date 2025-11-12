@@ -455,4 +455,3 @@ This index provides complete navigation through all OpenAI Agents SDK documentat
 **Sections**: 40+ major sections across 4 main documents
 **Code Examples**: 100+ working implementations
 **Diagrams**: 30+ architecture and flow diagrams
-

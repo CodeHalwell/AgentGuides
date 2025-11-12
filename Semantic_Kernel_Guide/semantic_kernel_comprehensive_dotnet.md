@@ -66,11 +66,13 @@ await foreach (var msg in chat.InvokeAsync())
 ## Plugins & Functions
 
 ```csharp
+{% raw %}
 var math = kernel.CreatePlugin("math");
 math.DefineNativeFunction("add", (int a, int b) => a + b);
 
 var summarize = kernel.CreateFunctionFromPrompt("Summarize {{$input}} in 3 bullets");
 var text = await kernel.InvokeAsync<string>(summarize, new() { ["input"] = "LangGraph" });
+{% endraw %}
 ```
 
 ## Structured Outputs

@@ -954,4 +954,3 @@ Token efficiency: ~40% fewer tokens consumed
 
 This comprehensive diagram guide visualises all major concepts, workflows, and architectural patterns in SmolAgents. Refer back to these diagrams when implementing agents or troubleshooting issues.
 
-

@@ -2764,4 +2764,3 @@ interface ErrorMessage {
 ---
 
 **This comprehensive guide covers the Claude Agent SDK from installation through advanced patterns. For additional examples and recipes, refer to the Recipes guide.**
-

@@ -338,4 +338,3 @@ Quick navigation and topic lookup for the Haystack comprehensive guide series.
 ### Advanced Guides
 - haystack_advanced_agents_python.md
 - haystack_observability_python.md
-

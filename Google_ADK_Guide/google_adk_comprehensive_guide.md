@@ -4019,4 +4019,3 @@ class CodeReviewAgent(SpecialisedAgent):
 ---
 
 *This comprehensive guide covers all major aspects of Google ADK. For specific implementations and advanced patterns, refer to the Production Guide, Recipes, and official ADK documentation.*
-

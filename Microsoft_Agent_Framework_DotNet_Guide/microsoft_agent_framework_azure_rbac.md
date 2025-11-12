@@ -17,4 +17,3 @@ description: "Least-privileged RBAC for Azure AI Agents and Key Vault."
 az role assignment create --assignee $APP_ID \
   --role "Key Vault Secrets User" --scope $KEYVAULT_SCOPE
 ```
-

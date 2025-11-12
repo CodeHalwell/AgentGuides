@@ -551,4 +551,3 @@ Caching Strategy:
 ```
 
 These diagrams illustrate the complex interactions and architectural patterns within the Claude Agent SDK. Each represents a different aspect of the system's operation, from basic execution flows to advanced orchestration patterns.
-

@@ -1021,4 +1021,3 @@ asyncio.run(main())
 ```
 
 These recipes provide production-ready implementations you can adapt for your specific use cases with the OpenAI Agents SDK.
-

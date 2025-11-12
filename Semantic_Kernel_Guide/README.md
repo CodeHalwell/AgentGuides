@@ -501,4 +501,3 @@ Advanced Topics → Production Deployment → Performance Optimisation → Custo
 ---
 
 **Start your Semantic Kernel journey today!** Choose your platform above and dive into the comprehensive guide.
-

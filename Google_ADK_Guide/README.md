@@ -498,4 +498,3 @@ This documentation is provided as part of the AgentGuides project. Follow the li
 
 ## Advanced Guides
 - [google_adk_advanced_python.md](google_adk_advanced_python.md)
-

@@ -13,6 +13,7 @@ This example streams staged events from a Semantic Kernel workflow; token-level 
 
 {% raw %}
 ```python
+{% raw %}
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import semantic_kernel as sk
@@ -33,6 +34,7 @@ def stream(q: str):
         yield f"data: {{\"final\": {result!r} }}\n\n"
 
     return StreamingResponse(run(), media_type="text/event-stream")
+{% endraw %}
 ```
 {% endraw %}
 

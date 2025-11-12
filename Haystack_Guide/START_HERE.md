@@ -261,4 +261,3 @@ Pick a reading path above and get started. Everything you need is in these files
 **Pro Tip**: Use your editor's search functionality (Ctrl+F / Cmd+F) to find specific topics in any file.
 
 **Questions?**: Check `GUIDE_INDEX.md` for topic lookup.
-

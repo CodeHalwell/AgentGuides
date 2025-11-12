@@ -13,6 +13,7 @@ This example streams simple progress events and a final answer. Token-level stre
 
 {% raw %}
 ```python
+{% raw %}
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
@@ -27,6 +28,7 @@ def stream(q: str):
         yield "data: {\"event\": \"generation\"}\n\n"
         yield f"data: {{\"final\": \"answer for {q}\"}}\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
+{% endraw %}
 ```
 {% endraw %}
 

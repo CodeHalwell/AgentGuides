@@ -11,4 +11,3 @@ Welcome to the Agent Guides site. Use the links below to explore.
 - All Guides: docs/guides.md
 - Framework Comparison: docs/frameworks.md
 - Quick Start: docs/quick-start.md
-

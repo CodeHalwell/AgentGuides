@@ -731,4 +731,3 @@ if __name__ == "__main__":
 
 **All recipes are production-ready and can be extended for specific use cases. Mix and match patterns for your requirements.**
 
-

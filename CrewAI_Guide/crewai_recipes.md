@@ -826,4 +826,3 @@ plan = plan_project(
 
 These recipes demonstrate CrewAI's versatility across diverse industries and use cases. Each recipe can be customised based on specific requirements and extended with additional agents, tools, and tasks as needed.
 
-

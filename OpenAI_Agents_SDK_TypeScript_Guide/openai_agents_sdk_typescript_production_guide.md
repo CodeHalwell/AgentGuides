@@ -1215,4 +1215,3 @@ describe('Agent Execution', () => {
 ## Conclusion
 
 This production guide provides enterprise-grade patterns for deploying, scaling, and maintaining OpenAI Agents SDK applications in production environments with focus on reliability, security, and operational excellence.
-

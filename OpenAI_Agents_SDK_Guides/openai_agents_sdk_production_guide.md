@@ -1234,6 +1234,7 @@ class TestMultiAgentSystem:
 Automated testing and deployment:
 
 ```yaml
+{% raw %}
 # .github/workflows/ci-cd.yml
 name: CI/CD Pipeline
 
@@ -1314,6 +1315,7 @@ jobs:
         curl -X POST ${{ secrets.DEPLOY_WEBHOOK }} \
           -H "Authorization: Bearer $DEPLOY_TOKEN" \
           -d '{"image":"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"}'
+{% endraw %}
 ```
 {% endraw %}
 
@@ -1542,4 +1544,3 @@ async def health():
 ```
 
 This comprehensive production guide provides enterprise-ready patterns for deploying and operating OpenAI Agents SDK at scale.
-

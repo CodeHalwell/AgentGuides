@@ -721,4 +721,3 @@ Carryover pattern allows context from each phase to inform the next!
 | **Deployment** | Production readiness | REST API, Docker, async patterns |
 
 This architectural flexibility allows AG2 to scale from simple two-agent conversations to complex enterprise systems with dozens of specialised agents, multiple orchestration layers, and integrated external systems.
-

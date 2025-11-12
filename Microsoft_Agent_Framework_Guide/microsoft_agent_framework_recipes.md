@@ -916,4 +916,3 @@ class MonitoredAgent(ChatAgent):
 **These recipes provide production-ready patterns for common Agent Framework scenarios. Adapt and extend them for your specific use cases.**
 
 For comprehensive conceptual information, see `microsoft_agent_framework_comprehensive_guide.md`.
-

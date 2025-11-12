@@ -362,4 +362,3 @@ All code examples tested against:
 
 ## Streaming Examples
 - [mistral_streaming_server_fastapi.md](mistral_streaming_server_fastapi.md)
-

@@ -29,4 +29,3 @@ def parse_or_retry(raw: str) -> Answer:
 - Unit: model schemas, validators
 - Integration: agent runs with mocked model
 - Snapshot: golden outputs for prompts
-

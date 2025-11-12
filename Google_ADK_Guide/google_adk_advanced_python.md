@@ -54,6 +54,7 @@ spec:
 ### GitHub Actions (Cloud Run deploy)
 
 ```yaml
+{% raw %}
 name: deploy-cloud-run
 on: { push: { branches: [ main ] } }
 jobs:
@@ -67,6 +68,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud builds submit --tag gcr.io/$PROJECT_ID/adk-agent:latest .
       - run: gcloud run deploy adk-agent --image gcr.io/$PROJECT_ID/adk-agent:latest --region $REGION --platform managed
+{% endraw %}
 ```
 {% endraw %}
 
@@ -76,4 +78,3 @@ jobs:
 - Network egress allowlisting for tool calls
 - Encrypt logs; avoid sensitive data in traces
 - Rotate keys regularly; monitor for anomalies
-

@@ -110,6 +110,7 @@ spec:
 ## CI/CD (GitHub Actions)
 
 ```yaml
+{% raw %}
 name: deploy
 on:
   push:
@@ -144,14 +145,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
+{% endraw %}
 ```
 {% endraw %}
 ```
-
-## Security Best Practices
-- Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)
-- Use least-privileged IAM roles; separate read/write roles for tools
-- Network egress allowlisting for tool calls
-- Encrypt logs; avoid sensitive data in traces
-- Rotate keys regularly; monitor for anomalies
-

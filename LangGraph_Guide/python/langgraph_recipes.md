@@ -208,6 +208,7 @@ print(f"Sources: {result['source_citations']}")
 Classify support tickets and route to appropriate handler:
 
 ```python
+{% raw %}
 from enum import Enum
 
 class TicketPriority(Enum):
@@ -418,6 +419,7 @@ print(f"Priority: {result['priority'].value}")
 print(f"Category: {result['category'].value}")
 print(f"Response: {result['response']}")
 print(f"Assigned to: {result['assigned_to']}")
+{% endraw %}
 ```
 
 ---
@@ -722,6 +724,7 @@ print("Final response:", result["messages"][-1].content)
 Multi-stage document processing with quality checks:
 
 ```python
+{% raw %}
 from enum import Enum
 
 class DocumentType(Enum):
@@ -869,6 +872,7 @@ if result["processing_status"] == "complete":
     print("Enrichment:", result["enrichment_result"])
 else:
     print("Error:", result["error_message"])
+{% endraw %}
 ```
 
 ---

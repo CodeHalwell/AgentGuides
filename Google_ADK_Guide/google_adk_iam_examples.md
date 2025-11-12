@@ -19,4 +19,3 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:adk-sa@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/aiplatform.user"
 ```
-

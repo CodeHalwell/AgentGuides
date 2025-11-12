@@ -902,4 +902,3 @@ Input Query
 ---
 
 This diagram document provides comprehensive visual representations of Haystack's architecture and patterns across all levels of complexity.
-

@@ -777,4 +777,3 @@ await refinementWorkflow('Write an introduction to machine learning');
 ---
 
 These recipes provide practical, copy-paste implementations for common use cases with the OpenAI Agents SDK.
-

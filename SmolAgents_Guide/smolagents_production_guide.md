@@ -1283,4 +1283,3 @@ def evaluate_agent_quality(test_cases: list) -> float:
 
 This production guide covers the essential aspects of deploying SmolAgents at scale. Follow these practices to ensure reliable, performant, and cost-effective agent systems in production.
 
-

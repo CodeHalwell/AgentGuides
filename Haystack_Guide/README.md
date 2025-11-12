@@ -512,4 +512,3 @@ The goal is to be the most complete Haystack resource available while maintainin
 
 ## Streaming Examples
 - [haystack_streaming_server_fastapi.md](haystack_streaming_server_fastapi.md)
-

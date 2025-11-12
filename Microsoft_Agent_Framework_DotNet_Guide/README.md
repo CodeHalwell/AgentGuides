@@ -414,4 +414,3 @@ Choose your path above and dive in! Start with the [Comprehensive Guide](./micro
 
 ## Streaming Examples
 - [microsoft_agent_streaming_server_dotnet.md](microsoft_agent_streaming_server_dotnet.md)
-

@@ -78,4 +78,3 @@ async def invoke_with_mw(kernel, func, input_text: str) -> str:
 
 - Unit tests for guardrail decisions and redaction
 - Integration tests using a mocked SK service to verify wrapper order
-

@@ -395,4 +395,3 @@ If you want to become an expert, read in this order:
 
 ### Advanced Guides
 - mistral_agents_api_advanced_python.md
-

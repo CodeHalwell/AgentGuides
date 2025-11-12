@@ -319,4 +319,3 @@ SmolAgents is open source and community-driven:
 
 **Happy agent building! 🤖✨**
 
-

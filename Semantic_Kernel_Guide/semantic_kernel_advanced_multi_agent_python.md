@@ -138,4 +138,3 @@ Use guardrail checks (policy, PII) to trigger `hitl_handoff` when needed.
 - Golden prompts with snapshot tests for role prompts
 - Deterministic tool mocks; property tests for router
 - Conversation regression tests validating termination and handoff paths
-

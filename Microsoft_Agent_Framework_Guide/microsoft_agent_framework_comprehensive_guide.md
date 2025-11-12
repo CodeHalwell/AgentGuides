@@ -1354,4 +1354,3 @@ See the companion documents for:
 - **microsoft_agent_framework_diagrams.md** - Architecture visualisations
 - **microsoft_agent_framework_production_guide.md** - Deployment and scaling
 - **microsoft_agent_framework_recipes.md** - Production code patterns
-

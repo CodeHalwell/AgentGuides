@@ -56,4 +56,3 @@ export async function run(input: string) {
 
 ## Tracing
 - Create spans per agent step; add attributes: model, tokens, tool names.
-

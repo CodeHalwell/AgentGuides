@@ -1097,4 +1097,3 @@ python recipe_name.py
 - Add logging with `logging.basicConfig(level=logging.DEBUG)`
 
 Each recipe is self-contained and production-ready. Mix and match patterns to build your own systems!
-
