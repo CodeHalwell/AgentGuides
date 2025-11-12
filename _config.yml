@@ -8,3 +8,6 @@ exclude:
   - versions.json
   - Gemfile
   - Gemfile.lock
+  - vendor/
+  - node_modules/
+  - .bundle/
