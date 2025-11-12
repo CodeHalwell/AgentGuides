@@ -11,6 +11,7 @@ Last verified: 2025-11
 
 This example streams model output over SSE while using Pydantic for final validation.
 
+{% raw %}
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -45,6 +46,7 @@ def stream(q: str):
             yield f"data: {{\"validated\": false, \"error\": {e.json()} }}\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
+{% endraw %}
 
 ## Deployment
 
