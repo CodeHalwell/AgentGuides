@@ -944,9 +944,7 @@ Documentation style: {{$style}}
 Generate documentation for this {{$language}} code:
 
 ```
-{% endraw %}
 {{$code}}
-{% raw %}
 ```
 
 
@@ -1027,9 +1025,7 @@ Documentation style: {{$style}}
 Generate documentation for this {{$language}} code:
 
 ```
-{% endraw %}
 {{$code}}
-{% raw %}
 ```
 
 

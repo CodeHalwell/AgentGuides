@@ -10,7 +10,7 @@
 ## 🎯 Quick Navigation
 
 ### **For Beginners: Start Here**
-1. Read **[README.md](README.md)** - Overview and setup (10 min)
+1. Read **[README.md](README)** - Overview and setup (10 min)
 2. Study **[Comprehensive Guide - Introduction & Core Fundamentals](microsoft_agent_framework_dotnet_comprehensive_guide.md#introduction)** (1-2 hours)
 3. Try **[Recipes - Beginner Section](microsoft_agent_framework_dotnet_recipes.md#beginner-recipes)** - Copy-paste examples (30 min)
 
@@ -20,7 +20,7 @@
 3. Implement **[Recipes - Intermediate Section](microsoft_agent_framework_dotnet_recipes.md#intermediate-recipes)** (2-4 hours)
 
 ### **For Production Deployment**
-1. Study **[Production Guide - Complete](microsoft_agent_framework_dotnet_production_guide.md)** (4-6 hours)
+1. Study **[Production Guide - Complete](microsoft_agent_framework_dotnet_production_guide)** (4-6 hours)
 2. Review **[Diagrams - Deployment Architecture](microsoft_agent_framework_dotnet_diagrams.md#deployment-architecture)** (1 hour)
 3. Apply **[Recipes - Integration Section](microsoft_agent_framework_dotnet_recipes.md#integration-recipes)** (varies)
 
@@ -286,7 +286,7 @@
 
 **Goal:** Build your first agent and understand basics
 
-1. **[README.md](README.md)** - Setup & Overview (1 hour)
+1. **[README.md](README)** - Setup & Overview (1 hour)
    - Install .NET SDK and tools
    - Setup Azure credentials
    - Verify installation
@@ -370,7 +370,7 @@
 
 **Prerequisites:** Complete Intermediate path
 
-1. **[Production Guide - Complete Read](microsoft_agent_framework_dotnet_production_guide.md)** (6 hours)
+1. **[Production Guide - Complete Read](microsoft_agent_framework_dotnet_production_guide)** (6 hours)
    - Deployment strategies
    - Security
    - Scaling
@@ -426,7 +426,7 @@
 
 #### **Tools**
 - Defining tools: [Comprehensive Guide - Tools Integration](microsoft_agent_framework_dotnet_comprehensive_guide.md#tools-integration)
-- `AIFunctionFactory`: [Recipes - Tool Examples](microsoft_agent_framework_dotnet_recipes.md)
+- `AIFunctionFactory`: [Recipes - Tool Examples](microsoft_agent_framework_dotnet_recipes)
 - Azure tools: [Comprehensive Guide - Built-in Tools](microsoft_agent_framework_dotnet_comprehensive_guide.md#tools-integration)
 - Custom tools: [Recipes - Custom Tool Development](microsoft_agent_framework_dotnet_recipes.md#recipe-10-custom-tool-development)
 
@@ -439,7 +439,7 @@
 #### **Dependency Injection**
 - Configuration: [Comprehensive Guide - DI Setup](microsoft_agent_framework_dotnet_comprehensive_guide.md#core-fundamentals)
 - Service lifetimes: [Comprehensive Guide - DI](microsoft_agent_framework_dotnet_comprehensive_guide.md#core-fundamentals)
-- IOptions pattern: [Recipes - Configuration](microsoft_agent_framework_dotnet_recipes.md)
+- IOptions pattern: [Recipes - Configuration](microsoft_agent_framework_dotnet_recipes)
 
 #### **Memory & Persistence**
 - Memory systems: [Comprehensive Guide - Memory Systems](microsoft_agent_framework_dotnet_comprehensive_guide.md#memory-systems)
@@ -466,7 +466,7 @@
 → [Recipes - Recipe 8: RAG Implementation](microsoft_agent_framework_dotnet_recipes.md#recipe-8-rag-retrieval-augmented-generation)
 
 #### **...deploy to production**
-→ [Production Guide - Complete](microsoft_agent_framework_dotnet_production_guide.md)
+→ [Production Guide - Complete](microsoft_agent_framework_dotnet_production_guide)
 
 #### **...integrate with Azure Functions**
 → [Recipes - Recipe 11: Azure Functions](microsoft_agent_framework_dotnet_recipes.md#recipe-11-azure-functions-integration)

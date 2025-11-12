@@ -34,9 +34,9 @@ print(result)
 ```
 
 **Next Steps**:
-1. Read [SmolAgents README](../SmolAgents_Guide/README.md)
-2. Try more [SmolAgents Recipes](../SmolAgents_Guide/smolagents_recipes.md)
-3. Deep dive: [SmolAgents Comprehensive Guide](../SmolAgents_Guide/smolagents_comprehensive_guide.md)
+1. Read [SmolAgents README](../SmolAgents_Guide/README)
+2. Try more [SmolAgents Recipes](../SmolAgents_Guide/smolagents_recipes)
+3. Deep dive: [SmolAgents Comprehensive Guide](../SmolAgents_Guide/smolagents_comprehensive_guide)
 
 ---
 
@@ -83,9 +83,9 @@ print(result)
 ```
 
 **Next Steps**:
-1. Read [CrewAI README](../CrewAI_Guide/README.md)
-2. Try more [CrewAI Recipes](../CrewAI_Guide/crewai_recipes.md)
-3. Deep dive: [CrewAI Comprehensive Guide](../CrewAI_Guide/crewai_comprehensive_guide.md)
+1. Read [CrewAI README](../CrewAI_Guide/README)
+2. Try more [CrewAI Recipes](../CrewAI_Guide/crewai_recipes)
+3. Deep dive: [CrewAI Comprehensive Guide](../CrewAI_Guide/crewai_comprehensive_guide)
 
 ---
 
@@ -121,9 +121,9 @@ print(result.final_output)
 ```
 
 **Next Steps**:
-1. Read [OpenAI Agents SDK README](../OpenAI_Agents_SDK_Guides/README.md)
-2. Try more [OpenAI Recipes](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_recipes.md)
-3. Deep dive: [OpenAI Comprehensive Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide.md)
+1. Read [OpenAI Agents SDK README](../OpenAI_Agents_SDK_Guides/README)
+2. Try more [OpenAI Recipes](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_recipes)
+3. Deep dive: [OpenAI Comprehensive Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide)
 
 ---
 
@@ -151,9 +151,9 @@ print(response)
 ```
 
 **Next Steps**:
-1. Read [LlamaIndex README](../LlamaIndex_Guide/README.md)
-2. Try more [LlamaIndex Recipes](../LlamaIndex_Guide/llamaindex_recipes.md)
-3. Deep dive: [LlamaIndex Comprehensive Guide](../LlamaIndex_Guide/llamaindex_comprehensive_guide.md)
+1. Read [LlamaIndex README](../LlamaIndex_Guide/README)
+2. Try more [LlamaIndex Recipes](../LlamaIndex_Guide/llamaindex_recipes)
+3. Deep dive: [LlamaIndex Comprehensive Guide](../LlamaIndex_Guide/llamaindex_comprehensive_guide)
 
 ---
 
@@ -195,9 +195,9 @@ print(result)
 ```
 
 **Next Steps**:
-1. Read [LangGraph README](../LangGraph_Guide/README.md)
-2. Try more [LangGraph Recipes](../LangGraph_Guide/python/langgraph_recipes.md)
-3. Deep dive: [LangGraph Comprehensive Guide](../LangGraph_Guide/python/langgraph_comprehensive_guide.md)
+1. Read [LangGraph README](../LangGraph_Guide/README)
+2. Try more [LangGraph Recipes](../LangGraph_Guide/python/langgraph_recipes)
+3. Deep dive: [LangGraph Comprehensive Guide](../LangGraph_Guide/python/langgraph_comprehensive_guide)
 
 ---
 
@@ -215,7 +215,7 @@ def search_web(query: str) -> str:
 agent = CodeAgent(tools=[search_web])
 ```
 
-[Learn More →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide.md#tools)
+[Learn More →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide#tools)
 
 ---
 
@@ -230,7 +230,7 @@ graph = builder.compile(checkpointer=memory)
 # Now the graph remembers between runs
 ```
 
-[Learn More →](../LangGraph_Guide/python/langgraph_comprehensive_guide.md#memory)
+[Learn More →](../LangGraph_Guide/python/langgraph_comprehensive_guide#memory)
 
 ---
 
@@ -250,7 +250,7 @@ def risky_operation() -> str:
         return "Operation failed, trying alternative approach"
 ```
 
-[Learn More →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide.md#error-handling)
+[Learn More →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide#error-handling)
 
 ---
 
@@ -265,7 +265,7 @@ docker run -p 8000:8000 my-agent
 aws ecs run-task --cluster my-cluster --task-definition my-agent
 ```
 
-[Learn More →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide.md#deployment)
+[Learn More →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide#deployment)
 
 ---
 
@@ -361,7 +361,7 @@ agent = Agent(tools=[my_tool])
 agent = Agent()
 ```
 
-[See Tool Guide →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide.md#tools)
+[See Tool Guide →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide#tools)
 
 ---
 
@@ -375,7 +375,7 @@ graph = builder.compile(checkpointer=MemorySaver())
 graph = builder.compile()
 ```
 
-[See Memory Guide →](../LangGraph_Guide/python/langgraph_comprehensive_guide.md#memory)
+[See Memory Guide →](../LangGraph_Guide/python/langgraph_comprehensive_guide#memory)
 
 ---
 
@@ -390,16 +390,16 @@ for event in agent.stream(input):
 output = agent.run(input)
 ```
 
-[See Streaming Guide →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide.md#streaming)
+[See Streaming Guide →](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide#streaming)
 
 ---
 
 ## Resources
 
-- 📖 [All Guides](guides.md)
-- 🔄 [Framework Comparison](frameworks.md)
-- 📚 [Browse by Use Case](guides.md#-quick-reference)
-- 🏠 [Home](index.md)
+- 📖 [All Guides](guides)
+- 🔄 [Framework Comparison](frameworks)
+- 📚 [Browse by Use Case](guides#-quick-reference)
+- 🏠 [Home](index)
 
 ---
 

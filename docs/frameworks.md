@@ -567,5 +567,5 @@ If you outgrow a framework:
 
 ---
 
-[Back to Home →](index.md) | [All Guides →](guides.md)
+[Back to Home →](index) | [All Guides →](guides)
 

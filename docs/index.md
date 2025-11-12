@@ -20,9 +20,9 @@ Welcome to the Agent Guides collection—your complete resource for mastering AI
 Multi-agent systems with lightweight primitives and powerful abstractions.
 
 **Quick Links**:
-- 📖 [Comprehensive Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide.md)
-- 🚀 [Production Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide.md)
-- 👨‍💻 [Recipes](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_recipes.md)
+- 📖 [Comprehensive Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide)
+- 🚀 [Production Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide)
+- 👨‍💻 [Recipes](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_recipes)
 
 **Install**: `pip install openai-agents`
 
@@ -32,9 +32,9 @@ Multi-agent systems with lightweight primitives and powerful abstractions.
 Lightweight Python framework where agents write code instead of JSON.
 
 **Quick Links**:
-- 📖 [Comprehensive Guide](../SmolAgents_Guide/smolagents_comprehensive_guide.md)
-- 🚀 [Production Guide](../SmolAgents_Guide/smolagents_production_guide.md)
-- 👨‍💻 [Recipes](../SmolAgents_Guide/smolagents_recipes.md)
+- 📖 [Comprehensive Guide](../SmolAgents_Guide/smolagents_comprehensive_guide)
+- 🚀 [Production Guide](../SmolAgents_Guide/smolagents_production_guide)
+- 👨‍💻 [Recipes](../SmolAgents_Guide/smolagents_recipes)
 
 **Install**: `pip install smolagents`
 
@@ -92,7 +92,7 @@ Lightweight Python framework where agents write code instead of JSON.
 - [Anthropic Claude TypeScript](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/) - TypeScript
 - [OpenAI Agents TypeScript](../OpenAI_Agents_SDK_TypeScript_Guide/) - TypeScript
 
-[View All Guides →](./guides.md)
+[View All Guides →](./guides)
 
 ---
 
@@ -178,7 +178,7 @@ State management:
 
 ## 📊 Framework Comparison
 
-Want to compare features across frameworks? Check out our [Comparison Guide](./frameworks.md).
+Want to compare features across frameworks? Check out our [Comparison Guide](./frameworks).
 
 ---
 
@@ -206,7 +206,7 @@ Help make this resource better:
 - Update for new versions
 - Share your patterns
 
-[Contribution Guidelines →](./contributing.md)
+[Contribution Guidelines →](./contributing)
 
 ---
 
@@ -233,5 +233,5 @@ This collection is maintained by the community for the community. Thank you to a
 
 ---
 
-**Start exploring**: [Browse All Guides →](./guides.md)
+**Start exploring**: [Browse All Guides →](./guides)
 
