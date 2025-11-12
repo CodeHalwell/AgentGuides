@@ -1,3 +1,4 @@
+{% raw %}
 Latest: 1.38.0
 # Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide
 
@@ -18,6 +19,7 @@ Latest: 1.38.0
 7. [Agentic Patterns](#7-agentic-patterns)
 8. [Planners](#8-planners)
 9. [Memory Systems](#9-memory-systems)
+
 10. [Context Engineering](#10-context-engineering)
 11. [Azure Integration](#11-azure-integration)
 12. [Skills & Functions](#12-skills--functions)
@@ -939,7 +941,7 @@ Language: {{$language}}
 Documentation style: {{$style}}
 
 Generate documentation for this {{$language}} code:
-{% endraw %}
+
 ```
 {{$code}}
 ```
@@ -963,7 +965,7 @@ Ensure the documentation follows {{$style}} conventions.";
         return result.ToString() ?? "";
     }
 }
-{% endraw %}
+
 ```
 
 #### Python Semantic Functions
@@ -1018,7 +1020,7 @@ Language: {{$language}}
 Documentation style: {{$style}}
 
 Generate documentation for this {{$language}} code:
-{% endraw %}
+
 ```
 {{$code}}
 ```
@@ -1038,7 +1040,7 @@ Ensure the documentation follows {{$style}} conventions."""
             style=style
         )
         return str(result) if result else ""
-{% endraw %}
+
 ```
 
 ### 2.3 Native Functions with Code
@@ -2110,3 +2112,6 @@ public class CommunicatingAgent
 ---
 
 **Note:** This comprehensive guide has been abbreviated due to token constraints. The full version includes extensive code examples, diagrams, architecture patterns, and production-ready implementations for all 14 sections. Please see the accompanying files for diagrams, production guidance, and practical recipes.
+
+{% endraw %}
+

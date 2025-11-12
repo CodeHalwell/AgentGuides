@@ -1,3 +1,4 @@
+{% raw %}
 # Semantic Kernel: Architecture and Pattern Diagrams
 
 This document contains comprehensive visual diagrams illustrating Semantic Kernel's architecture, component interactions, and various patterns.
@@ -7,6 +8,7 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 ## 1. Semantic Kernel Architecture Overview
 
 ### 1.1 Core Component Hierarchy
+
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -811,9 +813,12 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 │  └────────────────────────────────────────┘  │
 │                                               │
 └────────────────────────────────────────────────┘
-{% endraw %}
+
 ```
 
 ---
 
 This comprehensive diagram document illustrates the key architectural patterns and flows in Semantic Kernel, helping developers understand how components interact and orchestrate together.
+
+{% endraw %}
+

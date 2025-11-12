@@ -1,3 +1,4 @@
+{% raw %}
 # LangGraph: Advanced Recipes & Real-World Patterns
 
 ---
@@ -1092,3 +1093,6 @@ async def stream_processing():
 
 This collection of recipes covers real-world patterns you'll encounter building production AI systems.
 Adapt and combine them for your specific use cases!
+
+{% endraw %}
+

@@ -1,3 +1,4 @@
+{% raw %}
 # Semantic Kernel: Production Deployment and Operations Guide
 
 **Version:** 1.0  
@@ -1204,3 +1205,6 @@ public class BackgroundJobService
 ```
 
 This production guide covers essential operations patterns for deploying Semantic Kernel applications in enterprise environments with emphasis on reliability, scalability, security, and cost management.
+
+{% endraw %}
+

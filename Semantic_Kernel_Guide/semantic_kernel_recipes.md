@@ -1,3 +1,4 @@
+{% raw %}
 # Semantic Kernel: Practical Recipes and Code Examples
 
 **Version:** 1.0  
@@ -944,3 +945,6 @@ Final Answer: [the answer]",
 ```
 
 These recipes provide practical, production-ready code examples for common Semantic Kernel patterns across .NET and Python platforms.
+
+{% endraw %}
+
