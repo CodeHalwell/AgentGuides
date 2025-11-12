@@ -4,6 +4,9 @@ theme: minima
 markdown: kramdown
 plugins:
   - jekyll-seo-tag
+repository: CodeHalwell/AgentGuides
+url: https://codehalwell.github.io
+baseurl: /AgentGuides
 exclude:
   - versions.json
   - Gemfile
