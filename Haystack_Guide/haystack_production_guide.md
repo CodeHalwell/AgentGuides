@@ -652,7 +652,7 @@ networks:
 ### Kubernetes Manifests
 
 ```yaml
-{% raw %}
+
 # namespace.yaml
 apiVersion: v1
 kind: Namespace
@@ -877,7 +877,7 @@ spec:
       - type: Percent
         value: 100
         periodSeconds: 15
-{% endraw %}
+
 ```
 
 ---
@@ -1280,3 +1280,4 @@ This comprehensive production guide covers all aspects of deploying, managing, a
 Due to space constraints, I've covered the essential production topics. The remaining sections (Rate Limiting, Security, Observability, Error Recovery, Database Management, Multi-Tenancy, Governance, and Disaster Recovery) would follow similar patterns with detailed implementations.
 
 Each section provides production-ready code that can be adapted to specific deployment scenarios. The combination of best practices, design patterns, and working examples ensures applications can be deployed and operated reliably at scale.
+

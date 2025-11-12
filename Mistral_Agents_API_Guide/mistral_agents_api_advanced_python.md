@@ -86,7 +86,6 @@ for event in client.chat.stream(model="mistral-large-latest", messages=messages,
 
 deployment.yaml
 
-{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -131,7 +130,6 @@ spec:
 .github/workflows/deploy.yml
 
 ```yaml
-{% raw %}
 name: deploy
 on:
   push:
@@ -162,9 +160,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
-{% endraw %}
 ```
-{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

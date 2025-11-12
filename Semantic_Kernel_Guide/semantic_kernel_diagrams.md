@@ -1,4 +1,4 @@
-{% raw %}
+
 # Semantic Kernel: Architecture and Pattern Diagrams
 
 This document contains comprehensive visual diagrams illustrating Semantic Kernel's architecture, component interactions, and various patterns.
@@ -786,7 +786,7 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 ### 10.1 Template Variable Substitution
 
 ```
-{% raw %}
+
 ┌────────────────────────────────────────────────┐
 │     Prompt Template Variable Flow              │
 ├────────────────────────────────────────────────┤
@@ -820,5 +820,6 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 
 This comprehensive diagram document illustrates the key architectural patterns and flows in Semantic Kernel, helping developers understand how components interact and orchestrate together.
 
-{% endraw %}
+
+
 

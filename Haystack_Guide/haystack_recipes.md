@@ -20,7 +20,7 @@
 A complete RAG system for answering questions from an enterprise knowledge base.
 
 ```python
-{% raw %}
+
 from haystack import Pipeline, component
 from haystack.document_stores.elasticsearch import ElasticsearchDocumentStore
 from haystack.components.retrievers.elasticsearch import ElasticsearchBM25Retriever
@@ -64,9 +64,9 @@ class KnowledgeBaseQA:
         Based on the following documents, answer the question.
         
         Documents:
-        {% for doc in documents %}
+        
         - {{ doc.content }}
-        {% endfor %}
+        
         
         Question: {{ question }}
         Answer:
@@ -142,7 +142,7 @@ qa_system.index_documents(sample_docs)
 # Query
 result = qa_system.query("What's your return policy?")
 print(f"Answer: {result['answer']}")
-{% endraw %}
+
 ```
 
 ---
@@ -315,7 +315,7 @@ print(response)
 Analyse and summarise large document collections.
 
 ```python
-{% raw %}
+
 from haystack import Pipeline, component
 from haystack.components.builders import PromptBuilder
 from haystack.components.generators.chat import OpenAIChatGenerator
@@ -425,7 +425,7 @@ documents = [
 
 results = analyser.analyse_documents(documents)
 print(results)
-{% endraw %}
+
 ```
 
 ---
@@ -899,3 +899,4 @@ print(result)
 ---
 
 These recipes provide production-ready patterns for common Haystack use cases. Each recipe demonstrates best practices, error handling, and integration patterns suitable for enterprise deployments.
+

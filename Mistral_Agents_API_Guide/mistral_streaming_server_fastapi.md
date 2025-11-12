@@ -42,7 +42,6 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
 
 ### Kubernetes (deployment.yaml)
 
-{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -79,7 +78,6 @@ spec:
 ### GitHub Actions (.github/workflows/deploy.yml)
 
 ```yaml
-{% raw %}
 name: deploy
 on: { push: { branches: [ main ] } }
 jobs:
@@ -102,9 +100,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
-{% endraw %}
 ```
-{% endraw %}
 
 ## Security Best Practices
 - Require auth (Bearer or session) for SSE endpoint

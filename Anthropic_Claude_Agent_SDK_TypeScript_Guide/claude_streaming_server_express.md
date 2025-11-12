@@ -50,7 +50,6 @@ CMD ["node", "server.js"]
 
 ### Kubernetes (deployment.yaml)
 
-{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -84,7 +83,6 @@ spec:
 ### GitHub Actions
 
 ```yaml
-{% raw %}
 name: deploy
 on: { push: { branches: [ main ] } }
 jobs:
@@ -110,9 +108,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
-{% endraw %}
 ```
-{% endraw %}
 
 ## Security Best Practices
 - Use secrets from Kubernetes Secret or cloud secret managers

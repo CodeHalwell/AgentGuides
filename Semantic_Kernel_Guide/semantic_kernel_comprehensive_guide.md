@@ -1,4 +1,4 @@
-{% raw %}
+
 Latest: 1.38.0
 # Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide
 
@@ -884,7 +884,7 @@ Semantic functions use natural language prompts to define AI-driven behaviour. T
 #### .NET Semantic Functions
 
 ```csharp
-{% raw %}
+
 using Microsoft.SemanticKernel;
 
 public class SemanticFunctionsExample
@@ -945,7 +945,7 @@ Generate documentation for this {{$language}} code:
 ```
 {{$code}}
 ```
-{% raw %}
+
 
 Ensure the documentation follows {{$style}} conventions.";
 
@@ -971,7 +971,7 @@ Ensure the documentation follows {{$style}} conventions.";
 #### Python Semantic Functions
 
 ```python
-{% raw %}
+
 from semantic_kernel import Kernel
 from semantic_kernel.functions import kernel_function
 from typing import Any
@@ -1024,7 +1024,7 @@ Generate documentation for this {{$language}} code:
 ```
 {{$code}}
 ```
-{% raw %}
+
 
 Ensure the documentation follows {{$style}} conventions."""
         
@@ -2113,5 +2113,6 @@ public class CommunicatingAgent
 
 **Note:** This comprehensive guide has been abbreviated due to token constraints. The full version includes extensive code examples, diagrams, architecture patterns, and production-ready implementations for all 14 sections. Please see the accompanying files for diagrams, production guidance, and practical recipes.
 
-{% endraw %}
+
+
 

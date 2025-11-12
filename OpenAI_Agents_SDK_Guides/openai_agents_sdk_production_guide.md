@@ -104,7 +104,6 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
 
 Separate services for different agent types:
 
-{% raw %}
 ```yaml
 # docker-compose.yml
 version: '3.8'
@@ -1234,7 +1233,6 @@ class TestMultiAgentSystem:
 Automated testing and deployment:
 
 ```yaml
-{% raw %}
 # .github/workflows/ci-cd.yml
 name: CI/CD Pipeline
 
@@ -1315,9 +1313,7 @@ jobs:
         curl -X POST ${{ secrets.DEPLOY_WEBHOOK }} \
           -H "Authorization: Bearer $DEPLOY_TOKEN" \
           -d '{"image":"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"}'
-{% endraw %}
 ```
-{% endraw %}
 
 ---
 

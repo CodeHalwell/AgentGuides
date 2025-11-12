@@ -48,7 +48,6 @@ Console.WriteLine(messages.Value[0].Content[0].Text);
 
 deployment.yaml
 
-{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -91,7 +90,6 @@ spec:
 ## CI/CD (GitHub Actions)
 
 ```yaml
-{% raw %}
 name: build-and-deploy
 on:
   push:
@@ -125,9 +123,7 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
-{% endraw %}
 ```
-{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

@@ -5,7 +5,7 @@
 ### Cloud Provider Configuration
 
 **AWS Deployment (Recommended)**
-{% raw %}
+
 ```yaml
 Region: us-east-1 (or closest to users)
 Services:
@@ -660,7 +660,6 @@ class AccessControl:
 ### GitHub Actions Example
 
 ```yaml
-{% raw %}
 name: Deploy Mistral Agents
 
 on:
@@ -706,9 +705,7 @@ jobs:
       - name: Deploy to ECS
         run: |
           ./scripts/deploy.sh
-{% endraw %}
 ```
-{% endraw %}
 
 ---
 

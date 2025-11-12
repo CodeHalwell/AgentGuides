@@ -760,7 +760,7 @@ if __name__ == "__main__":
 ### Building Knowledge Graphs from Documents
 
 ```python
-{% raw %}
+
 """
 knowledge_graph_builder.py
 Extract and build knowledge graphs from documents
@@ -889,7 +889,7 @@ if __name__ == "__main__":
     
     # Save
     builder.save_graph("knowledge_graph.dot")
-{% endraw %}
+
 ```
 
 ---
@@ -1155,3 +1155,4 @@ if __name__ == "__main__":
 ---
 
 These recipes provide ready-to-use implementations for common LlamaIndex use cases. Each can be customised and extended based on specific requirements.
+

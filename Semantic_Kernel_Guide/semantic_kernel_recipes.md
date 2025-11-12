@@ -1,4 +1,4 @@
-{% raw %}
+
 # Semantic Kernel: Practical Recipes and Code Examples
 
 **Version:** 1.0  
@@ -25,7 +25,7 @@
 **.NET Implementation:**
 
 ```csharp
-{% raw %}
+
 using Microsoft.SemanticKernel;
 
 public class SimpleQASystem
@@ -62,13 +62,13 @@ Answer:",
         Console.WriteLine(answer);
     }
 }
-{% endraw %}
+
 ```
 
 **Python Implementation:**
 
 ```python
-{% raw %}
+
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 import asyncio
@@ -104,7 +104,7 @@ async def main():
     print(answer)
 
 asyncio.run(main())
-{% endraw %}
+
 ```
 
 ### 1.2 Content Summariser
@@ -114,7 +114,7 @@ asyncio.run(main())
 **.NET Implementation:**
 
 ```csharp
-{% raw %}
+
 using Microsoft.SemanticKernel;
 
 public class ContentSummariser
@@ -162,13 +162,13 @@ Bullet points:",
         return result.ToString() ?? "";
     }
 }
-{% endraw %}
+
 ```
 
 **Python Implementation:**
 
 ```python
-{% raw %}
+
 from semantic_kernel import Kernel
 
 class ContentSummariser:
@@ -208,7 +208,7 @@ Bullet points:""",
         
         result = await self.kernel.invoke_async(bullet_function, content=content)
         return str(result) if result else ""
-{% endraw %}
+
 ```
 
 ### 1.3 Translation Service
@@ -218,7 +218,7 @@ Bullet points:""",
 **.NET Implementation:**
 
 ```csharp
-{% raw %}
+
 using Microsoft.SemanticKernel;
 
 public class TranslationService
@@ -271,7 +271,7 @@ Translation:",
         return results;
     }
 }
-{% endraw %}
+
 ```
 
 ---
@@ -473,7 +473,7 @@ public class HttpPlugin
 **.NET Implementation:**
 
 ```csharp
-{% raw %}
+
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Memory;
 
@@ -559,13 +559,13 @@ Answer:",
         Console.WriteLine(answer);
     }
 }
-{% endraw %}
+
 ```
 
 **Python Implementation:**
 
 ```python
-{% raw %}
+
 from semantic_kernel import Kernel
 from semantic_kernel.memory import VolatileMemoryStore
 from semantic_kernel.connectors.ai.open_ai import OpenAITextEmbedding
@@ -638,7 +638,7 @@ async def main():
     print(answer)
 
 asyncio.run(main())
-{% endraw %}
+
 ```
 
 ---
@@ -740,7 +740,7 @@ Console.WriteLine(result);
 **.NET Implementation:**
 
 ```csharp
-{% raw %}
+
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Memory;
 using Microsoft.SemanticKernel.Embeddings;
@@ -844,7 +844,7 @@ Answer based on the provided context:",
         return chunks;
     }
 }
-{% endraw %}
+
 ```
 
 ### 5.2 ReAct Agent (Reasoning and Acting)
@@ -946,5 +946,6 @@ Final Answer: [the answer]",
 
 These recipes provide practical, production-ready code examples for common Semantic Kernel patterns across .NET and Python platforms.
 
-{% endraw %}
+
+
 
