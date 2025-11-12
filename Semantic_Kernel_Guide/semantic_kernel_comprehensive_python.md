@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Semantic Kernel Comprehensive Guide (Python)
-description: End-to-end Python guide for Microsoft Semantic Kernel agents, plugins, memory, planners, and production.
+title: "Semantic Kernel Comprehensive Guide (Python)"
+description: "End-to-end Python guide for Microsoft Semantic Kernel agents, plugins, memory, planners, and production."
 ---
 
 # Semantic Kernel Comprehensive Guide (Python)

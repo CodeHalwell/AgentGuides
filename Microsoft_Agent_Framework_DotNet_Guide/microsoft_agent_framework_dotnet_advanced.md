@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Microsoft Agent Framework Advanced (.NET)
-description: Advanced agent orchestration, resilience, and deployment patterns in .NET.
+title: "Microsoft Agent Framework Advanced (.NET)"
+description: "Advanced agent orchestration, resilience, and deployment patterns in .NET."
 ---
 
 # Microsoft Agent Framework Advanced (.NET)
@@ -48,6 +48,7 @@ Console.WriteLine(messages.Value[0].Content[0].Text);
 
 deployment.yaml
 
+{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -124,6 +125,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

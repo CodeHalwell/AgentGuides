@@ -104,6 +104,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
 
 Separate services for different agent types:
 
+{% raw %}
 ```yaml
 # docker-compose.yml
 version: '3.8'
@@ -1314,6 +1315,7 @@ jobs:
           -H "Authorization: Bearer $DEPLOY_TOKEN" \
           -d '{"image":"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"}'
 ```
+{% endraw %}
 
 ---
 

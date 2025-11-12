@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Semantic Kernel Comprehensive Guide (.NET)
-description: End-to-end .NET (C#) guide for Microsoft Semantic Kernel agents, plugins, memory, planners, and production.
+title: "Semantic Kernel Comprehensive Guide (.NET)"
+description: "End-to-end .NET (C#) guide for Microsoft Semantic Kernel agents, plugins, memory, planners, and production."
 ---
 
 # Semantic Kernel Comprehensive Guide (.NET)

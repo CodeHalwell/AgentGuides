@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Haystack Advanced Agent Patterns (Python)
-description: Complex pipelines, retries, and observability for Haystack agents.
+title: "Haystack Advanced Agent Patterns (Python)"
+description: "Complex pipelines, retries, and observability for Haystack agents."
 ---
 
 # Haystack Advanced Agent Patterns (Python)

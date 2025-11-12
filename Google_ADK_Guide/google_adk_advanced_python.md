@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Google ADK Advanced (Python)
-description: Advanced patterns for Google Agent Development Kit: multi-agent, HITL, observability, deployment.
+title: "Google ADK Advanced (Python)"
+description: "Advanced patterns for Google Agent Development Kit: multi-agent, HITL, observability, deployment."
 ---
 
 # Google ADK Advanced (Python)
@@ -34,6 +34,7 @@ print(result.output)
 
 ### Cloud Run (service.yaml)
 
+{% raw %}
 ```yaml
 apiVersion: serving.knative.dev/v1
 kind: Service
@@ -67,6 +68,7 @@ jobs:
       - run: gcloud builds submit --tag gcr.io/$PROJECT_ID/adk-agent:latest .
       - run: gcloud run deploy adk-agent --image gcr.io/$PROJECT_ID/adk-agent:latest --region $REGION --platform managed
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

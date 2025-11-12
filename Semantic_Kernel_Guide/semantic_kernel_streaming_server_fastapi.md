@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Semantic Kernel Streaming Server (FastAPI, Python)
-description: Stream incremental events from an SK-driven workflow over SSE.
+title: "Semantic Kernel Streaming Server (FastAPI, Python)"
+description: "Stream incremental events from an SK-driven workflow over SSE."
 ---
 
 # Semantic Kernel Streaming Server (FastAPI, Python)

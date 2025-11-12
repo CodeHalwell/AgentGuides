@@ -1,7 +1,7 @@
 ---
 layout: default
-title: All Guides
-description: Complete list of all agent framework guides
+title: "All Guides"
+description: "Complete list of all agent framework guides"
 ---
 
 # All Guides

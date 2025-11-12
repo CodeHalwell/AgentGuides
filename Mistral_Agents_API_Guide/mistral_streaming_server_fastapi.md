@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Mistral Streaming Server (FastAPI)
-description: Minimal FastAPI server streaming Mistral chat completions.
+title: "Mistral Streaming Server (FastAPI)"
+description: "Minimal FastAPI server streaming Mistral chat completions."
 ---
 
 # Mistral Streaming Server (FastAPI)
@@ -42,6 +42,7 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
 
 ### Kubernetes (deployment.yaml)
 
+{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -101,6 +102,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Require auth (Bearer or session) for SSE endpoint

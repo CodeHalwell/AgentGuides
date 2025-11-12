@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LangGraph Observability and Monitoring (TypeScript)
-description: Tracing and metrics for LangGraph TypeScript with OpenTelemetry.
+title: "LangGraph Observability and Monitoring (TypeScript)"
+description: "Tracing and metrics for LangGraph TypeScript with OpenTelemetry."
 ---
 
 # LangGraph Observability and Monitoring (TypeScript)

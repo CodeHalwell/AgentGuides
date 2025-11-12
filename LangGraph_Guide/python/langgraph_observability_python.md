@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LangGraph Observability and Monitoring (Python)
-description: Tracing, metrics, and logging patterns for LangGraph Python.
+title: "LangGraph Observability and Monitoring (Python)"
+description: "Tracing, metrics, and logging patterns for LangGraph Python."
 ---
 
 # LangGraph Observability and Monitoring (Python)

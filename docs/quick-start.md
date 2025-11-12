@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Quick Start
-description: Get started with AI agents in minutes
+title: "Quick Start"
+description: "Get started with AI agents in minutes"
 ---
 
 # 🚀 Quick Start Guide

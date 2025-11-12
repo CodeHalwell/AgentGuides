@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LangGraph Advanced Error Handling and Recovery (Python)
-description: Patterns for retries, timeouts, compensation, and safe state recovery in LangGraph Python.
+title: "LangGraph Advanced Error Handling and Recovery (Python)"
+description: "Patterns for retries, timeouts, compensation, and safe state recovery in LangGraph Python."
 ---
 
 # LangGraph Advanced Error Handling and Recovery (Python)

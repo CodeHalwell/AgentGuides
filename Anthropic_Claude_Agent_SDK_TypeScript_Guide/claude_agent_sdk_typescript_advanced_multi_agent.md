@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Claude Agent SDK Advanced Multi‑Agent (TypeScript)
-description: Advanced collaboration, guardrails, and HITL in Claude Agent SDK TypeScript.
+title: "Claude Agent SDK Advanced Multi‑Agent (TypeScript)"
+description: "Advanced collaboration, guardrails, and HITL in Claude Agent SDK TypeScript."
 ---
 
 # Claude Agent SDK Advanced Multi‑Agent (TypeScript)

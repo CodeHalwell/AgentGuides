@@ -5,6 +5,7 @@
 ### Cloud Provider Configuration
 
 **AWS Deployment (Recommended)**
+{% raw %}
 ```yaml
 Region: us-east-1 (or closest to users)
 Services:
@@ -705,6 +706,7 @@ jobs:
         run: |
           ./scripts/deploy.sh
 ```
+{% endraw %}
 
 ---
 

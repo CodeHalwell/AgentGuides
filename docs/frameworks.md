@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Framework Comparison
-description: Compare AI agent frameworks
+title: "Framework Comparison"
+description: "Compare AI agent frameworks"
 ---
 
 # 🔄 Framework Comparison

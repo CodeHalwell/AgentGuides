@@ -1,7 +1,7 @@
 ---
 layout: default
-title: AutoGen Observability & Recovery (Python)
-description: Instrumenting group chats, retries, and HITL for AutoGen.
+title: "AutoGen Observability & Recovery (Python)"
+description: "Instrumenting group chats, retries, and HITL for AutoGen."
 ---
 
 # AutoGen Observability & Recovery (Python)

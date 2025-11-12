@@ -1,7 +1,7 @@
 ---
 layout: default
-title: AutoGen Advanced Multi‑Agent (Python)
-description: Advanced group chat, routing, and HITL with AutoGen.
+title: "AutoGen Advanced Multi‑Agent (Python)"
+description: "Advanced group chat, routing, and HITL with AutoGen."
 ---
 
 # AutoGen Advanced Multi‑Agent (Python)

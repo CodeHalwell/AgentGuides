@@ -1,7 +1,7 @@
 ---
 layout: default
-title: OpenAI Agents Streaming Server (FastAPI)
-description: Stream model output using FastAPI and OpenAI Python SDK.
+title: "OpenAI Agents Streaming Server (FastAPI)"
+description: "Stream model output using FastAPI and OpenAI Python SDK."
 ---
 
 # OpenAI Agents Streaming Server (FastAPI)

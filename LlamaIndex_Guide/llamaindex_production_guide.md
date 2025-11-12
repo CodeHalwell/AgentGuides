@@ -208,6 +208,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ### Docker Compose for Local Development
 
+{% raw %}
 ```yaml
 # docker-compose.yml
 version: '3.8'
@@ -1296,6 +1297,7 @@ jobs:
       env:
         KUBECONFIG: ${{ secrets.KUBE_CONFIG }}
 ```
+{% endraw %}
 
 ---
 

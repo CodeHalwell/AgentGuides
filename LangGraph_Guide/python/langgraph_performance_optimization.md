@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LangGraph Performance Optimization (Python)
-description: Techniques for batching, caching, and parallelism in LangGraph Python.
+title: "LangGraph Performance Optimization (Python)"
+description: "Techniques for batching, caching, and parallelism in LangGraph Python."
 ---
 
 # LangGraph Performance Optimization (Python)

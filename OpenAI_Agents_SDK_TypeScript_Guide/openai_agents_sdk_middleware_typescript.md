@@ -1,7 +1,7 @@
 ---
 layout: default
-title: OpenAI Agents SDK Middleware and Guardrails (TypeScript)
-description: Implement middleware, guardrails, and tracing with the OpenAI Agents SDK in TypeScript.
+title: "OpenAI Agents SDK Middleware and Guardrails (TypeScript)"
+description: "Implement middleware, guardrails, and tracing with the OpenAI Agents SDK in TypeScript."
 ---
 
 # OpenAI Agents SDK Middleware and Guardrails (TypeScript)

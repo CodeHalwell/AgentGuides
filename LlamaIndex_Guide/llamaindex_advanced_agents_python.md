@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LlamaIndex Advanced Agents (Python)
-description: Multi-agent orchestration with LlamaIndex tools, observability, and recovery patterns.
+title: "LlamaIndex Advanced Agents (Python)"
+description: "Multi-agent orchestration with LlamaIndex tools, observability, and recovery patterns."
 ---
 
 # LlamaIndex Advanced Agents (Python)

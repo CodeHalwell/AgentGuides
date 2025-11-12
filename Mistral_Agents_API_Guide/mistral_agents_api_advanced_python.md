@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Mistral Agents API Advanced (Python)
-description: Advanced patterns for Mistral agents: error handling, observability, deployment.
+title: "Mistral Agents API Advanced (Python)"
+description: "Advanced patterns for Mistral agents: error handling, observability, deployment."
 ---
 
 # Mistral Agents API Advanced (Python)
@@ -86,6 +86,7 @@ for event in client.chat.stream(model="mistral-large-latest", messages=messages,
 
 deployment.yaml
 
+{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -161,6 +162,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

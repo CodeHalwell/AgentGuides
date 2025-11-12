@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LlamaIndex Observability & Monitoring (Python)
-description: Tracing, metrics, and logging patterns for LlamaIndex.
+title: "LlamaIndex Observability & Monitoring (Python)"
+description: "Tracing, metrics, and logging patterns for LlamaIndex."
 ---
 
 # LlamaIndex Observability & Monitoring (Python)

@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LlamaIndex Streaming Server (FastAPI)
-description: Stream LlamaIndex query tokens over SSE using FastAPI.
+title: "LlamaIndex Streaming Server (FastAPI)"
+description: "Stream LlamaIndex query tokens over SSE using FastAPI."
 ---
 
 # LlamaIndex Streaming Server (FastAPI)

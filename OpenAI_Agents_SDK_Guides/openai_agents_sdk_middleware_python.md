@@ -1,7 +1,7 @@
 ---
 layout: default
-title: OpenAI Agents SDK Middleware & Guardrails (Python)
-description: Add middleware, guardrails, and tracing to Python Agents SDK apps.
+title: "OpenAI Agents SDK Middleware & Guardrails (Python)"
+description: "Add middleware, guardrails, and tracing to Python Agents SDK apps."
 ---
 
 # OpenAI Agents SDK Middleware & Guardrails (Python)

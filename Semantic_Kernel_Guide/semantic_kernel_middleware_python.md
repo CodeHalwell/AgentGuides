@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Semantic Kernel Middleware (Python)
-description: Implement request/response middleware, guardrails, and policy enforcement in SK Python.
+title: "Semantic Kernel Middleware (Python)"
+description: "Implement request/response middleware, guardrails, and policy enforcement in SK Python."
 ---
 
 # Semantic Kernel Middleware (Python)

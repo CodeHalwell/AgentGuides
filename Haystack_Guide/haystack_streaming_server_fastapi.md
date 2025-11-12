@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Haystack Streaming Server (FastAPI)
-description: Stream progress/events over SSE with a Haystack pipeline.
+title: "Haystack Streaming Server (FastAPI)"
+description: "Stream progress/events over SSE with a Haystack pipeline."
 ---
 
 # Haystack Streaming Server (FastAPI)
@@ -11,6 +11,7 @@ Last verified: 2025-11
 
 This example streams simple progress events and a final answer. Token-level streaming depends on the underlying generator.
 
+{% raw %}
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -27,6 +28,7 @@ def stream(q: str):
         yield f"data: {{\"final\": \"answer for {q}\"}}\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
+{% endraw %}
 
 ## Deployment
 

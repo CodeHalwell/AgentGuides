@@ -1,7 +1,7 @@
 ---
 layout: default
-title: OpenAI Agents Streaming Server (Express)
-description: Stream OpenAI model output in Node/Express using the OpenAI SDK.
+title: "OpenAI Agents Streaming Server (Express)"
+description: "Stream OpenAI model output in Node/Express using the OpenAI SDK."
 ---
 
 # OpenAI Agents Streaming Server (Express)

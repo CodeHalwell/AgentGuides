@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Google ADK - IAM Examples
-description: Least-privilege IAM roles for ADK on GCP.
+title: "Google ADK - IAM Examples"
+description: "Least-privilege IAM roles for ADK on GCP."
 ---
 
 # Google ADK - IAM Examples

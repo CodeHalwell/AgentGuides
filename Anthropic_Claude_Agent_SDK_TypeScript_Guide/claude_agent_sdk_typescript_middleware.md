@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Claude Agent SDK Middleware (TypeScript)
-description: Guardrails, middleware, and tracing patterns for Claude Agent SDK (TypeScript).
+title: "Claude Agent SDK Middleware (TypeScript)"
+description: "Guardrails, middleware, and tracing patterns for Claude Agent SDK (TypeScript)."
 ---
 
 # Claude Agent SDK Middleware (TypeScript)
@@ -67,6 +67,7 @@ for await (const chunk of stream) {
 
 deployment.yaml
 
+{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -144,6 +145,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 ```
 
 ## Security Best Practices

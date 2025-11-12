@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Claude Streaming Server (Express)
-description: Stream Claude responses via SSE using @anthropic-ai/sdk.
+title: "Claude Streaming Server (Express)"
+description: "Stream Claude responses via SSE using @anthropic-ai/sdk."
 ---
 
 # Claude Streaming Server (Express)
@@ -50,6 +50,7 @@ CMD ["node", "server.js"]
 
 ### Kubernetes (deployment.yaml)
 
+{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -109,6 +110,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Use secrets from Kubernetes Secret or cloud secret managers

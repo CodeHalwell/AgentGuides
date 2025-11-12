@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LangGraph Streaming Server (Express)
-description: Stream LangGraph events over SSE using Express.
+title: "LangGraph Streaming Server (Express)"
+description: "Stream LangGraph events over SSE using Express."
 ---
 
 # LangGraph Streaming Server (Express)
@@ -54,6 +54,7 @@ CMD ["node", "server.js"]
 
 ### Kubernetes (deployment.yaml)
 
+{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -113,6 +114,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Use API keys from secret stores; never embed in code

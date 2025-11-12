@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Microsoft Agent Streaming Server (.NET)
-description: Minimal ASP.NET Core streaming endpoint for AI Agent responses.
+title: "Microsoft Agent Streaming Server (.NET)"
+description: "Minimal ASP.NET Core streaming endpoint for AI Agent responses."
 ---
 
 # Microsoft Agent Streaming Server (.NET)

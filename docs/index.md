@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Agent Guides
-description: Comprehensive AI Agent Framework Documentation
+title: "Agent Guides"
+description: "Comprehensive AI Agent Framework Documentation"
 ---
 
 # 🤖 Agent Guides

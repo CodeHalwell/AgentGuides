@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Microsoft Agent Framework Advanced (Python)
-description: Advanced multi-agent, resilience, and Azure deployment.
+title: "Microsoft Agent Framework Advanced (Python)"
+description: "Advanced multi-agent, resilience, and Azure deployment."
 ---
 
 # Microsoft Agent Framework Advanced (Python)

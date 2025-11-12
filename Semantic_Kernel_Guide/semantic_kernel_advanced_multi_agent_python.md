@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Semantic Kernel Advanced Multi‑Agent (Python)
-description: Advanced multi-agent patterns in Semantic Kernel (Python) with AgentGroupChat, structured handoffs, and routing.
+title: "Semantic Kernel Advanced Multi‑Agent (Python)"
+description: "Advanced multi-agent patterns in Semantic Kernel (Python) with AgentGroupChat, structured handoffs, and routing."
 ---
 
 # Semantic Kernel Advanced Multi‑Agent (Python)

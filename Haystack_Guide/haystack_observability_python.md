@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Haystack Observability & Error Recovery (Python)
-description: Tracing pipelines, retries, fallbacks, and dead letters in Haystack.
+title: "Haystack Observability & Error Recovery (Python)"
+description: "Tracing pipelines, retries, fallbacks, and dead letters in Haystack."
 ---
 
 # Haystack Observability & Error Recovery (Python)

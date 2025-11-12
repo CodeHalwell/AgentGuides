@@ -1,7 +1,7 @@
 ---
 layout: default
-title: PydanticAI Streaming Server (FastAPI)
-description: Stream tokens from the model and validate the final output with PydanticAI.
+title: "PydanticAI Streaming Server (FastAPI)"
+description: "Stream tokens from the model and validate the final output with PydanticAI."
 ---
 
 # PydanticAI Streaming Server (FastAPI)

@@ -1,7 +1,7 @@
 ---
 layout: default
-title: LangGraph Middleware and Guardrails (TypeScript)
-description: Implement request/response middlewares, guardrails, and tracing in LangGraph TypeScript.
+title: "LangGraph Middleware and Guardrails (TypeScript)"
+description: "Implement request/response middlewares, guardrails, and tracing in LangGraph TypeScript."
 ---
 
 # LangGraph Middleware and Guardrails (TypeScript)
