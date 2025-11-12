@@ -82,27 +82,27 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ### **Path 1: Beginner (Learning)**
 1. Start with README (this file)
-2. Read: `microsoft_agent_framework_comprehensive_guide.md` → Core Fundamentals + Simple Agents sections
-3. View: `microsoft_agent_framework_diagrams.md` → System Architecture section
-4. Code: `microsoft_agent_framework_recipes.md` → Beginner Recipes
+2. Read: [microsoft_agent_framework_comprehensive_guide](microsoft_agent_framework_comprehensive_guide) → Core Fundamentals + Simple Agents sections
+3. View: [microsoft_agent_framework_diagrams](microsoft_agent_framework_diagrams) → System Architecture section
+4. Code: [microsoft_agent_framework_recipes](microsoft_agent_framework_recipes) → Beginner Recipes
 5. Practice: Build simple chat agent following Recipe 1
 
 **Estimated Time:** 4-6 hours
 
 ### **Path 2: Intermediate (Building)**
 1. Prerequisites: Complete Beginner path
-2. Read: `microsoft_agent_framework_comprehensive_guide.md` → Multi-Agent + Tools sections
-3. Code: `microsoft_agent_framework_recipes.md` → Intermediate Recipes
+2. Read: [microsoft_agent_framework_comprehensive_guide](microsoft_agent_framework_comprehensive_guide) → Multi-Agent + Tools sections
+3. Code: [microsoft_agent_framework_recipes](microsoft_agent_framework_recipes) → Intermediate Recipes
 4. Build: Multi-agent workflow following Recipe 4
-5. View: `microsoft_agent_framework_diagrams.md` → Multi-Agent Orchestration
+5. View: [microsoft_agent_framework_diagrams](microsoft_agent_framework_diagrams) → Multi-Agent Orchestration
 
 **Estimated Time:** 6-8 hours
 
 ### **Path 3: Advanced (Production)**
 1. Prerequisites: Complete Intermediate path
-2. Read: `microsoft_agent_framework_production_guide.md` → All sections
-3. View: `microsoft_agent_framework_diagrams.md` → Deployment Architecture
-4. Code: `microsoft_agent_framework_recipes.md` → Advanced Recipes + Integration
+2. Read: [microsoft_agent_framework_production_guide](microsoft_agent_framework_production_guide) → All sections
+3. View: [microsoft_agent_framework_diagrams](microsoft_agent_framework_diagrams) → Deployment Architecture
+4. Code: [microsoft_agent_framework_recipes](microsoft_agent_framework_recipes) → Advanced Recipes + Integration
 5. Design: Production architecture for your use case
 
 **Estimated Time:** 10-12 hours
@@ -110,8 +110,8 @@ This comprehensive guide collection is designed to take you from beginner to exp
 ### **Path 4: Quick Reference**
 1. Need a specific feature? Use Table of Contents
 2. Search across all documents for your scenario
-3. Check `microsoft_agent_framework_recipes.md` for code examples
-4. Reference `microsoft_agent_framework_diagrams.md` for architecture
+3. Check [microsoft_agent_framework_recipes](microsoft_agent_framework_recipes) for code examples
+4. Reference [microsoft_agent_framework_diagrams](microsoft_agent_framework_diagrams) for architecture
 
 ---
 

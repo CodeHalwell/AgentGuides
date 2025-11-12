@@ -25,7 +25,7 @@ CrewAI is a powerful Python framework that enables developers to orchestrate tea
 
 This comprehensive documentation is organised into five detailed guides:
 
-### 1. **Comprehensive Guide** (`crewai_comprehensive_guide.md`)
+### 1. **Comprehensive Guide** (crewai_comprehensive_guide)
 
 **Purpose**: Complete technical reference covering all core concepts and features
 
@@ -49,7 +49,7 @@ This comprehensive documentation is organised into five detailed guides:
 
 ---
 
-### 2. **Diagrams Guide** (`crewai_diagrams.md`)
+### 2. **Diagrams Guide** (crewai_diagrams)
 
 **Purpose**: Visual representations of CrewAI architecture and workflows
 
@@ -71,7 +71,7 @@ This comprehensive documentation is organised into five detailed guides:
 
 ---
 
-### 3. **Production Guide** (`crewai_production_guide.md`)
+### 3. **Production Guide** (crewai_production_guide)
 
 **Purpose**: Best practices for deploying and operating CrewAI in production environments
 
@@ -93,7 +93,7 @@ This comprehensive documentation is organised into five detailed guides:
 
 ---
 
-### 4. **Recipes Guide** (`crewai_recipes.md`)
+### 4. **Recipes Guide** (crewai_recipes)
 
 **Purpose**: Practical, ready-to-use implementation examples for common use cases
 

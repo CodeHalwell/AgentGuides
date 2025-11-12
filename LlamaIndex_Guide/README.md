@@ -8,7 +8,7 @@ A comprehensive, EXTREMELY VERBOSE technical guide to LlamaIndex—the leading f
 
 This guide is organised into five comprehensive guides:
 
-### 1. **`llamaindex_comprehensive_guide.md`**
+### 1. **[llamaindex_comprehensive_guide](llamaindex_comprehensive_guide)**
 The foundational technical reference covering:
 
 - **Core Fundamentals** (44 sections)
@@ -85,7 +85,7 @@ The foundational technical reference covering:
 
 **Total: 350+ code examples across 44 main topics**
 
-### 2. **`llamaindex_diagrams.md`**
+### 2. **[llamaindex_diagrams](llamaindex_diagrams)**
 Visual representations of:
 
 - Core architecture diagrams
@@ -101,7 +101,7 @@ Visual representations of:
 
 **Includes: 30+ ASCII diagrams for clear understanding**
 
-### 3. **`llamaindex_production_guide.md`**
+### 3. **[llamaindex_production_guide](llamaindex_production_guide)**
 Production-ready deployment strategies:
 
 - **Production Architecture**
@@ -157,7 +157,7 @@ Production-ready deployment strategies:
 
 **Includes: 40+ production-ready code examples**
 
-### 4. **`llamaindex_recipes.md`**
+### 4. **[llamaindex_recipes](llamaindex_recipes)**
 10 real-world, production-quality recipes:
 
 1. **Basic RAG Chatbot** - Interactive document Q&A
@@ -173,7 +173,7 @@ Production-ready deployment strategies:
 
 **Includes: 50+ complete, runnable examples**
 
-### 5. **`llamaindex_advanced_implementations.md`**
+### 5. **[llamaindex_advanced_implementations](llamaindex_advanced_implementations)**
 Advanced, production-grade patterns for building sophisticated multi-agent and RAG systems:
 
 - **Advanced Multi-Agent Systems** - `llama-agents` orchestration and asynchronous communication.
@@ -237,9 +237,9 @@ print(response)
 
 ### For Beginners
 
-1. Start with **Core Fundamentals** section in `llamaindex_comprehensive_guide.md`
-2. Review **Architecture Diagrams** in `llamaindex_diagrams.md` to visualise concepts
-3. Try **Basic RAG Chatbot** recipe from `llamaindex_recipes.md`
+1. Start with **Core Fundamentals** section in [llamaindex_comprehensive_guide](llamaindex_comprehensive_guide)
+2. Review **Architecture Diagrams** in [llamaindex_diagrams](llamaindex_diagrams) to visualise concepts
+3. Try **Basic RAG Chatbot** recipe from [llamaindex_recipes](llamaindex_recipes)
 4. Build your first application
 
 ### For Intermediate Users

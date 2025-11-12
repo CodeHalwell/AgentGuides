@@ -237,22 +237,22 @@ This guide extensively covers all requested topics:
 ## Quick Start
 
 ### For Beginners
-1. Start with **Part I** of `haystack_comprehensive_guide.md`
-2. Review the architecture diagrams in `haystack_diagrams.md`
-3. Try one of the simpler recipes from `haystack_recipes.md`
+1. Start with **Part I** of [haystack_comprehensive_guide](haystack_comprehensive_guide)
+2. Review the architecture diagrams in [haystack_diagrams](haystack_diagrams)
+3. Try one of the simpler recipes from [haystack_recipes](haystack_recipes)
 
 ### For Production Deployment
-1. Review the production readiness checklist in `haystack_production_guide.md`
+1. Review the production readiness checklist in [haystack_production_guide](haystack_production_guide)
 2. Choose appropriate deployment strategy (blue-green vs canary)
 3. Use provided Kubernetes manifests as templates
 4. Implement monitoring and observability
 5. Follow security best practices
 
 ### For Specific Use Cases
-1. Browse `haystack_recipes.md` for relevant example
+1. Browse [haystack_recipes](haystack_recipes) for relevant example
 2. Adapt code to your needs
-3. Reference `haystack_comprehensive_guide.md` for detailed concepts
-4. Use `haystack_diagrams.md` to understand architecture
+3. Reference [haystack_comprehensive_guide](haystack_comprehensive_guide) for detailed concepts
+4. Use [haystack_diagrams](haystack_diagrams) to understand architecture
 
 ## Key Features Covered
 

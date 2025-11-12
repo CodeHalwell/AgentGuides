@@ -24,7 +24,7 @@ This is an **extremely comprehensive, production-ready guide** for building soph
 
 ## 📖 Documentation Structure
 
-### 1. **Comprehensive Guide** (`openai_agents_sdk_typescript_comprehensive_guide.md`)
+### 1. **Comprehensive Guide** (openai_agents_sdk_typescript_comprehensive_guide)
 **Beginner → Expert | ~80+ pages | Complete Reference**
 
 The complete technical reference covering all aspects of the OpenAI Agents SDK with TypeScript:
@@ -58,7 +58,7 @@ The complete technical reference covering all aspects of the OpenAI Agents SDK w
 
 ---
 
-### 2. **Production Guide** (`openai_agents_sdk_typescript_production_guide.md`)
+### 2. **Production Guide** (openai_agents_sdk_typescript_production_guide)
 **Enterprise Focus | Reliability & Scale**
 
 Enterprise-grade patterns and best practices for production deployments:
@@ -127,7 +127,7 @@ Enterprise-grade patterns and best practices for production deployments:
 
 ---
 
-### 3. **Practical Recipes** (`openai_agents_sdk_typescript_recipes.md`)
+### 3. **Practical Recipes** (openai_agents_sdk_typescript_recipes)
 **Copy-Paste Ready | 18+ Real-World Examples**
 
 Battle-tested implementations for common scenarios:
@@ -177,7 +177,7 @@ Battle-tested implementations for common scenarios:
 
 ---
 
-### 4. **Architecture Diagrams** (`openai_agents_sdk_typescript_diagrams.md`)
+### 4. **Architecture Diagrams** (openai_agents_sdk_typescript_diagrams)
 **Visual Reference | ASCII Diagrams & Flowcharts**
 
 Visual representations of architecture and patterns:
@@ -544,10 +544,10 @@ Happy building! 🚀
 ## 📋 Quick Reference
 
 ### Files in This Guide
-- `openai_agents_sdk_typescript_comprehensive_guide.md` - Complete reference
-- `openai_agents_sdk_typescript_production_guide.md` - Enterprise patterns
-- `openai_agents_sdk_typescript_recipes.md` - Practical examples
-- `openai_agents_sdk_typescript_diagrams.md` - Visual architecture
+- [openai_agents_sdk_typescript_comprehensive_guide](openai_agents_sdk_typescript_comprehensive_guide) - Complete reference
+- [openai_agents_sdk_typescript_production_guide](openai_agents_sdk_typescript_production_guide) - Enterprise patterns
+- [openai_agents_sdk_typescript_recipes](openai_agents_sdk_typescript_recipes) - Practical examples
+- [openai_agents_sdk_typescript_diagrams](openai_agents_sdk_typescript_diagrams) - Visual architecture
 - `README.md` - This file
 
 ### Key Topics Index

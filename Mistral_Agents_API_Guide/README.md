@@ -129,9 +129,9 @@ Native multi-agent coordination through handoff mechanisms and conversation mana
 
 ### For **Beginners**
 Start with:
-1. Read "Core Fundamentals" in `mistral_agents_api_comprehensive_guide.md`
+1. Read "Core Fundamentals" in [mistral_agents_api_comprehensive_guide](mistral_agents_api_comprehensive_guide)
 2. Review "Simple Agents" section
-3. Follow "Quick Start" recipes in `mistral_agents_api_recipes.md`
+3. Follow "Quick Start" recipes in [mistral_agents_api_recipes](mistral_agents_api_recipes)
 
 ### For **Developers**
 Focus on:
@@ -142,14 +142,14 @@ Focus on:
 
 ### For **DevOps/SREs**
 Prioritise:
-1. `mistral_agents_api_production_guide.md` entirely
+1. [mistral_agents_api_production_guide](mistral_agents_api_production_guide) entirely
 2. "Deployment Patterns" section
 3. Monitoring and scaling sections
 4. Security and compliance recommendations
 
 ### For **Architects**
 Review:
-1. System design diagrams in `mistral_agents_api_diagrams.md`
+1. System design diagrams in [mistral_agents_api_diagrams](mistral_agents_api_diagrams)
 2. "Multi-Agent Systems" section
 3. Advanced orchestration patterns
 4. Production deployment strategies

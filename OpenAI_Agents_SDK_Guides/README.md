@@ -4,9 +4,9 @@ Welcome to the comprehensive guide collection for the OpenAI Agents SDK, a light
 
 ## 📚 Guide Documents
 
-This collection contains five comprehensive guides:
+This collection contains four comprehensive guides:
 
-### 1. **Comprehensive Guide** (`openai_agents_sdk_comprehensive_guide.md`)
+### 1. **[Comprehensive Guide](openai_agents_sdk_comprehensive_guide)**
 The complete reference covering all aspects of the OpenAI Agents SDK from fundamental concepts to advanced patterns. Includes:
 - Core installation and setup procedures
 - Fundamental concepts and design philosophy
@@ -15,7 +15,7 @@ The complete reference covering all aspects of the OpenAI Agents SDK from fundam
 - Complete code examples for every feature
 - Best practices and architectural considerations
 
-### 2. **Production Guide** (`openai_agents_sdk_production_guide.md`)
+### 2. **[Production Guide](openai_agents_sdk_production_guide)**
 Practical patterns and strategies for deploying agents to production environments. Covers:
 - Deployment architectures and patterns
 - Scalability and performance optimisation
@@ -26,7 +26,7 @@ Practical patterns and strategies for deploying agents to production environment
 - Testing strategies and CI/CD integration
 - Real-world deployment examples
 
-### 3. **Diagrams Guide** (`openai_agents_sdk_diagrams.md`)
+### 3. **[Diagrams Guide](openai_agents_sdk_diagrams)**
 Visual representations and architecture diagrams for common patterns. Includes:
 - Agent lifecycle diagrams
 - Multi-agent interaction patterns
@@ -36,7 +36,7 @@ Visual representations and architecture diagrams for common patterns. Includes:
 - MCP server integration architectures
 - Production deployment topologies
 
-### 4. **Recipes Guide** (`openai_agents_sdk_recipes.md`)
+### 4. **[Recipes Guide](openai_agents_sdk_recipes)**
 Practical, ready-to-use code examples for common use cases. Features:
 - Customer service agent implementations
 - Research and knowledge retrieval agents

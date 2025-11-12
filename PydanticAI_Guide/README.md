@@ -17,10 +17,10 @@ This comprehensive guide covers Pydantic AI from beginner fundamentals to advanc
 
 | File | Purpose | Audience |
 |------|---------|----------|
-| **`pydantic_ai_comprehensive_guide.md`** | Complete reference from fundamentals to advanced concepts | Everyone |
-| **`pydantic_ai_production_guide.md`** | Deployment, scaling, monitoring, and operational patterns | DevOps/Platform engineers |
-| **`pydantic_ai_recipes.md`** | Real-world code examples and practical patterns | Developers |
-| **`pydantic_ai_diagrams.md`** | Visual architecture and flow diagrams | Visual learners |
+| **[pydantic_ai_comprehensive_guide](pydantic_ai_comprehensive_guide)** | Complete reference from fundamentals to advanced concepts | Everyone |
+| **[pydantic_ai_production_guide](pydantic_ai_production_guide)** | Deployment, scaling, monitoring, and operational patterns | DevOps/Platform engineers |
+| **[pydantic_ai_recipes](pydantic_ai_recipes)** | Real-world code examples and practical patterns | Developers |
+| **[pydantic_ai_diagrams](pydantic_ai_diagrams)** | Visual architecture and flow diagrams | Visual learners |
 | **`README.md`** | This file - Navigation and quick reference | Everyone |
 
 ---
@@ -554,10 +554,10 @@ This comprehensive guide is an educational resource created to help developers u
 
 ## 🎓 Next Steps
 
-1. **Read:** Start with `pydantic_ai_comprehensive_guide.md`
-2. **Practice:** Implement recipes from `pydantic_ai_recipes.md`
-3. **Deploy:** Follow `pydantic_ai_production_guide.md`
-4. **Visualise:** Review `pydantic_ai_diagrams.md` for architecture
+1. **Read:** Start with [pydantic_ai_comprehensive_guide](pydantic_ai_comprehensive_guide)
+2. **Practice:** Implement recipes from [pydantic_ai_recipes](pydantic_ai_recipes)
+3. **Deploy:** Follow [pydantic_ai_production_guide](pydantic_ai_production_guide)
+4. **Visualise:** Review [pydantic_ai_diagrams](pydantic_ai_diagrams) for architecture
 5. **Build:** Create your first production agent!
 
 ---
