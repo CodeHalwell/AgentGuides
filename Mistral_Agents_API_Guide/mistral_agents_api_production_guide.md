@@ -659,6 +659,7 @@ class AccessControl:
 
 ### GitHub Actions Example
 
+{% raw %}
 ```yaml
 name: Deploy Mistral Agents
 
@@ -706,6 +707,7 @@ jobs:
         run: |
           ./scripts/deploy.sh
 ```
+{% endraw %}
 
 ---
 

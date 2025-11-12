@@ -2984,6 +2984,7 @@ class RedisMemoryService(CustomMemoryService):
 
 #### Memory Expiration and Cleanup
 
+{% raw %}
 ```python
 from datetime import datetime, timedelta
 from typing import Dict
@@ -3044,6 +3045,7 @@ await lifecycle_manager.save_with_ttl(
 # Retrieve only if not expired
 session_data = await lifecycle_manager.retrieve_if_valid("user_session_123")
 ```
+{% endraw %}
 
 ---
 
@@ -3349,6 +3351,7 @@ vertex_agent = Agent(
 
 #### Vertex AI Monitoring Integration
 
+{% raw %}
 ```python
 from google.cloud import monitoring_v3
 
@@ -3379,6 +3382,7 @@ class VertexAIMonitoring:
         
         self.client.create_time_series(name=project_name, time_series=[time_series])
 ```
+{% endraw %}
 
 ### Cloud Run Deployment
 
@@ -3637,6 +3641,7 @@ await analytics.log_interaction(
 
 #### Secure Credential Management
 
+{% raw %}
 ```python
 from google.cloud import secretmanager
 
@@ -3687,6 +3692,7 @@ credential_manager.create_secret(
 # Retrieve when needed
 api_key = credential_manager.access_secret("gemini_api_key")
 ```
+{% endraw %}
 
 ---
 

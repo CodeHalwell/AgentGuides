@@ -535,6 +535,7 @@ class State(TypedDict):
 
 ## Execution Timeline Example
 
+{% raw %}
 ```
 Thread: "user-123"
 
@@ -558,6 +559,7 @@ Checkpoint 3 [ID: chk-003]
 
 [Can resume from any checkpoint for debugging]
 ```
+{% endraw %}
 
 ---
 

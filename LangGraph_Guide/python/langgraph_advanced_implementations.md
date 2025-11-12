@@ -84,6 +84,7 @@ This architecture is ideal for asynchronous, high-throughput tasks like document
 
 Code example: A producer sends tasks to a RabbitMQ queue. A LangGraph-powered worker consumes messages, processes them, and acknowledges them.
 
+{% raw %}
 ```python
 # producer.py - sends tasks to the queue
 import pika
@@ -154,6 +155,7 @@ channel.basic_consume(queue='document_processing_queue', on_message_callback=cal
 print(' [*] Waiting for messages. To exit press CTRL+C')
 channel.start_consuming()
 ```
+{% endraw %}
 
 ## Complex Integration Patterns
 
@@ -262,6 +264,7 @@ The process involves:
 3.  **Reflection:** The agent receives the evaluation score and its own execution trace (the "thought" process). It's prompted to reflect: "You scored 3/5 on correctness. Your reasoning led you down a wrong path when you chose tool X. Why did this happen, and what would you do differently next time?"
 4.  **Adaptation:** The agent's reflection is stored in a long-term memory (like a vector store). Before the next run, the agent retrieves its past reflections related to the new task. This retrieved "wisdom" is added to its system prompt, guiding it to avoid past mistakes.
 
+{% raw %}
 ```python
 # Conceptual example of a meta-learning loop
 class MetaLearningState(TypedDict):
@@ -313,6 +316,7 @@ meta_builder.add_edge("store", END)
 
 meta_graph = meta_builder.compile()
 ```
+{% endraw %}
 
 ---
 ## Human-in-the-Loop (HITL) Patterns
@@ -323,6 +327,7 @@ LangGraph's persistence and interrupt capabilities are ideal for building workfl
 
 Pause the graph to get human approval before executing a critical action. This is essential for tasks like financial transactions, deploying code, or sending sensitive communications. The `interrupt()` function pauses the graph, and it can be resumed with external input.
 
+{% raw %}
 ```python
 # human_in_the_loop.py
 from langgraph.graph import StateGraph, START, END
@@ -399,6 +404,7 @@ approval_input = {"messages": [("human", {"approved": True})]}
 # 3. The graph is resumed with the human's input.
 final_result = approval_graph.invoke(approval_input, config=config)
 ```
+{% endraw %}
 
 ---
 ## Middleware, Error Handling, and Observability

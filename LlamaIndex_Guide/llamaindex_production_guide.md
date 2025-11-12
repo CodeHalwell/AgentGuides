@@ -1198,6 +1198,7 @@ def test_query_performance():
 
 ### GitHub Actions Pipeline
 
+{% raw %}
 ```yaml
 
 # .github/workflows/deploy.yml
@@ -1299,6 +1300,7 @@ jobs:
         KUBECONFIG: ${{ secrets.KUBE_CONFIG }}
 
 ```
+{% endraw %}
 
 
 ---

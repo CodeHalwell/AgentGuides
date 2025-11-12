@@ -144,6 +144,7 @@ Automate your deployment process to ensure consistency and reliability.
 
 **GitHub Actions Workflow Example:**
 
+{% raw %}
 ```yaml
 # .github/workflows/deploy.yml
 name: Deploy Agent to ACA
@@ -174,6 +175,7 @@ jobs:
         containerAppName: my-agent-service
         resourceGroup: MyResourceGroup
 ```
+{% endraw %}
 
 ---
 

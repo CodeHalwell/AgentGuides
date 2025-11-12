@@ -759,6 +759,7 @@ if __name__ == "__main__":
 
 ### Building Knowledge Graphs from Documents
 
+{% raw %}
 ```python
 
 """
@@ -891,6 +892,7 @@ if __name__ == "__main__":
     builder.save_graph("knowledge_graph.dot")
 
 ```
+{% endraw %}
 
 ---
 

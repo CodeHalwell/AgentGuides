@@ -108,6 +108,7 @@ spec:
 
 ## CI/CD (GitHub Actions)
 
+{% raw %}
 ```yaml
 name: deploy
 on:
@@ -144,3 +145,4 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}

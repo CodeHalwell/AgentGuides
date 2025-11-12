@@ -17,6 +17,7 @@ Upstream: https://github.com/mistralai/client-python/releases | https://docs.mis
 
 ## Tool-Calling Chat (Python SDK)
 
+{% raw %}
 ```python
 from mistralai import Mistral
 import os, json
@@ -65,6 +66,7 @@ if msg.tool_calls:
             final = client.chat.complete(model="mistral-large-latest", messages=messages)
             print(final.choices[0].message.content)
 ```
+{% endraw %}
 
 ## Resilience
 - Wrap downstream API calls (weather, DB) with retries/backoff and timeouts
@@ -129,6 +131,7 @@ spec:
 
 .github/workflows/deploy.yml
 
+{% raw %}
 ```yaml
 name: deploy
 on:
@@ -161,6 +164,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

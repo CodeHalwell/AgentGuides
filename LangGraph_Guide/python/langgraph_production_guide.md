@@ -537,6 +537,7 @@ def run_with_metrics(graph_name, graph, input_data, config):
 
 ### Health Checks
 
+{% raw %}
 ```python
 # health_check.py
 from fastapi import FastAPI, HTTPException
@@ -598,6 +599,7 @@ async def readiness_check():
         "checks": checks
     }, status_code
 ```
+{% endraw %}
 
 ---
 
@@ -631,6 +633,7 @@ checkpointer = PostgresSaver.from_conn_string(
 
 ### 2. Batch Processing
 
+{% raw %}
 ```python
 # Process multiple requests efficiently
 async def batch_process(requests: list[dict], batch_size: int = 10):
@@ -656,6 +659,7 @@ requests = [
 
 results = asyncio.run(batch_process(requests, batch_size=10))
 ```
+{% endraw %}
 
 ### 3. Caching Strategy
 
@@ -712,6 +716,7 @@ async def semantic_cache_lookup(query: str, embeddings_model) -> Optional[str]:
 
 ### 4. Request Timeout Handling
 
+{% raw %}
 ```python
 import asyncio
 from contextlib import asynccontextmanager
@@ -736,6 +741,7 @@ async def invoke_graph(request: GraphRequest):
         )
     return result
 ```
+{% endraw %}
 
 ---
 

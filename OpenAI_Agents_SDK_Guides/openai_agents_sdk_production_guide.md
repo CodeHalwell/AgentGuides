@@ -1232,6 +1232,7 @@ class TestMultiAgentSystem:
 
 Automated testing and deployment:
 
+{% raw %}
 ```yaml
 # .github/workflows/ci-cd.yml
 name: CI/CD Pipeline
@@ -1314,6 +1315,7 @@ jobs:
           -H "Authorization: Bearer $DEPLOY_TOKEN" \
           -d '{"image":"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"}'
 ```
+{% endraw %}
 
 ---
 

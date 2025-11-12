@@ -276,6 +276,7 @@ class BlueGreenDeployment:
 
 A/B testing allows you to compare two or more versions of an agent to determine which one performs better. This is useful for testing different prompts, models, or action group configurations.
 
+{% raw %}
 ```python
 class ABTesting:
     """A/B testing for Bedrock Agents"""
@@ -313,6 +314,7 @@ class ABTesting:
             'user_satisfaction': 0.95
         }
 ```
+{% endraw %}
 
 ```python
 class CanaryDeployment:

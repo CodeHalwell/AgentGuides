@@ -883,6 +883,7 @@ Semantic functions use natural language prompts to define AI-driven behaviour. T
 
 #### .NET Semantic Functions
 
+{% raw %}
 ```csharp
 
 using Microsoft.SemanticKernel;
@@ -943,7 +944,9 @@ Documentation style: {{$style}}
 Generate documentation for this {{$language}} code:
 
 ```
+{% endraw %}
 {{$code}}
+{% raw %}
 ```
 
 
@@ -967,9 +970,11 @@ Ensure the documentation follows {{$style}} conventions.";
 }
 
 ```
+{% endraw %}
 
 #### Python Semantic Functions
 
+{% raw %}
 ```python
 
 from semantic_kernel import Kernel
@@ -1022,7 +1027,9 @@ Documentation style: {{$style}}
 Generate documentation for this {{$language}} code:
 
 ```
+{% endraw %}
 {{$code}}
+{% raw %}
 ```
 
 
@@ -1042,6 +1049,7 @@ Ensure the documentation follows {{$style}} conventions."""
         return str(result) if result else ""
 
 ```
+{% endraw %}
 
 ### 2.3 Native Functions with Code
 

@@ -785,6 +785,7 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 
 ### 10.1 Template Variable Substitution
 
+{% raw %}
 ```
 
 ┌────────────────────────────────────────────────┐
@@ -815,6 +816,7 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 └────────────────────────────────────────────────┘
 
 ```
+{% endraw %}
 
 ---
 

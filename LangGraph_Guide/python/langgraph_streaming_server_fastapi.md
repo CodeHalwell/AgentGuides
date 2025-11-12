@@ -80,6 +80,7 @@ spec:
 
 ### GitHub Actions
 
+{% raw %}
 ```yaml
 name: deploy
 on: { push: { branches: [ main ] } }
@@ -104,6 +105,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Authenticate clients; use JWT or a signed token for SSE

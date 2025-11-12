@@ -1542,6 +1542,7 @@ agent = ToolCallingAgent(
 
 ### ToolCallingAgent Implementation
 
+{% raw %}
 ```python
 from smolagents import ToolCallingAgent, Tool, InferenceClientModel
 from typing import Any
@@ -1584,6 +1585,7 @@ agent = ToolCallingAgent(
 # Step 2: Process payment ← happens second
 result = agent.run("Process $100 payment for customer 12345")
 ```
+{% endraw %}
 
 ### ToolCallingAgent with Specialized Models
 
@@ -1712,6 +1714,7 @@ results = coordinator.handle_task(
 
 ### Defining Output Schemas
 
+{% raw %}
 ```python
 from smolagents import Tool
 
@@ -1777,6 +1780,7 @@ agent = CodeAgent(tools=[AnalysisTool()], model=model)
 result = agent.run("Analyse the dataset [1, 2, 3, 4, 5, 100]")
 # Result will have structured output with statistics
 ```
+{% endraw %}
 
 ---
 

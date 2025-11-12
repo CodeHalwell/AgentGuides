@@ -23,6 +23,7 @@ A collection of practical, production-ready recipes and patterns for implementin
 
 ### Basic Customer Support Implementation
 
+{% raw %}
 ```python
 import boto3
 import json
@@ -347,6 +348,7 @@ def ticket_handler(event, context):
         response = table.get_item(Key={'ticketId': parameters.get('ticketId')})
         return response.get('Item', {})
 ```
+{% endraw %}
 
 ---
 
@@ -572,6 +574,7 @@ class A2AMultiAgentSystem:
 
 ### Financial Data Analysis and Reporting
 
+{% raw %}
 ```python
 class FinancialAnalyticsAgent:
     """Agent for financial data analysis and reporting"""
@@ -667,6 +670,7 @@ Always:
             actionGroupExecutor={'lambda': 'arn:aws:lambda:us-east-1:ACCOUNT:function:financial-data-handler'}
         )
 ```
+{% endraw %}
 
 ---
 

@@ -799,6 +799,7 @@ except ValueError as e:
 
 ### Pydantic v2 Integration
 
+{% raw %}
 ```python
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from pydantic_ai import Agent, RunContext
@@ -891,6 +892,7 @@ class ErrorResponse(BaseModel):
 
 Response = Annotated[Union[SuccessResponse, ErrorResponse], 'response']
 ```
+{% endraw %}
 
 ### Type Safety with Dependencies
 

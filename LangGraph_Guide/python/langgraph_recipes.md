@@ -208,6 +208,7 @@ print(f"Sources: {result['source_citations']}")
 
 Classify support tickets and route to appropriate handler:
 
+{% raw %}
 ```python
 
 from enum import Enum
@@ -422,6 +423,7 @@ print(f"Response: {result['response']}")
 print(f"Assigned to: {result['assigned_to']}")
 
 ```
+{% endraw %}
 
 ---
 
@@ -613,6 +615,7 @@ for i, cite in enumerate(result["citations"][:5], 1):
 
 Autonomous agent that reasons and acts:
 
+{% raw %}
 ```python
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.tools import tool
@@ -717,6 +720,7 @@ result = agentic_graph.invoke({
 
 print("Final response:", result["messages"][-1].content)
 ```
+{% endraw %}
 
 ---
 
@@ -724,6 +728,7 @@ print("Final response:", result["messages"][-1].content)
 
 Multi-stage document processing with quality checks:
 
+{% raw %}
 ```python
 
 from enum import Enum
@@ -875,6 +880,7 @@ else:
     print("Error:", result["error_message"])
 
 ```
+{% endraw %}
 
 ---
 
@@ -882,6 +888,7 @@ else:
 
 Maintain user context across multiple conversations:
 
+{% raw %}
 ```python
 from datetime import datetime
 
@@ -1040,6 +1047,7 @@ result = conversation_graph.invoke({
 
 print(result["response"])
 ```
+{% endraw %}
 
 ---
 

@@ -275,6 +275,7 @@ def fan_out(state) -> list[Send]:
 ```
 
 ### Memory Persistence
+{% raw %}
 ```python
 # Short-term (checkpoints)
 checkpointer = PostgresSaver.from_conn_string(db_url)
@@ -291,6 +292,7 @@ state = graph.get_state({"configurable": {"thread_id": "user-1"}})
 for checkpoint in graph.get_state_history(config):
     print(checkpoint.values)
 ```
+{% endraw %}
 
 ### Interrupts (Human-in-Loop)
 ```python

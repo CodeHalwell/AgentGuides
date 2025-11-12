@@ -53,6 +53,7 @@ print(result)
 ## Plugins & Functions
 - Semantic functions (prompt-based) and native functions (Python code) compose capabilities.
 
+{% raw %}
 ```python
 calc_plugin = kernel.create_plugin("calc")
 
@@ -62,10 +63,12 @@ async def add(a: int, b: int) -> int:
 
 semantic = kernel.create_function_from_prompt("Summarize: {{$input}} in 3 bullet points")
 ```
+{% endraw %}
 
 ## Structured Output
 - Ask models for JSON matching Pydantic models; validate and retry on failure.
 
+{% raw %}
 ```python
 from pydantic import BaseModel
 
@@ -77,6 +80,7 @@ fn = kernel.create_function_from_prompt(prompt)
 raw = await kernel.invoke_async(fn, input_text="LangGraph overview")
 data = Summary.model_validate_json(str(raw))
 ```
+{% endraw %}
 
 ## Memory
 - Use external vector stores (e.g., Azure AI Search, Qdrant) for retrieval.

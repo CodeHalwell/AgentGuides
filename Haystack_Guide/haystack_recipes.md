@@ -19,6 +19,7 @@
 
 A complete RAG system for answering questions from an enterprise knowledge base.
 
+{% raw %}
 ```python
 
 from haystack import Pipeline, component
@@ -144,6 +145,7 @@ result = qa_system.query("What's your return policy?")
 print(f"Answer: {result['answer']}")
 
 ```
+{% endraw %}
 
 ---
 
@@ -314,6 +316,7 @@ print(response)
 
 Analyse and summarise large document collections.
 
+{% raw %}
 ```python
 
 from haystack import Pipeline, component
@@ -427,6 +430,7 @@ results = analyser.analyse_documents(documents)
 print(results)
 
 ```
+{% endraw %}
 
 ---
 

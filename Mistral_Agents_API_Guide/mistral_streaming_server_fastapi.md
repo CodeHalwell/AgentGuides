@@ -77,6 +77,7 @@ spec:
 
 ### GitHub Actions (.github/workflows/deploy.yml)
 
+{% raw %}
 ```yaml
 name: deploy
 on: { push: { branches: [ main ] } }
@@ -101,6 +102,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Require auth (Bearer or session) for SSE endpoint

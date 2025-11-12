@@ -651,6 +651,7 @@ networks:
 
 ### Kubernetes Manifests
 
+{% raw %}
 ```yaml
 
 # namespace.yaml
@@ -879,6 +880,7 @@ spec:
         periodSeconds: 15
 
 ```
+{% endraw %}
 
 ---
 

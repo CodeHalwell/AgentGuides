@@ -24,6 +24,7 @@
 
 **.NET Implementation:**
 
+{% raw %}
 ```csharp
 
 using Microsoft.SemanticKernel;
@@ -64,9 +65,11 @@ Answer:",
 }
 
 ```
+{% endraw %}
 
 **Python Implementation:**
 
+{% raw %}
 ```python
 
 from semantic_kernel import Kernel
@@ -106,6 +109,7 @@ async def main():
 asyncio.run(main())
 
 ```
+{% endraw %}
 
 ### 1.2 Content Summariser
 
@@ -113,6 +117,7 @@ asyncio.run(main())
 
 **.NET Implementation:**
 
+{% raw %}
 ```csharp
 
 using Microsoft.SemanticKernel;
@@ -164,9 +169,11 @@ Bullet points:",
 }
 
 ```
+{% endraw %}
 
 **Python Implementation:**
 
+{% raw %}
 ```python
 
 from semantic_kernel import Kernel
@@ -210,6 +217,7 @@ Bullet points:""",
         return str(result) if result else ""
 
 ```
+{% endraw %}
 
 ### 1.3 Translation Service
 
@@ -217,6 +225,7 @@ Bullet points:""",
 
 **.NET Implementation:**
 
+{% raw %}
 ```csharp
 
 using Microsoft.SemanticKernel;
@@ -273,6 +282,7 @@ Translation:",
 }
 
 ```
+{% endraw %}
 
 ---
 
@@ -472,6 +482,7 @@ public class HttpPlugin
 
 **.NET Implementation:**
 
+{% raw %}
 ```csharp
 
 using Microsoft.SemanticKernel;
@@ -561,9 +572,11 @@ Answer:",
 }
 
 ```
+{% endraw %}
 
 **Python Implementation:**
 
+{% raw %}
 ```python
 
 from semantic_kernel import Kernel
@@ -640,6 +653,7 @@ async def main():
 asyncio.run(main())
 
 ```
+{% endraw %}
 
 ---
 
@@ -739,6 +753,7 @@ Console.WriteLine(result);
 
 **.NET Implementation:**
 
+{% raw %}
 ```csharp
 
 using Microsoft.SemanticKernel;
@@ -846,6 +861,7 @@ Answer based on the provided context:",
 }
 
 ```
+{% endraw %}
 
 ### 5.2 ReAct Agent (Reasoning and Acting)
 

@@ -87,6 +87,7 @@ my-agent-project/
 
 ### Minimal Setup Example
 
+{% raw %}
 ```python
 # agent.py
 from langgraph.graph import StateGraph, START, END
@@ -116,6 +117,7 @@ result = graph.invoke(
 )
 print(result)
 ```
+{% endraw %}
 
 ---
 
@@ -227,6 +229,7 @@ graph = builder.compile()
 
 Multiple ways to run your graph:
 
+{% raw %}
 ```python
 # Synchronous - blocking
 result = graph.invoke(
@@ -259,6 +262,7 @@ async_result = await graph.ainvoke({"message": "Hello"}, config={...})
 async for event in graph.astream(...):
     print(event)
 ```
+{% endraw %}
 
 ---
 
@@ -268,6 +272,7 @@ async for event in graph.astream(...):
 
 A basic chatbot with no branching:
 
+{% raw %}
 ```python
 from langgraph.graph import StateGraph, START, END
 from langchain_anthropic import ChatAnthropic
@@ -326,6 +331,7 @@ result = graph.invoke(
     config=config
 )
 ```
+{% endraw %}
 
 ### Example 2: Conditional Routing
 
@@ -408,6 +414,7 @@ print(result["result"])  # Routes to math
 
 Agent that can loop (with limits):
 
+{% raw %}
 ```python
 class LoopState(TypedDict):
     iteration: int
@@ -458,11 +465,13 @@ result = graph.invoke(
 print(result)
 # Output: {'iteration': 3, 'data': 'start [step-0] [step-1] [step-2]', 'final_result': '...'}
 ```
+{% endraw %}
 
 ### Example 4: Streaming Output
 
 See the graph execute step-by-step:
 
+{% raw %}
 ```python
 # Different streaming modes
 config = {"configurable": {"thread_id": "stream-test"}}
@@ -495,6 +504,7 @@ for event in graph.stream(
 ):
     print(f"Debug: {event}\n")
 ```
+{% endraw %}
 
 ---
 
@@ -504,6 +514,7 @@ for event in graph.stream(
 
 One coordinator agent routing to specialists:
 
+{% raw %}
 ```python
 from langchain_core.messages import BaseMessage
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -607,11 +618,13 @@ result = supervisor_graph.invoke(
 
 print("Final response:", result["messages"][-1].content)
 ```
+{% endraw %}
 
 ### Example 2: Parallel Worker Pattern
 
 Fan-out to multiple workers, collect results:
 
+{% raw %}
 ```python
 from langgraph.types import Send
 
@@ -678,11 +691,13 @@ result = parallel_graph.invoke({
 print("Results:", result["results"])
 # Output: {'task-1': 'Processed: data-a', 'task-2': 'Processed: data-b', ...}
 ```
+{% endraw %}
 
 ### Example 3: Handoff Pattern
 
 Agents handing off to each other mid-conversation:
 
+{% raw %}
 ```python
 class HandoffState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -757,6 +772,7 @@ result = handoff_graph.invoke(
 print("Step 2:", result["messages"][-1].content)
 print("Current agent:", result["current_agent"])
 ```
+{% endraw %}
 
 ---
 
@@ -1019,6 +1035,7 @@ graph = builder.compile(checkpointer=checkpointer)
 
 ### Using Checkpoints
 
+{% raw %}
 ```python
 config = {"configurable": {"thread_id": "user-123"}}
 
@@ -1063,6 +1080,7 @@ result = graph.invoke(
     config=time_travel_config
 )
 ```
+{% endraw %}
 
 ### Long-Term Memory: Store
 
@@ -1172,6 +1190,7 @@ graph = builder.compile(store=store)
 
 ### Complete Memory Example
 
+{% raw %}
 ```python
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.store.memory import InMemoryStore
@@ -1246,6 +1265,7 @@ for i in range(3):
     
 # Multi-turn conversations remembered automatically
 ```
+{% endraw %}
 
 ---
 
@@ -1293,6 +1313,7 @@ Example output:
 
 ### Streaming for Debugging
 
+{% raw %}
 ```python
 # Debug mode shows node execution
 config = {"configurable": {"thread_id": "debug-1"}}
@@ -1310,9 +1331,11 @@ for event in graph.stream(
 # {'type': 'task_start', 'timestamp': '...', 'step': 1, 'node': 'call_model'}
 # ...
 ```
+{% endraw %}
 
 ### Getting State at Any Point
 
+{% raw %}
 ```python
 # After partial execution
 config = {"configurable": {"thread_id": "user-1"}}
@@ -1336,9 +1359,11 @@ graph.update_state(
 # Continue from modified state
 result = graph.invoke({"query": "continue"}, config=config)
 ```
+{% endraw %}
 
 ### Checkpoint Inspection
 
+{% raw %}
 ```python
 # List all checkpoints for a thread
 config = {"configurable": {"thread_id": "user-1"}}
@@ -1353,9 +1378,11 @@ for i, snapshot in enumerate(history):
     print(f"  Next node(s): {next_node}")
     print(f"  State keys: {list(snapshot.values.keys())}")
 ```
+{% endraw %}
 
 ### Batch Debugging
 
+{% raw %}
 ```python
 # Process multiple and collect issues
 inputs = [
@@ -1384,6 +1411,7 @@ print(f"Failed: {len(errors)}")
 for thread_id, error in errors:
     print(f"  {thread_id}: {error}")
 ```
+{% endraw %}
 
 ---
 
@@ -1393,6 +1421,7 @@ for thread_id, error in errors:
 
 Pause execution and request human input:
 
+{% raw %}
 ```python
 from langgraph.types import interrupt, Command
 
@@ -1471,9 +1500,11 @@ if state.next == ("__interrupt__",):
     
     print(resume_events)  # Graph continues
 ```
+{% endraw %}
 
 ### Multi-Step Approval Workflow
 
+{% raw %}
 ```python
 from enum import Enum
 
@@ -1592,9 +1623,11 @@ stream_events(approval_workflow.stream(
     config=config
 ))
 ```
+{% endraw %}
 
 ### Interactive Debugging
 
+{% raw %}
 ```python
 class DebugState(TypedDict):
     data: str
@@ -1660,6 +1693,7 @@ stream_events(debug_workflow.stream(
     config=config
 ))
 ```
+{% endraw %}
 
 ---
 
@@ -1715,6 +1749,7 @@ print(result["output"])
 
 Explore multiple reasoning paths:
 
+{% raw %}
 ```python
 from langgraph.types import Send
 
@@ -1815,6 +1850,7 @@ result = tot_graph.invoke({
 print("Best thought:", result["best_thought"]["reasoning"])
 print("Final answer:", result["final_answer"])
 ```
+{% endraw %}
 
 ### Pattern 3: Self-Reflection
 
@@ -2026,6 +2062,7 @@ if result["validation_passed"]:
 
 ### Pattern 5: Caching and Memoization
 
+{% raw %}
 ```python
 from functools import lru_cache
 from langgraph.store.memory import InMemoryStore
@@ -2092,6 +2129,7 @@ print("Cache hit:", result["cache_hit"])  # False
 result = caching_graph.invoke({"query": "expensive"}, config=config)
 print("Cache hit:", result["cache_hit"])  # True
 ```
+{% endraw %}
 
 ---
 
@@ -2099,6 +2137,7 @@ print("Cache hit:", result["cache_hit"])  # True
 
 A simpler Python-native way to build workflows with automatic parallelization:
 
+{% raw %}
 ```python
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt, Command
@@ -2182,6 +2221,7 @@ config = {"configurable": {"thread_id": "counter"}}
 counter.invoke(5, config)    # "Counter: 5"
 counter.invoke(3, config)    # "Counter: 8" (5+3)
 ```
+{% endraw %}
 
 ---
 
@@ -2299,10 +2339,12 @@ graph = builder.compile(checkpointer=InMemorySaver())
 **Cause**: Missing `thread_id` in config  
 **Fix**: Always provide consistent `thread_id`:
 
+{% raw %}
 ```python
 config = {"configurable": {"thread_id": "unique-id"}}
 result = graph.invoke(input, config=config)  # Same config each time
 ```
+{% endraw %}
 
 ### Issue: Reducer functions not working
 

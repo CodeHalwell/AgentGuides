@@ -52,6 +52,7 @@ spec:
 
 ### GitHub Actions (Cloud Run deploy)
 
+{% raw %}
 ```yaml
 name: deploy-cloud-run
 on: { push: { branches: [ main ] } }
@@ -67,6 +68,7 @@ jobs:
       - run: gcloud builds submit --tag gcr.io/$PROJECT_ID/adk-agent:latest .
       - run: gcloud run deploy adk-agent --image gcr.io/$PROJECT_ID/adk-agent:latest --region $REGION --platform managed
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

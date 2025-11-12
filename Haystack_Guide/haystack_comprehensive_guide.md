@@ -259,6 +259,7 @@ print(f"Outputs: {processor.__haystack_output__}")
 
 **2. Pipeline-Centric Execution**: Pipelines are directed acyclic graphs (DAGs) of components. Data flows through connected components, transforming at each step.
 
+{% raw %}
 ```python
 from haystack import Pipeline, component
 
@@ -297,6 +298,7 @@ pipeline.connect("transformer.transformed", "formatter.text")
 result = pipeline.run({"validator": {"query": "hello world"}})
 print(result)  # Output: {'formatter': {'formatted_result': 'Result: HELLO WORLD'}}
 ```
+{% endraw %}
 
 **3. Provider-Agnostic Integration**: Haystack supports multiple LLM providers, vector databases, and tools. Components can be swapped to use different providers without changing pipeline structure.
 
@@ -321,6 +323,7 @@ anthropic_generator = AnthropicChatGenerator(
 
 **4. Type-Safe Configuration**: Components use Python type hints extensively, enabling IDE autocomplete, static analysis, and runtime validation.
 
+{% raw %}
 ```python
 from haystack import component
 from typing import Optional
@@ -343,6 +346,7 @@ class ConfigurableComponent:
     def run(self, input_data: dict) -> dict:
         return {"results": {"threshold": self.threshold}}
 ```
+{% endraw %}
 
 ### Architectural Layers
 
@@ -475,6 +479,7 @@ print(result)
 
 Pipelines are constructed by adding components and connecting their inputs/outputs:
 
+{% raw %}
 ```python
 from haystack import Pipeline
 
@@ -495,6 +500,7 @@ result = pipeline.run({"processor": {"text": "sample text"}})
 # Access results
 print(result["formatter"]["formatted_result"])
 ```
+{% endraw %}
 
 ### Complex Pipeline with Branching
 
@@ -1220,6 +1226,7 @@ api_tool = Tool(
 
 ### Tool Validation and Error Handling
 
+{% raw %}
 ```python
 from haystack.tools import Tool
 from typing import Callable
@@ -1290,6 +1297,7 @@ calculator_tool = Tool(
     description="Evaluate mathematical expressions safely"
 )
 ```
+{% endraw %}
 
 ### Tool Invocation in Agents
 

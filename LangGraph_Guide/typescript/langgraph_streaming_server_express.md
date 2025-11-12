@@ -86,6 +86,7 @@ spec:
 
 ### GitHub Actions
 
+{% raw %}
 ```yaml
 name: deploy
 on: { push: { branches: [ main ] } }
@@ -113,6 +114,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Use API keys from secret stores; never embed in code

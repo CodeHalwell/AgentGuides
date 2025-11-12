@@ -1679,6 +1679,7 @@ print(response)
 
 ### 18.2 Advanced Custom Tool with State
 
+{% raw %}
 ```python
 from llama_index.core.tools import Tool, ToolMetadata
 from pydantic import BaseModel, Field
@@ -1746,6 +1747,7 @@ response = agent.run("""
 """)
 print(response)
 ```
+{% endraw %}
 
 ## 19. Tool Schemas
 
@@ -2153,6 +2155,7 @@ print(f"Tags: {blog_post.tags}")
 
 ### 24.1 Using JSON Mode
 
+{% raw %}
 ```python
 
 from llama_index.llms.openai import OpenAI
@@ -2207,6 +2210,7 @@ parsed = loads(str(response))
 print(f"Structured JSON: {parsed}")
 
 ```
+{% endraw %}
 
 ---
 

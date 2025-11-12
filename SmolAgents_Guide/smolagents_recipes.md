@@ -233,6 +233,7 @@ print(result)
 
 ### Recipe 5: Financial Analysis Agent
 
+{% raw %}
 ```python
 from smolagents import CodeAgent, InferenceClientModel, tool, Tool
 from typing import Dict, Any
@@ -289,6 +290,7 @@ Create a financial comparison report:
 """)
 print(result)
 ```
+{% endraw %}
 
 ### Recipe 6: Sales & CRM Agent
 

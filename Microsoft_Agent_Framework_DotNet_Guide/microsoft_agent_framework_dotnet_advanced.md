@@ -89,6 +89,7 @@ spec:
 
 ## CI/CD (GitHub Actions)
 
+{% raw %}
 ```yaml
 name: build-and-deploy
 on:
@@ -124,6 +125,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
 ```
+{% endraw %}
 
 ## Security Best Practices
 - Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)

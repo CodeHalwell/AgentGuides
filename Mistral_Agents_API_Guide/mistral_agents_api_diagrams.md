@@ -90,6 +90,7 @@ Client          Manager Agent      Specialist 1    Specialist 2    DB
 
 ### Streaming Conversation Flow
 
+{% raw %}
 ```
 Client                          Mistral Server
   │                                  │
@@ -122,6 +123,7 @@ Client                          Mistral Server
   │   {tokens: {...}}                │
   │                                  │
 ```
+{% endraw %}
 
 ### Persistent Memory Retrieval
 

@@ -89,6 +89,7 @@ app.Run();
 
 #### Azure Functions
 
+{% raw %}
 ```csharp
 
 // Azure Function with Semantic Kernel
@@ -142,6 +143,7 @@ public class SemanticKernelFunction
 }
 
 ```
+{% endraw %}
 
 ### 1.2 Python Deployment
 
@@ -167,6 +169,7 @@ EXPOSE 5000
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "app:app"]
 ```
 
+{% raw %}
 ```python
 
 # app.py - Production Flask app with SK
@@ -235,6 +238,7 @@ if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=5000)
 
 ```
+{% endraw %}
 
 ---
 
@@ -1057,6 +1061,7 @@ class TestSemanticKernel:
 
 ### 8.2 Integration Testing
 
+{% raw %}
 ```csharp
 
 // .NET Integration Tests
@@ -1100,6 +1105,7 @@ public class IntegrationTests : IAsyncLifetime
 }
 
 ```
+{% endraw %}
 
 ---
 
@@ -1159,6 +1165,7 @@ public record ProcessRequest(string Text);
 
 ### 9.2 Asynchronous Processing Pattern
 
+{% raw %}
 ```csharp
 
 // .NET Background Job Processing
@@ -1203,6 +1210,7 @@ public class BackgroundJobService
 }
 
 ```
+{% endraw %}
 
 This production guide covers essential operations patterns for deploying Semantic Kernel applications in enterprise environments with emphasis on reliability, scalability, security, and cost management.
 
