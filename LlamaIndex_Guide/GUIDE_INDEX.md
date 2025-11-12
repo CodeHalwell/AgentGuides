@@ -13,9 +13,10 @@ Quick reference index for navigating the comprehensive LlamaIndex documentation.
 | **llamaindex_production_guide.md** | 1,151 | Production deployment, monitoring, and scaling |
 | **llamaindex_recipes.md** | 1,059 | 10 ready-to-use real-world applications |
 | **README.md** | 401 | Quick start and navigation guide |
+| **llamaindex_advanced_implementations.md** | 150 | Advanced implementation patterns for multi-agent systems, HITL, and observability |
 | **GUIDE_INDEX.md** | This | Complete searchable index |
 
-**Total: 6,534 lines of documentation covering 380+ code examples**
+**Total: 6,684 lines of documentation covering 380+ code examples**
 
 ---
 
@@ -26,6 +27,12 @@ Quick reference index for navigating the comprehensive LlamaIndex documentation.
 - **Configuration** → comprehensive_guide.md (Section 1.3)
 - **Global settings** → comprehensive_guide.md (Section 1.5.3)
 - **Local LLM setup** → comprehensive_guide.md (Section 1.5.4)
+
+### Advanced Implementation
+- **Advanced Multi-Agent Systems** → llamaindex_advanced_implementations.md (Section 1)
+- **Human-in-the-Loop (HITL)** → llamaindex_advanced_implementations.md (Section 2)
+- **Middleware & Observability** → llamaindex_advanced_implementations.md (Section 3)
+- **Advanced Error Handling** → llamaindex_advanced_implementations.md (Section 4)
 
 ### Core Concepts (Fundamentals)
 - **Documents** → comprehensive_guide.md (Section 1.3.1)
@@ -415,4 +422,9 @@ Before deploying to production, verify you've covered:
 **Total Documentation: 6,534 lines | 50+ topics | 380+ examples**
 
 *Last Updated: November 2024*
+
+
+### Advanced Guides
+- llamaindex_advanced_agents_python.md
+- llamaindex_observability_python.md
 

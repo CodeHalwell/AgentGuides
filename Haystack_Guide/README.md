@@ -504,3 +504,12 @@ The goal is to be the most complete Haystack resource available while maintainin
 **Python Version**: 3.9+  
 **Status**: Production Ready
 
+
+## Advanced Guides
+- [haystack_advanced_agents_python.md](haystack_advanced_agents_python.md)
+- [haystack_observability_python.md](haystack_observability_python.md)
+
+
+## Streaming Examples
+- [haystack_streaming_server_fastapi.md](haystack_streaming_server_fastapi.md)
+

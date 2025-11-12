@@ -193,3 +193,7 @@ For questions, issues, or contributions:
 **Last Updated**: November 2024
 **SDK Version**: Latest (v0.2.9+)
 
+
+## Streaming Examples
+- [openai_agents_streaming_server_fastapi.md](openai_agents_streaming_server_fastapi.md)
+

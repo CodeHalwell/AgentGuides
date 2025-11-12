@@ -407,3 +407,7 @@ This documentation should be updated when:
 **Ready to master CrewAI? Start with README.md! 🚀**
 
 
+
+### Advanced Guides
+- crewai_advanced_multi_agent_python.md
+

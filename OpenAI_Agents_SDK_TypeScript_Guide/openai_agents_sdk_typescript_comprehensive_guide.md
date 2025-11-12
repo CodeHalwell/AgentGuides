@@ -1,3 +1,4 @@
+Latest: 6.8.1
 # OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
 
 **Version:** 1.0  

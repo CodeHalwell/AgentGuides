@@ -392,3 +392,7 @@ If you want to become an expert, read in this order:
 **Happy learning! 🎉 Start with the document that matches your role and learning style.**
 
 
+
+### Advanced Guides
+- mistral_agents_api_advanced_python.md
+

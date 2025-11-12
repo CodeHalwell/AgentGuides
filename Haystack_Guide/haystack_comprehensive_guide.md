@@ -1,3 +1,4 @@
+Latest: 2.19.0
 # Haystack Comprehensive Technical Guide: From Fundamentals to Expert-Level Agentic AI
 
 ## Table of Contents

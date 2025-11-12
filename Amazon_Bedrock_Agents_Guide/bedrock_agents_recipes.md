@@ -45,7 +45,7 @@ class CustomerSupportAgent:
         agent_config = {
             'agentName': agent_name,
             'agentDescription': 'Intelligent customer support agent for ticket management and FAQ',
-            'foundationModelId': 'anthropic.claude-3-sonnet-20240229-v1:0',
+            'foundationModelId': 'anthropic.claude-3-5-sonnet-20240620-v1:0',
             'instruction': """You are an expert customer support agent. Your responsibilities:
 1. Answer frequently asked questions about our products and services
 2. Help customers troubleshoot common issues
@@ -431,7 +431,7 @@ Categories:
         response = self.bedrock.create_agent(
             agentName='CustomerServiceSupervisor',
             agentDescription='Supervisor agent for multi-agent customer service',
-            foundationModelId='anthropic.claude-3-sonnet-20240229-v1:0',
+            foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
             instruction=instructions,
             agentCollaboratorMode='SUPERVISOR'
         )
@@ -452,7 +452,7 @@ Focus on: Common issues, FAQs, ticket management"""
         return self.bedrock.create_agent(
             agentName='SupportSpecialist',
             agentDescription='Handles general customer support',
-            foundationModelId='anthropic.claude-3-sonnet-20240229-v1:0',
+            foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
             instruction=instructions
         )
     
@@ -470,7 +470,7 @@ Focus on: Account management, billing, payments"""
         return self.bedrock.create_agent(
             agentName='BillingSpecialist',
             agentDescription='Handles billing and account questions',
-            foundationModelId='anthropic.claude-3-sonnet-20240229-v1:0',
+            foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
             instruction=instructions
         )
     
@@ -488,7 +488,7 @@ Focus on: Technical issues, API problems, system errors"""
         return self.bedrock.create_agent(
             agentName='TechnicalSpecialist',
             agentDescription='Handles technical issues and troubleshooting',
-            foundationModelId='anthropic.claude-3-sonnet-20240229-v1:0',
+            foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
             instruction=instructions
         )
     
@@ -506,9 +506,64 @@ Focus on: Product features, pricing, sales opportunities"""
         return self.bedrock.create_agent(
             agentName='SalesSpecialist',
             agentDescription='Handles sales inquiries and product information',
-            foundationModelId='anthropic.claude-3-sonnet-20240229-v1:0',
+            foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
             instruction=instructions
         )
+```
+
+---
+
+## Multi-Agent System with A2A Protocol
+
+### Orchestrated Multi-Agent System with Agent-to-Agent Communication
+
+This recipe demonstrates how to build a multi-agent system where agents can communicate with each other using the Agent-to-Agent (A2A) protocol.
+
+```python
+class A2AMultiAgentSystem:
+    """Multi-agent system with A2A communication"""
+
+    def __init__(self):
+        self.bedrock = boto3.client('bedrock')
+        self.runtime = boto3.client('bedrock-runtime')
+
+    def create_a2a_system(self):
+        """Create a multi-agent system with A2A capabilities"""
+
+        # Create a supervisor agent
+        supervisor = self._create_supervisor_agent()
+
+        # Create specialist agents
+        researcher = self._create_researcher_agent()
+        writer = self._create_writer_agent()
+
+        # Enable A2A communication between the agents
+        self._enable_a2a_communication(supervisor['agentId'], [researcher['agentId'], writer['agentId']])
+
+        return {
+            'supervisor': supervisor['agentId'],
+            'researcher': researcher['agentId'],
+            'writer': writer['agentId']
+        }
+
+    def _create_supervisor_agent(self):
+        # ... implementation for creating a supervisor agent ...
+        pass
+
+    def _create_researcher_agent(self):
+        # ... implementation for creating a researcher agent ...
+        pass
+
+    def _create_writer_agent(self):
+        # ... implementation for creating a writer agent ...
+        pass
+
+    def _enable_a2a_communication(self, supervisor_id, specialist_ids):
+        """Enable A2A communication between agents"""
+        # In a real implementation, this would involve configuring the agents
+        # to allow them to invoke each other. This is a conceptual example.
+        print(f"Enabling A2A communication between supervisor {supervisor_id} and specialists {specialist_ids}")
+
 ```
 
 ---
@@ -611,6 +666,61 @@ Always:
             apiSchema={'payload': json.dumps(financial_schema)},
             actionGroupExecutor={'lambda': 'arn:aws:lambda:us-east-1:ACCOUNT:function:financial-data-handler'}
         )
+```
+
+---
+
+## Data Analysis Agent with Code Interpretation
+
+### Agent that uses Code Interpretation for Data Analysis
+
+This recipe demonstrates how to create an agent that uses the code interpretation feature to perform data analysis on a CSV file.
+
+```python
+class DataAnalysisAgent:
+    """Agent for data analysis using code interpretation"""
+
+    def __init__(self):
+        self.bedrock = boto3.client('bedrock')
+        self.runtime = boto3.client('bedrock-runtime')
+
+    def create_data_analysis_agent(self):
+        """Create a data analysis agent with code interpretation enabled"""
+
+        instructions = """You are a data analyst. You can write and execute Python code to answer questions about data.
+When you are asked to analyze a file, you can use the `inputFiles` parameter to access the file."""
+
+        response = self.bedrock.create_agent(
+            agentName='DataAnalysisAgent',
+            foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
+            instruction=instructions,
+            enableCodeInterpreter=True
+        )
+
+        return response['agentId']
+
+    def invoke_data_analysis_agent(self, agent_id, s3_uri):
+        """Invoke the data analysis agent with a CSV file"""
+
+        response = self.runtime.invoke_agent(
+            agentId=agent_id,
+            agentAliasId='YOUR_AGENT_ALIAS_ID',
+            inputText='Analyze the attached CSV file and provide a summary of the data.',
+            sessionId='session-1',
+            inputFiles=[
+                {
+                    'name': 'sales_data.csv',
+                    'source': {
+                        's3': {
+                            'uri': s3_uri
+                        }
+                    }
+                }
+            ]
+        )
+
+        return response['outputText']
+
 ```
 
 ---

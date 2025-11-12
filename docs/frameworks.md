@@ -181,7 +181,7 @@ Best For:       Complex workflows, cycles, conditional routing
 - You need conditional routing
 - You're building TypeScript apps
 
-[📖 LangGraph Guide](../LangGraph_Guide/) | [📖 LangGraph TypeScript](../Langgraph_Guide_Typescript/)
+[LangGraph Guide](../LangGraph_Guide/python/) | [LangGraph TypeScript](../LangGraph_Guide/typescript/)
 
 ---
 
@@ -349,7 +349,7 @@ Best For:       Enterprise integration, Microsoft ecosystem
 - Extended context
 - Tool use
 
-[📖 Claude Python Guide](../Anthropic_Claude_Agent_SDK_Guide/) | [📖 Claude TypeScript Guide](../Anthrpic\ Claude_Agent_SDK_Typescript_Guide/)
+[📖 Claude Python Guide](../Anthropic_Claude_Agent_SDK_Guide/) | [📖 Claude TypeScript Guide](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/)
 
 ---
 

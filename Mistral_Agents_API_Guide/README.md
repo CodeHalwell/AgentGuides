@@ -356,3 +356,10 @@ All code examples tested against:
 
 **Happy building with Mistral Agents API! 🚀**
 
+
+## Advanced Guides
+- [mistral_agents_api_advanced_python.md](mistral_agents_api_advanced_python.md)
+
+## Streaming Examples
+- [mistral_streaming_server_fastapi.md](mistral_streaming_server_fastapi.md)
+

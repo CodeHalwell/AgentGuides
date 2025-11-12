@@ -1,3 +1,4 @@
+Latest: 0.14.8
 # LlamaIndex Comprehensive Technical Guide
 
 ## Complete Framework for Building LLM-Powered Agents with RAG, Data Connectors, and Agentic Reasoning

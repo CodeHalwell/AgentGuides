@@ -272,6 +272,48 @@ class BlueGreenDeployment:
 
 ### Canary Deployment Pattern
 
+### A/B Testing
+
+A/B testing allows you to compare two or more versions of an agent to determine which one performs better. This is useful for testing different prompts, models, or action group configurations.
+
+```python
+class ABTesting:
+    """A/B testing for Bedrock Agents"""
+
+    def __init__(self):
+        self.bedrock = boto3.client('bedrock')
+        self.cloudwatch = boto3.client('cloudwatch')
+
+    def run_ab_test(self, agent_a_id: str, agent_b_id: str, traffic_split: int = 50):
+        """
+        Run an A/B test between two agents
+        """
+        # Configure traffic splitting using Route 53 or a feature flagging service
+        self._configure_traffic_split(agent_a_id, agent_b_id, traffic_split)
+
+        # Monitor key metrics for each agent
+        metrics_a = self._collect_metrics(agent_a_id)
+        metrics_b = self._collect_metrics(agent_b_id)
+
+        # Compare the results
+        if metrics_a['user_satisfaction'] > metrics_b['user_satisfaction']:
+            return {'winner': 'A', 'metrics': {'A': metrics_a, 'B': metrics_b}}
+        else:
+            return {'winner': 'B', 'metrics': {'A': metrics_a, 'B': metrics_b}}
+
+    def _configure_traffic_split(self, agent_a_id: str, agent_b_id: str, split: int):
+        # Implementation for traffic splitting
+        pass
+
+    def _collect_metrics(self, agent_id: str) -> Dict:
+        # Implementation for collecting metrics
+        return {
+            'error_rate': 0.01,
+            'latency': 1200,
+            'user_satisfaction': 0.95
+        }
+```
+
 ```python
 class CanaryDeployment:
     """Canary deployment for risk mitigation"""
@@ -615,6 +657,13 @@ class LatencyOptimisation:
 
 ## Cost Optimisation
 
+### Prompt Caching and Intelligent Prompt Routing
+
+Amazon Bedrock offers several features to help optimize costs:
+
+*   **Prompt Caching:** This feature can significantly reduce costs and latency by caching and reusing relevant parts of your prompts. It can decrease costs by up to 90% and latency by up to 85% for supported models.
+*   **Intelligent Prompt Routing:** This feature directs prompts to the most suitable Foundation Models (FMs) within a model family. This helps balance quality and cost, potentially lowering expenses by up to 30% without sacrificing accuracy.
+
 ### Comprehensive Cost Analysis
 
 ```python
@@ -694,6 +743,16 @@ class CostOptimisation:
 ---
 
 ## Monitoring and Observability
+
+### Amazon Bedrock AgentCore Observability
+
+Amazon Bedrock AgentCore provides a dedicated solution for monitoring, analyzing, and auditing AI agent interactions. It offers full visibility into agent operations, including tracking interactions, analyzing performance metrics, and debugging issues across various deployment environments.
+
+**Key Features:**
+
+*   **OpenTelemetry (OTEL) Compatibility:** AgentCore Observability emits telemetry data in a standardized OpenTelemetry-compatible format. This enables seamless integration with existing monitoring and observability stacks, promoting a unified approach to monitoring.
+*   **CloudWatch Integration:** Amazon Bedrock Agents provide native support for CloudWatch metrics. This allows developers to track detailed runtime metrics for operations like `InvokeAgent` and `InvokeInlineAgent`.
+*   **Third-Party Observability Tools:** Several third-party platforms, such as Dynatrace and Datadog, offer integrations for monitoring Amazon Bedrock Agents.
 
 ### Comprehensive Monitoring Setup
 
@@ -867,7 +926,9 @@ class DisasterRecoveryStrategy:
 
 ## CI/CD Pipelines
 
-### Automated Agent Deployment Pipeline
+### Automated Agent Deployment Pipeline with Automated Testing
+
+A robust CI/CD pipeline for Bedrock Agents should include automated testing to ensure the quality and security of your agents.
 
 ```python
 class AgentDeploymentPipeline:
@@ -962,6 +1023,9 @@ class AgentDeploymentPipeline:
               - python -m pytest tests/
           build:
             commands:
+              - echo "Running automated tests..."
+              - python -m pytest tests/regression/
+              - python -m pytest tests/security/
               - echo "Deploying agent..."
               - python scripts/deploy_agent.py
           post_build:
@@ -993,6 +1057,18 @@ class AgentDeploymentPipeline:
         
         return response['project']
 ```
+
+### Automated Testing
+
+Automated testing is crucial for ensuring the quality and reliability of your Bedrock Agents. Your CI/CD pipeline should include the following types of tests:
+
+*   **Prompt Regression Tests:** These tests ensure that changes to prompts do not negatively impact the agent's behavior. You can create a suite of test cases with sample inputs and expected outputs to validate the agent's responses.
+*   **Schema Validation:** Validate the structure and content of your agent configurations, including action group schemas and knowledge base schemas.
+*   **Security Checks:** Perform security scans to identify potential vulnerabilities in your agent's code and dependencies. You should also verify that the agent's IAM roles and policies adhere to the principle of least privilege.
+*   **Model Output Validation:** Send sample inputs to the updated model and validate the outputs against expected criteria to catch regressions in the model's behavior.
+*   **Integration Tests:** These tests verify the interaction between your agent and its external dependencies, such as action groups and knowledge bases.
+*   **End-to-End Tests:** These tests simulate real user interactions with your agent to validate the entire workflow from start to finish.
+
 
 ---
 

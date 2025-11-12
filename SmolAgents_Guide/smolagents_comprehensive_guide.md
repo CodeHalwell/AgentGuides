@@ -1,3 +1,4 @@
+Latest: 1.22.0
 # 🤗 SmolAgents: Comprehensive Technical Guide
 
 **From Beginner to Expert – The Complete Reference for Building AI Agents That Think in Code**

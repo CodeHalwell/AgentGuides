@@ -70,8 +70,8 @@ Lightweight Python framework where agents write code instead of JSON.
 ### Core Multi-Agent Orchestration
 - [CrewAI](../CrewAI_Guide/) - Role-based agent teams
 - [AG2](../AG2_Guide/) - Research & experimentation
-- [LangGraph](../LangGraph_Guide/) - Graph-based workflows
-- [LangGraph TypeScript](../Langgraph_Guide_Typescript/) - TypeScript workflows
+- [LangGraph](../LangGraph_Guide/python/) - Graph-based workflows
+- [LangGraph TypeScript](../LangGraph_Guide/typescript/) - TypeScript workflows
 
 ### Data & Knowledge Retrieval
 - [LlamaIndex](../LlamaIndex_Guide/) - RAG and data indexing
@@ -89,7 +89,7 @@ Lightweight Python framework where agents write code instead of JSON.
 
 ### Model-Specific
 - [Anthropic Claude](../Anthropic_Claude_Agent_SDK_Guide/) - Python
-- [Anthropic Claude TypeScript](../Anthrpic\ Claude_Agent_SDK_Typescript_Guide/) - TypeScript
+- [Anthropic Claude TypeScript](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/) - TypeScript
 - [OpenAI Agents TypeScript](../OpenAI_Agents_SDK_TypeScript_Guide/) - TypeScript
 
 [View All Guides →](./guides.md)

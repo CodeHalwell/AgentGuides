@@ -1,0 +1,92 @@
+---
+---
+@import "minima";
+
+/* Custom site styles */
+
+/* Typography tweaks */
+html { scroll-behavior: smooth; }
+body {
+  line-height: 1.65;
+}
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+}
+
+/* Content width for readability */
+.page-content .wrapper {
+  max-width: 980px;
+}
+
+/* Links */
+a { text-underline-offset: 3px; }
+
+/* Code blocks */
+pre, code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+pre {
+  overflow: auto;
+  border-radius: 8px;
+}
+pre code { white-space: pre; }
+code { background: rgba(0,0,0,0.04); padding: 0.15rem 0.33rem; border-radius: 4px; }
+
+/* Tables */
+table { display: block; overflow-x: auto; border-collapse: collapse; }
+th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e6e6e6; }
+thead th { border-bottom: 2px solid #d4d4d4; }
+
+/* Callouts (admonition-like) */
+.callout {
+  border-left: 4px solid #4a90e2;
+  background: #f4f8ff;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+}
+.callout.warn { border-color: #f5a623; background: #fff8ee; }
+.callout.danger { border-color: #d0021b; background: #fff2f3; }
+
+/* Grid used on index */
+.framework-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.framework-grid > * {
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #dbeafe;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  body { background: #0f1115; color: #e6e6e6; }
+  a { color: #8ab4ff; }
+  .site-header { background: #0f1115; border-bottom-color: #1f2430; }
+  .site-footer { background: #0f1115; border-top-color: #1f2430; }
+  .post-title, h1, h2, h3 { color: #eaeaea; }
+  pre { background: #0a0c10; border: 1px solid #1f2430; }
+  code { background: #131722; }
+  table { border-color: #1f2430; }
+  th, td { border-bottom-color: #1f2430; }
+  .callout { background: #0f172a; border-left-color: #60a5fa; }
+  .callout.warn { background: #1f2937; border-left-color: #f59e0b; }
+  .callout.danger { background: #1f2230; border-left-color: #f87171; }
+  .framework-grid > * { border-color: #1f2430; }
+  .badge { background: #1e293b; color: #c7d2fe; border-color: #334155; }
+}
+

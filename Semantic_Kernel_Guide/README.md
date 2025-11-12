@@ -32,6 +32,11 @@ Semantic Kernel is an open-source software development kit (SDK) that enables de
 
 This guide is organised into five comprehensive documents:
 
+### Language-specific comprehensive references
+
+- Python: [semantic_kernel_comprehensive_python.md](semantic_kernel_comprehensive_python.md)
+- .NET (C#): [semantic_kernel_comprehensive_dotnet.md](semantic_kernel_comprehensive_dotnet.md)
+
 ### 1. **semantic_kernel_comprehensive_guide.md** (14 sections, 50,000+ tokens)
 
 The foundational reference covering:
@@ -122,6 +127,21 @@ Ready-to-use code recipes for common patterns:
 ### 5. **semantic_kernel_diagrams.md** (This File)
 
 Navigation and index for the complete guide.
+
+---
+
+## Advanced Guides (Python)
+
+- [semantic_kernel_advanced_multi_agent_python.md](semantic_kernel_advanced_multi_agent_python.md)
+- [semantic_kernel_middleware_python.md](semantic_kernel_middleware_python.md)
+
+## Streaming Examples
+- [semantic_kernel_streaming_server_fastapi.md](semantic_kernel_streaming_server_fastapi.md)
+
+## Comprehensive (Language-Specific)
+
+- [semantic_kernel_comprehensive_python.md](semantic_kernel_comprehensive_python.md)
+- [semantic_kernel_comprehensive_dotnet.md](semantic_kernel_comprehensive_dotnet.md)
 
 ---
 

@@ -1,0 +1,18 @@
+{
+  "azure-ai-agents": "1.1.0",
+  "smolagents": "1.22.0",
+  "pydantic-ai": "1.14.1",
+  "haystack-ai": "2.19.0",
+  "@anthropic-ai/sdk": "0.68.0",
+  "autogen": "0.10.0",
+  "crewai": "1.4.1",
+  "semantic-kernel": "1.38.0",
+  "mistralai": "1.9.11",
+  "google-adk": "1.18.0",
+  "langgraph": "1.0.3",
+  "@langchain/langgraph": "1.0.2",
+  "openai": "6.8.1",
+  "llama-index": "0.14.8",
+  "anthropic": "0.72.1",
+  "openai-py": "2.7.2"
+}

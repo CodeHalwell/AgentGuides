@@ -20,9 +20,10 @@ User Input
              ↓
 ┌─────────────────────────────┐
 │  Foundation Model           │
-│  - Claude 3 Sonnet         │
+│  - Claude 3.5 Sonnet       │
 │  - Reasoning Phase          │
 │  - Action Selection         │
+│  - Code Interpretation      │
 └────────────┬────────────────┘
              ↓
        ┌─────┴─────┐
@@ -54,10 +55,11 @@ User Input
 └──────────────────────┬───────────────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────────────┐
-│            Agent Orchestration & Routing Layer               │
+│            Agent Orchestration & Routing Layer (AgentCore)   │
 │  - Request Reception        - Session Management             │
 │  - Agent Selection          - State Tracking                 │
 │  - Multi-Agent Coordination - Error Handling                 │
+│  - Code Interpretation      - A2A Protocol                   │
 └──────────────────────┬───────────────────────────────────────┘
                        │
         ┌──────────────┼──────────────┐
@@ -112,6 +114,7 @@ User Input
                     │  - Intent Analysis │
                     │  - Task Planning   │
                     │  - Routing Logic   │
+                    │  (A2A Protocol)    │
                     └─────────┬──────────┘
                               │
         ┌─────────────────────┼─────────────────────┐

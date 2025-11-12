@@ -1,3 +1,4 @@
+Latest: 1.4.1
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 

@@ -1,3 +1,4 @@
+Latest: 1.18.0
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  

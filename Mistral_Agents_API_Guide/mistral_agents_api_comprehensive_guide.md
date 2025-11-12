@@ -1,3 +1,4 @@
+Latest: 1.9.11
 # Mistral Agents API: Visual Architecture and Diagrams
 
 This document provides comprehensive visual representations of Mistral Agents API architecture, data flows, and patterns.

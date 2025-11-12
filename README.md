@@ -17,7 +17,7 @@ Looking for a specific framework? Use the table below:
 | **CrewAI** | Orchestrated role-based agents | Intermediate | `CrewAI_Guide/` |
 | **AG2** (AutoGen) | Research & experimentation | Intermediate-Advanced | `AG2_Guide/` |
 | **LangGraph** | Complex graph-based workflows | Advanced | `LangGraph_Guide/` |
-| **LangGraph** (TypeScript) | Graph workflows in TypeScript | Advanced | `Langgraph_Guide_Typescript/` |
+| **LangGraph** (TypeScript) | Graph workflows in TypeScript | Advanced | `LangGraph_Guide/typescript/` |
 | **LlamaIndex** | RAG & data indexing | Intermediate | `LlamaIndex_Guide/` |
 | **PydanticAI** | Type-safe structured outputs | Beginner-Intermediate | `PydanticAI_Guide/` |
 | **Haystack** | Production search systems | Intermediate-Advanced | `Haystack_Guide/` |
@@ -26,7 +26,7 @@ Looking for a specific framework? Use the table below:
 | **Google ADK** | Google's agent toolkit | Intermediate | `Google_ADK_Guide/` |
 | **Mistral Agents API** | Mistral LLM integration | Intermediate | `Mistral_Agents_API_Guide/` |
 | **Anthropic Claude** (Python) | Claude-powered agents | Intermediate | `Anthropic_Claude_Agent_SDK_Guide/` |
-| **Anthropic Claude** (TypeScript) | Claude agents in TypeScript | Intermediate | `Anthrpic Claude_Agent_SDK_Typescript_Guide/` |
+| **Anthropic Claude** (TypeScript) | Claude agents in TypeScript | Intermediate | `Anthropic_Claude_Agent_SDK_TypeScript_Guide/` |
 | **OpenAI Agents** (TypeScript) | OpenAI agents in TypeScript | Intermediate | `OpenAI_Agents_SDK_TypeScript_Guide/` |
 | **Semantic Kernel** | Microsoft semantic patterns | Intermediate | `Semantic_Kernel_Guide/` |
 
@@ -95,20 +95,20 @@ Graph-based agent orchestration for complex, stateful workflows.
 **Location**: `LangGraph_Guide/`
 - 📖 [Comprehensive Guide](./LangGraph_Guide/langgraph_comprehensive_guide.md)
 - 🚀 [Production Guide](./LangGraph_Guide/langgraph_production_guide.md)
-- 🏗️ [Diagrams Guide](./LangGraph_Guide/langgraph_diagrams.md)
-- 👨‍💻 [Recipes](./LangGraph_Guide/langgraph_recipes.md)
+- 🏗️ [Diagrams Guide](./LangGraph_Guide/python/langgraph_diagrams.md)
+- 👨‍💻 [Recipes](./LangGraph_Guide/python/langgraph_recipes.md)
 
 ---
 
 #### **LangGraph** (TypeScript)
 TypeScript implementation of LangGraph for JavaScript environments.
 
-**Location**: `Langgraph_Guide_Typescript/`
-- 📖 [Comprehensive Guide](./Langgraph_Guide_Typescript/langchain_langgraph_comprehensive_guide.md)
-- 🚀 [Production Guide](./Langgraph_Guide_Typescript/langchain_langgraph_production_guide.md)
-- 🏗️ [Diagrams Guide](./Langgraph_Guide_Typescript/langchain_langgraph_diagrams.md)
-- 👨‍💻 [Recipes](./Langgraph_Guide_Typescript/langchain_langgraph_recipes.md)
-- 📑 [Index](./Langgraph_Guide_Typescript/GUIDE_INDEX.md)
+**Location**: `LangGraph_Guide/typescript/`
+- 📖 [Comprehensive Guide](./LangGraph_Guide/typescript/langchain_langgraph_comprehensive_guide.md)
+- 🚀 [Production Guide](./LangGraph_Guide/typescript/langchain_langgraph_production_guide.md)
+- 🏗️ [Diagrams Guide](./LangGraph_Guide/typescript/langchain_langgraph_diagrams.md)
+- 👨‍💻 [Recipes](./LangGraph_Guide/typescript/langchain_langgraph_recipes.md)
+- 📑 [Index](./LangGraph_Guide/typescript/GUIDE_INDEX.md)
 
 ---
 
@@ -226,7 +226,7 @@ Build agents with Claude and the Anthropic SDK.
 #### **Anthropic Claude SDK** (TypeScript)
 Build agents with Claude using TypeScript.
 
-**Location**: `Anthrpic Claude_Agent_SDK_Typescript_Guide/`
+**Location**: `Anthropic_Claude_Agent_SDK_TypeScript_Guide/`
 - 📖 [Comprehensive Guide](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_comprehensive_guide.md)
 - 🚀 [Production Guide](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_production_guide.md)
 - 🏗️ [Diagrams Guide](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_diagrams.md)
@@ -428,7 +428,7 @@ AgentGuides/
 ├── CrewAI_Guide/
 ├── AG2_Guide/
 ├── LangGraph_Guide/
-├── Langgraph_Guide_Typescript/
+├── LangGraph_Guide/typescript/
 ├── LlamaIndex_Guide/
 ├── Haystack_Guide/
 ├── PydanticAI_Guide/
@@ -438,7 +438,7 @@ AgentGuides/
 ├── Google_ADK_Guide/
 ├── Mistral_Agents_API_Guide/
 ├── Anthropic_Claude_Agent_SDK_Guide/
-├── Anthrpic Claude_Agent_SDK_Typescript_Guide/
+├── Anthropic_Claude_Agent_SDK_TypeScript_Guide/
 ├── OpenAI_Agents_SDK_TypeScript_Guide/
 └── AutoGen_Guide/ (legacy)
 ```

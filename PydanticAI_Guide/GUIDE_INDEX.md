@@ -447,3 +447,7 @@ A: See Production Guide → "Observability & Monitoring"
 Start with README.md and progress through the learning paths based on your needs and experience level.
 
 
+
+### Advanced Guides
+- pydantic_ai_advanced_error_testing.md
+

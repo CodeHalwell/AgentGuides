@@ -1,3 +1,4 @@
+Latest: 1.38.0
 # Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide
 
 **Version:** 1.0  

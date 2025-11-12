@@ -196,8 +196,8 @@ print(result)
 
 **Next Steps**:
 1. Read [LangGraph README](../LangGraph_Guide/README.md)
-2. Try more [LangGraph Recipes](../LangGraph_Guide/langgraph_recipes.md)
-3. Deep dive: [LangGraph Comprehensive Guide](../LangGraph_Guide/langgraph_comprehensive_guide.md)
+2. Try more [LangGraph Recipes](../LangGraph_Guide/python/langgraph_recipes.md)
+3. Deep dive: [LangGraph Comprehensive Guide](../LangGraph_Guide/python/langgraph_comprehensive_guide.md)
 
 ---
 
@@ -230,7 +230,7 @@ graph = builder.compile(checkpointer=memory)
 # Now the graph remembers between runs
 ```
 
-[Learn More →](../LangGraph_Guide/langgraph_comprehensive_guide.md#memory)
+[Learn More →](../LangGraph_Guide/python/langgraph_comprehensive_guide.md#memory)
 
 ---
 
@@ -375,7 +375,7 @@ graph = builder.compile(checkpointer=MemorySaver())
 graph = builder.compile()
 ```
 
-[See Memory Guide →](../LangGraph_Guide/langgraph_comprehensive_guide.md#memory)
+[See Memory Guide →](../LangGraph_Guide/python/langgraph_comprehensive_guide.md#memory)
 
 ---
 

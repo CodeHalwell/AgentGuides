@@ -564,3 +564,7 @@ Happy building! 🚀
 **Updated: November 2025**  
 **Focus: TypeScript | Production Ready | Enterprise Grade**
 
+
+## Streaming Examples
+- [openai_agents_streaming_server_express.md](openai_agents_streaming_server_express.md)
+

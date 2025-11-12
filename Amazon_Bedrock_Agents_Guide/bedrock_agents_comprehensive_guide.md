@@ -31,6 +31,30 @@ A definitive, end-to-end technical reference covering Amazon Bedrock Agents from
 
 ## Core Fundamentals
 
+### Amazon Bedrock AgentCore
+
+Amazon Bedrock AgentCore is a new platform that simplifies the building and deployment of AI agents. It offers a suite of tools and services for securely and scalably operating AI agents at an enterprise level.
+
+**Key Features of AgentCore:**
+
+*   **Secure Serverless Runtime:** Provides a secure, serverless environment for executing agent logic.
+*   **Access to Tools:** Enables agents to access a wide range of tools, including AWS services, third-party APIs, and custom functions.
+*   **Support for Open Source Frameworks:** Supports popular open-source frameworks like LangChain, allowing developers to bring their own agent implementations.
+*   **Identity Services:** Manages agent permissions and access control through integration with AWS IAM.
+*   **Built-in Checkpointing and Recovery:** Provides automatic checkpointing and recovery for long-running tasks, ensuring agent resilience.
+*   **Integrated Observability:** Offers built-in monitoring and logging capabilities through integration with Amazon CloudWatch.
+
+### Best Practices for Building Bedrock Agents
+
+*   **Define Clear Use Cases and Objectives:** Establish a solid foundation with high-quality ground truth data and meticulously defined instructions.
+*   **Build Small and Focused Agents:** Design agents to be modular and specialized, allowing them to collaborate for more complex tasks.
+*   **Integrate Actions and APIs Thoughtfully:** Use Infrastructure as Code (IaC) to create and deploy reusable action groups.
+*   **Optimize Your Knowledge Base Design:** Integrate agents with existing organizational knowledge bases to provide accurate, context-aware responses.
+*   **Implement Robust Security and Access Control:** Use Guardrails to avoid sensitive topics, filter harmful content, and redact sensitive information.
+*   **Test and Iterate in Real-World Scenarios:** Begin with a comprehensive set of test cases derived from actual user interactions.
+*   **Leverage Infrastructure as Code (IaC):** Use IaC (CloudFormation, AWS CDK, Terraform) to create and deploy agents, guardrails, and knowledge bases for reusability and consistency.
+*   **Continuous Optimization:** Continuously optimize for cost and performance as your agents evolve and scale.
+
 ### AWS Bedrock Setup and IAM Permissions
 
 Amazon Bedrock Agents require comprehensive AWS environment setup with granular Identity and Access Management (IAM) configurations to ensure secure, scalable agent operations.
@@ -50,7 +74,8 @@ Amazon Bedrock Agents require comprehensive AWS environment setup with granular 
 aws bedrock list-foundation-models --region us-east-1
 
 # Check account's foundation model access
-aws bedrock get-foundation-model-availability-in-region --model-identifier anthropic.claude-3-sonnet-20240229-v1:0
+aws bedrock get-foundation-model-availability-in-region --model-identifier anthropic.claude-3-5-sonnet-20240620-v1:0
+# Note: As of late 2025, newer models like Claude 3.5 Haiku and Llama 3.1 are available and may offer better performance or cost-effectiveness.
 ```
 
 #### Comprehensive IAM Role Configuration
@@ -1061,6 +1086,36 @@ class GuardrailsManager:
         except Exception as e:
             print(f"✗ Error creating guardrail: {e}")
             raise
+
+#### Applying Guardrails Programmatically
+
+In addition to associating guardrails with agents at creation time, you can also apply guardrails programmatically to individual API requests using the `ApplyGuardrail` API. This is useful for multi-tenant scenarios or situations requiring dynamic moderation.
+
+```python
+import boto3
+
+bedrock_runtime = boto3.client('bedrock-runtime')
+
+response = bedrock_runtime.apply_guardrail(
+    guardrailIdentifier='YOUR_GUARDRAIL_ID',
+    guardrailVersion='YOUR_GUARDRAIL_VERSION',
+    source='USER_INPUT',
+    content=[
+        {
+            'text': {
+                'text': 'User input to be evaluated'
+            }
+        }
+    ]
+)
+
+# Process the response to check for any violations
+if response['action'] == 'DENY':
+    print("Input violates guardrails.")
+else:
+    # Proceed with invoking the agent
+    pass
+```
 ```
 
 #### Prompt Flows: Orchestrated Conversation Flows
@@ -1307,6 +1362,49 @@ class ModelSelectionFramework:
         }
         
         return fallback_chains.get(primary_model, [])
+
+### Code Interpretation
+
+Amazon Bedrock Agents now feature code interpretation, which allows agents to dynamically generate and execute code in a secure environment. This is particularly useful for complex analytical queries, data analysis, data visualization, and mathematical problem-solving.
+
+**Enabling Code Interpretation:**
+
+To enable code interpretation for an agent, you need to set the `enableCodeInterpreter` parameter to `true` when creating or updating the agent.
+
+```python
+response = bedrock.create_agent(
+    agentName='CodeInterpretingAgent',
+    foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
+    instruction='You are a data analyst. You can write and execute Python code to answer questions.',
+    enableCodeInterpreter=True
+)
+```
+
+**Example: Using Code Interpretation for Data Analysis**
+
+```python
+# Invoke the agent with a data analysis task
+response = bedrock_runtime.invoke_agent(
+    agentId='YOUR_AGENT_ID',
+    agentAliasId='YOUR_AGENT_ALIAS_ID',
+    inputText='Analyze the attached CSV file and provide a summary of the data.',
+    sessionId='session-1',
+    inputFiles=[
+        {
+            'name': 'sales_data.csv',
+            'source': {
+                's3': {
+                    'uri': 's3://your-bucket/sales_data.csv'
+                }
+            }
+        }
+    ]
+)
+
+# The agent will generate and execute Python code to read the CSV file,
+# perform the analysis, and generate a summary.
+print(response['outputText'])
+```
 ```
 
 ### AWS CLI and SDK Setup
@@ -1499,7 +1597,9 @@ class MultiRegionAgentDeployment:
 
 ---
 
-## Simple Agents
+## Multi-Agent Systems (MAS)
+
+**Note:** As of March 2025, Multi-Agent Systems in Amazon Bedrock are generally available. This includes support for the Agent-to-Agent (A2A) protocol, enabling seamless communication and coordination between agents built using different frameworks.
 
 ### Creating Basic Bedrock Agents via Console
 
@@ -1519,7 +1619,7 @@ Parameters:
 
   FoundationModel:
     Type: String
-    Default: anthropic.claude-3-sonnet-20240229-v1:0
+    Default: anthropic.claude-3-5-sonnet-20240620-v1:0
     Description: Foundation model to use for the agent
 
 Resources:
@@ -1666,7 +1766,7 @@ variable "agent_name" {
 }
 
 variable "foundation_model" {
-  default = "anthropic.claude-3-sonnet-20240229-v1:0"
+  default = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 }
 
 # IAM Role for Bedrock Agent

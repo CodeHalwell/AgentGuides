@@ -173,6 +173,14 @@ Production-ready deployment strategies:
 
 **Includes: 50+ complete, runnable examples**
 
+### 5. **`llamaindex_advanced_implementations.md`**
+Advanced, production-grade patterns for building sophisticated multi-agent and RAG systems:
+
+- **Advanced Multi-Agent Systems** - `llama-agents` orchestration and asynchronous communication.
+- **Complex Human-in-the-Loop (HITL)** - Approval workflows and interactive agent sessions.
+- **Middleware and Observability** - Custom agents with logging, metrics, and tracing.
+- **Advanced Error Handling** - Resilient tools with retry logic and fallbacks.
+
 ---
 
 ## 🚀 Quick Start
@@ -535,4 +543,12 @@ from llama_index.readers.web.simple_web_page import SimpleWebPageReader
 
 **Documentation by: LlamaIndex Community**  
 **For: Technical Professionals, AI Engineers, Developers**
+
+
+## Advanced Guides
+- [llamaindex_advanced_agents_python.md](llamaindex_advanced_agents_python.md)
+- [llamaindex_observability_python.md](llamaindex_observability_python.md)
+
+## Streaming Examples
+- [llamaindex_streaming_server_fastapi.md](llamaindex_streaming_server_fastapi.md)
 

@@ -1,3 +1,4 @@
+Latest: 1.14.1
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
