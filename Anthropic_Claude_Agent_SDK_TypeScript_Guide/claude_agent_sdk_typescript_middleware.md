@@ -67,7 +67,6 @@ for await (const chunk of stream) {
 
 deployment.yaml
 
-{% raw %}
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -110,7 +109,6 @@ spec:
 ## CI/CD (GitHub Actions)
 
 ```yaml
-{% raw %}
 name: deploy
 on:
   push:
@@ -145,7 +143,4 @@ jobs:
             deployment.yaml
           images: ghcr.io/${{ github.repository }}:latest
           namespace: default
-{% endraw %}
-```
-{% endraw %}
 ```
