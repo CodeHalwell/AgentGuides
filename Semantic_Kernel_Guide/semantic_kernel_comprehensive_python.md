@@ -38,6 +38,7 @@ kernel.add_chat_service(
 ## Agents
 - Use ChatCompletionAgent and AgentGroupChat for multi-agent workflows.
 
+{% raw %}
 ```python
 from semantic_kernel.agents import ChatCompletionAgent, AgentGroupChat
 
@@ -49,10 +50,12 @@ await chat.add_user_message("Draft a one-paragraph summary of LangGraph with sou
 result = await chat.invoke()
 print(result)
 ```
+{% endraw %}
 
 ## Plugins & Functions
 - Semantic functions (prompt-based) and native functions (Python code) compose capabilities.
 
+{% raw %}
 ```python
 calc_plugin = kernel.create_plugin("calc")
 
@@ -62,6 +65,7 @@ async def add(a: int, b: int) -> int:
 
 semantic = kernel.create_function_from_prompt("Summarize: {{$input}} in 3 bullet points")
 ```
+{% endraw %}
 
 ## Structured Output
 - Ask models for JSON matching Pydantic models; validate and retry on failure.
@@ -95,4 +99,3 @@ data = Summary.model_validate_json(str(raw))
 
 ## Examples & Recipes
 - See semantic_kernel_recipes.md for end-to-end examples.
-

@@ -11,6 +11,7 @@ Last verified: 2025-11
 
 This example streams staged events from a Semantic Kernel workflow; token-level streaming may depend on your SK function/service.
 
+{% raw %}
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -33,6 +34,7 @@ def stream(q: str):
 
     return StreamingResponse(run(), media_type="text/event-stream")
 ```
+{% endraw %}
 
 ## Deployment
 

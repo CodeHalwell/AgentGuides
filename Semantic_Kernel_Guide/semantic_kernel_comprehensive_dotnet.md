@@ -38,6 +38,7 @@ Console.WriteLine(result);
 
 ## Agents and Group Chat
 
+{% raw %}
 ```csharp
 using Microsoft.SemanticKernel.Agents;
 
@@ -60,6 +61,7 @@ await foreach (var msg in chat.InvokeAsync())
     Console.WriteLine($"{msg.Role}: {msg.Content}");
 }
 ```
+{% endraw %}
 
 ## Plugins & Functions
 
@@ -80,4 +82,3 @@ var text = await kernel.InvokeAsync<string>(summarize, new() { ["input"] = "Lang
 
 ## Deployment
 - ASP.NET Core minimal APIs; configure DI with SK Kernel; store secrets in Key Vault.
-
