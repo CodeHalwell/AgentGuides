@@ -1,16 +1,50 @@
-# OpenAI Agents SDK Complete Guide Collection
+# OpenAI Agents SDK Complete Guide Collection (2025 Edition)
 
-Welcome to the comprehensive guide collection for the OpenAI Agents SDK, a lightweight yet powerful framework for building production-ready multi-agent AI applications in Python.
+**🎯 PRODUCTION-READY | Official Swarm Replacement | Python 3.9+**
+
+Welcome to the comprehensive guide collection for the OpenAI Agents SDK, the **official production-ready replacement** for the experimental Swarm framework. Build enterprise-grade multi-agent AI applications with confidence.
+
+## 🚀 Critical 2025 Updates
+
+### ⭐ **NEW: Swarm Migration Guide**
+OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete Migration Guide →](openai_agents_sdk_swarm_migration_guide.md)**
+
+### ⭐ **NEW: 2025 Features Guide**
+- Built-in tracing and visualization
+- Provider-agnostic support (100+ LLMs)
+- Enhanced guardrails and session management
+- MCP integration
+- Fine-tuning and evaluation integration
+**[2025 Features Guide →](openai_agents_sdk_2025_features.md)**
+
+---
 
 ## 📚 Guide Documents
 
-This collection contains four comprehensive guides:
+This collection contains comprehensive guides:
 
-### 1. **[Comprehensive Guide](openai_agents_sdk_comprehensive_guide)**
+### 0. **[🆕 Swarm Migration Guide](openai_agents_sdk_swarm_migration_guide.md)** ⭐
+**CRITICAL FOR SWARM USERS**: Complete migration path from experimental Swarm to production Agents SDK. Includes:
+- Why migrate? (Production stability, active maintenance, enterprise features)
+- Side-by-side code comparisons
+- Breaking changes and solutions
+- Step-by-step migration checklist
+- Rollback strategy
+
+### 0.5 **[🆕 2025 Features Guide](openai_agents_sdk_2025_features.md)** ⭐
+Latest critical features and improvements:
+- Built-in tracing and visualization
+- Provider-agnostic support (100+ LLMs via LiteLLM)
+- Enhanced guardrails system
+- MCP integration (filesystem, git, HTTP)
+- Evaluation and fine-tuning integration
+- Production-ready session backends
+
+### 1. **[Comprehensive Guide](openai_agents_sdk_comprehensive_guide.md)**
 The complete reference covering all aspects of the OpenAI Agents SDK from fundamental concepts to advanced patterns. Includes:
 - Core installation and setup procedures
 - Fundamental concepts and design philosophy
-- All primitive types and their use cases
+- All primitive types and their use cases (Agents, Handoffs, Guardrails, Sessions, Tools, Runner)
 - Simple and complex agent patterns
 - Complete code examples for every feature
 - Best practices and architectural considerations
@@ -77,22 +111,35 @@ print(result.final_output)
 - **Architects**: Study the Diagrams Guide for system design patterns
 - **Advanced Users**: Explore all guides for deep customisation opportunities
 
-## 📖 Key Concepts
+## 📖 Key Concepts (2025 Edition)
 
-### Core Primitives
-- **Agent**: An LLM configured with instructions, tools, and guardrails
-- **Handoff**: Mechanism for transferring control between specialised agents
-- **Tool**: Functions agents can call with automatic schema generation
-- **Guardrail**: Input/output validation for safety and compliance
-- **Session**: Automatic conversation history management
-- **Runner**: The orchestrator executing the agent loop
+### Why Agents SDK Over Swarm?
+
+| Feature | Swarm (❌ Deprecated) | Agents SDK (✅ Production) |
+|---------|----------------------|---------------------------|
+| **Status** | Experimental | Production-Ready |
+| **Guardrails** | None | Built-in Input/Output |
+| **Tracing** | Basic | Comprehensive + Visualization |
+| **Sessions** | Manual | Automatic (SQLite/Redis/OpenAI) |
+| **Providers** | OpenAI only | 100+ via LiteLLM |
+| **MCP Support** | None | First-class |
+| **Maintenance** | Deprecated | Active Development |
+
+### Core Primitives (The Six Building Blocks)
+1. **Agent**: An LLM configured with instructions, tools, and guardrails
+2. **Handoff**: Mechanism for transferring control between specialised agents
+3. **Tool**: Functions agents can call with automatic Pydantic schema generation
+4. **Guardrail**: Input/output validation for safety and compliance
+5. **Session**: Automatic conversation history management (multiple backends)
+6. **Runner**: The orchestrator executing the agent loop
 
 ### Design Philosophy
 The SDK emphasises:
 - **Simplicity**: Minimal abstractions and intuitive APIs
 - **Customisation**: Extensible architecture for specific needs
 - **Production-Readiness**: Built-in support for tracing, sessions, and error handling
-- **Model Agnosticity**: Support for OpenAI and 100+ other LLM providers
+- **Model Agnosticity**: Support for OpenAI and 100+ other LLM providers via LiteLLM
+- **Active Maintenance**: Regular updates, security patches, new features
 
 ## 🔗 Model Context Protocol (MCP)
 
@@ -188,10 +235,57 @@ For questions, issues, or contributions:
 
 ---
 
-**Note**: This guide collection focuses on the Python implementation of the OpenAI Agents SDK. For JavaScript/TypeScript, refer to the separate [Agents SDK JS/TS](https://github.com/openai/openai-agents-js) documentation.
+## 🆕 2025 Critical Features
 
-**Last Updated**: November 2024
+### 1. Built-in Tracing & Visualization
+```python
+from agents import Agent, Runner, trace
+
+with trace("Customer Support Workflow", group_id="batch_001"):
+    result = await Runner.run(agent, query)
+# View at https://platform.openai.com/traces
+```
+
+### 2. Provider-Agnostic (100+ LLMs)
+```python
+# Use Claude, Gemini, Llama, Mistral, or any LiteLLM-supported model
+agent = Agent(
+    name="Claude Agent",
+    model="litellm/anthropic/claude-3-5-sonnet-20240620"
+)
+```
+
+### 3. Guardrails System
+```python
+@input_guardrail
+async def safety_check(ctx, agent, input_data):
+    # Validate inputs before processing
+    return GuardrailFunctionOutput(...)
+```
+
+### 4. Enhanced Session Management
+```python
+from agents import SQLiteSession, RedisSession, OpenAIConversationsSession
+
+# Choose backend: SQLite, Redis, SQLAlchemy, or OpenAI
+session = SQLiteSession("user_123", "conversations.db")
+```
+
+### 5. MCP Integration
+```python
+from agents.mcp import MCPServerStdio
+
+async with MCPServerStdio(name="Filesystem", params={...}) as server:
+    agent = Agent(mcp_servers=[server])
+```
+
+---
+
+**Note**: This guide collection focuses on the **Python** implementation of the OpenAI Agents SDK. For **JavaScript/TypeScript**, refer to the [TypeScript Guide Collection](../OpenAI_Agents_SDK_TypeScript_Guide/).
+
+**Last Updated**: January 2025
 **SDK Version**: Latest (v0.2.9+)
+**Status**: Production-Ready | Official Swarm Replacement
 
 
 ## Streaming Examples

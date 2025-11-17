@@ -1,4 +1,4 @@
-# Anthropic Claude Agent SDK - Comprehensive Technical Guide
+# Anthropic Claude Agent SDK - Comprehensive Technical Guide (2025 Edition)
 
 > **Complete Reference Documentation for Building Production-Ready AI Agents with Claude**
 
@@ -8,10 +8,38 @@ The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive
 
 - 🖥️ **Control computers** through mouse, keyboard, and screen interactions
 - 🔧 **Execute tools and commands** with fine-grained permission controls
-- 🧠 **Reason autonomously** using Claude's state-of-the-art reasoning capabilities
+- 🧠 **Reason autonomously** using Claude's state-of-the-art reasoning capabilities (Claude Sonnet 4.5)
 - 🔌 **Extend functionality** through the Model Context Protocol (MCP)
 - 📊 **Manage context efficiently** with automatic compaction mechanisms
 - 🔐 **Enforce security** with advanced permissions and sandboxing
+- 🤖 **Orchestrate subagents** for parallel task execution
+- 🔗 **Inject hooks** for custom logic at key execution points
+- 🌐 **Automate general tasks** beyond coding (research, data processing, web automation)
+
+This guide collection provides **exhaustive coverage** from beginner concepts to advanced production deployment patterns.
+
+## 🆕 What's New in 2025
+
+The Claude Agent SDK represents a significant evolution from the Claude Code SDK:
+
+### Critical Updates
+
+1. **Rebranding**: Claude Code SDK → Claude Agent SDK (broader capabilities)
+2. **Claude Sonnet 4.5**: Latest frontier model with superior reasoning
+3. **Subagents**: Specialized agents for parallel task decomposition
+4. **Hooks System**: Inject custom logic at pre/post execution points
+5. **Enhanced MCP**: Define custom Python functions as tools
+6. **Built-in Tools**: Read, Write, Bash, Grep, Glob, WebFetch, WebSearch
+7. **General-Purpose**: Support for non-coding tasks (CSV processing, research, visualization)
+8. **Python 3.10+**: Minimum version requirement (leverage modern features)
+
+### Migration from Claude Code SDK
+
+**Migrating from Claude Code SDK?** See the [Migration Guide](anthropic_claude_agent_sdk_migration_guide.md) for:
+- Step-by-step migration instructions
+- Breaking changes documentation
+- Code migration examples
+- Troubleshooting common issues
 
 This guide collection provides **exhaustive coverage** from beginner concepts to advanced production deployment patterns.
 
@@ -19,20 +47,39 @@ This guide collection provides **exhaustive coverage** from beginner concepts to
 
 ## 📚 Guide Structure
 
-### 1. **[anthropic_claude_agent_sdk_comprehensive_guide](anthropic_claude_agent_sdk_comprehensive_guide)**
+### 0. **[anthropic_claude_agent_sdk_migration_guide](anthropic_claude_agent_sdk_migration_guide.md)** 🆕
+**NEW for 2025:** Complete migration guide from Claude Code SDK to Claude Agent SDK. Covers:
+- Critical package and API changes
+- Step-by-step migration instructions
+- Breaking changes documentation
+- Code migration examples (before/after)
+- New features overview (Sonnet 4.5, subagents, hooks, MCP)
+- Troubleshooting common migration issues
+- Python 3.10+ requirement updates
+
+**Audience:** Developers migrating from Claude Code SDK
+
+**Essential:** Read this first if you're upgrading from Claude Code SDK
+
+---
+
+### 1. **[anthropic_claude_agent_sdk_comprehensive_guide](anthropic_claude_agent_sdk_comprehensive_guide.md)**
 The definitive technical reference covering all core concepts, APIs, and features. Includes:
 - Installation and setup for TypeScript and Python
 - Architecture and core concepts explanation
 - Complete API reference with extensive code examples
-- Tool ecosystem overview (file operations, bash, web search, etc.)
+- Tool ecosystem overview (Read, Write, Bash, Grep, Glob, WebFetch, WebSearch)
 - Multi-agent orchestration patterns
+- **🆕 Subagents**: Specialized task decomposition
+- **🆕 Hooks System**: Pre/post execution logic injection
+- **🆕 Claude Sonnet 4.5**: Latest model integration
 - Session and context management
 - Advanced configuration options
 - Model selection strategies
 
 **Audience:** Intermediate to Advanced developers building production systems
 
-**Key Sections:** 20,000+ lines covering all SDK capabilities
+**Key Sections:** 20,000+ lines covering all SDK capabilities including 2025 features
 
 ---
 
@@ -174,23 +221,87 @@ Built-in support for:
 
 ## 🔑 Key Features Explained
 
-### 1. **Computer Use** 
+### 1. **Claude Sonnet 4.5 Integration** 🆕
+Latest frontier model with superior reasoning capabilities, enhanced tool use, and improved multi-step planning. Built on the same infrastructure that powers Claude Code.
+
+### 2. **Subagents for Task Decomposition** 🆕
+Define specialized subagents that execute tasks in parallel. Each subagent can have its own tools, model, and configuration for optimal task completion.
+
+```python
+options = ClaudeAgentOptions(
+    enable_subagents=True,
+    agents={
+        "researcher": {
+            "description": "Web research specialist",
+            "tools": ["WebSearch", "WebFetch"]
+        },
+        "analyst": {
+            "description": "Data analysis expert",
+            "tools": ["Read", "Write"]
+        }
+    }
+)
+```
+
+### 3. **Hooks System** 🆕
+Inject custom logic at key execution points for validation, logging, auditing, and control flow modifications.
+
+```python
+async def validate_file_path(tool_name, tool_input, context):
+    if tool_name in ["Read", "Write"]:
+        # Custom validation logic
+        return {"allow": True}
+
+options = ClaudeAgentOptions(
+    hooks={
+        "pre_tool_execution": validate_file_path,
+        "post_tool_execution": log_tool_result
+    }
+)
+```
+
+### 4. **Enhanced MCP (Model Context Protocol)** 🆕
+Define custom Python functions as tools with type-safe parameter validation using decorators.
+
+```python
+from claude_agent_sdk import tool, create_sdk_mcp_server
+
+@tool("process_csv", "Process CSV files", {"file_path": str})
+async def process_csv(args: dict) -> dict:
+    # Custom tool implementation
+    return {"content": [{"type": "text", "text": "Processed"}]}
+
+server = create_sdk_mcp_server(
+    name="csv-tools",
+    version="1.0.0",
+    tools=[process_csv]
+)
+```
+
+### 5. **Built-in Tool Ecosystem** 🆕
+Comprehensive suite of built-in tools for file operations, command execution, and web access:
+- **Read/Write/Edit**: File operations
+- **Bash**: Command-line execution
+- **Grep/Glob**: File searching
+- **WebFetch/WebSearch**: Internet access
+
+### 6. **Computer Use**
 Agents can "use" a computer like a human - moving the mouse, typing, taking screenshots, and executing tasks through GUI applications.
 
-### 2. **MCP Integration**
-The Model Context Protocol allows seamless integration of custom tools and services, making agents extensible and composable.
-
-### 3. **Multi-Agent Orchestration**
+### 7. **Multi-Agent Orchestration**
 Build complex systems where multiple specialized agents coordinate to solve problems, with hierarchical delegation and context sharing.
 
-### 4. **Automatic Context Compaction**
+### 8. **Automatic Context Compaction**
 Handles long conversations automatically by compacting and summarising context to optimise token usage and costs.
 
-### 5. **Advanced Permissions**
+### 9. **Advanced Permissions**
 Fine-grained permission controls allow precise specification of what agents can and cannot do, with support for approval workflows.
 
-### 6. **Session Management**
+### 10. **Session Management**
 Agents maintain state across interactions with automatic persistence, recovery, and multi-session coordination capabilities.
+
+### 11. **General-Purpose Automation** 🆕
+Beyond coding tasks - support for CSV processing, web research, data visualization, document generation, and digital work automation.
 
 ---
 
@@ -227,19 +338,23 @@ Agents maintain state across interactions with automatic persistence, recovery, 
 ## 🛠️ Prerequisites
 
 ### For TypeScript/JavaScript
-- Node.js 16+ (18+ recommended)
+- Node.js 18+ (20+ recommended) 🆕 **Updated requirement**
 - npm or yarn
+- TypeScript 5.0+ recommended 🆕
 - Basic TypeScript knowledge
 
 ### For Python
-- Python 3.10+
+- **Python 3.10+** 🆕 **Required** (previously 3.8+)
+- Python 3.11+ recommended for best performance
 - pip package manager
 - async/await understanding recommended
+- Pattern matching support (Python 3.10+ feature)
 
 ### General Requirements
 - Anthropic API key (free at console.anthropic.com)
 - Basic command line knowledge
 - Understanding of async programming concepts
+- **Claude Sonnet 4.5** 🆕 Access (recommended model for 2025)
 
 ---
 

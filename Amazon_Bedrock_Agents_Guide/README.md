@@ -16,6 +16,10 @@ This guide provides exhaustive coverage of Amazon Bedrock Agents from foundation
 | **bedrock_agents_diagrams.md** | Visual architecture patterns and flow diagrams | Architects, DevOps | All levels |
 | **bedrock_agents_production_guide.md** | Deployment, operations, security, monitoring | DevOps, Platform teams | Advanced |
 | **bedrock_agents_recipes.md** | Practical implementations and use cases | Developers | Intermediate → Advanced |
+| **bedrock_agentcore_comprehensive_guide.md** | AgentCore serverless runtime and framework support | All developers | Intermediate |
+| **bedrock_strands_sdk_guide.md** | Strands lightweight agent framework and collaboration patterns | Developers | Intermediate → Advanced |
+| **bedrock_a2a_protocol_guide.md** | Agent-to-Agent protocol for cross-framework communication | Developers, Architects | Advanced |
+| **bedrock_agents_advanced_multi_agent_python.md** | Advanced multi-agent patterns and hierarchies | Developers | Advanced |
 
 ---
 
@@ -101,20 +105,36 @@ print(f"✓ Agent created: {agent_id}")
 
 Bedrock Agents are intelligent, autonomous systems that orchestrate interactions between:
 
-- **Foundation Models** (Claude, Llama, Titan, Mistral)
+- **Foundation Models** (Claude, Llama, Titan, Mistral, Amazon Nova)
 - **Data Sources** (Knowledge Bases, APIs, Databases)
 - **Actions** (Lambda functions, APIs, Step Functions)
 - **Policies** (Guardrails, compliance rules)
+- **AgentCore Runtime** (Secure serverless execution environment)
+
+### New 2025 Features (March 2025 Release)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Multi-Agent Collaboration** | GA (March 10, 2025) | Supervisor and supervisor-with-routing patterns for specialist agents |
+| **Amazon Bedrock AgentCore** | GA (Summit NYC 2025) | Secure serverless runtime for JS/TS/Python with framework support (Free trial until Sept 16, 2025) |
+| **Strands Agents SDK** | Open Source | Lightweight Python framework with 4 collaboration patterns: Agents as Tools, Swarms, Graphs, Workflows |
+| **Agent-to-Agent (A2A) Protocol** | GA | Cross-framework interoperability (Bedrock, OpenAI, LangGraph, Google ADK, Claude SDK) |
+| **Memory Retention** | GA | Cross-interaction persistence for personalized experiences |
+| **Amazon Nova Integration** | GA | Multi-agent support for Amazon Nova foundation models |
+| **Enhanced Guardrails** | GA | Advanced security and reliability features |
 
 ### Key Features
 
 | Feature | Description | Use Case |
 |---------|-------------|----------|
-| **Multi-Agent Collaboration** | Supervisor + specialist agents | Complex workflows, routing |
+| **Multi-Agent Collaboration** | Supervisor + specialist agents with parallel communication | Complex workflows, routing, task delegation |
+| **AgentCore Runtime** | Secure sandbox for complex data analysis and workflows | Enterprise automation, code interpretation |
 | **Knowledge Bases** | RAG-enabled semantic search | Context-aware responses |
 | **Action Groups** | API integration framework | External system interaction |
 | **Guardrails** | Safety and compliance policies | PII redaction, content filtering |
 | **Prompt Flows** | Visual workflow orchestration | Conditional routing, state management |
+| **Memory Systems** | Cross-session conversation persistence | Personalized agent experiences |
+| **A2A Protocol** | Cross-framework agent communication | Multi-vendor agent systems |
 
 ---
 
@@ -170,9 +190,26 @@ health = checker.perform_health_check(agent_id)
 User → Agent → Model → Response
 ```
 
-### Multi-Agent Pattern (Supervisor Mode)
+### Multi-Agent Pattern (Supervisor Mode) - NEW 2025
 ```
 User → Supervisor Agent → [Specialist Agents] → Response
+                ↓
+        Parallel Communication
+```
+
+### Supervisor with Routing Pattern - NEW 2025
+```
+User → Supervisor → Router → Specialist Agents → Response
+```
+
+### AgentCore Runtime Pattern - NEW 2025
+```
+User → AgentCore → [Strands/LangChain/LangGraph/CrewAI] → Secure Sandbox → Response
+```
+
+### Cross-Framework Collaboration (A2A) - NEW 2025
+```
+Bedrock Agent ←→ A2A Protocol ←→ OpenAI/Google/Claude Agents
 ```
 
 ### Complex Workflow Pattern
@@ -295,22 +332,78 @@ See: **production_guide.md** → Cost Optimisation
 **Sections**: 18 major sections covering
 - Core Fundamentals (IAM, Architecture, Components)
 - Simple Agents (Console, CloudFormation, Terraform)
-- Multi-Agent Systems (MAS, Supervisor, Routing)
-- AgentCore Services
+- Multi-Agent Systems (MAS, Supervisor, Routing) - **UPDATED 2025**
+- AgentCore Services - **NEW 2025**
 - Action Groups (OpenAPI, Lambda, APIs)
 - Knowledge Bases (Chunking, Retrieval, Citations)
 - Tools Integration
 - Structured Output
 - Model Context Protocol
 - Agentic Patterns (ReAct, Planning, Reflection)
-- Guardrails (Content Filtering, PII, Compliance)
+- Guardrails (Content Filtering, PII, Compliance) - **ENHANCED 2025**
 - Prompt Flows
-- Memory Systems
+- Memory Systems - **ENHANCED 2025**
 - Context Engineering
-- Multi-Model Support
+- Multi-Model Support (includes Amazon Nova) - **UPDATED 2025**
 - AWS Integrations
-- Supervisor Architecture
+- Supervisor Architecture - **ENHANCED 2025**
 - Advanced Topics (SageMaker, Testing, Compliance)
+
+**Code Examples**: 50+ production-ready Python and CloudFormation examples
+
+### agentcore_comprehensive_guide.md - **NEW 2025**
+
+**Sections**: 12 major sections covering
+- Introduction to AgentCore
+- Core Features (Secure Runtime, Framework Support, Data Analysis)
+- AgentCore Architecture
+- Getting Started
+- Secure Sandbox Runtime (JavaScript, TypeScript, Python)
+- Supported Frameworks (Strands, LangChain, LangGraph, CrewAI)
+- Data Analysis and Workflow Automation
+- AgentCore APIs
+- Integration Patterns
+- Security and Compliance
+- Best Practices
+- Production Deployment
+
+**Free Trial**: Until September 16, 2025
+
+### strands_sdk_guide.md - **NEW 2025**
+
+**Sections**: 12 major sections covering
+- Introduction to Strands
+- Installation and Setup
+- Core Concepts
+- Collaboration Pattern 1: Agents as Tools
+- Collaboration Pattern 2: Swarms
+- Collaboration Pattern 3: Agent Graphs
+- Collaboration Pattern 4: Workflows
+- Tool Definition and Integration
+- Memory and State Management
+- AWS Integration
+- Best Practices
+- Production Deployment
+
+**Open Source**: Apache 2.0 License
+
+### a2a_protocol_guide.md - **NEW 2025**
+
+**Sections**: 12 major sections covering
+- Introduction to A2A Protocol
+- Core Concepts
+- Protocol Specification (v1.0)
+- Amazon Bedrock Integration
+- OpenAI SDK Integration
+- LangGraph Integration
+- Google ADK Integration
+- Claude SDK Integration
+- Cross-Framework Communication Examples
+- Security and Authentication
+- Message Verification
+- Best Practices
+
+**Status**: Generally Available (March 10, 2025)
 
 **Code Examples**: 50+ production-ready Python and CloudFormation examples
 
@@ -393,7 +486,49 @@ This documentation guide is provided as-is for reference and educational purpose
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.0 | 2025-03-10 | **Major 2025 Update**: Multi-Agent Collaboration (GA), AgentCore (GA), Strands SDK (Open Source), A2A Protocol (GA), Memory Retention, Amazon Nova Integration, Enhanced Guardrails |
+| 1.5 | 2025-03-10 | Added comprehensive guides: AgentCore, Strands SDK, A2A Protocol |
 | 1.0 | 2024-11-11 | Initial comprehensive release |
+
+## 🆕 What's New in 2025
+
+### March 10, 2025 - Major Release
+
+**Multi-Agent Collaboration (GA)**
+- Supervisor agent pattern with parallel communication
+- Supervisor with routing for complex delegation
+- Complete production examples in comprehensive guide
+
+**Amazon Bedrock AgentCore (GA)**
+- Secure serverless runtime for JavaScript, TypeScript, Python
+- Support for Strands, LangChain, LangGraph, CrewAI frameworks
+- Complex data analysis and workflow automation
+- Free trial until September 16, 2025
+
+**Strands Agents SDK (Open Source)**
+- Lightweight Python framework for AWS-native agents
+- Four collaboration patterns: Agents as Tools, Swarms, Graphs, Workflows
+- Complete integration with Amazon Bedrock
+- Apache 2.0 license
+
+**Agent-to-Agent (A2A) Protocol (GA)**
+- Cross-framework interoperability standard
+- Works with Bedrock, OpenAI SDK, LangGraph, Google ADK, Claude SDK
+- Cryptographic message verification
+- Complete protocol specification and examples
+
+**Memory Retention (GA)**
+- Cross-interaction persistence
+- Personalized agent experiences
+- Improved multistep task accuracy
+
+**Amazon Nova Integration**
+- Multi-agent support for Amazon Nova models
+- Optimized performance and cost
+
+**Enhanced Guardrails**
+- Advanced security features
+- Improved reliability controls
 
 ---
 

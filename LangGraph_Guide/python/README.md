@@ -2,10 +2,20 @@
 
 **Comprehensive Guide for Building Production-Grade Stateful AI Agents**
 
-Latest Version: LangGraph 1.0+  
-Total Documentation: ~150KB across 4 comprehensive guides  
-Total Examples: 50+ working code examples  
+Latest Version: LangGraph 1.0.3 (November 2025)
+Total Documentation: ~200KB across 4 comprehensive guides
+Total Examples: 65+ working code examples
 Focus: Python with practical, real-world patterns
+
+**NEW in v1.0.3 (November 2025):**
+- ⚡ **Node Caching** - Skip redundant computations with built-in cache
+- ⏸️ **Deferred Nodes** - Delay execution until all upstream paths complete
+- 🎯 **Pre/Post Model Hooks** - Custom logic before/after LLM calls, context management
+- 🧠 **Cross-Thread Memory** - Share memory across multiple conversation threads
+- 🔧 **Tools State Updates** - Tools can directly modify graph state
+- 🌊 **Command Tool** - Build dynamic, edgeless agent flows
+- 🐍 **Python 3.13 Support** - Full compatibility with latest Python
+- 📦 **LangGraph Templates** - Pre-built patterns for common use cases
 
 ---
 

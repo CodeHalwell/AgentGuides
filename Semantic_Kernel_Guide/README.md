@@ -25,17 +25,53 @@ Semantic Kernel is an open-source software development kit (SDK) that enables de
 - **Cloud Integration:** Azure OpenAI, Azure AI Search, managed identity
 - **Enterprise Ready:** Production deployment patterns, monitoring, security
 - **Extensible Design:** Custom connectors, memory stores, and planners
+- **2025 Features:** Model Context Protocol (MCP), Google A2A Protocol, Vector Store v1.34, Microsoft Agent Framework
+
+---
+
+## Quick Start by Language
+
+**Choose your language to get started:**
+
+| Language | Directory | Quick Start | Best For |
+|----------|-----------|-------------|----------|
+| **Python** | **[python/](python/)** | [Python README](python/README.md) | Data science, ML workflows, rapid prototyping |
+| **.NET (C#)** | **[dotnet/](dotnet/)** | [.NET README](dotnet/README.md) | Enterprise apps, Azure integration, ASP.NET Core |
+| **General** | Root directory | This README | Conceptual understanding, cross-platform |
 
 ---
 
 ## Guide Structure
 
-This guide is organised into five comprehensive documents:
+**Documentation is now organized by programming language with complete, language-specific guides:**
 
-### Language-specific comprehensive references
+### 🐍 Python Documentation
+**Complete Python-specific guides with 2025 features (MCP, A2A Protocol, Vector Store v1.34)**
 
-- Python: [semantic_kernel_comprehensive_python.md](semantic_kernel_comprehensive_python.md)
-- .NET (C#): [semantic_kernel_comprehensive_dotnet.md](semantic_kernel_comprehensive_dotnet.md)
+- **[python/ directory](python/)** - Start here for Python
+  - [Python README](python/README.md) - Overview and quick start
+  - [Comprehensive Guide](python/semantic_kernel_comprehensive_python.md) - Complete Python reference
+  - [Production Guide](python/semantic_kernel_production_python.md) - Deployment, monitoring, scaling
+  - [Recipes](python/semantic_kernel_recipes_python.md) - Ready-to-use code examples
+  - [Diagrams](python/semantic_kernel_diagrams_python.md) - Python-specific architecture
+  - [GUIDE_INDEX](python/GUIDE_INDEX.md) - Complete topic index
+  - [Advanced Multi-Agent](python/semantic_kernel_advanced_multi_agent_python.md) - Multi-agent patterns
+  - [Middleware](python/semantic_kernel_middleware_python.md) - Guardrails and policy
+  - [Streaming Server](python/semantic_kernel_streaming_server_fastapi.md) - FastAPI examples
+
+### 🔷 .NET Documentation
+**Complete C#/.NET-specific guides with 2025 features (MCP March 2025, Agent Framework)**
+
+- **[dotnet/ directory](dotnet/)** - Start here for .NET
+  - [.NET README](dotnet/README.md) - Overview and quick start
+  - [Comprehensive Guide](dotnet/semantic_kernel_comprehensive_dotnet.md) - Complete C# reference
+  - [Production Guide](dotnet/semantic_kernel_production_dotnet.md) - ASP.NET Core, Polly, deployment
+  - [Recipes](dotnet/semantic_kernel_recipes_dotnet.md) - C# code examples
+  - [Diagrams](dotnet/semantic_kernel_diagrams_dotnet.md) - .NET architecture diagrams
+  - [GUIDE_INDEX](dotnet/GUIDE_INDEX.md) - Complete topic index
+
+### 📚 Language-Agnostic Core Documentation
+**General concepts and patterns applicable to all languages**
 
 ### 1. **semantic_kernel_comprehensive_guide.md** (14 sections, 50,000+ tokens)
 

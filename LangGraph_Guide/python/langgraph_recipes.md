@@ -1,6 +1,16 @@
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
+**Updated for LangGraph 1.0.3 (November 2025)**
+
+This guide includes recipes demonstrating the latest v1.0.3 features:
+- Node Caching for performance
+- Deferred Nodes for fan-in patterns
+- Pre/Post Model Hooks for LLM customization
+- Cross-Thread Memory for persistent context
+- Tools State Updates for dynamic behavior
+- Command Tool for edgeless flows
+
 ---
 
 ## Recipe 1: RAG System with Quality Control
@@ -1099,9 +1109,653 @@ async def stream_processing():
 
 ---
 
-This collection of recipes covers real-world patterns you'll encounter building production AI systems.
+## Recipe 7: Cached Multi-Agent Research System (v1.0.3)
+
+**Uses:** Node Caching, Deferred Nodes, Cross-Thread Memory
+
+```python
+from langgraph.graph import StateGraph, START, END, deferred
+from langgraph.cache import cache_node, SemanticCache
+from langgraph.types import Send
+from langgraph.store.postgres import AsyncPostgresStore
+from langgraph.prebuilt import InjectedStore
+from typing import Annotated
+from langchain_openai import OpenAIEmbeddings
+
+class ResearchState(TypedDict):
+    user_id: str
+    topic: str
+    search_queries: list[str]
+    research_results: Annotated[list[dict], lambda x, y: x + y]
+    cached_research: dict
+    final_report: str
+    user_preferences: dict
+
+# Semantic cache for expensive research queries
+semantic_cache = SemanticCache(
+    embeddings=OpenAIEmbeddings(),
+    similarity_threshold=0.90,
+    ttl=7200  # Cache for 2 hours
+)
+
+# Cross-thread store for user preferences
+store = AsyncPostgresStore.from_conn_string(
+    "postgresql://user:password@localhost/langgraph_db"
+)
+
+async def load_user_research_preferences(
+    state: ResearchState,
+    store: Annotated[AsyncPostgresStore, InjectedStore]
+) -> dict:
+    """Load user's research preferences from cross-thread memory."""
+
+    user_id = state["user_id"]
+    namespace = ("global", "users", user_id, "research_prefs")
+
+    prefs_item = await store.aget(namespace, "preferences")
+    preferences = prefs_item.value if prefs_item else {
+        "preferred_sources": ["academic", "news", "web"],
+        "depth": "comprehensive",
+        "format": "detailed"
+    }
+
+    return {"user_preferences": preferences}
+
+def generate_queries(state: ResearchState) -> dict:
+    """Generate research queries based on topic and preferences."""
+
+    topic = state["topic"]
+    prefs = state["user_preferences"]
+    depth = prefs.get("depth", "comprehensive")
+
+    # Generate more queries for comprehensive research
+    num_queries = 5 if depth == "comprehensive" else 3
+
+    prompt = f"""Generate {num_queries} specific research queries for: {topic}
+
+    Consider these aspects:
+    1. Current trends
+    2. Historical context
+    3. Expert opinions
+    4. Statistical data
+    5. Future predictions
+    """
+
+    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    response = model.invoke(prompt)
+
+    import json
+    queries = json.loads(response.content)
+
+    return {"search_queries": queries}
+
+def fan_out_research(state: ResearchState) -> list[Send]:
+    """Fan-out: Create parallel research tasks."""
+
+    return [
+        Send("researcher", {
+            "query": query,
+            "sources": state["user_preferences"]["preferred_sources"]
+        })
+        for query in state["search_queries"]
+    ]
+
+# CACHED NODE - expensive research operations
+@cache_node(cache=semantic_cache, cache_key="query")
+def researcher(state: ResearchState) -> dict:
+    """Research one query (cached to avoid redundant API calls)."""
+
+    query = state.get("query")
+    sources = state.get("sources", ["web"])
+
+    # This expensive operation will be cached
+    results = []
+
+    if "web" in sources:
+        web_results = tavily_search(query)
+        results.extend(web_results)
+
+    if "academic" in sources:
+        academic_results = semantic_scholar_search(query)
+        results.extend(academic_results)
+
+    if "news" in sources:
+        news_results = news_api_search(query)
+        results.extend(news_results)
+
+    return {
+        "research_results": [{
+            "query": query,
+            "results": results,
+            "cached": False  # First time
+        }]
+    }
+
+# DEFERRED NODE - waits for all research to complete
+@deferred(wait_for=["researcher"])
+def synthesize_report(state: ResearchState) -> dict:
+    """Synthesize report only after ALL research completes."""
+
+    # At this point, all parallel research is done
+    all_results = state["research_results"]
+    user_format = state["user_preferences"].get("format", "detailed")
+
+    # Compile all findings
+    findings = []
+    for result in all_results:
+        findings.append(f"Query: {result['query']}")
+        for item in result["results"]:
+            findings.append(f"- {item.get('title')}: {item.get('snippet')}")
+
+    synthesis_prompt = f"""
+    Synthesize a {user_format} research report on: {state['topic']}
+
+    Research findings:
+    {chr(10).join(findings)}
+
+    Format: {user_format}
+    """
+
+    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    response = model.invoke(synthesis_prompt)
+
+    return {"final_report": response.content}
+
+async def save_research_to_memory(
+    state: ResearchState,
+    store: Annotated[AsyncPostgresStore, InjectedStore]
+) -> dict:
+    """Save research to cross-thread memory for future use."""
+
+    user_id = state["user_id"]
+    namespace = ("global", "users", user_id, "research_history")
+
+    # Save this research
+    research_id = f"research-{uuid.uuid4().hex[:8]}"
+    await store.aput(
+        namespace,
+        research_id,
+        {
+            "topic": state["topic"],
+            "report": state["final_report"],
+            "date": datetime.now().isoformat(),
+            "query_count": len(state["search_queries"])
+        },
+        index=["topic", "report"]  # Enable semantic search
+    )
+
+    return {}
+
+# Build graph
+builder = StateGraph(ResearchState)
+builder.add_node("load_prefs", load_user_research_preferences)
+builder.add_node("generate_queries", generate_queries)
+builder.add_node("researcher", researcher)  # Cached & parallel
+builder.add_node("synthesize", synthesize_report)  # Deferred
+builder.add_node("save_memory", save_research_to_memory)
+
+builder.add_edge(START, "load_prefs")
+builder.add_edge("load_prefs", "generate_queries")
+builder.add_conditional_edges(
+    "generate_queries",
+    fan_out_research,
+    ["researcher"]
+)
+builder.add_edge("researcher", "synthesize")  # Deferred until all done
+builder.add_edge("synthesize", "save_memory")
+builder.add_edge("save_memory", END)
+
+# Compile with cache and store
+research_graph = builder.compile(
+    cache=True,  # Enable node caching
+    store=store  # Cross-thread memory
+)
+
+# Usage
+config = {"configurable": {"thread_id": "research-session-1"}}
+
+result = research_graph.invoke({
+    "user_id": "researcher-alice",
+    "topic": "Impact of AI on healthcare 2024"
+}, config=config)
+
+print(result["final_report"])
+
+# Future research on similar topics will hit cache!
+# User preferences persist across all threads!
+```
+
+---
+
+## Recipe 8: Smart Shopping Assistant with State Updates (v1.0.3)
+
+**Uses:** Tools State Updates, Pre/Post Model Hooks, Command Tool
+
+```python
+from langgraph.prebuilt import ToolNode, create_react_agent
+from langgraph.command import command_tool
+from langgraph.llm_hooks import pre_model_hook, post_model_hook
+from langchain.tools import tool
+from langgraph.types import StateUpdate
+
+class ShoppingState(TypedDict):
+    messages: Annotated[list, add_messages]
+    user_id: str
+    cart: list[dict]
+    total: float
+    recommendations: list[dict]
+    tokens_used: int
+    cost: float
+    conversation_phase: str
+
+# TOOLS WITH STATE UPDATES - directly modify graph state
+@tool(updates_state=True)
+def add_to_cart(
+    product_id: str,
+    quantity: int,
+    state: ShoppingState
+) -> StateUpdate:
+    """Add product to cart - updates state directly."""
+
+    # Fetch product
+    product = fetch_product(product_id)
+    item_total = product["price"] * quantity
+
+    # Update cart
+    current_cart = state.get("cart", [])
+    current_cart.append({
+        "product_id": product_id,
+        "name": product["name"],
+        "quantity": quantity,
+        "price": item_total
+    })
+
+    # Update recommendations based on cart
+    new_recs = get_recommendations_based_on_cart(current_cart)
+
+    # Return multiple state updates
+    return StateUpdate(
+        cart=current_cart,
+        total=state.get("total", 0.0) + item_total,
+        recommendations=new_recs,
+        messages=[{
+            "role": "tool",
+            "content": f"Added {quantity}x {product['name']} (${item_total}). Total: ${state.get('total', 0) + item_total}"
+        }]
+    )
+
+@tool(updates_state=True)
+def remove_from_cart(
+    product_id: str,
+    state: ShoppingState
+) -> StateUpdate:
+    """Remove product from cart."""
+
+    cart = state.get("cart", [])
+
+    # Find and remove
+    removed_item = None
+    new_cart = []
+    for item in cart:
+        if item["product_id"] == product_id and not removed_item:
+            removed_item = item
+        else:
+            new_cart.append(item)
+
+    if not removed_item:
+        return StateUpdate(
+            messages=[{"role": "tool", "content": f"Product {product_id} not in cart"}]
+        )
+
+    new_total = sum(item["price"] for item in new_cart)
+
+    return StateUpdate(
+        cart=new_cart,
+        total=new_total,
+        messages=[{
+            "role": "tool",
+            "content": f"Removed {removed_item['name']} from cart. New total: ${new_total}"
+        }]
+    )
+
+@tool(updates_state=True)
+def apply_discount_code(
+    code: str,
+    state: ShoppingState
+) -> StateUpdate:
+    """Apply discount code - updates total."""
+
+    discount_info = validate_discount(code)
+
+    if not discount_info["valid"]:
+        return StateUpdate(
+            messages=[{"role": "tool", "content": f"Invalid discount code: {code}"}]
+        )
+
+    current_total = state.get("total", 0.0)
+    discount_amount = current_total * discount_info["percentage"]
+    new_total = current_total - discount_amount
+
+    return StateUpdate(
+        total=new_total,
+        messages=[{
+            "role": "tool",
+            "content": f"Applied {code}: {discount_info['percentage']*100}% off. New total: ${new_total:.2f}"
+        }]
+    )
+
+# COMMAND TOOLS - control conversation flow
+@command_tool
+def start_checkout(state: ShoppingState) -> dict:
+    """Begin checkout process."""
+    return {
+        "command": "set_phase",
+        "phase": "checkout",
+        "message": "Starting checkout..."
+    }
+
+@command_tool
+def continue_shopping(state: ShoppingState) -> dict:
+    """Return to shopping."""
+    return {
+        "command": "set_phase",
+        "phase": "shopping",
+        "message": "Continue shopping"
+    }
+
+@command_tool
+def finish_order(order_details: dict) -> dict:
+    """Complete the order."""
+    return {
+        "command": "set_phase",
+        "phase": "complete",
+        "order": order_details
+    }
+
+# PRE/POST HOOKS for LLM calls
+@pre_model_hook
+def shopping_context_hook(state: ShoppingState, messages: list) -> dict:
+    """Inject shopping context before LLM calls."""
+
+    cart = state.get("cart", [])
+    total = state.get("total", 0.0)
+    recs = state.get("recommendations", [])
+
+    # Build context
+    context = f"""
+    Current Cart ({len(cart)} items, ${total:.2f}):
+    {chr(10).join([f"- {item['name']} x{item['quantity']}" for item in cart])}
+
+    Recommendations: {", ".join([r["name"] for r in recs[:3]])}
+    """
+
+    # Insert context as system message
+    messages.insert(0, {
+        "role": "system",
+        "content": f"Shopping Assistant Context:\n{context}\n\nBe helpful and suggest relevant products."
+    })
+
+    return {"messages": messages}
+
+@post_model_hook
+def track_shopping_costs(state: ShoppingState, response: Any, metadata: dict) -> dict:
+    """Track LLM costs."""
+
+    usage = metadata.get("usage_metadata", {})
+    tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+    cost = tokens * 0.003 / 1000  # Rough estimate
+
+    return {
+        "tokens_used": state.get("tokens_used", 0) + tokens,
+        "cost": state.get("cost", 0.0) + cost
+    }
+
+# Create agent with all tools
+tools = [
+    add_to_cart,
+    remove_from_cart,
+    apply_discount_code,
+    search_products,  # Regular tool
+    get_product_details  # Regular tool
+]
+
+command_tools = [
+    start_checkout,
+    continue_shopping,
+    finish_order
+]
+
+# Model with hooks
+model = ChatAnthropic(
+    model="claude-3-5-sonnet-20241022",
+    pre_hook=shopping_context_hook,
+    post_hook=track_shopping_costs
+)
+
+# Create agent
+shopping_agent = create_react_agent(
+    model=model,
+    tools=tools + command_tools,
+    command_tools=command_tools
+)
+
+# Usage
+result = shopping_agent.invoke({
+    "messages": [{
+        "role": "user",
+        "content": "I need a laptop for programming. Add a good one to my cart."
+    }],
+    "user_id": "shopper-123"
+})
+
+print(f"Cart: {result['cart']}")
+print(f"Total: ${result['total']:.2f}")
+print(f"LLM Cost: ${result['cost']:.4f}")
+```
+
+---
+
+## Recipe 9: Intelligent Workflow Coordinator (v1.0.3)
+
+**Uses:** Deferred Nodes, Command Tool, Caching
+
+```python
+from langgraph.graph import StateGraph, START, END, deferred
+from langgraph.cache import cache_node
+from langgraph.command import command_tool
+
+class WorkflowState(TypedDict):
+    workflow_id: str
+    tasks: list[dict]
+    task_results: Annotated[dict, lambda x, y: {**x, **y}]
+    dependencies_met: bool
+    final_output: dict
+    workflow_status: str
+
+@command_tool
+def execute_task(task_id: str, task_type: str) -> dict:
+    """Execute a specific task type."""
+    return {
+        "command": "execute",
+        "task_id": task_id,
+        "task_type": task_type
+    }
+
+@command_tool
+def skip_task(task_id: str, reason: str) -> dict:
+    """Skip a task."""
+    return {
+        "command": "skip",
+        "task_id": task_id,
+        "reason": reason
+    }
+
+@command_tool
+def retry_task(task_id: str) -> dict:
+    """Retry a failed task."""
+    return {
+        "command": "retry",
+        "task_id": task_id
+    }
+
+# Cached expensive tasks
+@cache_node(ttl=3600, cache_key="task_id")
+def data_processing_task(state: WorkflowState) -> dict:
+    """Expensive data processing (cached)."""
+
+    task_id = state.get("current_task_id")
+
+    # Expensive operation
+    result = process_large_dataset(task_id)
+
+    return {
+        "task_results": {
+            task_id: {
+                "status": "complete",
+                "result": result,
+                "cached": False
+            }
+        }
+    }
+
+@cache_node(ttl=3600, cache_key="model_params")
+def model_training_task(state: WorkflowState) -> dict:
+    """Expensive ML training (cached)."""
+
+    task_id = state.get("current_task_id")
+
+    # Train model
+    model_result = train_ml_model(task_id)
+
+    return {
+        "task_results": {
+            task_id: {
+                "status": "complete",
+                "model": model_result,
+                "cached": False
+            }
+        }
+    }
+
+def validation_task(state: WorkflowState) -> dict:
+    """Validation task."""
+
+    task_id = state.get("current_task_id")
+
+    # Validate results
+    validation = validate_task_results(state["task_results"])
+
+    return {
+        "task_results": {
+            task_id: {
+                "status": "complete",
+                "validation": validation
+            }
+        }
+    }
+
+# DEFERRED NODE - waits for all upstream tasks
+@deferred(wait_for=["data_processing_task", "model_training_task", "validation_task"])
+def final_aggregation(state: WorkflowState) -> dict:
+    """Aggregate results only after ALL tasks complete."""
+
+    all_results = state["task_results"]
+
+    # All dependencies are met
+    aggregated = {
+        "data_processing": all_results.get("data_task"),
+        "model_training": all_results.get("training_task"),
+        "validation": all_results.get("validation_task"),
+        "timestamp": datetime.now().isoformat()
+    }
+
+    return {
+        "final_output": aggregated,
+        "workflow_status": "complete"
+    }
+
+def workflow_coordinator(state: WorkflowState) -> dict:
+    """Coordinate workflow execution with command tools."""
+
+    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+
+    # Agent decides which tasks to execute
+    prompt = f"""
+    Workflow: {state['workflow_id']}
+    Tasks: {state['tasks']}
+    Completed: {list(state.get('task_results', {}).keys())}
+
+    Decide which task to execute next, or if workflow is complete.
+    Use command tools to control execution.
+    """
+
+    response = model.invoke(prompt)
+
+    # Extract command from response
+    # Agent will use execute_task, skip_task, or retry_task
+
+    return {"messages": [response]}
+
+# Build workflow graph
+builder = StateGraph(WorkflowState)
+builder.add_node("coordinator", workflow_coordinator)
+builder.add_node("data_task", data_processing_task)  # Cached
+builder.add_node("training_task", model_training_task)  # Cached
+builder.add_node("validation_task", validation_task)
+builder.add_node("aggregate", final_aggregation)  # Deferred
+
+# Dynamic routing based on command tools
+def route_workflow(state: WorkflowState) -> str:
+    """Route based on coordinator's command."""
+
+    last_command = extract_command(state["messages"][-1])
+
+    if last_command["command"] == "execute":
+        task_type = last_command["task_type"]
+        return f"{task_type}_task"
+    elif last_command["command"] == "skip":
+        return "coordinator"
+    elif last_command["command"] == "retry":
+        return route_workflow(state)  # Retry logic
+    else:
+        return "aggregate"
+
+builder.add_edge(START, "coordinator")
+builder.add_conditional_edges(
+    "coordinator",
+    route_workflow,
+    {
+        "data_task": "data_task",
+        "training_task": "training_task",
+        "validation_task": "validation_task",
+        "aggregate": "aggregate"
+    }
+)
+
+# Tasks return to coordinator
+builder.add_edge("data_task", "coordinator")
+builder.add_edge("training_task", "coordinator")
+builder.add_edge("validation_task", "coordinator")
+builder.add_edge("aggregate", END)
+
+workflow_graph = builder.compile(cache=True)
+
+# Execute intelligent workflow
+result = workflow_graph.invoke({
+    "workflow_id": "ml-pipeline-001",
+    "tasks": [
+        {"id": "data_task", "type": "data", "priority": 1},
+        {"id": "training_task", "type": "training", "priority": 2},
+        {"id": "validation_task", "type": "validation", "priority": 3}
+    ]
+})
+
+print(f"Workflow Status: {result['workflow_status']}")
+print(f"Final Output: {result['final_output']}")
+```
+
+---
+
+This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph 1.0.3.
+
 Adapt and combine them for your specific use cases!
-
-
-
-
