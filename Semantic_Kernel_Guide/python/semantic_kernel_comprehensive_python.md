@@ -246,6 +246,7 @@ result = await kernel.invoke(
 
 ### Basic Semantic Function
 
+{% raw %}
 ```python
 # Create function from prompt
 prompt = "What is the capital of {{$country}}?"
@@ -255,9 +256,11 @@ function = kernel.create_function_from_prompt(prompt)
 result = await kernel.invoke(function, country="France")
 print(result)  # "The capital of France is Paris."
 ```
+{% endraw %}
 
 ### Function with Settings
 
+{% raw %}
 ```python
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatPromptExecutionSettings
 
@@ -281,9 +284,11 @@ function = kernel.create_function_from_prompt(
 
 result = await kernel.invoke(function, input="Long text here...")
 ```
+{% endraw %}
 
 ### Template Variables
 
+{% raw %}
 ```python
 # Multiple variables
 prompt = """
@@ -303,6 +308,7 @@ result = await kernel.invoke(
     format="JSON with score and explanation"
 )
 ```
+{% endraw %}
 
 ---
 
@@ -1307,6 +1313,7 @@ await mcp_server.start()
 
 ### Complete MCP Server Example
 
+{% raw %}
 ```python
 import asyncio
 from semantic_kernel import Kernel
@@ -1347,6 +1354,7 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+{% endraw %}
 
 ---
 
@@ -1689,6 +1697,7 @@ result = await agent.invoke("Process sensitive customer data")
 
 ### Pydantic Models
 
+{% raw %}
 ```python
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional
@@ -1742,6 +1751,7 @@ customer = CustomerInfo.model_validate_json(str(result))
 
 print(f"Validated customer: {customer.name}, LTV: ${customer.lifetime_value}")
 ```
+{% endraw %}
 
 ### Validation with Retry
 

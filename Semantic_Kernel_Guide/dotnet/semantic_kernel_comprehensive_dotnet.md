@@ -198,6 +198,7 @@ kernel.ImportPluginFromObject(serviceProvider.GetRequiredService<WebPlugin>(), "
 
 ### Semantic Functions
 
+{% raw %}
 ```csharp
 var summarizePrompt = """
     Summarize the following text in 3 bullet points:
@@ -223,6 +224,7 @@ var result = await kernel.InvokeAsync<string>(
     new KernelArguments { ["input"] = "Long text here..." }
 );
 ```
+{% endraw %}
 
 ---
 
@@ -624,6 +626,7 @@ var response = await client.SendMessageAsync(
 
 ## 11. Structured Output
 
+{% raw %}
 ```csharp
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -661,6 +664,7 @@ var result = await kernel.InvokeAsync<string>(function, new() { ["input"] = text
 var customer = JsonSerializer.Deserialize<CustomerInfo>(result);
 Console.WriteLine($"Customer: {customer.Name}, LTV: ${customer.LifetimeValue}");
 ```
+{% endraw %}
 
 ---
 
@@ -787,6 +791,7 @@ app.MapControllers();
 app.Run();
 ```
 
+{% raw %}
 ```csharp
 // ChatController.cs
 [ApiController]
@@ -828,6 +833,7 @@ public class ChatController : ControllerBase
 
 public record ChatRequest(string Message);
 ```
+{% endraw %}
 
 ---
 

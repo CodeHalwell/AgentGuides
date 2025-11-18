@@ -52,6 +52,7 @@ app.MapControllers();
 app.Run();
 ```
 
+{% raw %}
 ```csharp
 // Controllers/ChatController.cs
 [ApiController]
@@ -93,6 +94,7 @@ public class ChatController : ControllerBase
 
 public record ChatRequest(string Message);
 ```
+{% endraw %}
 
 ---
 
