@@ -19,6 +19,10 @@ This comprehensive guide covers Pydantic AI from beginner fundamentals to advanc
 |------|---------|----------|
 | **[pydantic_ai_comprehensive_guide](pydantic_ai_comprehensive_guide)** | Complete reference from fundamentals to advanced concepts | Everyone |
 | **[pydantic_ai_production_guide](pydantic_ai_production_guide)** | Deployment, scaling, monitoring, and operational patterns | DevOps/Platform engineers |
+| **[pydantic_ai_durable_execution](pydantic_ai_durable_execution)** | **NEW 2025:** Fault-tolerant execution with checkpoint/resume | Production engineers |
+| **[pydantic_ai_graph_support](pydantic_ai_graph_support)** | **NEW 2025:** Type-safe graph-based workflows and state machines | Advanced developers |
+| **[pydantic_ai_integrations_2025](pydantic_ai_integrations_2025)** | **NEW 2025:** MCP, A2A Protocol, UI event streams | Integration specialists |
+| **[pydantic_ai_evals_2025](pydantic_ai_evals_2025)** | **NEW 2025:** Systematic testing with Logfire integration | QA/Testing engineers |
 | **[pydantic_ai_recipes](pydantic_ai_recipes)** | Real-world code examples and practical patterns | Developers |
 | **[pydantic_ai_diagrams](pydantic_ai_diagrams)** | Visual architecture and flow diagrams | Visual learners |
 | **`README.md`** | This file - Navigation and quick reference | Everyone |
@@ -102,6 +106,125 @@ async def main():
     print(result.output)
 
 asyncio.run(main())
+```
+
+---
+
+## 🆕 What's New in 2025
+
+### Critical Production Features
+
+**1. Durable Execution** - Never lose progress again
+```python
+from pydantic_ai.durable.prefect import PrefectDurableAgent
+
+# Agent that survives failures and restarts
+agent = PrefectDurableAgent(
+    'openai:gpt-4o',
+    checkpoint_every_n_steps=1  # Automatic checkpointing
+)
+
+# If it crashes at step 5 of 10, it resumes from step 5
+result = await agent.run("Long-running research task")
+```
+
+**2. Graph Support** - Type-safe workflow graphs
+```python
+from pydantic_ai.graph import graph, node
+
+@graph(state_type=WorkflowState)
+class DataPipeline:
+    @node
+    async def collect(self, state): ...
+
+    @node
+    async def analyze(self, state): ...
+
+    @node
+    async def visualize(self, state): ...
+
+# Automatic parallelization and dependency resolution
+pipeline = DataPipeline.build()
+result = await pipeline.execute(initial_state)
+```
+
+**3. MCP Integration** - Connect to any data source
+```python
+from pydantic_ai.mcp import MCPClient
+
+# Connect to MCP server (filesystem, database, APIs)
+mcp_client = await create_mcp_client()
+agent = Agent('openai:gpt-4o')
+
+# Agent can now access MCP tools
+result = await agent.run("Read the project README and summarize")
+```
+
+**4. Agent-to-Agent (A2A) Protocol** - Multi-agent networks
+```python
+from pydantic_ai.a2a import A2AAgent
+
+# Agents can discover and communicate with each other
+coordinator = CoordinatorAgent()
+workers = [WorkerAgent("worker-1"), WorkerAgent("worker-2")]
+
+# Distribute tasks across agent network
+result = await coordinator.delegate_task(task)
+```
+
+**5. Enhanced Model Support** - 12+ providers
+```python
+# All major providers supported
+Agent('openai:gpt-4o')           # OpenAI
+Agent('anthropic:claude-3-5-sonnet-latest')  # Anthropic
+Agent('google-gla:gemini-2.0-flash-exp')     # Google
+Agent('deepseek:deepseek-reasoner')          # DeepSeek
+Agent('grok:grok-2-latest')                  # xAI Grok
+Agent('perplexity:sonar-pro')                # Perplexity
+Agent('ollama:llama3.1:70b')                 # Local models
+
+# Smart fallback and routing
+from pydantic_ai.models import FallbackModel
+agent = Agent(FallbackModel(
+    primary='openai:gpt-4o',
+    fallbacks=['anthropic:claude-3-5-sonnet-latest', 'ollama:llama3.1']
+))
+```
+
+**6. UI Event Streams** - Real-time frontend updates
+```python
+from pydantic_ai.ui import UIEventStream
+
+# Stream agent progress to UI in real-time
+async with agent.run_stream(query) as response:
+    async for event in response.stream_events():
+        # event.type: "thinking", "tool_call", "text_delta", "complete"
+        await websocket.send_json(event)
+```
+
+**7. Powerful Evals** - Systematic quality testing
+```python
+import logfire
+from pydantic_ai import Agent
+
+# Automatic instrumentation
+logfire.configure()
+logfire.instrument_pydantic_ai()
+
+# All agent operations traced to Logfire dashboard
+agent = Agent('openai:gpt-4o')
+result = await agent.run("Query")
+
+# View detailed traces, metrics, and performance data at logfire.pydantic.dev
+```
+
+**6. Streamed Structured Outputs** - Continuous validation
+```python
+# Stream structured outputs with real-time validation
+async with agent.run_stream(query) as response:
+    async for partial_output in response.stream_structured():
+        # Receive validated Pydantic models as they're generated
+        print(f"Progress: {partial_output.completion_percentage}%")
 ```
 
 ---
@@ -211,25 +334,36 @@ async with agent.run_stream(query) as response:
 
 ---
 
-## 📚 Provider Support
+## 📚 Enhanced Provider Support (2025)
 
-Pydantic AI works with all major LLM providers:
+Pydantic AI now supports **12+ LLM providers** with unified interface:
 
-| Provider | Models | Status |
-|----------|--------|--------|
-| **OpenAI** | GPT-4o, GPT-4 Turbo, GPT-4, etc. | ✅ Fully supported |
-| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Opus | ✅ Fully supported |
-| **Google** | Gemini 1.5 Pro/Flash | ✅ Fully supported |
-| **Groq** | Llama 3.3, Mixtral | ✅ Fully supported |
-| **Mistral** | Mistral Large, Small | ✅ Fully supported |
-| **DeepSeek** | DeepSeek Chat | ✅ Fully supported |
-| **Grok** | Grok 2 | ✅ Fully supported |
-| **AWS Bedrock** | Multiple models | ✅ Supported |
+| Provider | Models | Status | Key Features |
+|----------|--------|--------|--------------|
+| **OpenAI** | GPT-4o, o3-mini, GPT-4 Turbo | ✅ Fully supported | Structured outputs, function calling |
+| **Anthropic** | Claude 3.5 Sonnet, Opus (2025) | ✅ Fully supported | Prompt caching, vision, 200K context |
+| **Google** | Gemini 2.0 Flash Exp, 1.5 Pro | ✅ Fully supported | Thinking mode, long context |
+| **DeepSeek** | DeepSeek Chat, Reasoner | ✅ Fully supported | Cost-effective reasoning |
+| **Grok (xAI)** | Grok 2, Grok Vision | ✅ Fully supported | Real-time data access |
+| **Cohere** | Command R+, Command R | ✅ Fully supported | RAG optimization |
+| **Mistral** | Mistral Large, Small | ✅ Fully supported | European deployment |
+| **Perplexity** | Sonar Pro, Sonar | ✅ Fully supported | Online search built-in |
+| **Azure OpenAI** | GPT-4o, GPT-4 | ✅ Fully supported | Enterprise compliance |
+| **AWS Bedrock** | Claude, Llama, etc. | ✅ Fully supported | AWS integration |
+| **Google Vertex AI** | Gemini on GCP | ✅ Fully supported | GCP integration |
+| **Ollama** | Llama 3.1, Custom models | ✅ Fully supported | Local/on-prem deployment |
 
 **Switch providers** without changing your code:
 ```python
 # From OpenAI to Anthropic - one line change!
-agent = Agent('anthropic:claude-3-5-sonnet-latest')
+agent = Agent('anthropic:claude-3-5-sonnet-20250219')
+
+# Or use multiple providers with fallback
+from pydantic_ai.models import FallbackModel
+agent = Agent(FallbackModel(
+    primary='openai:gpt-4o',
+    fallbacks=['anthropic:claude-3-5-sonnet-latest', 'ollama:llama3.1']
+))
 ```
 
 ---
@@ -554,11 +688,24 @@ This comprehensive guide is an educational resource created to help developers u
 
 ## 🎓 Next Steps
 
+### For Everyone
 1. **Read:** Start with [pydantic_ai_comprehensive_guide](pydantic_ai_comprehensive_guide)
 2. **Practice:** Implement recipes from [pydantic_ai_recipes](pydantic_ai_recipes)
-3. **Deploy:** Follow [pydantic_ai_production_guide](pydantic_ai_production_guide)
-4. **Visualise:** Review [pydantic_ai_diagrams](pydantic_ai_diagrams) for architecture
-5. **Build:** Create your first production agent!
+3. **Visualise:** Review [pydantic_ai_diagrams](pydantic_ai_diagrams) for architecture
+
+### For Production Systems (2025)
+4. **Durable Execution:** Add fault tolerance with [pydantic_ai_durable_execution](pydantic_ai_durable_execution)
+5. **Graph Workflows:** Build complex workflows with [pydantic_ai_graph_support](pydantic_ai_graph_support)
+6. **Integrations:** Connect to MCP/A2A with [pydantic_ai_integrations_2025](pydantic_ai_integrations_2025)
+7. **Quality Assurance:** Set up evals with [pydantic_ai_evals_2025](pydantic_ai_evals_2025)
+8. **Deploy:** Follow [pydantic_ai_production_guide](pydantic_ai_production_guide)
+
+### Build Your First Production Agent
+- Combine durable execution + graph workflows + evals
+- Deploy to Prefect/DBOS/Temporal
+- Monitor with Logfire
+- Connect to data via MCP
+- Scale with A2A protocol
 
 ---
 

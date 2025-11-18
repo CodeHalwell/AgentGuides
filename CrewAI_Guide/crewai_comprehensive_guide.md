@@ -1,4 +1,4 @@
-Latest: 1.4.1
+Latest: 1.4.1 (2025 Edition)
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 
@@ -19,6 +19,9 @@ Latest: 1.4.1
 11. [Crew Configuration](#crew-configuration)
 12. [Agentic Patterns](#agentic-patterns)
 13. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+14. [**NEW: CrewAI Flows (2025)**](#crewai-flows-2025)
+15. [**NEW: CrewAI AMP Suite**](#crewai-amp-suite)
+16. [**NEW: UV Dependency Management**](#uv-dependency-management)
 
 ---
 
@@ -27,6 +30,8 @@ Latest: 1.4.1
 ### What is CrewAI?
 
 CrewAI is an exceptionally powerful Python framework designed for orchestrating collaborative autonomous AI agents. It enables the creation of sophisticated multi-agent systems where each agent possesses a distinct role, specialisation, and set of responsibilities. The framework facilitates seamless collaboration between agents through well-defined communication protocols, task delegation mechanisms, and intelligent workflow orchestration.
+
+**2025 Update**: CrewAI has evolved into the industry-leading framework for agentic AI automation, trusted by over **100,000+ certified developers** worldwide. With the introduction of **CrewAI Flows** (event-driven workflows), the **CrewAI AMP Suite** (enterprise-grade automation), and **UV dependency management** (streamlined setup), CrewAI now provides a complete ecosystem for building production-ready agentic applications at any scale.
 
 ### Core Philosophy
 
@@ -68,12 +73,36 @@ Install the core CrewAI package:
 pip install crewai
 ```
 
+#### **NEW (2025): UV Dependency Management**
+
+CrewAI now supports UV, the ultra-fast Python package installer and resolver, providing a significantly improved setup experience:
+
+```bash
+# Install UV (if not already installed)
+pip install uv
+
+# Create and activate project with UV
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install CrewAI with UV (10-100x faster than pip)
+uv pip install crewai
+```
+
+**Benefits of UV**:
+- **Blazing Fast**: 10-100x faster than traditional pip
+- **Better Dependency Resolution**: Resolves complex dependency trees efficiently
+- **Smaller Environments**: More compact virtual environments
+- **Drop-in Replacement**: Compatible with existing pip workflows
+
 #### Installation with Tools
 
 For comprehensive tool support including web scraping, file operations, and API integrations:
 
 ```bash
 pip install 'crewai[tools]'
+# Or with UV:
+uv pip install 'crewai[tools]'
 ```
 
 #### Installation with Embeddings Support
@@ -82,6 +111,8 @@ If you need embeddings functionality:
 
 ```bash
 pip install 'crewai[embeddings]'
+# Or with UV:
+uv pip install 'crewai[embeddings]'
 ```
 
 #### Dependency Troubleshooting
@@ -1498,5 +1529,825 @@ agent = Agent(
 # MCP tools automatically integrated through configuration
 ```
 
-This guide provides comprehensive coverage of CrewAI fundamentals and patterns. Refer to official documentation for advanced features and updates.
+---
+
+## CrewAI Flows (2025)
+
+### Introduction to Flows
+
+**CrewAI Flows** is the revolutionary 2025 feature that extends CrewAI's capabilities beyond traditional agent orchestration into event-driven workflow automation. Flows enable you to build sophisticated applications that combine:
+
+- **Event-Driven Execution**: Trigger workflows based on events and conditions
+- **Conditional Logic**: Implement branching logic and decision trees
+- **Loops and Iterations**: Process data collections and repeating patterns
+- **Real-Time State Management**: Maintain and update application state dynamically
+- **Hybrid Orchestration**: Seamlessly combine Python code, LLM calls, and crew executions
+
+### Why Use Flows?
+
+Traditional crew execution is linear and task-based. Flows add:
+
+1. **Control Flow**: Conditional branching, loops, and complex decision logic
+2. **State Persistence**: Maintain state across multiple crew executions
+3. **Event Handling**: Respond to external events and triggers
+4. **Modularity**: Break complex workflows into reusable flow components
+5. **Observability**: Built-in monitoring and state inspection
+
+### Core Flow Concepts
+
+#### 1. Flow Class
+
+The base class for creating event-driven workflows:
+
+```python
+from crewai.flow.flow import Flow, listen, start
+
+class ContentCreationFlow(Flow):
+    """Flow for automated content creation pipeline"""
+
+    @start()
+    def gather_requirements(self):
+        """Entry point - gather content requirements"""
+        print("Gathering requirements...")
+        return {
+            "topic": "AI Agents",
+            "target_audience": "Developers",
+            "word_count": 2000
+        }
+
+    @listen(gather_requirements)
+    def research_topic(self, requirements):
+        """Research the topic based on requirements"""
+        print(f"Researching: {requirements['topic']}")
+        # Research logic here
+        return {"research_data": "..."}
+
+    @listen(research_topic)
+    def create_content(self, research_data):
+        """Generate content from research"""
+        print("Creating content...")
+        # Content creation logic
+        return {"content": "..."}
+
+# Execute the flow
+flow = ContentCreationFlow()
+result = flow.kickoff()
+```
+
+#### 2. Flow Decorators
+
+**@start()**: Defines the entry point of a flow
+
+```python
+@start()
+def initialize(self):
+    return {"status": "initialized"}
+```
+
+**@listen()**: Creates event listeners that trigger when specific methods complete
+
+```python
+@listen(initialize)
+def process_data(self, init_data):
+    # Processes after initialize completes
+    return processed_data
+```
+
+**@router()**: Implements conditional routing based on conditions
+
+```python
+from crewai.flow.flow import router
+
+@router(process_data)
+def route_based_on_type(self, data):
+    if data['type'] == 'urgent':
+        return 'handle_urgent'
+    elif data['type'] == 'normal':
+        return 'handle_normal'
+    else:
+        return 'handle_default'
+```
+
+### Flows with Crews
+
+Integrate crews into flows for powerful agentic workflows:
+
+```python
+from crewai import Agent, Task, Crew, LLM
+from crewai.flow.flow import Flow, listen, start
+
+class ResearchAndWriteFlow(Flow):
+    """Flow combining crews for research and writing"""
+
+    def __init__(self):
+        super().__init__()
+        self.llm = LLM(model="openai/gpt-4-turbo")
+
+    @start()
+    def define_topic(self):
+        """Define research topic"""
+        return {"topic": "Quantum Computing Applications"}
+
+    @listen(define_topic)
+    def research_crew_execution(self, topic_data):
+        """Execute research crew"""
+        # Create research agent
+        researcher = Agent(
+            role="AI Research Analyst",
+            goal=f"Research {topic_data['topic']} comprehensively",
+            backstory="Expert researcher with deep technical knowledge",
+            llm=self.llm
+        )
+
+        # Create research task
+        research_task = Task(
+            description=f"Research {topic_data['topic']} and compile findings",
+            expected_output="Comprehensive research report with key findings",
+            agent=researcher
+        )
+
+        # Execute crew
+        crew = Crew(
+            agents=[researcher],
+            tasks=[research_task],
+            verbose=True
+        )
+
+        result = crew.kickoff()
+        return {"research": result}
+
+    @listen(research_crew_execution)
+    def writing_crew_execution(self, research_data):
+        """Execute writing crew"""
+        writer = Agent(
+            role="Technical Writer",
+            goal="Create engaging technical content",
+            backstory="Expert at translating research into accessible content",
+            llm=self.llm
+        )
+
+        writing_task = Task(
+            description=f"Write article based on research: {research_data['research']}",
+            expected_output="Well-structured technical article",
+            agent=writer
+        )
+
+        crew = Crew(
+            agents=[writer],
+            tasks=[writing_task],
+            verbose=True
+        )
+
+        result = crew.kickoff()
+        return {"article": result}
+
+# Execute the flow
+flow = ResearchAndWriteFlow()
+final_result = flow.kickoff()
+print(final_result)
+```
+
+### Conditional Logic in Flows
+
+Implement branching logic using routers:
+
+```python
+from crewai.flow.flow import Flow, listen, start, router
+
+class DataProcessingFlow(Flow):
+    """Flow with conditional routing"""
+
+    @start()
+    def receive_data(self):
+        return {
+            "data_type": "customer_feedback",
+            "sentiment": "negative",
+            "priority": "high"
+        }
+
+    @router(receive_data)
+    def route_by_priority(self, data):
+        """Route based on priority level"""
+        if data['priority'] == 'high':
+            return 'handle_urgent'
+        elif data['priority'] == 'medium':
+            return 'handle_normal'
+        else:
+            return 'handle_low_priority'
+
+    @listen('handle_urgent')
+    def handle_urgent(self, data):
+        print(f"URGENT: Processing {data['data_type']}")
+        # Escalate and process immediately
+        return {"status": "escalated"}
+
+    @listen('handle_normal')
+    def handle_normal(self, data):
+        print(f"NORMAL: Processing {data['data_type']}")
+        # Standard processing
+        return {"status": "processed"}
+
+    @listen('handle_low_priority')
+    def handle_low_priority(self, data):
+        print(f"LOW: Queuing {data['data_type']}")
+        # Queue for later
+        return {"status": "queued"}
+
+flow = DataProcessingFlow()
+flow.kickoff()
+```
+
+### Loops and Iterations
+
+Process collections and implement iterative workflows:
+
+```python
+from crewai.flow.flow import Flow, listen, start
+
+class BatchProcessingFlow(Flow):
+    """Process multiple items iteratively"""
+
+    @start()
+    def get_items(self):
+        """Get items to process"""
+        return {
+            "items": [
+                {"id": 1, "content": "Item 1"},
+                {"id": 2, "content": "Item 2"},
+                {"id": 3, "content": "Item 3"}
+            ]
+        }
+
+    @listen(get_items)
+    def process_items(self, data):
+        """Process each item"""
+        results = []
+
+        for item in data['items']:
+            # Process each item
+            processed = self.process_single_item(item)
+            results.append(processed)
+
+        return {"results": results}
+
+    def process_single_item(self, item):
+        """Process a single item"""
+        print(f"Processing item {item['id']}: {item['content']}")
+        # Processing logic here
+        return {
+            "id": item['id'],
+            "status": "completed",
+            "output": f"Processed: {item['content']}"
+        }
+
+    @listen(process_items)
+    def summarize_results(self, results):
+        """Summarize processing results"""
+        total = len(results['results'])
+        print(f"Processed {total} items")
+        return {"summary": f"Completed {total} items"}
+
+flow = BatchProcessingFlow()
+flow.kickoff()
+```
+
+### Real-Time State Management
+
+Maintain and update state throughout flow execution:
+
+```python
+from crewai.flow.flow import Flow, listen, start
+
+class StatefulFlow(Flow):
+    """Flow with persistent state"""
+
+    def __init__(self):
+        super().__init__()
+        # Initialize state
+        self.state = {
+            "processed_count": 0,
+            "errors": [],
+            "results": []
+        }
+
+    @start()
+    def begin_processing(self):
+        print("Starting processing...")
+        return {"status": "started"}
+
+    @listen(begin_processing)
+    def process_batch_1(self, data):
+        """Process first batch"""
+        try:
+            # Processing logic
+            self.state['processed_count'] += 10
+            self.state['results'].append("Batch 1 complete")
+        except Exception as e:
+            self.state['errors'].append(str(e))
+
+        return {"batch": 1, "state": self.state}
+
+    @listen(process_batch_1)
+    def process_batch_2(self, data):
+        """Process second batch"""
+        try:
+            self.state['processed_count'] += 15
+            self.state['results'].append("Batch 2 complete")
+        except Exception as e:
+            self.state['errors'].append(str(e))
+
+        return {"batch": 2, "state": self.state}
+
+    @listen(process_batch_2)
+    def finalize(self, data):
+        """Finalize and report state"""
+        print(f"\nFinal State:")
+        print(f"Processed: {self.state['processed_count']} items")
+        print(f"Results: {self.state['results']}")
+        print(f"Errors: {self.state['errors']}")
+
+        return {"final_state": self.state}
+
+flow = StatefulFlow()
+flow.kickoff()
+```
+
+### Advanced Flow Patterns
+
+#### Pattern 1: Multi-Stage Pipeline
+
+```python
+from crewai.flow.flow import Flow, listen, start
+from crewai import Agent, Task, Crew, LLM
+
+class ContentPipelineFlow(Flow):
+    """Multi-stage content production pipeline"""
+
+    def __init__(self):
+        super().__init__()
+        self.llm = LLM(model="openai/gpt-4-turbo")
+
+    @start()
+    def ideation(self):
+        """Stage 1: Generate ideas"""
+        ideator = Agent(
+            role="Content Strategist",
+            goal="Generate compelling content ideas",
+            llm=self.llm
+        )
+
+        task = Task(
+            description="Generate 5 article ideas about AI agents",
+            expected_output="List of 5 article ideas with descriptions",
+            agent=ideator
+        )
+
+        crew = Crew(agents=[ideator], tasks=[task])
+        result = crew.kickoff()
+        return {"ideas": result}
+
+    @listen(ideation)
+    def research(self, ideas_data):
+        """Stage 2: Research selected ideas"""
+        researcher = Agent(
+            role="Research Analyst",
+            goal="Conduct thorough research",
+            llm=self.llm
+        )
+
+        task = Task(
+            description=f"Research these ideas: {ideas_data['ideas']}",
+            expected_output="Detailed research findings",
+            agent=researcher
+        )
+
+        crew = Crew(agents=[researcher], tasks=[task])
+        result = crew.kickoff()
+        return {"research": result}
+
+    @listen(research)
+    def write(self, research_data):
+        """Stage 3: Write content"""
+        writer = Agent(
+            role="Technical Writer",
+            goal="Create engaging content",
+            llm=self.llm
+        )
+
+        task = Task(
+            description=f"Write article based on: {research_data['research']}",
+            expected_output="Complete article draft",
+            agent=writer
+        )
+
+        crew = Crew(agents=[writer], tasks=[task])
+        result = crew.kickoff()
+        return {"draft": result}
+
+    @listen(write)
+    def edit(self, draft_data):
+        """Stage 4: Edit and refine"""
+        editor = Agent(
+            role="Editor",
+            goal="Polish content to publication quality",
+            llm=self.llm
+        )
+
+        task = Task(
+            description=f"Edit and refine: {draft_data['draft']}",
+            expected_output="Publication-ready article",
+            agent=editor
+        )
+
+        crew = Crew(agents=[editor], tasks=[task])
+        result = crew.kickoff()
+        return {"final_article": result}
+
+flow = ContentPipelineFlow()
+final_output = flow.kickoff()
+```
+
+#### Pattern 2: Error Handling and Retry Logic
+
+```python
+from crewai.flow.flow import Flow, listen, start, router
+
+class ResilientFlow(Flow):
+    """Flow with error handling and retries"""
+
+    def __init__(self):
+        super().__init__()
+        self.max_retries = 3
+        self.retry_count = 0
+
+    @start()
+    def process_data(self):
+        return {"data": "sensitive_operation"}
+
+    @listen(process_data)
+    def risky_operation(self, data):
+        """Operation that might fail"""
+        try:
+            # Simulated risky operation
+            import random
+            if random.random() < 0.5:
+                raise Exception("Operation failed")
+
+            return {"status": "success", "result": data}
+        except Exception as e:
+            return {"status": "error", "error": str(e), "retry": True}
+
+    @router(risky_operation)
+    def handle_result(self, result):
+        """Route based on operation result"""
+        if result['status'] == 'success':
+            return 'finalize_success'
+        elif result.get('retry') and self.retry_count < self.max_retries:
+            self.retry_count += 1
+            print(f"Retrying... (attempt {self.retry_count})")
+            return 'risky_operation'
+        else:
+            return 'handle_failure'
+
+    @listen('finalize_success')
+    def finalize_success(self, result):
+        print("Operation completed successfully")
+        return result
+
+    @listen('handle_failure')
+    def handle_failure(self, result):
+        print(f"Operation failed after {self.max_retries} retries")
+        return {"status": "failed", "error": result.get('error')}
+
+flow = ResilientFlow()
+flow.kickoff()
+```
+
+### Flow Execution and Monitoring
+
+```python
+from crewai.flow.flow import Flow, listen, start
+
+class MonitoredFlow(Flow):
+    """Flow with execution monitoring"""
+
+    @start()
+    def step_1(self):
+        print("Step 1: Started")
+        # Logic here
+        print("Step 1: Completed")
+        return {"step": 1}
+
+    @listen(step_1)
+    def step_2(self, data):
+        print("Step 2: Started")
+        # Logic here
+        print("Step 2: Completed")
+        return {"step": 2}
+
+    @listen(step_2)
+    def step_3(self, data):
+        print("Step 3: Started")
+        # Logic here
+        print("Step 3: Completed")
+        return {"step": 3, "final": True}
+
+# Execute and monitor
+flow = MonitoredFlow()
+result = flow.kickoff()
+
+# Access flow state
+print(f"\nFlow execution completed")
+print(f"Final result: {result}")
+```
+
+### Best Practices for Flows
+
+1. **Clear State Management**: Keep state explicit and well-documented
+2. **Modular Design**: Break complex flows into smaller, reusable components
+3. **Error Handling**: Implement proper error handling and recovery mechanisms
+4. **Logging**: Add comprehensive logging for debugging and monitoring
+5. **Testing**: Test flows with various scenarios and edge cases
+6. **Documentation**: Document flow logic, state transitions, and decision points
+
+**For comprehensive Flow examples and patterns, see the dedicated [CrewAI Flows Guide](./crewai_flows_guide.md).**
+
+---
+
+## CrewAI AMP Suite
+
+### Introduction to CrewAI AMP
+
+**CrewAI AMP (Agent Management Platform)** is the enterprise-grade suite for secure, scalable agentic automation. Released in 2025, the AMP Suite transforms CrewAI from a development framework into a complete enterprise platform.
+
+### What is CrewAI AMP?
+
+The AMP Suite provides:
+
+1. **Enterprise Security**: Advanced authentication, authorization, and audit logging
+2. **Scalable Infrastructure**: Production-ready deployment and scaling capabilities
+3. **Monitoring and Observability**: Real-time monitoring, metrics, and dashboards
+4. **Team Collaboration**: Multi-user support with role-based access control
+5. **Deployment Tools**: One-click deployment to cloud platforms
+6. **SLA Guarantees**: Enterprise support with SLAs and uptime guarantees
+
+### Key Features
+
+#### 1. Enterprise Authentication and Authorization
+
+```python
+from crewai.amp import AMPCrew, AuthConfig
+
+# Configure authentication
+auth_config = AuthConfig(
+    provider="oauth2",
+    client_id="your-client-id",
+    allowed_domains=["yourcompany.com"],
+    role_based_access=True
+)
+
+# Create AMP-enabled crew
+amp_crew = AMPCrew(
+    name="enterprise_crew",
+    auth_config=auth_config,
+    agents=[agent1, agent2],
+    tasks=[task1, task2]
+)
+```
+
+#### 2. Scalable Deployment
+
+```python
+from crewai.amp import DeploymentConfig
+
+deployment = DeploymentConfig(
+    platform="kubernetes",
+    replicas=3,
+    auto_scaling=True,
+    min_instances=2,
+    max_instances=10,
+    cpu_threshold=70,
+    memory_threshold=80
+)
+
+amp_crew.deploy(deployment)
+```
+
+#### 3. Real-Time Monitoring
+
+```python
+from crewai.amp import MonitoringConfig
+
+monitoring = MonitoringConfig(
+    enable_metrics=True,
+    enable_logging=True,
+    log_level="INFO",
+    metrics_endpoint="/metrics",
+    dashboard_enabled=True
+)
+
+amp_crew.configure_monitoring(monitoring)
+
+# Access metrics
+metrics = amp_crew.get_metrics()
+print(f"Total executions: {metrics['total_executions']}")
+print(f"Success rate: {metrics['success_rate']}%")
+print(f"Average duration: {metrics['avg_duration']}s")
+```
+
+#### 4. Audit Logging
+
+```python
+from crewai.amp import AuditConfig
+
+audit = AuditConfig(
+    enable_audit_log=True,
+    log_all_actions=True,
+    retention_days=90,
+    compliance_mode="SOC2"
+)
+
+amp_crew.configure_audit(audit)
+
+# Query audit logs
+logs = amp_crew.get_audit_logs(
+    start_date="2025-01-01",
+    end_date="2025-01-31",
+    user="john@company.com"
+)
+```
+
+#### 5. Team Collaboration
+
+```python
+from crewai.amp import TeamConfig, Role
+
+# Define roles
+admin_role = Role(
+    name="admin",
+    permissions=["create", "read", "update", "delete", "deploy"]
+)
+
+developer_role = Role(
+    name="developer",
+    permissions=["create", "read", "update"]
+)
+
+viewer_role = Role(
+    name="viewer",
+    permissions=["read"]
+)
+
+# Configure team
+team = TeamConfig(
+    roles=[admin_role, developer_role, viewer_role],
+    members=[
+        {"email": "admin@company.com", "role": "admin"},
+        {"email": "dev@company.com", "role": "developer"},
+        {"email": "viewer@company.com", "role": "viewer"}
+    ]
+)
+
+amp_crew.configure_team(team)
+```
+
+### AMP Pricing and Plans
+
+- **Developer**: Free for development and testing
+- **Team**: $99/month - Up to 10 users, basic monitoring
+- **Business**: $499/month - Unlimited users, advanced features, 99.9% SLA
+- **Enterprise**: Custom pricing - Dedicated support, custom SLAs, on-premise options
+
+For more information, visit: https://www.crewai.com/amp
+
+---
+
+## UV Dependency Management
+
+### Why UV?
+
+UV is the next-generation Python package installer developed by Astral (creators of Ruff). It offers:
+
+- **Speed**: 10-100x faster than pip
+- **Reliability**: Better dependency resolution
+- **Compatibility**: Drop-in replacement for pip
+- **Modern Design**: Built in Rust for performance
+
+### Installation with UV
+
+```bash
+# Install UV
+pip install uv
+
+# Or using standalone installer
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Creating CrewAI Projects with UV
+
+```bash
+# Create new project directory
+mkdir my_crewai_project
+cd my_crewai_project
+
+# Create virtual environment with UV
+uv venv
+
+# Activate environment
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate  # Windows
+
+# Install CrewAI with UV (blazing fast!)
+uv pip install crewai 'crewai[tools]'
+
+# Install specific versions
+uv pip install crewai==1.4.1
+
+# Install from requirements file
+uv pip install -r requirements.txt
+```
+
+### UV with CrewAI Development
+
+```bash
+# Create project structure
+crewai create crew my_project
+
+# Navigate to project
+cd my_project
+
+# Create UV environment
+uv venv
+
+# Activate
+source .venv/bin/activate
+
+# Install dependencies with UV
+uv pip install -r requirements.txt
+
+# Add additional packages
+uv pip install pytest black ruff
+```
+
+### UV Advantages for CrewAI Projects
+
+1. **Faster Installation**: Large projects install in seconds vs minutes
+2. **Better Caching**: Intelligent caching reduces re-downloads
+3. **Lock Files**: `uv.lock` files ensure reproducible builds
+4. **Parallel Downloads**: Multiple packages download simultaneously
+5. **Smart Resolution**: Advanced dependency conflict resolution
+
+### Migrating Existing Projects to UV
+
+```bash
+# Navigate to existing CrewAI project
+cd existing_project
+
+# Create UV virtual environment
+uv venv
+
+# Activate environment
+source .venv/bin/activate
+
+# Install from existing requirements.txt
+uv pip install -r requirements.txt
+
+# Or install from pyproject.toml
+uv pip install -e .
+
+# Freeze dependencies to UV format
+uv pip freeze > requirements.txt
+```
+
+### UV Commands Reference
+
+```bash
+# Install package
+uv pip install package_name
+
+# Install from requirements
+uv pip install -r requirements.txt
+
+# Uninstall package
+uv pip uninstall package_name
+
+# List installed packages
+uv pip list
+
+# Show package details
+uv pip show package_name
+
+# Create requirements file
+uv pip freeze > requirements.txt
+
+# Upgrade package
+uv pip install --upgrade package_name
+
+# Install specific version
+uv pip install package_name==1.2.3
+```
+
+---
+
+This comprehensive guide now includes all 2025 features including CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide.md).
 

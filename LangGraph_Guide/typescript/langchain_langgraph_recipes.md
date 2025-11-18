@@ -634,4 +634,746 @@ export async function errorRecoveryAgent(): Promise<void> {
 
 ---
 
-These recipes provide practical, production-ready implementations that you can adapt to your specific use cases. Each recipe demonstrates key patterns and best practices for building with LangChain.js and LangGraph.js.
+## Advanced Streaming Agent (v0.3+)
+
+### Real-Time Progress Tracking with Type-Safe Streaming
+
+```typescript
+// recipes/advancedStreamingAgent.ts
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+import express from 'express';
+
+interface AnalysisState {
+  documentUrl: string;
+  downloadStatus: string | null;
+  processStatus: string | null;
+  analysisResult: string | null;
+  error: string | null;
+}
+
+const AnalysisStateAnnotation = Annotation.Root({
+  documentUrl: Annotation<string>,
+  downloadStatus: Annotation<string | null>({ default: () => null }),
+  processStatus: Annotation<string | null>({ default: () => null }),
+  analysisResult: Annotation<string | null>({ default: () => null }),
+  error: Annotation<string | null>({ default: () => null }),
+});
+
+const analysisGraph = new StateGraph(AnalysisStateAnnotation);
+
+analysisGraph
+  .addNode('download', async (state) => {
+    // Simulate document download
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return {
+      downloadStatus: `Downloaded from ${state.documentUrl}`,
+    };
+  })
+  .addNode('process', async (state) => {
+    // Simulate processing
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return {
+      processStatus: 'Document processed successfully',
+    };
+  })
+  .addNode('analyze', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    const response = await model.invoke(
+      `Analyze this document: ${state.processStatus}`
+    );
+
+    return {
+      analysisResult: response.content as string,
+    };
+  });
+
+analysisGraph.addEdge(START, 'download');
+analysisGraph.addEdge('download', 'process');
+analysisGraph.addEdge('process', 'analyze');
+analysisGraph.addEdge('analyze', END);
+
+const analysisWorkflow = analysisGraph.compile();
+
+// Express endpoint with Server-Sent Events
+const app = express();
+app.use(express.json());
+
+app.post('/analyze', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const { documentUrl } = req.body;
+
+  try {
+    const stream = analysisWorkflow.stream(
+      {
+        documentUrl,
+        downloadStatus: null,
+        processStatus: null,
+        analysisResult: null,
+        error: null,
+      },
+      {
+        streamMode: 'updates',
+      }
+    );
+
+    for await (const update of stream) {
+      const nodeName = Object.keys(update)[0];
+      const nodeData = update[nodeName];
+
+      res.write(
+        `data: ${JSON.stringify({
+          node: nodeName,
+          update: nodeData,
+          timestamp: new Date().toISOString(),
+        })}\n\n`
+      );
+    }
+
+    res.write('data: {"done": true}\n\n');
+    res.end();
+  } catch (error) {
+    res.write(
+      `data: ${JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })}\n\n`
+    );
+    res.end();
+  }
+});
+
+export default app;
+```
+
+---
+
+## Cached RAG Pipeline
+
+### Implementing Node Caching for Expensive Embeddings
+
+```typescript
+// recipes/cachedRagPipeline.ts
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { MemoryVectorStore } from '@langchain/core/vectorstores';
+import { Document } from '@langchain/core/documents';
+import Redis from 'ioredis';
+
+interface RAGState {
+  query: string;
+  embedding: number[] | null;
+  retrievedDocs: Document[];
+  answer: string | null;
+}
+
+const RAGStateAnnotation = Annotation.Root({
+  query: Annotation<string>,
+  embedding: Annotation<number[] | null>({ default: () => null }),
+  retrievedDocs: Annotation<Document[]>({ default: () => [] }),
+  answer: Annotation<string | null>({ default: () => null }),
+});
+
+// Redis cache for embeddings
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+
+async function getCachedEmbedding(text: string): Promise<number[] | null> {
+  const cached = await redis.get(`embedding:${text}`);
+  return cached ? JSON.parse(cached) : null;
+}
+
+async function cacheEmbedding(text: string, embedding: number[]): Promise<void> {
+  await redis.setex(
+    `embedding:${text}`,
+    3600, // 1 hour TTL
+    JSON.stringify(embedding)
+  );
+}
+
+const ragGraph = new StateGraph(RAGStateAnnotation);
+
+// Cached embedding generation node
+ragGraph.addNode('generateEmbedding', async (state) => {
+  // Check cache first
+  const cached = await getCachedEmbedding(state.query);
+  if (cached) {
+    console.log('Using cached embedding');
+    return { embedding: cached };
+  }
+
+  console.log('Generating new embedding');
+  const embeddings = new OpenAIEmbeddings({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const embedding = await embeddings.embedQuery(state.query);
+
+  // Cache for future use
+  await cacheEmbedding(state.query, embedding);
+
+  return { embedding };
+});
+
+// Retrieve relevant documents
+ragGraph.addNode('retrieve', async (state) => {
+  // Simulate vector store search
+  const vectorStore = new MemoryVectorStore(
+    new OpenAIEmbeddings({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  );
+
+  const docs = await vectorStore.similaritySearch(state.query, 3);
+
+  return { retrievedDocs: docs };
+});
+
+// Generate answer
+ragGraph.addNode('generateAnswer', async (state) => {
+  const model = new ChatOpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const context = state.retrievedDocs
+    .map((doc) => doc.pageContent)
+    .join('\n\n');
+
+  const response = await model.invoke(
+    `Context:\n${context}\n\nQuestion: ${state.query}\n\nAnswer:`
+  );
+
+  return { answer: response.content as string };
+});
+
+ragGraph.addEdge(START, 'generateEmbedding');
+ragGraph.addEdge('generateEmbedding', 'retrieve');
+ragGraph.addEdge('retrieve', 'generateAnswer');
+ragGraph.addEdge('generateAnswer', END);
+
+export const cachedRAGWorkflow = ragGraph.compile();
+```
+
+---
+
+## Parallel Data Processing with Deferred Aggregation
+
+### Fan-Out/Fan-In Pattern for Scalable Processing
+
+```typescript
+// recipes/parallelDataProcessing.ts
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+
+interface DataBatch {
+  id: string;
+  data: any[];
+}
+
+interface ParallelProcessingState {
+  batches: DataBatch[];
+  processedBatches: Map<string, any>;
+  aggregatedResult: any | null;
+  errors: Array<{ batchId: string; error: string }>;
+}
+
+const ParallelStateAnnotation = Annotation.Root({
+  batches: Annotation<DataBatch[]>,
+  processedBatches: Annotation<Map<string, any>>({
+    default: () => new Map(),
+  }),
+  aggregatedResult: Annotation<any | null>({ default: () => null }),
+  errors: Annotation<Array<{ batchId: string; error: string }>>({
+    default: () => [],
+    reducer: (x, y) => [...x, ...y],
+  }),
+});
+
+function createProcessingGraph() {
+  const graph = new StateGraph(ParallelStateAnnotation);
+
+  // Create dynamic processing nodes for each batch
+  const createBatchProcessor = (batchIndex: number) => {
+    return async (state: ParallelProcessingState) => {
+      const batch = state.batches[batchIndex];
+
+      try {
+        // Simulate processing
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const processed = batch.data.map((item) => ({
+          ...item,
+          processed: true,
+          timestamp: Date.now(),
+        }));
+
+        const newMap = new Map(state.processedBatches);
+        newMap.set(batch.id, processed);
+
+        return {
+          processedBatches: newMap,
+        };
+      } catch (error) {
+        return {
+          errors: [{
+            batchId: batch.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          }],
+        };
+      }
+    };
+  };
+
+  // Add batch processing nodes
+  graph.addNode('batch0', createBatchProcessor(0));
+  graph.addNode('batch1', createBatchProcessor(1));
+  graph.addNode('batch2', createBatchProcessor(2));
+
+  // Deferred aggregation node
+  graph.addNode(
+    'aggregate',
+    async (state) => {
+      const allProcessed = Array.from(state.processedBatches.values()).flat();
+
+      return {
+        aggregatedResult: {
+          totalItems: allProcessed.length,
+          successful: allProcessed.filter((item) => item.processed).length,
+          errors: state.errors.length,
+          data: allProcessed,
+        },
+      };
+    },
+    {
+      deferred: true, // Wait for all batch processors
+    }
+  );
+
+  // Fan-out: Start all batch processors in parallel
+  graph.addEdge(START, 'batch0');
+  graph.addEdge(START, 'batch1');
+  graph.addEdge(START, 'batch2');
+
+  // Fan-in: All processors feed into aggregator
+  graph.addEdge('batch0', 'aggregate');
+  graph.addEdge('batch1', 'aggregate');
+  graph.addEdge('batch2', 'aggregate');
+
+  graph.addEdge('aggregate', END);
+
+  return graph.compile();
+}
+
+export const parallelProcessor = createProcessingGraph();
+
+// Usage
+async function processLargeDatasset(dataset: any[]): Promise<any> {
+  const batchSize = Math.ceil(dataset.length / 3);
+
+  const batches: DataBatch[] = [
+    { id: 'batch0', data: dataset.slice(0, batchSize) },
+    { id: 'batch1', data: dataset.slice(batchSize, batchSize * 2) },
+    { id: 'batch2', data: dataset.slice(batchSize * 2) },
+  ];
+
+  const result = await parallelProcessor.invoke({
+    batches,
+    processedBatches: new Map(),
+    aggregatedResult: null,
+    errors: [],
+  });
+
+  return result.aggregatedResult;
+}
+```
+
+---
+
+## Content Moderation Pipeline with Pre/Post Hooks
+
+### Implementing Safety Checks Around Model Calls
+
+```typescript
+// recipes/moderatedChatbot.ts
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+
+interface ModeratedChatState {
+  userMessage: string;
+  moderatedInput: string | null;
+  aiResponse: string | null;
+  moderatedOutput: string | null;
+  flags: string[];
+}
+
+const ModeratedStateAnnotation = Annotation.Root({
+  userMessage: Annotation<string>,
+  moderatedInput: Annotation<string | null>({ default: () => null }),
+  aiResponse: Annotation<string | null>({ default: () => null }),
+  moderatedOutput: Annotation<string | null>({ default: () => null }),
+  flags: Annotation<string[]>({
+    default: () => [],
+    reducer: (x, y) => [...x, ...y],
+  }),
+});
+
+const moderatedGraph = new StateGraph(ModeratedStateAnnotation);
+
+// Pre-hook: Input moderation
+moderatedGraph.addNode('moderateInput', async (state) => {
+  const sensitivePatterns = [
+    /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+    /\b\d{16}\b/, // Credit card
+    /\b(password|api[_-]?key)\s*[:=]/i,
+  ];
+
+  const flags: string[] = [];
+  let moderatedInput = state.userMessage;
+
+  for (const pattern of sensitivePatterns) {
+    if (pattern.test(state.userMessage)) {
+      flags.push('sensitive-data-detected');
+      moderatedInput = state.userMessage.replace(pattern, '[REDACTED]');
+    }
+  }
+
+  if (flags.length > 0) {
+    console.warn('Input moderation flags:', flags);
+  }
+
+  return {
+    moderatedInput,
+    flags,
+  };
+});
+
+// Model invocation
+moderatedGraph.addNode('generateResponse', async (state) => {
+  const model = new ChatOpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const response = await model.invoke(state.moderatedInput || state.userMessage);
+
+  return {
+    aiResponse: response.content as string,
+  };
+});
+
+// Post-hook: Output moderation
+moderatedGraph.addNode('moderateOutput', async (state) => {
+  let moderatedOutput = state.aiResponse || '';
+
+  // Check for leaked sensitive info
+  const sensitivePatterns = [
+    /\b\d{3}-\d{2}-\d{4}\b/,
+    /\b\d{16}\b/,
+  ];
+
+  const flags: string[] = [];
+
+  for (const pattern of sensitivePatterns) {
+    if (pattern.test(moderatedOutput)) {
+      flags.push('output-contains-sensitive-data');
+      moderatedOutput =
+        'I apologize, but I cannot provide that information as it may contain sensitive data.';
+    }
+  }
+
+  return {
+    moderatedOutput,
+    flags,
+  };
+});
+
+moderatedGraph.addEdge(START, 'moderateInput');
+moderatedGraph.addEdge('moderateInput', 'generateResponse');
+moderatedGraph.addEdge('generateResponse', 'moderateOutput');
+moderatedGraph.addEdge('moderateOutput', END);
+
+export const moderatedChatbot = moderatedGraph.compile();
+```
+
+---
+
+## Cross-Thread Memory Multi-User Support
+
+### Building User Context Across Conversations
+
+```typescript
+// recipes/multiUserMemorySystem.ts
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+import { Pool } from 'pg';
+
+interface UserConversationState {
+  userId: string;
+  threadId: string;
+  message: string;
+  userProfile: Record<string, any>;
+  conversationHistory: string[];
+  response: string | null;
+}
+
+const UserConversationAnnotation = Annotation.Root({
+  userId: Annotation<string>,
+  threadId: Annotation<string>,
+  message: Annotation<string>,
+  userProfile: Annotation<Record<string, any>>({ default: () => ({}) }),
+  conversationHistory: Annotation<string[]>({ default: () => [] }),
+  response: Annotation<string | null>({ default: () => null }),
+});
+
+class MultiUserMemorySystem {
+  private pool: Pool;
+
+  constructor(connectionString: string) {
+    this.pool = new Pool({ connectionString });
+  }
+
+  async getUserProfile(userId: string): Promise<Record<string, any>> {
+    const result = await this.pool.query(
+      'SELECT profile FROM user_profiles WHERE user_id = $1',
+      [userId]
+    );
+
+    return result.rows[0]?.profile || {};
+  }
+
+  async getConversationHistory(
+    userId: string,
+    threadId: string
+  ): Promise<string[]> {
+    const result = await this.pool.query(
+      `SELECT summary FROM conversation_summaries
+       WHERE user_id = $1 AND thread_id != $2
+       ORDER BY created_at DESC LIMIT 5`,
+      [userId, threadId]
+    );
+
+    return result.rows.map((row) => row.summary);
+  }
+
+  async saveConversation(
+    userId: string,
+    threadId: string,
+    message: string,
+    response: string
+  ): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO conversation_summaries (user_id, thread_id, summary)
+       VALUES ($1, $2, $3)`,
+      [userId, threadId, `User: ${message}\nAssistant: ${response}`]
+    );
+  }
+
+  async updateUserProfile(
+    userId: string,
+    updates: Record<string, any>
+  ): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO user_profiles (user_id, profile)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id)
+       DO UPDATE SET profile = user_profiles.profile || EXCLUDED.profile`,
+      [userId, JSON.stringify(updates)]
+    );
+  }
+}
+
+const memorySystem = new MultiUserMemorySystem(process.env.DATABASE_URL!);
+
+const conversationGraph = new StateGraph(UserConversationAnnotation);
+
+conversationGraph.addNode('loadUserContext', async (state) => {
+  const [profile, history] = await Promise.all([
+    memorySystem.getUserProfile(state.userId),
+    memorySystem.getConversationHistory(state.userId, state.threadId),
+  ]);
+
+  return {
+    userProfile: profile,
+    conversationHistory: history,
+  };
+});
+
+conversationGraph.addNode('generateResponse', async (state) => {
+  const model = new ChatOpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const context = `
+User Profile: ${JSON.stringify(state.userProfile, null, 2)}
+
+Previous Conversations:
+${state.conversationHistory.join('\n\n')}
+
+Current Message: ${state.message}
+  `.trim();
+
+  const response = await model.invoke(context);
+
+  return {
+    response: response.content as string,
+  };
+});
+
+conversationGraph.addNode('saveContext', async (state) => {
+  await memorySystem.saveConversation(
+    state.userId,
+    state.threadId,
+    state.message,
+    state.response!
+  );
+
+  // Extract and save preferences if mentioned
+  if (state.message.toLowerCase().includes('prefer')) {
+    await memorySystem.updateUserProfile(state.userId, {
+      lastPreferenceUpdate: new Date().toISOString(),
+    });
+  }
+
+  return state;
+});
+
+conversationGraph.addEdge(START, 'loadUserContext');
+conversationGraph.addEdge('loadUserContext', 'generateResponse');
+conversationGraph.addEdge('generateResponse', 'saveContext');
+conversationGraph.addEdge('saveContext', END);
+
+export const multiUserConversation = conversationGraph.compile();
+```
+
+---
+
+## Production Monitoring Dashboard
+
+### Complete Observability for LangGraph Workflows
+
+```typescript
+// recipes/monitoringDashboard.ts
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import express from 'express';
+
+interface MetricsState {
+  requestId: string;
+  operation: string;
+  startTime: number;
+  endTime: number | null;
+  duration: number | null;
+  success: boolean;
+  error: string | null;
+}
+
+class MonitoringDashboard {
+  private metrics: MetricsState[] = [];
+  private app: express.Application;
+
+  constructor() {
+    this.app = express();
+    this.setupRoutes();
+  }
+
+  recordMetric(metric: MetricsState): void {
+    this.metrics.push(metric);
+
+    // Keep only last 1000 metrics
+    if (this.metrics.length > 1000) {
+      this.metrics = this.metrics.slice(-1000);
+    }
+  }
+
+  getMetrics(): {
+    total: number;
+    successful: number;
+    failed: number;
+    avgDuration: number;
+    recentErrors: Array<{ requestId: string; error: string }>;
+  } {
+    const successful = this.metrics.filter((m) => m.success);
+    const failed = this.metrics.filter((m) => !m.success);
+
+    const totalDuration = this.metrics
+      .filter((m) => m.duration !== null)
+      .reduce((sum, m) => sum + (m.duration || 0), 0);
+
+    return {
+      total: this.metrics.length,
+      successful: successful.length,
+      failed: failed.length,
+      avgDuration:
+        this.metrics.length > 0 ? totalDuration / this.metrics.length : 0,
+      recentErrors: failed
+        .slice(-10)
+        .map((m) => ({ requestId: m.requestId, error: m.error || 'Unknown' })),
+    };
+  }
+
+  private setupRoutes(): void {
+    this.app.get('/metrics', (req, res) => {
+      res.json(this.getMetrics());
+    });
+
+    this.app.get('/metrics/detailed', (req, res) => {
+      res.json(this.metrics.slice(-100));
+    });
+  }
+
+  listen(port: number): void {
+    this.app.listen(port, () => {
+      console.log(`Monitoring dashboard running on port ${port}`);
+    });
+  }
+}
+
+export const dashboard = new MonitoringDashboard();
+
+// Middleware to track all workflow executions
+export function createMonitoredWorkflow<T>(
+  workflow: any,
+  operationName: string
+) {
+  return async (input: T): Promise<any> => {
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+
+    try {
+      const result = await workflow.invoke(input);
+      const endTime = Date.now();
+
+      dashboard.recordMetric({
+        requestId,
+        operation: operationName,
+        startTime,
+        endTime,
+        duration: endTime - startTime,
+        success: true,
+        error: null,
+      });
+
+      return result;
+    } catch (error) {
+      const endTime = Date.now();
+
+      dashboard.recordMetric({
+        requestId,
+        operation: operationName,
+        startTime,
+        endTime,
+        duration: endTime - startTime,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      throw error;
+    }
+  };
+}
+```
+
+---
+
+These recipes provide practical, production-ready implementations that you can adapt to your specific use cases. Each recipe demonstrates key patterns and best practices for building with LangChain.js and LangGraph.js, including the latest v1.0+ and v0.3+ features such as type-safe streaming, node caching, deferred nodes, model hooks, and cross-thread memory support.

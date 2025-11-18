@@ -1,5 +1,17 @@
-Latest: 2.19.0
+Latest: 2.19.0 | Updated: 2025
 # Haystack Comprehensive Technical Guide: From Fundamentals to Expert-Level Agentic AI
+
+**2025 Update: Production-Ready Agentic Workflows**
+
+Haystack 2.x has evolved into the premier framework for building **production-grade agentic AI applications**. This 2025 update emphasizes:
+
+- **Agentic AI Workflows**: Modular building blocks designed for real-world production deployment
+- **Advanced Agent Component**: Full reasoning capabilities with dynamic tool use and multi-turn interactions
+- **Enhanced Pipeline Architecture**: Sophisticated branching, looping, and conditional routing for complex workflows
+- **Multi-Agent Orchestration**: Native support for collaborative multi-agent systems
+- **Deepset Studio**: Free, drag-and-drop visual pipeline designer for rapid prototyping
+- **Standardized Function Calling**: Unified interface across all LLM providers for tool integration
+- **Pipeline Serialization**: Export pipelines to external configs for deployment across any environment
 
 ## Table of Contents
 
@@ -113,6 +125,407 @@ Latest: 2.19.0
     - Provider Switching
     - Evaluation Pipelines
     - CI/CD Integration
+
+---
+
+# 2025 FEATURES OVERVIEW
+
+## Agentic AI Workflows: Production-First Design
+
+Haystack 2025 transforms the framework into a **production-grade platform for agentic AI applications**. The focus has shifted from proof-of-concept to enterprise-ready deployments with:
+
+### Modular Building Blocks
+
+```python
+from haystack import Pipeline
+from haystack.components.agents import Agent, AgentStep
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.tools import Tool
+
+# 2025: Agents are first-class pipeline components
+# Build production workflows with modular, composable agent blocks
+
+def create_production_agent_pipeline():
+    """
+    2025 pattern: Agents as composable pipeline components
+    for production agentic workflows
+    """
+    pipeline = Pipeline()
+
+    # Reasoning agent with tool use
+    reasoning_agent = Agent(
+        llm=OpenAIChatGenerator(model="gpt-4o"),
+        tools=[WebSearchTool(), CalculatorTool()],
+        system_prompt="You are a research analyst with reasoning capabilities"
+    )
+
+    # Add agents as components
+    pipeline.add_component("research_agent", reasoning_agent)
+    pipeline.add_component("analysis_agent", create_analysis_agent())
+    pipeline.add_component("synthesis_agent", create_synthesis_agent())
+
+    # Connect for multi-agent workflow
+    pipeline.connect("research_agent.output", "analysis_agent.input")
+    pipeline.connect("analysis_agent.output", "synthesis_agent.input")
+
+    return pipeline
+
+# Production deployment
+prod_pipeline = create_production_agent_pipeline()
+result = prod_pipeline.run({"research_agent": {"query": "Market analysis Q4 2025"}})
+```
+
+### Advanced Agent Component (2025)
+
+The Agent component now includes **full reasoning capabilities** with dynamic tool selection:
+
+```python
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.tools import Tool
+
+def weather_tool(location: str) -> dict:
+    """Get weather for location"""
+    return {"temperature": 72, "condition": "sunny"}
+
+def search_tool(query: str) -> str:
+    """Search the web"""
+    return f"Results for: {query}"
+
+# 2025: Agent with reasoning and dynamic tool use
+agent = Agent(
+    tools=[
+        Tool(function=weather_tool, description="Get weather data"),
+        Tool(function=search_tool, description="Search information")
+    ],
+    llm=OpenAIChatGenerator(model="gpt-4o"),
+    system_prompt="""You are an intelligent agent with reasoning capabilities.
+    Think step-by-step, use tools dynamically, and provide well-reasoned answers."""
+)
+
+# Agent reasons through multi-step problems
+result = agent.run(
+    query="What's the weather in London, and what activities are good for that weather?",
+    max_iterations=10
+)
+
+print(result)
+# Agent will:
+# 1. Reason about needing weather data
+# 2. Use weather_tool("London")
+# 3. Reason about appropriate activities
+# 4. Use search_tool("activities for sunny weather")
+# 5. Synthesize final answer
+```
+
+### Enhanced Pipeline Architecture: Branching & Looping
+
+**2025**: Sophisticated control flow for complex agentic workflows:
+
+```python
+from haystack import Pipeline
+from haystack.components.routers import ConditionalRouter
+from haystack.components.joiners import BranchJoiner
+
+def create_branching_pipeline():
+    """
+    2025: Complex pipeline with conditional branching
+    and loop-based iteration
+    """
+    pipeline = Pipeline()
+
+    # Classifier determines workflow path
+    pipeline.add_component("classifier", QueryClassifier())
+
+    # Conditional router based on classification
+    pipeline.add_component("router", ConditionalRouter(
+        routes=[
+            {
+                "condition": "{classifier.category} == 'simple'",
+                "output": "{query}",
+                "output_name": "simple_path"
+            },
+            {
+                "condition": "{classifier.category} == 'complex'",
+                "output": "{query}",
+                "output_name": "complex_path"
+            }
+        ]
+    ))
+
+    # Different agents for different paths
+    pipeline.add_component("simple_agent", create_simple_agent())
+    pipeline.add_component("complex_agent", create_complex_agent())
+
+    # Joiner merges results
+    pipeline.add_component("joiner", BranchJoiner(type_=str))
+
+    # Connect branching logic
+    pipeline.connect("classifier.category", "router.category")
+    pipeline.connect("router.simple_path", "simple_agent.query")
+    pipeline.connect("router.complex_path", "complex_agent.query")
+    pipeline.connect("simple_agent.output", "joiner")
+    pipeline.connect("complex_agent.output", "joiner")
+
+    return pipeline
+
+# Looping for iterative refinement
+def create_looping_pipeline():
+    """
+    2025: Pipeline with loop for iterative agent refinement
+    """
+    pipeline = Pipeline()
+
+    pipeline.add_component("agent", ReasoningAgent())
+    pipeline.add_component("validator", OutputValidator())
+    pipeline.add_component("router", ConditionalRouter(
+        routes=[
+            {
+                "condition": "{validator.is_valid} == True",
+                "output": "{validator.result}",
+                "output_name": "final_output"
+            },
+            {
+                "condition": "{validator.is_valid} == False",
+                "output": "{validator.feedback}",
+                "output_name": "retry"
+            }
+        ]
+    ))
+
+    # Loop back for refinement (max 3 iterations)
+    pipeline.connect("agent.output", "validator.input")
+    pipeline.connect("validator.is_valid", "router.is_valid")
+    pipeline.connect("router.retry", "agent.feedback")  # Loop back
+
+    return pipeline
+```
+
+### Multi-Agent Applications (2025)
+
+**Native multi-agent collaboration** with specialized roles:
+
+```python
+from haystack import Pipeline
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+
+def create_multi_agent_system():
+    """
+    2025: Multi-agent system with specialized agents
+    collaborating on complex tasks
+    """
+
+    # Specialist agents
+    research_agent = Agent(
+        llm=OpenAIChatGenerator(model="gpt-4o"),
+        tools=[WebSearchTool(), DatabaseTool()],
+        system_prompt="You are a research specialist. Find comprehensive information."
+    )
+
+    analysis_agent = Agent(
+        llm=OpenAIChatGenerator(model="gpt-4o"),
+        tools=[DataAnalysisTool(), StatisticsTool()],
+        system_prompt="You are a data analyst. Analyze information deeply."
+    )
+
+    synthesis_agent = Agent(
+        llm=OpenAIChatGenerator(model="gpt-4o"),
+        tools=[],
+        system_prompt="You synthesize insights from multiple agents into coherent reports."
+    )
+
+    # Orchestration pipeline
+    pipeline = Pipeline()
+    pipeline.add_component("researcher", research_agent)
+    pipeline.add_component("analyst", analysis_agent)
+    pipeline.add_component("synthesizer", synthesis_agent)
+
+    # Sequential collaboration
+    pipeline.connect("researcher.output", "analyst.input")
+    pipeline.connect("analyst.output", "synthesizer.input")
+
+    return pipeline
+
+# Execute multi-agent workflow
+multi_agent_system = create_multi_agent_system()
+result = multi_agent_system.run({
+    "researcher": {"query": "AI market trends 2025"}
+})
+
+print(result["synthesizer"]["output"])
+# Comprehensive report from collaborative multi-agent analysis
+```
+
+### Deepset Studio: Visual Pipeline Design
+
+**2025**: Free drag-and-drop tool for rapid pipeline prototyping:
+
+```python
+# Deepset Studio features (2025):
+# - Visual pipeline builder with drag-and-drop components
+# - Real-time pipeline validation and testing
+# - Component marketplace for pre-built integrations
+# - Export to Python code or YAML config
+# - Collaborative editing for teams
+# - Deployment templates for production
+
+# Example: Export pipeline from Deepset Studio
+from haystack import Pipeline
+
+# Load pipeline designed in Deepset Studio
+pipeline = Pipeline.from_yaml("deepset_studio_export.yaml")
+
+# Or from Studio's Python export
+from deepset_studio_pipelines import MarketAnalysisPipeline
+pipeline = MarketAnalysisPipeline()
+
+# Deploy to production immediately
+result = pipeline.run({"query": "Your query here"})
+```
+
+### Standardized Function Calling Interface
+
+**2025**: Unified tool interface across **all LLM providers**:
+
+```python
+from haystack.tools import Tool
+from haystack.components.generators.chat import (
+    OpenAIChatGenerator,
+    AnthropicChatGenerator,
+    CohereGenerator
+)
+
+# Define tool once
+@tool
+def get_stock_price(symbol: str) -> float:
+    """Get current stock price for symbol"""
+    return fetch_price(symbol)
+
+# Works identically across all providers
+openai_agent = Agent(
+    llm=OpenAIChatGenerator(model="gpt-4o"),
+    tools=[get_stock_price]
+)
+
+anthropic_agent = Agent(
+    llm=AnthropicChatGenerator(model="claude-3-opus"),
+    tools=[get_stock_price]  # Same tool definition
+)
+
+cohere_agent = Agent(
+    llm=CohereGenerator(model="command-r-plus"),
+    tools=[get_stock_price]  # Same tool definition
+)
+
+# All agents can use tools with identical interface
+# No provider-specific code needed
+```
+
+### Pipeline Serialization for Any-Environment Deployment
+
+**2025**: Export pipelines for deployment anywhere:
+
+```python
+from haystack import Pipeline
+
+# Build pipeline
+pipeline = Pipeline()
+pipeline.add_component("agent", create_production_agent())
+pipeline.add_component("validator", create_validator())
+pipeline.connect("agent.output", "validator.input")
+
+# Export to YAML for deployment
+pipeline.to_yaml("production_pipeline.yaml")
+
+# Export to JSON
+pipeline.to_json("production_pipeline.json")
+
+# Deploy in different environments:
+
+# Environment 1: Local development
+local_pipeline = Pipeline.from_yaml("production_pipeline.yaml")
+
+# Environment 2: Docker container
+# Load same config in containerized environment
+docker_pipeline = Pipeline.from_yaml("/app/config/production_pipeline.yaml")
+
+# Environment 3: Kubernetes
+# ConfigMap contains pipeline YAML
+k8s_pipeline = Pipeline.from_yaml("/etc/haystack/pipeline.yaml")
+
+# Environment 4: Cloud Functions
+# Load from cloud storage
+from haystack.cloud import load_pipeline_from_s3
+cloud_pipeline = load_pipeline_from_s3("s3://my-bucket/pipeline.yaml")
+
+# Same pipeline, runs identically everywhere
+```
+
+### Complete 2025 Production Example
+
+```python
+from haystack import Pipeline
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.components.routers import ConditionalRouter
+from haystack.tools import Tool
+
+def create_production_agentic_system():
+    """
+    Complete 2025 production system combining all new features:
+    - Modular agent components
+    - Branching and looping
+    - Multi-agent collaboration
+    - Standardized function calling
+    - Serializable for deployment
+    """
+
+    pipeline = Pipeline()
+
+    # Research agent
+    research_agent = Agent(
+        llm=OpenAIChatGenerator(model="gpt-4o"),
+        tools=[WebSearchTool(), DatabaseTool()],
+        system_prompt="Research specialist with reasoning"
+    )
+
+    # Analysis agent
+    analysis_agent = Agent(
+        llm=OpenAIChatGenerator(model="gpt-4o"),
+        tools=[AnalyticsTool(), VisualizationTool()],
+        system_prompt="Data analysis specialist"
+    )
+
+    # Conditional router
+    router = ConditionalRouter(
+        routes=[
+            {"condition": "{quality_score} > 0.8", "output_name": "approved"},
+            {"condition": "{quality_score} <= 0.8", "output_name": "refine"}
+        ]
+    )
+
+    # Build pipeline
+    pipeline.add_component("researcher", research_agent)
+    pipeline.add_component("analyst", analysis_agent)
+    pipeline.add_component("quality_check", QualityValidator())
+    pipeline.add_component("router", router)
+
+    # Connect with branching
+    pipeline.connect("researcher.output", "analyst.input")
+    pipeline.connect("analyst.output", "quality_check.input")
+    pipeline.connect("quality_check.score", "router.quality_score")
+    pipeline.connect("router.refine", "researcher.feedback")  # Loop for refinement
+
+    # Serialize for production deployment
+    pipeline.to_yaml("prod_agentic_system.yaml")
+
+    return pipeline
+
+# Deploy to production
+production_system = create_production_agentic_system()
+result = production_system.run({"researcher": {"query": "Market analysis"}})
+```
 
 ---
 

@@ -48,6 +48,48 @@ Real-world, ready-to-use patterns including:
 - RAG (Retrieval-Augmented Generation) implementations
 - Human-in-the-loop approval workflows
 
+## 🚀 New in v1.0+ and v0.3+
+
+### Latest Features (2025)
+
+**Type-Safe Streaming (v0.3+)**
+- Multiple stream modes: `values`, `updates`, `debug`, `messages`
+- Real-time progress tracking with full type safety
+- Server-Sent Events integration for live updates
+- Multiple simultaneous stream modes
+
+**Builder Methods (v1.0+)**
+- `.addNode()` and `.addSequence()` for reduced boilerplate
+- Chainable API for cleaner workflow construction
+- Automatic edge management in sequences
+- Support for inline function definitions
+
+**Performance Optimization (v1.0+)**
+- Node-level caching with custom cache keys
+- Cache TTL configuration for time-sensitive data
+- Distributed caching with Redis integration
+- Cache performance monitoring and metrics
+
+**Advanced Orchestration (v1.0+)**
+- Deferred nodes for fan-out/fan-in patterns
+- Parallel processing with synchronized aggregation
+- Timeout handling for long-running branches
+- Error resilience in parallel workflows
+
+**Model Middleware (v1.0+)**
+- Pre-model hooks for request transformation
+- Post-model hooks for response processing
+- Content moderation pipelines
+- Caching and logging middleware
+- Custom hook chains for cross-cutting concerns
+
+**Cross-Thread Memory (v1.0+)**
+- Shared memory across conversation threads
+- User preference persistence
+- Knowledge base accumulation
+- PostgreSQL-backed memory for multi-instance deployments
+- Semantic search across conversation history
+
 ## 🎯 What You'll Learn
 
 ### Fundamental Concepts
@@ -63,25 +105,28 @@ Real-world, ready-to-use patterns including:
 - Tool creation, integration, and management
 - Error handling and recovery mechanisms
 
-### Advanced Orchestration
+### Advanced Orchestration (v1.0+ Enhanced)
 - Multi-agent systems with supervisor patterns
 - Agent-to-agent communication and handoffs
 - Hierarchical agent structures
-- Parallel execution strategies
+- Parallel execution strategies with deferred aggregation
 - Dynamic routing and conditional logic
+- Fan-out/fan-in patterns for scalable processing
 
-### Data Management
+### Data Management (v1.0+ Enhanced)
 - Memory systems (BufferMemory, WindowMemory, VectorStoreMemory)
 - State management with TypeScript interfaces
 - Checkpointing and persistence (MemorySaver, PostgresSaver, SqliteSaver)
 - Thread management and conversation tracking
 - State replay and debugging capabilities
+- Cross-thread memory for shared user context
+- Knowledge base persistence across sessions
 
 ### Information Retrieval
 - Vector store integration (Pinecone, Chroma, Weaviate, Supabase)
 - Document loaders and preprocessing
 - Text chunking and embedding strategies
-- Retrieval-augmented generation workflows
+- Retrieval-augmented generation workflows with caching
 - Contextual compression and multi-query retrieval
 
 ### Human Integration
@@ -90,6 +135,21 @@ Real-world, ready-to-use patterns including:
 - Approval workflows and validation steps
 - Interactive error recovery
 - Resume patterns with state transitions
+
+### Real-Time Streaming (v0.3+)
+- Type-safe streaming with multiple modes
+- Server-Sent Events for progress tracking
+- Real-time state updates in UI applications
+- Debug mode for execution introspection
+- Message-focused streaming for chat applications
+
+### Production Features (v1.0+)
+- Node caching for performance optimization
+- Pre/post model hooks for middleware
+- Content moderation and safety pipelines
+- Distributed caching with Redis
+- Comprehensive monitoring and metrics
+- Error resilience and timeout handling
 
 ### Deployment and Operations
 - Next.js integration and serverless deployment

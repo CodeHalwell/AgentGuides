@@ -1,10 +1,40 @@
 # Microsoft Agent Framework - .NET Guide Collection
 ## October 2025 Release - Enterprise-Grade Documentation
 
-**Release Date:** October 2025  
-**Framework Status:** Unified SDK (unifying Semantic Kernel + AutoGen)  
-**Platform:** .NET 8.0+  
+**Release Date:** October 2025
+**Framework Status:** Public Preview (Unified SDK)
+**Platform:** .NET 8.0+
 **Latest Version:** 1.0+
+
+---
+
+## 🌟 NEW in October 2025 - .NET-Specific Features
+
+### **Agent2Agent (A2A) Protocol** 🔥
+Cross-framework agent collaboration with strongly-typed C# records. Communicate with OpenAI, Claude, LangGraph, and Google ADK agents using type-safe patterns.
+
+### **Graph-Based Workflows** 🔥
+Build complex orchestration with async/await and Task Parallel Library. Streaming execution with `IAsyncEnumerable`, checkpointing with Azure Storage, and HITL patterns.
+
+### **Declarative Agent Definitions** 🔥
+JSON configuration with System.Text.Json, strongly-typed models with record types, and integration with IOptions pattern for ASP.NET Core.
+
+### **Enhanced Observability** 🔥
+Native OpenTelemetry integration with Azure Monitor, custom metrics using System.Diagnostics.Metrics, and distributed tracing with Activity API.
+
+### **Content Safety & Compliance** 🔥
+Azure AI Content Safety integration, PII detection and redaction, and .NET-specific security patterns with proper async disposal.
+
+### **Dependency Injection** 🔥
+Full DI container support, IOptions configuration pattern, hosted services integration, and proper lifetime management.
+
+👉 **[Complete .NET 2025 Features Guide](./microsoft_agent_framework_dotnet_2025_features.md)**
+
+### **Preview Status**
+- **Current Status:** October 2025 Public Preview
+- **.NET Versions:** 8.0+, C# 12.0+
+- **Production Readiness:** Beta - suitable for non-critical workloads
+- **GA Timeline:** Expected Q2 2026
 
 ---
 

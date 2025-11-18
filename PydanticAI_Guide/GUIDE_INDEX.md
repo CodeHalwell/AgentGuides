@@ -11,17 +11,30 @@
 
 ---
 
+## 🆕 2025 Updates
+
+**New Guides Added:**
+- `pydantic_ai_durable_execution.md` - Fault-tolerant agent workflows (58+ pages)
+- `pydantic_ai_graph_support.md` - Type-safe graph workflows (52+ pages)
+- `pydantic_ai_integrations_2025.md` - MCP, A2A, UI streams (48+ pages)
+- `pydantic_ai_evals_2025.md` - Systematic testing & Logfire (45+ pages)
+
+**Total New Content:** 200+ pages of production-ready 2025 features
+
+---
+
 ## 📚 File Guide
 
-### 1. **README.md** (572 lines)
+### 1. **README.md** (715+ lines)
 **Quick Navigation & Learning Path**
 
 **What's Inside:**
+- 🆕 **2025 Features Overview** - Durable execution, graphs, MCP, A2A, evals
 - Quick start (5-15 minute tutorials)
 - Learning path (5 levels from beginner to mastery)
 - Core concepts explained
 - Architecture patterns overview
-- Provider support matrix
+- 🆕 **Enhanced Provider Support** - 12+ LLM providers (OpenAI, Anthropic, Google, DeepSeek, Grok, Cohere, Mistral, Perplexity, Azure, Bedrock, Vertex, Ollama)
 - Tool categories
 - Common patterns reference
 - Security best practices
@@ -216,6 +229,130 @@
 
 ---
 
+### 7. **pydantic_ai_durable_execution.md** (1,400+ lines) 🆕 2025
+**Fault-Tolerant Agent Workflows**
+
+**Chapters Covered:**
+1. Overview - What is durable execution and why it matters
+2. Core Concepts - Checkpoints, resume tokens, execution guarantees
+3. Prefect Integration - Production workflows with Prefect
+4. DBOS Integration - Exactly-once execution with database-backed durability
+5. Temporal Integration - Long-running workflows with Temporal
+6. Custom Durable Backends - Build your own persistence layer
+7. State Persistence Patterns - Stateful multi-step workflows
+8. Fault Tolerance - Automatic recovery, circuit breakers, retries
+9. Production Examples - Complete production-ready workflows
+
+**Code Examples:** 40+ complete examples with Prefect, DBOS, Temporal
+
+**Read This For:** Building fault-tolerant agents that survive failures
+
+**Time Investment:** 3-4 hours comprehensive reading
+
+---
+
+### 8. **pydantic_ai_graph_support.md** (1,250+ lines) 🆕 2025
+**Type-Safe Graph Workflows & State Machines**
+
+**Chapters Covered:**
+1. Overview - Why use graphs for agent workflows
+2. Core Graph Concepts - Nodes, edges, state, execution
+3. Type-Hint Graph Definitions - Declarative graph syntax
+4. State Machines - Finite state machines for complex workflows
+5. Conditional Branching - Dynamic routing based on state
+6. Graph Execution - Parallel execution, streaming graphs
+7. Multi-Agent Graphs - Hierarchical and specialized agent graphs
+8. Production Patterns - Error handling, monitoring, deployment
+
+**Code Examples:** 35+ graph patterns and state machines
+
+**Read This For:** Building complex multi-step agent workflows
+
+**Time Investment:** 2-3 hours, reference as needed
+
+---
+
+### 9. **pydantic_ai_integrations_2025.md** (1,150+ lines) 🆕 2025
+**MCP, A2A Protocol, UI Event Streams**
+
+**Sections:**
+1. Model Context Protocol (MCP)
+   - MCP client integration
+   - Building custom MCP servers
+   - Multiple MCP server support
+   - Resource subscriptions
+
+2. Agent-to-Agent Protocol (A2A)
+   - A2A communication basics
+   - Agent discovery and registry
+   - Multi-agent workflow coordination
+
+3. UI Event Streams
+   - Real-time SSE/WebSocket streaming
+   - React frontend integration
+   - Structured event streaming
+
+4. Enhanced Model Support
+   - All 12+ providers (OpenAI, Anthropic, Google, DeepSeek, Grok, Cohere, Mistral, Perplexity, Azure, Bedrock, Vertex, Ollama)
+   - Provider-specific features
+   - Model fallback and routing
+
+5. Production Integration Patterns
+   - Complete integration examples
+   - FastAPI applications
+
+**Read This For:** Connecting agents to external systems and other agents
+
+**Time Investment:** 2-3 hours, reference as needed
+
+---
+
+### 10. **pydantic_ai_evals_2025.md** (1,100+ lines) 🆕 2025
+**Systematic Testing with Logfire Integration**
+
+**Chapters Covered:**
+1. Overview - What are evals and why they matter
+2. Logfire Integration
+   - Automatic instrumentation
+   - Custom eval spans
+   - Datasets for evals
+
+3. Evaluation Frameworks
+   - Pytest integration
+   - Custom eval frameworks
+
+4. Unit Testing Agents
+   - TestModel for unit tests
+   - Snapshot testing
+
+5. Integration Testing
+   - End-to-end tests
+   - Multi-component testing
+
+6. Performance Benchmarking
+   - Latency benchmarks
+   - Token usage tracking
+
+7. Quality Metrics
+   - Semantic similarity evaluation
+   - Custom quality metrics
+
+8. Regression Testing
+   - Baseline management
+   - Regression detection
+
+9. Production Monitoring
+   - Continuous evaluation
+   - Live quality tracking
+
+**Code Examples:** 30+ testing patterns and frameworks
+
+**Read This For:** Building comprehensive test suites for agents
+
+**Time Investment:** 2-3 hours, reference throughout development
+
+---
+
 ## 🎯 Learning Paths
 
 ### Path 1: "I Want to Build a Chatbot" (2-3 hours)
@@ -253,16 +390,29 @@
 
 ---
 
-### Path 4: "I'm an Expert" (Full Mastery - 12+ hours)
+### Path 4: "I Need Production-Grade 2025 Features" (8-10 hours) 🆕
+1. README - 2025 Features Overview (20 min)
+2. Durable Execution Guide - Prefect/DBOS/Temporal (3 hours)
+3. Graph Support Guide - DAGs and state machines (2 hours)
+4. Integrations Guide - MCP and A2A Protocol (2 hours)
+5. Evals Guide - Logfire and systematic testing (2 hours)
+6. Build production system with all features (2-3 hours)
+
+**Outcome:** Fault-tolerant, scalable, well-tested agent system
+
+---
+
+### Path 5: "I'm an Expert" (Full Mastery - 15+ hours)
 1. Read README completely
 2. Study Comprehensive Guide end-to-end
-3. Implement all Recipes
-4. Study all Diagrams deeply
-5. Master all Advanced Patterns
-6. Review Production Guide
-7. Build complex system combining multiple patterns
+3. Master all 2025 Features (Durable, Graphs, MCP, A2A, Evals)
+4. Implement all Recipes
+5. Study all Diagrams deeply
+6. Master all Advanced Patterns
+7. Review Production Guide
+8. Build complex system combining multiple patterns
 
-**Outcome:** Expert-level Pydantic AI knowledge and capabilities
+**Outcome:** Expert-level Pydantic AI knowledge with 2025 capabilities
 
 ---
 
@@ -286,6 +436,14 @@
 | **Scaling** | Production | "Scaling Strategies" |
 | **Error Handling** | Production | "Error Handling" |
 | **Cost Control** | Production | "Token Management" |
+| **Durable Execution** 🆕 | Durable Execution Guide | All sections |
+| **Graph Workflows** 🆕 | Graph Support Guide | All sections |
+| **MCP Integration** 🆕 | Integrations Guide | "MCP" section |
+| **A2A Protocol** 🆕 | Integrations Guide | "A2A" section |
+| **UI Event Streams** 🆕 | Integrations Guide | "UI Streams" section |
+| **Enhanced Models** 🆕 | Integrations Guide | "Model Support" |
+| **Powerful Evals** 🆕 | Evals Guide | All sections |
+| **Logfire Integration** 🆕 | Evals Guide | "Logfire" section |
 
 ### By Difficulty
 

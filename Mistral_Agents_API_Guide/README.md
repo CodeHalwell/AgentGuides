@@ -1,10 +1,14 @@
 # Mistral Agents API Comprehensive Guide
 
-Welcome to the **Mistral Agents API Comprehensive Guide** – the most extensive, expert-level resource for building sophisticated AI agents using Mistral's platform. This guide covers everything from foundational concepts to advanced production deployments, with special emphasis on **built-in orchestration**, **persistent memory via Conversations API**, and **eliminating external framework dependencies**.
+## MAY 27, 2025 LAUNCH - AGENTS API NOW AVAILABLE
+
+Mistral AI has officially launched the **Agents API** on May 27, 2025, bringing autonomous generative AI capabilities to production. This major platform release introduces powerful built-in connectors, multi-agent orchestration, and Model Context Protocol (MCP) support.
+
+Welcome to the **Mistral Agents API Comprehensive Guide** – the most extensive, expert-level resource for building sophisticated AI agents using Mistral's platform. This guide covers everything from foundational concepts to advanced production deployments, with special emphasis on **built-in orchestration**, **persistent memory via Conversations API**, **5 powerful built-in connectors**, **MCP integration**, and **eliminating external framework dependencies**.
 
 ## 📚 Guide Structure
 
-This comprehensive documentation suite consists of five detailed documents:
+This comprehensive documentation suite consists of eight detailed documents covering the May 2025 launch features:
 
 ### 1. **mistral_agents_api_comprehensive_guide.md** (Core Knowledge)
 The ultimate reference covering all aspects of the Mistral Agents API:
@@ -55,7 +59,33 @@ Copy-paste ready code examples for:
 - Creating specialised task agents
 - Real-world application examples
 
-### 5. **README.md** (This File)
+### 5. **mistral_agents_api_connectors_guide.md** (NEW - May 2025)
+Comprehensive guide to all 5 built-in connectors:
+- **Python Code Execution**: Secure sandboxed Python environment
+- **Image Generation**: Black Forest Lab FLUX1.1 [pro] Ultra integration
+- **Web Search**: Standard + Premium (AFP, Associated Press) sources
+- **Document Library/RAG**: Mistral Cloud document access and retrieval
+- **Persistent Memory**: Server-side conversation state management
+- Configuration, examples, and best practices for each connector
+
+### 6. **mistral_agents_api_orchestration_guide.md** (NEW - May 2025)
+Multi-agent collaboration and orchestration patterns:
+- Sequential agent pipelines
+- Parallel agent execution
+- Hierarchical agent structures
+- Complex problem-solving workflows
+- Agent handoff mechanisms
+- State management across agents
+
+### 7. **mistral_agents_api_mcp_guide.md** (NEW - May 2025)
+Model Context Protocol (MCP) integration:
+- Anthropic MCP implementation details
+- Standardized third-party tool connections
+- Custom MCP server development
+- Tool exposure patterns
+- Best practices for MCP integration
+
+### 8. **README.md** (This File)
 Navigation and overview of the entire documentation suite.
 
 ---
@@ -170,12 +200,14 @@ Review:
 - Conversation branching and restart capabilities
 - Long-term context windows
 
-### 🛠️ **Comprehensive Toolset**
-- **Web Search**: Real-time information retrieval
-- **Code Execution**: Safe Python/JavaScript execution
-- **Image Generation**: DALL-E integration
-- **Document Retrieval**: RAG patterns
-- **Custom Tools**: Define your own functions
+### 🛠️ **5 Built-in Connectors** (May 2025 Launch)
+- **Python Code Execution**: Secure sandboxed Python environment for autonomous code generation and execution
+- **Image Generation**: Black Forest Lab FLUX1.1 [pro] Ultra for high-quality image creation
+- **Web Search**: Standard search + Premium sources (AFP, Associated Press) for authoritative information
+- **Document Library/RAG**: Native Mistral Cloud document access for knowledge retrieval
+- **Persistent Memory**: Server-side conversation state management for long-term context
+- **Custom Tools**: Define your own function-based tools
+- **MCP Integration**: Anthropic Model Context Protocol for standardized third-party tool connections
 
 ### 📊 **Structured Output**
 - JSON schema validation
@@ -197,12 +229,20 @@ Review:
 
 ---
 
-## 📋 Supported Models
+## 📋 Supported Models (May 2025)
 
-| Model | Best For | Context Window | Use Case |
-|-------|----------|-----------------|----------|
-| `mistral-medium-2505` | Balanced performance | Large | General purpose, web search |
-| `mistral-large-latest` | Complex reasoning | Extra large | Intricate logic, detailed analysis |
+| Model | Alias | Best For | Context Window | Use Case |
+|-------|-------|----------|-----------------|----------|
+| `mistral-medium-2505` | `mistral-medium-latest` | Balanced performance | Large | General purpose, web search, connectors |
+| `mistral-large-latest` | Latest flagship | Complex reasoning | Extra large | Intricate logic, detailed analysis, orchestration |
+
+## 📊 Performance Metrics (May 2025 Launch)
+
+**SimpleQA Benchmark Results with Web Search Connector:**
+- **Mistral Large**: 23% → **75%** (+52 percentage points improvement)
+- **Mistral Medium**: 22.08% → **82.32%** (+60.24 percentage points improvement)
+
+The Web Search connector dramatically improves factual accuracy and current information retrieval, making agents significantly more reliable for knowledge-intensive tasks.
 
 ---
 
@@ -289,14 +329,44 @@ Start Here (Foundation)
 
 ---
 
+## 🎉 What's New in May 2025 Launch
+
+### Major Features
+1. **Agents API Official Launch** (May 27, 2025)
+   - Production-ready autonomous agent capabilities
+   - Full platform integration
+
+2. **5 Built-in Connectors**
+   - Python Code Execution (secure sandboxed environment)
+   - Image Generation (Black Forest Lab FLUX1.1 [pro] Ultra)
+   - Web Search (Standard + Premium: AFP, Associated Press)
+   - Document Library/RAG (Mistral Cloud integration)
+   - Persistent Memory (server-side conversation state)
+
+3. **Agent Orchestration**
+   - Multi-agent collaboration frameworks
+   - Sequential, parallel, and hierarchical patterns
+   - Complex problem-solving workflows
+
+4. **Model Context Protocol (MCP)**
+   - Anthropic MCP implementation
+   - Standardized third-party tool connections
+   - Custom MCP server support
+
+5. **Performance Improvements**
+   - SimpleQA: Mistral Large 23% → 75% with web search
+   - SimpleQA: Mistral Medium 22.08% → 82.32% with web search
+
 ## 📝 Document Versions
 
-**Latest Version**: 1.0 (November 2025)
+**Latest Version**: 2.0 (May 2025 Launch Edition)
 
 All code examples tested against:
-- Mistral AI Python SDK (latest)
+- Mistral AI Python SDK v1.9.11+
 - Models: `mistral-medium-2505`, `mistral-large-latest`
-- API Version: v1 (Beta)
+- API Version: v1
+- Connectors: All 5 built-in connectors
+- MCP: Anthropic MCP integration
 
 ---
 
@@ -352,6 +422,36 @@ All code examples tested against:
 7. Specialised Task Agents
 8. Real-World Applications
 
+### Connectors Guide Contents (NEW - May 2025)
+1. Python Code Execution Connector
+2. Image Generation Connector
+3. Web Search Connector (Standard + Premium)
+4. Document Library/RAG Connector
+5. Persistent Memory Connector
+6. Connector Best Practices
+7. Security Considerations
+8. Performance Optimization
+
+### Orchestration Guide Contents (NEW - May 2025)
+1. Sequential Agent Pipelines
+2. Parallel Agent Execution
+3. Hierarchical Agent Structures
+4. Agent Handoff Mechanisms
+5. State Management
+6. Complex Workflows
+7. Error Handling in Orchestration
+8. Production Patterns
+
+### MCP Guide Contents (NEW - May 2025)
+1. MCP Architecture
+2. Anthropic MCP Implementation
+3. Custom MCP Servers
+4. Tool Exposure Patterns
+5. Integration Best Practices
+6. Security and Authentication
+7. Debugging MCP Connections
+8. Production Deployment
+
 ---
 
 **Happy building with Mistral Agents API! 🚀**
@@ -359,6 +459,9 @@ All code examples tested against:
 
 ## Advanced Guides
 - [mistral_agents_api_advanced_python.md](mistral_agents_api_advanced_python.md)
+- [mistral_agents_api_connectors_guide.md](mistral_agents_api_connectors_guide.md) - NEW May 2025
+- [mistral_agents_api_orchestration_guide.md](mistral_agents_api_orchestration_guide.md) - NEW May 2025
+- [mistral_agents_api_mcp_guide.md](mistral_agents_api_mcp_guide.md) - NEW May 2025
 
 ## Streaming Examples
 - [mistral_streaming_server_fastapi.md](mistral_streaming_server_fastapi.md)

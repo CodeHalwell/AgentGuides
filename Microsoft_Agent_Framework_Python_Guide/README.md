@@ -1,10 +1,37 @@
 # Microsoft Agent Framework - Python Guide Collection
 ## October 2025 Release - Enterprise-Grade Documentation
 
-**Release Date:** October 2025  
-**Framework Status:** Unified SDK (unifying Semantic Kernel + AutoGen)  
-**Platform:** Python 3.10+  
+**Release Date:** October 2025
+**Framework Status:** Public Preview (Unified SDK)
+**Platform:** Python 3.10+
 **Latest Version:** 1.0+
+
+---
+
+## 🌟 NEW in October 2025 - Python-Specific Features
+
+### **Agent2Agent (A2A) Protocol** 🔥
+Cross-framework agent collaboration with async/await patterns. Communicate with OpenAI, Claude, LangGraph, and Google ADK agents using type-safe Pydantic models.
+
+### **Graph-Based Workflows** 🔥
+Build complex orchestration with Python's async capabilities. Streaming execution, checkpointing with Azure Storage, and interactive human-in-the-loop patterns.
+
+### **Declarative Agent Definitions** 🔥
+YAML/JSON configuration with Pydantic validation. Environment variable substitution and type-safe configuration loading.
+
+### **Enhanced Observability** 🔥
+Native OpenTelemetry integration with Azure Monitor, custom metrics using Python's `opentelemetry` package, and distributed tracing across async operations.
+
+### **Content Safety & Compliance** 🔥
+Azure AI Content Safety with async client, PII detection and redaction, and Python-specific security patterns.
+
+👉 **[Complete Python 2025 Features Guide](./microsoft_agent_framework_python_2025_features.md)**
+
+### **Preview Status**
+- **Current Status:** October 2025 Public Preview
+- **Python Versions:** 3.10, 3.11, 3.12
+- **Production Readiness:** Beta - suitable for non-critical workloads
+- **GA Timeline:** Expected Q2 2026
 
 ---
 

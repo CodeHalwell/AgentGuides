@@ -1,6 +1,18 @@
-# LlamaIndex Guide Complete Index
+# LlamaIndex Python Guide Complete Index
 
-Quick reference index for navigating the comprehensive LlamaIndex documentation.
+Quick reference index for navigating the comprehensive LlamaIndex Python documentation.
+
+---
+
+## 🆕 What's New in 2025
+
+### Workflows 1.0
+- Event-driven architecture for complex agentic systems
+- Async-first design with native asyncio support
+- Type-safe state management with Pydantic
+- Multi-agent coordination with event-based communication
+- Streaming support for real-time applications
+- See: llamaindex_comprehensive_guide.md for Workflows examples
 
 ---
 

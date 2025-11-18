@@ -1,12 +1,21 @@
 # Mistral Agents API: Quick Reference Index
 
+## 🎉 MAY 27, 2025 LAUNCH - NEW DOCUMENTATION
+
+This guide has been updated with comprehensive coverage of the May 27, 2025 Agents API launch, including:
+- **5 Built-in Connectors**: Python Code Execution, Image Generation, Web Search, Document Library/RAG, Persistent Memory
+- **Agent Orchestration**: Multi-agent collaboration patterns
+- **Model Context Protocol (MCP)**: Anthropic MCP integration for third-party tools
+
 ## 📖 Document Map
 
 ### 🏠 **START HERE** → `README.md`
+- **May 2025 launch announcement**
 - Project overview
 - Quick 30-second setup
 - Learning path recommendations
 - Key concepts at a glance
+- **Performance metrics** (SimpleQA benchmarks)
 
 ---
 
@@ -151,6 +160,130 @@ Copy-paste ready code examples.
 
 ---
 
+### 5️⃣ **mistral_agents_api_connectors_guide.md** (NEW - May 2025)
+Comprehensive guide to all 5 built-in connectors launched May 27, 2025.
+
+**Sections Overview**:
+```
+1. Python Code Execution Connector
+   - Secure sandboxed environment
+   - NumPy, Pandas, Matplotlib support
+   - Configuration and examples
+
+2. Image Generation Connector
+   - Black Forest Lab FLUX1.1 [pro] Ultra
+   - Text-to-image generation
+   - Iterative refinement patterns
+
+3. Web Search Connector
+   - Standard + Premium sources (AFP, AP)
+   - Performance: Mistral Large 23% → 75%
+   - Performance: Mistral Medium 22.08% → 82.32%
+
+4. Document Library/RAG Connector
+   - Mistral Cloud integration
+   - Semantic search
+   - Hybrid RAG + Web Search
+
+5. Persistent Memory Connector
+   - Server-side conversation state
+   - Cross-session continuity
+   - Conversation branching
+
+6. Best Practices & Security
+7. Performance Optimization
+8. Complete Multi-Connector Example
+```
+
+**Use When**: Learning about connector capabilities and implementation
+
+---
+
+### 6️⃣ **mistral_agents_api_orchestration_guide.md** (NEW - May 2025)
+Multi-agent collaboration and orchestration patterns.
+
+**Sections Overview**:
+```
+1. Orchestration Fundamentals
+   - Specialized agents
+   - Conversation-based coordination
+
+2. Sequential Agent Pipelines
+   - Linear pipelines
+   - Conditional branching
+
+3. Parallel Agent Execution
+   - Fan-out/Fan-in pattern
+   - Competitive evaluation
+
+4. Hierarchical Agent Structures
+   - Manager-worker pattern
+   - Recursive decomposition
+
+5. Agent Handoff Mechanisms
+   - Explicit handoffs
+   - Context preservation
+
+6. State Management
+   - Shared conversation context
+   - External state stores
+
+7. Complex Workflow Patterns
+   - Event-driven orchestration
+
+8. Production Patterns
+   - Complete production orchestrator
+```
+
+**Use When**: Building multi-agent systems
+
+---
+
+### 7️⃣ **mistral_agents_api_mcp_guide.md** (NEW - May 2025)
+Model Context Protocol (MCP) integration for third-party tools.
+
+**Sections Overview**:
+```
+1. MCP Architecture
+   - What is MCP
+   - MCP vs Built-in Connectors
+
+2. Anthropic MCP Implementation
+   - Mistral's MCP support
+   - Tool discovery
+   - Configuration
+
+3. Custom MCP Servers
+   - Building MCP servers
+   - FastAPI implementation
+   - Deployment
+
+4. Tool Exposure Patterns
+   - Database access
+   - API gateway
+   - Multi-service orchestration
+
+5. Integration Best Practices
+   - Tool design
+   - Error handling
+   - Versioning
+   - Rate limiting
+
+6. Security and Authentication
+   - Bearer tokens
+   - API keys
+   - OAuth 2.0
+
+7. Production Deployment
+   - Docker
+   - Kubernetes
+   - Monitoring
+```
+
+**Use When**: Integrating custom tools and third-party systems
+
+---
+
 ## 🎯 Quick Lookup Table
 
 ### By Task
@@ -174,6 +307,17 @@ Copy-paste ready code examples.
 | Set up database | Production | Database Schema |
 | Implement rate limiting | Production | Rate Limiting |
 | Security hardening | Production | Security Best Practices |
+| Use Python code execution | Connectors Guide | Python Code Execution |
+| Generate images | Connectors Guide | Image Generation |
+| Search web (premium) | Connectors Guide | Web Search |
+| Access documents (RAG) | Connectors Guide | Document Library |
+| Maintain conversation memory | Connectors Guide | Persistent Memory |
+| Build sequential pipeline | Orchestration | Sequential Pipelines |
+| Parallel agent execution | Orchestration | Parallel Execution |
+| Manager-worker pattern | Orchestration | Hierarchical Structures |
+| Agent handoffs | Orchestration | Handoff Mechanisms |
+| Connect custom tools (MCP) | MCP Guide | Custom MCP Servers |
+| Third-party integrations | MCP Guide | MCP Architecture |
 
 ### By Role
 
@@ -244,14 +388,17 @@ Copy-paste ready code examples.
 
 | Metric | Value |
 |--------|-------|
-| Total Lines | 2,703 |
-| Code Examples | 50+ |
-| ASCII Diagrams | 30+ |
+| Total Documents | 8 (3 NEW in May 2025) |
+| Total Lines | 5,500+ |
+| Code Examples | 100+ |
+| ASCII Diagrams | 40+ |
 | API Endpoints | 10+ |
-| Supported Models | 2 |
-| Built-in Tools | 5 |
-| Recipes | 9 |
-| Coverage Areas | 16+ |
+| Supported Models | 2 (mistral-medium-latest, mistral-large-latest) |
+| Built-in Connectors | 5 (NEW May 2025) |
+| Recipes | 9+ |
+| Coverage Areas | 25+ |
+| Orchestration Patterns | 8+ (NEW May 2025) |
+| MCP Integration | ✅ (NEW May 2025) |
 
 ---
 
@@ -267,6 +414,10 @@ Copy-paste ready code examples.
 **...add security** → Production Guide → Security Best Practices
 **...visualise the flow** → Diagrams → All sections
 **...deploy this** → Production Guide → Infrastructure Setup
+**...use connectors** → Connectors Guide → All 5 connectors (NEW)
+**...build multi-agent system** → Orchestration Guide → All patterns (NEW)
+**...integrate custom tools** → MCP Guide → Custom MCP Servers (NEW)
+**...see performance metrics** → README → Performance Metrics (NEW)
 
 ---
 

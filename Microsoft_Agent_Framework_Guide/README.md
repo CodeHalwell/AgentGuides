@@ -1,10 +1,43 @@
 # Microsoft Agent Framework - Complete Guide Collection
 ## October 2025 Release - Enterprise-Grade Documentation
 
-**Release Date:** October 2025  
-**Framework Status:** Unified SDK (unifying Semantic Kernel + AutoGen)  
-**Supported Platforms:** .NET, Python, TypeScript  
+**Release Date:** October 2025
+**Framework Status:** Public Preview (Unified SDK)
+**Supported Platforms:** .NET, Python, TypeScript
 **Latest Version:** 1.0+
+
+---
+
+## 🌟 NEW in October 2025 - Critical Features
+
+### **Agent2Agent (A2A) Protocol** 🔥
+Enable seamless collaboration between agents across different frameworks (OpenAI SDK, Claude SDK, LangGraph, Google ADK). Built-in authentication, cross-framework messaging, and remote agent communication.
+
+👉 **[Complete A2A Protocol Guide](./microsoft_agent_framework_a2a_protocol.md)**
+
+### **Graph-Based Workflows** 🔥
+Build complex agent orchestration with directed graphs. Features include streaming support, checkpointing, human-in-the-loop integration, and time-travel debugging for workflow analysis.
+
+👉 **[Graph-Based Workflows & Declarative Definitions Guide](./microsoft_agent_framework_graphs_declarative.md)**
+
+### **Declarative Agent Definitions** 🔥
+Configure agents using YAML/JSON for version control and reusability. Supports templates, validation, and environment-based configuration.
+
+👉 **[Graph-Based Workflows & Declarative Definitions Guide](./microsoft_agent_framework_graphs_declarative.md)**
+
+### **Enhanced Enterprise Features** 🔥
+- **OpenTelemetry Instrumentation:** Full distributed tracing, metrics, and logging
+- **Azure AI Content Safety:** Real-time harmful content detection and blocking
+- **Entra ID Authentication:** Managed Identity, Workload Identity for Kubernetes
+- **Compliance:** HIPAA, GDPR, SOX, PCI-DSS, FedRAMP configurations
+
+👉 **[Enterprise Features 2025 Guide](./microsoft_agent_framework_enterprise_2025.md)**
+
+### **Preview Status & Limitations**
+- **Current Status:** October 2025 Public Preview
+- **Production Readiness:** Beta - suitable for non-critical production workloads
+- **GA Timeline:** Expected Q2 2026
+- **Migration Support:** Comprehensive guides from Semantic Kernel and AutoGen
 
 ---
 
@@ -78,6 +111,51 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
+### **5. [microsoft_agent_framework_a2a_protocol.md](./microsoft_agent_framework_a2a_protocol.md)** 🆕
+**Agent2Agent Protocol specification** - ~8,000+ words
+
+- **Core Concepts:** Message structure, protocol components, framework registration
+- **Cross-Framework Interoperability:** OpenAI SDK, Claude SDK, LangGraph, Google ADK
+- **Authentication:** OAuth2, Entra ID, mTLS, API keys
+- **Message Formats:** Request/response, events, errors
+- **Implementation Examples:** Complete Python and .NET implementations
+- **Security:** End-to-end encryption, message signing, rate limiting
+- **Production Patterns:** Circuit breakers, message queues, monitoring
+
+**Best For:** Building cross-framework agent systems, enterprise integration
+
+---
+
+### **6. [microsoft_agent_framework_graphs_declarative.md](./microsoft_agent_framework_graphs_declarative.md)** 🆕
+**Graph workflows and declarative configuration** - ~10,000+ words
+
+- **Graph-Based Workflows:** Directed graphs, conditional routing, parallel execution
+- **Declarative Definitions:** YAML/JSON configuration, templates, validation
+- **Streaming:** Real-time output streaming, token-by-token responses
+- **Checkpointing:** Save/resume workflows, failure recovery
+- **Human-in-the-Loop:** Approval workflows, interactive decision points
+- **Time-Travel Debugging:** Navigate execution history, replay workflows
+- **Production Patterns:** Error handling, performance optimization
+
+**Best For:** Complex orchestration, configuration-driven development, debugging
+
+---
+
+### **7. [microsoft_agent_framework_enterprise_2025.md](./microsoft_agent_framework_enterprise_2025.md)** 🆕
+**Enterprise features and compliance** - ~9,000+ words
+
+- **OpenTelemetry Instrumentation:** Distributed tracing, metrics, custom spans
+- **Azure AI Content Safety:** Harmful content detection, PII redaction
+- **Entra ID Authentication:** Managed Identity, Workload Identity, multi-tenant
+- **Compliance:** HIPAA, GDPR, SOX, PCI-DSS, FedRAMP configurations
+- **Enterprise Governance:** Policy enforcement, cost management, model governance
+- **Advanced Security:** End-to-end encryption, network security, zero trust
+- **Audit Logging:** Comprehensive auditing, SIEM integration
+
+**Best For:** Enterprise deployments, regulated industries, security teams
+
+---
+
 ## 🚀 Quick Start Paths
 
 ### **Path 1: Beginner (Learning)**
@@ -117,14 +195,17 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ## 📋 Feature Matrix
 
-| Feature | Beginner Guide | Comprehensive | Production | Recipes | Diagrams |
-|---------|--------|---------------|-----------|---------|----------|
-| **Concepts** | ✓ | ✓✓✓ | ✓ | ✓ | ✓ |
-| **Code Examples** | Limited | Extensive | Infrastructure | ✓✓✓ | - |
-| **Architecture** | Basic | Detailed | Enterprise | - | ✓✓✓ |
-| **Deployment** | - | Overview | ✓✓✓ | - | ✓ |
-| **Security** | - | Overview | ✓✓✓ | Patterns | ✓ |
-| **Scaling** | - | Brief | ✓✓✓ | - | ✓ |
+| Feature | Comprehensive | Production | Recipes | Diagrams | A2A Protocol | Graphs/Declarative | Enterprise 2025 |
+|---------|---------------|-----------|---------|----------|--------------|-------------------|----------------|
+| **Core Concepts** | ✓✓✓ | ✓ | ✓ | ✓ | ✓✓ | ✓✓✓ | ✓ |
+| **Code Examples** | ✓✓✓ | ✓✓ | ✓✓✓ | - | ✓✓✓ | ✓✓✓ | ✓✓✓ |
+| **Architecture** | ✓✓✓ | ✓✓✓ | - | ✓✓✓ | ✓✓ | ✓✓✓ | ✓✓ |
+| **Deployment** | ✓ | ✓✓✓ | - | ✓ | - | - | ✓ |
+| **Security** | ✓ | ✓✓✓ | ✓ | ✓ | ✓✓✓ | ✓ | ✓✓✓ |
+| **Cross-Framework** | - | - | - | - | ✓✓✓ | - | - |
+| **Orchestration** | ✓✓ | ✓ | ✓✓ | ✓✓ | - | ✓✓✓ | - |
+| **Compliance** | - | ✓✓ | - | - | - | - | ✓✓✓ |
+| **Observability** | ✓ | ✓✓✓ | ✓ | - | ✓ | ✓✓ | ✓✓✓ |
 
 ---
 

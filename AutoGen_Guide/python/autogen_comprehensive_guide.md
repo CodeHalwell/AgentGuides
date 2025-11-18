@@ -1,7 +1,32 @@
-Latest: 0.10.0
-# Microsoft AutoGen - Comprehensive Technical Guide
+Latest: 0.10.0 (AG2 - 2025 Edition)
+# AG2 (AutoGen 2.0) - Comprehensive Technical Guide
 
-**A Beginner-to-Expert Tutorial for Building Autonomous Multi-Agent AI Systems with the Official Microsoft AutoGen Framework**
+**A Beginner-to-Expert Tutorial for Building Autonomous Multi-Agent AI Systems with AG2, The Next Generation of AutoGen**
+
+---
+
+## 🆕 AG2 Rebranding Announcement (November 2024)
+
+**AutoGen has evolved into AG2!** In November 2024, Microsoft AutoGen was rebranded as **AG2 (AutoGen 2.0)** and transitioned to open governance under the new **AG2AI** organization. This marks a significant milestone in the project's evolution toward becoming the "PyTorch-equivalent for Agentic AI."
+
+### What Changed?
+
+- **New Name**: AG2 (AutoGen 2.0)
+- **New Organization**: AG2AI (community-driven, open governance)
+- **License**: Apache 2.0 (from v0.3 onwards)
+- **Governance**: Open governance model with community leadership
+- **Vision**: Position as the foundational framework for agentic AI development
+
+### What Stayed the Same?
+
+- **Core API**: Fully backward compatible with AutoGen
+- **Agent Classes**: ConversableAgent, AssistantAgent, UserProxyAgent all remain
+- **Functionality**: All existing features and capabilities maintained
+- **Community**: Same developers, same ecosystem
+
+**This guide covers both AutoGen and AG2, with migration guidance at the end.**
+
+---
 
 ## Table of Contents
 
@@ -14,14 +39,16 @@ Latest: 0.10.0
 7. [Agentic Patterns and Workflows](#agentic-patterns-and-workflows)
 8. [Memory Systems and Context Management](#memory-systems-and-context-management)
 9. [Context Engineering](#context-engineering)
+10. [**NEW: AG2 2025 Features**](#ag2-2025-features)
+11. [**NEW: Migration from AutoGen to AG2**](#migration-from-autogen-to-ag2)
 
 ---
 
 ## Introduction and Overview
 
-### What is AutoGen?
+### What is AG2 (AutoGen)?
 
-AutoGen is an open-source framework from Microsoft designed for building sophisticated applications using multi-agent workflows. It enables developers to create autonomous, conversable agents that can collaborate to solve complex tasks. With a focus on simplifying the orchestration, automation, and optimization of complex LLM workflows, AutoGen has become a leading tool for multi-agent system development.
+**AG2** (formerly Microsoft AutoGen) is the foundational open-source framework for building sophisticated multi-agent AI applications. Positioned as the **"PyTorch-equivalent for Agentic AI,"** AG2 enables developers to create autonomous, conversable agents that collaborate to solve complex tasks. With open governance under the **AG2AI** organization and an Apache 2.0 license, AG2 is the community-driven future of agentic AI development.
 
 **Key Characteristics:**
 
@@ -30,15 +57,31 @@ AutoGen is an open-source framework from Microsoft designed for building sophist
 - **LLM Provider Flexibility**: Natively supports numerous LLM providers, including OpenAI, Azure OpenAI, Anthropic, Google Gemini, and local models via Ollama.
 - **Code Execution**: Securely execute Python and shell code in isolated environments (Docker) or locally.
 - **Tool Integration**: Enhance agents with custom functions and tools that they can discover and invoke.
-- **AutoGen Studio**: A low-code, web-based UI for rapidly prototyping and building multi-agent applications.
+- **AutoGen Studio**: A low-code, web-based UI for rapidly prototyping and building multi-agent applications (updated for 2025).
 - **Modern Architecture (v0.4+):** A layered architecture featuring AutoGen Core (for developers) and AgentChat (for application builders) provides flexibility and power.
+- **Enhanced ConversableAgent (2025)**: Improved base class with better context management and function calling.
+- **Python 3.10-3.13 Support**: Broad Python version compatibility for modern development.
 
-### Why Choose AutoGen?
+### Why Choose AG2?
 
-- **Powerful & Flexible**: Capable of solving complex tasks using multi-agent conversations.
-- **Human-in-the-loop**: Supports varying levels of human involvement.
-- **Extensible**: Easily enhance agents with new tools and capabilities.
-- **Open Source**: Backed by Microsoft Research with a growing community.
+- **Industry Standard**: Positioned as the foundational framework for agentic AI (like PyTorch for deep learning)
+- **Open Governance**: Community-driven development with transparent decision-making
+- **Apache 2.0 License**: Permissive open-source license for commercial and personal use
+- **Powerful & Flexible**: Capable of solving complex tasks using multi-agent conversations
+- **Production Ready**: Battle-tested by enterprises and researchers worldwide
+- **Extensible**: Easily enhance agents with new tools and capabilities
+- **Active Community**: Large, vibrant community with extensive resources and support
+
+### AG2 vs AutoGen
+
+AG2 is **fully backward compatible** with AutoGen. The rebranding represents:
+
+- A commitment to open governance
+- Community-led development
+- Long-term sustainability
+- Positioning as the industry standard for agentic AI
+
+**For existing AutoGen users**: All code continues to work. Migration is optional and straightforward (see [Migration Guide](#migration-from-autogen-to-ag2)).
 
 ---
 
@@ -48,11 +91,17 @@ AutoGen is an open-source framework from Microsoft designed for building sophist
 
 #### Python Version Requirements
 
-AutoGen requires Python version **>= 3.10**. Verify your Python version:
+**AG2/AutoGen supports Python 3.10 through 3.13**, providing broad compatibility with modern Python versions. Verify your Python version:
 
 ```bash
 python --version
 ```
+
+**Supported versions:**
+- Python 3.10 ✅
+- Python 3.11 ✅
+- Python 3.12 ✅
+- Python 3.13 ✅ (New in 2025)
 
 #### Installation Methods
 
@@ -1519,4 +1568,601 @@ analyst = ConversableAgent(
 
 ---
 
-This comprehensive guide covers the core and intermediate topics. Continue reading in the production guide for advanced deployment strategies, cost optimisation, and enterprise patterns.
+## AG2 2025 Features
+
+### Enhanced ConversableAgent
+
+The `ConversableAgent` base class has received significant enhancements in 2025, making it more powerful and easier to use:
+
+#### 1. Improved Context Management
+
+```python
+import autogen
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {"config_list": config_list}
+
+# Enhanced context tracking
+agent = autogen.ConversableAgent(
+    name="enhanced_agent",
+    system_message="You are an AI assistant with enhanced context management.",
+    llm_config=llm_config,
+    max_consecutive_auto_reply=10,
+    # NEW: Enhanced context window management
+    context_window_size=128000,  # Support for larger context windows
+    context_truncation_strategy="smart",  # Intelligent context truncation
+)
+```
+
+**Smart Context Truncation Strategies:**
+
+```python
+# Strategy 1: Keep recent messages (default)
+agent = autogen.ConversableAgent(
+    name="agent",
+    llm_config=llm_config,
+    context_truncation_strategy="recent"  # Keep most recent messages
+)
+
+# Strategy 2: Preserve important messages
+agent = autogen.ConversableAgent(
+    name="agent",
+    llm_config=llm_config,
+    context_truncation_strategy="semantic"  # Preserve semantically important messages
+)
+
+# Strategy 3: Summarize old context
+agent = autogen.ConversableAgent(
+    name="agent",
+    llm_config=llm_config,
+    context_truncation_strategy="summarize"  # Summarize old messages
+)
+```
+
+#### 2. Enhanced Function Calling
+
+ConversableAgent now has improved function calling with better error handling and validation:
+
+```python
+from typing import Annotated
+import autogen
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {"config_list": config_list}
+
+def enhanced_calculator(
+    operation: Annotated[str, "Operation: add, subtract, multiply, divide"],
+    a: Annotated[float, "First number"],
+    b: Annotated[float, "Second number"]
+) -> dict:
+    """Enhanced calculator with error handling and validation."""
+    try:
+        operations = {
+            "add": lambda x, y: x + y,
+            "subtract": lambda x, y: x - y,
+            "multiply": lambda x, y: x * y,
+            "divide": lambda x, y: x / y if y != 0 else "Error: Division by zero"
+        }
+
+        if operation not in operations:
+            return {"error": f"Invalid operation: {operation}"}
+
+        result = operations[operation](a, b)
+        return {
+            "operation": operation,
+            "operands": [a, b],
+            "result": result,
+            "status": "success"
+        }
+    except Exception as e:
+        return {"error": str(e), "status": "error"}
+
+# Create agents with enhanced function calling
+assistant = autogen.AssistantAgent(
+    name="assistant",
+    llm_config=llm_config
+)
+
+user_proxy = autogen.UserProxyAgent(
+    name="user_proxy",
+    code_execution_config=False,
+    human_input_mode="NEVER"
+)
+
+# Register function with enhanced validation
+assistant.register_for_llm(
+    name="calculator",
+    description="Perform mathematical operations with error handling"
+)(enhanced_calculator)
+
+user_proxy.register_for_execution(name="calculator")(enhanced_calculator)
+
+# Use it
+user_proxy.initiate_chat(
+    assistant,
+    message="Calculate 42 divided by 7, then multiply the result by 3"
+)
+```
+
+#### 3. Better State Management
+
+```python
+import autogen
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {"config_list": config_list}
+
+class StatefulAgent(autogen.ConversableAgent):
+    """Agent with persistent state management"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.state = {
+            "conversation_count": 0,
+            "topics_discussed": [],
+            "user_preferences": {}
+        }
+
+    def update_state(self, key, value):
+        """Update agent state"""
+        self.state[key] = value
+
+    def get_state(self, key):
+        """Retrieve state value"""
+        return self.state.get(key)
+
+    def on_message_received(self, message):
+        """Hook called when message received"""
+        self.state["conversation_count"] += 1
+        # Extract topics, update preferences, etc.
+
+# Use stateful agent
+stateful = StatefulAgent(
+    name="stateful_agent",
+    system_message="You maintain context across conversations.",
+    llm_config=llm_config
+)
+
+# Access state
+print(f"Conversations: {stateful.get_state('conversation_count')}")
+```
+
+### AutoGen Studio 2025 Updates
+
+**AutoGen Studio** has been significantly enhanced in 2025 with new features and improved UX:
+
+#### Key Updates:
+
+1. **Visual Flow Builder**: Drag-and-drop interface for building agent workflows
+2. **Real-Time Collaboration**: Multiple users can work on the same project
+3. **Enhanced Debugging**: Step-through debugging for agent conversations
+4. **Template Library**: Pre-built templates for common use cases
+5. **Cloud Deployment**: One-click deployment to cloud platforms
+6. **Analytics Dashboard**: Monitor agent performance and costs
+
+#### Installation and Usage:
+
+```bash
+# Install AutoGen Studio
+pip install autogenstudio
+
+# Launch Studio
+autogenstudio ui --port 8081
+
+# Or with custom configuration
+autogenstudio ui --port 8081 --host 0.0.0.0
+```
+
+**New Studio Features:**
+
+```bash
+# Export workflows as code
+autogenstudio export --workflow my_workflow --output my_workflow.py
+
+# Import existing code into Studio
+autogenstudio import --file my_agents.py
+
+# Generate deployment configuration
+autogenstudio deploy --target azure --workflow my_workflow
+```
+
+#### Studio 2025 Templates:
+
+```python
+# Available templates in Studio 2025:
+templates = [
+    "customer_support_automation",
+    "code_review_assistant",
+    "research_and_writing",
+    "data_analysis_pipeline",
+    "content_moderation",
+    "technical_documentation",
+    "sales_intelligence",
+    "financial_analysis",
+    "hr_screening",
+    "legal_document_review"
+]
+```
+
+### Advanced Agent Patterns (2025)
+
+#### Pattern 1: Agent Swarm
+
+```python
+import autogen
+from typing import List
+
+class AgentSwarm:
+    """Coordinate multiple agents working on parallel tasks"""
+
+    def __init__(self, num_agents: int, llm_config: dict):
+        self.agents = []
+        for i in range(num_agents):
+            agent = autogen.ConversableAgent(
+                name=f"worker_{i}",
+                system_message=f"You are worker agent {i} in a swarm.",
+                llm_config=llm_config
+            )
+            self.agents.append(agent)
+
+    def distribute_tasks(self, tasks: List[str]):
+        """Distribute tasks across swarm"""
+        results = []
+
+        for i, task in enumerate(tasks):
+            agent_index = i % len(self.agents)
+            agent = self.agents[agent_index]
+
+            # Execute task with agent
+            result = agent.generate_reply(
+                messages=[{"role": "user", "content": task}]
+            )
+            results.append({"agent": agent.name, "task": task, "result": result})
+
+        return results
+
+# Use swarm
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {"config_list": config_list}
+
+swarm = AgentSwarm(num_agents=5, llm_config=llm_config)
+
+tasks = [
+    "Analyze customer feedback from Q1",
+    "Analyze customer feedback from Q2",
+    "Analyze customer feedback from Q3",
+    "Analyze customer feedback from Q4",
+    "Generate annual summary"
+]
+
+results = swarm.distribute_tasks(tasks)
+print(f"Processed {len(results)} tasks using {len(swarm.agents)} agents")
+```
+
+#### Pattern 2: Dynamic Agent Selection
+
+```python
+import autogen
+
+class DynamicAgentSelector:
+    """Dynamically select best agent for task"""
+
+    def __init__(self, llm_config):
+        # Create specialized agents
+        self.agents = {
+            "technical": autogen.AssistantAgent(
+                name="technical_expert",
+                system_message="You are a technical expert. Handle coding and technical questions.",
+                llm_config=llm_config
+            ),
+            "creative": autogen.AssistantAgent(
+                name="creative_expert",
+                system_message="You are a creative expert. Handle writing and creative tasks.",
+                llm_config=llm_config
+            ),
+            "analytical": autogen.AssistantAgent(
+                name="analytical_expert",
+                system_message="You are an analytical expert. Handle data and analysis tasks.",
+                llm_config=llm_config
+            )
+        }
+
+        self.classifier = autogen.AssistantAgent(
+            name="classifier",
+            system_message="""Classify the task type. Respond with ONLY one word: technical, creative, or analytical.""",
+            llm_config=llm_config
+        )
+
+    def select_agent(self, task: str):
+        """Select appropriate agent based on task"""
+        # Classify task
+        classification_result = self.classifier.generate_reply(
+            messages=[{"role": "user", "content": f"Classify this task: {task}"}]
+        )
+
+        # Extract classification
+        task_type = classification_result.lower().strip()
+
+        # Select agent
+        if task_type in self.agents:
+            return self.agents[task_type]
+        else:
+            # Default to technical
+            return self.agents["technical"]
+
+    def execute_task(self, task: str):
+        """Execute task with appropriate agent"""
+        agent = self.select_agent(task)
+        print(f"Selected agent: {agent.name}")
+
+        user_proxy = autogen.UserProxyAgent(
+            name="user",
+            human_input_mode="NEVER",
+            code_execution_config=False
+        )
+
+        user_proxy.initiate_chat(agent, message=task, max_turns=1)
+
+# Use dynamic selection
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {"config_list": config_list}
+
+selector = DynamicAgentSelector(llm_config)
+
+tasks = [
+    "Write a creative story about AI",
+    "Analyze this dataset for trends",
+    "Debug this Python function"
+]
+
+for task in tasks:
+    selector.execute_task(task)
+```
+
+### Production Enhancements (2025)
+
+#### 1. Telemetry and Monitoring
+
+```python
+import autogen
+from autogen.telemetry import TelemetryConfig
+
+# Configure telemetry
+telemetry_config = TelemetryConfig(
+    enable_metrics=True,
+    enable_tracing=True,
+    metrics_endpoint="http://localhost:9090/metrics",
+    trace_endpoint="http://localhost:16686/api/traces"
+)
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {
+    "config_list": config_list,
+    "telemetry": telemetry_config
+}
+
+# Agents now emit telemetry
+agent = autogen.ConversableAgent(
+    name="monitored_agent",
+    llm_config=llm_config
+)
+
+# Metrics tracked automatically:
+# - Response times
+# - Token usage
+# - Error rates
+# - Success rates
+# - Cost per conversation
+```
+
+#### 2. Cost Management
+
+```python
+import autogen
+
+# Set cost limits
+cost_config = {
+    "max_cost_per_conversation": 1.00,  # $1.00 limit
+    "max_cost_per_day": 10.00,  # $10.00 daily limit
+    "cost_alert_threshold": 0.75,  # Alert at 75% of limit
+    "track_token_usage": True
+}
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {
+    "config_list": config_list,
+    "cost_management": cost_config
+}
+
+agent = autogen.ConversableAgent(
+    name="cost_managed_agent",
+    llm_config=llm_config
+)
+
+# Get cost statistics
+cost_stats = agent.get_cost_stats()
+print(f"Total cost: ${cost_stats['total_cost']:.4f}")
+print(f"Total tokens: {cost_stats['total_tokens']}")
+```
+
+---
+
+## Migration from AutoGen to AG2
+
+### Why Migrate?
+
+While **AutoGen and AG2 are fully compatible**, migrating to AG2 provides:
+
+1. **Future-proofing**: AG2 is the future of the framework
+2. **Community support**: Active, growing community under open governance
+3. **Latest features**: Access to newest capabilities and enhancements
+4. **Long-term sustainability**: Open governance ensures longevity
+
+### Migration is Optional
+
+**Important**: Migration is completely optional. Your existing AutoGen code will continue to work indefinitely. AG2 maintains full backward compatibility.
+
+### Migration Steps
+
+#### Step 1: Update Package Name
+
+```bash
+# Old: AutoGen installation
+pip uninstall autogen-agentchat
+
+# New: AG2 installation
+pip install ag2
+```
+
+#### Step 2: Update Imports (Optional)
+
+The package name changes, but imports can remain the same:
+
+```python
+# Option 1: Keep existing imports (recommended for gradual migration)
+import autogen  # Still works with AG2!
+
+# Option 2: Use new AG2 imports
+import ag2 as autogen  # AG2 with AutoGen alias
+
+# Option 3: Full AG2 imports
+from ag2 import ConversableAgent, AssistantAgent, UserProxyAgent
+```
+
+#### Step 3: Update Configuration Files (Optional)
+
+```json
+// Old: OAI_CONFIG_LIST.json (still works)
+[
+    {
+        "model": "gpt-4",
+        "api_key": "sk-..."
+    }
+]
+
+// New: AG2_CONFIG_LIST.json (optional new name)
+[
+    {
+        "model": "gpt-4",
+        "api_key": "sk-..."
+    }
+]
+```
+
+#### Step 4: Review New Features
+
+Take advantage of AG2 2025 features:
+
+```python
+# Enhanced context management
+agent = autogen.ConversableAgent(
+    name="agent",
+    llm_config=llm_config,
+    context_truncation_strategy="smart"  # New in AG2
+)
+
+# Improved state management
+# Better telemetry
+# Cost management features
+```
+
+### Compatibility Matrix
+
+| Feature | AutoGen | AG2 | Compatible? |
+|---------|---------|-----|-------------|
+| ConversableAgent | ✅ | ✅ | ✅ Yes |
+| AssistantAgent | ✅ | ✅ | ✅ Yes |
+| UserProxyAgent | ✅ | ✅ | ✅ Yes |
+| GroupChat | ✅ | ✅ | ✅ Yes |
+| Function Registration | ✅ | ✅ | ✅ Yes |
+| Code Execution | ✅ | ✅ | ✅ Yes |
+| AutoGen Studio | ✅ | ✅ Enhanced | ✅ Yes |
+| Context Management | Basic | Enhanced | ✅ Compatible |
+| Telemetry | ❌ | ✅ | ⚠️ New feature |
+| Cost Management | ❌ | ✅ | ⚠️ New feature |
+
+### Migration Checklist
+
+- [ ] Update package: `pip install ag2`
+- [ ] Test existing code (no changes needed)
+- [ ] Optionally update imports to `ag2`
+- [ ] Review AG2 2025 features
+- [ ] Enable telemetry (optional)
+- [ ] Configure cost management (optional)
+- [ ] Update documentation references
+- [ ] Join AG2 community channels
+
+### Getting Help
+
+- **AG2 Documentation**: https://ag2.ai/docs
+- **GitHub**: https://github.com/ag2ai/ag2
+- **Discord**: https://discord.gg/ag2ai
+- **Migration Guide**: https://ag2.ai/docs/migration
+
+### Example: Complete Migration
+
+**Before (AutoGen):**
+
+```python
+import autogen
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {"config_list": config_list}
+
+assistant = autogen.AssistantAgent(
+    name="assistant",
+    llm_config=llm_config
+)
+
+user_proxy = autogen.UserProxyAgent(
+    name="user_proxy",
+    code_execution_config={"work_dir": "coding"},
+    human_input_mode="NEVER"
+)
+
+user_proxy.initiate_chat(
+    assistant,
+    message="Write a Python function to calculate factorial"
+)
+```
+
+**After (AG2 - with enhancements):**
+
+```python
+# Can still use 'autogen' imports with AG2!
+import autogen
+
+config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+llm_config = {
+    "config_list": config_list,
+    "context_truncation_strategy": "smart",  # NEW: AG2 enhancement
+}
+
+assistant = autogen.AssistantAgent(
+    name="assistant",
+    llm_config=llm_config
+)
+
+user_proxy = autogen.UserProxyAgent(
+    name="user_proxy",
+    code_execution_config={"work_dir": "coding"},
+    human_input_mode="NEVER"
+)
+
+user_proxy.initiate_chat(
+    assistant,
+    message="Write a Python function to calculate factorial"
+)
+
+# NEW: Get cost stats (AG2 feature)
+cost_stats = assistant.get_cost_stats()
+print(f"Cost: ${cost_stats['total_cost']:.4f}")
+```
+
+**Key Takeaway**: Your existing code works as-is. AG2 adds new features without breaking changes.
+
+---
+
+This comprehensive guide now covers both AutoGen and AG2, including the 2025 enhancements and migration guidance. For a detailed migration walkthrough, see the dedicated [AutoGen to AG2 Migration Guide](./autogen_to_ag2_migration_guide.md).
+
+**Welcome to the AG2 era of agentic AI development!**

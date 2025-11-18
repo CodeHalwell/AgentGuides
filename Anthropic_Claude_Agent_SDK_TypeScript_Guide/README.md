@@ -1,15 +1,19 @@
-# Claude Agent SDK (TypeScript) - Complete Technical Guide
+# Claude Agent SDK (TypeScript) - Complete Technical Guide (2025 Edition)
 
-**Version:** 1.0.0  
-**Target Audience:** Advanced TypeScript developers, AI engineers, systems architects  
-**Status:** Production-Ready Guide  
-[[memory:8527310]]
+**Version:** 2.0.0 (2025 Edition)
+**Target Audience:** Advanced TypeScript developers, AI engineers, systems architects
+**Status:** Production-Ready Guide with 2025 Features
 
 ## Overview
 
 This comprehensive technical guide covers the Claude Agent SDK for TypeScript—Anthropic's most powerful framework for building autonomous AI agents powered by Claude models. This guide focuses exclusively on TypeScript implementation, production patterns, and real-world deployment strategies.
 
+**NEW in 2025:** The Claude Agent SDK (formerly Claude Code SDK) has evolved to support general-purpose agent development beyond coding tasks, with enhanced capabilities for research, data processing, web automation, and complex orchestration.
+
 The Claude Agent SDK enables developers to build sophisticated autonomous systems that can:
+- **🧠 Leverage Claude Sonnet 4.5** - Latest frontier model with superior reasoning
+- **🤖 Orchestrate subagents** - Specialized agents for parallel task execution
+- **🔗 Inject hooks** - Custom logic at key execution points
 - **Understand and analyse complex codebases**
 - **Execute commands and manipulate files**
 - **Make autonomous decisions through multi-turn reasoning**
@@ -18,18 +22,55 @@ The Claude Agent SDK enables developers to build sophisticated autonomous system
 - **Integrate custom tools via Model Context Protocol (MCP)**
 - **Manage extended conversations** with automatic context compaction
 - **Enforce granular permissions** for security and control
+- **🌐 Automate general tasks** - CSV processing, research, visualization, web automation
+
+## 🆕 What's New in 2025
+
+The Claude Agent SDK represents a major evolution from the Claude Code SDK with these critical updates:
+
+### Critical Updates
+
+1. **Rebranding**: `@anthropic-ai/claude-code` → `@anthropic-ai/claude-agent-sdk`
+2. **Function Change**: `code()` → `query()` (broader capabilities)
+3. **Claude Sonnet 4.5**: Latest frontier model integration
+4. **Subagents**: Parallel specialized agent execution
+5. **Hooks System**: Pre/post execution logic injection
+6. **Enhanced MCP**: Type-safe tool definitions with Zod
+7. **Built-in Tools**: Read, Write, Bash, Grep, Glob, WebFetch, WebSearch
+8. **General-Purpose**: Beyond coding (research, data, visualization)
+9. **Node.js 18+**: Minimum version requirement
+10. **TypeScript 5+**: Recommended for best type inference
+
+### Migration from Claude Code SDK
+
+**Migrating from Claude Code SDK?** See the [Migration Guide](claude_agent_sdk_typescript_migration_guide.md) for:
+- Step-by-step migration instructions
+- Package and function name changes
+- Breaking changes documentation
+- Code migration examples (before/after)
+- Automated migration scripts
+- Troubleshooting common issues
+
+---
 
 ## Document Structure
+
+### 0. **claude_agent_sdk_typescript_migration_guide.md** 🆕
+**NEW for 2025:** Complete migration guide from Claude Code SDK. Essential reading if upgrading.
 
 ### 1. **claude_agent_sdk_typescript_comprehensive_guide.md**
 **The authoritative reference covering:**
 - **Core Fundamentals**: Installation, authentication, architecture, type definitions
+- **🆕 Claude Sonnet 4.5**: Latest model integration and capabilities
 - **Simple Agents**: Basic agent creation, system prompts, synchronous/asynchronous patterns
 - **Multi-Agent Systems**: Orchestration patterns, coordination, delegation
+- **🆕 Subagents**: Specialized task decomposition and parallel execution
 - **Tools Integration**: Complete tool ecosystem, Zod schemas, custom tools
+- **🆕 Built-in Tools**: Read, Write, Bash, Grep, Glob, WebFetch, WebSearch
 - **Computer Use API**: Mouse control, keyboard automation, screen interaction
 - **Structured Output**: Response schemas, JSON mode, validation
-- **Model Context Protocol (MCP)**: Extensibility, custom servers, resource management
+- **Model Context Protocol (MCP)**: Enhanced extensibility, custom servers, resource management
+- **🆕 Hooks System**: Pre/post execution logic injection and validation
 - **Agentic Patterns**: Self-correction loops, reasoning chains, reflection patterns
 - **Automatic Context Compaction**: Managing 200K token context window efficiently
 - **Permissions System**: Fine-grained access control, security boundaries
@@ -41,9 +82,10 @@ The Claude Agent SDK enables developers to build sophisticated autonomous system
 - **TypeScript Patterns**: Generics, type safety, union types, Zod integration
 - **Project Setup**: Configuration, build process, development workflow
 - **Integration Patterns**: FastAPI, Next.js, Express.js, WebSocket
+- **🆕 General-Purpose Agents**: CSV processing, research, visualization, automation
 - **Advanced Topics**: Testing, evaluation, fine-tuning, enterprise deployment
 
-**Extensive TypeScript code examples for every major topic**
+**Extensive TypeScript code examples for every major topic including 2025 features**
 
 ### 2. **claude_agent_sdk_typescript_production_guide.md**
 **Hardened production deployment patterns:**
@@ -125,12 +167,16 @@ ASCII diagrams for easy reference and understanding
 ✅ **Cost Control**: Budget limits and token tracking  
 ✅ **Production Ready**: Comprehensive error handling and monitoring  
 
-### Supported Models
+### Supported Models 🆕 **Updated for 2025**
 
-- **Claude 4.5 Sonnet** (recommended for complex reasoning)
-- **Claude 3.5 Sonnet** (balanced cost/performance)
-- **Claude 3.5 Haiku** (fast, low-cost)
-- **Claude Opus** (maximum capability)
+- **Claude Sonnet 4.5** 🆕 **Recommended** - Latest frontier model (2025)
+  - Superior multi-step reasoning
+  - Enhanced tool use accuracy
+  - Built on Claude Code infrastructure
+  - 200K token context window
+- **Claude 3.5 Sonnet** - Balanced cost/performance
+- **Claude 3.5 Haiku** - Fast, low-cost operations
+- **Claude Opus** - Maximum capability for complex tasks
 
 ### Authentication Methods
 
@@ -266,19 +312,21 @@ const report = await audit.generateSecurityReport('./src');
 
 ## Requirements and Dependencies
 
-### Runtime Requirements
-- **Node.js**: 18.0.0 or higher
-- **TypeScript**: 4.5 or higher
+### Runtime Requirements 🆕 **Updated for 2025**
+- **Node.js**: 18.0.0 or higher (20+ recommended) 🆕
+- **TypeScript**: 5.0 or higher (5.3+ recommended) 🆕
 - **npm**: 8.0 or higher
 
 ### Core Dependencies
 ```json
 {
-  "@anthropic-ai/claude-agent-sdk": "^1.0.0",
+  "@anthropic-ai/claude-agent-sdk": "^2.0.0",
   "zod": "^3.22.0",
-  "typescript": "^5.0.0"
+  "typescript": "^5.3.0"
 }
 ```
+
+**Note:** The package name changed from `@anthropic-ai/claude-code` to `@anthropic-ai/claude-agent-sdk` in 2025.
 
 ### Optional Production Dependencies
 ```json
