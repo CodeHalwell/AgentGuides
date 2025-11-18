@@ -30,6 +30,7 @@ This document provides production-ready Python recipes for common Semantic Kerne
 
 ### 1. Simple Q&A System
 
+{% raw %}
 ```python
 import asyncio
 from semantic_kernel import Kernel
@@ -75,9 +76,11 @@ async def simple_qa_system():
 if __name__ == "__main__":
     asyncio.run(simple_qa_system())
 ```
+{% endraw %}
 
 ### 2. Content Summarizer with Structured Output
 
+{% raw %}
 ```python
 from pydantic import BaseModel
 from typing import List
@@ -121,6 +124,7 @@ async def structured_summarizer():
 
 asyncio.run(structured_summarizer())
 ```
+{% endraw %}
 
 ---
 
@@ -203,6 +207,7 @@ asyncio.run(main())
 
 ### 4. Document Q&A with RAG
 
+{% raw %}
 ```python
 from semantic_kernel.memory import SemanticTextMemory
 from semantic_kernel.connectors.memory.azure_ai_search import AzureAISearchMemoryStore
@@ -288,6 +293,7 @@ async def document_qa_rag():
 
 asyncio.run(document_qa_rag())
 ```
+{% endraw %}
 
 ---
 

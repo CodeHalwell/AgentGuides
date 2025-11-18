@@ -2729,6 +2729,7 @@ async def save_learnings(
     last_bot_message = state["messages"][-1].content
 
     # Use LLM to extract learnable facts
+    {% raw %}
     extraction_prompt = f"""
     Extract any facts learned about the user from this exchange:
     User: {last_user_message}
@@ -2736,6 +2737,7 @@ async def save_learnings(
 
     Return facts as JSON array: [{{"content": "fact", "confidence": 0.9}}]
     """
+    {% endraw %}
 
     model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
     facts_response = model.invoke(extraction_prompt)
