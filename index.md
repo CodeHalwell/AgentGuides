@@ -60,8 +60,8 @@ description: "Comprehensive AI Agent Framework Documentation - November 2025 Edi
 ### Cloud-Native
 - **[Amazon Bedrock Agents](Amazon_Bedrock_Agents_Guide/)** - Multi-agent collaboration (GA), AgentCore
 - **[Microsoft Agent Framework](Microsoft_Agent_Framework_Guide/)** - A2A, graphs, declarative agents
-  - [Python Guide](Microsoft_Agent_Framework_Python_Guide/)
-  - [.NET Guide](Microsoft_Agent_Framework_DotNet_Guide/)
+  - [Python Guide](Microsoft_Agent_Framework_Guide/python/)
+  - [.NET Guide](Microsoft_Agent_Framework_Guide/dotnet/)
 - **[Google ADK](Google_ADK_Guide/)** - Multi-language support
   - [Python Guide](Google_ADK_Guide/python/)
   - [Go Guide](Google_ADK_Guide/go/)
@@ -95,7 +95,7 @@ description: "Comprehensive AI Agent Framework Documentation - November 2025 Edi
 
 **.NET/C#**
 - [Semantic Kernel .NET](Semantic_Kernel_Guide/dotnet/)
-- [Microsoft Agent Framework .NET](Microsoft_Agent_Framework_DotNet_Guide/)
+- [Microsoft Agent Framework .NET](Microsoft_Agent_Framework_Guide/dotnet/)
 
 **Go**
 - [Google ADK Go](Google_ADK_Guide/go/)

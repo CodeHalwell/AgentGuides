@@ -36,7 +36,7 @@ Each framework section includes links to:
 
 #### Python
 - [📂 Python Directory](../Google_ADK_Guide/python/)
-- [📖 README](../Google_ADK_Guide/python/README)
+- [📖 README](../Google_ADK_Guide/python/README.md)
 - [🗺️ GUIDE_INDEX](../Google_ADK_Guide/python/GUIDE_INDEX)
 - [📚 Comprehensive](../Google_ADK_Guide/python/google_adk_comprehensive_guide)
 - [🚀 Production](../Google_ADK_Guide/python/google_adk_production_guide)
@@ -47,7 +47,7 @@ Each framework section includes links to:
 
 #### Go
 - [📂 Go Directory](../Google_ADK_Guide/go/)
-- [📖 README](../Google_ADK_Guide/go/README)
+- [📖 README](../Google_ADK_Guide/go/README.md)
 - [🗺️ GUIDE_INDEX](../Google_ADK_Guide/go/GUIDE_INDEX)
 - [📚 Comprehensive](../Google_ADK_Guide/go/google_adk_go_comprehensive_guide)
 - [🚀 Production](../Google_ADK_Guide/go/google_adk_go_production_guide)
@@ -61,7 +61,7 @@ Each framework section includes links to:
 
 #### Python
 - [📂 Python Directory](../Semantic_Kernel_Guide/python/)
-- [📖 README](../Semantic_Kernel_Guide/python/README)
+- [📖 README](../Semantic_Kernel_Guide/python/README.md)
 - [🗺️ GUIDE_INDEX](../Semantic_Kernel_Guide/python/GUIDE_INDEX)
 - [📚 Comprehensive](../Semantic_Kernel_Guide/python/semantic_kernel_comprehensive_python)
 - [🚀 Production](../Semantic_Kernel_Guide/python/semantic_kernel_production_python)
@@ -73,7 +73,7 @@ Each framework section includes links to:
 
 #### .NET
 - [📂 .NET Directory](../Semantic_Kernel_Guide/dotnet/)
-- [📖 README](../Semantic_Kernel_Guide/dotnet/README)
+- [📖 README](../Semantic_Kernel_Guide/dotnet/README.md)
 - [🗺️ GUIDE_INDEX](../Semantic_Kernel_Guide/dotnet/GUIDE_INDEX)
 - [📚 Comprehensive](../Semantic_Kernel_Guide/dotnet/semantic_kernel_comprehensive_dotnet)
 - [🚀 Production](../Semantic_Kernel_Guide/dotnet/semantic_kernel_production_dotnet)
@@ -88,7 +88,7 @@ Each framework section includes links to:
 
 #### Python
 - [📂 Python Directory](../LlamaIndex_Guide/python/)
-- [📖 README](../LlamaIndex_Guide/python/README)
+- [📖 README](../LlamaIndex_Guide/python/README.md)
 - [🗺️ GUIDE_INDEX](../LlamaIndex_Guide/python/GUIDE_INDEX)
 - [📚 Comprehensive](../LlamaIndex_Guide/python/llamaindex_comprehensive_guide)
 - [🚀 Production](../LlamaIndex_Guide/python/llamaindex_production_guide)
@@ -100,7 +100,7 @@ Each framework section includes links to:
 
 #### TypeScript
 - [📂 TypeScript Directory](../LlamaIndex_Guide/typescript/)
-- [📖 README](../LlamaIndex_Guide/typescript/README)
+- [📖 README](../LlamaIndex_Guide/typescript/README.md)
 - [🗺️ GUIDE_INDEX](../LlamaIndex_Guide/typescript/GUIDE_INDEX)
 - [📚 Workflows Comprehensive](../LlamaIndex_Guide/typescript/llamaindex_workflows_typescript_comprehensive_guide)
 - [🚀 Production](../LlamaIndex_Guide/typescript/llamaindex_typescript_production_guide)
@@ -114,7 +114,7 @@ Each framework section includes links to:
 
 #### Python
 - [📂 Python Directory](../LangGraph_Guide/python/)
-- [📖 README](../LangGraph_Guide/python/README)
+- [📖 README](../LangGraph_Guide/python/README.md)
 - [📚 Comprehensive](../LangGraph_Guide/python/langgraph_comprehensive_guide)
 - [🚀 Production](../LangGraph_Guide/python/langgraph_production_guide)
 - [🎨 Diagrams](../LangGraph_Guide/python/langgraph_diagrams)
@@ -127,7 +127,7 @@ Each framework section includes links to:
 
 #### TypeScript
 - [📂 TypeScript Directory](../LangGraph_Guide/typescript/)
-- [📖 README](../LangGraph_Guide/typescript/README)
+- [📖 README](../LangGraph_Guide/typescript/README.md)
 - [🗺️ GUIDE_INDEX](../LangGraph_Guide/typescript/GUIDE_INDEX)
 - [📚 Comprehensive](../LangGraph_Guide/typescript/langchain_langgraph_comprehensive_guide)
 - [🚀 Production](../LangGraph_Guide/typescript/langchain_langgraph_production_guide)
@@ -145,7 +145,7 @@ Each framework section includes links to:
 
 #### Base Framework
 - [📂 Framework Guide](../Microsoft_Agent_Framework_Guide/)
-- [📖 README](../Microsoft_Agent_Framework_Guide/README)
+- [📖 README](../Microsoft_Agent_Framework_Guide/README.md)
 - [📚 Comprehensive](../Microsoft_Agent_Framework_Guide/microsoft_agent_framework_comprehensive_guide)
 - [🚀 Production](../Microsoft_Agent_Framework_Guide/microsoft_agent_framework_production_guide)
 - [🎨 Diagrams](../Microsoft_Agent_Framework_Guide/microsoft_agent_framework_diagrams)
@@ -156,25 +156,25 @@ Each framework section includes links to:
 - [📋 Migration Notice](../Microsoft_Agent_Framework_Guide/MIGRATION_NOTICE)
 
 #### Python
-- [📂 Python Directory](../Microsoft_Agent_Framework_Python_Guide/)
-- [📖 README](../Microsoft_Agent_Framework_Python_Guide/README)
-- [🗺️ GUIDE_INDEX](../Microsoft_Agent_Framework_Python_Guide/GUIDE_INDEX)
-- [📚 Comprehensive](../Microsoft_Agent_Framework_Python_Guide/microsoft_agent_framework_python_comprehensive_guide)
-- [⚡ Advanced](../Microsoft_Agent_Framework_Python_Guide/microsoft_agent_framework_python_advanced)
-- [✨ 2025 Features](../Microsoft_Agent_Framework_Python_Guide/microsoft_agent_framework_python_2025_features) **NEW**
+- [📂 Python Directory](../Microsoft_Agent_Framework_Guide/python/)
+- [📖 README](../Microsoft_Agent_Framework_Guide/python/README.md)
+- [🗺️ GUIDE_INDEX](../Microsoft_Agent_Framework_Guide/python/GUIDE_INDEX.md)
+- [📚 Comprehensive](../Microsoft_Agent_Framework_Guide/python/microsoft_agent_framework_python_comprehensive_guide.md)
+- [⚡ Advanced](../Microsoft_Agent_Framework_Guide/python/microsoft_agent_framework_python_advanced.md)
+- [✨ 2025 Features](../Microsoft_Agent_Framework_Guide/python/microsoft_agent_framework_python_2025_features.md) **NEW**
 
 #### .NET
-- [📂 .NET Directory](../Microsoft_Agent_Framework_DotNet_Guide/)
-- [📖 README](../Microsoft_Agent_Framework_DotNet_Guide/README)
-- [🗺️ GUIDE_INDEX](../Microsoft_Agent_Framework_DotNet_Guide/GUIDE_INDEX)
-- [📚 Comprehensive](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_comprehensive_guide)
-- [🚀 Production](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_production_guide)
-- [🎨 Diagrams](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_diagrams)
-- [👨‍💻 Recipes](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_recipes)
-- [⚡ Advanced](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_advanced)
-- [✨ 2025 Features](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_2025_features) **NEW**
-- [🔐 Azure RBAC](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_azure_rbac)
-- [🌊 Streaming Server](../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_streaming_server_dotnet)
+- [📂 .NET Directory](../Microsoft_Agent_Framework_Guide/dotnet/)
+- [📖 README](../Microsoft_Agent_Framework_Guide/dotnet/README.md)
+- [🗺️ GUIDE_INDEX](../Microsoft_Agent_Framework_Guide/dotnet/GUIDE_INDEX.md)
+- [📚 Comprehensive](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide.md)
+- [🚀 Production](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_dotnet_production_guide.md)
+- [🎨 Diagrams](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_dotnet_diagrams.md)
+- [👨‍💻 Recipes](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_dotnet_recipes.md)
+- [⚡ Advanced](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_dotnet_advanced.md)
+- [✨ 2025 Features](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_dotnet_2025_features.md) **NEW**
+- [🔐 Azure RBAC](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_framework_azure_rbac.md)
+- [🌊 Streaming Server](../Microsoft_Agent_Framework_Guide/dotnet/microsoft_agent_streaming_server_dotnet.md)
 
 ---
 
@@ -184,7 +184,7 @@ Each framework section includes links to:
 
 #### Python
 - [📂 Python Directory](../OpenAI_Agents_SDK_Guides/)
-- [📖 README](../OpenAI_Agents_SDK_Guides/README)
+- [📖 README](../OpenAI_Agents_SDK_Guides/README.md)
 - [🗺️ GUIDE_INDEX](../OpenAI_Agents_SDK_Guides/GUIDE_INDEX)
 - [📚 Comprehensive](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide)
 - [🚀 Production](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_production_guide)
@@ -198,7 +198,7 @@ Each framework section includes links to:
 
 #### TypeScript
 - [📂 TypeScript Directory](../OpenAI_Agents_SDK_TypeScript_Guide/)
-- [📖 README](../OpenAI_Agents_SDK_TypeScript_Guide/README)
+- [📖 README](../OpenAI_Agents_SDK_TypeScript_Guide/README.md)
 - [🗺️ GUIDE_INDEX](../OpenAI_Agents_SDK_TypeScript_Guide/GUIDE_INDEX)
 - [📚 Comprehensive](../OpenAI_Agents_SDK_TypeScript_Guide/openai_agents_sdk_typescript_comprehensive_guide)
 - [🚀 Production](../OpenAI_Agents_SDK_TypeScript_Guide/openai_agents_sdk_typescript_production_guide)
@@ -216,7 +216,7 @@ Each framework section includes links to:
 
 #### Python
 - [📂 Python Directory](../Anthropic_Claude_Agent_SDK_Guide/)
-- [📖 README](../Anthropic_Claude_Agent_SDK_Guide/README)
+- [📖 README](../Anthropic_Claude_Agent_SDK_Guide/README.md)
 - [📚 Comprehensive](../Anthropic_Claude_Agent_SDK_Guide/anthropic_claude_agent_sdk_comprehensive_guide)
 - [🚀 Production](../Anthropic_Claude_Agent_SDK_Guide/anthropic_claude_agent_sdk_production_guide)
 - [🎨 Diagrams](../Anthropic_Claude_Agent_SDK_Guide/anthropic_claude_agent_sdk_diagrams)
@@ -225,7 +225,7 @@ Each framework section includes links to:
 
 #### TypeScript
 - [📂 TypeScript Directory](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/)
-- [📖 README](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/README)
+- [📖 README](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/README.md)
 - [🗺️ GUIDE_INDEX](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/GUIDE_INDEX)
 - [📚 Comprehensive](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/claude_agent_sdk_typescript_comprehensive_guide)
 - [🚀 Production](../Anthropic_Claude_Agent_SDK_TypeScript_Guide/claude_agent_sdk_typescript_production_guide)
@@ -243,7 +243,7 @@ Each framework section includes links to:
 **Latest:** v1.4.1
 
 - [📂 CrewAI Guide](../CrewAI_Guide/)
-- [📖 README](../CrewAI_Guide/README)
+- [📖 README](../CrewAI_Guide/README.md)
 - [🗺️ GUIDE_INDEX](../CrewAI_Guide/GUIDE_INDEX)
 - [📚 Comprehensive](../CrewAI_Guide/crewai_comprehensive_guide)
 - [🚀 Production](../CrewAI_Guide/crewai_production_guide)
@@ -258,7 +258,7 @@ Each framework section includes links to:
 **Latest:** v0.10.0 (Rebranded to AG2)
 
 - [📂 AutoGen/AG2 Guide](../AutoGen_Guide/python/)
-- [📖 README](../AutoGen_Guide/python/README)
+- [📖 README](../AutoGen_Guide/python/README.md)
 - [📚 Comprehensive](../AutoGen_Guide/python/autogen_comprehensive_guide)
 - [🚀 Production](../AutoGen_Guide/python/autogen_production_guide)
 - [🎨 Diagrams](../AutoGen_Guide/python/autogen_diagrams)
@@ -273,7 +273,7 @@ Each framework section includes links to:
 **Latest:** v1.14.1
 
 - [📂 PydanticAI Guide](../PydanticAI_Guide/)
-- [📖 README](../PydanticAI_Guide/README)
+- [📖 README](../PydanticAI_Guide/README.md)
 - [🗺️ GUIDE_INDEX](../PydanticAI_Guide/GUIDE_INDEX)
 - [📚 Comprehensive](../PydanticAI_Guide/pydantic_ai_comprehensive_guide)
 - [🚀 Production](../PydanticAI_Guide/pydantic_ai_production_guide)
@@ -291,7 +291,7 @@ Each framework section includes links to:
 **Latest:** v2.19.0
 
 - [📂 Haystack Guide](../Haystack_Guide/)
-- [📖 README](../Haystack_Guide/README)
+- [📖 README](../Haystack_Guide/README.md)
 - [🗺️ GUIDE_INDEX](../Haystack_Guide/GUIDE_INDEX)
 - [📚 Comprehensive](../Haystack_Guide/haystack_comprehensive_guide)
 - [🚀 Production](../Haystack_Guide/haystack_production_guide)
@@ -308,7 +308,7 @@ Each framework section includes links to:
 **Latest:** v1.22.0
 
 - [📂 SmolAgents Guide](../SmolAgents_Guide/)
-- [📖 README](../SmolAgents_Guide/README)
+- [📖 README](../SmolAgents_Guide/README.md)
 - [📚 Comprehensive](../SmolAgents_Guide/smolagents_comprehensive_guide)
 - [🚀 Production](../SmolAgents_Guide/smolagents_production_guide)
 - [🎨 Diagrams](../SmolAgents_Guide/smolagents_diagrams)
@@ -320,7 +320,7 @@ Each framework section includes links to:
 **Latest:** GA (March 10, 2025 - Multi-Agent Collaboration)
 
 - [📂 Bedrock Guide](../Amazon_Bedrock_Agents_Guide/)
-- [📖 README](../Amazon_Bedrock_Agents_Guide/README)
+- [📖 README](../Amazon_Bedrock_Agents_Guide/README.md)
 - [📚 Comprehensive](../Amazon_Bedrock_Agents_Guide/bedrock_agents_comprehensive_guide)
 - [🚀 Production](../Amazon_Bedrock_Agents_Guide/bedrock_agents_production_guide)
 - [🎨 Diagrams](../Amazon_Bedrock_Agents_Guide/bedrock_agents_diagrams)
@@ -341,7 +341,7 @@ Each framework section includes links to:
 **Latest:** v1.9.11 (May 27, 2025 Launch)
 
 - [📂 Mistral Guide](../Mistral_Agents_API_Guide/)
-- [📖 README](../Mistral_Agents_API_Guide/README)
+- [📖 README](../Mistral_Agents_API_Guide/README.md)
 - [🗺️ GUIDE_INDEX](../Mistral_Agents_API_Guide/GUIDE_INDEX)
 - [📚 Comprehensive/Diagrams](../Mistral_Agents_API_Guide/mistral_agents_api_comprehensive_guide)
 - [🚀 Production](../Mistral_Agents_API_Guide/mistral_agents_api_production_guide)

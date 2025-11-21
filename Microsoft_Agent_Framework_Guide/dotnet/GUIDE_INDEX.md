@@ -10,7 +10,7 @@
 ## 🎯 Quick Navigation
 
 ### **For Beginners: Start Here**
-1. Read **[README.md](README)** - Overview and setup (10 min)
+1. Read **[README.md](README.md)** - Overview and setup (10 min)
 2. Study **[Comprehensive Guide - Introduction & Core Fundamentals](microsoft_agent_framework_dotnet_comprehensive_guide.md#introduction)** (1-2 hours)
 3. Try **[Recipes - Beginner Section](microsoft_agent_framework_dotnet_recipes.md#beginner-recipes)** - Copy-paste examples (30 min)
 
@@ -286,7 +286,7 @@
 
 **Goal:** Build your first agent and understand basics
 
-1. **[README.md](README)** - Setup & Overview (1 hour)
+1. **[README.md](README.md)** - Setup & Overview (1 hour)
    - Install .NET SDK and tools
    - Setup Azure credentials
    - Verify installation

@@ -438,7 +438,7 @@ if __name__ == "__main__":
 - [Discussion Forum](https://github.com/microsoft/semantic-kernel/discussions)
 
 ### Related Frameworks
-- [LangChain Python](../LangChain_Guide/)
+- [LangGraph Guide](../LangGraph_Guide/)
 - [AutoGen Guide](../AutoGen_Guide/)
 - [CrewAI Guide](../CrewAI_Guide/)
 

@@ -34,7 +34,7 @@ print(result)
 ```
 
 **Next Steps**:
-1. Read [SmolAgents README](../SmolAgents_Guide/README)
+1. Read [SmolAgents README](../SmolAgents_Guide/README.md)
 2. Try more [SmolAgents Recipes](../SmolAgents_Guide/smolagents_recipes)
 3. Deep dive: [SmolAgents Comprehensive Guide](../SmolAgents_Guide/smolagents_comprehensive_guide)
 
@@ -83,7 +83,7 @@ print(result)
 ```
 
 **Next Steps**:
-1. Read [CrewAI README](../CrewAI_Guide/README)
+1. Read [CrewAI README](../CrewAI_Guide/README.md)
 2. Try more [CrewAI Recipes](../CrewAI_Guide/crewai_recipes)
 3. Deep dive: [CrewAI Comprehensive Guide](../CrewAI_Guide/crewai_comprehensive_guide)
 
@@ -121,7 +121,7 @@ print(result.final_output)
 ```
 
 **Next Steps**:
-1. Read [OpenAI Agents SDK README](../OpenAI_Agents_SDK_Guides/README)
+1. Read [OpenAI Agents SDK README](../OpenAI_Agents_SDK_Guides/README.md)
 2. Try more [OpenAI Recipes](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_recipes)
 3. Deep dive: [OpenAI Comprehensive Guide](../OpenAI_Agents_SDK_Guides/openai_agents_sdk_comprehensive_guide)
 
@@ -151,7 +151,7 @@ print(response)
 ```
 
 **Next Steps**:
-1. Read [LlamaIndex README](../LlamaIndex_Guide/README)
+1. Read [LlamaIndex README](../LlamaIndex_Guide/README.md)
 2. Try more [LlamaIndex Recipes](../LlamaIndex_Guide/llamaindex_recipes)
 3. Deep dive: [LlamaIndex Comprehensive Guide](../LlamaIndex_Guide/llamaindex_comprehensive_guide)
 
@@ -195,7 +195,7 @@ print(result)
 ```
 
 **Next Steps**:
-1. Read [LangGraph README](../LangGraph_Guide/README)
+1. Read [LangGraph README](../LangGraph_Guide/README.md)
 2. Try more [LangGraph Recipes](../LangGraph_Guide/python/langgraph_recipes)
 3. Deep dive: [LangGraph Comprehensive Guide](../LangGraph_Guide/python/langgraph_comprehensive_guide)
 

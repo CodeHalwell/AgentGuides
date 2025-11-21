@@ -459,7 +459,7 @@ var result = await kernel.InvokeAsync(function).ConfigureAwait(false);
 
 ### Related Frameworks
 - [AutoGen .NET](../AutoGen_Guide/)
-- [LangChain .NET](../LangChain_Guide/)
+- [LangGraph Guide](../LangGraph_Guide/)
 
 ---
 

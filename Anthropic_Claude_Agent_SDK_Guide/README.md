@@ -83,7 +83,7 @@ The definitive technical reference covering all core concepts, APIs, and feature
 
 ---
 
-### 2. **[anthropic_claude_agent_sdk_production_guide](anthropic_claude_agent_sdk_production_guide)**
+### 2. **[anthropic_claude_agent_sdk_production_guide](anthropic_claude_agent_sdk_production_guide.md)**
 Production-focused documentation for deploying agents safely and efficiently. Covers:
 - Error handling strategies and retry mechanisms
 - Rate limiting, budgeting, and cost optimisation [[memory:8527310]]
@@ -101,7 +101,7 @@ Production-focused documentation for deploying agents safely and efficiently. Co
 
 ---
 
-### 3. **[anthropic_claude_agent_sdk_diagrams](anthropic_claude_agent_sdk_diagrams)**
+### 3. **[anthropic_claude_agent_sdk_diagrams](anthropic_claude_agent_sdk_diagrams.md)**
 Visual architecture and flow diagrams using Markdown with ASCII art and conceptual layouts. Features:
 - Agent lifecycle and execution flow diagrams
 - Multi-agent orchestration patterns
@@ -118,7 +118,7 @@ Visual architecture and flow diagrams using Markdown with ASCII art and conceptu
 
 ---
 
-### 4. **[anthropic_claude_agent_sdk_recipes](anthropic_claude_agent_sdk_recipes)**
+### 4. **[anthropic_claude_agent_sdk_recipes](anthropic_claude_agent_sdk_recipes.md)**
 Production-ready code recipes, patterns, and real-world examples. Includes:
 - Simple hello-world examples
 - Data analysis and research agents

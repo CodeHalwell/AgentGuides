@@ -11,7 +11,7 @@
 This **original combined guide** has been **split into two separate, focused guides** for better developer experience:
 
 ### **For Python Developers**
-📁 **Use:** `../Microsoft_Agent_Framework_Python_Guide/`
+📁 **Use:** `./python/`
 
 **Why:** 
 - ✅ 100% Python-focused content
@@ -22,12 +22,12 @@ This **original combined guide** has been **split into two separate, focused gui
 
 **Start Here:**
 ```bash
-cd ../Microsoft_Agent_Framework_Python_Guide
+cd python
 # Read GUIDE_INDEX.md for navigation
 ```
 
 ### **For .NET Developers**
-📁 **Use:** `../Microsoft_Agent_Framework_DotNet_Guide/`
+📁 **Use:** `./dotnet/`
 
 **Why:**
 - ✅ 100% .NET/C#-focused content
@@ -38,7 +38,7 @@ cd ../Microsoft_Agent_Framework_Python_Guide
 
 **Start Here:**
 ```bash
-cd ../Microsoft_Agent_Framework_DotNet_Guide
+cd dotnet
 # Read GUIDE_INDEX.md for navigation
 ```
 
@@ -60,7 +60,7 @@ Microsoft_Agent_Framework_Guide/
 
 ### **New Structure (Platform-Specific)**
 ```
-Microsoft_Agent_Framework_Python_Guide/          [100% Python]
+python/          [100% Python]
 ├── GUIDE_INDEX.md                               [NEW - Navigation hub]
 ├── README.md                                    [Python-focused]
 ├── microsoft_agent_framework_python_comprehensive_guide.md
@@ -68,7 +68,7 @@ Microsoft_Agent_Framework_Python_Guide/          [100% Python]
 ├── microsoft_agent_framework_python_production_guide.md
 └── microsoft_agent_framework_python_diagrams.md
 
-Microsoft_Agent_Framework_DotNet_Guide/          [100% .NET]
+dotnet/          [100% .NET]
 ├── GUIDE_INDEX.md                               [NEW - Navigation hub]
 ├── README.md                                    [.NET-focused]
 ├── microsoft_agent_framework_dotnet_comprehensive_guide.md
@@ -98,16 +98,16 @@ Microsoft_Agent_Framework_DotNet_Guide/          [100% .NET]
 ## 📖 Documentation Map
 
 ### **If You're Learning Python:**
-1. Start: `../Microsoft_Agent_Framework_Python_Guide/GUIDE_INDEX.md`
-2. Setup: `../Microsoft_Agent_Framework_Python_Guide/README.md`
-3. Learn: `../Microsoft_Agent_Framework_Python_Guide/microsoft_agent_framework_python_comprehensive_guide.md`
-4. Practice: `../Microsoft_Agent_Framework_Python_Guide/microsoft_agent_framework_python_recipes.md`
+1. Start: `./python/GUIDE_INDEX.md`
+2. Setup: `./python/README.md`
+3. Learn: `./python/microsoft_agent_framework_python_comprehensive_guide.md`
+4. Practice: `./python/microsoft_agent_framework_python_recipes.md`
 
 ### **If You're Learning .NET:**
-1. Start: `../Microsoft_Agent_Framework_DotNet_Guide/GUIDE_INDEX.md`
-2. Setup: `../Microsoft_Agent_Framework_DotNet_Guide/README.md`
-3. Learn: `../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_comprehensive_guide.md`
-4. Practice: `../Microsoft_Agent_Framework_DotNet_Guide/microsoft_agent_framework_dotnet_recipes.md`
+1. Start: `./dotnet/GUIDE_INDEX.md`
+2. Setup: `./dotnet/README.md`
+3. Learn: `./dotnet/microsoft_agent_framework_dotnet_comprehensive_guide.md`
+4. Practice: `./dotnet/microsoft_agent_framework_dotnet_recipes.md`
 
 ---
 
@@ -193,8 +193,8 @@ A: Yes, they were created November 2025 and validated with Context7 and GitHub.
 
 ### **Resources**
 - **Summary:** See `../MICROSOFT_AGENT_FRAMEWORK_SPLIT_SUMMARY.md`
-- **Python Guide:** `../Microsoft_Agent_Framework_Python_Guide/`
-- **. NET Guide:** `../Microsoft_Agent_Framework_DotNet_Guide/`
+- **Python Guide:** `./python/`
+- **. NET Guide:** `./dotnet/`
 - **GitHub:** https://github.com/microsoft/agent-framework
 
 ### **Questions?**
@@ -210,13 +210,13 @@ A: Yes, they were created November 2025 and validated with Context7 and GitHub.
 
 #### **Python Developer**
 ```bash
-cd ../Microsoft_Agent_Framework_Python_Guide
+cd python
 open GUIDE_INDEX.md
 ```
 
 #### **.NET Developer**
 ```bash
-cd ../Microsoft_Agent_Framework_DotNet_Guide
+cd dotnet
 open GUIDE_INDEX.md
 ```
 

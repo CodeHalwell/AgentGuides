@@ -236,10 +236,10 @@ Build agents with Claude and the Anthropic SDK.
 Build agents with Claude using TypeScript.
 
 **Location**: `Anthropic_Claude_Agent_SDK_TypeScript_Guide/`
-- 📖 [Comprehensive Guide](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_comprehensive_guide.md)
-- 🚀 [Production Guide](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_production_guide.md)
-- 🏗️ [Diagrams Guide](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_diagrams.md)
-- 👨‍💻 [Recipes](./Anthrpic\ Claude_Agent_SDK_Typescript_Guide/claude_agent_sdk_typescript_recipes.md)
+- 📖 [Comprehensive Guide](./Anthropic_Claude_Agent_SDK_TypeScript_Guide/claude_agent_sdk_typescript_comprehensive_guide.md)
+- 🚀 [Production Guide](./Anthropic_Claude_Agent_SDK_TypeScript_Guide/claude_agent_sdk_typescript_production_guide.md)
+- 🏗️ [Diagrams Guide](./Anthropic_Claude_Agent_SDK_TypeScript_Guide/claude_agent_sdk_typescript_diagrams.md)
+- 👨‍💻 [Recipes](./Anthropic_Claude_Agent_SDK_TypeScript_Guide/claude_agent_sdk_typescript_recipes.md)
 
 ---
 
