@@ -10,7 +10,7 @@ Welcome to the **Mistral Agents API Comprehensive Guide** – the most extensive
 
 This comprehensive documentation suite consists of eight detailed documents covering the May 2025 launch features:
 
-### 1. **mistral_agents_api_comprehensive_guide.md** (Core Knowledge)
+### 1. **[mistral_agents_api_comprehensive_guide.md](./mistral_agents_api_comprehensive_guide.md)** (Core Knowledge)
 The ultimate reference covering all aspects of the Mistral Agents API:
 - **Core Fundamentals**: Platform setup, API keys, architecture, supported models, and configuration
 - **Simple Agents**: Basic agent creation, instructions, single-task execution, synchronous calls
@@ -25,7 +25,7 @@ The ultimate reference covering all aspects of the Mistral Agents API:
 - **Deployment Patterns**: Direct platform deployment, scaling, cost management
 - **Advanced Topics**: Streaming, rate limiting, monitoring, testing, security
 
-### 2. **mistral_agents_api_diagrams.md** (Visual Architecture)
+### 2. **[mistral_agents_api_diagrams.md](./mistral_agents_api_diagrams.md)** (Visual Architecture)
 Comprehensive visual representations of:
 - Agent lifecycle and deployment architecture
 - Conversation flow and memory management
@@ -35,7 +35,7 @@ Comprehensive visual representations of:
 - MCP integration patterns
 - Memory persistence architecture
 
-### 3. **mistral_agents_api_production_guide.md** (Enterprise Deployment)
+### 3. **[mistral_agents_api_production_guide.md](./mistral_agents_api_production_guide.md)** (Enterprise Deployment)
 Production-ready best practices including:
 - Infrastructure setup and configuration
 - Scaling strategies and load balancing
@@ -48,7 +48,7 @@ Production-ready best practices including:
 - Database design for conversation storage
 - Rate limiting implementation
 
-### 4. **mistral_agents_api_recipes.md** (Ready-to-Use Patterns)
+### 4. **[mistral_agents_api_recipes.md](./mistral_agents_api_recipes.md)** (Ready-to-Use Patterns)
 Copy-paste ready code examples for:
 - Building web search agents
 - Multi-agent systems without external frameworks

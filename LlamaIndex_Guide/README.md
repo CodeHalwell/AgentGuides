@@ -246,10 +246,10 @@ LlamaIndex_Guide/
 ├── python/
 │   ├── README.md
 │   ├── GUIDE_INDEX.md
-│   ├── llamaindex_comprehensive_guide.md (350+ examples)
-│   ├── llamaindex_diagrams.md (30+ diagrams)
-│   ├── llamaindex_production_guide.md
-│   ├── llamaindex_recipes.md (10 recipes)
+│   ├── [llamaindex_comprehensive_guide.md](./python/llamaindex_comprehensive_guide.md) (350+ examples)
+│   ├── [llamaindex_diagrams.md](./python/llamaindex_diagrams.md) (30+ diagrams)
+│   ├── [llamaindex_production_guide.md](./python/llamaindex_production_guide.md)
+│   ├── [llamaindex_recipes.md](./python/llamaindex_recipes.md) (10 recipes)
 │   ├── llamaindex_advanced_implementations.md
 │   ├── llamaindex_advanced_agents_python.md
 │   ├── llamaindex_observability_python.md
@@ -258,9 +258,9 @@ LlamaIndex_Guide/
 └── typescript/
     ├── README.md
     ├── GUIDE_INDEX.md
-    ├── llamaindex_workflows_typescript_comprehensive_guide.md (200+ examples)
-    ├── llamaindex_typescript_production_guide.md
-    └── llamaindex_typescript_recipes.md (10 recipes)
+    ├── [llamaindex_workflows_typescript_comprehensive_guide.md](./typescript/llamaindex_workflows_typescript_comprehensive_guide.md) (200+ examples)
+    ├── [llamaindex_typescript_production_guide.md](./typescript/llamaindex_typescript_production_guide.md)
+    └── [llamaindex_typescript_recipes.md](./typescript/llamaindex_typescript_recipes.md) (10 recipes)
 ```
 
 ---

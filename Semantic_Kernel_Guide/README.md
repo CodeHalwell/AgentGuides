@@ -79,7 +79,7 @@ The **Microsoft Agent Framework** (Preview) is a unified SDK that brings togethe
 ### 📚 Language-Agnostic Core Documentation
 **General concepts and patterns applicable to all languages**
 
-### 1. **semantic_kernel_comprehensive_guide.md** (14 sections, 50,000+ tokens)
+### 1. **[semantic_kernel_comprehensive_guide.md](./semantic_kernel_comprehensive_guide.md)** (14 sections, 50,000+ tokens)
 
 The foundational reference covering:
 
@@ -105,7 +105,7 @@ The foundational reference covering:
 - Azure-specific configuration and patterns
 - All planner types with complete implementations
 
-### 2. **semantic_kernel_diagrams.md** (10 sections)
+### 2. **[semantic_kernel_diagrams.md](./semantic_kernel_diagrams.md)** (10 sections)
 
 Visual representations of key architectural concepts:
 
@@ -127,7 +127,7 @@ Visual representations of key architectural concepts:
 - Component hierarchies
 - Sequence diagrams
 
-### 3. **semantic_kernel_production_guide.md** (9 sections, 40,000+ tokens)
+### 3. **[semantic_kernel_production_guide.md](./semantic_kernel_production_guide.md)** (9 sections, 40,000+ tokens)
 
 Production-ready deployment, operations, and performance patterns:
 
@@ -149,7 +149,7 @@ Production-ready deployment, operations, and performance patterns:
 - Polly resilience policies
 - Cost tracking and optimisation
 
-### 4. **semantic_kernel_recipes.md** (30+ practical examples)
+### 4. **[semantic_kernel_recipes.md](./semantic_kernel_recipes.md)** (30+ practical examples)
 
 Ready-to-use code recipes for common patterns:
 

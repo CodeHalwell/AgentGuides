@@ -64,7 +64,7 @@ Latest TypeScript-specific features and improvements:
 - Production features (error handling, cost tracking)
 
 ### 1. **Comprehensive Guide**
-**openai_agents_sdk_typescript_comprehensive_guide.md**
+**[openai_agents_sdk_typescript_comprehensive_guide.md](./openai_agents_sdk_typescript_comprehensive_guide.md)**
 **Beginner → Expert | ~80+ pages | Complete Reference**
 
 The complete technical reference covering all aspects of the OpenAI Agents SDK with TypeScript:
@@ -99,7 +99,7 @@ The complete technical reference covering all aspects of the OpenAI Agents SDK w
 ---
 
 ### 2. **Production Guide**
-**openai_agents_sdk_typescript_production_guide.md**
+**[openai_agents_sdk_typescript_production_guide.md](./openai_agents_sdk_typescript_production_guide.md)**
 **Enterprise Focus | Reliability & Scale**
 
 Enterprise-grade patterns and best practices for production deployments:
@@ -169,7 +169,7 @@ Enterprise-grade patterns and best practices for production deployments:
 ---
 
 ### 3. **Practical Recipes**
-**openai_agents_sdk_typescript_recipes.md**
+**[openai_agents_sdk_typescript_recipes.md](./openai_agents_sdk_typescript_recipes.md)**
 **Copy-Paste Ready | 18+ Real-World Examples**
 
 Battle-tested implementations for common scenarios:
@@ -220,7 +220,7 @@ Battle-tested implementations for common scenarios:
 ---
 
 ### 4. **Architecture Diagrams**
-**openai_agents_sdk_typescript_diagrams.md**
+**[openai_agents_sdk_typescript_diagrams.md](./openai_agents_sdk_typescript_diagrams.md)**
 **Visual Reference | ASCII Diagrams & Flowcharts**
 
 Visual representations of architecture and patterns:

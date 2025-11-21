@@ -16,7 +16,7 @@ ADK is an open-source, code-first Python framework optimised for building sophis
 
 ## 📚 Documentation Files
 
-### 1. **google_adk_comprehensive_guide.md** (15,000+ lines)
+### 1. **[google_adk_comprehensive_guide.md](./google_adk_comprehensive_guide.md)** (15,000+ lines)
 The complete technical reference covering everything from basics to advanced topics.
 
 **Sections:**
@@ -37,7 +37,7 @@ The complete technical reference covering everything from basics to advanced top
 
 **Best for:** Learning all aspects of ADK, reference implementation patterns, understanding architectural decisions.
 
-### 2. **google_adk_production_guide.md** (8,000+ lines)
+### 2. **[google_adk_production_guide.md](./google_adk_production_guide.md)** (8,000+ lines)
 Enterprise-focused guide for production deployments and operations.
 
 **Sections:**
@@ -63,7 +63,7 @@ Enterprise-focused guide for production deployments and operations.
 
 **Best for:** Deploying agents to production, optimising performance and costs, implementing security controls, establishing monitoring.
 
-### 3. **google_adk_diagrams.md** (1,500+ lines)
+### 3. **[google_adk_diagrams.md](./google_adk_diagrams.md)** (1,500+ lines)
 Visual architecture representations and flowcharts.
 
 **Diagrams included:**
@@ -85,7 +85,7 @@ Visual architecture representations and flowcharts.
 
 **Best for:** Understanding system architecture visually, planning implementations, communicating designs to stakeholders.
 
-### 4. **google_adk_recipes.md** (4,000+ lines)
+### 4. **[google_adk_recipes.md](./google_adk_recipes.md)** (4,000+ lines)
 Real-world implementation examples and practical use cases.
 
 **Recipes included:**

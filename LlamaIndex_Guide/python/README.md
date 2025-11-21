@@ -503,10 +503,10 @@ After working through this documentation, you'll be able to:
 
 ```
 LlamaIndex_Guide/
-├── llamaindex_comprehensive_guide.md    (Core reference)
-├── llamaindex_diagrams.md               (Visual guides)
-├── llamaindex_production_guide.md       (Deployment)
-├── llamaindex_recipes.md                (Examples)
+├── [llamaindex_comprehensive_guide.md](./llamaindex_comprehensive_guide.md)    (Core reference)
+├── [llamaindex_diagrams.md](./llamaindex_diagrams.md)               (Visual guides)
+├── [llamaindex_production_guide.md](./llamaindex_production_guide.md)       (Deployment)
+├── [llamaindex_recipes.md](./llamaindex_recipes.md)                (Examples)
 └── README.md                             (This file)
 ```
 

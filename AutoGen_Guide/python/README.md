@@ -12,7 +12,7 @@ This documentation suite provides everything needed to master AG2, from absolute
 
 ## 📚 Guide Structure
 
-### 1. **ag2_comprehensive_guide.md** - Core Knowledge
+### 1. **[ag2_comprehensive_guide.md](./autogen_comprehensive_guide.md)** - Core Knowledge
 **Target Audience:** Everyone (start here if new)
 
 This is the main technical reference covering:
@@ -32,7 +32,7 @@ This is the main technical reference covering:
 
 ---
 
-### 2. **ag2_production_guide.md** - Enterprise-Grade Patterns
+### 2. **[ag2_production_guide.md](./autogen_production_guide.md)** - Enterprise-Grade Patterns
 **Target Audience:** Developers building production systems
 
 Focuses on deploying AG2 at scale:
@@ -54,7 +54,7 @@ Focuses on deploying AG2 at scale:
 
 ---
 
-### 3. **ag2_recipes.md** - Working Tutorials
+### 3. **[ag2_recipes.md](./autogen_recipes.md)** - Working Tutorials
 **Target Audience:** Hands-on learners, project builders
 
 Ten complete, self-contained working examples:
@@ -76,7 +76,7 @@ Ten complete, self-contained working examples:
 
 ---
 
-### 4. **ag2_diagrams.md** - Visual Architecture
+### 4. **[ag2_diagrams.md](./autogen_diagrams.md)** - Visual Architecture
 **Target Audience:** Visual learners, architects
 
 Comprehensive ASCII diagrams and flowcharts:

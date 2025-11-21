@@ -458,9 +458,9 @@ After working through this documentation, you'll be able to:
 
 ```
 LlamaIndex_Guide/typescript/
-├── llamaindex_workflows_typescript_comprehensive_guide.md
-├── llamaindex_typescript_production_guide.md
-├── llamaindex_typescript_recipes.md
+├── [llamaindex_workflows_typescript_comprehensive_guide.md](./llamaindex_workflows_typescript_comprehensive_guide.md)
+├── [llamaindex_typescript_production_guide.md](./llamaindex_typescript_production_guide.md)
+├── [llamaindex_typescript_recipes.md](./llamaindex_typescript_recipes.md)
 ├── GUIDE_INDEX.md
 └── README.md (This file)
 ```

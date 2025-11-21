@@ -8,7 +8,7 @@ This comprehensive documentation suite provides an exhaustive exploration of Lan
 
 This guide consists of multiple specialised documents designed to take you from fundamental concepts through to production-ready implementations:
 
-### 1. **langchain_langgraph_comprehensive_guide.md** (Core Reference)
+### 1. **[langchain_langgraph_comprehensive_guide.md](./langchain_langgraph_comprehensive_guide.md)** (Core Reference)
 The foundational reference document containing:
 - Complete installation and setup instructions
 - Core fundamentals of both LangChain.js and LangGraph.js
@@ -17,7 +17,7 @@ The foundational reference document containing:
 - Beginner-friendly explanations with progressive complexity
 - Deep dives into memory systems, state management, and orchestration patterns
 
-### 2. **langchain_langgraph_diagrams.md** (Visual Architecture Reference)
+### 2. **[langchain_langgraph_diagrams.md](./langchain_langgraph_diagrams.md)** (Visual Architecture Reference)
 Visual representations including:
 - Mermaid diagrams for graph structures and workflows
 - State flow visualisations for complex applications
@@ -26,7 +26,7 @@ Visual representations including:
 - Conditional logic flow charts
 - Reference architecture diagrams for various patterns
 
-### 3. **langchain_langgraph_production_guide.md** (Deployment and Operations)
+### 3. **[langchain_langgraph_production_guide.md](./langchain_langgraph_production_guide.md)** (Deployment and Operations)
 Production-focused guidance covering:
 - Environment configuration for various deployment targets
 - Performance optimisation strategies

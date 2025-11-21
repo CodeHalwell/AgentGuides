@@ -6,7 +6,7 @@ Welcome to the comprehensive technical guide for **SmolAgents** – the lightwei
 
 This guide consists of four interconnected documents, each serving a specific purpose:
 
-### 1. **smolagents_comprehensive_guide.md** (MAIN REFERENCE)
+### 1. **[smolagents_comprehensive_guide.md](./smolagents_comprehensive_guide.md)** (MAIN REFERENCE)
    - **Purpose**: Complete technical reference for all SmolAgents concepts
    - **Best for**: Learning the framework from fundamentals to advanced topics
    - **Contains**:
@@ -22,7 +22,7 @@ This guide consists of four interconnected documents, each serving a specific pu
      - Comparison with other frameworks
    - **Read this**: First, to understand concepts deeply
 
-### 2. **smolagents_diagrams.md** (VISUAL REFERENCE)
+### 2. **[smolagents_diagrams.md](./smolagents_diagrams.md)** (VISUAL REFERENCE)
    - **Purpose**: ASCII diagrams and visual representations
    - **Best for**: Understanding architecture & workflows visually
    - **Contains**:
@@ -36,7 +36,7 @@ This guide consists of four interconnected documents, each serving a specific pu
      - Deployment architecture
    - **Read this**: When you need visual understanding
 
-### 3. **smolagents_production_guide.md** (DEPLOYMENT GUIDE)
+### 3. **[smolagents_production_guide.md](./smolagents_production_guide.md)** (DEPLOYMENT GUIDE)
    - **Purpose**: Production deployment, scaling & operations
    - **Best for**: Building production-grade systems
    - **Contains**:
@@ -52,7 +52,7 @@ This guide consists of four interconnected documents, each serving a specific pu
      - Weights & Biases Weave integration
    - **Read this**: Before deploying to production
 
-### 4. **smolagents_recipes.md** (PRACTICAL EXAMPLES)
+### 4. **[smolagents_recipes.md](./smolagents_recipes.md)** (PRACTICAL EXAMPLES)
    - **Purpose**: Ready-to-use code patterns for common tasks
    - **Best for**: Copy-paste starting points for implementations
    - **Contains**:
