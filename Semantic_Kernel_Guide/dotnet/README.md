@@ -4,7 +4,7 @@
 
 Last Updated: November 2025
 .NET Version: 6.0+
-Semantic Kernel .NET: 1.38.0+
+Semantic Kernel .NET: 1.67.1+
 
 ---
 
@@ -468,7 +468,7 @@ var result = await kernel.InvokeAsync(function).ConfigureAwait(false);
 | Component | Minimum Version | Recommended |
 |-----------|----------------|-------------|
 | .NET | 6.0 | 8.0+ |
-| Microsoft.SemanticKernel | 1.0.0 | 1.38.0+ |
+| Microsoft.SemanticKernel | 1.0.0 | 1.67.1+ |
 | C# | 10.0 | 12.0+ |
 | Azure.Identity | 1.10.0 | Latest |
 | Polly | 8.0.0 | Latest |

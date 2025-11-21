@@ -480,7 +480,7 @@ These guides are comprehensive educational materials covering the official Claud
 
 ---
 
-**Version:** 1.0  
+**Version:** 0.1.6  
 **Last Updated:** 2025  
 **Status:** Complete & Maintained
 

@@ -8,8 +8,8 @@ Comprehensive technical documentation for LlamaIndex—the leading framework for
 
 ## 🆕 What's New in 2025
 
-### Workflows 1.0
-Both Python and TypeScript implementations now feature **Workflows 1.0**, a powerful event-driven orchestration system:
+### Workflows 2.x
+Both Python and TypeScript implementations now feature **Workflows 2.x**, a powerful event-driven orchestration system:
 
 - **Event-Driven Architecture** - Build reactive, loosely-coupled agent systems
 - **Async-First Design** - High-performance asynchronous workflows
@@ -320,7 +320,7 @@ This documentation is community-maintained. Contributions welcome!
 
 **Happy building with LlamaIndex! 🦙**
 
-*Last updated: January 2025*
+*Last updated: November 2025*
 *Python version: 0.14.8+*
 *TypeScript version: 0.5.0+*
 *Workflows 1.0: Available in both languages*

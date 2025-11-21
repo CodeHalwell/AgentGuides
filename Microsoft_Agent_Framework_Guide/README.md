@@ -3,7 +3,7 @@
 
 **Release Date:** October 2025
 **Framework Status:** Public Preview (Unified SDK)
-**Supported Platforms:** .NET, Python, TypeScript
+**Supported Platforms:** .NET, Python
 **Latest Version:** 1.0+
 
 ---
@@ -65,7 +65,17 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
-### **2. [microsoft_agent_framework_diagrams.md](./microsoft_agent_framework_diagrams.md)**
+### **2. Language-Specific Guides**
+
+#### **[.NET Guide](./dotnet/README.md)**
+Comprehensive documentation for C#/.NET developers, including installation, configuration, and advanced patterns.
+
+#### **[Python Guide](./python/README.md)**
+Complete guide for Python developers, covering installation, async patterns, and data science integration.
+
+---
+
+### **3. [microsoft_agent_framework_diagrams.md](./microsoft_agent_framework_diagrams.md)**
 **Visual architecture reference** - System flows and topology diagrams
 
 - **System Architecture:** Layered design, component relationships
@@ -82,7 +92,7 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
-### **3. [microsoft_agent_framework_production_guide.md](./microsoft_agent_framework_production_guide.md)**
+### **4. [microsoft_agent_framework_production_guide.md](./microsoft_agent_framework_production_guide.md)**
 **Enterprise deployment & operations** - ~12,000+ words
 
 - **Production Deployment:** Azure Container Apps, Kubernetes, CI/CD
@@ -98,7 +108,7 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
-### **4. [microsoft_agent_framework_recipes.md](./microsoft_agent_framework_recipes.md)**
+### **5. [microsoft_agent_framework_recipes.md](./microsoft_agent_framework_recipes.md)**
 **Copy-paste ready code patterns** - ~5,000+ words
 
 - **Beginner Recipes:** Simple chat agent, single tool, error handling
@@ -111,7 +121,7 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
-### **5. [microsoft_agent_framework_a2a_protocol.md](./microsoft_agent_framework_a2a_protocol.md)** 🆕
+### **6. [microsoft_agent_framework_a2a_protocol.md](./microsoft_agent_framework_a2a_protocol.md)** 🆕
 **Agent2Agent Protocol specification** - ~8,000+ words
 
 - **Core Concepts:** Message structure, protocol components, framework registration
@@ -126,7 +136,7 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
-### **6. [microsoft_agent_framework_graphs_declarative.md](./microsoft_agent_framework_graphs_declarative.md)** 🆕
+### **7. [microsoft_agent_framework_graphs_declarative.md](./microsoft_agent_framework_graphs_declarative.md)** 🆕
 **Graph workflows and declarative configuration** - ~10,000+ words
 
 - **Graph-Based Workflows:** Directed graphs, conditional routing, parallel execution
@@ -141,7 +151,7 @@ This comprehensive guide collection is designed to take you from beginner to exp
 
 ---
 
-### **7. [microsoft_agent_framework_enterprise_2025.md](./microsoft_agent_framework_enterprise_2025.md)** 🆕
+### **8. [microsoft_agent_framework_enterprise_2025.md](./microsoft_agent_framework_enterprise_2025.md)** 🆕
 **Enterprise features and compliance** - ~9,000+ words
 
 - **OpenTelemetry Instrumentation:** Distributed tracing, metrics, custom spans
@@ -241,12 +251,7 @@ dotnet add package Azure.AI.OpenAI
 dotnet add package Azure.Identity
 ```
 
-### **TypeScript Quick Start**
 
-```bash
-npm init -y
-npm install @microsoft/agents-ai @azure/identity @azure/openai
-```
 
 ---
 
@@ -368,7 +373,7 @@ After completing all four documents, you'll be able to:
 - ✓ Understand tool integration and MCP standards
 
 **Skills:**
-- ✓ Create and deploy agents in Python, .NET, TypeScript
+- ✓ Create and deploy agents in Python, .NET
 - ✓ Build multi-agent orchestrated systems
 - ✓ Integrate with Azure services and custom APIs
 - ✓ Implement RAG and advanced patterns

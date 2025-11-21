@@ -119,19 +119,6 @@ print(result.final_output)
 |---------|----------------------|---------------------------|
 | **Status** | Experimental | Production-Ready |
 | **Guardrails** | None | Built-in Input/Output |
-| **Tracing** | Basic | Comprehensive + Visualization |
-| **Sessions** | Manual | Automatic (SQLite/Redis/OpenAI) |
-| **Providers** | OpenAI only | 100+ via LiteLLM |
-| **MCP Support** | None | First-class |
-| **Maintenance** | Deprecated | Active Development |
-
-### Core Primitives (The Six Building Blocks)
-1. **Agent**: An LLM configured with instructions, tools, and guardrails
-2. **Handoff**: Mechanism for transferring control between specialised agents
-3. **Tool**: Functions agents can call with automatic Pydantic schema generation
-4. **Guardrail**: Input/output validation for safety and compliance
-5. **Session**: Automatic conversation history management (multiple backends)
-6. **Runner**: The orchestrator executing the agent loop
 
 ### Design Philosophy
 The SDK emphasises:

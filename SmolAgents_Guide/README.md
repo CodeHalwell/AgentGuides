@@ -318,4 +318,11 @@ SmolAgents is open source and community-driven:
 **SmolAgents**: The framework for building intelligent agents with minimal abstractions and maximum capability. Let's build the future of AI, one line of code at a time.
 
 **Happy agent building! 🤖✨**
+ 
+ ---
+ 
+ ## Version Information
+ 
+ **Last Updated**: November 2025
+ **Version**: 1.23.0
 

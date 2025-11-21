@@ -379,7 +379,8 @@ Welcome to the future of collaborative AI systems!
 - **Recipes Guide**: 10 complete real-world implementation examples
 - **Total Content**: Over 5000 lines of documentation with 100+ code examples
 
-**Last Updated**: 2024/2025
+**Last Updated**: November 2025
+**Version**: 1.5.0
 
 ---
 

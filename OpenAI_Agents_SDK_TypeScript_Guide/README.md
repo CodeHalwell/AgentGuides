@@ -2,9 +2,9 @@
 
 **🎯 PRODUCTION-READY | TypeScript-First | Official Swarm Replacement**
 
-**Version:** 2.0
+**Version:** 0.3.2
 **Status:** Production-Ready with 2025 Features
-**Last Updated:** January 2025
+**Last Updated:** November 2025
 **Language:** TypeScript 5.0+
 **Framework:** OpenAI Agents SDK
 
@@ -762,8 +762,8 @@ Happy building! 🚀
 
 ---
 
-**Version 2.0 - 2025 Edition**
-**Updated: January 2025**
+**Version 0.3.2 - 2025 Edition**
+**Updated: November 2025**
 **Focus: TypeScript 5.0+ | Production Ready | Official Swarm Replacement**
 **Status: ✅ Production-Ready | 🆕 2025 Features | 🎯 TypeScript-First**
 

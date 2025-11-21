@@ -1,4 +1,4 @@
-Latest: 0.72.1
+Latest: 0.1.6
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**

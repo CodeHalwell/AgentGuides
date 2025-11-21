@@ -1,6 +1,6 @@
 # Google Agent Development Kit (ADK) - Complete Documentation Suite
 
-**Version:** 1.0  
+**Version:** 1.19.0  
 **Last Updated:** November 2025  
 **Focus:** Comprehensive, Practical, Production-Ready
 

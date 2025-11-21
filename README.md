@@ -82,6 +82,9 @@ Role-based multi-agent orchestration with specialised agents.
 Multi-agent conversation framework with automatic message routing.
 
 **Location**: `AG2_Guide/`
+
+**Start Here**: [README](./AG2_Guide/README.md)
+
 - 📖 [Comprehensive Guide](./AG2_Guide/ag2_comprehensive_guide.md)
 - 🚀 [Production Guide](./AG2_Guide/ag2_production_guide.md)
 - 🏗️ [Diagrams Guide](./AG2_Guide/ag2_diagrams.md)
@@ -180,6 +183,12 @@ Build agents using Amazon's managed foundation models.
 Enterprise agent framework with Azure integration.
 
 **Location**: `Microsoft_Agent_Framework_Guide/`
+
+**Start Here**: [README](./Microsoft_Agent_Framework_Guide/README.md)
+
+**Contents**:
+- 🐍 **[Python Guide](./Microsoft_Agent_Framework_Guide/python/README.md)**
+- 🔷 **[.NET Guide](./Microsoft_Agent_Framework_Guide/dotnet/README.md)**
 - 📖 [Comprehensive Guide](./Microsoft_Agent_Framework_Guide/microsoft_agent_framework_comprehensive_guide.md)
 - 🚀 [Production Guide](./Microsoft_Agent_Framework_Guide/microsoft_agent_framework_production_guide.md)
 - 🏗️ [Diagrams Guide](./Microsoft_Agent_Framework_Guide/microsoft_agent_framework_diagrams.md)
@@ -488,7 +497,7 @@ To add or update guides:
 
 ## 📅 Last Updated
 
-- **Updated**: November 2025
+- **Updated**: November 21, 2025
 - **OpenAI Agents SDK**: November 2024
 - **SmolAgents**: November 2024
 - **Other Frameworks**: Various dates (see individual guides)

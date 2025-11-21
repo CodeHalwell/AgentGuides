@@ -33,7 +33,7 @@ The Microsoft Agent Framework (October 2025 release) represents a unified, open-
 ### Key Objectives
 
 The framework addresses several critical objectives:
-- **Unified Development Experience:** Single SDK across multiple programming languages (.NET, Python, TypeScript)
+- **Unified Development Experience:** Single SDK across multiple programming languages (.NET, Python)
 - **Azure Ecosystem Integration:** Seamless integration with Azure AI services, Copilot Studio, and Semantic Kernel
 - **Enterprise Readiness:** Built-in observability, security features, and compliance tools
 - **Scalability:** Support for both simple single-purpose agents and complex multi-agent systems
@@ -116,18 +116,7 @@ pip install agent-framework-microsoft agent-framework-azure-ai --pre
 - Virtual environment recommended
 - Poetry or pip for package management
 
-#### **TypeScript/Node.js Installation**
 
-```bash
-# Core installation
-npm install @microsoft/agents-ai
-
-# With Azure support
-npm install @microsoft/agents-ai-azure @azure/openai @azure/identity
-
-# With OpenAI support
-npm install @microsoft/agents-ai-openai openai
-```
 
 ### Unified SDK Structure
 
@@ -219,18 +208,6 @@ credential = DefaultAzureCredential()
 async_credential = AsyncAzureCliCredential()
 ```
 
-#### **Role-Based Access Control (RBAC)**
-
-Agents operate under AAD-assigned roles that determine resource access:
-
-- **Agent Reader:** Read-only access to agent definitions
-- **Agent Contributor:** Create and modify agents
-- **Agent User:** Execute agents within defined scope
-- **Azure AI Project Admin:** Full project management
-
-```python
-from azure.identity import AzureCliCredential
-from azure.ai.projects.aio import AIProjectClient
 
 async with AzureCliCredential() as credential:
     async with AIProjectClient(

@@ -499,8 +499,8 @@ The goal is to be the most complete Haystack resource available while maintainin
 ---
 
 **Document Version**: 1.0  
-**Last Updated**: November 2024  
-**Haystack Version**: 2.16+  
+**Last Updated**: November 2025  
+**Haystack Version**: 2.20.0  
 **Python Version**: 3.9+  
 **Status**: Production Ready
 

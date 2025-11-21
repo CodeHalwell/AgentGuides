@@ -27,6 +27,12 @@ Semantic Kernel is an open-source software development kit (SDK) that enables de
 - **Extensible Design:** Custom connectors, memory stores, and planners
 - **2025 Features:** Model Context Protocol (MCP), Google A2A Protocol, Vector Store v1.34, Microsoft Agent Framework
 
+### Relationship with Microsoft Agent Framework
+
+The **Microsoft Agent Framework** (Preview) is a unified SDK that brings together Semantic Kernel and AutoGen into a cohesive platform. Semantic Kernel continues to be a core component for building AI agents, while the Agent Framework provides higher-level orchestration and unification.
+
+👉 **[View the Microsoft Agent Framework Guide](../Microsoft_Agent_Framework_Guide/README.md)**
+
 ---
 
 ## Quick Start by Language

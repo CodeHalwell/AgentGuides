@@ -1,6 +1,6 @@
 # Claude Agent SDK (TypeScript) - Complete Technical Guide (2025 Edition)
 
-**Version:** 2.0.0 (2025 Edition)
+**Version:** 0.1.30 (2025 Edition)
 **Target Audience:** Advanced TypeScript developers, AI engineers, systems architects
 **Status:** Production-Ready Guide with 2025 Features
 
@@ -320,7 +320,7 @@ const report = await audit.generateSecurityReport('./src');
 ### Core Dependencies
 ```json
 {
-  "@anthropic-ai/claude-agent-sdk": "^2.0.0",
+  "@anthropic-ai/claude-agent-sdk": "^0.1.30",
   "zod": "^3.22.0",
   "typescript": "^5.3.0"
 }
@@ -517,7 +517,7 @@ These guides are provided as comprehensive technical documentation for the Claud
 | **Styling** | British English (optimisation, analyse, etc.) [[memory:8527310]] |
 | **Format** | Markdown (GitHub-compatible) |
 | **Last Updated** | November 2025 |
-| **Compatibility** | Claude Agent SDK 1.0.0+ |
+| **Compatibility** | Claude Agent SDK 0.1.30+ |
 | **Target Audience** | Advanced TypeScript developers, architects, engineers |
 
 ---
