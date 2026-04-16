@@ -2,6 +2,36 @@
 
 > An extremely verbose, production-focused technical documentation covering Haystack from beginner to expert level, with emphasis on agentic AI, observability, and customisation.
 
+> **Current Version:** 2.27.0 (April 1, 2026) — previously 2.20.0 (November 2025)
+
+## 🆕 What's New in Haystack 2.21–2.27 (November 2025 → April 2026)
+
+### New Agent Features
+- **`SearchableToolset`** (v2.26): agents dynamically discover relevant tools from large catalogs using BM25 keyword search, reducing context usage
+- **`LLMRanker`** (v2.26): new ranking component using an LLM to rerank documents for higher retrieval quality
+- **`PipelineTool`** (v2.25/2.26): wrap an entire Haystack Pipeline as an LLM-compatible tool
+- **Runtime tool injection** (v2.25): pass a list of tool names or `Tool` objects directly to `agent.run()` for per-run tool subsets
+- **Jinja2-templated agent prompts** (v2.26): `user_prompt` and `required_variables` on the `Agent` component for dynamic prompts
+- **`AgentSnapshot` / breakpoint resumption**: resume an agent from a saved snapshot with a new breakpoint — enables stepwise debugging
+
+### New Document Processing
+- **`EmbeddingBasedDocumentSplitter`**: splits documents based on semantic similarity rather than fixed sizes
+- **`LLMDocumentContentExtractor`**: extracts both content and metadata from image-based documents
+
+### Framework Updates
+- **Transformers v5 support** (v2.25): compatible with both v4 and v5; faster model loading, improved quantization
+- **Native multi-output pipeline fan-in** (v2.24): connect multiple outputs to a single list-typed input
+- **`ChatMessage` internal restructuring**: downstream code that directly constructs `ChatMessage` objects may require updates
+
+## ⚠️ Breaking Changes
+
+### Python 3.9 Dropped
+Haystack 2.21+ requires **Python 3.10+**. Python 3.9 reached EOL in October 2025.
+
+### `ChatMessage` Internal Restructuring
+If you directly construct `ChatMessage` objects (instead of using the framework's helpers), review PR #8640 for changes to the internal field structure.
+
+
 [[memory:8527310]]
 
 ## Overview
@@ -498,11 +528,20 @@ The goal is to be the most complete Haystack resource available while maintainin
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: November 2025  
-**Haystack Version**: 2.20.0  
-**Python Version**: 3.9+  
+**Document Version**: 2.0  
+**Last Updated**: April 16, 2026  
+**Haystack Version**: 2.27.0  
+**Python Version**: 3.10+  
 **Status**: Production Ready
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 2.27.0 | Updated to v2.27.0; added SearchableToolset, LLMRanker, PipelineTool sections; documented Python 3.9 deprecation; ChatMessage restructuring note; transformers v5 support |
+| November 2025 | 2.20.0 | Initial comprehensive guide |
 
 
 ## Advanced Guides

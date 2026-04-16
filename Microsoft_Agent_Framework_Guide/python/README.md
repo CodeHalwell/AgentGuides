@@ -425,3 +425,12 @@ Choose your path above and dive in! Start with the [Comprehensive Guide](./micro
 
 ## Advanced Guides
 - [microsoft_agent_framework_python_advanced.md](microsoft_agent_framework_python_advanced.md)
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.0 GA | GA 1.0 release; `--prerelease` flags removed; first-party connectors; Azure App Service support |
+| November 2025 | 1.0 Preview | Initial Python guide; agents; tool integration; multi-agent patterns; streaming |

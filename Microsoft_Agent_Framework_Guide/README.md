@@ -1,14 +1,40 @@
 # Microsoft Agent Framework - Complete Guide Collection
-## October 2025 Release - Enterprise-Grade Documentation
+## April 2026 - GA 1.0 Release
 
-**Release Date:** October 2025
-**Framework Status:** Public Preview (Unified SDK)
+**GA Release Date:** April 3–7, 2026 (previously Preview since October 2025)
+**Framework Status:** ✅ Production-Ready — GA 1.0 with Long-Term Support
 **Supported Platforms:** .NET, Python
-**Latest Version:** 1.0+
+**Latest Version:** 1.0 GA
+
+> **Status Update:** Microsoft Agent Framework has graduated from Public Preview to **GA 1.0** as of April 3–7, 2026. The `--prerelease` flag is no longer needed; install with `pip install agent-framework`.
+
+## ⚠️ Migration Notes from Preview to GA 1.0
+
+- **`ChatClientAgentOptions.Instructions` removed** — pass instructions directly to the `ChatClientAgent` constructor.
+- **Dependency version floor changed** — packages now require `>=1.0.0,<2`; RC installs are incompatible.
+- **Package name changes** — use `agent-framework`, `agent-framework-core`, `agent-framework-openai` (not the preview names).
+- **Migration from standalone Semantic Kernel or AutoGen** — see the [official migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-semantic-kernel/). Microsoft estimates 2–4 hours for a typical app.
 
 ---
 
-## 🌟 NEW in October 2025 - Critical Features
+## 🌟 NEW in April 2026 - GA 1.0 Features
+
+### **Production-Ready with Stable APIs and LTS Commitment**
+Agent Framework 1.0 is now ready for production with stable APIs across both .NET and Python.
+
+### **First-Party Service Connectors**
+Swap LLM providers with a single line via the `IChatClient` interface:
+- Azure OpenAI, OpenAI, Anthropic Claude, Amazon Bedrock, Google Gemini, Ollama
+
+### **Unified Orchestration**
+Multi-agent patterns built-in: sequential, concurrent, handoff, group chat, and Magentic-One.
+
+### **Azure App Service Support**
+Deploy multi-agent apps to Azure App Service with native integration.
+
+---
+
+## 🌟 Features Added in October 2025 Preview
 
 ### **Agent2Agent (A2A) Protocol** 🔥
 Enable seamless collaboration between agents across different frameworks (OpenAI SDK, Claude SDK, LangGraph, Google ADK). Built-in authentication, cross-framework messaging, and remote agent communication.
@@ -33,11 +59,10 @@ Configure agents using YAML/JSON for version control and reusability. Supports t
 
 👉 **[Enterprise Features 2025 Guide](./microsoft_agent_framework_enterprise_2025.md)**
 
-### **Preview Status & Limitations**
-- **Current Status:** October 2025 Public Preview
-- **Production Readiness:** Beta - suitable for non-critical production workloads
-- **GA Timeline:** Expected Q2 2026
-- **Migration Support:** Comprehensive guides from Semantic Kernel and AutoGen
+### **GA Status**
+- **Current Status:** GA 1.0 — Production-Ready (April 3–7, 2026)
+- **Production Readiness:** Stable APIs, LTS commitment
+- **Migration Support:** Comprehensive guides from Semantic Kernel and AutoGen at [learn.microsoft.com](https://learn.microsoft.com/en-us/agent-framework/migration-guide/)
 
 ---
 
@@ -228,11 +253,11 @@ Complete guide for Python developers, covering installation, async patterns, and
 python -m venv agent_env
 source agent_env/bin/activate  # On Windows: agent_env\Scripts\activate
 
-# Install Agent Framework
-pip install agent-framework --pre
+# Install Agent Framework (GA - no --pre flag needed)
+pip install agent-framework
 
 # With Azure integration
-pip install agent-framework-azure-ai --pre
+pip install agent-framework-azure-ai
 
 # Verify installation
 python -c "import agent_framework; print('✓ Framework installed')"
@@ -246,7 +271,7 @@ dotnet new console -n MyAgentApp
 cd MyAgentApp
 
 # Add packages
-dotnet add package Microsoft.Agents.AI --prerelease
+dotnet add package Microsoft.Agents.AI
 dotnet add package Azure.AI.OpenAI
 dotnet add package Azure.Identity
 ```
@@ -429,10 +454,10 @@ These documentation materials are provided as-is for educational and reference p
 
 ---
 
-**Last Updated:** November 2025  
+**Last Updated:** April 16, 2026  
 **Maintained By:** AI Documentation Team  
-**Status:** Actively Maintained  
-**Next Review:** Q2 2026
+**Status:** Actively Maintained — GA 1.0  
+**Next Review:** Q3 2026
 
 ---
 
@@ -441,3 +466,12 @@ These documentation materials are provided as-is for educational and reference p
 Choose your path above and dive in! Start with the [Comprehensive Guide](./microsoft_agent_framework_comprehensive_guide.md) if this is your first time.
 
 **Happy building! 🎯**
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.0 GA | Updated to GA 1.0; `ChatClientAgentOptions.Instructions` removed; `--prerelease` flags removed; first-party connectors (Azure OpenAI, OpenAI, Anthropic, Bedrock, Gemini, Ollama); Azure App Service support |
+| November 2025 | 1.0 Preview | Initial guide; preview release; multi-agent orchestration; .NET and Python SDKs |

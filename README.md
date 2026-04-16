@@ -197,9 +197,12 @@ Enterprise agent framework with Azure integration.
 ---
 
 #### **Google ADK**
-Google's Agent Development Kit for intelligent applications.
+Google's Agent Development Kit — supports Python, TypeScript, Go, and Java.
 
 **Location**: `Google_ADK_Guide/`
+- 🐍 **[Python Guide](./Google_ADK_Guide/python/README.md)** (v1.30.0)
+- 🟦 **[TypeScript Guide](./Google_ADK_Guide/typescript/README.md)** (December 2025) ⭐ NEW
+- 🐹 **[Go Guide](./Google_ADK_Guide/go/README.md)** (v1.0.0 GA)
 - 📖 [Comprehensive Guide](./Google_ADK_Guide/google_adk_comprehensive_guide.md)
 - 🚀 [Production Guide](./Google_ADK_Guide/google_adk_production_guide.md)
 - 🏗️ [Diagrams Guide](./Google_ADK_Guide/google_adk_diagrams.md)
@@ -540,3 +543,12 @@ Please ensure all contributions:
 **Built with ❤️ for the AI agents community.**
 
 This collection represents comprehensive, production-ready documentation for building intelligent agents across multiple frameworks and platforms.
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 2.0 | Major update: all guides updated to latest versions; breaking changes documented; Google ADK TypeScript guide added; revision history added to all guides |
+| November 2025 | 1.0 | Initial release: 16+ framework guides covering Python, TypeScript, .NET, Go |

@@ -4,6 +4,8 @@
 
 ## Overview
 
+> **Current Version:** Python `claude-agent-sdk` 0.1.59 (April 13, 2026) — previously 0.1.6 (November 2025)
+
 The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive framework for building sophisticated, production-ready AI agents capable of executing complex tasks autonomously. This SDK enables developers to create agents that can:
 
 - 🖥️ **Control computers** through mouse, keyboard, and screen interactions
@@ -17,6 +19,33 @@ The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive
 - 🌐 **Automate general tasks** beyond coding (research, data processing, web automation)
 
 This guide collection provides **exhaustive coverage** from beginner concepts to advanced production deployment patterns.
+
+## 🆕 What's New in 2026 (v0.1.6 → v0.1.59)
+
+- **`get_context_usage()`**: query context window usage by category via `ClaudeSDKClient`
+- **`typing.Annotated` support**: add per-parameter descriptions directly in tool function signatures
+- **Structured outputs**: return validated Pydantic schemas from agents
+- **`reloadPlugins()`**: refresh commands, agents, and MCP server status at runtime
+- **Claude Code CLI bundled**: no separate CLI install required; custom CLI path still supported
+- **Fallback model handling**: improved reliability for model availability issues
+- **SDK beta flags**: pass `betas` option (e.g., `"context-1m-2025-08-07"`) for extended context
+- **`sandbox.failIfUnavailable` now defaults to `true`** when `sandbox.enabled = True`
+
+## ⚠️ Breaking Changes
+
+### Import Path Changed
+```python
+# BEFORE (broken)
+from claude_code_sdk import ClaudeCodeOptions, query
+
+# AFTER
+from claude_agent_sdk import ClaudeAgentOptions, query
+```
+
+### `sandbox` Default Changed
+When `sandbox.enabled = True`, `failIfUnavailable` now defaults to `True`. Set `failIfUnavailable=False` to restore silent degradation behavior.
+
+---
 
 ## 🆕 What's New in 2025
 
@@ -480,8 +509,17 @@ These guides are comprehensive educational materials covering the official Claud
 
 ---
 
-**Version:** 0.1.6  
-**Last Updated:** 2025  
+**Version:** 0.1.59  
+**Last Updated:** April 16, 2026  
 **Status:** Complete & Maintained
 
 Ready to build intelligent agents? Start reading the Comprehensive Guide →
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 0.1.59 | Updated to v0.1.59; `claude_code_sdk` → `claude_agent_sdk` import rename; `ClaudeCodeOptions` → `ClaudeAgentOptions`; structured outputs; `get_context_usage()`; `typing.Annotated` per-parameter descriptions; bundled CLI; fallback model handling |
+| November 2025 | 0.1.6 | Initial guide; agent creation; tool use; memory systems; production deployment |

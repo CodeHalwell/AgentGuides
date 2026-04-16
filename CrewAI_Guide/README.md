@@ -1,7 +1,50 @@
 # CrewAI Complete Technical Guide
 ## Comprehensive Documentation for Building Autonomous Multi-Agent Systems
 
+> **Current Version:** 1.14.0 (April 7, 2026) — previously 1.5.0 (November 2025)
+
 Welcome to the complete CrewAI technical documentation resource. This comprehensive guide covers everything from fundamental concepts to advanced production deployment of sophisticated multi-agent systems using CrewAI.
+
+## ⚠️ Breaking Changes Since v1.5.0
+
+### `CodeInterpreterTool` Removed (v1.14)
+`CodeInterpreterTool` has been removed from the public API. Remove any references to it:
+```python
+# REMOVED - will raise ImportError
+from crewai_tools import CodeInterpreterTool
+
+# Alternative: use the built-in code execution pattern via task instructions
+```
+
+### `CrewStructuredTool` Moved to Internal API
+`CrewStructuredTool` is no longer part of the public interface. Use standard tool definitions instead.
+
+### `stop` Parameter No Longer Sent to GPT-5 / o-series Models (v1.13)
+CrewAI now detects model capabilities and skips unsupported parameters. If you relied on stop-sequence behavior with these models, test your workflows with v1.13+.
+
+### v1.10.0 Was Yanked
+Version 1.10.0 was yanked from PyPI. Use 1.10.1 or later.
+
+---
+
+## 🆕 What's New in v1.14.0 (2026)
+
+- **Checkpoint System** (`CheckpointConfig` + `SqliteProvider`): save crew state at each task boundary; resume from the last checkpoint after failures
+  ```python
+  from crewai import Crew, CheckpointConfig
+  crew = Crew(
+      agents=[...], tasks=[...],
+      checkpoint_config=CheckpointConfig(provider="sqlite", db_path="crew.db")
+  )
+  ```
+  New CLI commands: `crewai checkpoint list` and `crewai checkpoint info`
+- **Structured outputs with Pydantic** (v1.9): agents can return typed `BaseModel` instances via `response_format`
+- **Before/after tool call hooks** (v1.9.1): `CrewAgentExecutor` lifecycle hooks around tool calls
+- **Native vision support** (v1.13): GPT-5 and newer o-series multimodal models
+- **SSRF and path traversal protections** (v1.14): URL and path validation for RAG tools
+- **Enterprise RBAC and SSO** (v1.13): role-based access control documentation added
+- **MCP Custom Server support** (v1.11): define and connect custom MCP servers
+- **Memory classes made serializable** (v1.10/1.11)
 
 ---
 
@@ -378,6 +421,15 @@ Welcome to the future of collaborative AI systems!
 - **Production Guide**: Best practices for deployment, testing, monitoring, and optimisation
 - **Recipes Guide**: 10 complete real-world implementation examples
 - **Total Content**: Over 5000 lines of documentation with 100+ code examples
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.14.0 | Updated to v1.14.0; documented CodeInterpreterTool removal; checkpoint system (SqliteProvider); structured Pydantic outputs; SSRF protections; RBAC; MCP custom servers; GPT-5/o-series stop parameter fix |
+| November 2025 | 1.5.0 | CrewAI Flows guide; MCP integration; memory systems; hierarchical processes |
 
 **Last Updated**: November 2025
 **Version**: 1.5.0

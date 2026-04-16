@@ -543,3 +543,12 @@ Advanced Topics → Production Deployment → Performance Optimisation → Custo
 ---
 
 **Start your Semantic Kernel journey today!** Choose your platform above and dive into the comprehensive guide.
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | Python 1.41.2 / .NET 1.74.0 | Full MCP support; A2A protocol; Oracle connector; Google GenAI SDK migration; CVE-2026-26127 fix; Handlebars planners removed; strategic recommendation to use Microsoft Agent Framework for new multi-agent projects |
+| November 2025 | Python 1.38.0 / .NET 1.67.1 | Initial guide; plugins; memory; planners; Azure OpenAI integration |

@@ -1,12 +1,48 @@
-# OpenAI Agents SDK TypeScript: Complete Developer Guide (2025 Edition)
+# OpenAI Agents SDK TypeScript: Complete Developer Guide (2026 Edition)
 
 **🎯 PRODUCTION-READY | TypeScript-First | Official Swarm Replacement**
 
-**Version:** 0.3.2
-**Status:** Production-Ready with 2025 Features
-**Last Updated:** November 2025
+**Version:** 0.8.3 (April 9, 2026) — previously 0.3.2 (November 2025)
+**Package:** `@openai/agents` (npm)
+**Status:** Production-Ready with 2026 Features
+**Last Updated:** April 16, 2026
 **Language:** TypeScript 5.0+
 **Framework:** OpenAI Agents SDK
+
+## ⚠️ Breaking Changes Since v0.3.2
+
+### Monorepo Package Split
+The SDK is now split into sub-packages:
+- `@openai/agents-core` — Core agent primitives
+- `@openai/agents-openai` — OpenAI model integration
+- `@openai/agents-realtime` — Voice/Realtime agents
+- `@openai/agents-extensions` — Third-party integrations (AI SDK, etc.)
+
+```bash
+# Main package (includes all sub-packages)
+npm install @openai/agents
+
+# Or install sub-packages individually
+npm install @openai/agents-core @openai/agents-openai
+```
+
+### `aisdk()` Helper Import Path Changed
+```typescript
+// BEFORE (v0.3.x - broken in v0.8)
+import { aisdk } from '@openai/agents-extensions';
+
+// AFTER (v0.4+)
+import { aisdk } from '@openai/agents-extensions/ai-sdk';
+```
+
+## 🆕 What's New in 2026 (v0.3.2 → v0.8.3)
+
+- **Feature parity with Python SDK**: full support for handoffs, guardrails, tracing, MCP, sessions, human-in-the-loop
+- **Realtime Agents**: voice agents with automatic interruption detection
+- **Sessions API**: persistent conversation history management
+- **Zod-powered validation**: function tools auto-generate schemas with Zod
+- **Built-in tracing**: visualize and debug multi-agent workflows
+- **Note:** Sandbox Agents (new in Python 0.14) not yet available in TypeScript — planned for a future release
 
 ---
 
@@ -762,10 +798,19 @@ Happy building! 🚀
 
 ---
 
-**Version 0.3.2 - 2025 Edition**
-**Updated: November 2025**
+**Version 0.8.3 - 2026 Edition**
+**Updated: April 16, 2026**
 **Focus: TypeScript 5.0+ | Production Ready | Official Swarm Replacement**
-**Status: ✅ Production-Ready | 🆕 2025 Features | 🎯 TypeScript-First**
+**Status: ✅ Production-Ready | 🆕 2026 Features | 🎯 TypeScript-First**
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 0.8.3 | Updated to v0.8.3; monorepo package split (4 sub-packages); `aisdk()` import path change; Realtime Agents; Sessions API; Zod validation; built-in tracing |
+| November 2025 | 0.3.2 | Initial TypeScript guide; agent creation; tool integration; handoffs; streaming |
 
 ---
 

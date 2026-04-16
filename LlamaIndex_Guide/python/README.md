@@ -583,3 +583,12 @@ from llama_index.readers.web.simple_web_page import SimpleWebPageReader
 
 ## Streaming Examples
 - [llamaindex_streaming_server_fastapi.md](llamaindex_streaming_server_fastapi.md)
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 0.14.20 | Hard-removal of legacy agent classes (`ReActAgent`, `OpenAIAgent`); Python 3.9 dropped; `AgentWorkflow` as primary pattern; LlamaSheets; LiteParse; Agent Client Protocol; `asyncio_module` deprecation |
+| November 2025 | 0.12.x | Initial Python guide; query engines; RAG; Workflows 1.0; LLM integration |

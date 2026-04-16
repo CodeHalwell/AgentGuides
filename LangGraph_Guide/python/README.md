@@ -2,10 +2,41 @@
 
 **Comprehensive Guide for Building Production-Grade Stateful AI Agents**
 
-Latest Version: LangGraph 1.0.3 (November 2025)
+Latest Version: LangGraph 1.1.6 (April 10, 2026) — previously 1.0.3 (November 2025)
 Total Documentation: ~200KB across 4 comprehensive guides
 Total Examples: 65+ working code examples
 Focus: Python with practical, real-world patterns
+
+## ⚠️ Deprecations and Breaking Changes (v1.1.x)
+
+### Python 3.9 Dropped
+LangGraph 1.1.x dropped Python 3.9 support. Minimum version is now **Python 3.10**.
+
+### `create_react_agent` deprecated
+`langgraph.prebuilt.create_react_agent` is deprecated. Use `create_agent` from `langchain.agents` instead. Removal is planned for v2.0.
+
+```python
+# DEPRECATED (still works, but warns)
+from langgraph.prebuilt import create_react_agent
+agent = create_react_agent(model, tools)
+
+# NEW (recommended)
+from langchain.agents import create_agent
+agent = create_agent(model, tools)
+```
+
+### `langgraph-prebuilt` version constraint hazard
+`langgraph-prebuilt==1.0.9` introduced an `ImportError` for `ServerInfo` when used with older LangGraph versions. Pin both `langgraph` and `langgraph-prebuilt` together in your requirements.
+
+---
+
+**NEW in v1.1.x (2026):**
+- 🔒 **Type-safe streaming (v2 API)** — opt-in with `version="v2"`; unified `StreamPart` output with `type`, `ns`, `data` keys
+- 🔒 **Type-safe invoke (v2 API)** — returns `GraphOutput` object with `.value` and `.interrupts`
+- 🏗️ **Pydantic/dataclass coercion** — `invoke()` auto-coerces declared Pydantic or dataclass types
+- ⏩ **Python 3.14 support**
+- 🐛 **Fixed time travel with interrupts and subgraphs** — replays no longer reuse stale `RESUME` values
+- (All v2 features are fully backwards compatible and opt-in)
 
 **NEW in v1.0.3 (November 2025):**
 - ⚡ **Node Caching** - Skip redundant computations with built-in cache
@@ -847,15 +878,16 @@ These guides are provided as comprehensive learning resources for LangGraph.
 
 ---
 
-## Advanced Guides
-
-- [langgraph_advanced_error_recovery.md](langgraph_advanced_error_recovery.md)
-- [langgraph_observability_python.md](langgraph_observability_python.md)
-- [langgraph_performance_optimization.md](langgraph_performance_optimization.md)
+**Happy building! LangGraph enables you to create sophisticated, stateful AI agent systems. Start simple, iterate, and scale to production.**
 
 ---
 
-**Happy building! LangGraph enables you to create sophisticated, stateful AI agent systems. Start simple, iterate, and scale to production.**
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.1.6 | Updated to v1.1.6; documented Python 3.9 drop; `create_react_agent` deprecation; type-safe v2 API (`StreamPart`, `GraphOutput`); `langgraph-prebuilt==1.0.9` hazard warning; Python 3.14 support |
+| November 2025 | 1.0.3 | Initial Python guide; node caching; deferred nodes; pre/post model hooks; cross-thread memory; Python 3.13 support |
 
 For questions: Check troubleshooting section first, then review relevant guide section.
 For production issues: Follow the support runbook in production_guide.md
