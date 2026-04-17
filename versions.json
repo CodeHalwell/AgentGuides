@@ -35,7 +35,7 @@
     "anthropic-claude-sdk": "Renamed package (claude-code-sdk → claude-agent-sdk); structured outputs, MCP integration, subagents; v0.1.59 Python / v0.2.110 TypeScript",
     "amazon-bedrock": "Strands SDK 1.35.0; AgentCore with memory and policy controls; multi-agent graph workflows; A2A protocol support",
     "mistral": "Major v2.0.1 rewrite — v1.x and v2.x APIs are not compatible; full Agents API, MCP tools, Code Interpreter, Premium Web Search",
-    "pydantic-ai": "BREAKING: result_* API renamed to output_* (result_type → output_type, etc.); hard removals; v1.83.0 on April 16 2026",
+    "pydantic-ai": "BREAKING: result_* API renamed to output_* (result_type → output_type, etc.); hard removals; v1.83.0 on April 16, 2026",
     "crewai": "v1.14.0: checkpoint system added (SqliteProvider); CodeInterpreterTool removed; structured outputs with Pydantic; SSRF protections",
     "autogen-ag2": "v0.11.5; autogen.beta parallel redesign (event-driven); A2A protocol; formal v1.0 deprecation roadmap — breaking changes at v1.0",
     "haystack-ai": "v2.27.0: SearchableToolset, LLMRanker, PipelineTool, runtime tool injection, Jinja2 prompts, transformers v5; Python 3.9 dropped",
