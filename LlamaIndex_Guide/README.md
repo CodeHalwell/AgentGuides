@@ -4,6 +4,56 @@ Comprehensive technical documentation for LlamaIndex—the leading framework for
 
 **Now organized by programming language: Python and TypeScript**
 
+> **Python Version:** 0.14.20 (April 3, 2026) — previously 0.14.8 (November 2025)
+> **TypeScript:** `@llamaindex/workflow` 1.1.4 (April 15, 2026)
+
+## ⚠️ Breaking Changes Since v0.14.8
+
+### Legacy Agent Classes Hard-Removed (Python)
+The following classes were **hard-removed** (no deprecation warning — they will raise `ImportError`). Migrate to `AgentWorkflow`-based agents:
+
+| Removed Class | Replacement |
+|---------------|-------------|
+| `FunctionCallingAgent` | `FunctionAgent` (via `AgentWorkflow`) |
+| `AgentRunner` | `AgentWorkflow` |
+| `AgentWorker` | `AgentWorkflow` |
+| `StructuredAgentPlanner` | `AgentWorkflow` |
+| `OpenAIAgent` | `FunctionAgent` with OpenAI LLM |
+| `LLMPredictor` | Use LLM object directly |
+
+**Migration example:**
+```python
+# BEFORE (raises ImportError now)
+from llama_index.core.agent import ReActAgent
+agent = ReActAgent.from_tools(tools, llm=llm)
+
+# AFTER
+from llama_index.core.workflow import AgentWorkflow
+agent = AgentWorkflow.from_tools_or_functions(tools, llm=llm)
+result = await agent.run("Your query")
+```
+
+### Python 3.9 Dropped
+Minimum Python version is now **3.10**. Python 3.9 is no longer supported.
+
+### TypeScript Package Restructuring
+The `llamaindex` monorepo package (`npm install llamaindex`) is largely superseded by scoped packages. Migrate to `@llamaindex/workflow`, `@llamaindex/core`, etc.
+
+### `asyncio_module` Parameter Deprecated
+Use `get_asyncio_module` instead of the `asyncio_module` parameter.
+
+---
+
+## 🆕 What's New in 2026
+
+- **`AgentWorkflow`** and **`Workflows`** are now the primary agent orchestration primitives
+- New workflow-based agent classes: `FunctionAgent`, `CodeActAgent`, `ReActAgent`, `AgentWorkflow`
+- **`early_stopping_method`** parameter on agent workflows
+- **Agent Client Protocol integration** for cross-framework interoperability
+- **Enhanced long-term and short-term memory** for agents
+- **`LlamaSheets`**: structured extraction from complex spreadsheets
+- **LiteParse** (TypeScript): zero-Python-dependency PDF/document parsing for TypeScript workflows
+
 ---
 
 ## 🆕 What's New in 2025
@@ -223,6 +273,15 @@ const result = await workflow.run({ query: "What is AI?" });
 - [LlamaIndex TypeScript Docs](https://ts.llamaindex.ai)
 - [GitHub - Python](https://github.com/run-llama/llama_index)
 - [GitHub - TypeScript](https://github.com/run-llama/LlamaIndexTS)
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | Python 0.14.20 / TS @llamaindex/workflow 1.1.4 | Hard-removal of legacy agent classes documented; Python 3.9 drop; TypeScript package restructuring; AgentWorkflow migration examples; LiteParse; Agent Client Protocol |
+| November 2025 | Python 0.14.8 / TS Workflows 2.11.2 | Workflows 2.x; event-driven architecture; multi-language reorganization |
 
 ### Community
 - [Discord Community](https://discord.gg/dGcwcsnxhU)

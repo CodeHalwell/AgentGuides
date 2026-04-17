@@ -2,9 +2,27 @@
 
 **A Comprehensive C#/.NET-Specific Technical Reference for Microsoft Semantic Kernel**
 
-Last Updated: November 2025
+Last Updated: April 16, 2026
 .NET Version: 6.0+
-Semantic Kernel .NET: 1.67.1+
+Semantic Kernel .NET: 1.74.0 — previously 1.67.1 (November 2025)
+
+## 🆕 What's New in v1.67.1 → v1.74.0
+
+- **Server URL validation options** for OpenAPI plugins
+- **Text Search LINQ functionality** added
+- `Microsoft.SemanticKernel.Plugins.Core` graduated from alpha to preview (experimental attribute removed)
+- **OpenAPI API surface stabilized** (experimental attribute removed from stable surface)
+- **Security update**: CVE-2026-26127 patched
+
+## ⚠️ Deprecated Packages
+
+- **`Microsoft.SemanticKernel.Planners.Handlebars`** — deprecated and removed from NuGet (last preview was 1.47.0-preview). Remove from your `.csproj`.
+- **`Microsoft.SemanticKernel.Planners.OpenAI`** — deprecated in favour of function calling.
+- **Stepwise and Handlebars planners** are fully discontinued — use function calling instead.
+
+## 📢 Strategic Note
+
+Microsoft recommends evaluating **Microsoft Agent Framework 1.0** (GA as of April 2026) for new multi-agent projects. See the [Microsoft Agent Framework Guide](../../Microsoft_Agent_Framework_Guide/README.md).
 
 ---
 
@@ -494,3 +512,12 @@ Found an issue or want to contribute?
 ---
 
 **Start building intelligent .NET applications with Semantic Kernel today!**
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.74.0 | Server URL validation; Text Search LINQ; plugin graduation from alpha to preview; CVE-2026-26127 fix; Handlebars planners removed; OpenAI planners deprecated; strategic note re: Microsoft Agent Framework |
+| November 2025 | 1.67.1 | Initial .NET guide; plugins; memory; planners; Azure OpenAI integration |

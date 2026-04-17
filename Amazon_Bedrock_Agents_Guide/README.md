@@ -1,6 +1,28 @@
 # Amazon Bedrock Agents: Complete Technical Documentation
 
+> **Strands SDK Version:** 1.35.0 (April 2026) — previously ~1.0 (November 2025)
+> **TypeScript SDK:** `strands-agents-ts` 1.0.0-rc.3
+
 A comprehensive, production-grade technical reference for building, deploying, and operating Amazon Bedrock Agents at enterprise scale.
+
+## 🆕 What's New in 2026 (Strands SDK Updates)
+
+- **Multi-agent graph workflows**: support for `A2AAgent` instances and custom `AgentBase` implementations in graph nodes
+- **Interrupt propagation**: interrupts now correctly propagate through nested multi-agent graph nodes
+- **`AgentCoreMemorySessionManager`**: integration with Amazon Bedrock AgentCore memory — session summarization, user preferences, semantic memory
+- **Steering Hooks**: demonstrated 100% agent accuracy on controlled benchmarks for controlling agent behavior
+- **A2A protocol support**: cross-framework agent interoperability (compatible with Google ADK, OpenAI SDK, LangGraph, etc.)
+- **Structured output**: `Agent.structured_output()` converts Pydantic schema to Bedrock tool spec
+- **Prompt caching**: for system prompts, tools, and messages
+- **Reasoning configuration**: for compatible Bedrock models
+- **Llama 4 and Nova Forge model support**
+- **`strands-agents-ts`**: TypeScript SDK available at `1.0.0-rc.3`
+- **Strands Labs**: new experimental org (projects: Robots, Robots Sim, AI Functions)
+
+## ⚠️ Behavioral Change in Strands SDK
+
+- **`retry_strategy=None`** now explicitly disables retries (previously had ambiguous behavior)
+- **A2A server agent card URL** now properly reflects host/port overrides — may affect existing A2A integrations
 
 ---
 
@@ -486,6 +508,7 @@ This documentation guide is provided as-is for reference and educational purpose
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.0 | April 16, 2026 | Strands SDK 1.35.0; multi-agent graph workflows; interrupt propagation; AgentCoreMemorySessionManager; Steering Hooks; A2A 1.0; structured output; prompt caching; TypeScript SDK RC; Strands Labs |
 | 2.0 | 2025-03-10 | **Major 2025 Update**: Multi-Agent Collaboration (GA), AgentCore (GA), Strands SDK (Open Source), A2A Protocol (GA), Memory Retention, Amazon Nova Integration, Enhanced Guardrails |
 | 1.5 | 2025-03-10 | Added comprehensive guides: AgentCore, Strands SDK, A2A Protocol |
 | 1.0 | 2024-11-11 | Initial comprehensive release |
@@ -652,4 +675,14 @@ aws bedrock create-agent-alias \
 **Happy building! 🚀**
 
 This comprehensive documentation provides everything needed to successfully design, build, deploy, and operate Amazon Bedrock Agents from prototype through enterprise-scale production systems.
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 3.0 | Updated to Strands SDK 1.35.0; multi-agent graph workflows; interrupt propagation; AgentCoreMemorySessionManager; Steering Hooks; structured output; prompt caching; Llama 4/Nova Forge support; TypeScript SDK RC noted |
+| November 2025 | 2.0 | Strands Agents SDK (v0.x); inline agents; knowledge bases; guardrails; action groups |
+| 2024 | 1.0 | Initial guide; Amazon Bedrock Agents console and API |
 

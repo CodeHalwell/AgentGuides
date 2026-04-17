@@ -2,7 +2,7 @@
 
 > **The Pydantic Way for Generative AI** - Type-safe, production-grade agent framework with FastAPI-inspired developer experience.
 
-**Latest Version:** 1.20.0 (November 2025)  
+**Latest Version:** 1.83.0 (April 16, 2026) — previously 1.20.0 (November 2025)  
 **Framework:** [Pydantic AI](https://ai.pydantic.dev)  
 **Python:** 3.10+  
 **License:** Comprehensive Educational Guide
@@ -107,6 +107,52 @@ async def main():
 
 asyncio.run(main())
 ```
+
+---
+
+## ⚠️ Breaking Changes in v1.83.0 (2026 Edition)
+
+> **All `result_*` APIs have been hard-removed. Upgrade requires code changes.**
+
+| Old API | New API |
+|---------|---------|
+| `Agent(result_type=X)` | `Agent(output_type=X)` |
+| `Agent(result_retries=N)` | `Agent(output_retries=N)` |
+| `AgentRunResult.data` | `AgentRunResult.output` |
+| `FinalResult.data` | `FinalResult.output` |
+| `StreamedRunResult.get_data()` | `StreamedRunResult.get_output()` |
+| `StreamedRunResult.validate_structured_result()` | `StreamedRunResult.validate_structured_output()` |
+| `Agent.result_validator` method | `Agent.output_validator` |
+| `from pydantic_ai.utils import format_as_xml` | `from pydantic_ai import format_as_xml` |
+| Graph.next() | async with graph.iter(...) as run: await run.next() |
+
+**Quick migration example:**
+```python
+# BEFORE (v1.20, broken in v1.83)
+agent = Agent('openai:gpt-4o', result_type=MyModel, result_retries=3)
+result = await agent.run('Query')
+print(result.data.field)
+
+# AFTER (v1.83+)
+agent = Agent('openai:gpt-4o', output_type=MyModel, output_retries=3)
+result = await agent.run('Query')
+print(result.output.field)
+```
+
+---
+
+## 🆕 What's New in 2026
+
+### New Features (v1.20 → v1.83)
+
+- **`output_type` / `output_retries`** replace `result_type` / `result_retries` (hard-removed)
+- **Evaluation framework matured**: `EvaluationReport` with `print` / `console_table` methods; `EvaluatorSpec` for serializable evaluator references
+- **`pydantic-graph` package expanded**: typed graph-based GenAI workflows with full `iter()` API
+- **`defer_loading` for tools and toolsets**: lazy tool discovery; reduces context overhead
+- **`ThreadExecutor` support**: run sync tools safely in threads without event loop conflicts
+- **Smart instruction caching**: for Anthropic and Bedrock providers
+- **`CaseLifecycle` hooks on `Dataset.evaluate`**: add before/wrap model request hooks to swap the model; retry control flow via `ModelRetry` inside hooks
+- **Local `WebFetch` tool**: built-in tool for fetching web pages
 
 ---
 
@@ -709,12 +755,21 @@ This comprehensive guide is an educational resource created to help developers u
 
 ---
 
-**Last Updated:** November 2025  
-**Version:** 1.20.0  
+**Last Updated:** April 16, 2026  
+**Version:** 1.83.0  
 **Python:** 3.10+  
-**Pydantic AI:** v1.0+
+**Pydantic AI:** v1.83.0+
 
 Happy agent building! 🚀
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.83.0 | Updated to v1.83.0; documented `result_*` → `output_*` breaking changes; added 2026 features section; updated all code examples |
+| November 2025 | 1.20.0 | Initial comprehensive guide; durable execution, graph support, MCP/A2A integrations, evals |
 
 
 

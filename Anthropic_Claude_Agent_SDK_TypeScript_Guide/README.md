@@ -1,8 +1,46 @@
-# Claude Agent SDK (TypeScript) - Complete Technical Guide (2025 Edition)
+# Claude Agent SDK (TypeScript) - Complete Technical Guide (2026 Edition)
 
-**Version:** 0.1.30 (2025 Edition)
+**Version:** 0.2.110 (April 16, 2026) — previously 0.1.30 (November 2025)
+**Package:** `@anthropic-ai/claude-agent-sdk` (was `@anthropic-ai/claude-code`)
 **Target Audience:** Advanced TypeScript developers, AI engineers, systems architects
-**Status:** Production-Ready Guide with 2025 Features
+**Status:** Production-Ready Guide with 2026 Features
+
+## ⚠️ Breaking Changes Since v0.1.30
+
+### Package Renamed
+```bash
+# REMOVE old package
+npm uninstall @anthropic-ai/claude-code
+
+# INSTALL new package
+npm install @anthropic-ai/claude-agent-sdk
+```
+
+### Import Path Changed
+```typescript
+// BEFORE (broken)
+import { query } from "@anthropic-ai/claude-code";
+
+// AFTER
+import { query } from "@anthropic-ai/claude-agent-sdk";
+```
+
+### `sandbox.failIfUnavailable` Default Changed
+When `sandbox.enabled = true`, `failIfUnavailable` now defaults to `true`. Previously the SDK ran unsandboxed silently. To restore the prior behavior:
+```typescript
+const options: ClaudeAgentOptions = {
+  sandbox: { enabled: true, failIfUnavailable: false }
+};
+```
+
+## 🆕 What's New Since v0.1.30
+
+- **Structured outputs**: agents can return validated JSON matching a Zod schema
+- **MCP server integration**: connect any MCP-compatible service with a single configuration block
+- **`reloadPlugins()`**: refresh commands, agents, and MCP server status at runtime
+- **Multibyte text fix**: fixed CJK / UTF-8 stream corruption when chunk boundaries split a sequence
+- **MCP cleanup fix**: MCP server child processes now properly terminated when `query()` session ends
+- **`get_context_usage()`** (Python equivalent): query context window usage by category
 
 ## Overview
 
@@ -516,8 +554,8 @@ These guides are provided as comprehensive technical documentation for the Claud
 | **Diagrams** | 10+ architecture and flow diagrams |
 | **Styling** | British English (optimisation, analyse, etc.) [[memory:8527310]] |
 | **Format** | Markdown (GitHub-compatible) |
-| **Last Updated** | November 2025 |
-| **Compatibility** | Claude Agent SDK 0.1.30+ |
+| **Last Updated** | April 16, 2026 |
+| **Compatibility** | Claude Agent SDK 0.2.110+ |
 | **Target Audience** | Advanced TypeScript developers, architects, engineers |
 
 ---
@@ -533,3 +571,12 @@ Happy building! 🚀
 
 ## Streaming Examples
 - [claude_streaming_server_express.md](claude_streaming_server_express.md)
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 0.2.110 | Updated to v0.2.110; package renamed to `@anthropic-ai/claude-agent-sdk`; structured outputs with Zod; MCP integration; `sandbox.failIfUnavailable` default changed; multibyte fix; import path update |
+| November 2025 | 0.1.30 | Initial TypeScript guide; streaming; tool use; multi-agent patterns |

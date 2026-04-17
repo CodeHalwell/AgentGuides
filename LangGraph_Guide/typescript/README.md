@@ -1,8 +1,38 @@
-# LangChain.js and LangGraph.js Comprehensive TypeScript Guide
+# LangGraph.js Comprehensive TypeScript Guide
+
+> **Package:** `@langchain/langgraph`
+> **Version:** 1.2.8 (April 11, 2026) — previously 1.0.2 (November 2025)
+
+## ⚠️ What's Changed in v1.2.8
+
+### `createReactAgent` Moved to Toolkit Package
+```typescript
+// DEPRECATED (still works, but warns)
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+
+// NEW (recommended)
+import { createReactAgent } from '@langgraphjs/toolkit';
+```
+
+### New Features (v1.1 → v1.2)
+- **Standard JSON Schema support** (compatible with Zod 4, Valibot, ArkType) — removes validator lock-in
+- **`ReducedValue` type**: define fields with custom reducers that have separate input/output schemas
+- **`UntrackedValue` type**: transient state that exists during a run but is never checkpointed (reduces persistence overhead)
+- **`@langgraphjs/toolkit`**: new package for prebuilt agent implementations
+
+### Installation
+```bash
+npm install @langchain/langgraph
+
+# For prebuilt agent utilities
+npm install @langgraphjs/toolkit
+```
+
+---
 
 ## Overview
 
-This comprehensive documentation suite provides an exhaustive exploration of LangChain.js and LangGraph.js, two powerful TypeScript frameworks for building sophisticated applications powered by large language models (LLMs). Whether you're a beginner just starting your journey with AI-powered applications or an advanced developer looking to architect production-grade systems, this guide covers every aspect of these libraries with extensive code examples, architectural diagrams, and real-world patterns.
+This comprehensive documentation suite provides an exhaustive exploration of LangGraph.js, the TypeScript framework for building stateful, multi-step applications powered by large language models (LLMs). Whether you're a beginner just starting your journey with AI-powered applications or an advanced developer looking to architect production-grade systems, this guide covers every aspect with extensive code examples, architectural diagrams, and real-world patterns.
 
 ## 📚 Documentation Structure
 
@@ -315,9 +345,18 @@ This documentation has been carefully researched and written to provide the most
 
 ---
 
-**Last Updated**: November 2025
-**Coverage**: LangChain.js, LangGraph.js, TypeScript
+**Last Updated**: April 16, 2026
+**Coverage**: LangGraph.js, TypeScript
 **Intended Audience**: Beginners to Advanced Developers
-**Target Production**: Node.js 18+, TypeScript 4.7+
+**Target Production**: Node.js 18+, TypeScript 4.7+, `@langchain/langgraph` 1.2.8
 
 Start your learning journey by opening **langchain_langgraph_comprehensive_guide.md** and beginning with the installation section!
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.2.8 | Updated to v1.2.8; createReactAgent moved to @langgraphjs/toolkit; JSON Schema flexibility; ReducedValue / UntrackedValue types documented |
+| November 2025 | 1.0.2 | Initial TypeScript guide; stateful graphs; streaming; human-in-the-loop |

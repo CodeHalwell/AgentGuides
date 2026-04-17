@@ -1,7 +1,9 @@
 # Google Agent Development Kit (ADK) - Complete Documentation Suite
 
-**Version:** 1.19.0  
-**Last Updated:** November 2025  
+**Python Version:** 1.30.0 (April 13, 2026) — previously 1.18.0 (November 2025)
+**Go Version:** 1.0.0 GA (April 8, 2026) — previously 0.1.0 (November 2025)
+**TypeScript:** Available (December 2025) — NEW
+**Last Updated:** April 16, 2026  
 **Focus:** Comprehensive, Practical, Production-Ready
 
 ---
@@ -10,7 +12,10 @@
 
 This documentation suite provides exhaustive coverage of the Google Agent Development Kit (ADK), from foundational concepts to advanced enterprise deployments. It's designed for developers at all levels—from beginners learning agentic programming to experts building complex multi-agent systems.
 
-ADK is an open-source, code-first Python framework optimised for building sophisticated AI agents with Google's Gemini models and Google Cloud services. It emphasises modularity, scalability, and production-readiness.
+ADK is an open-source, code-first framework optimised for building sophisticated AI agents with Google's Gemini models and Google Cloud services. It emphasises modularity, scalability, and production-readiness. ADK now supports **Python, TypeScript, Go, and Java**.
+
+> **New language:** ADK for **TypeScript** was announced in December 2025. See the [TypeScript guide](typescript/) for documentation.
+> **Go SDK reached 1.0 GA** on April 8, 2026 — production-ready with OTel, A2A 1.0, YAML config, and plugin system.
 
 ---
 
@@ -479,7 +484,7 @@ This documentation is provided as part of the AgentGuides project. Follow the li
 
 ---
 
-**Last Updated:** November 2025  
+**Last Updated:** April 16, 2026  
 **Maintained by:** Technical Documentation Team  
 **Status:** ✅ Complete and Current
 
@@ -495,6 +500,14 @@ This documentation is provided as part of the AgentGuides project. Follow the li
 
 **Happy building with Google ADK! 🚀**
 
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | Python 1.30.0 / Go 1.0.0 GA | Python: graph workflows, Task API, session rewind, AgentEngineSandboxCodeExecutor, A2A 1.0; Go: 1.0.0 GA, OTel, YAML config, plugin system; TypeScript ADK guide added (December 2025 announcement) |
+| November 2025 | Python 1.18.0 / Go 0.1.0 | Initial multi-language guide; Python and Go SDKs; MCP integration; A2A protocol preview |
 
 ## Advanced Guides
 - [google_adk_advanced_python.md](google_adk_advanced_python.md)

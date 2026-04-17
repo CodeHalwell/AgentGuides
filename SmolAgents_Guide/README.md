@@ -1,6 +1,29 @@
 # SmolAgents: Complete Technical Reference Guide
 
+> **Current Version:** 1.24.0 (January 16, 2026) — previously 1.23.0 (November 2025)
+
 Welcome to the comprehensive technical guide for **SmolAgents** – the lightweight Python framework for building AI agents that think in code.
+
+## 🆕 What's New in v1.24.0 (January 2026)
+
+- **Backward compatibility shim for `HfApiModel`** — `HfApiModel` is deprecated; the compatibility shim eases migration
+- **Expanded model compatibility** — updated no-stop-sequence model list to support `gpt-5.2*` and newer OpenAI model families
+- **Bug fix** — fixed `token_counts` tracking when a managed agent is called more than once in a run
+- **Vision model support** — build web browsing agents using vision-capable models that can navigate websites by scrolling, clicking, and going back
+
+## ⚠️ Deprecations
+
+- **`HfApiModel`** is deprecated. Use `InferenceClientModel` instead:
+  ```python
+  # DEPRECATED
+  from smolagents import HfApiModel
+  model = HfApiModel("meta-llama/Llama-3.3-70B-Instruct")
+
+  # NEW
+  from smolagents import InferenceClientModel
+  model = InferenceClientModel("meta-llama/Llama-3.3-70B-Instruct")
+  ```
+- **Python 3.10+** required (3.9 not supported)
 
 ## 📚 What's in This Guide
 
@@ -323,6 +346,15 @@ SmolAgents is open source and community-driven:
  
  ## Version Information
  
- **Last Updated**: November 2025
- **Version**: 1.23.0
+ **Last Updated**: April 16, 2026
+ **Version**: 1.24.0
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.24.0 | Updated to v1.24.0; documented `HfApiModel` deprecation with `InferenceClientModel` migration; vision model support; `token_counts` bug fix; Python 3.10+ requirement |
+| November 2025 | 1.23.0 | Initial guide; CodeAgent vs ToolCallingAgent; sandbox execution; 100+ LLM providers |
 

@@ -1,21 +1,73 @@
-# OpenAI Agents SDK Complete Guide Collection (2025 Edition)
+# OpenAI Agents SDK Complete Guide Collection (2026 Edition)
 
-**🎯 PRODUCTION-READY | Official Swarm Replacement | Python 3.9+**
+**🎯 PRODUCTION-READY | Official Swarm Replacement | Python 3.10+**
 
 Welcome to the comprehensive guide collection for the OpenAI Agents SDK, the **official production-ready replacement** for the experimental Swarm framework. Build enterprise-grade multi-agent AI applications with confidence.
 
-## 🚀 Critical 2025 Updates
+> **Current Version:** 0.14.x (April 2026) | **Previous:** 0.6.1 (November 2025)
 
-### ⭐ **NEW: Swarm Migration Guide**
-OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete Migration Guide →](openai_agents_sdk_swarm_migration_guide.md)**
+## ⚠️ Breaking Changes in Recent Versions
 
-### ⭐ **NEW: 2025 Features Guide**
+> **If upgrading from 0.6.x, read this section carefully before updating.**
+
+### Requires `openai` v2.x (Breaking)
+The SDK now requires `openai` >= 2.0. The v1.x `openai` package is **no longer supported**.
+```bash
+pip install "openai>=2.0" openai-agents
+```
+
+### Python 3.9 Dropped
+Python 3.9 is no longer supported. Minimum version is now **Python 3.10**.
+
+### Sync function tools now run on worker threads
+Synchronous callables in function tools now use `asyncio.to_thread(...)`. If your sync tools rely on thread-local state, migrate them to `async` tools.
+
+### MCP error handling semantics changed
+Local MCP tool failures now propagate as exceptions by default and abort the run. To return a model-visible error string instead, configure `failure_error_function`:
+```python
+agent = Agent(..., mcp_config={"failure_error_function": lambda error: str(error)})
+```
+
+### `Agent#as_tool()` type narrowed
+Return type is now `FunctionTool` instead of `Tool`. Update any type annotations accordingly.
+
+---
+
+## 🚀 What's New in 2026
+
+### ⭐ **NEW: Sandbox Agents (v0.14)**
+Agents can now operate inside persistent, isolated workspaces with files, directories, Git repos, snapshots, and resume support. Multiple backends: local Unix, Docker, Blaxel, E2B, Modal, Runloop, Vercel.
+
+```python
+from agents.sandbox import SandboxAgent, Manifest
+
+agent = SandboxAgent(
+    name="CodeAgent",
+    instructions="You are a coding assistant",
+    manifest=Manifest(files={"main.py": "print('hello')"})
+)
+result = await agent.run("Improve this script")
+```
+
+### ⭐ **NEW: WebSocket Transport for Responses API (v0.13)**
+Opt-in WebSocket transport for OpenAI Responses models enables low-latency multi-turn conversations.
+```python
+from agents import responses_websocket_session
+
+async with responses_websocket_session() as session:
+    result = await Runner.run(agent, "Hello", session=session)
+```
+
+### ⭐ **2025 Features Guide**
 - Built-in tracing and visualization
 - Provider-agnostic support (100+ LLMs)
 - Enhanced guardrails and session management
 - MCP integration
 - Fine-tuning and evaluation integration
 **[2025 Features Guide →](openai_agents_sdk_2025_features.md)**
+
+### ⭐ **Swarm Migration Guide**
+OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete Migration Guide →](openai_agents_sdk_swarm_migration_guide.md)**
 
 ---
 
@@ -270,9 +322,18 @@ async with MCPServerStdio(name="Filesystem", params={...}) as server:
 
 **Note**: This guide collection focuses on the **Python** implementation of the OpenAI Agents SDK. For **JavaScript/TypeScript**, refer to the [TypeScript Guide Collection](../OpenAI_Agents_SDK_TypeScript_Guide/).
 
-**Last Updated**: January 2025
-**SDK Version**: Latest (v0.2.9+)
+**Last Updated**: April 16, 2026
+**SDK Version**: 0.14.x
 **Status**: Production-Ready | Official Swarm Replacement
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 0.14.x | Updated to v0.14; added Sandbox Agents section; documented breaking changes (openai v2 req, Python 3.9 dropped, sync tool threading, MCP error semantics); added WebSocket transport section |
+| November 2025 | 0.6.1 | 2025 Features Guide; Swarm migration; MCP integration; guardrails; sessions |
 
 
 ## Streaming Examples

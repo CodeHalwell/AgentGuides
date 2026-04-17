@@ -2,9 +2,21 @@
 
 **A Comprehensive Python-Specific Technical Reference for Microsoft Semantic Kernel**
 
-Last Updated: November 2025
-Python Version: 3.9+
-Semantic Kernel Python: 1.38.0+
+Last Updated: April 16, 2026
+Python Version: 3.10+
+Semantic Kernel Python: 1.41.2 (April 8, 2026) — previously 1.38.0 (November 2025)
+
+## 🆕 What's New in v1.38 → v1.41.2
+
+- **Full MCP (Model Context Protocol) support**: SK now acts as both MCP host/client and MCP server, reaching parity with the .NET version
+- **Google A2A (Agent-to-Agent) Protocol**: native A2A integration for cross-framework agent communication
+- **Oracle connector**: new database connector for Oracle
+- **Google GenAI SDK migration**: updated to use the new `google-genai` SDK (replaces deprecated `google-generativeai`)
+- **Crash fixes**: Vertex AI `anyOf` schema and `use_vertexai` flag issues resolved
+
+## 📢 Strategic Note
+
+Microsoft recommends evaluating **Microsoft Agent Framework 1.0** (GA as of April 2026) for new multi-agent projects. Semantic Kernel remains the foundational layer within Agent Framework, and both projects are actively maintained. See the [Microsoft Agent Framework Guide](../../Microsoft_Agent_Framework_Guide/README.md).
 
 ---
 
@@ -477,3 +489,12 @@ Found an issue or want to contribute?
 ---
 
 **Start building intelligent Python applications with Semantic Kernel today!**
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.41.2 | Full MCP support; A2A protocol; Oracle connector; Google GenAI SDK migration; Python 3.10+ requirement; strategic note re: Microsoft Agent Framework |
+| November 2025 | 1.38.0 | Initial Python guide; plugins; memory; Azure OpenAI integration; function calling |

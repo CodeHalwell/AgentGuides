@@ -1,8 +1,24 @@
 # Google Agent Development Kit (ADK) - Python Documentation
 
-**Version:** 1.18.0
-**Last Updated:** November 2025
+**Version:** 1.30.0 (April 13, 2026) — previously 1.18.0 (November 2025)
+**Last Updated:** April 16, 2026
 **Language:** Python 3.10+
+
+## 🆕 What's New in ADK Python 1.18 → 1.30
+
+- **Graph-based workflow orchestration** (`Workflow(BaseNode)`): lazy scan deduplication, partial resume for nested workflows, state/artifact delta bundling
+- **Task API**: structured agent-to-agent delegation with multi-turn task mode, single-turn controlled output, human-in-the-loop, and task agents as workflow nodes
+- **`AgentEngineSandboxCodeExecutor`**: execute agent-generated code using the Vertex AI Code Execution Sandbox API
+- **Session Rewind**: roll back a session to before a previous invocation
+- **Web UI updates**: workflow graph visualization, distinct icons/shapes, active node rendering
+- **A2A 1.0 spec upgrade**: Agent-to-Agent protocol updated to v1.0
+- **TypeScript SDK available**: Google now officially supports TypeScript — see `../typescript/` for docs
+- **ADK 2.0 alpha** (`google-adk==2.0.0a1`): preview available; **not for production** — storage schema incompatible with 1.x
+
+## ⚠️ Deprecations
+
+- Old `MCPToolset` exit-stack pattern deprecated; use the updated context manager API
+- Synchronous service methods deprecated — prefer async-first service patterns
 
 ---
 
@@ -277,3 +293,12 @@ print(response.content)
 6. **Optimize** for production
 
 Ready to build powerful AI agents with Python? Start with `google_adk_comprehensive_guide.md`!
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.30.0 | Graph workflows; Task API; AgentEngineSandboxCodeExecutor; session rewind; A2A 1.0 spec; Web UI updates; MCPToolset deprecation noted; async-first migration guidance |
+| November 2025 | 1.18.0 | Initial Python guide; LlmAgent; tools; MCP integration; multi-agent systems; Vertex AI deployment |

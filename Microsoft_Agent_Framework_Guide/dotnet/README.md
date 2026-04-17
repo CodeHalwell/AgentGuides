@@ -444,3 +444,12 @@ Choose your path above and dive in! Start with the [Comprehensive Guide](./micro
 
 ## Streaming Examples
 - [microsoft_agent_streaming_server_dotnet.md](microsoft_agent_streaming_server_dotnet.md)
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.0 GA | GA 1.0 release; `--prerelease` flags removed; `ChatClientAgentOptions.Instructions` removed; first-party connectors; Azure App Service support |
+| November 2025 | 1.0 Preview | Initial .NET guide; agents; channels; connectors; streaming |

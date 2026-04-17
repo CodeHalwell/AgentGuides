@@ -550,3 +550,12 @@ import { OpenAIEmbedding } from 'llamaindex';
 ---
 
 **Documentation for: Technical Professionals, AI Engineers, TypeScript/JavaScript Developers**
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | @llamaindex/workflow 1.1.4 | TypeScript package restructuring; `@llamaindex/workflow` split; updated patterns for new package layout |
+| November 2025 | Initial | Initial TypeScript guide; LlamaIndex.TS; workflows; RAG; tool use |

@@ -1,8 +1,29 @@
 # Mistral Agents API Comprehensive Guide
 
-## MAY 27, 2025 LAUNCH - AGENTS API NOW AVAILABLE
+## SDK v2.0.1 — March 2026 Major Release
 
-Mistral AI has officially launched the **Agents API** on May 27, 2025, bringing autonomous generative AI capabilities to production. This major platform release introduces powerful built-in connectors, multi-agent orchestration, and Model Context Protocol (MCP) support.
+> **Current SDK Version:** `mistralai` 2.0.1 (March 12, 2026) — previously 1.9.11 (May 2025)
+> **Breaking change:** v1.x and v2.x SDK APIs are **not compatible**. A migration is required.
+
+### ⚠️ Migrating from SDK v1.x to v2.x
+
+```bash
+# Install v2
+pip install "mistralai>=2.0"
+```
+
+Key v2 changes:
+- Stateful agent conversations now use the `conversations` client instead of `agents.complete()`
+- TypeScript SDK is **ESM-only** (no CommonJS)
+- Shorter type names throughout
+- Forward-compatible enums/unions
+- Zod v4 required for TypeScript
+
+---
+
+## MAY 2025 LAUNCH — Agents API Background
+
+Mistral AI originally launched the **Agents API** on May 27, 2025, bringing autonomous generative AI capabilities to production. The platform introduced built-in connectors, multi-agent orchestration, and Model Context Protocol (MCP) support. The v2.0 SDK (March 2026) is the production-hardened, fully stable release of these capabilities.
 
 Welcome to the **Mistral Agents API Comprehensive Guide** – the most extensive, expert-level resource for building sophisticated AI agents using Mistral's platform. This guide covers everything from foundational concepts to advanced production deployments, with special emphasis on **built-in orchestration**, **persistent memory via Conversations API**, **5 powerful built-in connectors**, **MCP integration**, and **eliminating external framework dependencies**.
 
@@ -359,14 +380,24 @@ Start Here (Foundation)
 
 ## 📝 Document Versions
 
-**Latest Version**: 2.0 (May 2025 Launch Edition)
+**Latest Version**: 3.0 (April 2026 Edition — SDK v2.0.1)
 
 All code examples tested against:
-- Mistral AI Python SDK v1.9.11+
+- Mistral AI Python SDK v2.0.1+
 - Models: `mistral-medium-2505`, `mistral-large-latest`
-- API Version: v1
-- Connectors: All 5 built-in connectors
-- MCP: Anthropic MCP integration
+- API Version: v2
+- Connectors: All 5 built-in connectors + Premium Web Search
+- MCP: Full MCP server integration
+- Code Interpreter: Secure Python sandbox
+
+---
+
+## 📋 Revision History
+
+| Date | SDK Version | Changes |
+|------|-------------|---------|
+| April 16, 2026 | 2.0.1 | Updated all code examples to SDK v2.x; documented migration from v1.x; updated install instructions; added Premium Web Search and Code Interpreter sections |
+| November 2025 | 1.9.11 | May 2025 launch documentation; 5 built-in connectors; MCP integration; Conversations API |
 
 ---
 

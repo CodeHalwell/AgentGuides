@@ -1,10 +1,25 @@
 # Google Agent Development Kit (ADK) for Go
 
-**Version:** 1.0.0
-**Release Date:** November 7, 2025
+**Version:** 1.0.0 GA (April 8, 2026) — previously 0.1.0 (November 2025)
 **License:** Apache 2.0
 **Official Repository:** https://github.com/google/adk-go
 **Documentation:** https://google.github.io/adk-docs/
+
+## 🆕 What's New — 0.1.0 → 1.0.0 GA
+
+- **Native OpenTelemetry (OTel) integration**: plugging in a `TraceProvider` generates structured traces and spans for agent debugging
+- **A2A 1.0 protocol support**: seamless communication between Go, Java, Python, and TypeScript agents with automatic event ordering and response aggregation during streaming
+- **Request Confirmation flow**: sensitive operations can be flagged as `RequireConfirmation`, pausing agent execution for human approval (aligned with SAIF guidelines)
+- **YAML-based agent configuration**: define and run agents via YAML + the `adk` CLI without boilerplate Go code
+- **Plugin system**: composable agent extensions
+- **Tool Confirmation**: human-in-the-loop confirmation for sensitive tool calls
+- **VertexAI Session Service**: native integration with Vertex AI session management
+
+## ⚠️ Breaking Changes (0.x → 1.0.0)
+
+- The API surface has been stabilized at 1.0. Interfaces that were experimental in 0.x may have changed signatures.
+- The A2A SDK dependency was upgraded to support A2A 1.0 spec — breaking for code using A2A 0.x patterns.
+- Review the [migration notes](https://github.com/google/adk-go/releases/tag/v1.0.0) before upgrading.
 
 ---
 
@@ -525,3 +540,12 @@ Apache 2.0 License. See [LICENSE](https://github.com/google/adk-go/blob/main/LIC
 ---
 
 **Ready to build AI agents in Go?** Start with the [Comprehensive Guide](./google_adk_go_comprehensive_guide.md) or jump straight to [Code Recipes](./google_adk_go_recipes.md).
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 16, 2026 | 1.0.0 GA | GA release (April 8, 2026); OTel integration; A2A 1.0 support; YAML config; plugin system; tool confirmation; breaking changes from 0.x documented |
+| November 2025 | 0.1.0 | Initial Go ADK guide; LLMAgent; multi-agent orchestration; A2A protocol; MCP integration |
