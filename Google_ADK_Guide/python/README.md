@@ -1,10 +1,10 @@
 # Google Agent Development Kit (ADK) - Python Documentation
 
-**Version:** 1.30.0 (April 13, 2026) — previously 1.19.0 (November 2025)
+**Version:** 1.30.0 (April 13, 2026) — previously 1.18.0 (November 2025)
 **Last Updated:** April 16, 2026
 **Language:** Python 3.10+
 
-## 🆕 What's New in ADK Python 1.19 → 1.30
+## 🆕 What's New in ADK Python 1.18 → 1.30
 
 - **Graph-based workflow orchestration** (`Workflow(BaseNode)`): lazy scan deduplication, partial resume for nested workflows, state/artifact delta bundling
 - **Task API**: structured agent-to-agent delegation with multi-turn task mode, single-turn controlled output, human-in-the-loop, and task agents as workflow nodes
