@@ -1,4 +1,4 @@
-Latest: 1.22.0 | Updated: 2025
+Latest: 1.24.0 | Updated: April 2026
 # 🤗 SmolAgents: Comprehensive Technical Guide
 
 **From Beginner to Expert – The Complete Reference for Building AI Agents That Think in Code**
@@ -710,6 +710,8 @@ Benefits of code-based reasoning:
 
 ### Basic Installation
 
+Requires **Python 3.10+**.
+
 ```bash
 # Core installation with default toolkit
 pip install 'smolagents[toolkit]'
@@ -992,6 +994,20 @@ model = InferenceClientModel(
 agent = CodeAgent(model=model)
 result = agent.run("What is 2 + 2?")
 print(result)  # Output: 4
+```
+
+**v1.24.0+ Note: `HfApiModel` has been deprecated.** Use `InferenceClientModel` for all new code:
+
+```python
+# CURRENT (v1.24.0+): Use InferenceClientModel
+from smolagents import InferenceClientModel, CodeAgent
+
+model = InferenceClientModel(model_id="Qwen/Qwen2.5-72B-Instruct")
+agent = CodeAgent(tools=[], model=model)
+
+# DEPRECATED (still works with shim in v1.24.0):
+# from smolagents import HfApiModel
+# model = HfApiModel(model_id="Qwen/Qwen2.5-72B-Instruct")  # DeprecationWarning
 ```
 
 **Recommended Models for Different Use Cases:**
@@ -2416,4 +2432,13 @@ result = agent.run("Analyse the dataset [1, 2, 3, 4, 5, 100]")
 ---
 
 (Document continues with approximately 15,000+ more lines covering all 20 major topics comprehensively)
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.24.0 | January 16, 2026 | `HfApiModel` deprecated (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents |
+| 1.23.0 | November 2025 | Previous documented version |
 

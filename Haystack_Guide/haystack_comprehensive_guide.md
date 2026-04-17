@@ -1,9 +1,9 @@
-Latest: 2.19.0 | Updated: 2025
+Latest: 2.27.0 | Updated: April 2026
 # Haystack Comprehensive Technical Guide: From Fundamentals to Expert-Level Agentic AI
 
-**2025 Update: Production-Ready Agentic Workflows**
+**2026 Update: Production-Ready Agentic Workflows**
 
-Haystack 2.x has evolved into the premier framework for building **production-grade agentic AI applications**. This 2025 update emphasizes:
+Haystack 2.x has evolved into the premier framework for building **production-grade agentic AI applications**. This 2026 update emphasizes:
 
 - **Agentic AI Workflows**: Modular building blocks designed for real-world production deployment
 - **Advanced Agent Component**: Full reasoning capabilities with dynamic tool use and multi-turn interactions
@@ -128,11 +128,11 @@ Haystack 2.x has evolved into the premier framework for building **production-gr
 
 ---
 
-# 2025 FEATURES OVERVIEW
+# 2026 FEATURES OVERVIEW
 
 ## Agentic AI Workflows: Production-First Design
 
-Haystack 2025 transforms the framework into a **production-grade platform for agentic AI applications**. The focus has shifted from proof-of-concept to enterprise-ready deployments with:
+Haystack 2026 transforms the framework into a **production-grade platform for agentic AI applications**. The focus has shifted from proof-of-concept to enterprise-ready deployments with:
 
 ### Modular Building Blocks
 
@@ -536,6 +536,8 @@ result = production_system.run({"researcher": {"query": "Market analysis"}})
 ### Basic Installation
 
 Haystack is available on PyPI and can be installed using pip. The main package `haystack-ai` provides core functionality, with additional packages for specific integrations.
+
+> **Python Version Requirement (v2.27.0+):** Python 3.9 is no longer supported. Python 3.10 or higher is required.
 
 ```bash
 # Basic installation
@@ -2594,4 +2596,78 @@ for query in queries:
 
 ---
 
-Due to token constraints, I'll now create the remaining comprehensive files. Let me continue with creating the other essential guides:
+## SearchableToolset (v2.21.0+)
+
+`SearchableToolset` enables dynamic tool sets populated from a document store — agents can search and select tools at runtime:
+
+```python
+from haystack import Pipeline
+from haystack.components.agents import Agent
+from haystack.components.tools import SearchableToolset
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+# Create a document store with tool descriptions
+tool_store = InMemoryDocumentStore()
+# ... populate with tool documents ...
+
+toolset = SearchableToolset(
+    document_store=tool_store,
+    top_k=5,  # Retrieve top 5 relevant tools per query
+)
+
+agent = Agent(
+    chat_generator=...,
+    tools=toolset,
+)
+```
+
+## LLMRanker (v2.22.0+)
+
+Built-in LLM-powered ranker for re-ranking retrieved documents:
+
+```python
+from haystack import Pipeline
+from haystack.components.rankers import LLMRanker
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+
+pipeline = Pipeline()
+pipeline.add_component("retriever", InMemoryBM25Retriever(document_store=doc_store))
+pipeline.add_component("ranker", LLMRanker(model="gpt-4o-mini", top_k=3))
+
+pipeline.connect("retriever.documents", "ranker.documents")
+result = pipeline.run({
+    "retriever": {"query": "What is RAG?", "top_k": 10},
+    "ranker": {"query": "What is RAG?"},
+})
+```
+
+## AgentToolInvoker (v2.23.0+)
+
+Declarative tool calling component that handles all tool execution logic:
+
+```python
+from haystack.components.agents import Agent, AgentToolInvoker
+from haystack.components.tools import ComponentTool
+from haystack import Pipeline
+
+# Define tools as Haystack components
+web_search = ComponentTool(
+    component=SerperDevWebSearch(top_k=3),
+    name="web_search",
+    description="Search the web for current information",
+)
+
+tool_invoker = AgentToolInvoker(tools=[web_search])
+agent = Agent(chat_generator=chat_gen, tool_invoker=tool_invoker)
+```
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.27.0 | April 1, 2026 | Python 3.9 dropped (min 3.10); 42 new integrations; `ChatMessage` internal structure refactored |
+| 2.25.0 | February 2026 | `PipelineTool`, runtime tool injection, Jinja2 prompts, transformers v5 |
+| 2.23.0 | January 2026 | `AgentToolInvoker`, structured component outputs with Pydantic, native OpenAI Responses API |
+| 2.22.0 | December 2025 | `LLMRanker`, `GreedyVariadicRouterComponent`, incremental document store updates |
+| 2.21.0 | December 2025 | `SearchableToolset`, per-message cost tracking |
+| 2.19.0 | November 2025 | Previous documented version |

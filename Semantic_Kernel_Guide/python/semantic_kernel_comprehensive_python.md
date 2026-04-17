@@ -1,10 +1,11 @@
+Latest: 1.41.2 | Updated: April 2026
 # Semantic Kernel Comprehensive Guide (Python)
 
 **Complete Python Reference for Building AI Agents and Agentic Systems**
 
-Last Updated: November 2025
-Python Version: 3.9+
-Semantic Kernel: 1.38.0+
+Last Updated: April 2026
+Python Version: 3.10+ (3.9 dropped as of v1.41.2)
+Semantic Kernel: 1.41.2+
 
 ---
 
@@ -2229,5 +2230,52 @@ For production deployment, recipes, and more examples, see:
 - [Production Guide](semantic_kernel_production_python.md)
 - [Recipes](semantic_kernel_recipes_python.md)
 - [Advanced Multi-Agent Guide](semantic_kernel_advanced_multi_agent_python.md)
+
+---
+
+## MCP Server/Client Support (v1.41.x)
+
+Semantic Kernel Python now supports both MCP server and client modes:
+
+```python
+from semantic_kernel import Kernel
+from semantic_kernel.connectors.mcp import MCPClient, MCPServer
+
+# Use MCP tools from an external server
+async with MCPClient(server_url="http://localhost:8080") as client:
+    tools = await client.list_tools()
+
+    kernel = Kernel()
+    kernel.add_plugin(tools, plugin_name="external_tools")
+
+# Expose SK functions as an MCP server
+server = MCPServer(kernel)
+await server.start(port=9090)
+```
+
+---
+
+## A2A Protocol Support (v1.41.x)
+
+```python
+from semantic_kernel.agents import Agent
+from semantic_kernel.interop.a2a import A2AAdapter
+
+# Expose SK agent via A2A
+agent = Agent(kernel=kernel, name="sk-assistant")
+adapter = A2AAdapter(agent)
+await adapter.start(port=8080)
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.41.2 | April 8, 2026 | Full MCP server/client support; A2A protocol; Oracle database connector; Google GenAI SDK migration; Python 3.10+ required |
+| 1.38.0 | November 2025 | Previous documented version |
+
+---
 
 **[Back to Python README](README.md)** | **[Complete Index](GUIDE_INDEX.md)**

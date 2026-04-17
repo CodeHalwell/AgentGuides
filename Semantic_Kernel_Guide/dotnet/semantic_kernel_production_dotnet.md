@@ -2,9 +2,9 @@
 
 **Production Deployment, Monitoring, and Best Practices for .NET**
 
-Last Updated: November 2025
+Last Updated: April 2026
 .NET Version: 6.0+
-Semantic Kernel .NET: 1.38.0+
+Semantic Kernel .NET: 1.74.0+
 
 ---
 

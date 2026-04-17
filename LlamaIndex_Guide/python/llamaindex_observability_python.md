@@ -7,7 +7,7 @@ description: "Tracing, metrics, and logging patterns for LlamaIndex."
 # LlamaIndex Observability & Monitoring (Python)
 
 
-Latest: 0.14.8
+Latest: 0.14.20 | Updated: April 2026
 Upstream: https://github.com/run-llama/llama_index/releases | https://pypi.org/project/llama-index/
 
 ## Tracing

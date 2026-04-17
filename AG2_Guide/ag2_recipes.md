@@ -1,7 +1,7 @@
 # AG2 (AutoGen) Recipes
 
-**Version:** 0.3.2
-**Last Updated:** November 2025
+**Version:** 0.11.5
+**Last Updated:** April 2026
 **Focus:** Ready-to-Use Examples
 
 ## Overview

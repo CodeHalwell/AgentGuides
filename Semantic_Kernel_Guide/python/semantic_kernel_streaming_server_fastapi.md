@@ -6,7 +6,7 @@ description: "Stream incremental events from an SK-driven workflow over SSE."
 
 # Semantic Kernel Streaming Server (FastAPI, Python)
 
-Latest: 1.38.0
+Latest: 1.41.2 | Updated: April 2026
 Last verified: 2025-11
 
 This example streams staged events from a Semantic Kernel workflow; token-level streaming may depend on your SK function/service.

@@ -1,4 +1,4 @@
-Latest: 1.0.2
+Latest: 1.2.8 | Updated: April 2026
 # LangChain.js and LangGraph.js Comprehensive Technical Guide
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
@@ -496,6 +496,8 @@ console.log(toolDescriptions);
 Agents are autonomous entities that use language models and tools to solve problems.
 
 ```typescript
+// DEPRECATED: createReactAgent from '@langchain/langgraph/prebuilt' moved to '@langgraphjs/toolkit' in v1.2.x
+// Use instead: import { createReactAgent } from '@langgraphjs/toolkit';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { AgentExecutor } from '@langchain/core/agents';
 
@@ -641,6 +643,8 @@ Agents in LangChain.js are autonomous systems that make decisions about which to
 The ReAct (Reasoning + Acting) paradigm is the most common agent pattern. It interleaves thought steps with tool invocations.
 
 ```typescript
+// DEPRECATED: createReactAgent from '@langchain/langgraph/prebuilt' moved to '@langgraphjs/toolkit' in v1.2.x
+// Use instead: import { createReactAgent } from '@langgraphjs/toolkit';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
@@ -4939,6 +4943,48 @@ conversationGraph.addNode('retrieveKnowledge', async (state) => {
   };
 });
 ```
+
+---
+
+## New Type Utilities (v1.2.x)
+
+### ReducedValue — Fields with Separate Input/Output Schemas
+
+```typescript
+import { StateGraph, ReducedValue } from "@langchain/langgraph";
+import { z } from "zod";
+
+// ReducedValue lets you define separate schemas for reading vs writing a field
+const StateAnnotation = {
+  // Input: accepts string[], Output: returns concatenated string
+  results: ReducedValue<string[], string>({
+    input: z.array(z.string()),
+    output: z.string(),
+    reducer: (existing, update) => [...existing, ...update],
+  }),
+};
+```
+
+### UntrackedValue — Transient State (Not Checkpointed)
+
+```typescript
+import { StateGraph, UntrackedValue } from "@langchain/langgraph";
+
+const StateAnnotation = {
+  messages: { ... },
+  // This field is transient — never saved to checkpoints
+  tempCache: UntrackedValue<Record<string, unknown>>(),
+};
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type; `createReactAgent` moved to `@langgraphjs/toolkit` |
+| 1.0.2 | November 2025 | Previous documented version |
 
 ---
 

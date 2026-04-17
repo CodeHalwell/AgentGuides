@@ -2,7 +2,7 @@
 
 **Quick Reference and Navigation for All Python Documentation**
 
-Last Updated: November 2025
+Last Updated: April 2026
 
 ---
 
@@ -498,4 +498,4 @@ result = await kernel.invoke(function, input="Hello")
 ---
 
 **Last Updated:** November 2025
-**Semantic Kernel Python Version:** 1.38.0+
+**Semantic Kernel Python Version:** 1.41.2+

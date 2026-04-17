@@ -142,7 +142,7 @@ from llama_index.core import (
 )
 from llama_index.readers.file.pdf import PDFReader
 from llama_index.core.tools import QueryEngineTool, FunctionTool
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 import os
 from pathlib import Path
@@ -215,7 +215,7 @@ class ResearchPaperAnalyzer:
         ))
         
         # Create agent
-        agent = ReActAgent.from_tools(
+        agent = AgentWorkflow.from_tools(
             tools=tools,
             llm=self.llm,
             verbose=True,
@@ -454,7 +454,7 @@ news_analysis_agent.py
 Analyze news in real-time with agent
 """
 
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import feedparser
@@ -515,7 +515,7 @@ class NewsAnalysisAgent:
             ),
         ]
         
-        agent = ReActAgent.from_tools(
+        agent = AgentWorkflow.from_tools(
             tools=tools,
             llm=self.llm,
             verbose=True,
@@ -642,7 +642,7 @@ sql_agent.py
 Query databases using natural language
 """
 
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import sqlite3
@@ -730,7 +730,7 @@ Return only the SQL query."""
             ),
         ]
         
-        agent = ReActAgent.from_tools(
+        agent = AgentWorkflow.from_tools(
             tools=tools,
             llm=self.llm,
             system_prompt="You are a helpful database assistant. Help users query the database.",
@@ -906,7 +906,7 @@ multi_step_reasoning_agent.py
 Agent that can reason through complex problems
 """
 
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -971,7 +971,7 @@ class MultiStepReasoningAgent:
 
 Use the tools in this order and explain your reasoning at each step."""
         
-        agent = ReActAgent.from_tools(
+        agent = AgentWorkflow.from_tools(
             tools=tools,
             llm=self.llm,
             system_prompt=system_prompt,
@@ -1008,7 +1008,7 @@ support_triage_agent.py
 Triage customer support tickets
 """
 
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 from enum import Enum
@@ -1097,7 +1097,7 @@ Keep it brief (2-3 sentences) and empathetic."""
 
 Be thorough but efficient."""
         
-        agent = ReActAgent.from_tools(
+        agent = AgentWorkflow.from_tools(
             tools=tools,
             llm=self.llm,
             system_prompt=system_prompt,

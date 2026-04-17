@@ -1,7 +1,7 @@
 # AG2 (AutoGen) Architecture Diagrams
 
-**Version:** 0.3.2
-**Last Updated:** November 2025
+**Version:** 0.11.5
+**Last Updated:** April 2026
 **Focus:** Visualizing AG2 Systems
 
 ## Overview

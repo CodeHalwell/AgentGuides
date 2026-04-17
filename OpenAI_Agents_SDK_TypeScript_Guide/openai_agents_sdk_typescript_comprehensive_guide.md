@@ -1,8 +1,8 @@
-Latest: 6.8.1
+Latest: 0.8.3 | Updated: April 2026
 # OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** November 2025  
+**Last Updated:** April 2026  
 **Language:** TypeScript  
 **Framework:** OpenAI Agents SDK
 
@@ -35,10 +35,19 @@ Latest: 6.8.1
 
 ### Installation and Setup
 
-The OpenAI Agents SDK provides a lightweight framework for building agentic AI applications with minimal abstractions. Begin by installing the necessary dependencies:
+The OpenAI Agents SDK provides a lightweight framework for building agentic AI applications with minimal abstractions. The SDK has moved to a monorepo structure. Begin by installing the necessary dependencies:
 
 ```bash
-npm install @openai/agents zod dotenv
+npm install openai-agents
+# Extensions (optional):
+npm install @openai/agents-extensions-vercel-ai-sdk
+```
+
+> **Note:** The `aisdk()` helper import changed from the internal SDK package to the separate `@openai/agents-extensions-vercel-ai-sdk` package. Update any existing imports accordingly.
+
+```bash
+# Additional development dependencies
+npm install zod dotenv
 npm install --save-dev typescript @types/node
 ```
 
@@ -2468,3 +2477,46 @@ This comprehensive guide provides an extensive foundation for building productio
 - **Type Safety Best Practices**: Leveraging TypeScript's capabilities
 
 The guide emphasises lightweight primitives, model-agnostic design, and built-in observability throughout all implementations.
+
+---
+
+### Realtime Agents with WebSocket Voice/Audio (v0.8.x)
+
+TypeScript SDK supports Realtime Agents with WebSocket-based voice/audio input:
+
+```typescript
+import { RealtimeAgent, RealtimeRunner } from 'openai-agents/realtime';
+
+const agent = new RealtimeAgent({
+  name: 'Voice Assistant',
+  instructions: 'You are a helpful voice assistant.',
+});
+
+const runner = new RealtimeRunner(agent);
+
+// Connect to WebSocket
+const session = await runner.connect({
+  audio: {
+    inputFormat: 'pcm16',
+    outputFormat: 'pcm16',
+    sampleRate: 24000,
+  },
+});
+
+session.on('audio_delta', (delta: ArrayBuffer) => {
+  // Play audio delta
+  playAudio(delta);
+});
+
+await session.send({ type: 'input_audio_buffer.append', audio: recordedPcm });
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.8.3 | April 9, 2026 | Stability improvements; Zod schema validation for tool inputs; built-in tracing |
+| 0.8.0 | March 2026 | Realtime Agents with WebSocket voice/audio; Sessions API for multi-turn persistence |
+| 0.3.2 | November 2025 | Previous documented version |

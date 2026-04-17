@@ -1,4 +1,4 @@
-Latest: 0.10.0
+Latest: 0.11.5 | Updated: April 2026
 # Microsoft AutoGen - Comprehensive Technical Guide
 
 **A Beginner-to-Expert Tutorial for Building Autonomous Multi-Agent AI Systems with the Official Microsoft AutoGen Framework**
@@ -1386,3 +1386,10 @@ analyst = autogen.ConversableAgent(
 ---
 
 This comprehensive guide covers the core and intermediate topics. Continue reading in the production guide for advanced deployment strategies, cost optimisation, and enterprise patterns.
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.11.5 | April 5, 2026 | Security fixes (CVE-2026-23745/23950/24842); QuickResearchTool; Gemini streaming; RemyxCodeExecutor; autogen.beta event-driven redesign; A2A protocol; AG2 CLI |
+| 0.10.0 | November 2025 | Previous documented version |

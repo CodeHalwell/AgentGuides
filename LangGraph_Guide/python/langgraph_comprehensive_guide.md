@@ -1,7 +1,7 @@
-Latest: 1.0.3
+Latest: 1.1.6 | Updated: April 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.0.3 (November 2025)
+**Latest Version**: LangGraph 1.1.6 (April 2026)
 **Focus**: Python Examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
@@ -1354,6 +1354,65 @@ for event in graph.stream(
 ```
 {% endraw %}
 
+## Type-Safe v2 API (v1.1.x)
+
+### v2 Streaming
+
+```python
+from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+class State(TypedDict):
+    messages: list
+    result: str
+
+builder = StateGraph(State)
+# ... add nodes and edges ...
+graph = builder.compile()
+
+# v2 streaming: opt-in with version="v2"
+async for part in graph.astream(
+    {"messages": [{"role": "user", "content": "Hello"}]},
+    version="v2",  # Enables type-safe StreamPart output
+):
+    # part is a StreamPart with .type, .ns, and .data
+    print(f"Type: {part.type}, Data: {part.data}")
+```
+
+### v2 Invoke
+
+```python
+# v2 invoke returns a GraphOutput instead of a dict
+result = await graph.ainvoke(
+    {"messages": [{"role": "user", "content": "Hello"}]},
+    version="v2",
+)
+
+# GraphOutput has .value (final state) and .interrupts (any Human-in-the-Loop interrupts)
+print(result.value)       # Final state dict
+print(result.interrupts)  # List of interrupt points (if any)
+```
+
+### Pydantic/Dataclass Auto-Coercion
+
+v1.1.x automatically coerces input dictionaries to the graph's state type on `invoke()`:
+
+```python
+from pydantic import BaseModel
+
+class MyState(BaseModel):
+    query: str
+    result: str = ""
+
+builder = StateGraph(MyState)
+# ... graph setup ...
+graph = builder.compile()
+
+# Pass dict directly — auto-coerced to MyState
+result = await graph.ainvoke({"query": "What is LangGraph?"})
+print(type(result))  # MyState
+```
+
 ### Getting State at Any Point
 
 {% raw %}
@@ -2156,7 +2215,7 @@ print("Cache hit:", result["cache_hit"])  # True
 
 ## v1.0.3 Features (November 2025)
 
-LangGraph 1.0.3 introduces powerful new features for building more efficient, flexible, and production-ready agent systems.
+LangGraph 1.1.6 (April 2026) continues expanding on features first introduced in 1.0.3. LangGraph 1.0.3 introduced powerful new features for building more efficient, flexible, and production-ready agent systems.
 
 ### 11. Node Caching
 
@@ -3016,6 +3075,10 @@ async def async_state_update(url: str, state: AgentState) -> StateUpdate:
 #### Basic Command Tool Usage
 
 ```python
+# DEPRECATED: create_react_agent from langgraph.prebuilt is deprecated in v1.1.x
+# Use instead:
+from langchain.agents import create_agent
+# Note: langgraph.prebuilt.create_react_agent still works for compatibility
 from langgraph.prebuilt import create_react_agent
 from langgraph.command import command_tool
 from langchain.tools import tool
@@ -3216,7 +3279,7 @@ result = graph.invoke({
 
 ### 17. Python 3.13 Compatibility
 
-LangGraph 1.0.3 is fully compatible with Python 3.13, including support for new language features.
+LangGraph 1.1.6 (April 2026) adds Python 3.14 support. LangGraph 1.0.3 was fully compatible with Python 3.13, including support for new language features.
 
 #### Python 3.13 Features in LangGraph
 
@@ -3288,6 +3351,10 @@ langgraph run
 
 ```python
 # agent.py (generated from template)
+# DEPRECATED: create_react_agent from langgraph.prebuilt is deprecated in v1.1.x
+# Use instead:
+from langchain.agents import create_agent
+# Note: langgraph.prebuilt.create_react_agent still works for compatibility
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
 from tools import get_tools
@@ -3630,3 +3697,12 @@ def should_continue(state) -> str:
 7. Monitor with LangSmith
 
 Good luck with your AI engineering journey! LangGraph gives you the low-level control to build sophisticated agent systems. Start small, iterate, and scale.
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.1.6 | April 10, 2026 | Type-safe v2 streaming and invoke API (`version="v2"`); Pydantic/dataclass auto-coercion; Python 3.14 support; time-travel bug fixes with interrupts and subgraphs |
+| 1.0.3 | November 2025 | Previous documented version |

@@ -7,7 +7,7 @@ description: "Tracing pipelines, retries, fallbacks, and dead letters in Haystac
 # Haystack Observability & Error Recovery (Python)
 
 
-Latest: 2.19.0
+Latest: 2.27.0 | Updated: April 2026
 Upstream: https://github.com/deepset-ai/haystack/releases | https://haystack.deepset.ai/release-notes
 
 ## Pipelines

@@ -543,7 +543,7 @@ This index provides a comprehensive navigation structure for all Google Agent De
 
 ## Document Version History
 
-**Version 1.0** (November 2025)
+**Version 1.0.0 GA** (April 2026)
 - Initial documentation release
 - All core features documented
 - Complete code examples

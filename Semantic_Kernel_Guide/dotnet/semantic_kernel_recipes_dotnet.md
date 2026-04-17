@@ -2,8 +2,8 @@
 
 **Ready-to-Use C# Code Examples for Common Patterns**
 
-Last Updated: November 2025
-Semantic Kernel .NET: 1.38.0+
+Last Updated: April 2026
+Semantic Kernel .NET: 1.74.0+
 
 ---
 

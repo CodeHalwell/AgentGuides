@@ -55,8 +55,8 @@ Quick reference index for navigating the comprehensive LlamaIndex Python documen
 - **Architecture Overview** → diagrams.md (Core Architecture section)
 
 ### Agents
-- **ReActAgent** → comprehensive_guide.md (Section 1.4.1)
-- **OpenAIAgent** → comprehensive_guide.md (Section 1.4.2)
+- **AgentWorkflow** → comprehensive_guide.md (Section 4.1) [ReActAgent removed — use AgentWorkflow]
+- **AgentWorkflow** → comprehensive_guide.md (Section 4.2) [OpenAIAgent removed — use AgentWorkflow]
 - **Custom Agents** → comprehensive_guide.md (Section 1.4.3)
 - **ReAct Loop Diagrams** → diagrams.md (Agent Workflows section)
 - **Agent Execution Patterns** → production_guide.md (Agent Configuration)

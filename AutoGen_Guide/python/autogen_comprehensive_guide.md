@@ -1,4 +1,4 @@
-Latest: 0.10.0 (AG2 - 2025 Edition)
+Latest: 0.11.5 | Updated: April 2026
 # AG2 (AutoGen 2.0) - Comprehensive Technical Guide
 
 **A Beginner-to-Expert Tutorial for Building Autonomous Multi-Agent AI Systems with AG2, The Next Generation of AutoGen**
@@ -2166,3 +2166,10 @@ print(f"Cost: ${cost_stats['total_cost']:.4f}")
 This comprehensive guide now covers both AutoGen and AG2, including the 2025 enhancements and migration guidance. For a detailed migration walkthrough, see the dedicated [AutoGen to AG2 Migration Guide](./autogen_to_ag2_migration_guide.md).
 
 **Welcome to the AG2 era of agentic AI development!**
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.11.5 | April 5, 2026 | Security fixes (CVE-2026-23745/23950/24842); QuickResearchTool; Gemini streaming; RemyxCodeExecutor; autogen.beta event-driven redesign; A2A protocol; AG2 CLI |
+| 0.10.0 | November 2025 | Previous documented version |

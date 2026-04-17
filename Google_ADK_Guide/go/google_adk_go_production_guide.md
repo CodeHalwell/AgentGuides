@@ -3,7 +3,7 @@
 **Complete guide for deploying AI agents to production**
 
 Version: 0.1.0
-Last Updated: November 2025
+Last Updated: April 2026
 
 ---
 

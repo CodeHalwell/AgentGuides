@@ -20,7 +20,7 @@ from llama_agents import (
     SimpleMessageQueue,
     AgentOrchestrator,
 )
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -36,11 +36,11 @@ def analysis_tool(data: str) -> str:
 # Create agents
 llm = OpenAI(model="gpt-4")
 research_agent_service = AgentService(
-    agent=ReActAgent.from_tools([FunctionTool.from_defaults(research_tool)], llm=llm),
+    agent=AgentWorkflow.from_tools([FunctionTool.from_defaults(research_tool)], llm=llm),
     message_queue=SimpleMessageQueue(),
 )
 analysis_agent_service = AgentService(
-    agent=ReActAgent.from_tools([FunctionTool.from_defaults(analysis_tool)], llm=llm),
+    agent=AgentWorkflow.from_tools([FunctionTool.from_defaults(analysis_tool)], llm=llm),
     message_queue=SimpleMessageQueue(),
 )
 
@@ -77,7 +77,7 @@ This pattern involves an agent performing a task, presenting the result for huma
 
 ```python
 # human_approval_workflow.py
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -98,7 +98,7 @@ tools = [
 ]
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools, llm=llm, verbose=True)
 
 # Manual HITL implementation
 task = "Draft an email to 'test@example.com' about 'Project Update' and send it."
@@ -127,14 +127,15 @@ This example shows a custom agent that logs every step and its duration.
 ```python
 # observable_agent.py
 import time
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-class ObservableReActAgent(ReActAgent):
+# NOTE: ReActAgent was hard-removed in v0.14.x (raises ImportError). Extended AgentWorkflow instead.
+class ObservableAgentWorkflow(AgentWorkflow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -151,7 +152,7 @@ class ObservableReActAgent(ReActAgent):
 # Usage
 tools = [FunctionTool.from_defaults(lambda x: x, name="echo")]
 llm = OpenAI(model="gpt-4")
-agent = ObservableReActAgent.from_tools(tools, llm=llm)
+agent = ObservableAgentWorkflow.from_tools(tools, llm=llm)
 agent.run("This is a test.")
 ```
 

@@ -7,8 +7,10 @@ description: "Advanced patterns for Mistral agents: error handling, observabilit
 # Mistral Agents API Advanced (Python)
 
 
-Latest: 1.9.11
+Latest: 2.0.1 | Updated: April 2026
 Upstream: https://github.com/mistralai/client-python/releases | https://docs.mistral.ai/getting-started/clients | https://pypi.org/project/mistralai/
+
+> **BREAKING (v2.0.1)**: The Mistral SDK v2.0.1 API is NOT backwards-compatible with v1.x. Install with `pip install mistralai>=2.0.0`.
 
 ## Patterns
 - Tool reliability with retries/backoff

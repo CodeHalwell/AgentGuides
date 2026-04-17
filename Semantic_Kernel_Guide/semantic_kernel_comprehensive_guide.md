@@ -1,9 +1,9 @@
 
-Latest: 1.38.0
+Latest: SK Python 1.41.2 / .NET 1.74.0 | Updated: April 2026
 # Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** November 2025  
+**Last Updated:** April 2026  
 **Scope:** Installation, Core Concepts, Agents, Plugins, Planners, Memory, Azure Integration, Cross-Platform Implementation
 
 ---
@@ -103,7 +103,7 @@ pip install semantic-kernel[all]
 Create a `requirements.txt` file:
 
 ```
-semantic-kernel>=0.10.0
+semantic-kernel>=1.41.2
 python-dotenv>=1.0.0
 aiohttp>=3.8.0
 openai>=1.0.0

@@ -6,7 +6,7 @@ description: "Stream LlamaIndex query tokens over SSE using FastAPI."
 
 # LlamaIndex Streaming Server (FastAPI)
 
-Latest: 0.14.8
+Latest: 0.14.20 | Updated: April 2026
 Last verified: 2025-11
 
 ```python

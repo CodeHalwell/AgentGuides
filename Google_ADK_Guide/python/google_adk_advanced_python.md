@@ -7,7 +7,7 @@ description: "Advanced patterns for Google Agent Development Kit: multi-agent, H
 # Google ADK Advanced (Python)
 
 
-Latest: 1.18.0
+Latest: 1.30.0 | Updated: April 2026
 Upstream: https://github.com/google/adk-python | https://google.github.io/adk-docs/get-started/python/
 
 ## Patterns

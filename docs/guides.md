@@ -1,17 +1,17 @@
 ---
 layout: default
 title: "All Guides"
-description: "Complete list of all agent framework guides - Updated November 2025"
+description: "Complete list of all agent framework guides - Updated April 2026"
 ---
 
 # All Framework Guides
 
 **Complete Directory of All AI Agent Framework Documentation**
 
-**Last Updated:** November 17, 2025
+**Last Updated:** April 17, 2026
 **Frameworks:** 18
 **Languages:** Python, TypeScript, .NET, Go
-**Total Files:** 160+
+**Total Files:** 219+
 
 ---
 
@@ -32,7 +32,7 @@ Each framework section includes links to:
 
 ### Google ADK
 **Languages:** Python, Go
-**Latest:** Python v1.18.0, Go v0.1.0 (November 2025)
+**Latest:** Python v1.30.0, Go v1.0.0 GA, TypeScript v0.1.x (April 2026)
 
 #### Python
 - [📂 Python Directory](../Google_ADK_Guide/python/)
@@ -57,7 +57,7 @@ Each framework section includes links to:
 
 ### Semantic Kernel
 **Languages:** Python, .NET
-**Latest:** v1.38.0
+**Latest:** Python v1.41.2 / .NET v1.74.0 (April 2026)
 
 #### Python
 - [📂 Python Directory](../Semantic_Kernel_Guide/python/)
@@ -84,7 +84,7 @@ Each framework section includes links to:
 
 ### LlamaIndex
 **Languages:** Python, TypeScript
-**Latest:** Python v0.14.8, Workflows 1.0
+**Latest:** Python v0.14.20, TypeScript @llamaindex/workflow v1.1.4 (April 2026)
 
 #### Python
 - [📂 Python Directory](../LlamaIndex_Guide/python/)
@@ -110,7 +110,7 @@ Each framework section includes links to:
 
 ### LangGraph
 **Languages:** Python, TypeScript
-**Latest:** Python v1.0.3 (Nov 10, 2025), TypeScript v1.0.2
+**Latest:** Python v1.1.6 / TypeScript v1.2.8 (April 2026)
 
 #### Python
 - [📂 Python Directory](../LangGraph_Guide/python/)
@@ -240,7 +240,7 @@ Each framework section includes links to:
 ## 🐍 Python-Only Frameworks
 
 ### CrewAI
-**Latest:** v1.4.1
+**Latest:** v1.14.0 (April 2026)
 
 - [📂 CrewAI Guide](../CrewAI_Guide/)
 - [📖 README](../CrewAI_Guide/README.md)
@@ -288,7 +288,7 @@ Each framework section includes links to:
 ---
 
 ### Haystack
-**Latest:** v2.19.0
+**Latest:** v2.27.0 (April 2026)
 
 - [📂 Haystack Guide](../Haystack_Guide/)
 - [📖 README](../Haystack_Guide/README.md)
@@ -305,7 +305,7 @@ Each framework section includes links to:
 ---
 
 ### SmolAgents
-**Latest:** v1.22.0
+**Latest:** v1.24.0 (April 2026)
 
 - [📂 SmolAgents Guide](../SmolAgents_Guide/)
 - [📖 README](../SmolAgents_Guide/README.md)
@@ -338,7 +338,7 @@ Each framework section includes links to:
 ---
 
 ### Mistral Agents API
-**Latest:** v1.9.11 (May 27, 2025 Launch)
+**Latest:** v2.0.1 (March 2026)
 
 - [📂 Mistral Guide](../Mistral_Agents_API_Guide/)
 - [📖 README](../Mistral_Agents_API_Guide/README.md)
@@ -369,7 +369,7 @@ Each framework section includes links to:
 - [LlamaIndex - TypeScript](../LlamaIndex_Guide/typescript/)
 
 **Major Feature Releases:**
-- [LangGraph v1.0.3](../LangGraph_Guide/python/) - Caching, hooks, memory
+- [LangGraph v1.1.6](../LangGraph_Guide/python/) - Caching, hooks, memory
 - [PydanticAI](../PydanticAI_Guide/) - Durable execution, graphs
 - [CrewAI](../CrewAI_Guide/) - Flows
 - [Amazon Bedrock](../Amazon_Bedrock_Agents_Guide/) - Multi-agent collaboration, AgentCore

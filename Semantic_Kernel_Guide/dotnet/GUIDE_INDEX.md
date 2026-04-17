@@ -2,7 +2,7 @@
 
 **Quick Reference and Navigation for All .NET Documentation**
 
-Last Updated: November 2025
+Last Updated: April 2026
 
 ---
 
@@ -93,4 +93,4 @@ Last Updated: November 2025
 
 **[← Back to .NET README](README.md)** | **[↑ Main Guide](../README.md)**
 
-Last Updated: November 2025
+Last Updated: April 2026
