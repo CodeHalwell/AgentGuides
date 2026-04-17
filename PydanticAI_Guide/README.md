@@ -124,7 +124,7 @@ asyncio.run(main())
 | `StreamedRunResult.validate_structured_result()` | `StreamedRunResult.validate_structured_output()` |
 | `Agent.result_validator` method | `Agent.output_validator` |
 | `from pydantic_ai.utils import format_as_xml` | `from pydantic_ai import format_as_xml` |
-| `Graph.next()` | `async with graph.iter(...) as run: run.next()` |
+| Graph.next() | async with graph.iter(...) as run: await run.next() |
 
 **Quick migration example:**
 ```python
