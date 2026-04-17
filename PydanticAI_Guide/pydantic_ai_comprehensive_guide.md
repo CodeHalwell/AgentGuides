@@ -1,8 +1,8 @@
-Latest: 1.14.1
+Latest: 1.84.0 | Updated: April 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.0.0 (September 2025)  
+**Version:** 1.84.0 (April 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1638,4 +1638,108 @@ This comprehensive guide continues with:
 - `pydantic_ai_production_guide.md` - Deployment, scaling, architecture patterns
 - `pydantic_ai_recipes.md` - Real-world code examples and patterns
 - `pydantic_ai_diagrams.md` - Architecture and flow diagrams
+
+---
+
+## Advanced Features (April 2026)
+
+### EvaluationReport API
+
+Pydantic AI now includes a built-in evaluation API for LLM-based assessment:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.eval import EvaluationReport, EvalCase
+
+agent = Agent('openai:gpt-4o', output_type=str)
+
+# Define evaluation cases
+cases = [
+    EvalCase(
+        input="What is 2+2?",
+        expected_output="4",
+    ),
+]
+
+# Run evaluation
+report: EvaluationReport = await agent.evaluate(cases)
+print(f"Pass rate: {report.pass_rate:.1%}")
+print(f"Mean score: {report.mean_score:.3f}")
+```
+
+### Deferred Model Loading
+
+```python
+from pydantic_ai import Agent
+
+# Defer model init until first run (useful for testing and lazy startup)
+agent = Agent('openai:gpt-4o', defer_loading=True)
+
+# Model is loaded only when run() is first called
+result = await agent.run("Hello")
+```
+
+### ThreadExecutor for Sync Tools
+
+When you need to call synchronous (blocking) functions inside an async agent:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.tools import ThreadExecutor
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool
+def blocking_db_query(ctx, query: str) -> str:
+    # This sync function is automatically wrapped with ThreadExecutor
+    import time
+    time.sleep(0.1)  # Simulate blocking I/O
+    return f"Result for: {query}"
+
+# Sync tools are executed in a thread pool automatically
+result = await agent.run("Query the database for recent orders")
+```
+
+### CaseLifecycle Hooks (State Machine Patterns)
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.lifecycle import CaseLifecycle
+from dataclasses import dataclass
+
+@dataclass
+class WorkflowState:
+    step: str = "start"
+    retries: int = 0
+
+class WorkflowLifecycle(CaseLifecycle[WorkflowState]):
+    async def on_start(self, ctx) -> None:
+        ctx.deps.step = "processing"
+
+    async def on_tool_call(self, ctx, tool_name: str) -> None:
+        print(f"Tool called: {tool_name}, state: {ctx.deps.step}")
+
+    async def on_complete(self, ctx) -> None:
+        ctx.deps.step = "done"
+
+    async def on_error(self, ctx, error: Exception) -> None:
+        ctx.deps.retries += 1
+        ctx.deps.step = "error"
+
+agent = Agent('openai:gpt-4o', deps_type=WorkflowState)
+
+state = WorkflowState()
+result = await agent.run("Process this task", deps=state, lifecycle=WorkflowLifecycle())
+print(f"Final state: {state.step}")
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.84.0 | April 2026 | Patch: fixes exponential-time regex in Google FileSearchTool response parsing |
+| 1.83.0 | April 16, 2026 | Hard removal of all `result_*` → `output_*` renames (breaking); EvaluationReport API; pydantic-graph expansion with branching/looping; `defer_loading` for lazy model init; `ThreadExecutor` for sync-in-async tools; smart instruction caching; `CaseLifecycle` hooks; local `WebFetch` tool |
+| 1.20.0 | November 2025 | Previous documented version |
 

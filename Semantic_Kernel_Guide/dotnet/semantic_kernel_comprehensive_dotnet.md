@@ -1,10 +1,11 @@
+Latest: 1.74.0 | Updated: April 2026
 # Semantic Kernel Comprehensive Guide (.NET)
 
 **Complete C#/.NET Reference for Building AI Agents and Agentic Systems**
 
-Last Updated: November 2025
+Last Updated: April 2026
 .NET Version: 6.0+
-Semantic Kernel: 1.38.0+
+Semantic Kernel .NET: 1.74.0+
 
 ---
 
@@ -917,5 +918,14 @@ This guide covers Semantic Kernel .NET with 2025 features:
 - [Production Guide](semantic_kernel_production_dotnet.md)
 - [Recipes](semantic_kernel_recipes_dotnet.md)
 - [Python Comprehensive Guide](../python/semantic_kernel_comprehensive_python.md) - for detailed conceptual patterns
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.74.0 | March 2026 | Server URL validation; Text Search LINQ provider; plugin graduation from alpha to preview; CVE-2026-26127 security fix |
+| 1.67.1 | November 2025 | Previous documented version |
 
 **[Back to .NET README](README.md)** | **[Complete Index](GUIDE_INDEX.md)**

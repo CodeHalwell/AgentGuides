@@ -1,5 +1,7 @@
-Latest: 1.9.11
+Latest: 2.0.1 | Updated: April 2026
 # Mistral Agents API: Visual Architecture and Diagrams
+
+> **BREAKING**: Mistral SDK v2.0.1 (March 12, 2026) is NOT backwards-compatible with v1.x. See the migration guide for full details.
 
 This document provides comprehensive visual representations of Mistral Agents API architecture, data flows, and patterns.
 
@@ -685,3 +687,12 @@ Agent Object:
 **End of Diagrams Documentation**
 
 All diagrams use ASCII art for clarity and can be copied/shared easily. For more detailed visual representation, refer to the comprehensive guide's code examples and the production guide's architecture sections.
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.0.1 | March 12, 2026 | **BREAKING v2 rewrite**: stateful conversation API redesigned; TypeScript SDK now ESM-only, requires Zod v4; full Agents API with MCP tools, Code Interpreter, Premium Web Search; v1.x incompatible |
+| 1.9.11 | November 2025 | Previous documented version |

@@ -1,29 +1,36 @@
 ---
 layout: default
 title: "Agent Guides Home"
-description: "Comprehensive AI Agent Framework Documentation - November 2025 Edition"
+description: "Comprehensive AI Agent Framework Documentation - April 2026 Edition"
 ---
 
 # 🤖 Agent Guides
 ## Comprehensive AI Agent Framework Documentation
 
-**Latest Update:** November 17, 2025
+**Latest Update:** April 17, 2026
 **Frameworks Covered:** 18
 **Languages:** Python, TypeScript, .NET, Go
-**Total Documentation:** 500,000+ words across 160+ files
+**Total Documentation:** 500,000+ words across 219+ files
 
 ---
 
-## 🎉 What's New - November 2025
+## 🎉 What's New - April 2026
 
-✨ **Major Repository Update Complete!**
+✨ **April 2026 Update Complete!**
 
-- **3 Frameworks Reorganized by Language:** Google ADK, Semantic Kernel, LlamaIndex now have separate Python, TypeScript, .NET, and Go directories
-- **All 18 Frameworks Updated** with latest 2025 features
-- **75+ New Guides Created** including migration guides, 2025 feature docs
-- **500+ New Code Examples** across all frameworks
+- **All 19 Frameworks Updated** to latest versions (April 2026)
+- **New Google ADK TypeScript guide** added
+- **Microsoft Agent Framework 1.0 GA** — unifies Semantic Kernel + AutoGen
+- **PydanticAI v1.84.0** — `output_*` API (breaking renames complete), EvaluationReport, pydantic-graph
+- **Anthropic Claude Agent SDK v0.1.60** — extended thinking config, file checkpointing, session rewind
+- **OpenAI Agents SDK v0.14.1** — SandboxAgent (beta), openai v2.x required
+- **CrewAI v1.14.0** — checkpoint system (SqliteProvider), CodeInterpreterTool removed
+- **LlamaIndex v0.14.20** — AgentWorkflow replaces all legacy agent classes (hard-removed)
+- **Mistral SDK v2.0.1** — major API rewrite, v1.x incompatible
+- **AG2 v0.11.5** — autogen.beta event-driven redesign, A2A protocol, security fixes
+- **219+ files** with revision history sections added throughout
 
-📖 **[Read Full Update Summary →](REPOSITORY_UPDATE_SUMMARY_NOV_2025)**
+📖 **[Read Full Update Report →](docs/update_report_april_2026)**
 
 ---
 
@@ -48,7 +55,7 @@ description: "Comprehensive AI Agent Framework Documentation - November 2025 Edi
 - **[OpenAI Agents SDK](OpenAI_Agents_SDK_TypeScript_Guide/)** (TypeScript) - With HITL approvals
 - **[CrewAI](CrewAI_Guide/)** - Role-based teams with Flows
 - **[AutoGen (AG2)](AutoGen_Guide/python/)** - Research-grade multi-agent
-- **[LangGraph](LangGraph_Guide/python/)** (Python) - v1.0.3 with caching, hooks
+- **[LangGraph](LangGraph_Guide/python/)** (Python) - v1.1.6 with type-safe v2 API
 - **[LangGraph](LangGraph_Guide/typescript/)** (TypeScript) - Type-safe streaming
 
 ### Data & Knowledge
@@ -155,7 +162,7 @@ Quick comparison table:
 | PydanticAI | Python | Low-Med | Type safety | Durable exec, graphs |
 | OpenAI Agents | Python, TS | Medium | Multi-agent | Swarm replacement |
 | CrewAI | Python | Medium | Teams | Flows feature |
-| LangGraph | Python, TS | High | Complex flows | v1.0.3 caching, hooks |
+| LangGraph | Python, TS | High | Complex flows | v1.1.6 type-safe v2 API |
 | LlamaIndex | Python, TS | Medium | RAG | Workflows 1.0 |
 | Haystack | Python | Med-High | Search | Multi-agent patterns |
 | AG2 | Python | Med-High | Research | AG2 rebranding |
@@ -171,7 +178,7 @@ Quick comparison table:
 ## 🔍 Search Documentation
 
 ### By Feature
-- **Caching:** LangGraph v1.0.3
+- **Caching/Checkpointing:** LangGraph v1.1.6
 - **Durable Execution:** PydanticAI
 - **Graph Workflows:** LangGraph, Microsoft Agent Framework, PydanticAI
 - **MCP Support:** Google ADK, Semantic Kernel, Microsoft Framework, Claude SDK, Mistral
@@ -194,7 +201,7 @@ Quick comparison table:
 - ✅ Google ADK: Added Go support, reorganized by language
 - ✅ Semantic Kernel: Reorganized by language (Python/.NET)
 - ✅ LlamaIndex: Added TypeScript support, reorganized
-- ✅ LangGraph: v1.0.3 features (caching, hooks, memory)
+- ✅ LangGraph: v1.1.6 features (type-safe v2 API, caching, hooks, memory)
 - ✅ OpenAI Agents SDK: Swarm replacement documentation
 - ✅ Anthropic Claude: Rebranding from Code SDK
 - ✅ Microsoft Agent Framework: A2A, graphs, declarative agents

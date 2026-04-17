@@ -1,3 +1,4 @@
+Latest: 1.14.0 | Updated: April 2026
 # CrewAI Flows - Comprehensive Guide (2025)
 ## Event-Driven Workflows for Agentic AI Automation
 
@@ -98,12 +99,12 @@ Each method can trigger one or more listeners, creating a directed acyclic graph
 
 ### Installation
 
-Flows are included in CrewAI 1.4.1+:
+Flows are included in CrewAI 1.6.0+:
 
 ```bash
-pip install crewai>=1.4.1
+pip install crewai>=1.14.0
 # Or with UV:
-uv pip install crewai>=1.4.1
+uv pip install crewai>=1.14.0
 ```
 
 ### Your First Flow

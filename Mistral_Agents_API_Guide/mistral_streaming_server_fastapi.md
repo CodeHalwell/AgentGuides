@@ -6,8 +6,8 @@ description: "Minimal FastAPI server streaming Mistral chat completions."
 
 # Mistral Streaming Server (FastAPI)
 
-Latest: 1.9.11
-Last verified: 2025-11
+Latest: 2.0.1 | Updated: April 2026
+Last verified: 2026-04
 
 ```python
 from fastapi import FastAPI

@@ -2,8 +2,10 @@
 
 **Complete API Reference and Developer Guide**
 
-Version: 0.1.0
-Last Updated: November 2025
+> **GA Release**: Google ADK for Go reached v1.0.0 GA on April 8, 2026. The API is now stable with long-term support.
+
+Version: 1.0.0 GA
+Last Updated: April 2026
 License: Apache 2.0
 
 ---
@@ -2180,6 +2182,79 @@ for _, ag := range agents {
 wg.Wait()
 close(responses)
 ```
+
+---
+
+## What's New in v1.0.0 GA
+
+### OpenTelemetry Integration
+
+```go
+import (
+    "go.opentelemetry.io/otel"
+    "github.com/google/adk-go/observability"
+)
+
+// Set up OpenTelemetry tracing
+tp := observability.NewTracerProvider(
+    observability.WithExporter(jaegerExporter),
+)
+otel.SetTracerProvider(tp)
+
+// ADK automatically traces all agent runs
+agent, err := adk.NewAgent(
+    adk.WithName("my-agent"),
+    adk.WithTracing(true),
+)
+```
+
+### YAML Agent Configuration
+
+```yaml
+# agent.yaml
+name: research-agent
+model: gemini-2.0-flash
+instruction: |
+  You are a research assistant. Conduct thorough research
+  on the given topic and provide well-sourced answers.
+tools:
+  - type: google_search
+  - type: code_execution
+```
+
+```go
+agent, err := adk.LoadAgent("agent.yaml")
+```
+
+### Plugin System
+
+```go
+type LoggingPlugin struct{}
+
+func (p *LoggingPlugin) BeforeRun(ctx context.Context, req *adk.RunRequest) error {
+    log.Printf("Agent run started: %s", req.Prompt)
+    return nil
+}
+
+func (p *LoggingPlugin) AfterRun(ctx context.Context, resp *adk.RunResponse) error {
+    log.Printf("Agent run completed in %v", resp.Duration)
+    return nil
+}
+
+agent, err := adk.NewAgent(
+    adk.WithName("my-agent"),
+    adk.WithPlugins(&LoggingPlugin{}),
+)
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 GA | April 8, 2026 | **Stable GA release**; OpenTelemetry integration; A2A 1.0 full support; YAML-based agent configuration; Plugin system; Tool confirmation hooks |
+| 0.1.0 | November 2025 | Initial documented version |
 
 ---
 

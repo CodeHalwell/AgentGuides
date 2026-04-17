@@ -1,4 +1,4 @@
-Latest: 0.6.1
+Latest: 0.14.1 | Updated: April 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -29,11 +29,13 @@ A complete reference for building production-ready multi-agent AI applications w
 
 ### Basic Installation
 
-The OpenAI Agents SDK requires Python 3.9 or newer and can be installed via pip:
+The OpenAI Agents SDK requires Python 3.10 or newer and can be installed via pip:
 
 ```bash
-pip install openai-agents
+pip install openai-agents>=0.14.1
 ```
+
+> **Requirements:** `openai>=2.0.0` is required (breaking change from v1.x — see [Breaking Changes](#breaking-changes-in-v014x) below). Python 3.9 has been dropped; minimum supported version is Python 3.10.
 
 For development with optional features, install with extras:
 
@@ -49,6 +51,9 @@ pip install 'openai-agents[all]'
 
 # LiteLLM support for multi-provider model access
 pip install 'openai-agents[litellm]'
+
+# Code interpreter support
+pip install 'openai-agents[code-interpreter]'
 ```
 
 ### Using uv Package Manager
@@ -123,6 +128,16 @@ my_agent_app/
     ├── test_agents.py
     └── test_tools.py
 ```
+
+### Breaking Changes in v0.14.x
+
+| Change | Details |
+|--------|---------|
+| **`openai` v2 required** | `openai>=2.0.0` is a hard requirement; v1.x raises `ImportError` at import time |
+| **Python 3.9 dropped** | Minimum Python version is now 3.10 |
+| **Sync tools auto-wrapped** | Synchronous tool functions are automatically wrapped with `asyncio.to_thread`; no manual wrapping needed |
+| **MCP tool errors** | MCP tool errors now propagate as exceptions (not strings) |
+| **`as_tool()` type narrowed** | `Agent.as_tool()` return type is now `FunctionTool` (previously `Tool`) |
 
 ---
 
@@ -1273,6 +1288,8 @@ asyncio.run(main())
 ```
 
 **Code Interpreter Tool:**
+
+> **Note:** `CodeInterpreterTool` is OpenAI's built-in code interpreter tool and is imported directly from `agents`. If the tool is not bundled with your install, add the extra: `pip install 'openai-agents[code-interpreter]'`.
 
 ```python
 from agents import Agent, Runner, CodeInterpreterTool
@@ -3013,6 +3030,78 @@ async def main():
 asyncio.run(main())
 ```
 
+### SandboxAgent (v0.14.0+) — Isolated Execution Environment
+
+SandboxAgent provides agents with a persistent, isolated workspace for file operations, code execution, and long-running tasks. This is a beta feature launching first in Python.
+
+```python
+from agents import SandboxAgent, Manifest
+import asyncio
+
+async def main():
+    # Define the sandbox manifest
+    manifest = Manifest(
+        name="data-analysis-sandbox",
+        description="Isolated environment for data analysis tasks",
+        python_version="3.11",
+        packages=["pandas", "matplotlib", "numpy"],
+    )
+
+    # Create a SandboxAgent with persistent workspace
+    agent = SandboxAgent(
+        name="Data Analyst",
+        instructions="Analyse data and create visualisations. Save outputs to /workspace/output/.",
+        manifest=manifest,
+    )
+
+    result = await agent.run(
+        "Load the CSV at /workspace/data.csv, calculate summary statistics, "
+        "and create a histogram saved as /workspace/output/histogram.png"
+    )
+    print(result.final_output)
+
+asyncio.run(main())
+```
+
+**Key SandboxAgent features:**
+- Persistent workspace across agent turns
+- Configurable resource limits (CPU, memory, network)
+- File I/O between agent and workspace
+- Automatic cleanup on completion
+- Works with any tool including file operations and code execution
+
+```python
+# Access sandbox output files
+for artifact in result.artifacts:
+    print(f"File: {artifact.path}, Size: {artifact.size_bytes} bytes")
+    content = artifact.read()
+```
+
+### WebSocket Streaming (v0.13.0+)
+
+For real-time bidirectional streaming:
+
+```python
+from agents import Agent, Runner
+from agents.transports import responses_websocket_session
+import asyncio
+
+agent = Agent(
+    name="Realtime Assistant",
+    instructions="You are a helpful assistant that responds in real time.",
+)
+
+async def handle_websocket_session(websocket):
+    async with responses_websocket_session(agent, websocket) as session:
+        async for event in session:
+            if event.type == "text_delta":
+                await websocket.send(event.delta)
+            elif event.type == "tool_call":
+                print(f"Tool called: {event.tool_name}")
+
+# Use with your WebSocket server (aiohttp, fastapi, etc.)
+```
+
 ---
 
 ## Summary and Best Practices
@@ -3031,3 +3120,14 @@ The OpenAI Agents SDK provides a production-ready framework for building sophist
 10. **Iterate Constantly**: Use traces and feedback to improve agents
 
 This comprehensive framework enables developers to build production-grade AI applications with confidence, from simple chatbots to complex multi-agent research systems.
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.14.1 | April 2026 | Patch release for SandboxAgent stability improvements |
+| 0.14.0 | April 2026 | **SandboxAgent** (beta) for persistent isolated workspaces; `openai` v2.x hard requirement; Python 3.9 dropped; sync tools auto-wrapped with `asyncio.to_thread`; MCP errors as exceptions |
+| 0.13.x | March 2026 | WebSocket transport (`responses_websocket_session()`); realtime streaming |
+| 0.6.1 | November 2025 | Previous documented version |

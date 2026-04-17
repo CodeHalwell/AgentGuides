@@ -1,3 +1,4 @@
+Latest: 0.2.110 | Updated: April 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -3250,4 +3251,13 @@ console.log('Test Results:', testResults);
 (Document continues with STRUCTURED OUTPUT, MCP, AGENTIC PATTERNS, PERMISSIONS, SESSION MANAGEMENT, CONTEXT ENGINEERING, PRODUCTION ESSENTIALS, TOOL DEVELOPMENT, STREAMING, TYPESCRIPT PATTERNS, PROJECT SETUP, INTEGRATION PATTERNS, and ADVANCED TOPICS sections...)
 
 The comprehensive guide continues with detailed sections on each topic with extensive TypeScript examples. Due to length constraints, I'll now create the production guide, diagrams, and recipes files as separate documents.
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.2.110 | April 16, 2026 | Multibyte character fix; MCP cleanup fix; extended thinking config types aligned with Python SDK |
+| 0.1.30 | Previous version | Package renamed from `@anthropic-ai/claude-code` to `@anthropic-ai/claude-agent-sdk`; structured outputs with Zod; MCP integration |
 

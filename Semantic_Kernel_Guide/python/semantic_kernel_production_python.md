@@ -2,9 +2,9 @@
 
 **Production Deployment, Monitoring, and Best Practices for Python**
 
-Last Updated: November 2025
+Last Updated: April 2026
 Python Version: 3.9+
-Semantic Kernel: 1.38.0+
+Semantic Kernel Python: 1.41.2+
 
 ---
 
@@ -68,7 +68,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### requirements.txt
 
 ```txt
-semantic-kernel[azure,openai]==1.38.0
+semantic-kernel[azure,openai]>=1.41.2
 fastapi==0.104.0
 uvicorn[standard]==0.24.0
 python-dotenv==1.0.0

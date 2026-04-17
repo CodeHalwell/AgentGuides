@@ -7,6 +7,7 @@ A complete technical reference for Amazon Bedrock AgentCore, the secure serverle
 **Announced:** AWS Summit NYC 2025
 **Status:** Generally Available
 **Free Trial:** Available until September 16, 2025
+**Last Updated:** April 2026
 
 ---
 

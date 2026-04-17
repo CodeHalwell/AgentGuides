@@ -1,8 +1,8 @@
 # Microsoft Agent Framework Comprehensive Guide
-## October 2025 Release - Beginner to Expert
+## **GA 1.0** (April 2026) - Beginner to Expert
 
 **Document Version:** 1.0  
-**Last Updated:** November 2025  
+**Last Updated:** April 2026  
 **Target Audience:** Developers from beginner to expert level  
 **Coverage:** Unified SDK and Azure Ecosystem Integration
 
@@ -28,7 +28,9 @@
 
 ## Introduction
 
-The Microsoft Agent Framework (October 2025 release) represents a unified, open-source development kit designed to facilitate the creation, orchestration, and deployment of AI agents and multi-agent workflows across .NET and Python platforms. This framework unifies and extends concepts from Microsoft's previous projects including Semantic Kernel and AutoGen, providing a comprehensive foundation for building sophisticated AI agents.
+The Microsoft Agent Framework (GA 1.0, April 2026) represents a unified, open-source development kit designed to facilitate the creation, orchestration, and deployment of AI agents and multi-agent workflows across .NET and Python platforms. This framework directly unifies **Semantic Kernel** and **AutoGen** into a single production-ready SDK, providing a comprehensive foundation for building sophisticated AI agents.
+
+> **Note (GA 1.0):** `ChatClientAgentOptions.Instructions` has been removed in GA 1.0. Use the `SystemPrompt` property on the agent configuration instead.
 
 ### Key Objectives
 
@@ -79,13 +81,11 @@ Every framework component includes OpenTelemetry instrumentation, enabling compr
 dotnet add package Microsoft.Agents.AI
 
 # With Azure support
-dotnet add package Microsoft.Agents.AI.Azure --prerelease
-dotnet add package Azure.AI.OpenAI
+dotnet add package Microsoft.Agents.AI.Azuredotnet add package Azure.AI.OpenAI
 dotnet add package Azure.Identity
 
 # With OpenAI support
-dotnet add package Microsoft.Agents.AI.OpenAI --prerelease
-```
+dotnet add package Microsoft.Agents.AI.OpenAI```
 
 **System Requirements:**
 - .NET 8.0 SDK or later
@@ -96,19 +96,19 @@ dotnet add package Microsoft.Agents.AI.OpenAI --prerelease
 
 ```bash
 # Core installation
-pip install agent-framework --pre
+pip install agent-framework
 
 # Selective component installation
-pip install agent-framework-core --pre
+pip install agent-framework-core
 
 # With Azure AI integration
-pip install agent-framework-azure-ai --pre
+pip install agent-framework-azure-ai
 
 # With Copilot Studio integration
-pip install agent-framework-copilotstudio --pre
+pip install agent-framework-copilotstudio
 
 # With Microsoft integration
-pip install agent-framework-microsoft agent-framework-azure-ai --pre
+pip install agent-framework-microsoft agent-framework-azure-ai
 ```
 
 **System Requirements:**
@@ -243,9 +243,7 @@ var client = new AzureOpenAIClient(
 ```bash
 dotnet new console -n MyAgentApp
 cd MyAgentApp
-dotnet add package Microsoft.Agents.AI --prerelease
-dotnet add package Microsoft.Agents.AI.Azure --prerelease
-dotnet add package Azure.AI.OpenAI
+dotnet add package Microsoft.Agents.AIdotnet add package Microsoft.Agents.AI.Azuredotnet add package Azure.AI.OpenAI
 dotnet add package Azure.Identity
 ```
 
@@ -306,8 +304,8 @@ source agent_env/bin/activate
 
 **Step 2: Dependencies Installation**
 ```bash
-pip install agent-framework --pre
-pip install agent-framework-azure-ai --pre
+pip install agent-framework
+pip install agent-framework-azure-ai
 pip install python-dotenv
 ```
 
@@ -1331,3 +1329,12 @@ See the companion documents for:
 - **microsoft_agent_framework_diagrams.md** - Architecture visualisations
 - **microsoft_agent_framework_production_guide.md** - Deployment and scaling
 - **microsoft_agent_framework_recipes.md** - Production code patterns
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 GA | April 3, 2026 | **Production-ready GA release**; `ChatClientAgentOptions.Instructions` removed; Azure App Service deployment; LTS designation; first-party connectors: Azure OpenAI, OpenAI, Anthropic, Bedrock, Gemini, Ollama |
+| 1.0 Preview | November 2025 | Initial documented version |

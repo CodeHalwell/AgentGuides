@@ -447,9 +447,9 @@ Supporting:
 
 ## 📌 Version Information
 
-- **Python ADK Version:** 1.18.0
+- **Python ADK Version:** 1.30.0
 - **Documentation Version:** 2.0
-- **Last Updated:** November 2025
+- **Last Updated:** April 2026
 - **Python Version:** 3.10+
 - **Gemini Models:** 2.5-flash, 2.5-pro, 2.0-flash
 

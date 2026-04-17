@@ -2,7 +2,7 @@
 
 **Visual Architecture and Flow Diagrams for .NET Implementation**
 
-Last Updated: November 2025
+Last Updated: April 2026
 
 ---
 

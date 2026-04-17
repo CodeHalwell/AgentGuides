@@ -1,4 +1,4 @@
-Latest: 1.4.1 (2025 Edition)
+Latest: 1.14.0 | Updated: April 2026
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 
@@ -31,7 +31,7 @@ Latest: 1.4.1 (2025 Edition)
 
 CrewAI is an exceptionally powerful Python framework designed for orchestrating collaborative autonomous AI agents. It enables the creation of sophisticated multi-agent systems where each agent possesses a distinct role, specialisation, and set of responsibilities. The framework facilitates seamless collaboration between agents through well-defined communication protocols, task delegation mechanisms, and intelligent workflow orchestration.
 
-**2025 Update**: CrewAI has evolved into the industry-leading framework for agentic AI automation, trusted by over **100,000+ certified developers** worldwide. With the introduction of **CrewAI Flows** (event-driven workflows), the **CrewAI AMP Suite** (enterprise-grade automation), and **UV dependency management** (streamlined setup), CrewAI now provides a complete ecosystem for building production-ready agentic applications at any scale.
+**April 2026 Update (v1.14.0)**: CrewAI has evolved into the industry-leading framework for agentic AI automation, trusted by over **100,000+ certified developers** worldwide. Version 1.14.0 introduces a production-grade **checkpoint system** for resumable crew execution, native support for OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras), structured Pydantic outputs via `response_format`, before/after tool hooks, GPT-5/o-series vision support, and SSRF and path traversal protections. Combined with **CrewAI Flows** (event-driven workflows), the **CrewAI AMP Suite** (enterprise-grade automation), and **UV dependency management** (streamlined setup), CrewAI now provides a complete ecosystem for building production-ready agentic applications at any scale.
 
 ### Core Philosophy
 
@@ -791,6 +791,24 @@ CrewAI provides numerous built-in tools through the crewai-tools package:
 7. **GmailTool**: Interact with Gmail
 8. **JiraSearchTool**: Search Jira for issues and projects
 
+> **v1.14.0 Breaking Change**: `CodeInterpreterTool` was hard-removed in CrewAI v1.14.0 and will raise an `ImportError` if referenced. Use a custom tool instead:
+>
+> ```python
+> # CodeInterpreterTool was removed in CrewAI v1.14.0
+> # Use custom tool for code execution:
+> from crewai.tools import tool
+>
+> @tool("Python Code Executor")
+> def execute_python(code: str) -> str:
+>     """Execute Python code safely and return output."""
+>     import subprocess
+>     result = subprocess.run(
+>         ["python3", "-c", code],
+>         capture_output=True, text=True, timeout=30
+>     )
+>     return result.stdout or result.stderr
+> ```
+
 #### Tool Assignment Example
 
 ```python
@@ -1188,6 +1206,41 @@ task = Task(
 )
 ```
 
+### Native OpenAI-Compatible Providers (v1.14.0+)
+
+CrewAI now supports native integration with OpenAI-compatible providers without custom configuration:
+
+```python
+from crewai import LLM, Agent
+
+# OpenRouter
+llm_openrouter = LLM(
+    model="openrouter/anthropic/claude-3-5-sonnet",
+    base_url="https://openrouter.ai/api/v1",
+    api_key="your-openrouter-key",
+)
+
+# DeepSeek
+llm_deepseek = LLM(
+    model="deepseek/deepseek-chat",
+    base_url="https://api.deepseek.com/v1",
+    api_key="your-deepseek-key",
+)
+
+# Ollama (local)
+llm_ollama = LLM(
+    model="ollama/llama3.2",
+    base_url="http://localhost:11434",
+)
+
+agent = Agent(
+    role="Assistant",
+    goal="Help with tasks",
+    backstory="A helpful AI assistant",
+    llm=llm_ollama,
+)
+```
+
 ---
 
 ## Structured Output
@@ -1451,6 +1504,55 @@ crew = Crew(
 
 # All agents share crew memory
 # Information from earlier tasks is available to later tasks
+```
+
+### Checkpoint System (v1.14.0+)
+
+CrewAI 1.14.0 introduces a production-grade checkpoint system for resumable crew execution. This is essential for long-running tasks that may be interrupted.
+
+```python
+from crewai import Crew, Agent, Task
+from crewai.checkpoint import CheckpointConfig, SqliteProvider
+
+# Configure checkpointing with SQLite backend
+checkpoint_config = CheckpointConfig(
+    provider=SqliteProvider(db_path="crew_checkpoints.db"),
+    checkpoint_interval=1,  # Save after every task
+)
+
+research_agent = Agent(
+    role="Research Analyst",
+    goal="Conduct thorough research",
+    backstory="Expert researcher with analytical skills",
+    verbose=True,
+)
+
+research_task = Task(
+    description="Research the latest AI developments",
+    agent=research_agent,
+    expected_output="Comprehensive research summary",
+)
+
+crew = Crew(
+    agents=[research_agent],
+    tasks=[research_task],
+    checkpoint_config=checkpoint_config,
+)
+
+# Run - automatically saves checkpoints
+result = crew.kickoff()
+
+# Resume from checkpoint if execution was interrupted
+# result = crew.kickoff(resume_from_checkpoint=True)
+```
+
+**CLI Commands:**
+```bash
+# List available checkpoints
+crewai checkpoint list
+
+# Show checkpoint details
+crewai checkpoint info <checkpoint_id>
 ```
 
 ---
@@ -2261,7 +2363,7 @@ source .venv/bin/activate  # macOS/Linux
 uv pip install crewai 'crewai[tools]'
 
 # Install specific versions
-uv pip install crewai==1.4.1
+uv pip install crewai==1.14.0
 
 # Install from requirements file
 uv pip install -r requirements.txt
@@ -2349,5 +2451,15 @@ uv pip install package_name==1.2.3
 
 ---
 
-This comprehensive guide now includes all 2025 features including CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide.md).
+This comprehensive guide now includes all features through CrewAI v1.14.0 (April 2026), including the Checkpoint System, native OpenAI-compatible providers, CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide.md).
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.14.0 | April 7, 2026 | Checkpoint system (`CheckpointConfig`, `SqliteProvider`); `CodeInterpreterTool` hard-removed; structured Pydantic outputs via `response_format`; before/after tool hooks; GPT-5/o-series vision support; SSRF and path traversal protections; native OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras) |
+| 1.13.0 | April 1-2, 2026 | RBAC permission fixes; lazy event bus; Flow converted to Pydantic BaseModel; LLM class as Pydantic BaseModel; reduced framework overhead |
+| 1.5.0 | November 2025 | Previous documented version |
 

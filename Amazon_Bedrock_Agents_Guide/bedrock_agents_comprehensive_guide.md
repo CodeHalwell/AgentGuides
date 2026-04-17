@@ -1,6 +1,8 @@
 # Amazon Bedrock Agents: Comprehensive Technical Guide
 
 **Framework Name:** bedrock_agents
+**Strands SDK Version:** 1.35.0 (April 2026)
+**Last Updated:** April 2026
 
 A definitive, end-to-end technical reference covering Amazon Bedrock Agents from foundational concepts through enterprise-scale production deployment. This guide provides exhaustive coverage of architecture patterns, implementation strategies, AWS integration techniques, cost optimisation, security best practices, and advanced agentic patterns.
 

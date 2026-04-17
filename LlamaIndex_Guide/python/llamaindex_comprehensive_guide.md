@@ -1,4 +1,4 @@
-Latest: 0.14.8
+Latest: 0.14.20 | Updated: April 2026
 # LlamaIndex Comprehensive Technical Guide
 
 ## Complete Framework for Building LLM-Powered Agents with RAG, Data Connectors, and Agentic Reasoning
@@ -74,7 +74,7 @@ pip install llama-index-message-queue-redis
 ```python
 import llama_index
 from llama_index.core import VectorStoreIndex, Document
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 print(f"LlamaIndex version: {llama_index.__version__}")
@@ -416,16 +416,20 @@ for chunk in response:
 
 ## 4. Agent Classes and Types
 
-### 4.1 ReActAgent
+### 4.1 AgentWorkflow (Primary Agent Pattern)
 
-The ReActAgent implements the ReAct (Reasoning + Acting) pattern:
+> **Note:** `ReActAgent` was hard-removed in LlamaIndex v0.14.x and now raises `ImportError`. Use `AgentWorkflow` instead.
+
+`AgentWorkflow` is the primary agent pattern in LlamaIndex v0.14.x+, replacing `ReActAgent`, `FunctionCallingAgent`, `OpenAIAgent`, `AgentRunner`, and `StructuredPlanningAgent`:
 
 ```python
-from llama_index.core.agent import ReActAgent
+# LlamaIndex v0.14.20+ — AgentWorkflow replaces ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
-# Define tools
+llm = OpenAI(model="gpt-4o", temperature=0)
+
 def multiply(a: float, b: float) -> float:
     """Multiply two numbers."""
     return a * b
@@ -439,56 +443,29 @@ tools = [
     FunctionTool.from_defaults(fn=add),
 ]
 
-# Create ReActAgent
-llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+# AgentWorkflow is the primary agent pattern in v0.14.x+
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     verbose=True,
-    max_iterations=10,
 )
 
-# Use the agent
-response = agent.run("What is 5 times 3 plus 2?")
+# Run the agent
+import asyncio
+response = asyncio.run(agent.run("What is 7 * 8 + 12?"))
 print(response)
 ```
 
-**ReActAgent Detailed Workflow:**
+### 4.2 AgentWorkflow with OpenAI Tool Calling
+
+> **Note:** `OpenAIAgent` and `FunctionCallingAgent` were hard-removed in LlamaIndex v0.14.x and now raise `ImportError`. Use `AgentWorkflow` instead.
 
 ```python
-# The ReActAgent follows this loop:
-# 1. THINK: LLM thinks about what to do
-# 2. ACT: LLM decides which tool to use
-# 3. OBSERVE: Tool is executed and result is observed
-# 4. REPEAT: Continue until response is complete
-
-# Verbose output shows this process
-agent = ReActAgent.from_tools(
-    tools=tools,
-    llm=llm,
-    verbose=True,
-)
-
-# With verbose=True, you'll see output like:
-# Thought: I need to calculate 5 * 3 + 2
-# Action: multiply
-# Params: [5, 3]
-# Observation: 15
-# Thought: Now I need to add 15 + 2
-# Action: add
-# Params: [15, 2]
-# Observation: 17
-# Response: The answer is 17
-```
-
-### 4.2 OpenAIAgent
-
-Leverages OpenAI's function-calling capabilities:
-
-```python
-from llama_index.core.agent import FunctionCallingAgent
+# LlamaIndex v0.14.20+ — AgentWorkflow with OpenAI tool calling
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
+import asyncio
 
 # Define tools
 def get_weather(location: str) -> str:
@@ -504,75 +481,36 @@ tools = [
     FunctionTool.from_defaults(fn=search_web),
 ]
 
-# Create OpenAI agent (function-calling agent)
-llm = OpenAI(model="gpt-4")
-agent = FunctionCallingAgent.from_tools(tools=tools, llm=llm)
-
-# Query the agent
-response = agent.run("What's the weather in New York and trending topics?")
-print(response)
-```
-
-**Function-Calling Agent Features:**
-
-```python
-# Function-calling agents are more efficient than ReAct
-# because they make parallel function calls
-
-from llama_index.core.agent import FunctionCallingAgent
-
-agent = FunctionCallingAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
-    llm=llm,
-    max_iterations=10,
-    allow_parallel_tool_calls=True,  # Can call multiple tools at once
+    llm=OpenAI(model="gpt-4o"),
+    system_prompt="You are a helpful math assistant.",
 )
 
-# This agent can execute multiple tools in parallel
-response = agent.run("Get weather for NYC and LA, and search for AI news")
-# The agent might call get_weather("NYC"), get_weather("LA"), 
-# and search_web("AI news") all at once
+response = asyncio.run(agent.run("Calculate the compound interest..."))
+print(response)
 ```
 
 ### 4.3 Custom Agent Implementations
 
-Creating completely custom agents:
+> **Note:** `AgentRunner` was hard-removed in LlamaIndex v0.14.x and now raises `ImportError`. Extend `AgentWorkflow` instead.
+
+Creating custom agents by extending `AgentWorkflow`:
 
 ```python
-from llama_index.core.agent import AgentRunner, Task
+# AgentRunner hard-removed in v0.14.x — use AgentWorkflow instead
+from llama_index.core.workflow import AgentWorkflow, Context
 from llama_index.core.tools import BaseTool, FunctionTool
 from llama_index.llms.openai import OpenAI
 from typing import List, Any
 
-class CustomAgent(AgentRunner):
-    """Custom agent with special reasoning capabilities."""
+class CustomAgentWorkflow(AgentWorkflow):
+    """Extend AgentWorkflow for custom behaviour."""
     
-    def __init__(self, tools: List[BaseTool], llm: OpenAI):
-        self.tools = tools
-        self.llm = llm
-        self.tool_map = {tool.metadata.name: tool for tool in tools}
-    
-    def run(self, query: str) -> str:
-        """Run the agent with custom logic."""
-        # Custom thought process
-        system_prompt = f"""You are a reasoning agent. Available tools:
-        {', '.join(self.tool_map.keys())}
-        
-        Always think step-by-step and use tools effectively."""
-        
-        # Formulate the prompt
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": query}
-        ]
-        
-        # Get LLM response
-        response = self.llm.complete(
-            prompt=messages,
-            structured_output=None
-        )
-        
-        return str(response)
+    async def _run_step(self, ctx: Context, step: str) -> str:
+        # Custom pre-processing
+        print(f"Processing step: {step}")
+        return await super()._run_step(ctx, step)
 ```
 
 ## 5. LLM and Embedding Configuration
@@ -702,7 +640,7 @@ print(response)
 ### 6.1 Minimal ReAct Agent
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import os
@@ -728,7 +666,7 @@ tools = [
 
 # Create agent
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # Use agent
 response = agent.run("What's the current time plus 5 hours?")
@@ -738,7 +676,7 @@ print(f"Final Response: {response}")
 ### 6.2 Structured Response Agent
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 from pydantic import BaseModel
@@ -767,7 +705,7 @@ tools = [
 
 # Create agent with structured output
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # Structured query
 response = agent.run("Calculate 15 multiplied by 3, then divide by 9")
@@ -779,7 +717,7 @@ print(f"Response: {response}")
 ### 7.1 Multiple Tool Types
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool, Tool, ToolMetadata
 from llama_index.llms.openai import OpenAI
 from typing import Any
@@ -813,7 +751,7 @@ tools = [
 
 # Create agent
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # Agent can now use all three tools
 response = agent.run("Search for 'AI trends' and also query the database for users")
@@ -822,7 +760,7 @@ response = agent.run("Search for 'AI trends' and also query the database for use
 ### 7.2 Tool Chaining
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -851,7 +789,7 @@ tools = [
 ]
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # The agent will automatically chain tools
 response = agent.run("Extract entities from text and summarize them")
@@ -863,7 +801,7 @@ print(response)
 ### 8.1 Single Query Engine Tool
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import QueryEngineTool
 from llama_index.core import VectorStoreIndex, Document
 from llama_index.llms.openai import OpenAI
@@ -889,7 +827,7 @@ query_engine_tool = QueryEngineTool.from_defaults(
 # Create agent
 tools = [query_engine_tool]
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # Query using agent
 response = agent.run("What is the difference between ML and NLP?")
@@ -899,7 +837,7 @@ print(response)
 ### 8.2 Multiple Query Engine Tools
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core import VectorStoreIndex, Document
 from llama_index.llms.openai import OpenAI
@@ -941,7 +879,7 @@ cv_tool = QueryEngineTool(
 # Create agent
 tools = [ml_tool, nlp_tool, cv_tool]
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # Agent can intelligently choose which tool to use
 response = agent.run("Compare ML and CV approaches for image classification")
@@ -953,7 +891,7 @@ print(response)
 ### 9.1 Specialized Single-Task Agent
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -978,7 +916,7 @@ tools = [
 ]
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     verbose=True,
@@ -1001,7 +939,7 @@ print(f"Q3: {response}")
 ### 10.1 Advanced Agent Settings
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.llms.openai import OpenAI
@@ -1020,7 +958,7 @@ memory = ChatMemoryBuffer.from_defaults(
 
 # Create configured agent
 llm = OpenAI(model="gpt-4", temperature=0.7)
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     verbose=True,
@@ -1043,7 +981,7 @@ print(f"Response: {response2}\n")
 ### 10.2 Custom System Prompts
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -1070,7 +1008,7 @@ Guidelines:
 5. Suggest further reading when appropriate"""
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     system_prompt=expert_system_prompt,
@@ -1086,7 +1024,7 @@ print(response)
 ### 11.1 Agent Response Streaming
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import asyncio
@@ -1098,7 +1036,7 @@ def fetch_data(source: str) -> str:
 tools = [FunctionTool.from_defaults(fn=fetch_data)]
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm)
 
 async def stream_agent_response():
     """Stream agent response for real-time feedback."""
@@ -1119,7 +1057,7 @@ asyncio.run(stream_agent_response())
 ### 11.2 Event-Based Streaming
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 from llama_index.core.callbacks import CallbackManager, LlamaDebugHandler
@@ -1136,7 +1074,7 @@ debug_handler = LlamaDebugHandler(print_trace_on_end=True)
 callback_manager = CallbackManager([debug_handler])
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     callback_manager=callback_manager,
@@ -1396,11 +1334,11 @@ print(f"Tool name: {tool.metadata.name}")
 print(f"Tool description: {tool.metadata.description}")
 
 # Use tool in agent
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools([tool], llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools([tool], llm=llm, verbose=True)
 
 response = agent.run("Compare Python and Rust for system programming")
 print(response)
@@ -1562,7 +1500,7 @@ analysis_tool = FunctionTool.from_defaults(
 # Example: Using a pre-built tool
 
 from llama_index.tools.google import GoogleSearchToolSpec
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 # Initialize tool spec
@@ -1573,7 +1511,7 @@ tools = google_search.to_tool_list()
 
 # Use in agent
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 response = agent.run("Search for recent AI breakthroughs")
 print(response)
@@ -1667,11 +1605,11 @@ sentiment_tool = Tool(
 )
 
 # Use in agent
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools([sentiment_tool], llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools([sentiment_tool], llm=llm, verbose=True)
 
 response = agent.run("Analyze the sentiment of 'I absolutely love this product!'")
 print(response)
@@ -1733,11 +1671,11 @@ tools = [
 ]
 
 # Use stateful tools
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 response = agent.run("""
     Calculate 15 * 3 and store as 'result1'
@@ -2240,7 +2178,7 @@ Thought: I have the information needed, can now respond
 Final Answer: Tomorrow in NYC it will be cloudy with a temperature of 15°C
 """
 
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -2258,7 +2196,7 @@ tools = [
 ]
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # The agent will automatically follow ReAct loop
 response = agent.run("What's the weather forecast for Paris for the next 3 days?")
@@ -2338,7 +2276,7 @@ print(response)
 ```python
 from llama_index.core import VectorStoreIndex, Document
 from llama_index.core.tools import QueryEngineTool
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 # Create multiple knowledge bases
@@ -2370,7 +2308,7 @@ rag_tool = QueryEngineTool.from_defaults(
 # Create reasoning agent
 tools = [llm_tool, rag_tool]
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     system_prompt="""You are an AI expert. Answer questions by:
@@ -2393,7 +2331,7 @@ print(response)
 ```python
 from llama_index.core import VectorStoreIndex, Document
 from llama_index.core.tools import QueryEngineTool, FunctionTool
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 # Knowledge bases
@@ -2423,7 +2361,7 @@ analysis_tool = FunctionTool.from_defaults(fn=analyze_comparison)
 # Combine retrieval and reasoning
 tools = [retrieval_tool, analysis_tool]
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(tools=tools, llm=llm, verbose=True)
+agent = AgentWorkflow.from_tools(tools=tools, llm=llm, verbose=True)
 
 # Dynamic RAG query
 response = agent.run(
@@ -2532,7 +2470,7 @@ print(response)
 ### 28.1 Routing to Specialized Agents
 
 ```python
-from llama_index.core.agent import ReActAgent, AgentRunner
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool, QueryEngineTool
 from llama_index.core import VectorStoreIndex, Document
 from llama_index.llms.openai import OpenAI
@@ -2553,7 +2491,7 @@ class RouterAgent:
             return f"Sales response to: {query}"
         
         sales_tool = FunctionTool.from_defaults(fn=sales_query)
-        self.agents["sales"] = ReActAgent.from_tools(
+        self.agents["sales"] = AgentWorkflow.from_tools(
             [sales_tool],
             llm=self.router_llm,
         )
@@ -2563,7 +2501,7 @@ class RouterAgent:
             return f"Support response to: {query}"
         
         support_tool = FunctionTool.from_defaults(fn=support_query)
-        self.agents["support"] = ReActAgent.from_tools(
+        self.agents["support"] = AgentWorkflow.from_tools(
             [support_tool],
             llm=self.router_llm,
         )
@@ -2573,7 +2511,7 @@ class RouterAgent:
             return f"Technical response to: {query}"
         
         tech_tool = FunctionTool.from_defaults(fn=tech_query)
-        self.agents["technical"] = ReActAgent.from_tools(
+        self.agents["technical"] = AgentWorkflow.from_tools(
             [tech_tool],
             llm=self.router_llm,
         )
@@ -2607,7 +2545,7 @@ print(response)
 ### 29.1 Implementing Self-Reflection in Agents
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -2615,7 +2553,7 @@ class ReflectiveAgent:
     """Agent that reflects on its responses."""
     
     def __init__(self, tools: list, llm: OpenAI):
-        self.agent = ReActAgent.from_tools(tools, llm=llm)
+        self.agent = AgentWorkflow.from_tools(tools, llm=llm)
         self.llm = llm
     
     def run_with_reflection(self, query: str) -> dict:
@@ -2685,7 +2623,7 @@ print(result)
 
 ```python
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -2702,7 +2640,7 @@ memory = ChatMemoryBuffer.from_defaults(
 
 # Create agent with memory
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     memory=memory,
@@ -2772,13 +2710,13 @@ class SummaryMemory(BaseMemory):
         self.summary = ""
 
 # Use custom memory
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.llms.openai import OpenAI
 
 memory = SummaryMemory(max_messages=20, summary_threshold=10)
 llm = OpenAI(model="gpt-4")
 
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=[],
     llm=llm,
     memory=memory,
@@ -3499,7 +3437,7 @@ response = llm.complete(
 ### 38.2 Custom Prompts for Agents
 
 ```python
-from llama_index.core.agent import ReActAgent
+from llama_index.core.workflow import AgentWorkflow
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -3518,7 +3456,7 @@ Always cite your sources and provide balanced perspectives.
 Think step-by-step before using tools."""
 
 llm = OpenAI(model="gpt-4")
-agent = ReActAgent.from_tools(
+agent = AgentWorkflow.from_tools(
     tools=tools,
     llm=llm,
     system_prompt=system_prompt,
@@ -3917,4 +3855,14 @@ print(f"Passing: {result.passing}")
 *(Continued in the next section with Production deployment, testing, and optimization...)*
 
 This concludes the comprehensive guide section. Each topic includes conceptual explanations, complete code examples, RAG implementation details, and real-world patterns.
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.14.20 | April 3, 2026 | `AgentWorkflow` is now the only primary agent pattern; legacy agent classes hard-removed (`ReActAgent`, `FunctionCallingAgent`, `AgentRunner`, `OpenAIAgent`, `StructuredPlanningAgent` — all raise `ImportError`); LlamaSheets integration; LiteParse document parser; Agent Client Protocol |
+| 0.14.8 | Previous version | Legacy agents deprecated (still worked with warnings) |
+| 0.12.x | November 2025 | Previous documented version |
 

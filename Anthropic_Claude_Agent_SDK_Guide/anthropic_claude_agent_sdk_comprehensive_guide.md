@@ -1,4 +1,4 @@
-Latest: 0.1.6
+Latest: 0.1.60 | Updated: April 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -135,7 +135,7 @@ source venv/bin/activate
 pip install --upgrade pip
 
 # Install Claude Agent SDK
-pip install claude-agent-sdk
+pip install claude-agent-sdk==0.1.60  # Latest stable release
 
 # Install recommended dependencies
 pip install python-dotenv pydantic aiohttp
@@ -2760,6 +2760,112 @@ interface ErrorMessage {
   };
 }
 ```
+
+---
+
+## Extended Thinking Configuration (v0.1.60+)
+
+The SDK now exposes fine-grained control over Claude's extended thinking capability.
+
+```python
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    ThinkingConfigAdaptive,
+    ThinkingConfigEnabled,
+    ThinkingConfigDisabled,
+)
+
+# Adaptive thinking - Claude decides when to use extended thinking
+options = ClaudeAgentOptions(
+    thinking=ThinkingConfigAdaptive(),
+)
+
+# Always-on extended thinking with effort level
+options = ClaudeAgentOptions(
+    thinking=ThinkingConfigEnabled(budget_tokens=10000),
+    effort="high",  # "low", "medium", "high", or "max"
+)
+
+# Disable thinking entirely
+options = ClaudeAgentOptions(
+    thinking=ThinkingConfigDisabled(),
+)
+```
+
+The `effort` field provides a high-level shortcut that automatically sets an appropriate `budget_tokens` value:
+
+| Effort Level | Thinking Budget |
+|-------------|----------------|
+| `"low"` | ~1,000 tokens |
+| `"medium"` | ~5,000 tokens |
+| `"high"` | ~20,000 tokens |
+| `"max"` | Maximum available |
+
+---
+
+## File Checkpointing and Session Rewind (v0.1.60+)
+
+Long-running agent sessions can now be checkpointed and rewound to recover from errors or explore alternative execution paths.
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions
+
+async def main():
+    options = ClaudeAgentOptions(
+        checkpoint_enabled=True,
+        checkpoint_dir="./agent_checkpoints",
+    )
+
+    async for message in query(
+        prompt="Analyse this codebase and suggest improvements",
+        options=options,
+    ):
+        print(message)
+
+    # Rewind to before the last file change
+    options_rewind = ClaudeAgentOptions(
+        checkpoint_enabled=True,
+        checkpoint_dir="./agent_checkpoints",
+        rewind_to_checkpoint="last",  # or a specific checkpoint ID
+    )
+    print("Rewinding session...")
+    async for message in query(
+        prompt="Try a different approach",
+        options=options_rewind,
+    ):
+        print(message)
+
+asyncio.run(main())
+```
+
+### Context Usage Tracking
+
+Track token consumption across agent turns:
+
+```python
+from claude_agent_sdk import query, ClaudeAgentOptions
+
+options = ClaudeAgentOptions()
+
+async for message in query(prompt="Long complex task...", options=options):
+    if hasattr(message, "usage"):
+        usage = await options.get_context_usage()
+        print(f"Context used: {usage.input_tokens}/{usage.context_window}")
+        if usage.input_tokens / usage.context_window > 0.8:
+            print("Warning: approaching context limit")
+    print(message)
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 0.1.60 | April 16, 2026 | Extended thinking configuration (`ThinkingConfigAdaptive`, `ThinkingConfigEnabled`, `ThinkingConfigDisabled`); `effort` field for thinking depth control; file checkpointing and session rewind; context usage tracking improvements |
+| 0.1.59 | April 13, 2026 | Package rename finalised (`claude_code_sdk` → `claude_agent_sdk`); `ClaudeAgentOptions` replaces `ClaudeCodeOptions`; structured outputs; MCP integration; `get_context_usage()` |
+| 0.1.6 | Previous version | Original documented version |
 
 ---
 

@@ -1,8 +1,8 @@
-Latest: 1.18.0
+Latest: 1.30.0 | Updated: April 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** 2025  
+**Last Updated:** April 2026  
 **Framework:** Google Agent Development Kit (ADK)  
 **Target Audience:** Beginner to Advanced Developers
 
@@ -64,7 +64,7 @@ python3 -m venv adk_env
 source adk_env/bin/activate  # On Windows: adk_env\Scripts\activate
 
 # Install the ADK package
-pip install google-adk
+pip install google-adk>=1.30.0
 
 # Verify installation
 python -c "import google.adk; print('ADK installed successfully')"
@@ -4021,6 +4021,116 @@ class CodeReviewAgent(SpecialisedAgent):
     def get_specialty(self) -> str:
         return "Code Review"
 ```
+
+---
+
+## Graph-Based Agent Workflows (v1.25.0+)
+
+`GraphAgent` enables stateful, graph-based multi-agent orchestration with visual tooling:
+
+```python
+from google.adk import Agent
+from google.adk.graph import GraphAgent, GraphEdge
+
+# Define individual specialist agents
+research_agent = Agent(
+    name="researcher",
+    model="gemini-2.0-flash",
+    instruction="Research the given topic thoroughly.",
+)
+
+analysis_agent = Agent(
+    name="analyser",
+    model="gemini-2.0-flash",
+    instruction="Analyse the research and extract key insights.",
+)
+
+writer_agent = Agent(
+    name="writer",
+    model="gemini-2.0-flash",
+    instruction="Write a clear report based on the analysis.",
+)
+
+# Build the graph
+graph = GraphAgent(
+    name="report_pipeline",
+    agents=[research_agent, analysis_agent, writer_agent],
+    edges=[
+        GraphEdge(from_agent="researcher", to_agent="analyser"),
+        GraphEdge(from_agent="analyser", to_agent="writer"),
+    ],
+)
+
+# Run the graph
+result = await graph.run("Write a report on quantum computing trends in 2026")
+print(result.final_output)
+```
+
+---
+
+## Task API (v1.28.0+)
+
+The Task API provides structured task management for complex, multi-step agent workflows:
+
+```python
+from google.adk import Agent
+from google.adk.tasks import TaskManager, Task, TaskStatus
+
+agent = Agent(name="task_agent", model="gemini-2.0-flash")
+task_manager = TaskManager(agent)
+
+# Create and track tasks
+task = await task_manager.create_task(
+    title="Market Analysis Report",
+    description="Analyse Q1 2026 market data",
+    priority="high",
+)
+
+# Run the task
+await task_manager.run_task(task.id)
+
+# Check status
+status = await task_manager.get_status(task.id)
+print(f"Status: {status}")  # TaskStatus.COMPLETED
+```
+
+---
+
+## Session Rewind (v1.29.0+)
+
+Rewind a session to replay from a prior state — useful for debugging and exploring alternative paths:
+
+```python
+from google.adk.sessions import InMemorySessionService
+
+session_service = InMemorySessionService()
+
+# ... run agent session ...
+
+# Rewind to before the last 2 turns
+rewound_session = await session_service.rewind(
+    session_id="session_123",
+    steps_back=2,
+)
+
+# Continue from the rewound point
+result = await agent.run(
+    "Try a different approach",
+    session=rewound_session,
+)
+```
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.30.0 | April 13, 2026 | A2A 1.0 spec compliance; `AgentEngineSandboxCodeExecutor`; YAML agent config support |
+| 1.29.0 | April 2026 | Session rewind for replay/debugging; `MCPToolset` async-first API (legacy sync API deprecated) |
+| 1.28.0 | March 2026 | Task API for structured task management |
+| 1.25.0 | February 2026 | `GraphAgent` for graph-based multi-agent workflows; Web UI for graph visualisation |
+| 1.18.0 | November 2025 | Previous documented version |
 
 ---
 

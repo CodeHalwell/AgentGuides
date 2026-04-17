@@ -3,7 +3,7 @@
 **Copy-paste ready examples for common patterns**
 
 Version: 0.1.0
-Last Updated: November 2025
+Last Updated: April 2026
 
 ---
 
