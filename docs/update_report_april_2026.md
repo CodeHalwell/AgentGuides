@@ -10,7 +10,7 @@ Complete rewrite updating all framework version records:
 
 | Framework | Before | After |
 |-----------|--------|-------|
-| OpenAI Agents SDK (Python) | 0.0.12 | 0.8.3 |
+| OpenAI Agents SDK (Python) | 0.6.1 | 0.14.x |
 | OpenAI Agents SDK (TypeScript) | 0.3.2 | 0.8.3 |
 | PydanticAI | 1.20.0 | 1.83.0 |
 | CrewAI | 1.5.0 | 1.14.0 |
