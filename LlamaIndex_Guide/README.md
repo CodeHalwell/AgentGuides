@@ -28,8 +28,6 @@ from llama_index.core.agent import ReActAgent
 agent = ReActAgent.from_tools(tools, llm=llm)
 
 # AFTER
-from llama_index.core.agent import ReActAgent as agent_cls
-# Or better, use the new Workflow-first API:
 from llama_index.core.workflow import AgentWorkflow
 agent = AgentWorkflow.from_tools_or_functions(tools, llm=llm)
 result = await agent.run("Your query")
