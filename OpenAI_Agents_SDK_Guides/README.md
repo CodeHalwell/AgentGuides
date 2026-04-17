@@ -4,7 +4,7 @@
 
 Welcome to the comprehensive guide collection for the OpenAI Agents SDK, the **official production-ready replacement** for the experimental Swarm framework. Build enterprise-grade multi-agent AI applications with confidence.
 
-> **Current Version:** 0.14.x (April 2026) | **Previous:** 0.6.1 (November 2025)
+> **Current Version:** 0.14.1 (April 15, 2026) | **Previous:** 0.6.1 (November 2025)
 
 ## ⚠️ Breaking Changes in Recent Versions
 
@@ -322,8 +322,8 @@ async with MCPServerStdio(name="Filesystem", params={...}) as server:
 
 **Note**: This guide collection focuses on the **Python** implementation of the OpenAI Agents SDK. For **JavaScript/TypeScript**, refer to the [TypeScript Guide Collection](../OpenAI_Agents_SDK_TypeScript_Guide/).
 
-**Last Updated**: April 16, 2026
-**SDK Version**: 0.14.x
+**Last Updated**: April 17, 2026
+**SDK Version**: 0.14.1
 **Status**: Production-Ready | Official Swarm Replacement
 
 ---
@@ -332,7 +332,8 @@ async with MCPServerStdio(name="Filesystem", params={...}) as server:
 
 | Date | Version | Changes |
 |------|---------|---------|
-| April 16, 2026 | 0.14.x | Updated to v0.14; added Sandbox Agents section; documented breaking changes (openai v2 req, Python 3.9 dropped, sync tool threading, MCP error semantics); added WebSocket transport section |
+| April 17, 2026 | 0.14.1 | Pinned to v0.14.1 (April 15, 2026); Harness API for Sandbox Agents available in Python only (TypeScript support pending); no breaking changes from 0.14.0 |
+| April 16, 2026 | 0.14.0 | Updated to v0.14; added Sandbox Agents section; documented breaking changes (openai v2 req, Python 3.9 dropped, sync tool threading, MCP error semantics); added WebSocket transport section |
 | November 2025 | 0.6.1 | 2025 Features Guide; Swarm migration; MCP integration; guardrails; sessions |
 
 
