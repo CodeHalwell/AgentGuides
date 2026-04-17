@@ -23,9 +23,9 @@ Python 3.9 is no longer supported. Minimum version is now **Python 3.10**.
 Synchronous callables in function tools now use `asyncio.to_thread(...)`. If your sync tools rely on thread-local state, migrate them to `async` tools.
 
 ### MCP error handling semantics changed
-Local MCP tool failures now return a model-visible error string by default instead of aborting the run. To restore fail-fast behavior:
+Local MCP tool failures now propagate as exceptions by default and abort the run. To return a model-visible error string instead, configure `failure_error_function`:
 ```python
-agent = Agent(..., mcp_config={"failure_error_function": None})
+agent = Agent(..., mcp_config={"failure_error_function": lambda error: str(error)})
 ```
 
 ### `Agent#as_tool()` type narrowed
