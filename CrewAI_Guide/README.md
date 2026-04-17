@@ -431,8 +431,8 @@ Welcome to the future of collaborative AI systems!
 | April 16, 2026 | 1.14.0 | Updated to v1.14.0; documented CodeInterpreterTool removal; checkpoint system (SqliteProvider); structured Pydantic outputs; SSRF protections; RBAC; MCP custom servers; GPT-5/o-series stop parameter fix |
 | November 2025 | 1.5.0 | CrewAI Flows guide; MCP integration; memory systems; hierarchical processes |
 
-**Last Updated**: November 2025
-**Version**: 1.5.0
+**Last Updated**: April 16, 2026
+**Version**: 1.14.0
 
 ---
 
