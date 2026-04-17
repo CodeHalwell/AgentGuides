@@ -32,7 +32,7 @@ npm install @openai/agents-core @openai/agents-openai
 import { aisdk } from '@openai/agents-extensions';
 
 // AFTER (v0.4+)
-import { aisdk } from '@openai/agents-extensions/ai-sdk';
+import { aisdk } from '@openai/agents-extensions-vercel-ai-sdk';
 ```
 
 ## 🆕 What's New in 2026 (v0.3.2 → v0.8.3)
