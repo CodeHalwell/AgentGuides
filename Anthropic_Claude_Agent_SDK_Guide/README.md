@@ -4,7 +4,7 @@
 
 ## Overview
 
-> **Current Version:** Python `claude-agent-sdk` 0.1.59 (April 13, 2026) — previously 0.1.6 (November 2025)
+> **Current Version:** Python `claude-agent-sdk` 0.1.60 (April 16, 2026) — previously 0.1.59 (April 13, 2026)
 
 The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive framework for building sophisticated, production-ready AI agents capable of executing complex tasks autonomously. This SDK enables developers to create agents that can:
 
@@ -19,6 +19,12 @@ The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive
 - 🌐 **Automate general tasks** beyond coding (research, data processing, web automation)
 
 This guide collection provides **exhaustive coverage** from beginner concepts to advanced production deployment patterns.
+
+## 🆕 What's New in v0.1.60 (April 16, 2026)
+
+This is a patch release with stability and compatibility improvements. No breaking changes from v0.1.59.
+
+> **Upgrade**: `pip install --upgrade claude-agent-sdk`
 
 ## 🆕 What's New in 2026 (v0.1.6 → v0.1.59)
 
@@ -509,8 +515,8 @@ These guides are comprehensive educational materials covering the official Claud
 
 ---
 
-**Version:** 0.1.59  
-**Last Updated:** April 16, 2026  
+**Version:** 0.1.60  
+**Last Updated:** April 17, 2026  
 **Status:** Complete & Maintained
 
 Ready to build intelligent agents? Start reading the Comprehensive Guide →
@@ -521,5 +527,6 @@ Ready to build intelligent agents? Start reading the Comprehensive Guide →
 
 | Date | Version | Changes |
 |------|---------|---------|
+| April 17, 2026 | 0.1.60 | Updated to v0.1.60; patch release — stability and compatibility improvements; no breaking changes from v0.1.59 |
 | April 16, 2026 | 0.1.59 | Updated to v0.1.59; `claude_code_sdk` → `claude_agent_sdk` import rename; `ClaudeCodeOptions` → `ClaudeAgentOptions`; structured outputs; `get_context_usage()`; `typing.Annotated` per-parameter descriptions; bundled CLI; fallback model handling |
 | November 2025 | 0.1.6 | Initial guide; agent creation; tool use; memory systems; production deployment |

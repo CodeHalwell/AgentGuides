@@ -385,3 +385,4 @@ All 19 comprehensive framework guides now include a **Revision History** table d
 ---
 
 *Report generated: April 17, 2026*
+*Previous report: [update_report_april_2026.md](update_report_april_2026.md)*

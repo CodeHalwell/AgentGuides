@@ -2,7 +2,7 @@
 
 > **The Pydantic Way for Generative AI** - Type-safe, production-grade agent framework with FastAPI-inspired developer experience.
 
-**Latest Version:** 1.83.0 (April 16, 2026) — previously 1.20.0 (November 2025)  
+**Latest Version:** 1.84.0 (April 17, 2026) — previously 1.83.0 (April 16, 2026)  
 **Framework:** [Pydantic AI](https://ai.pydantic.dev)  
 **Python:** 3.10+  
 **License:** Comprehensive Educational Guide
@@ -143,7 +143,37 @@ print(result.output.field)
 
 ## 🆕 What's New in 2026
 
-### New Features (v1.20 → v1.83)
+### New Features (v1.84.0 — April 17, 2026)
+
+- **`XSearchTool` and `FileSearch` for xAI**: built-in search and file retrieval tools for the xAI (Grok) provider
+- **`FastMCPToolset` metadata injection**: inject per-tool-call metadata when using FastMCP toolsets, enabling richer tracing and auditing
+- **Bedrock prompt cache TTL support**: configure cache time-to-live for AWS Bedrock provider responses
+- **Claude Opus 4.7 support**: `anthropic:claude-opus-4-7` is now a recognised model string
+- **`OllamaModel` subclass**: dedicated `OllamaModel` class replaces generic `OpenAIModel` workaround; corrects Ollama capability flags (fixes structured output on Ollama Cloud)
+- **Stateful compaction mode for `OpenAICompaction`**: reduces token usage in long conversations by compacting history while preserving state
+- **Fix: regex parsing in Google `FileSearchTool`**: resolves a parsing bug affecting Google Vertex AI file search responses
+
+```python
+# Example: OllamaModel (new in v1.84.0)
+from pydantic_ai import Agent
+from pydantic_ai.models.ollama import OllamaModel
+
+agent = Agent(OllamaModel('llama3.2'))
+result = await agent.run('Explain dependency injection')
+print(result.output)
+```
+
+```python
+# Example: FastMCPToolset with per-call metadata (new in v1.84.0)
+from pydantic_ai.mcp import FastMCPToolset
+
+toolset = FastMCPToolset(
+    server_url='http://localhost:8080',
+    inject_metadata=True   # attaches call_id, timestamp to each tool invocation
+)
+```
+
+### New Features (v1.83.0 — April 16, 2026)
 
 - **`output_type` / `output_retries`** replace `result_type` / `result_retries` (hard-removed)
 - **Evaluation framework matured**: `EvaluationReport` with `print` / `console_table` methods; `EvaluatorSpec` for serializable evaluator references
@@ -755,10 +785,10 @@ This comprehensive guide is an educational resource created to help developers u
 
 ---
 
-**Last Updated:** April 16, 2026  
-**Version:** 1.83.0  
+**Last Updated:** April 17, 2026  
+**Version:** 1.84.0  
 **Python:** 3.10+  
-**Pydantic AI:** v1.83.0+
+**Pydantic AI:** v1.84.0+
 
 Happy agent building! 🚀
 
@@ -768,6 +798,7 @@ Happy agent building! 🚀
 
 | Date | Version | Changes |
 |------|---------|---------|
+| April 17, 2026 | 1.84.0 | Updated to v1.84.0; added `XSearchTool`/`FileSearch` for xAI; `FastMCPToolset` metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support; `OllamaModel` subclass; stateful `OpenAICompaction`; Google `FileSearchTool` regex fix |
 | April 16, 2026 | 1.83.0 | Updated to v1.83.0; documented `result_*` → `output_*` breaking changes; added 2026 features section; updated all code examples |
 | November 2025 | 1.20.0 | Initial comprehensive guide; durable execution, graph support, MCP/A2A integrations, evals |
 
