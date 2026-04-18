@@ -1,6 +1,6 @@
 # Claude Agent SDK (TypeScript) - Complete Technical Guide (2026 Edition)
 
-**Version:** 0.2.110 (April 16, 2026) — previously 0.1.30 (November 2025)
+**Version:** 0.2.113 (April 18, 2026) — previously 0.2.110 (April 16, 2026)
 **Package:** `@anthropic-ai/claude-agent-sdk` (was `@anthropic-ai/claude-code`)
 **Target Audience:** Advanced TypeScript developers, AI engineers, systems architects
 **Status:** Production-Ready Guide with 2026 Features
@@ -33,6 +33,37 @@ const options: ClaudeAgentOptions = {
 };
 ```
 
+## 🆕 What's New in v0.2.113 (April 18, 2026)
+
+- **`getContextUsage()`**: query context window usage by category (system, conversation, tools) via `ClaudeSDKClient`; returns `ContextUsage` with `systemTokens`, `conversationTokens`, `toolTokens`, `totalTokens`, `contextWindow`, and `utilisationPct`
+- **JSDoc parameter descriptions in `@tool`**: annotate parameters with JSDoc `@param` comments; the SDK generates accurate JSON Schema descriptions automatically — no separate schema object needed
+- **`toolUseId` and `agentId` in `ToolPermissionContext`**: disambiguate concurrent tool permission requests from different subagents or parallel tool calls
+
+```typescript
+import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+
+/** Search the project codebase for a pattern
+ * @param pattern The regex or literal string to search for
+ * @param directory Relative path to the directory to search in
+ * @param maxResults Maximum number of results to return (1–100)
+ */
+const searchCodebase = tool("search_codebase", async (args: {
+  pattern: string;
+  directory?: string;
+  maxResults?: number;
+}) => {
+  // JSDoc @param annotations become JSON Schema descriptions
+  return { matches: [] };
+});
+
+// getContextUsage example
+const client = new ClaudeSDKClient();
+for await (const message of client.query({ prompt: "Long task..." })) {
+  const usage = await client.getContextUsage();
+  console.log(`Context: ${usage.totalTokens}/${usage.contextWindow} (${usage.utilisationPct.toFixed(1)}%)`);
+}
+```
+
 ## 🆕 What's New Since v0.1.30
 
 - **Structured outputs**: agents can return validated JSON matching a Zod schema
@@ -40,7 +71,6 @@ const options: ClaudeAgentOptions = {
 - **`reloadPlugins()`**: refresh commands, agents, and MCP server status at runtime
 - **Multibyte text fix**: fixed CJK / UTF-8 stream corruption when chunk boundaries split a sequence
 - **MCP cleanup fix**: MCP server child processes now properly terminated when `query()` session ends
-- **`get_context_usage()`** (Python equivalent): query context window usage by category
 
 ## Overview
 
@@ -554,8 +584,8 @@ These guides are provided as comprehensive technical documentation for the Claud
 | **Diagrams** | 10+ architecture and flow diagrams |
 | **Styling** | British English (optimisation, analyse, etc.) [[memory:8527310]] |
 | **Format** | Markdown (GitHub-compatible) |
-| **Last Updated** | April 16, 2026 |
-| **Compatibility** | Claude Agent SDK 0.2.110+ |
+| **Last Updated** | April 18, 2026 |
+| **Compatibility** | Claude Agent SDK 0.2.113+ |
 | **Target Audience** | Advanced TypeScript developers, architects, engineers |
 
 ---
@@ -578,5 +608,6 @@ Happy building! 🚀
 
 | Date | Version | Changes |
 |------|---------|---------|
-| April 16, 2026 | 0.2.110 | Updated to v0.2.110; package renamed to `@anthropic-ai/claude-agent-sdk`; structured outputs with Zod; MCP integration; `sandbox.failIfUnavailable` default changed; multibyte fix; import path update |
+| April 18, 2026 | 0.2.113 | `getContextUsage()` with per-category breakdown; JSDoc `@param` descriptions in `@tool` for accurate JSON Schema generation; `toolUseId` and `agentId` in `ToolPermissionContext` |
+| April 16, 2026 | 0.2.110 | Package renamed to `@anthropic-ai/claude-agent-sdk`; structured outputs with Zod; MCP integration; `sandbox.failIfUnavailable` default changed; multibyte fix; import path update |
 | November 2025 | 0.1.30 | Initial TypeScript guide; streaming; tool use; multi-agent patterns |

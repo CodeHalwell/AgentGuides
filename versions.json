@@ -1,6 +1,6 @@
 {
-  "last_updated": "April 17, 2026",
-  "previous_update": "April 16, 2026",
+  "last_updated": "April 18, 2026",
+  "previous_update": "April 17, 2026",
   "frameworks": {
     "google-adk-python": "1.30.0 (April 13, 2026)",
     "google-adk-typescript": "0.1.x (December 2025 - new)",
@@ -13,8 +13,8 @@
     "langgraph-typescript": "1.2.8 (April 11, 2026)",
     "openai-agents-sdk-python": "0.14.1 (April 15, 2026)",
     "openai-agents-sdk-typescript": "0.8.3 (April 9, 2026)",
-    "anthropic-claude-agent-sdk-python": "0.1.60 (April 16, 2026)",
-    "anthropic-claude-agent-sdk-typescript": "0.2.110 (April 16, 2026)",
+    "anthropic-claude-agent-sdk-python": "0.1.63 (April 18, 2026)",
+    "anthropic-claude-agent-sdk-typescript": "0.2.113 (April 18, 2026)",
     "amazon-bedrock-strands": "1.35.0 (April 2026)",
     "amazon-bedrock-agentcore": "GA with quality evaluations and policy controls",
     "mistral-agents-api": "2.0.1 (March 12, 2026)",
@@ -32,7 +32,7 @@
     "microsoft-agent-framework": "GA 1.0 released April 3, 2026 — unifies Semantic Kernel + AutoGen; first-party connectors for Azure OpenAI, OpenAI, Anthropic, Amazon Bedrock, Google Gemini, Ollama",
     "langgraph": "Version 1.1.x adds type-safe v2 API (streaming and invoke); Python 3.9 dropped; create_react_agent deprecated in favor of langchain.agents",
     "openai-agents-sdk": "v0.14.1 (April 15, 2026): SandboxAgent with persistent workspaces (Harness API); openai v2.x required (breaking); Python 3.9 dropped; TypeScript at 0.8.3",
-    "anthropic-claude-sdk": "v0.1.60: extended thinking config (ThinkingConfigAdaptive/Enabled/Disabled), effort field for thinking depth, file checkpointing and session rewind; renamed package (claude-code-sdk → claude-agent-sdk); structured outputs, MCP integration, subagents; TypeScript at 0.2.110",
+    "anthropic-claude-sdk": "v0.1.63: get_context_usage() for querying context window usage by category; typing.Annotated support for per-parameter descriptions in @tool and create_sdk_mcp_server; tool_use_id and agent_id fields in ToolPermissionContext for parallel tool call disambiguation — v0.1.60: extended thinking config (ThinkingConfigAdaptive/Enabled/Disabled), effort field for thinking depth, file checkpointing and session rewind; renamed package (claude-code-sdk → claude-agent-sdk); structured outputs, MCP integration, subagents; TypeScript at 0.2.110",
     "amazon-bedrock": "Strands SDK 1.35.0; AgentCore with memory and policy controls; multi-agent graph workflows; A2A protocol support",
     "mistral": "Major v2.0.1 rewrite — v1.x and v2.x APIs are not compatible; full Agents API, MCP tools, Code Interpreter, Premium Web Search",
     "pydantic-ai": "v1.84.0 (April 17, 2026): XSearchTool/FileSearch for xAI, FastMCPToolset metadata injection per tool call, Bedrock prompt cache TTL, Claude Opus 4.7 support, OllamaModel subclass, stateful compaction mode for OpenAICompaction; fixes exponential-time regex in Google FileSearchTool; result_* API renamed to output_* (hard-removed); EvaluationReport, pydantic-graph, defer_loading, ThreadExecutor",
