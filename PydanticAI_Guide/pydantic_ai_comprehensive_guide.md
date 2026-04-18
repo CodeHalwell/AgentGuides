@@ -1735,11 +1735,110 @@ print(f"Final state: {state.step}")
 
 ---
 
+## What's New in v1.84.0 (April 17, 2026)
+
+### OllamaModel — Dedicated Local LLM Class
+
+A new first-class `OllamaModel` replaces the generic `OpenAIModel` workaround and correctly sets Ollama capability flags (fixes structured output on Ollama Cloud):
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.ollama import OllamaModel
+
+# Dedicated OllamaModel — correct capability flags, no OpenAI workaround needed
+agent = Agent(OllamaModel('llama3.2'))
+result = await agent.run('Summarise this document in three bullet points')
+print(result.output)
+
+# With Ollama Cloud (hosted)
+cloud_agent = Agent(OllamaModel('llama3.2', base_url='https://api.ollama.ai/v1'))
+```
+
+### XSearchTool and FileSearch for xAI (Grok)
+
+Built-in search and file retrieval tools for the xAI provider:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.tools.xai import XSearchTool, FileSearchTool
+
+agent = Agent(
+    'grok:grok-2-latest',
+    tools=[XSearchTool(), FileSearchTool()]
+)
+
+# Agent can now search the web and retrieve files via Grok's xAI APIs
+result = await agent.run('What are the latest AI developments this week?')
+print(result.output)
+```
+
+### FastMCPToolset Per-Call Metadata Injection
+
+Inject per-tool-call metadata when using `FastMCPToolset` for richer tracing and auditing:
+
+```python
+from pydantic_ai.mcp import FastMCPToolset
+
+toolset = FastMCPToolset(
+    server_url='http://localhost:8080',
+    inject_metadata=True   # Attaches call_id, timestamp, and agent_id to every invocation
+)
+
+agent = Agent('openai:gpt-4o', toolsets=[toolset])
+result = await agent.run('Search the company database for Q1 reports')
+# Each tool call now includes metadata visible in Logfire traces
+```
+
+### Bedrock Prompt Cache TTL
+
+Configure cache time-to-live for AWS Bedrock provider responses:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.bedrock import BedrockModel
+
+agent = Agent(
+    BedrockModel('anthropic.claude-3-5-sonnet-20241022-v2:0', cache_ttl=300),
+    instructions='You are a helpful assistant'
+)
+# Responses are cached for 300 seconds — reduces Bedrock API costs on repeated queries
+```
+
+### Stateful OpenAICompaction
+
+Reduce token usage in long conversations while preserving state:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.compaction import OpenAICompaction
+
+agent = Agent(
+    OpenAIModel('gpt-4o', compaction=OpenAICompaction(mode='stateful')),
+    instructions='You are a long-running research assistant'
+)
+# Stateful mode compacts history while retaining internal state references
+```
+
+### Claude Opus 4.7 Support
+
+`anthropic:claude-opus-4-7` is now a recognised model string:
+
+```python
+from pydantic_ai import Agent
+
+# Claude Opus 4.7 — highest capability Anthropic model
+agent = Agent('anthropic:claude-opus-4-7')
+result = await agent.run('Reason through this complex multi-step problem...')
+```
+
+---
+
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.84.0 | April 2026 | Patch: fixes exponential-time regex in Google FileSearchTool response parsing |
-| 1.83.0 | April 16, 2026 | Hard removal of all `result_*` → `output_*` renames (breaking); EvaluationReport API; pydantic-graph expansion with branching/looping; `defer_loading` for lazy model init; `ThreadExecutor` for sync-in-async tools; smart instruction caching; `CaseLifecycle` hooks; local `WebFetch` tool |
+| 1.84.0 | April 17, 2026 | `OllamaModel` subclass (fixes structured output on Ollama Cloud); `XSearchTool`/`FileSearchTool` for xAI (Grok); `FastMCPToolset` per-call metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support (`anthropic:claude-opus-4-7`); stateful `OpenAICompaction`; fix exponential-time regex in Google `FileSearchTool` |
+| 1.83.0 | April 16, 2026 | Hard removal of all `result_*` → `output_*` renames (breaking); `EvaluationReport` API; pydantic-graph expansion with branching/looping; `defer_loading` for lazy model init; `ThreadExecutor` for sync-in-async tools; smart instruction caching; `CaseLifecycle` hooks; local `WebFetch` tool |
 | 1.20.0 | November 2025 | Previous documented version |
 

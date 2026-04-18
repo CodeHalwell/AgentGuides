@@ -1,4 +1,4 @@
-Latest: 0.1.60 | Updated: April 2026
+Latest: 0.1.63 | Updated: April 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -2841,20 +2841,82 @@ asyncio.run(main())
 
 ### Context Usage Tracking
 
-Track token consumption across agent turns:
+Track token consumption across agent turns via `ClaudeSDKClient.get_context_usage()`. The method returns a breakdown by category (system prompt, conversation history, tool results):
 
 ```python
-from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk import query, ClaudeAgentOptions, ClaudeSDKClient
 
-options = ClaudeAgentOptions()
+client = ClaudeSDKClient()
 
-async for message in query(prompt="Long complex task...", options=options):
-    if hasattr(message, "usage"):
-        usage = await options.get_context_usage()
-        print(f"Context used: {usage.input_tokens}/{usage.context_window}")
-        if usage.input_tokens / usage.context_window > 0.8:
-            print("Warning: approaching context limit")
+async for message in client.query(prompt="Long complex task...", options=ClaudeAgentOptions()):
+    usage = await client.get_context_usage()
+    print(f"System: {usage.system_tokens} | Convo: {usage.conversation_tokens} | Tools: {usage.tool_tokens}")
+    print(f"Total: {usage.total_tokens}/{usage.context_window} ({usage.utilisation_pct:.1f}%)")
+    if usage.utilisation_pct > 80:
+        print("Warning: approaching context limit — consider compaction")
     print(message)
+```
+
+The `ContextUsage` object exposes:
+- `system_tokens` — tokens used by the system prompt
+- `conversation_tokens` — tokens from the conversation history
+- `tool_tokens` — tokens attributed to tool results
+- `total_tokens` — total tokens in context
+- `context_window` — maximum context window for the current model
+- `utilisation_pct` — percentage of context window consumed
+
+### Typed Tool Parameter Descriptions (v0.1.63+)
+
+Use `typing.Annotated` to attach per-parameter descriptions directly in function signatures. The SDK generates accurate JSON Schema from these annotations, improving tool call accuracy:
+
+```python
+from typing import Annotated
+from claude_agent_sdk import tool, create_sdk_mcp_server
+
+@tool("search_codebase", "Search the project codebase for patterns")
+async def search_codebase(
+    pattern:   Annotated[str,  "The regex or literal string to search for"],
+    directory: Annotated[str,  "Relative path to the directory to search in"] = ".",
+    max_results: Annotated[int, "Maximum number of results to return (1–100)"] = 20,
+    case_sensitive: Annotated[bool, "Whether the search is case-sensitive"] = False
+) -> dict:
+    # The SDK injects these descriptions into the tool's JSON Schema automatically
+    import subprocess
+    flag = "" if case_sensitive else "-i"
+    result = subprocess.run(
+        ["grep", "-rn", flag, "--include=*.py", f"-m{max_results}", pattern, directory],
+        capture_output=True, text=True
+    )
+    return {"matches": result.stdout.splitlines()}
+
+server = create_sdk_mcp_server(name="code-tools", version="1.0.0", tools=[search_codebase])
+```
+
+### Parallel Tool Disambiguation with ToolPermissionContext (v0.1.63+)
+
+When an agent invokes multiple tools simultaneously (e.g., two `Bash` calls in parallel), the `tool_use_id` and `agent_id` fields on `ToolPermissionContext` let you distinguish which request is which:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, query
+
+async def granular_permission_handler(tool_name: str, tool_input: dict, context) -> dict:
+    print(f"[{context.agent_id}] Tool call {context.tool_use_id}: {tool_name}")
+
+    # Allow read-only tools unconditionally
+    if tool_name in ("Read", "Glob", "Grep"):
+        return {"allow": True}
+
+    # For destructive operations, check the specific call by ID
+    if tool_name == "Bash" and "rm " in tool_input.get("command", ""):
+        print(f"  → Denying destructive command from call {context.tool_use_id}")
+        return {"allow": False, "reason": "Destructive commands are not permitted"}
+
+    return {"allow": True}
+
+options = ClaudeAgentOptions(
+    allowed_tools=["Read", "Bash", "Glob", "Grep"],
+    permission_prompt_tool_callback=granular_permission_handler
+)
 ```
 
 ---
@@ -2863,8 +2925,9 @@ async for message in query(prompt="Long complex task...", options=options):
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.1.60 | April 16, 2026 | Extended thinking configuration (`ThinkingConfigAdaptive`, `ThinkingConfigEnabled`, `ThinkingConfigDisabled`); `effort` field for thinking depth control; file checkpointing and session rewind; context usage tracking improvements |
-| 0.1.59 | April 13, 2026 | Package rename finalised (`claude_code_sdk` → `claude_agent_sdk`); `ClaudeAgentOptions` replaces `ClaudeCodeOptions`; structured outputs; MCP integration; `get_context_usage()` |
+| 0.1.63 | April 18, 2026 | `get_context_usage()` on `ClaudeSDKClient` with per-category breakdown (system/conversation/tool tokens); `typing.Annotated` for per-parameter descriptions in `@tool` and `create_sdk_mcp_server`; `tool_use_id` and `agent_id` in `ToolPermissionContext` |
+| 0.1.60 | April 16, 2026 | Extended thinking configuration (`ThinkingConfigAdaptive`, `ThinkingConfigEnabled`, `ThinkingConfigDisabled`); `effort` field for thinking depth control; file checkpointing and session rewind |
+| 0.1.59 | April 13, 2026 | Package rename finalised (`claude_code_sdk` → `claude_agent_sdk`); `ClaudeAgentOptions` replaces `ClaudeCodeOptions`; structured outputs; MCP integration |
 | 0.1.6 | Previous version | Original documented version |
 
 ---

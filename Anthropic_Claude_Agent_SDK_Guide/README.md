@@ -4,7 +4,7 @@
 
 ## Overview
 
-> **Current Version:** Python `claude-agent-sdk` 0.1.60 (April 16, 2026) — previously 0.1.59 (April 13, 2026)
+> **Current Version:** Python `claude-agent-sdk` 0.1.63 (April 18, 2026) — previously 0.1.60 (April 16, 2026)
 
 The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive framework for building sophisticated, production-ready AI agents capable of executing complex tasks autonomously. This SDK enables developers to create agents that can:
 
@@ -20,11 +20,47 @@ The **Claude Agent SDK** (formerly Claude Code SDK) is Anthropic's comprehensive
 
 This guide collection provides **exhaustive coverage** from beginner concepts to advanced production deployment patterns.
 
-## 🆕 What's New in v0.1.60 (April 16, 2026)
+## 🆕 What's New in v0.1.63 (April 18, 2026)
 
-This is a patch release with stability and compatibility improvements. No breaking changes from v0.1.59.
+- **`get_context_usage()`**: query context window usage by category via `ClaudeSDKClient` to track token consumption across tool calls, system prompts, and conversation history
+- **`typing.Annotated` parameter descriptions**: add per-parameter descriptions directly in tool function signatures using `Annotated[type, "description"]` — works for both `@tool` decorator and `create_sdk_mcp_server`
+- **`tool_use_id` and `agent_id` in `ToolPermissionContext`**: distinguish parallel permission requests; `tool_use_id` identifies the specific tool call and `agent_id` identifies which subagent is requesting permission
+
+```python
+# Example: typing.Annotated parameter descriptions (new in v0.1.63)
+from typing import Annotated
+from claude_agent_sdk import tool
+
+@tool("search_docs", "Search project documentation")
+async def search_docs(
+    query: Annotated[str, "The search query to look up"],
+    limit: Annotated[int, "Maximum number of results (1-50)"] = 10
+) -> dict:
+    return {"results": []}
+
+# Example: get_context_usage() (new in v0.1.63)
+from claude_agent_sdk import ClaudeAgentOptions, query
+
+async for message in query(
+    prompt="Summarise the project",
+    options=ClaudeAgentOptions(allowed_tools=["Read"])
+):
+    if hasattr(message, "context_usage"):
+        usage = await client.get_context_usage()
+        print(f"System: {usage.system_tokens}, Convo: {usage.conversation_tokens}")
+
+# Example: tool_use_id/agent_id in ToolPermissionContext (new in v0.1.63)
+async def smart_permission_handler(tool_name, tool_input, context):
+    # Distinguish concurrent permission requests from different subagents
+    print(f"Tool call {context.tool_use_id} from agent {context.agent_id}")
+    return {"allow": True}
+```
 
 > **Upgrade**: `pip install --upgrade claude-agent-sdk`
+
+## 🆕 What's New in v0.1.60–v0.1.62 (April 2026)
+
+- v0.1.60–0.1.62: patch releases — stability, compatibility, and minor improvements; no breaking changes
 
 ## 🆕 What's New in 2026 (v0.1.6 → v0.1.59)
 
@@ -515,8 +551,8 @@ These guides are comprehensive educational materials covering the official Claud
 
 ---
 
-**Version:** 0.1.60  
-**Last Updated:** April 17, 2026  
+**Version:** 0.1.63  
+**Last Updated:** April 18, 2026  
 **Status:** Complete & Maintained
 
 Ready to build intelligent agents? Start reading the Comprehensive Guide →
@@ -527,6 +563,7 @@ Ready to build intelligent agents? Start reading the Comprehensive Guide →
 
 | Date | Version | Changes |
 |------|---------|---------|
-| April 17, 2026 | 0.1.60 | Updated to v0.1.60; patch release — stability and compatibility improvements; no breaking changes from v0.1.59 |
-| April 16, 2026 | 0.1.59 | Updated to v0.1.59; `claude_code_sdk` → `claude_agent_sdk` import rename; `ClaudeCodeOptions` → `ClaudeAgentOptions`; structured outputs; `get_context_usage()`; `typing.Annotated` per-parameter descriptions; bundled CLI; fallback model handling |
+| April 18, 2026 | 0.1.63 | Updated to v0.1.63; `get_context_usage()` via `ClaudeSDKClient`; `typing.Annotated` support for per-parameter descriptions in `@tool` and `create_sdk_mcp_server`; `tool_use_id` and `agent_id` in `ToolPermissionContext` for parallel call disambiguation |
+| April 16–17, 2026 | 0.1.60 | Patch releases (0.1.60–0.1.62) — stability and compatibility improvements; no breaking changes from v0.1.59 |
+| April 16, 2026 | 0.1.59 | `claude_code_sdk` → `claude_agent_sdk` import rename; `ClaudeCodeOptions` → `ClaudeAgentOptions`; structured outputs; extended thinking config; file checkpointing and session rewind; bundled CLI; fallback model handling |
 | November 2025 | 0.1.6 | Initial guide; agent creation; tool use; memory systems; production deployment |

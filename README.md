@@ -500,10 +500,15 @@ To add or update guides:
 
 ## 📅 Last Updated
 
-- **Updated**: November 21, 2025
-- **OpenAI Agents SDK**: November 2024
-- **SmolAgents**: November 2024
-- **Other Frameworks**: Various dates (see individual guides)
+- **Updated**: April 18, 2026
+- **OpenAI Agents SDK**: April 2026 (v0.14.1)
+- **PydanticAI**: April 2026 (v1.84.0)
+- **Anthropic Claude Agent SDK**: April 2026 (v0.1.63)
+- **LangGraph**: April 2026 (v1.1.6)
+- **CrewAI**: April 2026 (v1.14.0)
+- **Google ADK**: April 2026 (Python v1.30.0, Go v1.0.0)
+- **SmolAgents**: January 2026 (v1.24.0)
+- **Other Frameworks**: See `versions.json` for full version history
 
 ---
 
@@ -550,5 +555,6 @@ This collection represents comprehensive, production-ready documentation for bui
 
 | Date | Version | Changes |
 |------|---------|---------|
-| April 16, 2026 | 2.0 | Major update: all guides updated to latest versions; breaking changes documented; Google ADK TypeScript guide added; revision history added to all guides |
+| April 18, 2026 | 2.1 | Anthropic Claude Agent SDK updated to v0.1.63 (new: `get_context_usage()`, `typing.Annotated` tool params, `tool_use_id`/`agent_id` in ToolPermissionContext); README date corrected; update report added |
+| April 16–17, 2026 | 2.0 | Major update: all guides updated to latest versions; breaking changes documented; Google ADK TypeScript guide added; revision history added to all guides |
 | November 2025 | 1.0 | Initial release: 16+ framework guides covering Python, TypeScript, .NET, Go |
