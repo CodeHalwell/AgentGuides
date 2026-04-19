@@ -1,8 +1,22 @@
 # Google Agent Development Kit (ADK) - Python Documentation
 
-**Version:** 1.30.0 (April 13, 2026) — previously 1.18.0 (November 2025)
-**Last Updated:** April 16, 2026
+**Version:** 1.31.0 (April 17, 2026) — previously 1.18.0 (November 2025)
+**Last Updated:** April 19, 2026
 **Language:** Python 3.10+
+
+## 🆕 What's New in ADK Python 1.31.0 (April 17, 2026)
+
+- **Overhauled Web UI**: live chat interface with session display names and structured execution traces
+- **Graph View canvas**: visual map for designing and managing agent architectures interactively
+- **Event filtering**: filter the event stream by message type, tool calls, or errors in the UI
+- **Computer-use visualisation**: dedicated interface for monitoring computer-use agent actions
+- **Memory bank event ingestion**: agents can now ingest events directly into memory banks
+- **Vertex AI Agent Engine Sandbox**: computer-use agents can run inside Agent Engine sandboxes
+- **Firestore database support**: first-class Firestore integration as a database backend for agent state
+- **Session ID tracking in LLM responses**: session IDs are now propagated through LLM response objects
+- **Parameter Manager and Secret Manager user-agent headers**: user-agent headers added to Parameter Manager and Secret Manager API clients
+- **MCP 1.24.0 minimum**: minimum supported MCP version raised to 1.24.0
+- **Bug fixes**: console URL path corrections after Agent Engine deployment; event callback timing fix (plugin modifications now persist correctly); `FunctionDeclaration` JSON schema fallback improved; BigQuery plugin data transfer and metadata issues resolved
 
 ## 🆕 What's New in ADK Python 1.18 → 1.30
 

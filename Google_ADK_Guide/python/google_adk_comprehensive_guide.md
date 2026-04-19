@@ -1,8 +1,8 @@
-Latest: 1.30.0 | Updated: April 2026
+Latest: 1.31.0 | Updated: April 19, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** April 2026  
+**Last Updated:** April 19, 2026  
 **Framework:** Google Agent Development Kit (ADK)  
 **Target Audience:** Beginner to Advanced Developers
 
@@ -4126,7 +4126,8 @@ result = await agent.run(
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.30.0 | April 13, 2026 | A2A 1.0 spec compliance; `AgentEngineSandboxCodeExecutor`; YAML agent config support |
+| 1.31.0 | April 17, 2026 | Overhauled Web UI: live chat interface, session display names, structured execution traces, Graph View canvas, event filtering (by message/tool/error type), computer-use visualisation; memory bank event ingestion; Vertex AI Agent Engine Sandbox for computer use; Firestore database support; session ID tracking in LLM responses; user-agent headers for Parameter Manager and Secret Manager clients; minimum MCP version raised to 1.24.0; `FunctionDeclaration` JSON schema fallback improved; BigQuery plugin fixes (data transfers, metadata); console URL path corrections after Agent Engine deployment; event callback timing fix (plugin modifications now persist correctly) |
+| 1.30.0 | April 13, 2026 | A2A 1.0 spec compliance; `AgentEngineSandboxCodeExecutor`; YAML agent config support; authentication provider support in agent registry; Parameter Manager integration; Gemma 4 model support; artifact service integration via interceptor; `TaskStatusUpdateEvent` emission; live avatar support; BigQuery tools promoted to stable; path traversal validation for user/session IDs |
 | 1.29.0 | April 2026 | Session rewind for replay/debugging; `MCPToolset` async-first API (legacy sync API deprecated) |
 | 1.28.0 | March 2026 | Task API for structured task management |
 | 1.25.0 | February 2026 | `GraphAgent` for graph-based multi-agent workflows; Web UI for graph visualisation |

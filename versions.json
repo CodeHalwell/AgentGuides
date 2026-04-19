@@ -1,8 +1,8 @@
 {
-  "last_updated": "April 18, 2026",
-  "previous_update": "April 17, 2026",
+  "last_updated": "April 19, 2026",
+  "previous_update": "April 18, 2026",
   "frameworks": {
-    "google-adk-python": "1.30.0 (April 13, 2026)",
+    "google-adk-python": "1.31.0 (April 17, 2026)",
     "google-adk-typescript": "0.1.x (December 2025 - new)",
     "google-adk-go": "1.0.0 (April 8, 2026)",
     "semantic-kernel-python": "1.41.2 (April 8, 2026)",
@@ -19,7 +19,7 @@
     "amazon-bedrock-agentcore": "GA with quality evaluations and policy controls",
     "mistral-agents-api": "2.0.1 (March 12, 2026)",
     "pydantic-ai": "1.84.0 (April 17, 2026)",
-    "crewai": "1.14.0 (April 7, 2026)",
+    "crewai": "1.14.2 (April 17, 2026)",
     "autogen-ag2": "0.11.5 (April 5, 2026)",
     "haystack-ai": "2.27.0 (April 1, 2026)",
     "llamaindex-python": "0.14.20 (April 3, 2026)",
@@ -27,7 +27,7 @@
     "smolagents": "1.24.0 (January 16, 2026)"
   },
   "notes": {
-    "google-adk": "Now supports Python, TypeScript, Go, and Java; ADK 2.0 alpha available (not for production); Go SDK reached 1.0 GA",
+    "google-adk": "Now supports Python, TypeScript, Go, and Java; ADK 2.0 alpha available (not for production); Go SDK reached 1.0 GA; v1.31.0 overhauled Web UI (Graph View, live chat, event filtering), memory bank ingestion, Firestore support, Vertex AI Agent Engine Sandbox for computer use, MCP minimum 1.24.0",
     "semantic-kernel": "Python and .NET documented; Handlebars/OpenAI planners deprecated; Microsoft Agent Framework 1.0 is recommended for new multi-agent projects",
     "microsoft-agent-framework": "GA 1.0 released April 3, 2026 — unifies Semantic Kernel + AutoGen; first-party connectors for Azure OpenAI, OpenAI, Anthropic, Amazon Bedrock, Google Gemini, Ollama",
     "langgraph": "Version 1.1.x adds type-safe v2 API (streaming and invoke); Python 3.9 dropped; create_react_agent deprecated in favor of langchain.agents",
@@ -36,7 +36,7 @@
     "amazon-bedrock": "Strands SDK 1.35.0; AgentCore with memory and policy controls; multi-agent graph workflows; A2A protocol support",
     "mistral": "Major v2.0.1 rewrite — v1.x and v2.x APIs are not compatible; full Agents API, MCP tools, Code Interpreter, Premium Web Search",
     "pydantic-ai": "v1.84.0 (April 17, 2026): XSearchTool/FileSearch for xAI, FastMCPToolset metadata injection per tool call, Bedrock prompt cache TTL, Claude Opus 4.7 support, OllamaModel subclass, stateful compaction mode for OpenAICompaction; fixes exponential-time regex in Google FileSearchTool; result_* API renamed to output_* (hard-removed); EvaluationReport, pydantic-graph, defer_loading, ThreadExecutor",
-    "crewai": "v1.14.0: checkpoint system added (SqliteProvider); CodeInterpreterTool removed; structured outputs with Pydantic; SSRF protections; native OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama)",
+    "crewai": "v1.14.2: checkpoint forking with lineage tracking; from_checkpoint on Agent.kickoff; checkpoint resume/diff/prune CLI; enriched LLM token tracking (reasoning + cache creation); scoped streaming handlers; CVE-2026-39892 fix — v1.14.1: async checkpoint TUI browser; streaming output context managers; BaseProvider as Pydantic BaseModel — v1.14.0: checkpoint system (SqliteProvider); CodeInterpreterTool removed; structured Pydantic outputs; SSRF protections; native OpenAI-compatible providers",
     "autogen-ag2": "v0.11.5; autogen.beta parallel redesign (event-driven); A2A protocol; QuickResearchTool; security fixes (CVE-2026-23745, CVE-2026-23950, CVE-2026-24842); formal v1.0 deprecation roadmap — breaking changes at v1.0",
     "haystack-ai": "v2.27.0: SearchableToolset, LLMRanker, PipelineTool, runtime tool injection, Jinja2 prompts, transformers v5; Python 3.9 dropped",
     "llamaindex": "v0.14.20 Python; legacy agent classes hard-removed (FunctionCallingAgent, AgentRunner, ReActAgent, etc.); Python 3.9 dropped; AgentWorkflow is the primary pattern"

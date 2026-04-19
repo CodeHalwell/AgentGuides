@@ -1,7 +1,7 @@
 # CrewAI Complete Technical Guide
 ## Comprehensive Documentation for Building Autonomous Multi-Agent Systems
 
-> **Current Version:** 1.14.0 (April 7, 2026) — previously 1.5.0 (November 2025)
+> **Current Version:** 1.14.2 (April 17, 2026) — previously 1.5.0 (November 2025)
 
 Welcome to the complete CrewAI technical documentation resource. This comprehensive guide covers everything from fundamental concepts to advanced production deployment of sophisticated multi-agent systems using CrewAI.
 
@@ -27,7 +27,29 @@ Version 1.10.0 was yanked from PyPI. Use 1.10.1 or later.
 
 ---
 
-## 🆕 What's New in v1.14.0 (2026)
+## 🆕 What's New in v1.14.2 (April 17, 2026)
+
+- **Checkpoint forking with lineage tracking**: branch execution from any saved checkpoint and track the fork graph
+- **`from_checkpoint` on `Agent.kickoff`**: resume a crew run from a named checkpoint directly in code
+- **Checkpoint CLI expanded**: `crewai checkpoint resume`, `crewai checkpoint diff`, and `crewai checkpoint prune` commands for managing checkpoint lifecycle
+- **Template management CLI**: `crewai template` commands for creating and managing project templates
+- **Enriched LLM token tracking**: token counts now include `reasoning_tokens` and `cache_creation_tokens` alongside standard in/out tokens
+- **Scoped streaming handlers**: chunk handlers are scoped per-run to prevent contamination across concurrent crew executions
+- **Security patches**: authlib, langchain-text-splitters, and pypdf updated; cryptography pinned to 46.0.7 (CVE-2026-39892)
+- **`flow_finished` event fix**: event now correctly fires after HITL resume in Flows
+- **Bedrock tool call argument preservation fix**: fixed argument dropping when routing through Amazon Bedrock Converse API
+- **Cyclic JSON schema fix**: MCP tool resolution now correctly handles cyclic JSON schema references
+
+## 🆕 What's New in v1.14.1 (April 9, 2026)
+
+- **Async checkpoint TUI browser**: interactive terminal browser for inspecting and managing saved checkpoints
+- **Streaming output context managers**: `aclose()`/`close()` and `async with` support on streaming outputs for clean resource handling
+- **`BaseProvider` as Pydantic `BaseModel`**: provider backends now use `provider_type` discriminator for type-safe configuration
+- **`tomlkit`-based devtools CLI**: more reliable TOML parsing in the CLI tooling
+- **Dynamic tool field exclusion**: denylist is now computed dynamically rather than hardcoded, allowing custom tool fields
+- **CVE-2026-1839**: transformers dependency bumped to ≥5.5.0
+
+## 🆕 What's New in v1.14.0 (April 7, 2026)
 
 - **Checkpoint System** (`CheckpointConfig` + `SqliteProvider`): save crew state at each task boundary; resume from the last checkpoint after failures
   ```python

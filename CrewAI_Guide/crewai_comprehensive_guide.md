@@ -1,4 +1,4 @@
-Latest: 1.14.0 | Updated: April 2026
+Latest: 1.14.2 | Updated: April 19, 2026
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 
@@ -31,7 +31,7 @@ Latest: 1.14.0 | Updated: April 2026
 
 CrewAI is an exceptionally powerful Python framework designed for orchestrating collaborative autonomous AI agents. It enables the creation of sophisticated multi-agent systems where each agent possesses a distinct role, specialisation, and set of responsibilities. The framework facilitates seamless collaboration between agents through well-defined communication protocols, task delegation mechanisms, and intelligent workflow orchestration.
 
-**April 2026 Update (v1.14.0)**: CrewAI has evolved into the industry-leading framework for agentic AI automation, trusted by over **100,000+ certified developers** worldwide. Version 1.14.0 introduces a production-grade **checkpoint system** for resumable crew execution, native support for OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras), structured Pydantic outputs via `response_format`, before/after tool hooks, GPT-5/o-series vision support, and SSRF and path traversal protections. Combined with **CrewAI Flows** (event-driven workflows), the **CrewAI AMP Suite** (enterprise-grade automation), and **UV dependency management** (streamlined setup), CrewAI now provides a complete ecosystem for building production-ready agentic applications at any scale.
+**April 2026 Update (v1.14.2)**: CrewAI has evolved into a leading framework for agentic AI automation and is widely used for building collaborative AI systems. Version 1.14.0 introduced a production-grade **checkpoint system** for resumable crew execution, native support for OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras), structured Pydantic outputs via `response_format`, before/after tool hooks, GPT-5/o-series vision support, and SSRF and path traversal protections. Version 1.14.1 added an **async checkpoint TUI browser** and streaming output context managers. Version 1.14.2 (April 17, 2026) further enhanced the checkpoint system with **checkpoint forking**, `from_checkpoint` support in `Agent.kickoff`, enriched LLM token tracking (reasoning and cache creation tokens), and security patches for CVE-2026-39892. Combined with **CrewAI Flows** (event-driven workflows), the **CrewAI AMP Suite** (enterprise-grade automation), and **UV dependency management** (streamlined setup), CrewAI now provides a complete ecosystem for building production-ready agentic applications at any scale.
 
 ### Core Philosophy
 
@@ -2451,7 +2451,7 @@ uv pip install package_name==1.2.3
 
 ---
 
-This comprehensive guide now includes all features through CrewAI v1.14.0 (April 2026), including the Checkpoint System, native OpenAI-compatible providers, CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide.md).
+This comprehensive guide now includes all features through CrewAI v1.14.2 (April 2026), including the Checkpoint System (with forking and `from_checkpoint`), enriched LLM token tracking, native OpenAI-compatible providers, CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide.md).
 
 ---
 
@@ -2459,6 +2459,8 @@ This comprehensive guide now includes all features through CrewAI v1.14.0 (April
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.14.2 | April 17, 2026 | Checkpoint forking with lineage tracking; `from_checkpoint` parameter on `Agent.kickoff`; checkpoint resume/diff/prune CLI commands; template management commands; enriched LLM token tracking (reasoning + cache creation tokens); scoped streaming handlers (prevents cross-run chunk contamination); Bedrock tool call argument preservation fix; cyclic JSON schema fix in MCP tool resolution; `flow_finished` event fix after HITL resume; cryptography pinned to 46.0.7 (CVE-2026-39892); security patches for authlib, langchain-text-splitters, pypdf |
+| 1.14.1 | April 9, 2026 | Async checkpoint TUI browser; `aclose()`/`close()` and async context manager support for streaming outputs; `BaseProvider` refactored as Pydantic `BaseModel` with `provider_type` discriminator; devtools CLI switched to `tomlkit`; dynamic tool field exclusion (replaces hardcoded denylist); transformers bumped to 5.5.0 (CVE-2026-1839) |
 | 1.14.0 | April 7, 2026 | Checkpoint system (`CheckpointConfig`, `SqliteProvider`); `CodeInterpreterTool` hard-removed; structured Pydantic outputs via `response_format`; before/after tool hooks; GPT-5/o-series vision support; SSRF and path traversal protections; native OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras) |
 | 1.13.0 | April 1-2, 2026 | RBAC permission fixes; lazy event bus; Flow converted to Pydantic BaseModel; LLM class as Pydantic BaseModel; reduced framework overhead |
 | 1.5.0 | November 2025 | Previous documented version |
