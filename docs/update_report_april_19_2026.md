@@ -3,7 +3,7 @@
 **Prepared by:** Automated review process  
 **Review date:** April 19, 2026  
 **Previous review:** April 18, 2026  
-**Scope:** All 18+ framework guides across Python, TypeScript, .NET, and Go
+**Scope:** All 22 framework guides across Python, TypeScript, .NET, and Go
 
 ---
 
