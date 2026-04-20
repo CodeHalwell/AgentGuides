@@ -69,3 +69,4 @@ uv.lock
 pyproject.toml
 .python-version
 hello.py
+main.py
