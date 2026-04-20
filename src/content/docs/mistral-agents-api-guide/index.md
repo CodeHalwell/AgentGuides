@@ -415,8 +415,8 @@ All code examples tested against:
 | Date | SDK Version | Summary of changes | Reviewer |
 |------|-------------|-------------------|----------|
 | 2026-04-20 | 2.4.0 | Version bump to v2.4.0; added Azure AI and Google Cloud deployment targets; Python 3.10+ requirement noted; install command updated | Claude routine |
-| April 16, 2026 | 2.0.1 | Updated all code examples to SDK v2.x; documented migration from v1.x; updated install instructions; added Premium Web Search and Code Interpreter sections |
-| November 2025 | 1.9.11 | May 2025 launch documentation; 5 built-in connectors; MCP integration; Conversations API |
+| April 16, 2026 | 2.0.1 | Updated all code examples to SDK v2.x; documented migration from v1.x; updated install instructions; added Premium Web Search and Code Interpreter sections | |
+| November 2025 | 1.9.11 | May 2025 launch documentation; 5 built-in connectors; MCP integration; Conversations API | |
 
 ---
 

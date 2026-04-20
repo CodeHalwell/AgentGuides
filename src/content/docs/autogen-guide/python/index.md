@@ -460,7 +460,7 @@ Key changes since 0.2.x:
 | Date | Version | Summary of changes | Reviewer |
 |------|---------|-------------------|----------|
 | 2026-04-20 | 0.12.0 | Version metadata updated to 0.12.0; added breaking-changes section for 0.4+ migration (Pydantic v2, Python 3.10+, async-first, A2A interop); flagged prose/code examples as 0.2.x-era pending full rewrite | Claude routine |
-| November 2024 | 0.2.x | Initial guide; ConversableAgent; GroupChat; tools; sequential workflows |
+| November 2024 | 0.2.x | Initial guide; ConversableAgent; GroupChat; tools; sequential workflows | |
 
 ---
 

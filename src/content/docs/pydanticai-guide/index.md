@@ -805,9 +805,9 @@ Happy agent building! 🚀
 | Date | Version | Summary of changes | Reviewer |
 |------|---------|-------------------|----------|
 | 2026-04-20 | 1.84.1 | Version pin updated to 1.84.1 (April 18, 2026); frameworks.ts metadata corrected; patch release with no prose changes required | Claude routine |
-| April 17, 2026 | 1.84.0 | Updated to v1.84.0; added `XSearchTool`/`FileSearch` for xAI; `FastMCPToolset` metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support; `OllamaModel` subclass; stateful `OpenAICompaction`; Google `FileSearchTool` regex fix |
-| April 16, 2026 | 1.83.0 | Updated to v1.83.0; documented `result_*` → `output_*` breaking changes; added 2026 features section; updated all code examples |
-| November 2025 | 1.20.0 | Initial comprehensive guide; durable execution, graph support, MCP/A2A integrations, evals |
+| April 17, 2026 | 1.84.0 | Updated to v1.84.0; added `XSearchTool`/`FileSearch` for xAI; `FastMCPToolset` metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support; `OllamaModel` subclass; stateful `OpenAICompaction`; Google `FileSearchTool` regex fix | |
+| April 16, 2026 | 1.83.0 | Updated to v1.83.0; documented `result_*` → `output_*` breaking changes; added 2026 features section; updated all code examples | |
+| November 2025 | 1.20.0 | Initial comprehensive guide; durable execution, graph support, MCP/A2A integrations, evals | |
 
 
 

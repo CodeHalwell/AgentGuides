@@ -340,9 +340,9 @@ async with MCPServerStdio(name="Filesystem", params={...}) as server:
 |------|---------|-------------------|----------|
 | 2026-04-20 | 0.14.3 | Version pin updated to 0.14.3 (April 20, 2026); verified against installed package via uv; patch release, no breaking changes from 0.14.2 | Claude routine |
 | 2026-04-20 | 0.14.2 | Version pin updated to 0.14.2 (April 18, 2026); frameworks.ts metadata corrected; no breaking changes from 0.14.1 | Claude routine |
-| April 17, 2026 | 0.14.1 | Pinned to v0.14.1 (April 15, 2026); Harness API for Sandbox Agents available in Python only (TypeScript support pending); no breaking changes from 0.14.0 |
-| April 16, 2026 | 0.14.0 | Updated to v0.14; added Sandbox Agents section; documented breaking changes (openai v2 req, Python 3.9 dropped, sync tool threading, MCP error semantics); added WebSocket transport section |
-| November 2025 | 0.6.1 | 2025 Features Guide; Swarm migration; MCP integration; guardrails; sessions |
+| April 17, 2026 | 0.14.1 | Pinned to v0.14.1 (April 15, 2026); Harness API for Sandbox Agents available in Python only (TypeScript support pending); no breaking changes from 0.14.0 | |
+| April 16, 2026 | 0.14.0 | Updated to v0.14; added Sandbox Agents section; documented breaking changes (openai v2 req, Python 3.9 dropped, sync tool threading, MCP error semantics); added WebSocket transport section | |
+| November 2025 | 0.6.1 | 2025 Features Guide; Swarm migration; MCP integration; guardrails; sessions | |
 
 
 ## Streaming Examples
