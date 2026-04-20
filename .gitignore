@@ -47,8 +47,11 @@ ENV/
 # Node
 node_modules/
 npm-debug.log
-package-lock.json
 yarn.lock
+
+# Astro
+.astro/
+dist/
 
 # OS
 .DS_Store

@@ -1,0 +1,63 @@
+---
+title: Agent Guides
+description: Comprehensive, production-ready documentation for building AI agents across 18+ frameworks.
+template: splash
+hero:
+  tagline: The modern, opinionated atlas of AI agent frameworks — Python, TypeScript, .NET and Go, all in one place.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Quick Start
+      link: /AgentGuides/quick-start/
+      icon: rocket
+      variant: primary
+    - text: Compare Frameworks
+      link: /AgentGuides/frameworks/
+      icon: right-arrow
+---
+
+import FrameworkGrid from '../../components/FrameworkGrid';
+import UseCasePicker from '../../components/UseCasePicker';
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Choose your starting point
+
+<CardGrid stagger>
+  <Card title="New to agents" icon="rocket">
+    Learn the fundamentals with the [SmolAgents guide](/smolagents-guide/) in about an hour. No orchestration, no boilerplate — just agents.
+  </Card>
+  <Card title="Already shipping" icon="star">
+    Jump to [LangGraph](/langgraph-guide/python/), [OpenAI Agents SDK](/openai-agents-sdk-guides/), or [CrewAI](/crewai-guide/) for production patterns and handoff topologies.
+  </Card>
+  <Card title="Enterprise & cloud" icon="cloud-download">
+    Explore [Microsoft Agent Framework](/microsoft-agent-framework-guide/), [Amazon Bedrock Agents](/amazon-bedrock-agents-guide/), or [Google ADK](/google-adk-guide/) for managed, A2A-ready deployments.
+  </Card>
+  <Card title="RAG & knowledge" icon="open-book">
+    Build retrieval-centric systems with [LlamaIndex](/llamaindex-guide/python/) or [Haystack](/haystack-guide/).
+  </Card>
+</CardGrid>
+
+## I want to build…
+
+<UseCasePicker client:idle />
+
+## Browse all frameworks
+
+<FrameworkGrid client:idle />
+
+## What each guide contains
+
+<CardGrid>
+  <Card title="Quick start README" icon="document">
+    Install, minimum viable example, and key concepts in under 10 minutes.
+  </Card>
+  <Card title="Comprehensive guide" icon="open-book">
+    Every class, method, pattern and gotcha — the canonical reference.
+  </Card>
+  <Card title="Production guide" icon="setting">
+    Deployment, scaling, observability, security and cost controls.
+  </Card>
+  <Card title="Recipes" icon="puzzle">
+    Copy-paste, production-tested snippets for the patterns you actually use.
+  </Card>
+</CardGrid>

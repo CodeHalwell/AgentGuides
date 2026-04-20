@@ -1,0 +1,348 @@
+---
+title: "OpenAI Agents SDK Complete Guide Collection (2026 Edition)"
+description: "Welcome to the comprehensive guide collection for the OpenAI Agents SDK, the official production-ready replacement for the experimental Swarm framework. Build enterprise-grade mult"
+framework: openai-agents-sdk
+---
+
+# OpenAI Agents SDK Complete Guide Collection (2026 Edition)
+
+**🎯 PRODUCTION-READY | Official Swarm Replacement | Python 3.10+**
+
+Welcome to the comprehensive guide collection for the OpenAI Agents SDK, the **official production-ready replacement** for the experimental Swarm framework. Build enterprise-grade multi-agent AI applications with confidence.
+
+> **Current Version:** 0.14.2 (April 18, 2026) | **Previous:** 0.6.1 (November 2025)
+
+## ⚠️ Breaking Changes in Recent Versions
+
+> **If upgrading from 0.6.x, read this section carefully before updating.**
+
+### Requires `openai` v2.x (Breaking)
+The SDK now requires `openai` >= 2.0. The v1.x `openai` package is **no longer supported**.
+```bash
+pip install "openai>=2.0" openai-agents
+```
+
+### Python 3.9 Dropped
+Python 3.9 is no longer supported. Minimum version is now **Python 3.10**.
+
+### Sync function tools now run on worker threads
+Synchronous callables in function tools now use `asyncio.to_thread(...)`. If your sync tools rely on thread-local state, migrate them to `async` tools.
+
+### MCP error handling semantics changed
+Local MCP tool failures now propagate as exceptions by default and abort the run. To return a model-visible error string instead, configure `failure_error_function`:
+```python
+agent = Agent(..., mcp_config={"failure_error_function": lambda error: str(error)})
+```
+
+### `Agent#as_tool()` type narrowed
+Return type is now `FunctionTool` instead of `Tool`. Update any type annotations accordingly.
+
+---
+
+## 🚀 What's New in 2026
+
+### ⭐ **NEW: Sandbox Agents (v0.14)**
+Agents can now operate inside persistent, isolated workspaces with files, directories, Git repos, snapshots, and resume support. Multiple backends: local Unix, Docker, Blaxel, E2B, Modal, Runloop, Vercel.
+
+```python
+from agents.sandbox import SandboxAgent, Manifest
+
+agent = SandboxAgent(
+    name="CodeAgent",
+    instructions="You are a coding assistant",
+    manifest=Manifest(files={"main.py": "print('hello')"})
+)
+result = await agent.run("Improve this script")
+```
+
+### ⭐ **NEW: WebSocket Transport for Responses API (v0.13)**
+Opt-in WebSocket transport for OpenAI Responses models enables low-latency multi-turn conversations.
+```python
+from agents import responses_websocket_session
+
+async with responses_websocket_session() as session:
+    result = await Runner.run(agent, "Hello", session=session)
+```
+
+### ⭐ **2025 Features Guide**
+- Built-in tracing and visualization
+- Provider-agnostic support (100+ LLMs)
+- Enhanced guardrails and session management
+- MCP integration
+- Fine-tuning and evaluation integration
+**[2025 Features Guide →](./openai_agents_sdk_2025_features/)**
+
+### ⭐ **Swarm Migration Guide**
+OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete Migration Guide →](./openai_agents_sdk_swarm_migration_guide/)**
+
+---
+
+## 📚 Guide Documents
+
+This collection contains comprehensive guides:
+
+### 0. **[🆕 Swarm Migration Guide](./openai_agents_sdk_swarm_migration_guide/)** ⭐
+**CRITICAL FOR SWARM USERS**: Complete migration path from experimental Swarm to production Agents SDK. Includes:
+- Why migrate? (Production stability, active maintenance, enterprise features)
+- Side-by-side code comparisons
+- Breaking changes and solutions
+- Step-by-step migration checklist
+- Rollback strategy
+
+### 0.5 **[🆕 2025 Features Guide](./openai_agents_sdk_2025_features/)** ⭐
+Latest critical features and improvements:
+- Built-in tracing and visualization
+- Provider-agnostic support (100+ LLMs via LiteLLM)
+- Enhanced guardrails system
+- MCP integration (filesystem, git, HTTP)
+- Evaluation and fine-tuning integration
+- Production-ready session backends
+
+### 1. **[Comprehensive Guide](./openai_agents_sdk_comprehensive_guide/)**
+The complete reference covering all aspects of the OpenAI Agents SDK from fundamental concepts to advanced patterns. Includes:
+- Core installation and setup procedures
+- Fundamental concepts and design philosophy
+- All primitive types and their use cases (Agents, Handoffs, Guardrails, Sessions, Tools, Runner)
+- Simple and complex agent patterns
+- Complete code examples for every feature
+- Best practices and architectural considerations
+
+### 2. **[Production Guide](openai_agents_sdk_production_guide)**
+Practical patterns and strategies for deploying agents to production environments. Covers:
+- Deployment architectures and patterns
+- Scalability and performance optimisation
+- Error handling and resilience strategies
+- Monitoring, observability, and tracing
+- Security and safety considerations
+- Cost optimisation techniques
+- Testing strategies and CI/CD integration
+- Real-world deployment examples
+
+### 3. **[Diagrams Guide](openai_agents_sdk_diagrams)**
+Visual representations and architecture diagrams for common patterns. Includes:
+- Agent lifecycle diagrams
+- Multi-agent interaction patterns
+- Message flow diagrams
+- Session and memory management flows
+- Tool and guardrail integration patterns
+- MCP server integration architectures
+- Production deployment topologies
+
+### 4. **[Recipes Guide](openai_agents_sdk_recipes)**
+Practical, ready-to-use code examples for common use cases. Features:
+- Customer service agent implementations
+- Research and knowledge retrieval agents
+- Financial analysis workflows
+- Code generation and review agents
+- Multi-language translation services
+- Content moderation and analysis systems
+- Personal assistant implementations
+- Team collaboration workflows
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+pip install openai-agents
+```
+
+### Basic Agent
+
+```python
+from agents import Agent, Runner
+
+agent = Agent(
+    name="Assistant",
+    instructions="You are a helpful assistant"
+)
+
+result = Runner.run_sync(agent, "What is 2 + 2?")
+print(result.final_output)
+```
+
+## 🎯 Who Should Use This Guide?
+
+- **Beginners**: Start with the Comprehensive Guide's fundamentals section
+- **Developers**: Reference the Recipes Guide for common patterns
+- **DevOps/SRE**: Review the Production Guide for deployment strategies
+- **Architects**: Study the Diagrams Guide for system design patterns
+- **Advanced Users**: Explore all guides for deep customisation opportunities
+
+## 📖 Key Concepts (2025 Edition)
+
+### Why Agents SDK Over Swarm?
+
+| Feature | Swarm (❌ Deprecated) | Agents SDK (✅ Production) |
+|---------|----------------------|---------------------------|
+| **Status** | Experimental | Production-Ready |
+| **Guardrails** | None | Built-in Input/Output |
+
+### Design Philosophy
+The SDK emphasises:
+- **Simplicity**: Minimal abstractions and intuitive APIs
+- **Customisation**: Extensible architecture for specific needs
+- **Production-Readiness**: Built-in support for tracing, sessions, and error handling
+- **Model Agnosticity**: Support for OpenAI and 100+ other LLM providers via LiteLLM
+- **Active Maintenance**: Regular updates, security patches, new features
+
+## 🔗 Model Context Protocol (MCP)
+
+The SDK includes first-class support for the Model Context Protocol, enabling:
+- Integration with MCP servers (filesystem, git, web tools, etc.)
+- Hosted MCP connectors with approval workflows
+- Custom MCP server creation
+- SSE streaming and secure remote execution
+
+## 📊 Session Management
+
+Choose from multiple session backends:
+- **SQLite**: File-based storage (default, suitable for most applications)
+- **Redis**: Distributed, high-performance session storage
+- **SQLAlchemy**: Support for any database backend
+- **OpenAI Backend**: Managed session storage via OpenAI's infrastructure
+
+## 🛡️ Safety and Compliance
+
+The SDK provides comprehensive guardrail support:
+- **Input Guardrails**: Validate and filter user inputs before processing
+- **Output Guardrails**: Validate and filter agent responses before returning
+- **Custom Validation**: Create domain-specific safety checks
+- **Integration**: Works seamlessly with Pydantic validation
+
+## 📈 Observability
+
+Built-in features include:
+- **Tracing**: Visualise and debug agent flows
+- **Structured Logging**: Comprehensive event tracking
+- **Token Counting**: Monitor usage and costs
+- **Integration**: Connect to Langfuse, AgentOps, Braintrust, and more
+
+## 🔗 Additional Resources
+
+- **Official GitHub**: https://github.com/openai/openai-agents-python
+- **Examples Repository**: https://github.com/openai/openai-agents-python/tree/main/examples
+- **OpenAI Documentation**: https://openai.github.io/openai-agents-python/
+- **API Reference**: Available within the examples and documentation
+
+## 📝 File Structure
+
+Each guide is designed to be:
+- **Self-contained**: Can be read independently
+- **Cross-referenced**: Links between guides for related topics
+- **Code-heavy**: Practical examples accompany every concept
+- **Verbose**: Detailed explanations for comprehensive understanding
+
+## 🎓 Learning Path
+
+### For Beginners
+1. Read the Quick Start section in this README
+2. Review "Core Fundamentals" in the Comprehensive Guide
+3. Try examples from the Recipes Guide
+4. Understand Production considerations from the Production Guide
+
+### For Experienced Developers
+1. Skim the Comprehensive Guide's fundamentals
+2. Deep-dive into advanced patterns and MCP integration
+3. Review Production Guide for deployment strategies
+4. Reference Recipes Guide for specific use cases
+
+### For DevOps/SRE Personnel
+1. Focus on the Production Guide entirely
+2. Review deployment architectures in the Diagrams Guide
+3. Understand monitoring and observability patterns
+4. Plan scaling strategies and cost optimisation
+
+## 💡 Key Features Summary
+
+| Feature | Description |
+|---------|-------------|
+| **Lightweight Primitives** | Agent, Handoff, Guardrail, Session, Tool |
+| **Multi-Agent Systems** | Handoff mechanisms for agent delegation |
+| **Tool Integration** | Automatic schema generation with Pydantic |
+| **Structured Outputs** | Pydantic-based output validation |
+| **Session Memory** | Multiple backends (SQLite, Redis, SQLAlchemy) |
+| **MCP Support** | First-class Model Context Protocol integration |
+| **Streaming** | Token-level and item-level event streaming |
+| **Guardrails** | Input and output validation with custom logic |
+| **Tracing** | Built-in observability and debugging |
+| **Model Agnostic** | Support for OpenAI and 100+ other providers |
+| **Error Handling** | Comprehensive exception hierarchy |
+| **Async/Await** | Full async support with sync alternatives |
+
+## 📞 Support and Community
+
+For questions, issues, or contributions:
+- Open issues on [GitHub](https://github.com/openai/openai-agents-python)
+- Check existing examples in the repository
+- Review error messages and tracing output
+- Consult the comprehensive guides for advanced patterns
+
+---
+
+## 🆕 2025 Critical Features
+
+### 1. Built-in Tracing & Visualization
+```python
+from agents import Agent, Runner, trace
+
+with trace("Customer Support Workflow", group_id="batch_001"):
+    result = await Runner.run(agent, query)
+# View at https://platform.openai.com/traces
+```
+
+### 2. Provider-Agnostic (100+ LLMs)
+```python
+# Use Claude, Gemini, Llama, Mistral, or any LiteLLM-supported model
+agent = Agent(
+    name="Claude Agent",
+    model="litellm/anthropic/claude-3-5-sonnet-20240620"
+)
+```
+
+### 3. Guardrails System
+```python
+@input_guardrail
+async def safety_check(ctx, agent, input_data):
+    # Validate inputs before processing
+    return GuardrailFunctionOutput(...)
+```
+
+### 4. Enhanced Session Management
+```python
+from agents import SQLiteSession, RedisSession, OpenAIConversationsSession
+
+# Choose backend: SQLite, Redis, SQLAlchemy, or OpenAI
+session = SQLiteSession("user_123", "conversations.db")
+```
+
+### 5. MCP Integration
+```python
+from agents.mcp import MCPServerStdio
+
+async with MCPServerStdio(name="Filesystem", params={...}) as server:
+    agent = Agent(mcp_servers=[server])
+```
+
+---
+
+**Note**: This guide collection focuses on the **Python** implementation of the OpenAI Agents SDK. For **JavaScript/TypeScript**, refer to the [TypeScript Guide Collection](/openai-agents-sdk-typescript-guide/).
+
+**Last Updated**: April 17, 2026
+**SDK Version**: 0.14.1
+**Status**: Production-Ready | Official Swarm Replacement
+
+---
+
+## 📋 Revision History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| April 17, 2026 | 0.14.1 | Pinned to v0.14.1 (April 15, 2026); Harness API for Sandbox Agents available in Python only (TypeScript support pending); no breaking changes from 0.14.0 |
+| April 16, 2026 | 0.14.0 | Updated to v0.14; added Sandbox Agents section; documented breaking changes (openai v2 req, Python 3.9 dropped, sync tool threading, MCP error semantics); added WebSocket transport section |
+| November 2025 | 0.6.1 | 2025 Features Guide; Swarm migration; MCP integration; guardrails; sessions |
+
+
+## Streaming Examples
+- [openai_agents_streaming_server_fastapi.md](./openai_agents_streaming_server_fastapi/)
+
