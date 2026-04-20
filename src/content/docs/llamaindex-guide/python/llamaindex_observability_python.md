@@ -1,6 +1,6 @@
 ---
 title: "LlamaIndex Observability & Monitoring (Python)"
-description: "\"Tracing, metrics, and logging patterns for LlamaIndex.\""
+description: "Tracing, metrics, and logging patterns for LlamaIndex."
 framework: llamaindex
 language: python
 ---

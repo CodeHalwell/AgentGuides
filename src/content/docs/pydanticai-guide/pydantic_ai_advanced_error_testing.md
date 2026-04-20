@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI Advanced Error Handling and Testing (Python)"
-description: "\"Robust error handling, validation recovery, and testing patterns for PydanticAI.\""
+description: "Robust error handling, validation recovery, and testing patterns for PydanticAI."
 framework: pydanticai
 ---
 

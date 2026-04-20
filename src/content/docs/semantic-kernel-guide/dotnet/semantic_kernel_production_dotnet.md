@@ -199,5 +199,5 @@ public class KernelServiceTests
 
 For complete production patterns, see [../semantic_kernel_production_guide.md](../semantic_kernel_production_guide/)
 
-**[Back to .NET README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to .NET README](./)** | **[Complete Index](./guide_index/)**
 

@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Streaming Server (Express)"
-description: "\"Stream LangGraph events over SSE using Express.\""
+description: "Stream LangGraph events over SSE using Express."
 framework: langgraph
 language: typescript
 ---

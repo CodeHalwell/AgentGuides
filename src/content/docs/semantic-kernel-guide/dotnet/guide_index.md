@@ -15,11 +15,11 @@ Last Updated: April 2026
 
 ## Quick Links
 
-- **[README.md](./adme/)** - Start here
-- **[semantic_kernel_comprehensive_dotnet.md](./mantic_kernel_comprehensive_dotnet/)** - Complete reference
-- **[semantic_kernel_production_dotnet.md](./mantic_kernel_production_dotnet/)** - Production deployment
-- **[semantic_kernel_recipes_dotnet.md](./mantic_kernel_recipes_dotnet/)** - Code examples
-- **[semantic_kernel_diagrams_dotnet.md](./mantic_kernel_diagrams_dotnet/)** - Visual guides
+- **[README.md](./)** - Start here
+- **[semantic_kernel_comprehensive_dotnet.md](./semantic_kernel_comprehensive_dotnet/)** - Complete reference
+- **[semantic_kernel_production_dotnet.md](./semantic_kernel_production_dotnet/)** - Production deployment
+- **[semantic_kernel_recipes_dotnet.md](./semantic_kernel_recipes_dotnet/)** - Code examples
+- **[semantic_kernel_diagrams_dotnet.md](./semantic_kernel_diagrams_dotnet/)** - Visual guides
 
 ---
 
@@ -98,7 +98,7 @@ Last Updated: April 2026
 
 ---
 
-**[← Back to .NET README](./adme/)** | **[↑ Main Guide](../)**
+**[← Back to .NET README](./)** | **[↑ Main Guide](../)**
 
 Last Updated: April 2026
 

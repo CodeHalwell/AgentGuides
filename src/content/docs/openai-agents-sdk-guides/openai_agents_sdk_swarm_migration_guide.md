@@ -864,9 +864,9 @@ def route_request(user_id: str):
 ## Support and Resources
 
 ### Documentation
-- [Agents SDK Comprehensive Guide](./enai_agents_sdk_comprehensive_guide/)
-- [Production Guide](./enai_agents_sdk_production_guide/)
-- [Recipes Guide](./enai_agents_sdk_recipes/)
+- [Agents SDK Comprehensive Guide](./openai_agents_sdk_comprehensive_guide/)
+- [Production Guide](./openai_agents_sdk_production_guide/)
+- [Recipes Guide](./openai_agents_sdk_recipes/)
 
 ### Community
 - GitHub Issues: https://github.com/openai/openai-agents-python

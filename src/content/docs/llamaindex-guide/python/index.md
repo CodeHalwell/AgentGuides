@@ -585,11 +585,11 @@ from llama_index.readers.web.simple_web_page import SimpleWebPageReader
 
 
 ## Advanced Guides
-- [llamaindex_advanced_agents_python.md](./amaindex_advanced_agents_python/)
-- [llamaindex_observability_python.md](./amaindex_observability_python/)
+- [llamaindex_advanced_agents_python.md](./llamaindex_advanced_agents_python/)
+- [llamaindex_observability_python.md](./llamaindex_observability_python/)
 
 ## Streaming Examples
-- [llamaindex_streaming_server_fastapi.md](./amaindex_streaming_server_fastapi/)
+- [llamaindex_streaming_server_fastapi.md](./llamaindex_streaming_server_fastapi/)
 
 ---
 

@@ -117,7 +117,7 @@ The Claude Agent SDK represents a major evolution from the Claude Code SDK with 
 
 ### Migration from Claude Code SDK
 
-**Migrating from Claude Code SDK?** See the [Migration Guide](./aude_agent_sdk_typescript_migration_guide/) for:
+**Migrating from Claude Code SDK?** See the [Migration Guide](./claude_agent_sdk_typescript_migration_guide/) for:
 - Step-by-step migration instructions
 - Package and function name changes
 - Breaking changes documentation
@@ -602,11 +602,11 @@ Happy building! 🚀
 
 
 ## Advanced Guides
-- [claude_agent_sdk_typescript_advanced_multi_agent.md](./aude_agent_sdk_typescript_advanced_multi_agent/)
-- [claude_agent_sdk_typescript_middleware.md](./aude_agent_sdk_typescript_middleware/)
+- [claude_agent_sdk_typescript_advanced_multi_agent.md](./claude_agent_sdk_typescript_advanced_multi_agent/)
+- [claude_agent_sdk_typescript_middleware.md](./claude_agent_sdk_typescript_middleware/)
 
 ## Streaming Examples
-- [claude_streaming_server_express.md](./aude_streaming_server_express/)
+- [claude_streaming_server_express.md](./claude_streaming_server_express/)
 
 ---
 

@@ -1213,9 +1213,9 @@ Model Context Protocol (MCP) support in Mistral Agents API enables:
 MCP bridges the gap between Mistral's built-in connectors and your custom systems, creating a comprehensive agent platform.
 
 **Next Steps:**
-- Review [Connectors Guide](./stral_agents_api_connectors_guide/) for built-in capabilities
-- Explore [Orchestration Guide](./stral_agents_api_orchestration_guide/) for multi-agent patterns
-- Study [Production Guide](./stral_agents_api_production_guide/) for deployment
+- Review [Connectors Guide](./mistral_agents_api_connectors_guide/) for built-in capabilities
+- Explore [Orchestration Guide](./mistral_agents_api_orchestration_guide/) for multi-agent patterns
+- Study [Production Guide](./mistral_agents_api_production_guide/) for deployment
 
 ---
 

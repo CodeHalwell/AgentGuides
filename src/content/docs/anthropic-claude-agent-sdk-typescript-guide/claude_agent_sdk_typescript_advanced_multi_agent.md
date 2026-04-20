@@ -1,6 +1,6 @@
 ---
 title: "Claude Agent SDK Advanced Multi‑Agent (TypeScript)"
-description: "\"Advanced collaboration, guardrails, and HITL in Claude Agent SDK TypeScript.\""
+description: "Advanced collaboration, guardrails, and HITL in Claude Agent SDK TypeScript."
 framework: anthropic-claude-agent-sdk-typescript
 ---
 

@@ -447,10 +447,10 @@ Choose your path above and dive in! Start with the [Comprehensive Guide](./micro
 
 
 ## Advanced Guides
-- [microsoft_agent_framework_dotnet_advanced.md](./crosoft_agent_framework_dotnet_advanced/)
+- [microsoft_agent_framework_dotnet_advanced.md](./microsoft_agent_framework_dotnet_advanced/)
 
 ## Streaming Examples
-- [microsoft_agent_streaming_server_dotnet.md](./crosoft_agent_streaming_server_dotnet/)
+- [microsoft_agent_streaming_server_dotnet.md](./microsoft_agent_streaming_server_dotnet/)
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: "Google ADK - IAM Examples"
-description: "\"Least-privilege IAM roles for ADK on GCP.\""
+description: "Least-privilege IAM roles for ADK on GCP."
 framework: google-adk
 language: python
 ---

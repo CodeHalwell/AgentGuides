@@ -1,6 +1,6 @@
 ---
 title: "Framework Comparison"
-description: "\"Compare AI agent frameworks\""
+description: "Compare AI agent frameworks"
 ---
 
 # 🔄 Framework Comparison
@@ -13,19 +13,19 @@ Detailed comparison of all supported agent frameworks to help you choose the rig
 
 | Framework | Language | Best For | Complexity | Learning Curve | Community | Last Updated |
 |-----------|----------|----------|-----------|-----------------|-----------|--------------|
-| **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | Nov 2024 |
-| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | Nov 2024 |
-| **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Nov 2024 |
-| **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | Nov 2024 |
-| **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Nov 2024 |
-| **LlamaIndex** | Python | RAG systems | Medium | 6-8 hours | Active | Nov 2024 |
-| **Haystack** | Python | Search systems | Med-High | 8-10 hours | Active | Nov 2024 |
-| **AG2** | Python | Research | Med-High | 6-8 hours | Large | Nov 2024 |
-| **Semantic Kernel** | C#/Python | Enterprise | Medium | 6-8 hours | Active | Nov 2024 |
-| **Amazon Bedrock** | Python | AWS-native | Medium | 6-8 hours | Growing | Nov 2024 |
-| **Google ADK** | Python | GCP-native | Medium | 6-8 hours | Growing | Nov 2024 |
-| **Anthropic Claude** | Python/TS | Claude API | Medium | 4-6 hours | Growing | Nov 2024 |
-| **Mistral** | Python | Mistral API | Medium | 4-6 hours | Growing | Nov 2024 |
+| **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | Apr 2026 |
+| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | Apr 2026 |
+| **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Apr 2026 |
+| **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | Apr 2026 |
+| **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Apr 2026 |
+| **LlamaIndex** | Python | RAG systems | Medium | 6-8 hours | Active | Apr 2026 |
+| **Haystack** | Python | Search systems | Med-High | 8-10 hours | Active | Apr 2026 |
+| **AG2** | Python | Research | Med-High | 6-8 hours | Large | Apr 2026 |
+| **Semantic Kernel** | C#/Python | Enterprise | Medium | 6-8 hours | Active | Apr 2026 |
+| **Amazon Bedrock** | Python | AWS-native | Medium | 6-8 hours | Growing | Apr 2026 |
+| **Google ADK** | Python | GCP-native | Medium | 6-8 hours | Growing | Apr 2026 |
+| **Anthropic Claude** | Python/TS | Claude API | Medium | 4-6 hours | Growing | Apr 2026 |
+| **Mistral** | Python | Mistral API | Medium | 4-6 hours | Growing | Apr 2026 |
 
 ---
 
@@ -566,6 +566,6 @@ If you outgrow a framework:
 
 ---
 
-[Back to Home →](index) | [All Guides →](guides)
+[Back to Home →](/) | [All Guides →](/guides/)
 
 

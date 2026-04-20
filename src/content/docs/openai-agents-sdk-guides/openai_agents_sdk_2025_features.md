@@ -63,7 +63,7 @@ result = await Runner.run(agent, "Hello")
 print(result.final_output)
 ```
 
-**See:** [Complete Swarm Migration Guide](./enai_agents_sdk_swarm_migration_guide/)
+**See:** [Complete Swarm Migration Guide](./openai_agents_sdk_swarm_migration_guide/)
 
 ---
 
@@ -827,5 +827,5 @@ The OpenAI Agents SDK (2025) provides:
 
 **Last Updated:** January 2025
 **SDK Version:** v0.2.9+
-**Next:** [Swarm Migration Guide](./enai_agents_sdk_swarm_migration_guide/)
+**Next:** [Swarm Migration Guide](./openai_agents_sdk_swarm_migration_guide/)
 

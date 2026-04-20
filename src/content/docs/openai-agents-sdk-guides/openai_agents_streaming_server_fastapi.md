@@ -1,6 +1,6 @@
 ---
 title: "OpenAI Agents Streaming Server (FastAPI)"
-description: "\"Stream model output using FastAPI and OpenAI Python SDK.\""
+description: "Stream model output using FastAPI and OpenAI Python SDK."
 framework: openai-agents-sdk
 ---
 

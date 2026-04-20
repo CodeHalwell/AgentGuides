@@ -1273,9 +1273,9 @@ The May 2025 launch of Mistral Agents API brings five powerful connectors that t
 By combining these connectors strategically, you can build sophisticated agents that rival or exceed specialized frameworks—all with simpler code, better integration, and enterprise-grade reliability.
 
 **Next Steps:**
-- Explore [Agent Orchestration Guide](./stral_agents_api_orchestration_guide/) for multi-agent patterns
-- Learn [MCP Integration](./stral_agents_api_mcp_guide/) for third-party tool connections
-- Review [Production Guide](./stral_agents_api_production_guide/) for deployment best practices
+- Explore [Agent Orchestration Guide](./mistral_agents_api_orchestration_guide/) for multi-agent patterns
+- Learn [MCP Integration](./mistral_agents_api_mcp_guide/) for third-party tool connections
+- Review [Production Guide](./mistral_agents_api_production_guide/) for deployment best practices
 
 ---
 

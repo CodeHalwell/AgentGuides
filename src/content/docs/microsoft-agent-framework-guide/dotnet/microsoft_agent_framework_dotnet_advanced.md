@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Advanced (.NET)"
-description: "\"Advanced agent orchestration, resilience, and deployment patterns in .NET.\""
+description: "Advanced agent orchestration, resilience, and deployment patterns in .NET."
 framework: microsoft-agent-framework
 language: dotnet
 ---

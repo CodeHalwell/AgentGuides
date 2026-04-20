@@ -208,5 +208,5 @@ Message Format:
 
 For more diagrams, see [../semantic_kernel_diagrams.md](../semantic_kernel_diagrams/)
 
-**[Back to Python README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to Python README](./)** | **[Complete Index](./guide_index/)**
 

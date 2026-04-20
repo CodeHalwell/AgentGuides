@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Advanced (Python)"
-description: "\"Advanced multi-agent, resilience, and Azure deployment.\""
+description: "Advanced multi-agent, resilience, and Azure deployment."
 framework: microsoft-agent-framework
 language: python
 ---

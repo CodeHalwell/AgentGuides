@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI Streaming Server (FastAPI)"
-description: "\"Stream tokens from the model and validate the final output with PydanticAI.\""
+description: "Stream tokens from the model and validate the final output with PydanticAI."
 framework: pydanticai
 ---
 

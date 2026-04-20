@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Performance Optimization (Python)"
-description: "\"Techniques for batching, caching, and parallelism in LangGraph Python.\""
+description: "Techniques for batching, caching, and parallelism in LangGraph Python."
 framework: langgraph
 language: python
 ---

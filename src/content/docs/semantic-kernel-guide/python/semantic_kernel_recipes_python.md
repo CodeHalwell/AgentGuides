@@ -514,10 +514,10 @@ asyncio.run(vector_store_v134_recipe())
 ---
 
 For more recipes, see:
-- [Comprehensive Guide](./mantic_kernel_comprehensive_python/) - Detailed examples
-- [Production Guide](./mantic_kernel_production_python/) - Production patterns
-- [Advanced Multi-Agent Guide](./mantic_kernel_advanced_multi_agent_python/) - Complex multi-agent patterns
+- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) - Detailed examples
+- [Production Guide](./semantic_kernel_production_python/) - Production patterns
+- [Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/) - Complex multi-agent patterns
 - [General Recipes](../semantic_kernel_recipes/) - Language-agnostic examples
 
-**[Back to Python README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to Python README](./)** | **[Complete Index](./guide_index/)**
 

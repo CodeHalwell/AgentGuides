@@ -70,10 +70,10 @@ async with responses_websocket_session() as session:
 - Enhanced guardrails and session management
 - MCP integration
 - Fine-tuning and evaluation integration
-**[2025 Features Guide →](./enai_agents_sdk_2025_features/)**
+**[2025 Features Guide →](./openai_agents_sdk_2025_features/)**
 
 ### ⭐ **Swarm Migration Guide**
-OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete Migration Guide →](./enai_agents_sdk_swarm_migration_guide/)**
+OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete Migration Guide →](./openai_agents_sdk_swarm_migration_guide/)**
 
 ---
 
@@ -81,7 +81,7 @@ OpenAI has officially deprecated Swarm in favor of the Agents SDK. **[Complete M
 
 This collection contains comprehensive guides:
 
-### 0. **[🆕 Swarm Migration Guide](./enai_agents_sdk_swarm_migration_guide/)** ⭐
+### 0. **[🆕 Swarm Migration Guide](./openai_agents_sdk_swarm_migration_guide/)** ⭐
 **CRITICAL FOR SWARM USERS**: Complete migration path from experimental Swarm to production Agents SDK. Includes:
 - Why migrate? (Production stability, active maintenance, enterprise features)
 - Side-by-side code comparisons
@@ -89,7 +89,7 @@ This collection contains comprehensive guides:
 - Step-by-step migration checklist
 - Rollback strategy
 
-### 0.5 **[🆕 2025 Features Guide](./enai_agents_sdk_2025_features/)** ⭐
+### 0.5 **[🆕 2025 Features Guide](./openai_agents_sdk_2025_features/)** ⭐
 Latest critical features and improvements:
 - Built-in tracing and visualization
 - Provider-agnostic support (100+ LLMs via LiteLLM)
@@ -98,7 +98,7 @@ Latest critical features and improvements:
 - Evaluation and fine-tuning integration
 - Production-ready session backends
 
-### 1. **[Comprehensive Guide](./enai_agents_sdk_comprehensive_guide/)**
+### 1. **[Comprehensive Guide](./openai_agents_sdk_comprehensive_guide/)**
 The complete reference covering all aspects of the OpenAI Agents SDK from fundamental concepts to advanced patterns. Includes:
 - Core installation and setup procedures
 - Fundamental concepts and design philosophy
@@ -344,5 +344,5 @@ async with MCPServerStdio(name="Filesystem", params={...}) as server:
 
 
 ## Streaming Examples
-- [openai_agents_streaming_server_fastapi.md](./enai_agents_streaming_server_fastapi/)
+- [openai_agents_streaming_server_fastapi.md](./openai_agents_streaming_server_fastapi/)
 

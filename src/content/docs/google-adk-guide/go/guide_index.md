@@ -382,14 +382,14 @@ This index provides a comprehensive navigation structure for all Google Agent De
 1. [Comprehensive Guide: LLMAgent](./google_adk_go_comprehensive_guide/#llmagent-deep-dive)
 2. [Comprehensive Guide: Custom Agents](./google_adk_go_comprehensive_guide/#custom-agent-implementation)
 3. [Recipes: Agent Examples](./google_adk_go_recipes/#basic-recipes)
-4. [Diagrams: Agent Architecture](./google_adk_go_diagrams/#agent-architecture)
+4. Diagrams: Agent Architecture *(coming soon)*
 
 ### Multi-Agent Systems
 1. [Comprehensive Guide: Multi-Agent Systems](./google_adk_go_comprehensive_guide/#multi-agent-systems)
 2. [Comprehensive Guide: Sequential Agents](./google_adk_go_comprehensive_guide/#sequential-agents)
 3. [Comprehensive Guide: Parallel Agents](./google_adk_go_comprehensive_guide/#parallel-agents)
 4. [Recipes: Multi-Agent Recipes](./google_adk_go_recipes/#multi-agent-recipes)
-5. [Diagrams: Multi-Agent Communication](./google_adk_go_diagrams/#multi-agent-communication)
+5. Diagrams: Multi-Agent Communication *(coming soon)*
 
 ### Tools
 1. [Comprehensive Guide: Tool System](./google_adk_go_comprehensive_guide/#tools-integration)
@@ -401,14 +401,14 @@ This index provides a comprehensive navigation structure for all Google Agent De
 1. [Comprehensive Guide: MCP Overview](./google_adk_go_comprehensive_guide/#model-context-protocol-mcp)
 2. [Comprehensive Guide: MCP Server Integration](./google_adk_go_comprehensive_guide/#mcp-server-integration)
 3. [Recipes: MCP Integration](./google_adk_go_recipes/#integration-recipes)
-4. [Diagrams: MCP Architecture](./google_adk_go_diagrams/#mcp-integration-architecture)
+4. Diagrams: MCP Architecture *(coming soon)*
 
 ### A2A Protocol
 1. [Comprehensive Guide: A2A Overview](./google_adk_go_comprehensive_guide/#agent2agent-a2a-protocol)
 2. [Comprehensive Guide: Exposing Agents](./google_adk_go_comprehensive_guide/#exposing-agents-via-a2a)
 3. [Comprehensive Guide: Consuming Agents](./google_adk_go_comprehensive_guide/#consuming-remote-a2a-agents)
 4. [Recipes: A2A Recipes](./google_adk_go_recipes/#integration-recipes)
-5. [Diagrams: A2A Protocol](./google_adk_go_diagrams/#a2a-protocol-diagrams)
+5. Diagrams: A2A Protocol *(coming soon)*
 
 ### Google Cloud
 1. [Comprehensive Guide: GCP Integration](./google_adk_go_comprehensive_guide/#google-cloud-integration)
@@ -422,7 +422,7 @@ This index provides a comprehensive navigation structure for all Google Agent De
 3. [Production Guide: Security](./google_adk_go_production_guide/#security)
 4. [Production Guide: Monitoring](./google_adk_go_production_guide/#monitoring-and-observability)
 5. [Recipes: Production Recipes](./google_adk_go_recipes/#production-recipes)
-6. [Diagrams: Deployment Architectures](./google_adk_go_diagrams/#deployment-architectures)
+6. Diagrams: Deployment Architectures *(coming soon)*
 
 ### Advanced Topics
 1. [Comprehensive Guide: Concurrency](./google_adk_go_comprehensive_guide/#concurrency-patterns)
@@ -481,7 +481,7 @@ This index provides a comprehensive navigation structure for all Google Agent De
 1. [Comprehensive Guide: Multi-Agent Systems](./google_adk_go_comprehensive_guide/#multi-agent-systems)
 2. [Comprehensive Guide: Google Search Tool](./google_adk_go_comprehensive_guide/#google-search)
 3. [Recipes: Research Assistant System](./google_adk_go_recipes/#research-assistant-system)
-4. [Diagrams: Multi-Agent Communication](./google_adk_go_diagrams/#multi-agent-communication)
+4. Diagrams: Multi-Agent Communication *(coming soon)*
 
 ### DevOps Automation
 1. [Comprehensive Guide: Custom Tools](./google_adk_go_comprehensive_guide/#custom-tool-creation)

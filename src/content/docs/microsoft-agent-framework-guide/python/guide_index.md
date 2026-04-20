@@ -17,19 +17,19 @@ language: python
 ## 🎯 Quick Navigation
 
 ### **For Beginners: Start Here**
-1. Read **[README.md](./adme/)** - Overview and setup (10 min)
-2. Study **[Comprehensive Guide - Introduction & Core Fundamentals](./crosoft_agent_framework_python_comprehensive_guide/#introduction)** (1-2 hours)
-3. Try **[Recipes - Beginner Section](./crosoft_agent_framework_python_recipes/#beginner-recipes)** - Copy-paste examples (30 min)
+1. Read **[README.md](./)** - Overview and setup (10 min)
+2. Study **[Comprehensive Guide - Introduction & Core Fundamentals](./microsoft_agent_framework_python_comprehensive_guide/#introduction)** (1-2 hours)
+3. Try **[Recipes - Beginner Section](./microsoft_agent_framework_python_recipes/#beginner-recipes)** - Copy-paste examples (30 min)
 
 ### **For Intermediate Developers**
-1. Review **[Comprehensive Guide - Multi-Agent Systems](./crosoft_agent_framework_python_comprehensive_guide/#multi-agent-systems)** (2-3 hours)
-2. Explore **[Diagrams - Multi-Agent Orchestration](./crosoft_agent_framework_python_diagrams/#multi-agent-orchestration)** (30 min)
-3. Implement **[Recipes - Intermediate Section](./crosoft_agent_framework_python_recipes/#intermediate-recipes)** (2-4 hours)
+1. Review **[Comprehensive Guide - Multi-Agent Systems](./microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems)** (2-3 hours)
+2. Explore **[Diagrams - Multi-Agent Orchestration](./microsoft_agent_framework_python_diagrams/#multi-agent-orchestration)** (30 min)
+3. Implement **[Recipes - Intermediate Section](./microsoft_agent_framework_python_recipes/#intermediate-recipes)** (2-4 hours)
 
 ### **For Production Deployment**
 1. Study **[Production Guide - Complete](microsoft_agent_framework_python_production_guide)** (4-6 hours)
-2. Review **[Diagrams - Deployment Architecture](./crosoft_agent_framework_python_diagrams/#deployment-architecture)** (1 hour)
-3. Apply **[Recipes - Integration Section](./crosoft_agent_framework_python_recipes/#integration-recipes)** (varies)
+2. Review **[Diagrams - Deployment Architecture](./microsoft_agent_framework_python_diagrams/#deployment-architecture)** (1 hour)
+3. Apply **[Recipes - Integration Section](./microsoft_agent_framework_python_recipes/#integration-recipes)** (varies)
 
 ---
 
@@ -311,29 +311,29 @@ language: python
 
 **Goal:** Build your first agent and understand basics
 
-1. **[README.md](./adme/)** - Setup & Overview (1 hour)
+1. **[README.md](./)** - Setup & Overview (1 hour)
    - Install Python and Agent Framework
    - Setup Azure credentials
    - Verify installation
 
-2. **[Comprehensive Guide - Introduction](./crosoft_agent_framework_python_comprehensive_guide/#introduction)** (30 min)
+2. **[Comprehensive Guide - Introduction](./microsoft_agent_framework_python_comprehensive_guide/#introduction)** (30 min)
    - Understand what Agent Framework is
    - Learn key objectives
 
-3. **[Comprehensive Guide - Core Fundamentals](./crosoft_agent_framework_python_comprehensive_guide/#core-fundamentals)** (2 hours)
+3. **[Comprehensive Guide - Core Fundamentals](./microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals)** (2 hours)
    - Architecture principles
    - Authentication
    - Configuration
 
-4. **[Recipes - Recipe 1: Simple Chat Agent](./crosoft_agent_framework_python_recipes/#recipe-1-simple-chat-agent---python)** (1 hour)
+4. **[Recipes - Recipe 1: Simple Chat Agent](./microsoft_agent_framework_python_recipes/#recipe-1-simple-chat-agent---python)** (1 hour)
    - Copy and run first example
    - Understand code structure
 
-5. **[Comprehensive Guide - Simple Agents](./crosoft_agent_framework_python_comprehensive_guide/#simple-agents)** (2 hours)
+5. **[Comprehensive Guide - Simple Agents](./microsoft_agent_framework_python_comprehensive_guide/#simple-agents)** (2 hours)
    - Learn agent creation patterns
    - Understand lifecycle
 
-6. **[Recipes - Recipe 2: Agent with Single Tool](./crosoft_agent_framework_python_recipes/#recipe-2-agent-with-single-tool)** (1-2 hours)
+6. **[Recipes - Recipe 2: Agent with Single Tool](./microsoft_agent_framework_python_recipes/#recipe-2-agent-with-single-tool)** (1-2 hours)
    - Add tool to your agent
    - Test tool invocation
 
@@ -352,29 +352,29 @@ language: python
 
 **Prerequisites:** Complete Beginner path
 
-1. **[Comprehensive Guide - Multi-Agent Systems](./crosoft_agent_framework_python_comprehensive_guide/#multi-agent-systems)** (4 hours)
+1. **[Comprehensive Guide - Multi-Agent Systems](./microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems)** (4 hours)
    - Orchestration patterns
    - Communication patterns
    - State management
 
-2. **[Diagrams - Multi-Agent Orchestration](./crosoft_agent_framework_python_diagrams/#multi-agent-orchestration)** (30 min)
+2. **[Diagrams - Multi-Agent Orchestration](./microsoft_agent_framework_python_diagrams/#multi-agent-orchestration)** (30 min)
    - Visualize patterns
    - Understand flows
 
-3. **[Recipes - Recipe 4: Multi-Agent Workflow](./crosoft_agent_framework_python_recipes/#recipe-4-multi-agent-workflow---python)** (2 hours)
+3. **[Recipes - Recipe 4: Multi-Agent Workflow](./microsoft_agent_framework_python_recipes/#recipe-4-multi-agent-workflow---python)** (2 hours)
    - Implement multi-agent system
    - Test coordination
 
-4. **[Comprehensive Guide - Tools Integration](./crosoft_agent_framework_python_comprehensive_guide/#tools-integration)** (3 hours)
+4. **[Comprehensive Guide - Tools Integration](./microsoft_agent_framework_python_comprehensive_guide/#tools-integration)** (3 hours)
    - Advanced tool patterns
    - Azure tools
    - Custom tools
 
-5. **[Recipes - Recipe 5: Multiple Tools](./crosoft_agent_framework_python_recipes/#recipe-5-agent-with-multiple-tools---python)** (2 hours)
+5. **[Recipes - Recipe 5: Multiple Tools](./microsoft_agent_framework_python_recipes/#recipe-5-agent-with-multiple-tools---python)** (2 hours)
    - Implement complex tools
    - Test integration
 
-6. **[Comprehensive Guide - Memory Systems](./crosoft_agent_framework_python_comprehensive_guide/#memory-systems)** (3 hours)
+6. **[Comprehensive Guide - Memory Systems](./microsoft_agent_framework_python_comprehensive_guide/#memory-systems)** (3 hours)
    - Persistent storage
    - Vector memory
    - Redis/Cosmos DB
@@ -400,29 +400,29 @@ language: python
    - Scaling
    - Monitoring
 
-2. **[Diagrams - Deployment Architecture](./crosoft_agent_framework_python_diagrams/#deployment-architecture)** (1 hour)
+2. **[Diagrams - Deployment Architecture](./microsoft_agent_framework_python_diagrams/#deployment-architecture)** (1 hour)
    - Infrastructure patterns
    - Network topology
 
-3. **[Comprehensive Guide - Agentic Patterns](./crosoft_agent_framework_python_comprehensive_guide/#agentic-patterns)** (4 hours)
+3. **[Comprehensive Guide - Agentic Patterns](./microsoft_agent_framework_python_comprehensive_guide/#agentic-patterns)** (4 hours)
    - Advanced reasoning
    - Planning patterns
    - Autonomous agents
 
-4. **[Recipes - Recipe 8: RAG Implementation](./crosoft_agent_framework_python_recipes/#recipe-8-rag-retrieval-augmented-generation---python)** (4 hours)
+4. **[Recipes - Recipe 8: RAG Implementation](./microsoft_agent_framework_python_recipes/#recipe-8-rag-retrieval-augmented-generation---python)** (4 hours)
    - Build RAG system
    - Integrate with Azure AI Search
 
-5. **[Recipes - Integration Recipes](./crosoft_agent_framework_python_recipes/#integration-recipes)** (6 hours)
+5. **[Recipes - Integration Recipes](./microsoft_agent_framework_python_recipes/#integration-recipes)** (6 hours)
    - Azure Functions
    - Event-driven patterns
    - FastAPI integration
 
-6. **[Production Guide - Security](./crosoft_agent_framework_python_production_guide/#security-best-practices)** (2 hours)
+6. **[Production Guide - Security](./microsoft_agent_framework_python_production_guide/#security-best-practices)** (2 hours)
    - Implement security
    - Key Vault integration
 
-7. **[Production Guide - Monitoring](./crosoft_agent_framework_python_production_guide/#monitoring--observability)** (2 hours)
+7. **[Production Guide - Monitoring](./microsoft_agent_framework_python_production_guide/#monitoring--observability)** (2 hours)
    - Setup Application Insights
    - Custom metrics
    - Alerting
@@ -443,40 +443,40 @@ language: python
 ### **By Concept**
 
 #### **Agents**
-- Creating agents: [Comprehensive Guide - Simple Agents](./crosoft_agent_framework_python_comprehensive_guide/#simple-agents)
-- ChatAgent vs AIAgent: [Comprehensive Guide - Core Fundamentals](./crosoft_agent_framework_python_comprehensive_guide/#unified-sdk-structure)
-- Lifecycle: [Comprehensive Guide - Agent Lifecycle](./crosoft_agent_framework_python_comprehensive_guide/#agent-lifecycle-management)
-- Testing: [Comprehensive Guide - Testing](./crosoft_agent_framework_python_comprehensive_guide/#testing-individual-agents)
+- Creating agents: [Comprehensive Guide - Simple Agents](./microsoft_agent_framework_python_comprehensive_guide/#simple-agents)
+- ChatAgent vs AIAgent: [Comprehensive Guide - Core Fundamentals](./microsoft_agent_framework_python_comprehensive_guide/#unified-sdk-structure)
+- Lifecycle: [Comprehensive Guide - Agent Lifecycle](./microsoft_agent_framework_python_comprehensive_guide/#agent-lifecycle-management)
+- Testing: [Comprehensive Guide - Testing](./microsoft_agent_framework_python_comprehensive_guide/#testing-individual-agents)
 
 #### **Tools**
-- Defining tools: [Comprehensive Guide - Tools Integration](./crosoft_agent_framework_python_comprehensive_guide/#tools-integration)
+- Defining tools: [Comprehensive Guide - Tools Integration](./microsoft_agent_framework_python_comprehensive_guide/#tools-integration)
 - `@ai_function` decorator: [Recipes - Tool Examples](microsoft_agent_framework_python_recipes)
-- Azure tools: [Comprehensive Guide - Built-in Tools](./crosoft_agent_framework_python_comprehensive_guide/#tools-integration)
-- Custom tools: [Recipes - Custom Tool Development](./crosoft_agent_framework_python_recipes/#recipe-10-custom-tool-development)
+- Azure tools: [Comprehensive Guide - Built-in Tools](./microsoft_agent_framework_python_comprehensive_guide/#tools-integration)
+- Custom tools: [Recipes - Custom Tool Development](./microsoft_agent_framework_python_recipes/#recipe-10-custom-tool-development)
 
 #### **Multi-Agent Systems**
-- Orchestration: [Comprehensive Guide - Multi-Agent Systems](./crosoft_agent_framework_python_comprehensive_guide/#multi-agent-systems)
-- Communication patterns: [Comprehensive Guide - Communication](./crosoft_agent_framework_python_comprehensive_guide/#communication-patterns-between-agents)
-- State management: [Comprehensive Guide - Shared State](./crosoft_agent_framework_python_comprehensive_guide/#shared-state-management)
-- Workflows: [Comprehensive Guide - Workflow Coordination](./crosoft_agent_framework_python_comprehensive_guide/#workflow-coordination)
+- Orchestration: [Comprehensive Guide - Multi-Agent Systems](./microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems)
+- Communication patterns: [Comprehensive Guide - Communication](./microsoft_agent_framework_python_comprehensive_guide/#communication-patterns-between-agents)
+- State management: [Comprehensive Guide - Shared State](./microsoft_agent_framework_python_comprehensive_guide/#shared-state-management)
+- Workflows: [Comprehensive Guide - Workflow Coordination](./microsoft_agent_framework_python_comprehensive_guide/#workflow-coordination)
 
 #### **Memory & Persistence**
-- Memory systems: [Comprehensive Guide - Memory Systems](./crosoft_agent_framework_python_comprehensive_guide/#memory-systems)
-- Redis integration: [Recipes - Memory Integration](./crosoft_agent_framework_python_recipes/#recipe-6-memory-integration)
-- Cosmos DB: [Comprehensive Guide - Cosmos DB State](./crosoft_agent_framework_python_comprehensive_guide/#azure-cosmos-db-state-backend)
-- Vector memory: [Comprehensive Guide - Memory Systems](./crosoft_agent_framework_python_comprehensive_guide/#memory-systems)
+- Memory systems: [Comprehensive Guide - Memory Systems](./microsoft_agent_framework_python_comprehensive_guide/#memory-systems)
+- Redis integration: [Recipes - Memory Integration](./microsoft_agent_framework_python_recipes/#recipe-6-memory-integration)
+- Cosmos DB: [Comprehensive Guide - Cosmos DB State](./microsoft_agent_framework_python_comprehensive_guide/#azure-cosmos-db-state-backend)
+- Vector memory: [Comprehensive Guide - Memory Systems](./microsoft_agent_framework_python_comprehensive_guide/#memory-systems)
 
 #### **Azure Integration**
-- Azure OpenAI: [Comprehensive Guide - Core Fundamentals](./crosoft_agent_framework_python_comprehensive_guide/#authentication-and-authorization)
-- Azure AI Search: [Recipes - RAG](./crosoft_agent_framework_python_recipes/#recipe-8-rag-retrieval-augmented-generation)
-- Azure Functions: [Recipes - Integration](./crosoft_agent_framework_python_recipes/#recipe-11-azure-functions-integration)
-- Application Insights: [Production Guide - Monitoring](./crosoft_agent_framework_python_production_guide/#monitoring--observability)
+- Azure OpenAI: [Comprehensive Guide - Core Fundamentals](./microsoft_agent_framework_python_comprehensive_guide/#authentication-and-authorization)
+- Azure AI Search: [Recipes - RAG](./microsoft_agent_framework_python_recipes/#recipe-8-rag-retrieval-augmented-generation)
+- Azure Functions: [Recipes - Integration](./microsoft_agent_framework_python_recipes/#recipe-11-azure-functions-integration)
+- Application Insights: [Production Guide - Monitoring](./microsoft_agent_framework_python_production_guide/#monitoring--observability)
 
 #### **Deployment**
-- Docker: [Production Guide - Containers](./crosoft_agent_framework_python_production_guide/#production-deployment)
-- Kubernetes: [Production Guide - Kubernetes](./crosoft_agent_framework_python_production_guide/#production-deployment)
-- Azure Container Apps: [Production Guide - Azure Container Apps](./crosoft_agent_framework_python_production_guide/#production-deployment)
-- CI/CD: [Production Guide - CI/CD](./crosoft_agent_framework_python_production_guide/#production-deployment)
+- Docker: [Production Guide - Containers](./microsoft_agent_framework_python_production_guide/#production-deployment)
+- Kubernetes: [Production Guide - Kubernetes](./microsoft_agent_framework_python_production_guide/#production-deployment)
+- Azure Container Apps: [Production Guide - Azure Container Apps](./microsoft_agent_framework_python_production_guide/#production-deployment)
+- CI/CD: [Production Guide - CI/CD](./microsoft_agent_framework_python_production_guide/#production-deployment)
 
 ---
 
@@ -485,40 +485,40 @@ language: python
 ### **"I want to..."**
 
 #### **...build my first agent**
-→ [Recipes - Recipe 1: Simple Chat Agent](./crosoft_agent_framework_python_recipes/#recipe-1-simple-chat-agent---python)
+→ [Recipes - Recipe 1: Simple Chat Agent](./microsoft_agent_framework_python_recipes/#recipe-1-simple-chat-agent---python)
 
 #### **...add tools to an agent**
-→ [Recipes - Recipe 2: Agent with Single Tool](./crosoft_agent_framework_python_recipes/#recipe-2-agent-with-single-tool)
+→ [Recipes - Recipe 2: Agent with Single Tool](./microsoft_agent_framework_python_recipes/#recipe-2-agent-with-single-tool)
 
 #### **...coordinate multiple agents**
-→ [Recipes - Recipe 4: Multi-Agent Workflow](./crosoft_agent_framework_python_recipes/#recipe-4-multi-agent-workflow---python)
+→ [Recipes - Recipe 4: Multi-Agent Workflow](./microsoft_agent_framework_python_recipes/#recipe-4-multi-agent-workflow---python)
 
 #### **...implement RAG**
-→ [Recipes - Recipe 8: RAG Implementation](./crosoft_agent_framework_python_recipes/#recipe-8-rag-retrieval-augmented-generation)
+→ [Recipes - Recipe 8: RAG Implementation](./microsoft_agent_framework_python_recipes/#recipe-8-rag-retrieval-augmented-generation)
 
 #### **...deploy to production**
 → [Production Guide - Complete](microsoft_agent_framework_python_production_guide)
 
 #### **...integrate with Azure Functions**
-→ [Recipes - Recipe 11: Azure Functions](./crosoft_agent_framework_python_recipes/#recipe-11-azure-functions-integration)
+→ [Recipes - Recipe 11: Azure Functions](./microsoft_agent_framework_python_recipes/#recipe-11-azure-functions-integration)
 
 #### **...handle errors properly**
-→ [Recipes - Recipe 3: Error Handling](./crosoft_agent_framework_python_recipes/#recipe-3-basic-error-handling---python)
+→ [Recipes - Recipe 3: Error Handling](./microsoft_agent_framework_python_recipes/#recipe-3-basic-error-handling---python)
 
 #### **...add memory to agents**
-→ [Recipes - Recipe 6: Memory Integration](./crosoft_agent_framework_python_recipes/#recipe-6-memory-integration)
+→ [Recipes - Recipe 6: Memory Integration](./microsoft_agent_framework_python_recipes/#recipe-6-memory-integration)
 
 #### **...understand the architecture**
-→ [Diagrams - System Architecture](./crosoft_agent_framework_python_diagrams/#system-architecture)
+→ [Diagrams - System Architecture](./microsoft_agent_framework_python_diagrams/#system-architecture)
 
 #### **...optimize performance**
-→ [Production Guide - Performance Tuning](./crosoft_agent_framework_python_production_guide/#performance-tuning)
+→ [Production Guide - Performance Tuning](./microsoft_agent_framework_python_production_guide/#performance-tuning)
 
 #### **...setup monitoring**
-→ [Production Guide - Monitoring](./crosoft_agent_framework_python_production_guide/#monitoring--observability)
+→ [Production Guide - Monitoring](./microsoft_agent_framework_python_production_guide/#monitoring--observability)
 
 #### **...secure my agents**
-→ [Production Guide - Security](./crosoft_agent_framework_python_production_guide/#security-best-practices)
+→ [Production Guide - Security](./microsoft_agent_framework_python_production_guide/#security-best-practices)
 
 ---
 

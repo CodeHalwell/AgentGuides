@@ -1,6 +1,6 @@
 ---
 title: "LlamaIndex Streaming Server (FastAPI)"
-description: "\"Stream LlamaIndex query tokens over SSE using FastAPI.\""
+description: "Stream LlamaIndex query tokens over SSE using FastAPI."
 framework: llamaindex
 language: python
 ---

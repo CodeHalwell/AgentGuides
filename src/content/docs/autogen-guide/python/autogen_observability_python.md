@@ -1,6 +1,6 @@
 ---
 title: "AutoGen Observability & Recovery (Python)"
-description: "\"Instrumenting group chats, retries, and HITL for AutoGen.\""
+description: "Instrumenting group chats, retries, and HITL for AutoGen."
 framework: autogen
 language: python
 ---

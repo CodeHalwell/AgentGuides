@@ -169,9 +169,9 @@ builder.Services.AddScoped<IAgentOrchestrator, ResearchWritingOrchestrator>();
 ---
 
 For more recipes, see:
-- [Comprehensive Guide](./mantic_kernel_comprehensive_dotnet/)
-- [Production Guide](./mantic_kernel_production_dotnet/)
+- [Comprehensive Guide](./semantic_kernel_comprehensive_dotnet/)
+- [Production Guide](./semantic_kernel_production_dotnet/)
 - [General Recipes](../semantic_kernel_recipes/)
 
-**[Back to .NET README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to .NET README](./)** | **[Complete Index](./guide_index/)**
 

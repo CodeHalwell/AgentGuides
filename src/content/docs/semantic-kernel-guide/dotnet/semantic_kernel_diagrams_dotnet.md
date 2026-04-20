@@ -73,5 +73,5 @@ HTTP Request
 
 For more diagrams, see [../semantic_kernel_diagrams.md](../semantic_kernel_diagrams/)
 
-**[Back to .NET README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to .NET README](./)** | **[Complete Index](./guide_index/)**
 

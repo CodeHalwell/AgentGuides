@@ -48,7 +48,7 @@ const result = await workflow.run({ query: "What is AI?" });
 
 This guide is organized into comprehensive guides covering all aspects of LlamaIndex TypeScript:
 
-### 1. **[llamaindex_workflows_typescript_comprehensive_guide](./amaindex_workflows_typescript_comprehensive_guide/)**
+### 1. **[llamaindex_workflows_typescript_comprehensive_guide](./llamaindex_workflows_typescript_comprehensive_guide/)**
 Complete technical reference for Workflows 1.0:
 
 - **Workflows 1.0 Fundamentals**
@@ -83,7 +83,7 @@ Complete technical reference for Workflows 1.0:
 
 **Total: 200+ code examples**
 
-### 2. **[llamaindex_typescript_production_guide](./amaindex_typescript_production_guide/)**
+### 2. **[llamaindex_typescript_production_guide](./llamaindex_typescript_production_guide/)**
 Production-ready deployment strategies:
 
 - **Production Architecture**
@@ -130,7 +130,7 @@ Production-ready deployment strategies:
 
 **Includes: 50+ production-ready examples**
 
-### 3. **[llamaindex_typescript_recipes](./amaindex_typescript_recipes/)**
+### 3. **[llamaindex_typescript_recipes](./llamaindex_typescript_recipes/)**
 Real-world, production-quality recipes:
 
 1. **Basic RAG Chatbot** - Interactive document Q&A

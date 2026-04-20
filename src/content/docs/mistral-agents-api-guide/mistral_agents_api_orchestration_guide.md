@@ -1308,9 +1308,9 @@ The May 2025 Agents API launch brings native multi-agent orchestration capabilit
 No external frameworks needed—everything runs on Mistral's platform with enterprise reliability.
 
 **Next Steps:**
-- Review [Connectors Guide](./stral_agents_api_connectors_guide/) for agent capabilities
-- Explore [MCP Integration](./stral_agents_api_mcp_guide/) for third-party tools
-- Study [Production Guide](./stral_agents_api_production_guide/) for deployment
+- Review [Connectors Guide](./mistral_agents_api_connectors_guide/) for agent capabilities
+- Explore [MCP Integration](./mistral_agents_api_mcp_guide/) for third-party tools
+- Study [Production Guide](./mistral_agents_api_production_guide/) for deployment
 
 ---
 

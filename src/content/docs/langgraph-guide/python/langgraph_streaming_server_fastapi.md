@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Streaming Server (FastAPI)"
-description: "\"Stream graph events over SSE using FastAPI.\""
+description: "Stream graph events over SSE using FastAPI."
 framework: langgraph
 language: python
 ---

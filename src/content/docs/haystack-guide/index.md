@@ -551,10 +551,10 @@ The goal is to be the most complete Haystack resource available while maintainin
 
 
 ## Advanced Guides
-- [haystack_advanced_agents_python.md](./ystack_advanced_agents_python/)
-- [haystack_observability_python.md](./ystack_observability_python/)
+- [haystack_advanced_agents_python.md](./haystack_advanced_agents_python/)
+- [haystack_observability_python.md](./haystack_observability_python/)
 
 
 ## Streaming Examples
-- [haystack_streaming_server_fastapi.md](./ystack_streaming_server_fastapi/)
+- [haystack_streaming_server_fastapi.md](./haystack_streaming_server_fastapi/)
 

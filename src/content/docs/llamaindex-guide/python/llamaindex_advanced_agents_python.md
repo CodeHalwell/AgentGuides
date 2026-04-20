@@ -1,6 +1,6 @@
 ---
 title: "LlamaIndex Advanced Agents (Python)"
-description: "\"Multi-agent orchestration with LlamaIndex tools, observability, and recovery patterns.\""
+description: "Multi-agent orchestration with LlamaIndex tools, observability, and recovery patterns."
 framework: llamaindex
 language: python
 ---

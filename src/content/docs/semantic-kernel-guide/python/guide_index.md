@@ -26,9 +26,9 @@ Last Updated: April 2026
 ## By Topic
 
 ### Installation & Setup
-- [README.md](./adme/) → Quick Start
-- [Comprehensive Guide](./mantic_kernel_comprehensive_python/) → Section 1: Installation & Configuration
-- [Production Guide](./mantic_kernel_production_python/) → Section 1: Environment Setup
+- [README.md](./) → Quick Start
+- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) → Section 1: Installation & Configuration
+- [Production Guide](./semantic_kernel_production_python/) → Section 1: Environment Setup
 
 ### Core Concepts
 
@@ -64,7 +64,7 @@ Last Updated: April 2026
 ### Advanced Topics
 
 #### Multi-Agent Systems
-- **[Advanced Multi-Agent Guide](./mantic_kernel_advanced_multi_agent_python/):** Complete reference
+- **[Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/):** Complete reference
   - AgentGroupChat
   - Termination Strategies
   - Role Routing
@@ -73,7 +73,7 @@ Last Updated: April 2026
   - Resilience Patterns
 
 #### Middleware & Guardrails
-- **[Middleware Guide](./mantic_kernel_middleware_python/):** Complete reference
+- **[Middleware Guide](./semantic_kernel_middleware_python/):** Complete reference
   - Execution Wrapper Pattern
   - Policy Enforcement
   - Content Filtering
@@ -81,7 +81,7 @@ Last Updated: April 2026
   - Custom Middleware Development
 
 #### Streaming
-- **[Streaming Server Guide](./mantic_kernel_streaming_server_fastapi/):** FastAPI implementation
+- **[Streaming Server Guide](./semantic_kernel_streaming_server_fastapi/):** FastAPI implementation
   - Server-Sent Events (SSE)
   - WebSocket alternatives
   - Incremental response streaming
@@ -189,7 +189,7 @@ Last Updated: April 2026
 
 ### Diagrams & Visualizations
 
-- **[Diagrams Guide](./mantic_kernel_diagrams_python/):**
+- **[Diagrams Guide](./semantic_kernel_diagrams_python/):**
   - Architecture Diagrams
   - Request Flow Diagrams
   - Multi-Agent Orchestration Patterns
@@ -205,7 +205,7 @@ Last Updated: April 2026
 ### Beginner (New to Semantic Kernel)
 
 **Week 1: Fundamentals**
-1. [README.md](./adme/) → Quick Start
+1. [README.md](./) → Quick Start
 2. Comprehensive Guide → Sections 1-3 (Installation, Kernel, Services)
 3. Recipes → Sections 1-4 (Basic Examples)
 
@@ -487,20 +487,20 @@ result = await kernel.invoke(function, input="Hello")
 
 ## Navigation
 
-**[← Back to Python README](./adme/)** | **[↑ Main Guide](../)**
+**[← Back to Python README](./)** | **[↑ Main Guide](../)**
 
 ---
 
 ## Document Quick Links
 
-- **[README.md](./adme/)** - Start here
-- **[semantic_kernel_comprehensive_python.md](./mantic_kernel_comprehensive_python/)** - Complete reference
-- **[semantic_kernel_production_python.md](./mantic_kernel_production_python/)** - Production deployment
-- **[semantic_kernel_recipes_python.md](./mantic_kernel_recipes_python/)** - Code examples
-- **[semantic_kernel_diagrams_python.md](./mantic_kernel_diagrams_python/)** - Visual guides
-- **[semantic_kernel_advanced_multi_agent_python.md](./mantic_kernel_advanced_multi_agent_python/)** - Multi-agent systems
-- **[semantic_kernel_middleware_python.md](./mantic_kernel_middleware_python/)** - Middleware & guardrails
-- **[semantic_kernel_streaming_server_fastapi.md](./mantic_kernel_streaming_server_fastapi/)** - Streaming server
+- **[README.md](./)** - Start here
+- **[semantic_kernel_comprehensive_python.md](./semantic_kernel_comprehensive_python/)** - Complete reference
+- **[semantic_kernel_production_python.md](./semantic_kernel_production_python/)** - Production deployment
+- **[semantic_kernel_recipes_python.md](./semantic_kernel_recipes_python/)** - Code examples
+- **[semantic_kernel_diagrams_python.md](./semantic_kernel_diagrams_python/)** - Visual guides
+- **[semantic_kernel_advanced_multi_agent_python.md](./semantic_kernel_advanced_multi_agent_python/)** - Multi-agent systems
+- **[semantic_kernel_middleware_python.md](./semantic_kernel_middleware_python/)** - Middleware & guardrails
+- **[semantic_kernel_streaming_server_fastapi.md](./semantic_kernel_streaming_server_fastapi/)** - Streaming server
 
 ---
 

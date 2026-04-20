@@ -1,6 +1,6 @@
 ---
 title: "Semantic Kernel Advanced Multi‑Agent (Python)"
-description: "\"Advanced multi-agent patterns in Semantic Kernel (Python) with AgentGroupChat, structured handoffs, and routing.\""
+description: "Advanced multi-agent patterns in Semantic Kernel (Python) with AgentGroupChat, structured handoffs, and routing."
 framework: semantic-kernel
 language: python
 ---

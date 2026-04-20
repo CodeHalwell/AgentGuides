@@ -1,6 +1,6 @@
 ---
 title: "Mistral Agents API Advanced (Python)"
-description: "\"Advanced patterns for Mistral agents: error handling, observability, deployment.\""
+description: "Advanced patterns for Mistral agents: error handling, observability, deployment."
 framework: mistral-agents-api
 ---
 

@@ -38,9 +38,9 @@ export default defineConfig({
           label: 'Start Here',
           items: [
             { label: 'Introduction', link: '/' },
-            { label: 'Quick Start', link: '/docs/quick-start/' },
-            { label: 'Choose a Framework', link: '/docs/frameworks/' },
-            { label: 'All Guides', link: '/docs/guides/' },
+            { label: 'Quick Start', link: '/quick-start/' },
+            { label: 'Choose a Framework', link: '/frameworks/' },
+            { label: 'All Guides', link: '/guides/' },
           ],
         },
         {

@@ -27,7 +27,7 @@ ADK is an open-source, code-first framework optimised for building sophisticated
 
 ## 📚 Documentation Files
 
-### 1. **[google_adk_comprehensive_guide.md](./google_adk_comprehensive_guide/)** (15,000+ lines)
+### 1. **[google_adk_comprehensive_guide.md](./python/google_adk_comprehensive_guide/)** (15,000+ lines)
 The complete technical reference covering everything from basics to advanced topics.
 
 **Sections:**
@@ -48,7 +48,7 @@ The complete technical reference covering everything from basics to advanced top
 
 **Best for:** Learning all aspects of ADK, reference implementation patterns, understanding architectural decisions.
 
-### 2. **[google_adk_production_guide.md](./google_adk_production_guide/)** (8,000+ lines)
+### 2. **[google_adk_production_guide.md](./python/google_adk_production_guide/)** (8,000+ lines)
 Enterprise-focused guide for production deployments and operations.
 
 **Sections:**
@@ -74,7 +74,7 @@ Enterprise-focused guide for production deployments and operations.
 
 **Best for:** Deploying agents to production, optimising performance and costs, implementing security controls, establishing monitoring.
 
-### 3. **[google_adk_diagrams.md](./google_adk_diagrams/)** (1,500+ lines)
+### 3. **[google_adk_diagrams.md](./python/google_adk_diagrams/)** (1,500+ lines)
 Visual architecture representations and flowcharts.
 
 **Diagrams included:**
@@ -96,7 +96,7 @@ Visual architecture representations and flowcharts.
 
 **Best for:** Understanding system architecture visually, planning implementations, communicating designs to stakeholders.
 
-### 4. **[google_adk_recipes.md](./google_adk_recipes/)** (4,000+ lines)
+### 4. **[google_adk_recipes.md](./python/google_adk_recipes/)** (4,000+ lines)
 Real-world implementation examples and practical use cases.
 
 **Recipes included:**
@@ -516,5 +516,5 @@ This documentation is provided as part of the AgentGuides project. Follow the li
 | November 2025 | Python 1.18.0 / Go 0.1.0 | Initial multi-language guide; Python and Go SDKs; MCP integration; A2A protocol preview |
 
 ## Advanced Guides
-- [google_adk_advanced_python.md](./ogle_adk_advanced_python/)
+- [google_adk_advanced_python.md](./python/google_adk_advanced_python/)
 

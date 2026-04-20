@@ -1,6 +1,6 @@
 ---
 title: "Claude Streaming Server (Express)"
-description: "\"Stream Claude responses via SSE using @anthropic-ai/sdk.\""
+description: "Stream Claude responses via SSE using @anthropic-ai/sdk."
 framework: anthropic-claude-agent-sdk-typescript
 ---
 

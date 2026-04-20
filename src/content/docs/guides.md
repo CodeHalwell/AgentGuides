@@ -1,6 +1,6 @@
 ---
 title: "All Guides"
-description: "\"Complete list of all agent framework guides - Updated April 2026\""
+description: "Complete list of all agent framework guides - Updated April 2026"
 ---
 
 # All Framework Guides
@@ -189,16 +189,15 @@ Each framework section includes links to:
 - [🚀 Production](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/)
 - [🎨 Diagrams](/openai-agents-sdk-guides/openai_agents_sdk_diagrams/)
 - [👨‍💻 Recipes](/openai-agents-sdk-guides/openai_agents_sdk_recipes/)
-- [⚡ Advanced Multi-Agent](/openai-agents-sdk-guides/openai_agents_sdk_advanced_multi_agent/)
+- [⚡ Advanced Multi-Agent](/openai-agents-sdk-guides/openai_agents_sdk_advanced_multi_agent_python/)
 - [🔧 Middleware](/openai-agents-sdk-guides/openai_agents_sdk_middleware_python/)
-- [🌊 Streaming Server](/openai-agents-sdk-guides/openai_streaming_server_fastapi/)
+- [🌊 Streaming Server](/openai-agents-sdk-guides/openai_agents_streaming_server_fastapi/)
 - [✨ 2025 Features](/openai-agents-sdk-guides/openai_agents_sdk_2025_features/) **NEW**
 - [🔄 Swarm Migration Guide](/openai-agents-sdk-guides/openai_agents_sdk_swarm_migration_guide/) **NEW**
 
 #### TypeScript
 - [📂 TypeScript Directory](/openai-agents-sdk-typescript-guide/)
 - [📖 README](/openai-agents-sdk-typescript-guide/)
-- [🗺️ GUIDE_INDEX](/openai-agents-sdk-typescript-guide/guide_index/)
 - [📚 Comprehensive](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_comprehensive_guide/)
 - [🚀 Production](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_production_guide/)
 - [🎨 Diagrams](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_diagrams/)
@@ -225,7 +224,6 @@ Each framework section includes links to:
 #### TypeScript
 - [📂 TypeScript Directory](/anthropic-claude-agent-sdk-typescript-guide/)
 - [📖 README](/anthropic-claude-agent-sdk-typescript-guide/)
-- [🗺️ GUIDE_INDEX](/anthropic-claude-agent-sdk-typescript-guide/guide_index/)
 - [📚 Comprehensive](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/)
 - [🚀 Production](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/)
 - [🎨 Diagrams](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_diagrams/)
@@ -298,7 +296,7 @@ Each framework section includes links to:
 - [👨‍💻 Recipes](/haystack-guide/haystack_recipes/)
 - [⚡ Advanced Agents](/haystack-guide/haystack_advanced_agents_python/)
 - [📊 Observability](/haystack-guide/haystack_observability_python/)
-- [🌊 Streaming Server](/haystack-guide/haystack_streaming_server_python/)
+- [🌊 Streaming Server](/haystack-guide/haystack_streaming_server_fastapi/)
 - [👥 Multi-Agent Guide](/haystack-guide/haystack_multi_agent_guide/) **NEW 2025**
 
 ---
@@ -378,12 +376,12 @@ Each framework section includes links to:
 
 ## 🔗 Navigation
 
-- [← Back to Home](../)
-- [Framework Comparison →](./frameworks)
-- [Quick Start →](./quick-start)
+- [← Back to Home](/)
+- [Framework Comparison →](/frameworks/)
+- [Quick Start →](/quick-start/)
 
 ---
 
-*Last Updated: November 17, 2025*
+*Last Updated: April 20, 2026*
 *All links verified and updated for GitHub Pages*
 

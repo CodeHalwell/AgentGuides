@@ -112,7 +112,7 @@ The Claude Agent SDK represents a significant evolution from the Claude Code SDK
 
 ### Migration from Claude Code SDK
 
-**Migrating from Claude Code SDK?** See the [Migration Guide](./thropic_claude_agent_sdk_migration_guide/) for:
+**Migrating from Claude Code SDK?** See the [Migration Guide](./anthropic_claude_agent_sdk_migration_guide/) for:
 - Step-by-step migration instructions
 - Breaking changes documentation
 - Code migration examples
@@ -124,7 +124,7 @@ This guide collection provides **exhaustive coverage** from beginner concepts to
 
 ## 📚 Guide Structure
 
-### 0. **[anthropic_claude_agent_sdk_migration_guide](./thropic_claude_agent_sdk_migration_guide/)** 🆕
+### 0. **[anthropic_claude_agent_sdk_migration_guide](./anthropic_claude_agent_sdk_migration_guide/)** 🆕
 **NEW for 2025:** Complete migration guide from Claude Code SDK to Claude Agent SDK. Covers:
 - Critical package and API changes
 - Step-by-step migration instructions
@@ -140,7 +140,7 @@ This guide collection provides **exhaustive coverage** from beginner concepts to
 
 ---
 
-### 1. **[anthropic_claude_agent_sdk_comprehensive_guide](./thropic_claude_agent_sdk_comprehensive_guide/)**
+### 1. **[anthropic_claude_agent_sdk_comprehensive_guide](./anthropic_claude_agent_sdk_comprehensive_guide/)**
 The definitive technical reference covering all core concepts, APIs, and features. Includes:
 - Installation and setup for TypeScript and Python
 - Architecture and core concepts explanation
@@ -160,7 +160,7 @@ The definitive technical reference covering all core concepts, APIs, and feature
 
 ---
 
-### 2. **[anthropic_claude_agent_sdk_production_guide](./thropic_claude_agent_sdk_production_guide/)**
+### 2. **[anthropic_claude_agent_sdk_production_guide](./anthropic_claude_agent_sdk_production_guide/)**
 Production-focused documentation for deploying agents safely and efficiently. Covers:
 - Error handling strategies and retry mechanisms
 - Rate limiting, budgeting, and cost optimisation [[memory:8527310]]
@@ -178,7 +178,7 @@ Production-focused documentation for deploying agents safely and efficiently. Co
 
 ---
 
-### 3. **[anthropic_claude_agent_sdk_diagrams](./thropic_claude_agent_sdk_diagrams/)**
+### 3. **[anthropic_claude_agent_sdk_diagrams](./anthropic_claude_agent_sdk_diagrams/)**
 Visual architecture and flow diagrams using Markdown with ASCII art and conceptual layouts. Features:
 - Agent lifecycle and execution flow diagrams
 - Multi-agent orchestration patterns
@@ -195,7 +195,7 @@ Visual architecture and flow diagrams using Markdown with ASCII art and conceptu
 
 ---
 
-### 4. **[anthropic_claude_agent_sdk_recipes](./thropic_claude_agent_sdk_recipes/)**
+### 4. **[anthropic_claude_agent_sdk_recipes](./anthropic_claude_agent_sdk_recipes/)**
 Production-ready code recipes, patterns, and real-world examples. Includes:
 - Simple hello-world examples
 - Data analysis and research agents

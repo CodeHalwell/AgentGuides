@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Middleware and Guardrails (TypeScript)"
-description: "\"Implement request/response middlewares, guardrails, and tracing in LangGraph TypeScript.\""
+description: "Implement request/response middlewares, guardrails, and tracing in LangGraph TypeScript."
 framework: langgraph
 language: typescript
 ---

@@ -495,11 +495,11 @@ All code examples tested against:
 
 
 ## Advanced Guides
-- [mistral_agents_api_advanced_python.md](./stral_agents_api_advanced_python/)
-- [mistral_agents_api_connectors_guide.md](./stral_agents_api_connectors_guide/) - NEW May 2025
-- [mistral_agents_api_orchestration_guide.md](./stral_agents_api_orchestration_guide/) - NEW May 2025
-- [mistral_agents_api_mcp_guide.md](./stral_agents_api_mcp_guide/) - NEW May 2025
+- [mistral_agents_api_advanced_python.md](./mistral_agents_api_advanced_python/)
+- [mistral_agents_api_connectors_guide.md](./mistral_agents_api_connectors_guide/) - NEW May 2025
+- [mistral_agents_api_orchestration_guide.md](./mistral_agents_api_orchestration_guide/) - NEW May 2025
+- [mistral_agents_api_mcp_guide.md](./mistral_agents_api_mcp_guide/) - NEW May 2025
 
 ## Streaming Examples
-- [mistral_streaming_server_fastapi.md](./stral_streaming_server_fastapi/)
+- [mistral_streaming_server_fastapi.md](./mistral_streaming_server_fastapi/)
 

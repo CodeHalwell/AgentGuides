@@ -56,7 +56,7 @@ import { aisdk } from '@openai/agents-extensions-vercel-ai-sdk';
 
 ### ⭐ **NEW: Production-Ready & Swarm Replacement**
 The OpenAI Agents SDK for TypeScript is the **official production-ready replacement** for experimental Swarm. Complete migration path available:
-- **[Swarm Migration Guide →](./enai_agents_sdk_typescript_swarm_migration_guide/)**
+- **[Swarm Migration Guide →](./openai_agents_sdk_typescript_swarm_migration_guide/)**
 
 ### ⭐ **NEW: 2025 Features Guide**
 Critical new features for TypeScript developers:
@@ -65,7 +65,7 @@ Critical new features for TypeScript developers:
 - Provider-agnostic support (100+ LLMs)
 - Type-safe guardrails with Zod
 - MCP integration
-- **[Complete 2025 Features Guide →](./enai_agents_sdk_typescript_2025_features/)**
+- **[Complete 2025 Features Guide →](./openai_agents_sdk_typescript_2025_features/)**
 
 ---
 
@@ -73,12 +73,12 @@ Critical new features for TypeScript developers:
 
 | Feature | Description | Guide |
 |---------|-------------|-------|
-| **Human-in-Loop** | Approval workflows for critical actions | [2025 Features](./enai_agents_sdk_typescript_2025_features/) |
-| **Built-in Tracing** | Comprehensive observability & visualization | [2025 Features](./enai_agents_sdk_typescript_2025_features/) |
-| **100+ LLM Providers** | Claude, Gemini, Llama, Mistral & more | [2025 Features](./enai_agents_sdk_typescript_2025_features/) |
-| **Type-Safe Guardrails** | Input/output validation with Zod | [2025 Features](./enai_agents_sdk_typescript_2025_features/) |
-| **MCP Integration** | Filesystem, git, HTTP support | [Comprehensive Guide](./enai_agents_sdk_typescript_comprehensive_guide/) |
-| **Swarm Migration** | Complete migration from Swarm | [Migration Guide](./enai_agents_sdk_typescript_swarm_migration_guide/) |
+| **Human-in-Loop** | Approval workflows for critical actions | [2025 Features](./openai_agents_sdk_typescript_2025_features/) |
+| **Built-in Tracing** | Comprehensive observability & visualization | [2025 Features](./openai_agents_sdk_typescript_2025_features/) |
+| **100+ LLM Providers** | Claude, Gemini, Llama, Mistral & more | [2025 Features](./openai_agents_sdk_typescript_2025_features/) |
+| **Type-Safe Guardrails** | Input/output validation with Zod | [2025 Features](./openai_agents_sdk_typescript_2025_features/) |
+| **MCP Integration** | Filesystem, git, HTTP support | [Comprehensive Guide](./openai_agents_sdk_typescript_comprehensive_guide/) |
+| **Swarm Migration** | Complete migration from Swarm | [Migration Guide](./openai_agents_sdk_typescript_swarm_migration_guide/) |
 
 ---
 
@@ -784,12 +784,12 @@ Happy building! 🚀
 ## 📋 Quick Reference
 
 ### Files in This Guide
-- **🆕** [openai_agents_sdk_typescript_swarm_migration_guide.md](./enai_agents_sdk_typescript_swarm_migration_guide/) - Swarm to Agents SDK migration
-- **🆕** [openai_agents_sdk_typescript_2025_features.md](./enai_agents_sdk_typescript_2025_features/) - 2025 features guide
-- [openai_agents_sdk_typescript_comprehensive_guide.md](./enai_agents_sdk_typescript_comprehensive_guide/) - Complete reference
-- [openai_agents_sdk_typescript_production_guide.md](./enai_agents_sdk_typescript_production_guide/) - Enterprise patterns
-- [openai_agents_sdk_typescript_recipes.md](./enai_agents_sdk_typescript_recipes/) - Practical examples
-- [openai_agents_sdk_typescript_diagrams.md](./enai_agents_sdk_typescript_diagrams/) - Visual architecture
+- **🆕** [openai_agents_sdk_typescript_swarm_migration_guide.md](./openai_agents_sdk_typescript_swarm_migration_guide/) - Swarm to Agents SDK migration
+- **🆕** [openai_agents_sdk_typescript_2025_features.md](./openai_agents_sdk_typescript_2025_features/) - 2025 features guide
+- [openai_agents_sdk_typescript_comprehensive_guide.md](./openai_agents_sdk_typescript_comprehensive_guide/) - Complete reference
+- [openai_agents_sdk_typescript_production_guide.md](./openai_agents_sdk_typescript_production_guide/) - Enterprise patterns
+- [openai_agents_sdk_typescript_recipes.md](./openai_agents_sdk_typescript_recipes/) - Practical examples
+- [openai_agents_sdk_typescript_diagrams.md](./openai_agents_sdk_typescript_diagrams/) - Visual architecture
 - `README.md` - This file
 
 ### Key Topics Index
@@ -821,5 +821,5 @@ Happy building! 🚀
 ---
 
 ## Streaming Examples
-- [openai_agents_streaming_server_express.md](./enai_agents_streaming_server_express/)
+- [openai_agents_streaming_server_express.md](./openai_agents_streaming_server_express/)
 

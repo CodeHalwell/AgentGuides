@@ -1,6 +1,6 @@
 ---
 title: "OpenAI Agents SDK Advanced Multi‑Agent (Python)"
-description: "\"Advanced multi-agent coordination, handoffs, and guardrails in Python.\""
+description: "Advanced multi-agent coordination, handoffs, and guardrails in Python."
 framework: openai-agents-sdk
 ---
 

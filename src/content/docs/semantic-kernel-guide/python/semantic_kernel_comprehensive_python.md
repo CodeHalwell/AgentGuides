@@ -2234,9 +2234,9 @@ This comprehensive guide covers Semantic Kernel Python from fundamentals to adva
 - ✅ Production best practices
 
 For production deployment, recipes, and more examples, see:
-- [Production Guide](./mantic_kernel_production_python/)
-- [Recipes](./mantic_kernel_recipes_python/)
-- [Advanced Multi-Agent Guide](./mantic_kernel_advanced_multi_agent_python/)
+- [Production Guide](./semantic_kernel_production_python/)
+- [Recipes](./semantic_kernel_recipes_python/)
+- [Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/)
 
 ---
 
@@ -2285,5 +2285,5 @@ await adapter.start(port=8080)
 
 ---
 
-**[Back to Python README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to Python README](./)** | **[Complete Index](./guide_index/)**
 

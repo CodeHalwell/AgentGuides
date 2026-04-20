@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Observability and Monitoring (Python)"
-description: "\"Tracing, metrics, and logging patterns for LangGraph Python.\""
+description: "Tracing, metrics, and logging patterns for LangGraph Python."
 framework: langgraph
 language: python
 ---

@@ -23,7 +23,7 @@ Semantic Kernel Python: 1.41.2 (April 8, 2026) — previously 1.38.0 (November 2
 
 ## 📢 Strategic Note
 
-Microsoft recommends evaluating **Microsoft Agent Framework 1.0** (GA as of April 2026) for new multi-agent projects. Semantic Kernel remains the foundational layer within Agent Framework, and both projects are actively maintained. See the [Microsoft Agent Framework Guide](/../microsoft_agent_framework_guide/).
+Microsoft recommends evaluating **Microsoft Agent Framework 1.0** (GA as of April 2026) for new multi-agent projects. Semantic Kernel remains the foundational layer within Agent Framework, and both projects are actively maintained. See the [Microsoft Agent Framework Guide](/microsoft-agent-framework-guide/).
 
 ---
 
@@ -85,14 +85,14 @@ if __name__ == "__main__":
 
 ### Core Guides
 
-1. **[semantic_kernel_comprehensive_python.md](./mantic_kernel_comprehensive_python/)**
+1. **[semantic_kernel_comprehensive_python.md](./semantic_kernel_comprehensive_python/)**
    - Complete Python reference from basics to advanced topics
    - Agents, functions, plugins, memory, planners
    - 2025 features: MCP, Vector Store v1.34, A2A Protocol
    - Installation, setup, and configuration
    - Type hints, async patterns, and Python best practices
 
-2. **[semantic_kernel_production_python.md](./mantic_kernel_production_python/)**
+2. **[semantic_kernel_production_python.md](./semantic_kernel_production_python/)**
    - Production deployment strategies (Docker, Kubernetes, Azure)
    - Performance optimization and caching
    - Monitoring with OpenTelemetry and Application Insights
@@ -101,7 +101,7 @@ if __name__ == "__main__":
    - Cost tracking and optimization
    - Testing strategies (unit, integration, e2e)
 
-3. **[semantic_kernel_recipes_python.md](./mantic_kernel_recipes_python/)**
+3. **[semantic_kernel_recipes_python.md](./semantic_kernel_recipes_python/)**
    - 30+ production-ready code examples
    - Document processing and RAG implementations
    - Multi-agent systems and orchestration
@@ -109,7 +109,7 @@ if __name__ == "__main__":
    - Streaming responses with FastAPI
    - Integration with external APIs and services
 
-4. **[semantic_kernel_diagrams_python.md](./mantic_kernel_diagrams_python/)**
+4. **[semantic_kernel_diagrams_python.md](./semantic_kernel_diagrams_python/)**
    - Python-specific architecture diagrams
    - Request flow visualizations
    - Multi-agent orchestration patterns
@@ -118,21 +118,21 @@ if __name__ == "__main__":
 
 ### Advanced Topics
 
-5. **[semantic_kernel_advanced_multi_agent_python.md](./mantic_kernel_advanced_multi_agent_python/)**
+5. **[semantic_kernel_advanced_multi_agent_python.md](./semantic_kernel_advanced_multi_agent_python/)**
    - AgentGroupChat and termination strategies
    - Role routing and capability-based routing
    - Human-in-the-loop handoffs
    - Resilience patterns for multi-agent systems
    - Advanced coordination and communication
 
-6. **[semantic_kernel_middleware_python.md](./mantic_kernel_middleware_python/)**
+6. **[semantic_kernel_middleware_python.md](./semantic_kernel_middleware_python/)**
    - Request/response middleware patterns
    - Guardrails and policy enforcement
    - Content filtering and PII detection
    - Telemetry and observability hooks
    - Custom middleware development
 
-7. **[semantic_kernel_streaming_server_fastapi.md](./mantic_kernel_streaming_server_fastapi/)**
+7. **[semantic_kernel_streaming_server_fastapi.md](./semantic_kernel_streaming_server_fastapi/)**
    - FastAPI server with Server-Sent Events (SSE)
    - Streaming incremental responses
    - Production deployment with Docker/Kubernetes
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
 ### Index and Navigation
 
-8. **[GUIDE_INDEX.md](./ide_index/)**
+8. **[GUIDE_INDEX.md](./guide_index/)**
    - Complete topic index
    - Quick reference by use case
    - Cross-reference to related sections
@@ -487,11 +487,11 @@ Found an issue or want to contribute?
 
 ## Quick Navigation
 
-**New to Semantic Kernel?** → Start with [Comprehensive Guide](./mantic_kernel_comprehensive_python/)
-**Building for Production?** → See [Production Guide](./mantic_kernel_production_python/)
-**Need Examples?** → Check [Recipes](./mantic_kernel_recipes_python/)
-**Multi-Agent Systems?** → Read [Advanced Multi-Agent Guide](./mantic_kernel_advanced_multi_agent_python/)
-**Complete Index?** → Browse [GUIDE_INDEX.md](./ide_index/)
+**New to Semantic Kernel?** → Start with [Comprehensive Guide](./semantic_kernel_comprehensive_python/)
+**Building for Production?** → See [Production Guide](./semantic_kernel_production_python/)
+**Need Examples?** → Check [Recipes](./semantic_kernel_recipes_python/)
+**Multi-Agent Systems?** → Read [Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/)
+**Complete Index?** → Browse [GUIDE_INDEX.md](./guide_index/)
 
 ---
 

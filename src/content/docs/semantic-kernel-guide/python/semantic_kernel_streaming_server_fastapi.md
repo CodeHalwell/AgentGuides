@@ -1,6 +1,6 @@
 ---
 title: "Semantic Kernel Streaming Server (FastAPI, Python)"
-description: "\"Stream incremental events from an SK-driven workflow over SSE.\""
+description: "Stream incremental events from an SK-driven workflow over SSE."
 framework: semantic-kernel
 language: python
 ---

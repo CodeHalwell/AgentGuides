@@ -1,6 +1,6 @@
 ---
 title: "Mistral Streaming Server (FastAPI)"
-description: "\"Minimal FastAPI server streaming Mistral chat completions.\""
+description: "Minimal FastAPI server streaming Mistral chat completions."
 framework: mistral-agents-api
 ---
 

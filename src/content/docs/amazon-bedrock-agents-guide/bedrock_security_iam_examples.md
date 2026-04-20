@@ -1,6 +1,6 @@
 ---
 title: "Amazon Bedrock Agents - IAM Examples"
-description: "\"Least-privilege IAM policies for Bedrock Agents and Knowledge Bases.\""
+description: "Least-privilege IAM policies for Bedrock Agents and Knowledge Bases."
 framework: amazon-bedrock-agents
 ---
 

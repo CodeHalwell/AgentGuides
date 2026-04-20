@@ -590,16 +590,16 @@ async def test_retry_on_failure():
 7. **Regular dependency updates**
 8. **Content filtering and guardrails**
 
-See: [Middleware Guide](./mantic_kernel_middleware_python/) for guardrails implementation.
+See: [Middleware Guide](./semantic_kernel_middleware_python/) for guardrails implementation.
 
 ---
 
 ## Additional Resources
 
-- [Comprehensive Guide](./mantic_kernel_comprehensive_python/) - Complete reference
-- [Recipes](./mantic_kernel_recipes_python/) - Code examples
+- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) - Complete reference
+- [Recipes](./semantic_kernel_recipes_python/) - Code examples
 - [General Production Guide](../semantic_kernel_production_guide/) - Language-agnostic patterns
-- [Streaming Server Guide](./mantic_kernel_streaming_server_fastapi/) - FastAPI patterns
+- [Streaming Server Guide](./semantic_kernel_streaming_server_fastapi/) - FastAPI patterns
 
-**[Back to Python README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to Python README](./)** | **[Complete Index](./guide_index/)**
 

@@ -1,6 +1,6 @@
 ---
 title: "OpenAI Agents Streaming Server (Express)"
-description: "\"Stream OpenAI model output in Node/Express using the OpenAI SDK.\""
+description: "Stream OpenAI model output in Node/Express using the OpenAI SDK."
 framework: openai-agents-sdk-typescript
 ---
 

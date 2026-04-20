@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Streaming Server (.NET)"
-description: "\"Minimal ASP.NET Core streaming endpoint for AI Agent responses.\""
+description: "Minimal ASP.NET Core streaming endpoint for AI Agent responses."
 framework: microsoft-agent-framework
 language: dotnet
 ---

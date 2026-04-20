@@ -507,7 +507,7 @@ Copy-paste ready code examples for common patterns
 - [Tools Guide](./google_adk_go_comprehensive_guide/#tools-integration)
 - [Production Deployment](./google_adk_go_production_guide/)
 - [Code Recipes](./google_adk_go_recipes/)
-- [Architecture Diagrams](./google_adk_go_diagrams/)
+- Architecture Diagrams *(coming soon)*
 
 ---
 

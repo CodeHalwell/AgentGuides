@@ -1,6 +1,6 @@
 ---
 title: "Haystack Streaming Server (FastAPI)"
-description: "\"Stream progress/events over SSE with a Haystack pipeline.\""
+description: "Stream progress/events over SSE with a Haystack pipeline."
 framework: haystack
 ---
 

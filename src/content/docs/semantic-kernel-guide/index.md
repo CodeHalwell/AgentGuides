@@ -47,8 +47,8 @@ The **Microsoft Agent Framework** (Preview) is a unified SDK that brings togethe
 
 | Language | Directory | Quick Start | Best For |
 |----------|-----------|-------------|----------|
-| **Python** | **[python/](python/)** | [Python README](./thon/) | Data science, ML workflows, rapid prototyping |
-| **.NET (C#)** | **[dotnet/](dotnet/)** | [.NET README](./tnet/) | Enterprise apps, Azure integration, ASP.NET Core |
+| **Python** | **[python/](python/)** | [Python README](./python/) | Data science, ML workflows, rapid prototyping |
+| **.NET (C#)** | **[dotnet/](dotnet/)** | [.NET README](./dotnet/) | Enterprise apps, Azure integration, ASP.NET Core |
 | **General** | Root directory | This README | Conceptual understanding, cross-platform |
 
 ---
@@ -61,26 +61,26 @@ The **Microsoft Agent Framework** (Preview) is a unified SDK that brings togethe
 **Complete Python-specific guides with 2025 features (MCP, A2A Protocol, Vector Store v1.34)**
 
 - **[python/ directory](python/)** - Start here for Python
-  - [Python README](./thon/) - Overview and quick start
-  - [Comprehensive Guide](./thon/semantic_kernel_comprehensive_python/) - Complete Python reference
-  - [Production Guide](./thon/semantic_kernel_production_python/) - Deployment, monitoring, scaling
-  - [Recipes](./thon/semantic_kernel_recipes_python/) - Ready-to-use code examples
-  - [Diagrams](./thon/semantic_kernel_diagrams_python/) - Python-specific architecture
-  - [GUIDE_INDEX](./thon/guide_index/) - Complete topic index
-  - [Advanced Multi-Agent](./thon/semantic_kernel_advanced_multi_agent_python/) - Multi-agent patterns
-  - [Middleware](./thon/semantic_kernel_middleware_python/) - Guardrails and policy
-  - [Streaming Server](./thon/semantic_kernel_streaming_server_fastapi/) - FastAPI examples
+  - [Python README](./python/) - Overview and quick start
+  - [Comprehensive Guide](./python/semantic_kernel_comprehensive_python/) - Complete Python reference
+  - [Production Guide](./python/semantic_kernel_production_python/) - Deployment, monitoring, scaling
+  - [Recipes](./python/semantic_kernel_recipes_python/) - Ready-to-use code examples
+  - [Diagrams](./python/semantic_kernel_diagrams_python/) - Python-specific architecture
+  - [GUIDE_INDEX](./python/guide_index/) - Complete topic index
+  - [Advanced Multi-Agent](./python/semantic_kernel_advanced_multi_agent_python/) - Multi-agent patterns
+  - [Middleware](./python/semantic_kernel_middleware_python/) - Guardrails and policy
+  - [Streaming Server](./python/semantic_kernel_streaming_server_fastapi/) - FastAPI examples
 
 ### 🔷 .NET Documentation
 **Complete C#/.NET-specific guides with 2025 features (MCP March 2025, Agent Framework)**
 
 - **[dotnet/ directory](dotnet/)** - Start here for .NET
-  - [.NET README](./tnet/) - Overview and quick start
-  - [Comprehensive Guide](./tnet/semantic_kernel_comprehensive_dotnet/) - Complete C# reference
-  - [Production Guide](./tnet/semantic_kernel_production_dotnet/) - ASP.NET Core, Polly, deployment
-  - [Recipes](./tnet/semantic_kernel_recipes_dotnet/) - C# code examples
-  - [Diagrams](./tnet/semantic_kernel_diagrams_dotnet/) - .NET architecture diagrams
-  - [GUIDE_INDEX](./tnet/guide_index/) - Complete topic index
+  - [.NET README](./dotnet/) - Overview and quick start
+  - [Comprehensive Guide](./dotnet/semantic_kernel_comprehensive_dotnet/) - Complete C# reference
+  - [Production Guide](./dotnet/semantic_kernel_production_dotnet/) - ASP.NET Core, Polly, deployment
+  - [Recipes](./dotnet/semantic_kernel_recipes_dotnet/) - C# code examples
+  - [Diagrams](./dotnet/semantic_kernel_diagrams_dotnet/) - .NET architecture diagrams
+  - [GUIDE_INDEX](./dotnet/guide_index/) - Complete topic index
 
 ### 📚 Language-Agnostic Core Documentation
 **General concepts and patterns applicable to all languages**
@@ -180,16 +180,16 @@ Navigation and index for the complete guide.
 
 ## Advanced Guides (Python)
 
-- [semantic_kernel_advanced_multi_agent_python.md](./mantic_kernel_advanced_multi_agent_python/)
-- [semantic_kernel_middleware_python.md](./mantic_kernel_middleware_python/)
+- [semantic_kernel_advanced_multi_agent_python.md](./python/semantic_kernel_advanced_multi_agent_python/)
+- [semantic_kernel_middleware_python.md](./python/semantic_kernel_middleware_python/)
 
 ## Streaming Examples
-- [semantic_kernel_streaming_server_fastapi.md](./mantic_kernel_streaming_server_fastapi/)
+- [semantic_kernel_streaming_server_fastapi.md](./python/semantic_kernel_streaming_server_fastapi/)
 
 ## Comprehensive (Language-Specific)
 
-- [semantic_kernel_comprehensive_python.md](./mantic_kernel_comprehensive_python/)
-- [semantic_kernel_comprehensive_dotnet.md](./mantic_kernel_comprehensive_dotnet/)
+- [semantic_kernel_comprehensive_python.md](./python/semantic_kernel_comprehensive_python/)
+- [semantic_kernel_comprehensive_dotnet.md](./dotnet/semantic_kernel_comprehensive_dotnet/)
 
 ---
 

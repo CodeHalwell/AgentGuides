@@ -1,6 +1,6 @@
 ---
 title: "CrewAI Advanced Multi‑Agent Patterns (Python)"
-description: "\"Complex team orchestration, error recovery, HITL, and performance with CrewAI.\""
+description: "Complex team orchestration, error recovery, HITL, and performance with CrewAI."
 framework: crewai
 ---
 

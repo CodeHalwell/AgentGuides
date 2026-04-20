@@ -1,6 +1,6 @@
 ---
 title: "Agent Guides"
-description: "\"Comprehensive AI Agent Framework Documentation\""
+description: "Comprehensive AI Agent Framework Documentation"
 ---
 
 # 🤖 Agent Guides
@@ -205,7 +205,7 @@ Help make this resource better:
 - Update for new versions
 - Share your patterns
 
-[Contribution Guidelines →](./contributing)
+[Contribution Guidelines →](https://github.com/CodeHalwell/AgentGuides/blob/main/README.md#contributing)
 
 ---
 
@@ -222,7 +222,7 @@ All guides follow consistent standards:
 
 ## 📅 Last Updated
 
-November 2025
+April 2026
 
 ---
 

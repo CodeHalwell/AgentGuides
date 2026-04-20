@@ -29,7 +29,7 @@ Semantic Kernel .NET: 1.74.0 — previously 1.67.1 (November 2025)
 
 ## 📢 Strategic Note
 
-Microsoft recommends evaluating **Microsoft Agent Framework 1.0** (GA as of April 2026) for new multi-agent projects. See the [Microsoft Agent Framework Guide](/../microsoft_agent_framework_guide/).
+Microsoft recommends evaluating **Microsoft Agent Framework 1.0** (GA as of April 2026) for new multi-agent projects. See the [Microsoft Agent Framework Guide](/microsoft-agent-framework-guide/).
 
 ---
 
@@ -100,14 +100,14 @@ Console.WriteLine(result);
 
 ### Core Guides
 
-1. **[semantic_kernel_comprehensive_dotnet.md](./mantic_kernel_comprehensive_dotnet/)**
+1. **[semantic_kernel_comprehensive_dotnet.md](./semantic_kernel_comprehensive_dotnet/)**
    - Complete C#/.NET reference from basics to advanced topics
    - Agents, functions, plugins, memory, planners
    - 2025 features: MCP (March 2025), Agent Framework, Vector Store
    - Async/await patterns, dependency injection, configuration
    - Type-safe implementations with generics
 
-2. **[semantic_kernel_production_dotnet.md](./mantic_kernel_production_dotnet/)**
+2. **[semantic_kernel_production_dotnet.md](./semantic_kernel_production_dotnet/)**
    - Production deployment strategies (Docker, Kubernetes, Azure App Service)
    - Performance optimization and caching with MemoryCache
    - Monitoring with Application Insights and OpenTelemetry
@@ -116,7 +116,7 @@ Console.WriteLine(result);
    - Cost tracking and optimization
    - Testing strategies (xUnit, NUnit, integration tests)
 
-3. **[semantic_kernel_recipes_dotnet.md](./mantic_kernel_recipes_dotnet/)**
+3. **[semantic_kernel_recipes_dotnet.md](./semantic_kernel_recipes_dotnet/)**
    - 30+ production-ready C# code examples
    - Document processing and RAG implementations
    - Multi-agent systems and orchestration
@@ -124,7 +124,7 @@ Console.WriteLine(result);
    - ASP.NET Core integration
    - Integration with existing .NET ecosystems
 
-4. **[semantic_kernel_diagrams_dotnet.md](./mantic_kernel_diagrams_dotnet/)**
+4. **[semantic_kernel_diagrams_dotnet.md](./semantic_kernel_diagrams_dotnet/)**
    - .NET-specific architecture diagrams
    - Request flow visualizations
    - Dependency injection patterns
@@ -132,7 +132,7 @@ Console.WriteLine(result);
 
 ### Index and Navigation
 
-5. **[GUIDE_INDEX.md](./ide_index/)**
+5. **[GUIDE_INDEX.md](./guide_index/)**
    - Complete topic index
    - Quick reference by use case
    - Cross-reference to related sections
@@ -511,10 +511,10 @@ Found an issue or want to contribute?
 
 ## Quick Navigation
 
-**New to Semantic Kernel?** → Start with [Comprehensive Guide](./mantic_kernel_comprehensive_dotnet/)
-**Building for Production?** → See [Production Guide](./mantic_kernel_production_dotnet/)
-**Need Examples?** → Check [Recipes](./mantic_kernel_recipes_dotnet/)
-**Complete Index?** → Browse [GUIDE_INDEX.md](./ide_index/)
+**New to Semantic Kernel?** → Start with [Comprehensive Guide](./semantic_kernel_comprehensive_dotnet/)
+**Building for Production?** → See [Production Guide](./semantic_kernel_production_dotnet/)
+**Need Examples?** → Check [Recipes](./semantic_kernel_recipes_dotnet/)
+**Complete Index?** → Browse [GUIDE_INDEX.md](./guide_index/)
 
 ---
 

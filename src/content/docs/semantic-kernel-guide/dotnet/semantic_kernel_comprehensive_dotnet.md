@@ -922,8 +922,8 @@ This guide covers Semantic Kernel .NET with 2025 features:
 - ✅ **Google A2A Protocol**
 
 **Related Guides:**
-- [Production Guide](./mantic_kernel_production_dotnet/)
-- [Recipes](./mantic_kernel_recipes_dotnet/)
+- [Production Guide](./semantic_kernel_production_dotnet/)
+- [Recipes](./semantic_kernel_recipes_dotnet/)
 - [Python Comprehensive Guide](../python/semantic_kernel_comprehensive_python/) - for detailed conceptual patterns
 
 ---
@@ -935,5 +935,5 @@ This guide covers Semantic Kernel .NET with 2025 features:
 | 1.74.0 | March 2026 | Server URL validation; Text Search LINQ provider; plugin graduation from alpha to preview; CVE-2026-26127 security fix |
 | 1.67.1 | November 2025 | Previous documented version |
 
-**[Back to .NET README](./adme/)** | **[Complete Index](./ide_index/)**
+**[Back to .NET README](./)** | **[Complete Index](./guide_index/)**
 

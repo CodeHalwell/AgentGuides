@@ -1,6 +1,6 @@
 ---
 title: "Quick Start"
-description: "\"Get started with AI agents in minutes\""
+description: "Get started with AI agents in minutes"
 ---
 
 # 🚀 Quick Start Guide
@@ -151,8 +151,8 @@ print(response)
 
 **Next Steps**:
 1. Read [LlamaIndex README](/llamaindex-guide/)
-2. Try more [LlamaIndex Recipes](/llamaindex-guide/llamaindex_recipes/)
-3. Deep dive: [LlamaIndex Comprehensive Guide](/llamaindex-guide/llamaindex_comprehensive_guide/)
+2. Try more [LlamaIndex Recipes](/llamaindex-guide/python/llamaindex_recipes/)
+3. Deep dive: [LlamaIndex Comprehensive Guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/)
 
 ---
 
@@ -395,10 +395,10 @@ output = agent.run(input)
 
 ## Resources
 
-- 📖 [All Guides](guides)
-- 🔄 [Framework Comparison](frameworks)
-- 📚 [Browse by Use Case](guides#-quick-reference)
-- 🏠 [Home](index)
+- 📖 [All Guides](/guides/)
+- 🔄 [Framework Comparison](/frameworks/)
+- 📚 [Browse by Use Case](/guides/#-quick-reference)
+- 🏠 [Home](/)
 
 ---
 

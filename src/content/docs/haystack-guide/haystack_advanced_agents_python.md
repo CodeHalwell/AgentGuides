@@ -1,6 +1,6 @@
 ---
 title: "Haystack Advanced Agent Patterns (Python)"
-description: "\"Complex pipelines, retries, and observability for Haystack agents.\""
+description: "Complex pipelines, retries, and observability for Haystack agents."
 framework: haystack
 ---
 

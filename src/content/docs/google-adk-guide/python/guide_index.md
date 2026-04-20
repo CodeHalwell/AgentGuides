@@ -15,13 +15,13 @@ language: python
 
 | Document | Size | Purpose | Start Here If... |
 |----------|------|---------|-----------------|
-| [README.md](./adme/) | Overview | Introduction and quick start | You're new to Google ADK |
-| [google_adk_comprehensive_guide.md](./ogle_adk_comprehensive_guide/) | 15,000+ lines | Complete technical reference | You want to learn everything |
-| [google_adk_production_guide.md](./ogle_adk_production_guide/) | 8,000+ lines | Production deployment | You're deploying to production |
-| [google_adk_diagrams.md](./ogle_adk_diagrams/) | 6,000+ lines | Visual architecture | You're a visual learner |
-| [google_adk_recipes.md](./ogle_adk_recipes/) | 5,000+ lines | Copy-paste examples | You want working code now |
-| [google_adk_advanced_python.md](./ogle_adk_advanced_python/) | 2,000+ lines | Advanced patterns | You're an experienced Python dev |
-| [google_adk_iam_examples.md](./ogle_adk_iam_examples/) | 500+ lines | Cloud authentication | You need IAM/auth setup |
+| [README.md](./) | Overview | Introduction and quick start | You're new to Google ADK |
+| [google_adk_comprehensive_guide.md](./google_adk_comprehensive_guide/) | 15,000+ lines | Complete technical reference | You want to learn everything |
+| [google_adk_production_guide.md](./google_adk_production_guide/) | 8,000+ lines | Production deployment | You're deploying to production |
+| [google_adk_diagrams.md](./google_adk_diagrams/) | 6,000+ lines | Visual architecture | You're a visual learner |
+| [google_adk_recipes.md](./google_adk_recipes/) | 5,000+ lines | Copy-paste examples | You want working code now |
+| [google_adk_advanced_python.md](./google_adk_advanced_python/) | 2,000+ lines | Advanced patterns | You're an experienced Python dev |
+| [google_adk_iam_examples.md](./google_adk_iam_examples/) | 500+ lines | Cloud authentication | You need IAM/auth setup |
 
 ---
 
@@ -462,5 +462,5 @@ Supporting:
 
 ---
 
-**Ready to dive in? Start with [README.md](./adme/) or jump to the [Comprehensive Guide](./ogle_adk_comprehensive_guide/)!**
+**Ready to dive in? Start with [README.md](./) or jump to the [Comprehensive Guide](./google_adk_comprehensive_guide/)!**
 

@@ -82,12 +82,12 @@ Both Python and TypeScript implementations now feature **Workflows 2.x**, a powe
 
 Complete guide to LlamaIndex Python with **380+ code examples**:
 
-- **[Python README](./thon/)** - Quick start and overview
-- **[Comprehensive Guide](./thon/llamaindex_comprehensive_guide/)** - 350+ examples covering all features
-- **[Diagrams](./thon/llamaindex_diagrams/)** - 30+ visual architecture diagrams
-- **[Production Guide](./thon/llamaindex_production_guide/)** - Docker, Kubernetes, monitoring, scaling
-- **[Recipes](./thon/llamaindex_recipes/)** - 10 production-ready applications
-- **[Guide Index](./thon/guide_index/)** - Complete searchable index
+- **[Python README](./python/)** - Quick start and overview
+- **[Comprehensive Guide](./python/llamaindex_comprehensive_guide/)** - 350+ examples covering all features
+- **[Diagrams](./python/llamaindex_diagrams/)** - 30+ visual architecture diagrams
+- **[Production Guide](./python/llamaindex_production_guide/)** - Docker, Kubernetes, monitoring, scaling
+- **[Recipes](./python/llamaindex_recipes/)** - 10 production-ready applications
+- **[Guide Index](./python/guide_index/)** - Complete searchable index
 
 **Python Quick Start:**
 ```bash
@@ -114,11 +114,11 @@ result = await workflow.run(query="What is AI?")
 
 Complete guide to LlamaIndex TypeScript with **300+ code examples**:
 
-- **[TypeScript README](./pescript/)** - Quick start and overview
-- **[Workflows Comprehensive Guide](./pescript/llamaindex_workflows_typescript_comprehensive_guide/)** - 200+ Workflows 1.0 examples
-- **[Production Guide](./pescript/llamaindex_typescript_production_guide/)** - Node.js deployment, Docker, K8s, serverless
-- **[Recipes](./pescript/llamaindex_typescript_recipes/)** - 10 production-ready TypeScript applications
-- **[Guide Index](./pescript/guide_index/)** - Complete searchable index
+- **[TypeScript README](./typescript/)** - Quick start and overview
+- **[Workflows Comprehensive Guide](./typescript/llamaindex_workflows_typescript_comprehensive_guide/)** - 200+ Workflows 1.0 examples
+- **[Production Guide](./typescript/llamaindex_typescript_production_guide/)** - Node.js deployment, Docker, K8s, serverless
+- **[Recipes](./typescript/llamaindex_typescript_recipes/)** - 10 production-ready TypeScript applications
+- **[Guide Index](./typescript/guide_index/)** - Complete searchable index
 
 **TypeScript Quick Start:**
 ```bash
@@ -251,24 +251,24 @@ const result = await workflow.run({ query: "What is AI?" });
 ## 💡 Common Use Cases
 
 ### Document Q&A / RAG Systems
-- **Python:** [Python Recipe 1](./thon/llamaindex_recipes/#recipe-1)
-- **TypeScript:** [TypeScript Recipe 1](./pescript/llamaindex_typescript_recipes/#recipe-1)
+- **Python:** [Python Recipe 1](./python/llamaindex_recipes/#recipe-1)
+- **TypeScript:** [TypeScript Recipe 1](./typescript/llamaindex_typescript_recipes/#recipe-1)
 
 ### Multi-Agent Workflows
-- **Python:** [Python Comprehensive Guide](./thon/llamaindex_comprehensive_guide/) (Multi-Agent section)
-- **TypeScript:** [TypeScript Workflows Guide](./pescript/llamaindex_workflows_typescript_comprehensive_guide/) (Multi-Agent section)
+- **Python:** [Python Comprehensive Guide](./python/llamaindex_comprehensive_guide/) (Multi-Agent section)
+- **TypeScript:** [TypeScript Workflows Guide](./typescript/llamaindex_workflows_typescript_comprehensive_guide/) (Multi-Agent section)
 
 ### Production Deployment
-- **Python:** [Python Production Guide](./thon/llamaindex_production_guide/)
-- **TypeScript:** [TypeScript Production Guide](./pescript/llamaindex_typescript_production_guide/)
+- **Python:** [Python Production Guide](./python/llamaindex_production_guide/)
+- **TypeScript:** [TypeScript Production Guide](./typescript/llamaindex_typescript_production_guide/)
 
 ### Data Extraction
-- **Python:** [Python Recipe 6](./thon/llamaindex_recipes/#recipe-6)
-- **TypeScript:** [TypeScript Recipe 6](./pescript/llamaindex_typescript_recipes/#recipe-6)
+- **Python:** [Python Recipe 6](./python/llamaindex_recipes/#recipe-6)
+- **TypeScript:** [TypeScript Recipe 6](./typescript/llamaindex_typescript_recipes/#recipe-6)
 
 ### Customer Support
-- **Python:** [Python Recipe 10](./thon/llamaindex_recipes/#recipe-10)
-- **TypeScript:** [TypeScript Recipe 10](./pescript/llamaindex_typescript_recipes/#recipe-10)
+- **Python:** [Python Recipe 10](./python/llamaindex_recipes/#recipe-10)
+- **TypeScript:** [TypeScript Recipe 10](./typescript/llamaindex_typescript_recipes/#recipe-10)
 
 ---
 

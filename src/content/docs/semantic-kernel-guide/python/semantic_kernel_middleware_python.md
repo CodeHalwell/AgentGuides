@@ -1,6 +1,6 @@
 ---
 title: "Semantic Kernel Middleware (Python)"
-description: "\"Implement request/response middleware, guardrails, and policy enforcement in SK Python.\""
+description: "Implement request/response middleware, guardrails, and policy enforcement in SK Python."
 framework: semantic-kernel
 language: python
 ---

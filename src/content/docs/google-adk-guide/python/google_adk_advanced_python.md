@@ -1,6 +1,6 @@
 ---
 title: "Google ADK Advanced (Python)"
-description: "\"Advanced patterns for Google Agent Development Kit: multi-agent, HITL, observability, deployment.\""
+description: "Advanced patterns for Google Agent Development Kit: multi-agent, HITL, observability, deployment."
 framework: google-adk
 language: python
 ---

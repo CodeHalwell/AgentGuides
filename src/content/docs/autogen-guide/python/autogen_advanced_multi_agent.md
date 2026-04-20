@@ -1,6 +1,6 @@
 ---
 title: "AutoGen Advanced Multi‑Agent (Python)"
-description: "\"Advanced group chat, routing, and HITL with AutoGen.\""
+description: "Advanced group chat, routing, and HITL with AutoGen."
 framework: autogen
 language: python
 ---

@@ -1,6 +1,6 @@
 ---
 title: "Claude Agent SDK Middleware (TypeScript)"
-description: "\"Guardrails, middleware, and tracing patterns for Claude Agent SDK (TypeScript).\""
+description: "Guardrails, middleware, and tracing patterns for Claude Agent SDK (TypeScript)."
 framework: anthropic-claude-agent-sdk-typescript
 ---
 

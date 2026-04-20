@@ -1,6 +1,6 @@
 ---
 title: "Haystack Observability & Error Recovery (Python)"
-description: "\"Tracing pipelines, retries, fallbacks, and dead letters in Haystack.\""
+description: "Tracing pipelines, retries, fallbacks, and dead letters in Haystack."
 framework: haystack
 ---
 
