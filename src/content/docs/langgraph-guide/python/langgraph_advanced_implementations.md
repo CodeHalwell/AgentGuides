@@ -339,7 +339,8 @@ Pause the graph to get human approval before executing a critical action. This i
 # human_in_the_loop.py
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.types import TypedDict, Annotated, interrupt
+from typing import Annotated
+from langgraph.types import TypedDict, interrupt
 from langgraph.graph.message import add_messages
 
 class ApprovalState(TypedDict):

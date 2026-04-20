@@ -1518,6 +1518,7 @@ CrewAI 1.14.0 introduces a production-grade checkpoint system for resumable crew
 
 ```python
 from crewai import Crew, Agent, Task
+# NOTE: crewai.checkpoint module not found in stable 1.14.2 — verify before use
 from crewai.checkpoint import CheckpointConfig, SqliteProvider
 
 # Configure checkpointing with SQLite backend

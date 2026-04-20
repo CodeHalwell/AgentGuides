@@ -19,17 +19,13 @@ Focus: Python with practical, real-world patterns
 ### Python 3.9 Dropped
 LangGraph 1.1.x dropped Python 3.9 support. Minimum version is now **Python 3.10**.
 
-### `create_react_agent` deprecated
-`langgraph.prebuilt.create_react_agent` is deprecated. Use `create_agent` from `langchain.agents` instead. Removal is planned for v2.0.
+### `create_react_agent` — confirmed working in v1.1.8
+`langgraph.prebuilt.create_react_agent` is **not** deprecated in v1.1.8 and continues to be the recommended way to create ReAct agents in LangGraph. There is no `create_agent` in `langchain.agents`.
 
 ```python
-# DEPRECATED (still works, but warns)
+# Correct usage in LangGraph 1.1.8
 from langgraph.prebuilt import create_react_agent
 agent = create_react_agent(model, tools)
-
-# NEW (recommended)
-from langchain.agents import create_agent
-agent = create_agent(model, tools)
 ```
 
 ### `langgraph-prebuilt` version constraint hazard

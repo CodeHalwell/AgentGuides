@@ -1,13 +1,13 @@
 ---
 title: "AG2 (AutoGen) Comprehensive Guide"
-description: "Version: 0.11.5 Last Updated: April 2026 Focus: Modern AutoGen (AG2) Framework"
+description: "Version: 0.12.0 Last Updated: April 2026 Focus: Modern AutoGen (AG2) Framework"
 framework: ag2
 ---
 
-Latest: 0.11.5 | Updated: April 2026
+Latest: 0.12.0 | Updated: April 2026
 # AG2 (AutoGen) Comprehensive Guide
 
-**Version:** 0.11.5
+**Version:** 0.12.0
 **Last Updated:** April 2026
 **Focus:** Modern AutoGen (AG2) Framework
 

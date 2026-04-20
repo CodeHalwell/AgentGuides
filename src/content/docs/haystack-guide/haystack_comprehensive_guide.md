@@ -144,7 +144,7 @@ Haystack 2026 transforms the framework into a **production-grade platform for ag
 
 ```python
 from haystack import Pipeline
-from haystack.components.agents import Agent, AgentStep
+from haystack.components.agents import Agent
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.tools import Tool
 
@@ -1401,30 +1401,20 @@ print(response)
 ### Agent with Custom Configuration
 
 ```python
-from haystack.components.agents import Agent, AgentConfig
+from haystack.components.agents import Agent
 from haystack.dataclasses import ChatMessage
 
-# Create custom configuration
-config = AgentConfig(
-    max_iterations=15,
-    timeout_seconds=60,
-    enable_streaming=True,
-    temperature=0.5,
-    top_p=0.9
-)
-
-# Create agent with custom config
+# Create agent with custom configuration via constructor args
 agent = Agent(
+    chat_generator=llm,
     tools=tools,
-    llm=llm,
     system_prompt="You are a careful, methodical assistant.",
-    config=config
+    max_agent_steps=15,
 )
 
-# Run with custom parameters
+# Run the agent
 result = agent.run(
-    query="Analyse the following data and provide insights",
-    max_iterations=config.max_iterations
+    messages=[ChatMessage.from_user("Analyse the following data and provide insights")]
 )
 ```
 
@@ -2123,7 +2113,7 @@ Agents can be customised extensively to meet specific requirements.
 ### Advanced Agent Configuration
 
 ```python
-from haystack.components.agents import Agent, AgentConfig
+from haystack.components.agents import Agent
 from typing import Optional, Callable
 from enum import Enum
 
@@ -2609,7 +2599,7 @@ for query in queries:
 ```python
 from haystack import Pipeline
 from haystack.components.agents import Agent
-from haystack.components.tools import SearchableToolset
+from haystack.tools import SearchableToolset
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 # Create a document store with tool descriptions
@@ -2652,8 +2642,8 @@ result = pipeline.run({
 Declarative tool calling component that handles all tool execution logic:
 
 ```python
-from haystack.components.agents import Agent, AgentToolInvoker
-from haystack.components.tools import ComponentTool
+from haystack.components.agents import Agent
+from haystack.tools import ComponentTool
 from haystack import Pipeline
 
 # Define tools as Haystack components
@@ -2663,8 +2653,7 @@ web_search = ComponentTool(
     description="Search the web for current information",
 )
 
-tool_invoker = AgentToolInvoker(tools=[web_search])
-agent = Agent(chat_generator=chat_gen, tool_invoker=tool_invoker)
+agent = Agent(chat_generator=chat_gen, tools=[web_search])
 ```
 
 ## Revision History

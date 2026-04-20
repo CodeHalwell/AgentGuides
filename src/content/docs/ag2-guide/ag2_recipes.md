@@ -1,12 +1,12 @@
 ---
 title: "AG2 (AutoGen) Recipes"
-description: "Version: 0.11.5 Last Updated: April 2026 Focus: Ready-to-Use Examples"
+description: "Version: 0.12.0 Last Updated: April 2026 Focus: Ready-to-Use Examples"
 framework: ag2
 ---
 
 # AG2 (AutoGen) Recipes
 
-**Version:** 0.11.5
+**Version:** 0.12.0
 **Last Updated:** April 2026
 **Focus:** Ready-to-Use Examples
 

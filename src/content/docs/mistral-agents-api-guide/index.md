@@ -400,10 +400,13 @@ Start Here (Foundation)
 
 > **Note (April 2026 routine pass):** Only this index page was updated to v2.4.0 in this pass. Companion guide pages (`mistral_agents_api_comprehensive_guide`, `mistral_agents_api_advanced_python`, etc.) retain v2.0.1 examples and have not yet been updated. Verify against the companion pages before using code snippets from them with SDK v2.4.0+.
 
-All code examples tested against:
-- Mistral AI Python SDK v2.4.0+
+Index page metadata verified against:
+- Mistral AI Python SDK v2.4.0 (index page only; companion guide pages remain v2.0.1-tested — see note above)
 - Models: `mistral-medium-2505`, `mistral-large-latest`
 - API Version: v2
+
+Companion guide code examples were tested against:
+- Mistral AI Python SDK v2.0.1
 - Connectors: All 5 built-in connectors + Premium Web Search
 - MCP: Full MCP server integration
 - Code Interpreter: Secure Python sandbox

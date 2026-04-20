@@ -13,6 +13,8 @@ framework: pydanticai
 **Python:** 3.10+  
 **License:** Comprehensive Educational Guide
 
+> **Note — Shared Environment Version Mismatch:** The installed version of `pydantic-ai` in the shared `.venv` is **1.31.0**, not 1.84.1, due to a dependency conflict with another package in this environment. This guide tracks the **PyPI latest (1.84.1)** API. Code examples throughout this guide use the 1.84.1 API (e.g. `output_type`, `output_retries`, `result.output`). If you run snippets against the installed 1.31.0 build, note that 1.31.0 also uses the `output_*` naming (the `result_*` → `output_*` rename happened before 1.31.0), but some newer features (durable execution, graph support, MCP/A2A toolsets, built-in tools such as `WebSearchTool`) are not present in 1.31.0. Install `pydantic-ai==1.84.1` in an isolated environment to use all documented features.
+
 ---
 
 ## 📚 Documentation Overview

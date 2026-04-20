@@ -247,22 +247,22 @@ agent = autogen.ConversableAgent(
 
 **Advantage**: No code changes needed. Easy gradual migration.
 
-#### Option 2: Alias AG2 as AutoGen
+#### Option 2: Use Explicit Named Imports
 
 ```python
-# Import AG2 with AutoGen alias
-import autogen
+# Use explicit named imports from the autogen module
+from autogen import ConversableAgent, config_list_from_json
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
-agent = autogen.ConversableAgent(
+agent = ConversableAgent(
     name="my_agent",
     llm_config=llm_config
 )
 ```
 
-**Advantage**: Makes AG2 usage explicit while maintaining code compatibility.
+**Advantage**: Explicit imports make it clear which AG2 classes are used; avoids namespace collisions.
 
 #### Option 3: Full AG2 Imports
 
