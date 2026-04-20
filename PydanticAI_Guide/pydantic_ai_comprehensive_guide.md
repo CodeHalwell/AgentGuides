@@ -1,8 +1,8 @@
-Latest: 1.84.0 | Updated: April 2026
+Latest: 1.84.1 | Updated: April 20, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.84.0 (April 2026)  
+**Version:** 1.84.1 (April 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1838,6 +1838,7 @@ result = await agent.run('Reason through this complex multi-step problem...')
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.84.1 | April 18, 2026 | Skip tool hooks for internal output tools; always pass dict-shaped validated args to hooks for single-`BaseModel` tools |
 | 1.84.0 | April 17, 2026 | `OllamaModel` subclass (fixes structured output on Ollama Cloud); `XSearchTool`/`FileSearchTool` for xAI (Grok); `FastMCPToolset` per-call metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support (`anthropic:claude-opus-4-7`); stateful `OpenAICompaction`; fix exponential-time regex in Google `FileSearchTool` |
 | 1.83.0 | April 16, 2026 | Hard removal of all `result_*` → `output_*` renames (breaking); `EvaluationReport` API; pydantic-graph expansion with branching/looping; `defer_loading` for lazy model init; `ThreadExecutor` for sync-in-async tools; smart instruction caching; `CaseLifecycle` hooks; local `WebFetch` tool |
 | 1.20.0 | November 2025 | Previous documented version |

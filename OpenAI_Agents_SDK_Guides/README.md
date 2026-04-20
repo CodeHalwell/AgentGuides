@@ -4,7 +4,7 @@
 
 Welcome to the comprehensive guide collection for the OpenAI Agents SDK, the **official production-ready replacement** for the experimental Swarm framework. Build enterprise-grade multi-agent AI applications with confidence.
 
-> **Current Version:** 0.14.1 (April 15, 2026) | **Previous:** 0.6.1 (November 2025)
+> **Current Version:** 0.14.2 (April 18, 2026) | **Previous:** 0.6.1 (November 2025)
 
 ## ⚠️ Breaking Changes in Recent Versions
 

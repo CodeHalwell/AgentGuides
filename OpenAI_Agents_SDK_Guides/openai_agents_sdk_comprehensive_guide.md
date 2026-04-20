@@ -1,4 +1,4 @@
-Latest: 0.14.1 | Updated: April 2026
+Latest: 0.14.2 | Updated: April 20, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -3127,6 +3127,7 @@ This comprehensive framework enables developers to build production-grade AI app
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.14.2 | April 18, 2026 | Default Realtime model updated to `gpt-realtime-1.5`; `MCPServer` exposes `list_resources()`, `list_resource_templates()`, `read_resource()`; `MCPServerStreamableHttp` exposes `session_id` for resuming sessions across reconnects; Chat Completions opt-in reasoning-content replay via `should_replay_reasoning_content`; runtime and session edge case fixes; no breaking changes |
 | 0.14.1 | April 2026 | Patch release for SandboxAgent stability improvements |
 | 0.14.0 | April 2026 | **SandboxAgent** (beta) for persistent isolated workspaces; `openai` v2.x hard requirement; Python 3.9 dropped; sync tools auto-wrapped with `asyncio.to_thread`; MCP errors as exceptions |
 | 0.13.x | March 2026 | WebSocket transport (`responses_websocket_session()`); realtime streaming |

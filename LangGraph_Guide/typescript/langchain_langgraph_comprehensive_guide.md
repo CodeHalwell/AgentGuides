@@ -1,4 +1,4 @@
-Latest: 1.2.8 | Updated: April 2026
+Latest: 1.2.9 | Updated: April 20, 2026
 # LangChain.js and LangGraph.js Comprehensive Technical Guide
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
@@ -4983,6 +4983,7 @@ const StateAnnotation = {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.9 | April 19, 2026 | Stability improvements and bug fixes following 1.2.8 |
 | 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type; `createReactAgent` moved to `@langgraphjs/toolkit` |
 | 1.0.2 | November 2025 | Previous documented version |
 

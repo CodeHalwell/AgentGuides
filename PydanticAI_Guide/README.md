@@ -2,7 +2,7 @@
 
 > **The Pydantic Way for Generative AI** - Type-safe, production-grade agent framework with FastAPI-inspired developer experience.
 
-**Latest Version:** 1.84.0 (April 17, 2026) — previously 1.83.0 (April 16, 2026)  
+**Latest Version:** 1.84.1 (April 18, 2026) — previously 1.84.0 (April 17, 2026)  
 **Framework:** [Pydantic AI](https://ai.pydantic.dev)  
 **Python:** 3.10+  
 **License:** Comprehensive Educational Guide

@@ -1,9 +1,9 @@
 # Google Agent Development Kit (ADK) - Complete Documentation Suite
 
-**Python Version:** 1.30.0 (April 13, 2026) — previously 1.18.0 (November 2025)
+**Python Version:** 1.31.0 (April 17, 2026) — previously 1.18.0 (November 2025)
 **Go Version:** 1.0.0 GA (April 8, 2026) — previously 0.1.0 (November 2025)
-**TypeScript:** Available (December 2025) — NEW
-**Last Updated:** April 16, 2026  
+**TypeScript:** 0.6.1 (April 4, 2026) — previously announced December 2025
+**Last Updated:** April 20, 2026  
 **Focus:** Comprehensive, Practical, Production-Ready
 
 ---

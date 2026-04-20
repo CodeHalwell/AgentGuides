@@ -1,6 +1,6 @@
 # Google Agent Development Kit (ADK) for TypeScript
 
-**Status:** Available (announced December 2025)
+**Status:** Active development — v0.6.1 (April 4, 2026)
 **Package:** `@google/adk` (npm)
 **Official Repository:** https://github.com/google/adk-js
 **Documentation:** https://google.github.io/adk-docs/get-started/typescript/
@@ -303,4 +303,5 @@ npx @google/adk deploy \
 
 | Date | Version | Changes |
 |------|---------|---------|
+| April 20, 2026 | 0.6.1 | Updated version from 0.1.x placeholder to confirmed 0.6.1 (April 4, 2026); updated Status field to reflect active development |
 | April 16, 2026 | Initial | New TypeScript ADK guide created; TypeScript support announced December 2025 |

@@ -1,7 +1,7 @@
 # LangGraph.js Comprehensive TypeScript Guide
 
 > **Package:** `@langchain/langgraph`
-> **Version:** 1.2.8 (April 11, 2026) — previously 1.0.2 (November 2025)
+> **Version:** 1.2.9 (April 19, 2026) — previously 1.0.2 (November 2025)
 
 ## ⚠️ What's Changed in v1.2.8
 

@@ -1,7 +1,7 @@
-Latest: 1.1.6 | Updated: April 2026
+Latest: 1.1.8 | Updated: April 20, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.1.6 (April 2026)
+**Latest Version**: LangGraph 1.1.8 (April 2026)
 **Focus**: Python Examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
@@ -3704,5 +3704,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.8 | April 17, 2026 | Fixed strict `add_handler` type check that broke OpenTelemetry instrumentation; follows patch 1.1.7 (same day) |
+| 1.1.7 | April 17, 2026 | Intermediate patch preceding 1.1.8; stability fixes |
 | 1.1.6 | April 10, 2026 | Type-safe v2 streaming and invoke API (`version="v2"`); Pydantic/dataclass auto-coercion; Python 3.14 support; time-travel bug fixes with interrupts and subgraphs |
 | 1.0.3 | November 2025 | Previous documented version |

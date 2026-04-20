@@ -1,10 +1,10 @@
 # Microsoft Agent Framework - Python Guide Collection
 ## October 2025 Release - Enterprise-Grade Documentation
 
-**Release Date:** October 2025
-**Framework Status:** Public Preview (Unified SDK)
+**Release Date:** April 3, 2026 (GA); patch 1.0.1 on April 10, 2026
+**Framework Status:** ✅ GA — Production-Ready with Long-Term Support
 **Platform:** Python 3.10+
-**Latest Version:** 1.0+
+**Latest Version:** 1.0.1
 
 ---
 
@@ -27,11 +27,11 @@ Azure AI Content Safety with async client, PII detection and redaction, and Pyth
 
 👉 **[Complete Python 2025 Features Guide](./microsoft_agent_framework_python_2025_features.md)**
 
-### **Preview Status**
-- **Current Status:** October 2025 Public Preview
+### **GA Status**
+- **Current Status:** GA 1.0.1 — Production-Ready with Long-Term Support
 - **Python Versions:** 3.10, 3.11, 3.12
-- **Production Readiness:** Beta - suitable for non-critical workloads
-- **GA Timeline:** Expected Q2 2026
+- **Production Readiness:** GA — suitable for all production workloads
+- **GA Released:** April 3, 2026; patch 1.0.1 on April 10, 2026
 
 ---
 

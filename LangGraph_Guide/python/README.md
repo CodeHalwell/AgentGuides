@@ -2,7 +2,7 @@
 
 **Comprehensive Guide for Building Production-Grade Stateful AI Agents**
 
-Latest Version: LangGraph 1.1.6 (April 10, 2026) — previously 1.0.3 (November 2025)
+Latest Version: LangGraph 1.1.8 (April 17, 2026) — previously 1.0.3 (November 2025)
 Total Documentation: ~200KB across 4 comprehensive guides
 Total Examples: 65+ working code examples
 Focus: Python with practical, real-world patterns

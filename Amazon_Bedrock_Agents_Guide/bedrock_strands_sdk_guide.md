@@ -4,8 +4,8 @@
 
 A complete technical reference for the AWS Strands Agents SDK, a lightweight, open-source Python framework for building collaborative AI agent systems on Amazon Bedrock. Strands provides four collaboration patterns: Agents as Tools, Swarms, Agent Graphs, and Workflows.
 
-**Version:** 1.35.0 (April 2026)
-**Last Updated:** April 2026
+**Version:** 1.36.0 (April 17, 2026)
+**Last Updated:** April 20, 2026
 **Status:** Open Source, Generally Available
 **Language:** Python
 **GitHub:** https://github.com/awslabs/strands-agents (hypothetical)
@@ -1170,5 +1170,13 @@ AWS Strands provides a powerful, lightweight framework for building collaborativ
 
 ---
 
-**Last Updated:** March 2025
+**Last Updated:** April 20, 2026
 **Status:** Open Source, Generally Available
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.36.0 | April 17, 2026 | Incremental improvements; multi-agent graph workflows; interrupt propagation through nested nodes; `AgentCoreMemorySessionManager` integration; Steering Hooks |
+| 1.35.0 | April 2026 | Previous documented version |
+| 1.0 | March 2025 | Initial guide created |

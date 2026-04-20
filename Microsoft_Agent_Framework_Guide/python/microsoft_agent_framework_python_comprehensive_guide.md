@@ -1,8 +1,8 @@
-Latest: 1.1.0
+Latest: 1.0.1 | Updated: April 20, 2026
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Release:** October 2025
-**Framework Version:** 1.0+
+**Release:** GA April 3, 2026; patch 1.0.1 April 10, 2026
+**Framework Version:** 1.0.1
 **Target Platform:** Python 3.10+
 
 ---

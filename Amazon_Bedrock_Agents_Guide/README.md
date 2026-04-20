@@ -1,6 +1,6 @@
 # Amazon Bedrock Agents: Complete Technical Documentation
 
-> **Strands SDK Version:** 1.35.0 (April 2026) — previously ~1.0 (November 2025)
+> **Strands SDK Version:** 1.36.0 (April 17, 2026) — previously ~1.0 (November 2025)
 > **TypeScript SDK:** `strands-agents-ts` 1.0.0-rc.3
 
 A comprehensive, production-grade technical reference for building, deploying, and operating Amazon Bedrock Agents at enterprise scale.
