@@ -352,7 +352,7 @@ This documentation has been carefully researched and written to provide the most
 
 ---
 
-**Last Updated**: April 16, 2026
+**Last Updated**: April 20, 2026
 **Coverage**: LangGraph.js, TypeScript
 **Intended Audience**: Beginners to Advanced Developers
 **Target Production**: Node.js 18+, TypeScript 4.7+, `@langchain/langgraph` 1.2.9

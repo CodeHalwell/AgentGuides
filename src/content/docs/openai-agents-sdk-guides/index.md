@@ -328,7 +328,7 @@ async with MCPServerStdio(name="Filesystem", params={...}) as server:
 
 **Note**: This guide collection focuses on the **Python** implementation of the OpenAI Agents SDK. For **JavaScript/TypeScript**, refer to the [TypeScript Guide Collection](/openai-agents-sdk-typescript-guide/).
 
-**Last Updated**: April 17, 2026
+**Last Updated**: April 20, 2026
 **SDK Version**: 0.14.2
 **Status**: Production-Ready | Official Swarm Replacement
 

@@ -14,7 +14,7 @@ framework: mistral-agents-api
 ### 🆕 What's New in v2.4.0
 
 - **Azure AI and Google Cloud deployment targets**: `mistralai` 2.4.0 adds official support for deploying Mistral agents via Azure AI Foundry and Google Cloud Vertex AI, giving EU-hosted workloads more cloud-native options.
-- **Enhanced agent capabilities**: improved tool-call reliability and structured output validation; refer to the [mistralai changelog](https://github.com/mistralai/client-python) for the full diff.
+- **Enhanced agent capabilities**: improved tool-call reliability and structured output validation; refer to the [mistralai changelog](https://github.com/mistralai/client-python/releases) for the full diff.
 - **Python 3.10+** required (3.9 dropped).
 
 ```bash
@@ -397,6 +397,8 @@ Start Here (Foundation)
 ## 📝 Document Versions
 
 **Latest Version**: 3.1 (April 2026 Edition — SDK v2.4.0)
+
+> **Note (April 2026 routine pass):** Only this index page was updated to v2.4.0 in this pass. Companion guide pages (`mistral_agents_api_comprehensive_guide`, `mistral_agents_api_advanced_python`, etc.) retain v2.0.1 examples and have not yet been updated. Verify against the companion pages before using code snippets from them with SDK v2.4.0+.
 
 All code examples tested against:
 - Mistral AI Python SDK v2.4.0+
