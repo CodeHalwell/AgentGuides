@@ -26,6 +26,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['chatbot', 'automation', 'prototyping'],
+    version: 'v1.24.0',
   },
   {
     id: 'pydanticai',
@@ -36,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.84',
+    version: 'v1.84.1',
   },
   {
     id: 'openai-agents',
@@ -47,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.14.1',
+    version: 'v0.14.2',
   },
   {
     id: 'openai-agents-ts',
@@ -79,7 +80,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['research', 'multi-agent', 'experimentation'],
-    version: 'v0.11.5',
+    version: 'v0.12.0',
   },
   {
     id: 'langgraph-py',
@@ -90,7 +91,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'conditional-routing'],
-    version: 'v1.1.6',
+    version: 'v1.1.8',
   },
   {
     id: 'langgraph-ts',
@@ -101,7 +102,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'web'],
-    version: 'v1.2.8',
+    version: 'v1.2.9',
   },
   {
     id: 'llamaindex-py',
@@ -133,6 +134,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Advanced',
     useCases: ['search', 'qa', 'rag'],
+    version: 'v2.15.0',
   },
   {
     id: 'bedrock',
@@ -197,7 +199,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],
-    version: 'v2.0.1',
+    version: 'v2.4.0',
   },
   {
     id: 'semantic-kernel',
@@ -208,6 +210,7 @@ export const frameworks: Framework[] = [
     category: 'Enterprise',
     difficulty: 'Intermediate',
     useCases: ['enterprise', 'microsoft', 'plugins'],
+    version: 'Python 1.41.2 / .NET 1.74.0',
   },
 ];
 

@@ -1,15 +1,25 @@
 ---
 title: "Mistral Agents API Comprehensive Guide"
-description: "> Current SDK Version: mistralai 2.0.1 (March 12, 2026) — previously 1.9.11 (May 2025) > Breaking change: v1.x and v2.x SDK APIs are not compatible. A migration is required."
+description: "> Current SDK Version: mistralai 2.4.0 (April 2026) — previously 2.0.1 (March 12, 2026) > Breaking change: v1.x and v2.x SDK APIs are not compatible. A migration is required."
 framework: mistral-agents-api
 ---
 
 # Mistral Agents API Comprehensive Guide
 
-## SDK v2.0.1 — March 2026 Major Release
+## SDK v2.4.0 — April 2026
 
-> **Current SDK Version:** `mistralai` 2.0.1 (March 12, 2026) — previously 1.9.11 (May 2025)
+> **Current SDK Version:** `mistralai` 2.4.0 (April 2026) — previously 2.0.1 (March 12, 2026)
 > **Breaking change:** v1.x and v2.x SDK APIs are **not compatible**. A migration is required.
+
+### 🆕 What's New in v2.4.0
+
+- **Azure AI and Google Cloud deployment targets**: `mistralai` 2.4.0 adds official support for deploying Mistral agents via Azure AI Foundry and Google Cloud Vertex AI, giving EU-hosted workloads more cloud-native options.
+- **Enhanced agent capabilities**: improved tool-call reliability and structured output validation; refer to the [mistralai changelog](https://github.com/mistralai/client-python) for the full diff.
+- **Python 3.10+** required (3.9 dropped).
+
+```bash
+pip install "mistralai>=2.4"
+```
 
 ### ⚠️ Migrating from SDK v1.x to v2.x
 
@@ -386,10 +396,10 @@ Start Here (Foundation)
 
 ## 📝 Document Versions
 
-**Latest Version**: 3.0 (April 2026 Edition — SDK v2.0.1)
+**Latest Version**: 3.1 (April 2026 Edition — SDK v2.4.0)
 
 All code examples tested against:
-- Mistral AI Python SDK v2.0.1+
+- Mistral AI Python SDK v2.4.0+
 - Models: `mistral-medium-2505`, `mistral-large-latest`
 - API Version: v2
 - Connectors: All 5 built-in connectors + Premium Web Search
@@ -400,8 +410,9 @@ All code examples tested against:
 
 ## 📋 Revision History
 
-| Date | SDK Version | Changes |
-|------|-------------|---------|
+| Date | SDK Version | Summary of changes | Reviewer |
+|------|-------------|-------------------|----------|
+| 2026-04-20 | 2.4.0 | Version bump to v2.4.0; added Azure AI and Google Cloud deployment targets; Python 3.10+ requirement noted; install command updated | Claude routine |
 | April 16, 2026 | 2.0.1 | Updated all code examples to SDK v2.x; documented migration from v1.x; updated install instructions; added Premium Web Search and Code Interpreter sections |
 | November 2025 | 1.9.11 | May 2025 launch documentation; 5 built-in connectors; MCP integration; Conversations API |
 

@@ -893,6 +893,7 @@ These guides are provided as comprehensive learning resources for LangGraph.
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-20 | 1.1.8 | Version pin updated to 1.1.8 (April 17, 2026); frameworks.ts metadata corrected to match guide header | Claude routine |
 | April 16, 2026 | 1.1.6 | Updated to v1.1.6; documented Python 3.9 drop; `create_react_agent` deprecation; type-safe v2 API (`StreamPart`, `GraphOutput`); `langgraph-prebuilt==1.0.9` hazard warning; Python 3.14 support |
 | November 2025 | 1.0.3 | Initial Python guide; node caching; deferred nodes; pre/post model hooks; cross-thread memory; Python 3.13 support |
 
