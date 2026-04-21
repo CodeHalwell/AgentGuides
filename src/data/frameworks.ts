@@ -188,7 +188,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.2.113',
+    version: 'v0.2.116',
   },
   {
     id: 'mistral',

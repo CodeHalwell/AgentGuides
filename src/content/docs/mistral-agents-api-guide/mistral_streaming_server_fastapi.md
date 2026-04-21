@@ -12,7 +12,7 @@ Last verified: 2026-04
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from mistralai import Mistral
+from mistralai.client import Mistral
 import os
 
 app = FastAPI()

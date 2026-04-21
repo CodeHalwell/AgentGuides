@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.6.1** · April 2026 · Node 18+
+    **v1.0.0** · April 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack Gemini agents, Node backends, browser-compatible flows.
@@ -40,9 +40,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 ## Install, minimal example
 
 ```typescript
-import { LLMAgent } from '@google/adk';
+import { LlmAgent } from '@google/adk';
 
-const agent = new LLMAgent({
+const agent = new LlmAgent({
   name: 'assistant',
   model: 'gemini-2.0-flash-exp',
   instruction: 'You are a helpful assistant.',

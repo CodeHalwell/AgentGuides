@@ -14,6 +14,17 @@ Latest: 1.0.1 | Updated: April 20, 2026
 
 ---
 
+> **Errata (April 2026).** Significant portions of this guide's Python code examples use a pseudo-`microsoft.agents.ai` namespace and `AgentFactory` pattern that does **not** match the installed Python package. Verified reality for `agent-framework-core==1.1.0`:
+>
+> - **Package name / import root:** `agent_framework` (underscores), not `microsoft.agents.ai`.
+> - **Primary agent class:** `Agent` (not `AgentFactory`/`ChatAgent`). Construct with `Agent(client=<ChatClient>, instructions=...)`.
+> - **Chat clients:** `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, etc. — not `microsoft.agents.ai.azure.add_azure_openai`.
+> - **Tool decorator:** `@tool` from `agent_framework` (not `@ai_function`).
+>
+> Where you see `from microsoft.agents.ai import ...` or `AgentFactory` below, substitute the real imports above. The [A2A](../microsoft_agent_framework_a2a_protocol/), [Workflows & Declarative Agents](../microsoft_agent_framework_graphs_declarative/), and [2025 features](./microsoft_agent_framework_python_2025_features/) pages have already been rewritten against the real API. The minimal index example at the [Python overview](./) also uses the correct imports.
+
+---
+
 ## Introduction
 
 This guide provides a comprehensive technical overview of the Microsoft Agent Framework for Python, designed for developers building advanced AI agents and multi-agent systems.
@@ -51,7 +62,7 @@ The framework's architecture is layered to promote modularity and ease of use.
 | (Workflows, GroupChatManager)     |
 +-----------------------------------+
 |      Agent Abstraction Layer      |
-| (Agent, ChatAgent, AgentThread)   |
+| (Agent, Agent, AgentThread)   |
 +-----------------------------------+
 |      Core Components Layer          |
 | (Tools, Memory, LLM Providers)    |
@@ -146,7 +157,7 @@ async def main():
 
     # Create a simple chat agent
     agent = await factory.create_agent(
-        "ChatAgent",
+        "Agent",
         instructions="You are a helpful AI assistant for Python developers."
     )
 
@@ -164,20 +175,20 @@ if __name__ == "__main__":
 
 ## Simple Agents
 
-### `Agent` vs. `ChatAgent`
+### `Agent` vs. `Agent`
 
 -   **`Agent`**: A stateless agent for single-turn interactions.
--   **`ChatAgent`**: A stateful agent that manages conversation history within a thread. This is the most common type.
+-   **`Agent`**: A stateful agent that manages conversation history within a thread. This is the most common type.
 
-### Creating a `ChatAgent`
+### Creating a `Agent`
 
 ```python
 import asyncio
-from microsoft.agents.ai import AgentFactory, ChatAgent
+from microsoft.agents.ai import AgentFactory, Agent
 
 async def run_chat_agent(factory: AgentFactory):
     agent = await factory.create_agent(
-        ChatAgent,
+        Agent,
         instructions="You are a friendly and helpful assistant."
     )
     
@@ -211,7 +222,7 @@ Agents are designed to be managed via the `AgentFactory`, which handles resource
 
 ```python
 import asyncio
-from microsoft.agents.ai import AgentFactory, ChatAgent
+from microsoft.agents.ai import AgentFactory, Agent
 
 class RouterWorkflow:
     def __init__(self, factory: AgentFactory):
@@ -222,15 +233,15 @@ class RouterWorkflow:
 
     async def initialize(self):
         self._router = await self._factory.create_agent(
-            ChatAgent,
+            Agent,
             instructions="You are a router. Classify the user's query as 'Billing' or 'Technical'. Respond with only one of those words."
         )
         self._billing_agent = await self._factory.create_agent(
-            ChatAgent,
+            Agent,
             instructions="You are a billing support expert."
         )
         self._tech_agent = await self._factory.create_agent(
-            ChatAgent,
+            Agent,
             instructions="You are a technical support expert."
         )
 
@@ -266,10 +277,10 @@ class RouterWorkflow:
 Tools are standard Python functions decorated with `@ai_function` to expose them to an agent.
 
 ```python
-from microsoft.agents.ai.tool import ai_function
+from microsoft.agents.ai.tool import tool
 from typing import Annotated
 
-@ai_function(description="Get the current time in a specified timezone.")
+@tool(description="Get the current time in a specified timezone.")
 async def get_current_time(
     timezone: Annotated[str, "The IANA timezone name, e.g., 'America/New_York'."]
 ) -> str:
@@ -283,7 +294,7 @@ async def get_current_time(
 
 # --- Attaching the tool to an agent ---
 # agent = await factory.create_agent(
-#     ChatAgent,
+#     Agent,
 #     instructions="You can get the current time.",
 #     tools=[get_current_time]
 # )
@@ -312,7 +323,7 @@ class UserProfile(BaseModel):
 
 async def extract_structured_data(factory: AgentFactory, text: str) -> UserProfile:
     agent = await factory.create_agent(
-        ChatAgent,
+        Agent,
         instructions="Extract user profile information from the text provided."
     )
     thread = await agent.create_thread()

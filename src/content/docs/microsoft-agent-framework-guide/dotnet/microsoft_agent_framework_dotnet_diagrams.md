@@ -25,7 +25,7 @@ graph TD
 
     subgraph Agent Framework
         B(Orchestration Layer<br/><i>Workflows, GroupChat</i>)
-        C(Agent Abstraction Layer<br/><i>AIAgent, ChatAgent, AgentThread</i>)
+        C(Agent Abstraction Layer<br/><i>AIAgent, ChatClientAgent, AgentThread</i>)
         D(Core Components<br/><i>Tools, Memory, State</i>)
         E(LLM & Integration Layer<br/><i>AzureOpenAI, Connectors</i>)
     end
@@ -40,9 +40,9 @@ graph TD
 
 ## 2. Agent Lifecycle
 
-### State Machine for a `ChatAgent`
+### State Machine for a `ChatClientAgent`
 
-This diagram illustrates the lifecycle of a stateful `ChatAgent` as it processes messages within a thread.
+This diagram illustrates the lifecycle of a stateful `ChatClientAgent` as it processes messages within a thread.
 
 ```mermaid
 graph TD

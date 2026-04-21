@@ -161,7 +161,7 @@ For better security and portability, store configurations in a JSON file. By def
 import autogen
 
 # AutoGen automatically finds and loads this file if the path is not specified
-config_list = autogen.config_list_from_json(
+config_list = autogen.llm_config.config.config_list_from_json(
     "OAI_CONFIG_LIST.json",
     filter_dict={
         "model": ["gpt-4"] # Optional: filter for specific models
@@ -251,7 +251,7 @@ The `ConversableAgent` is the base class for all agents. It handles message pass
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create a conversable agent
@@ -284,7 +284,7 @@ agent = autogen.ConversableAgent(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create agents for code discussion
@@ -321,7 +321,7 @@ print(chat_result.summary)
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create assistant
@@ -341,7 +341,7 @@ print(f"Assistant '{assistant.name}' created.")
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create assistant
@@ -429,7 +429,7 @@ A single agent receiving and responding to messages:
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create problem solver
@@ -455,7 +455,7 @@ chat_result = solver.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 researcher = autogen.ConversableAgent(
@@ -515,7 +515,7 @@ Do NOT write code; only review and critique.""",
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 autonomous_agent = autogen.ConversableAgent(
@@ -559,7 +559,7 @@ manual_approval_agent = autogen.ConversableAgent(
 **Conservative (Deterministic) Configuration**
 
 ```python
-config_list_conservative = autogen.config_list_from_json(
+config_list_conservative = autogen.llm_config.config.config_list_from_json(
     "OAI_CONFIG_LIST.json",
     filter_dict={"model": ["gpt-4"]}
 )
@@ -578,7 +578,7 @@ fact_checker = autogen.ConversableAgent(
 **Creative Configuration**
 
 ```python
-config_list_creative = autogen.config_list_from_json(
+config_list_creative = autogen.llm_config.config.config_list_from_json(
     "OAI_CONFIG_LIST.json",
     filter_dict={"model": ["gpt-4"]}
 )
@@ -636,7 +636,7 @@ executor = autogen.UserProxyAgent(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 assistant = autogen.AssistantAgent(
@@ -680,7 +680,7 @@ executor = autogen.UserProxyAgent(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 assistant = autogen.AssistantAgent("assistant", llm_config=llm_config)
@@ -730,7 +730,7 @@ from datetime import datetime
 from typing import Annotated
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Define tool function with type hints
@@ -772,7 +772,7 @@ from typing import Annotated, List
 import autogen
 import statistics
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 def calculate_statistics(
@@ -822,7 +822,7 @@ user_proxy.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 analyst = autogen.ConversableAgent(
@@ -849,7 +849,7 @@ human.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 proposer = autogen.ConversableAgent(
@@ -881,7 +881,7 @@ approver.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 agent_a = autogen.ConversableAgent(
@@ -921,7 +921,7 @@ chat_result_2 = agent_b.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create specialized agents
@@ -968,7 +968,7 @@ planner.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Research agent
@@ -1086,7 +1086,7 @@ groupchat = autogen.GroupChat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Main agents
@@ -1146,7 +1146,7 @@ task_planner.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Stage 1 agent
@@ -1210,7 +1210,7 @@ coordinator.initiate_chats(chat_sequence)
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Agent that thinks and acts
@@ -1243,7 +1243,7 @@ executor.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Initial generator
@@ -1292,7 +1292,7 @@ generator.initiate_chat(manager, message="Start the refinement process.")
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 agent1 = autogen.ConversableAgent(
@@ -1366,7 +1366,7 @@ Your role:
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 few_shot_system_message = """You are a data analyst. Here are examples of how to analyse problems:

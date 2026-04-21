@@ -43,7 +43,7 @@ public class A2AExample
     public static async Task SetupA2AAgentAsync()
     {
         // Create base agent
-        var agent = new ChatAgent(
+        var agent = new ChatClientAgent(
             instructions: "You are a helpful sales data agent.",
             name: "SalesAgent"
         );
@@ -193,22 +193,22 @@ public class ContentPipeline
     public static async Task<AgentGraph> CreateContentPipelineAsync()
     {
         // Define specialized agents
-        var researchAgent = new ChatAgent(
+        var researchAgent = new ChatClientAgent(
             instructions: "You research topics thoroughly.",
             name: "ResearchAgent"
         );
 
-        var writerAgent = new ChatAgent(
+        var writerAgent = new ChatClientAgent(
             instructions: "You write engaging content.",
             name: "WriterAgent"
         );
 
-        var editorAgent = new ChatAgent(
+        var editorAgent = new ChatClientAgent(
             instructions: "You edit and improve content quality.",
             name: "EditorAgent"
         );
 
-        var seoAgent = new ChatAgent(
+        var seoAgent = new ChatClientAgent(
             instructions: "You optimize content for SEO.",
             name: "SEOAgent"
         );
@@ -279,19 +279,19 @@ public class ConditionalWorkflow
 {
     public static async Task<AgentGraph> CreateConditionalWorkflowAsync()
     {
-        var classifierAgent = new ChatAgent(
+        var classifierAgent = new ChatClientAgent(
             instructions: "Classify customer queries by urgency and type."
         );
 
-        var simpleAgent = new ChatAgent(
+        var simpleAgent = new ChatClientAgent(
             instructions: "Handle simple queries quickly."
         );
 
-        var complexAgent = new ChatAgent(
+        var complexAgent = new ChatClientAgent(
             instructions: "Handle complex queries with detailed analysis."
         );
 
-        var urgentAgent = new ChatAgent(
+        var urgentAgent = new ChatClientAgent(
             instructions: "Handle urgent queries with priority."
         );
 
@@ -336,10 +336,10 @@ public class ParallelWorkflow
 {
     public static async Task<AgentGraph> CreateParallelAnalysisAsync()
     {
-        var sentimentAgent = new ChatAgent(instructions: "Analyze sentiment");
-        var keywordAgent = new ChatAgent(instructions: "Extract keywords");
-        var summaryAgent = new ChatAgent(instructions: "Summarize text");
-        var aggregatorAgent = new ChatAgent(instructions: "Combine results");
+        var sentimentAgent = new ChatClientAgent(instructions: "Analyze sentiment");
+        var keywordAgent = new ChatClientAgent(instructions: "Extract keywords");
+        var summaryAgent = new ChatClientAgent(instructions: "Summarize text");
+        var aggregatorAgent = new ChatClientAgent(instructions: "Combine results");
 
         var graph = new AgentGraph("ParallelAnalysis");
 
@@ -430,9 +430,9 @@ public class ApprovalWorkflow
     {
         var graph = new AgentGraph("ContentApproval");
 
-        var draftAgent = new ChatAgent(instructions: "Draft content");
-        var reviewAgent = new ChatAgent(instructions: "Review content");
-        var publishAgent = new ChatAgent(instructions: "Publish content");
+        var draftAgent = new ChatClientAgent(instructions: "Draft content");
+        var reviewAgent = new ChatClientAgent(instructions: "Review content");
+        var publishAgent = new ChatClientAgent(instructions: "Publish content");
 
         graph.AddNode("draft", draftAgent);
         graph.AddNode("review", reviewAgent);
@@ -548,7 +548,7 @@ using Azure.Identity;
 
 public class ConfigurationLoader
 {
-    public static async Task<ChatAgent> LoadAgentFromJsonAsync(string configPath)
+    public static async Task<ChatClientAgent> LoadAgentFromJsonAsync(string configPath)
     {
         // Read configuration file
         var json = await File.ReadAllTextAsync(configPath);
@@ -674,12 +674,12 @@ public class ModelOptions
 public class AgentService
 {
     private readonly AgentOptions _options;
-    private readonly ChatAgent _agent;
+    private readonly ChatClientAgent _agent;
 
     public AgentService(IOptions<AgentOptions> options)
     {
         _options = options.Value;
-        _agent = new ChatAgent(
+        _agent = new ChatClientAgent(
             instructions: _options.Instructions,
             name: _options.Name
         );
@@ -804,7 +804,7 @@ public class TelemetrySetup
         activity?.SetTag("customer.id", "cust_12345");
         activity?.SetTag("query.type", "order_status");
 
-        var agent = new ChatAgent(
+        var agent = new ChatClientAgent(
             instructions: "You help customers with orders."
         );
 
@@ -858,7 +858,7 @@ public class AgentMetrics
 
         try
         {
-            var agent = new ChatAgent(instructions: "You help customers.");
+            var agent = new ChatClientAgent(instructions: "You help customers.");
             var response = await agent.RunAsync(query);
 
             // Record success
@@ -907,7 +907,7 @@ using Azure.Identity;
 
 public class SafeAgent
 {
-    public static ChatAgent CreateSafeAgent()
+    public static ChatClientAgent CreateSafeAgent()
     {
         // Configure Content Safety
         var contentSafetyConfig = new ContentSafetyConfig
@@ -942,7 +942,7 @@ public class SafeAgent
             ActionOnViolation = ViolationAction.BlockAndLog
         };
 
-        var agent = new ChatAgent(
+        var agent = new ChatClientAgent(
             instructions: "You are a customer support agent.",
             contentSafety: contentSafetyConfig
         );
@@ -1041,7 +1041,7 @@ using Microsoft.Agents.AI.Safety;
 
 public class PIIProtection
 {
-    public static ChatAgent CreatePIIProtectedAgent()
+    public static ChatClientAgent CreatePIIProtectedAgent()
     {
         var piiConfig = new PIIDetectionConfig
         {
@@ -1059,7 +1059,7 @@ public class PIIProtection
             RedactionPattern = "[REDACTED_{category}]"
         };
 
-        var agent = new ChatAgent(
+        var agent = new ChatClientAgent(
             instructions: "You handle customer data.",
             piiDetection: piiConfig
         );
@@ -1104,9 +1104,9 @@ public class Program
                 services.AddSingleton<DefaultAzureCredential>();
 
                 // Register agents
-                services.AddSingleton<ChatAgent>(sp =>
+                services.AddSingleton<ChatClientAgent>(sp =>
                 {
-                    return new ChatAgent(
+                    return new ChatClientAgent(
                         instructions: "You are a helpful assistant.",
                         credential: sp.GetRequiredService<DefaultAzureCredential>()
                     );
@@ -1131,10 +1131,10 @@ public interface IAgentService
 
 public class AgentService : IAgentService
 {
-    private readonly ChatAgent _agent;
+    private readonly ChatClientAgent _agent;
     private readonly ILogger<AgentService> _logger;
 
-    public AgentService(ChatAgent agent, ILogger<AgentService> logger)
+    public AgentService(ChatClientAgent agent, ILogger<AgentService> logger)
     {
         _agent = agent;
         _logger = logger;

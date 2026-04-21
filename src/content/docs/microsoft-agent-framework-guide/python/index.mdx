@@ -27,7 +27,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="caution" title="Earlier drafts had fabricated APIs">
-  Pages under this guide previously documented `agent_framework.graphs.AgentGraph`, `agent_framework.a2a.A2AProtocolAdapter`, `AzureAIAgentClient`, and other classes that **do not exist**. Index pages and the graphs/A2A/2025-features pages were rewritten in April 2026 after introspecting `agent-framework-core==1.1.0`. Other pages may still contain stale references; see [Errata in the comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) for the running list.
+  Pages under this guide previously documented `agent_framework.graphs.AgentGraph`, `agent_framework.a2a.A2AProtocolAdapter`, `AzureAIAgentClient`, `ChatAgent`, `ai_function`, and other names that **do not exist**. The real primary agent class in Python is `Agent`; the Azure chat client is `FoundryChatClient` from `agent_framework.foundry`. Pages were rewritten in April 2026 after introspecting `agent-framework-core==1.1.0`. See [Errata in the comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) for the running list.
 </Aside>
 
 <Aside type="tip" title="Where to start">
@@ -40,7 +40,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 
 <CardGrid>
   <LinkCard title="1 · Setup & core fundamentals" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals" description="Install, architecture, unified SDK, authentication · 20 min" />
-  <LinkCard title="2 · Your first agent" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" description="ChatAgent basics, lifecycle, task execution · 20 min" />
+  <LinkCard title="2 · Your first agent" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" description="Agent basics, lifecycle, task execution · 20 min" />
   <LinkCard title="3 · Multi-agent orchestration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems" description="Sequential, concurrent, handoff, group chat, Magentic · 30 min" />
   <LinkCard title="4 · Tools integration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#tools-integration" description="Built-in Azure tools, custom tools, MCP · 20 min" />
   <LinkCard title="5 · Structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" description="Pydantic schemas, validation, type-safe responses · 15 min" />
@@ -55,7 +55,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 
 <CardGrid>
   <LinkCard title="Unified SDK architecture" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals" />
-  <LinkCard title="ChatAgent lifecycle" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" />
+  <LinkCard title="Agent lifecycle" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" />
   <LinkCard title="Orchestration patterns" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems" />
   <LinkCard title="Tool registration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#tools-integration" />
   <LinkCard title="Pydantic structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" />
@@ -115,7 +115,7 @@ async def main():
 asyncio.run(main())
 ```
 
-> Previous drafts of this page used a `ChatAgent(chat_client=...)` minimal example. `ChatAgent` is not a public class in `agent-framework-core` 1.1.0 — the primary agent is `Agent` and the keyword is `client=` (not `chat_client=`).
+> Previous drafts of this page used a `ChatAgent(chat_client=...)` minimal example. `Agent` is not a public class in `agent-framework-core` 1.1.0 — the primary agent is `Agent` and the keyword is `client=` (not `chat_client=`).
 
 Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals)**
 

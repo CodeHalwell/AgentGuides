@@ -30,7 +30,7 @@ using System.Threading.Tasks;
 
 public class SimpleChatAgent
 {
-    private readonly ChatAgent _agent;
+    private readonly ChatClientAgent _agent;
 
     public SimpleChatAgent(AgentFactory agentFactory)
     {
@@ -38,7 +38,7 @@ public class SimpleChatAgent
         {
             Instructions = "You are a friendly AI assistant. Keep your responses concise."
         };
-        _agent = agentFactory.CreateAgent<ChatAgent>(options);
+        _agent = agentFactory.CreateAgent<ChatClientAgent>(options);
     }
 
     public async Task RunInteractiveAsync()
@@ -91,7 +91,7 @@ public class TimeTool
 // 2. Create the agent and add the tool
 public class ToolAgent
 {
-    private readonly ChatAgent _agent;
+    private readonly ChatClientAgent _agent;
 
     public ToolAgent(AgentFactory agentFactory)
     {
@@ -103,7 +103,7 @@ public class ToolAgent
             Instructions = "You have a tool to get the current time. Use it when asked about the time.",
             Tools = { tool }
         };
-        _agent = agentFactory.CreateAgent<ChatAgent>(options);
+        _agent = agentFactory.CreateAgent<ChatClientAgent>(options);
     }
 
     public async Task<string> AskAboutTimeAsync()
@@ -141,7 +141,7 @@ public class MathTool
 // --- Agent Setup ---
 // var mathTool = new MathTool();
 // var agentOptions = new AgentOptions { Tools = { AIFunctionFactory.CreateTool(mathTool) } };
-// var agent = factory.CreateAgent<ChatAgent>(agentOptions);
+// var agent = factory.CreateAgent<ChatClientAgent>(agentOptions);
 // var response = await agent.CreateThread().InvokeAsync("What is 10 divided by 0?");
 // The agent will respond with something like: "I cannot divide by zero. Could you please provide a different number?"
 ```
@@ -160,15 +160,15 @@ This recipe shows how to chain two agents together: a researcher and a summarize
 // SequentialWorkflow.cs
 public class SequentialWorkflow
 {
-    private readonly ChatAgent _researcher;
-    private readonly ChatAgent _summarizer;
+    private readonly ChatClientAgent _researcher;
+    private readonly ChatClientAgent _summarizer;
 
     public SequentialWorkflow(AgentFactory factory)
     {
-        _researcher = factory.CreateAgent<ChatAgent>(new() {
+        _researcher = factory.CreateAgent<ChatClientAgent>(new() {
             Instructions = "You are a world-class researcher. Find detailed information on the given topic."
         });
-        _summarizer = factory.CreateAgent<ChatAgent>(new() {
+        _summarizer = factory.CreateAgent<ChatClientAgent>(new() {
             Instructions = "You are a skilled editor. Summarize the provided text into a single, concise paragraph."
         });
     }
@@ -197,17 +197,17 @@ This recipe demonstrates a router agent that decides which specialist agent shou
 // RouterAgent.cs
 public class RouterWorkflow
 {
-    private readonly ChatAgent _routerAgent;
-    private readonly ChatAgent _billingAgent;
-    private readonly ChatAgent _techSupportAgent;
+    private readonly ChatClientAgent _routerAgent;
+    private readonly ChatClientAgent _billingAgent;
+    private readonly ChatClientAgent _techSupportAgent;
 
     public RouterWorkflow(AgentFactory factory)
     {
-        _routerAgent = factory.CreateAgent<ChatAgent>(new() {
+        _routerAgent = factory.CreateAgent<ChatClientAgent>(new() {
             Instructions = "You are a request router. Your job is to determine if a user's query is about 'Billing' or 'Technical Support'. Respond with only one of those two words."
         });
-        _billingAgent = factory.CreateAgent<ChatAgent>(new() { Instructions = "You are a billing support specialist." });
-        _techSupportAgent = factory.CreateAgent<ChatAgent>(new() { Instructions = "You are a technical support specialist." });
+        _billingAgent = factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a billing support specialist." });
+        _techSupportAgent = factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a technical support specialist." });
     }
 
     public async Task<string> RouteAndHandleRequestAsync(string userInput)
@@ -254,12 +254,12 @@ builder.Services.AddAgentFactory(b =>
 public class KnowledgeWorker
 {
     private readonly IAgentMemory _memory;
-    private readonly ChatAgent _ragAgent;
+    private readonly ChatClientAgent _ragAgent;
 
     public KnowledgeWorker(IAgentMemory memory, AgentFactory factory)
     {
         _memory = memory;
-        _ragAgent = factory.CreateAgent<ChatAgent>(new() {
+        _ragAgent = factory.CreateAgent<ChatClientAgent>(new() {
             Instructions = "You answer questions based on the knowledge you have stored."
         });
     }
@@ -337,9 +337,9 @@ public class AdvancedWorkflow
     public async Task<string> RunHandoffWorkflowAsync(string topic)
     {
         // 1. Define agents
-        var researcher = _factory.CreateAgent<ChatAgent>(new() { Instructions = "You are a researcher." });
-        var analyst = _factory.CreateAgent<ChatAgent>(new() { Instructions = "You are a data analyst." });
-        var writer = _factory.CreateAgent<ChatAgent>(new() { Instructions = "You are a technical writer." });
+        var researcher = _factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a researcher." });
+        var analyst = _factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a data analyst." });
+        var writer = _factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a technical writer." });
 
         // 2. Create a workflow
         var workflow = new Workflow("ResearchPaperWorkflow");

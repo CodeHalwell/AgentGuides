@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **@llamaindex/workflow 1.1.4** · April 2026 · Node 18+
+    **@llamaindex/workflow 1.1.24** · April 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed event-driven agents, full-stack RAG apps, browser-compatible flows.
@@ -60,7 +60,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./llamaindex_typescript_production_guide/" />
 </CardGrid>
 
-## What's new in @llamaindex/workflow 1.1.4 (April 2026)
+## What's new in @llamaindex/workflow 1.1.24 (April 2026)
 
 - Scoped package migration finalised.
 - Typed event handlers stabilised.
@@ -68,20 +68,28 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## Install, minimal example
 
+`@llamaindex/workflow` 1.1.24 uses a **functional API** — `createWorkflow`, `workflowEvent`, `runWorkflow`. Earlier drafts of this page documented a class-based `extends Workflow` + `@step()` decorator pattern that does not exist in the current package.
+
 ```typescript
-import { Workflow, StartEvent, StopEvent, step } from '@llamaindex/workflow';
+import { createWorkflow, workflowEvent, runWorkflow } from '@llamaindex/workflow';
+import { z } from 'zod';
 
-class MyAgent extends Workflow {
-  @step()
-  async respond(ev: StartEvent): Promise<StopEvent> {
-    return new StopEvent({ result: `Echo: ${ev.data.input}` });
-  }
-}
+// Define typed events
+const startEvent = workflowEvent({ data: z.object({ input: z.string() }) });
+const stopEvent  = workflowEvent({ data: z.object({ result: z.string() }) });
 
-const workflow = new MyAgent();
-const result = await workflow.run({ input: 'Hello!' });
+// Build the workflow
+const workflow = createWorkflow()
+  .handle([startEvent], async ({ data }) => {
+    return stopEvent.with({ result: `Echo: ${data.input}` });
+  });
+
+// Run it
+const { result } = await runWorkflow(workflow, startEvent.with({ input: 'Hello!' }));
 console.log(result);
 ```
+
+For multi-agent topologies use `multiAgent(...)` + `FunctionAgent`. For streaming responses use `runStream` / `runAndCollect`.
 
 Ready? **[Start Zero → Hero Step 1 →](./llamaindex_workflows_typescript_comprehensive_guide/#1-installation-and-setup)**
 
@@ -91,7 +99,7 @@ Ready? **[Start Zero → Hero Step 1 →](./llamaindex_workflows_typescript_comp
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-04-21 | 1.1.4 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| April 2026 | 1.1.4 | Scoped package migration; event handlers stabilised. |
+| 2026-04-21 | 1.1.24 | Minimal example rewritten against functional API (`createWorkflow`/`workflowEvent`/`runWorkflow`) after pkg introspection — class + `@step` pattern documented earlier does not exist. |
+| April 2026 | 1.1.24 | Scoped package migration; typed event handlers stabilised. |
 
 **Note:** Python implementation lives at [LlamaIndex (Python)](/llamaindex-guide/python/).

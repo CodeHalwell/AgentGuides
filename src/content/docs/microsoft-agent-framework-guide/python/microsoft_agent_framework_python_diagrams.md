@@ -23,8 +23,8 @@ graph TD
     
     subgraph "Agent Framework (Python)"
         API --> Orchestrator[Orchestrator / Workflow]
-        Orchestrator --> AgentA[ChatAgent A]
-        Orchestrator --> AgentB[ChatAgent B]
+        Orchestrator --> AgentA[Agent A]
+        Orchestrator --> AgentB[Agent B]
         
         AgentA --> Memory[Memory Store]
         AgentA --> Tools[Tools / Plugins]
@@ -47,7 +47,7 @@ The lifecycle of a Python agent within an `asyncio` event loop.
 sequenceDiagram
     participant App as Application (Main Loop)
     participant Factory as AgentFactory
-    participant Agent as ChatAgent
+    participant Agent as Agent
     participant Thread as AgentThread
     participant LLM as LLM Service
 

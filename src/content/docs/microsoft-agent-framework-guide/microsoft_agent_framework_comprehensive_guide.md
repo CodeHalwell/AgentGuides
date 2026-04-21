@@ -361,22 +361,22 @@ class Config:
 
 #### **Chat Agent - Python**
 
-The most common agent type is `ChatAgent`, designed for conversational interactions:
+The most common agent type is `Agent` (Python) / `ChatClientAgent` (.NET), designed for conversational interactions:
 
 ```python
 import asyncio
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 async def main():
     # Create credentials (uses Azure CLI or environment variables)
     async with AzureCliCredential() as credential:
         # Initialize Azure AI agent client
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             # Create a chat agent with system instructions
-            agent = ChatAgent(
-                chat_client=client,
+            agent = Agent(
+                client=client,
                 instructions="You are a helpful assistant specialising in Python programming. "
                             "Provide clear, concise explanations with code examples when appropriate."
             )
@@ -428,11 +428,11 @@ Agents become more powerful when equipped with tools:
 ```python
 import asyncio
 from typing import Annotated
-from agent_framework import ChatAgent, ai_function
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent, tool
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
-@ai_function(description="Get the current weather for a specified location")
+@tool(description="Get the current weather for a specified location")
 async def get_weather(location: Annotated[str, "City name, e.g., 'London'"],
                       unit: Annotated[str, "Temperature unit: 'celsius' or 'fahrenheit'"] = "celsius") -> str:
     """Fetch weather information for a location."""
@@ -446,10 +446,10 @@ async def get_weather(location: Annotated[str, "City name, e.g., 'London'"],
 
 async def main():
     async with AzureCliCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             # Create agent with integrated tool
-            agent = ChatAgent(
-                chat_client=client,
+            agent = Agent(
+                client=client,
                 tools=[get_weather],
                 instructions="You are a weather assistant. Help users check weather in different cities."
             )
@@ -520,8 +520,8 @@ Initialisation → Configuration → Execution → Termination
 #### **Lifecycle Management - Python**
 
 ```python
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 class ManagedChatAgent:
@@ -534,11 +534,11 @@ class ManagedChatAgent:
     async def __aenter__(self):
         """Initialisation phase"""
         self.credential = AzureCliCredential()
-        self.client = AzureAIAgentClient(async_credential=self.credential)
+        self.client = FoundryChatClient(credential=self.credential)
         
         # Configure agent
-        self.agent = ChatAgent(
-            chat_client=self.client,
+        self.agent = Agent(
+            client=self.client,
             instructions=self.instructions
         )
         return self
@@ -739,14 +739,14 @@ Single-purpose agents excel at focused tasks, improving maintainability and reus
 
 ```python
 from abc import ABC, abstractmethod
-from agent_framework import ChatAgent
+from agent_framework import Agent
 
 class SpecialisedAgent(ABC):
     """Base class for single-purpose agents"""
     
     def __init__(self, client, instructions: str):
-        self.agent = ChatAgent(
-            chat_client=client,
+        self.agent = Agent(
+            client=client,
             instructions=instructions
         )
     
@@ -781,7 +781,7 @@ class CodeReviewAgent(SpecialisedAgent):
 # Usage
 async def main():
     async with AzureCliCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             # Use specialised agents
             analysis_agent = DataAnalysisAgent(client)
             result = await analysis_agent.execute("sales_data.csv")
@@ -797,13 +797,13 @@ async def main():
 ```python
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from agent_framework import ChatAgent
+from agent_framework import Agent
 
 @pytest.fixture
 async def mock_agent():
     """Fixture providing a mock agent"""
     mock_client = AsyncMock()
-    agent = ChatAgent(chat_client=mock_client, instructions="Test agent")
+    agent = Agent(client=mock_client, instructions="Test agent")
     return agent
 
 @pytest.mark.asyncio
@@ -840,8 +840,8 @@ async def test_agent_tool_usage(mock_agent):
 
 ```python
 import pytest
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import DefaultAzureCredential
 import os
 
@@ -849,9 +849,9 @@ import os
 async def real_agent():
     """Fixture providing a real agent for integration tests"""
     async with DefaultAzureCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
-            agent = ChatAgent(
-                chat_client=client,
+        async with FoundryChatClient(credential=credential) as client:
+            agent = Agent(
+                client=client,
                 instructions="You are a helpful assistant."
             )
             yield agent
@@ -912,8 +912,8 @@ Multi-agent orchestration involves coordinating multiple specialised agents to s
 
 ```python
 import asyncio
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 class MultiAgentSystem:
@@ -921,18 +921,18 @@ class MultiAgentSystem:
         self.client = client
         
         # Create specialised agents
-        self.research_agent = ChatAgent(
-            chat_client=client,
+        self.research_agent = Agent(
+            client=client,
             instructions="You are a research specialist. Gather and summarise information."
         )
         
-        self.analysis_agent = ChatAgent(
-            chat_client=client,
+        self.analysis_agent = Agent(
+            client=client,
             instructions="You are a data analyst. Analyse findings and extract insights."
         )
         
-        self.recommendation_agent = ChatAgent(
-            chat_client=client,
+        self.recommendation_agent = Agent(
+            client=client,
             instructions="You are a strategist. Provide recommendations based on analysis."
         )
     
@@ -963,7 +963,7 @@ class MultiAgentSystem:
 # Usage
 async def main():
     async with AzureCliCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             multi_agent = MultiAgentSystem(client)
             result = await multi_agent.orchestrate("Market trends in AI")
             print("Research:", result["research"])
@@ -1046,9 +1046,9 @@ class StatefulMultiAgentSystem:
     
     def _create_agents(self):
         return {
-            "research": ChatAgent(chat_client=self.client, instructions="Research"),
-            "analysis": ChatAgent(chat_client=self.client, instructions="Analyse"),
-            "planning": ChatAgent(chat_client=self.client, instructions="Plan")
+            "research": Agent(client=self.client, instructions="Research"),
+            "analysis": Agent(client=self.client, instructions="Analyse"),
+            "planning": Agent(client=self.client, instructions="Plan")
         }
     
     async def execute_with_state(self):
@@ -1158,8 +1158,8 @@ class MultiAgentWorkflow:
         
         while current_node:
             # Create agent for current node
-            agent = ChatAgent(
-                chat_client=client,
+            agent = Agent(
+                client=client,
                 instructions=current_node.instructions
             )
             

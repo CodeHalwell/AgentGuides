@@ -236,7 +236,7 @@ You have **three options** for imports:
 # Keep existing imports - works perfectly with AG2!
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 agent = autogen.ConversableAgent(
@@ -250,8 +250,10 @@ agent = autogen.ConversableAgent(
 #### Option 2: Use Explicit Named Imports
 
 ```python
-# Use explicit named imports from the autogen module
-from autogen import ConversableAgent, config_list_from_json
+# `config_list_from_json` is not re-exported at `autogen`'s top level in
+# 0.11+. Import from the real deep path instead:
+from autogen import ConversableAgent
+from autogen.llm_config.config import config_list_from_json
 
 config_list = config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
@@ -329,7 +331,7 @@ Now you can optionally use AG2 2025 enhancements:
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 
 # NEW: Enhanced context management
 llm_config = {
@@ -398,7 +400,7 @@ Update your project documentation to reference AG2:
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 assistant = autogen.AssistantAgent(
@@ -424,7 +426,7 @@ user_proxy.initiate_chat(
 # Same code works perfectly!
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 assistant = autogen.AssistantAgent(
@@ -449,7 +451,7 @@ user_proxy.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 
 # NEW: Add AG2 enhancements
 llm_config = {
@@ -485,7 +487,7 @@ print(f"Total cost: ${cost_stats['total_cost']:.4f}")
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 # Create agents
@@ -529,7 +531,7 @@ user_proxy.initiate_chat(
 # Exact same code works with AG2
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 coder = autogen.AssistantAgent(
@@ -573,7 +575,7 @@ user_proxy.initiate_chat(
 import autogen
 from typing import Annotated
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 def get_weather(city: Annotated[str, "City name"]) -> str:
@@ -608,7 +610,7 @@ user_proxy.initiate_chat(
 import autogen
 from typing import Annotated
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
 def get_weather(city: Annotated[str, "City name"]) -> str:
@@ -644,7 +646,7 @@ user_proxy.initiate_chat(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 
 # Smart context truncation
 llm_config = {
@@ -670,7 +672,7 @@ agent = autogen.ConversableAgent(
 ```python
 import autogen
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 
 # Configure cost limits
 llm_config = {
@@ -699,7 +701,7 @@ print(f"Tokens: {cost_stats['total_tokens']}")
 import autogen
 from autogen.telemetry import TelemetryConfig
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
 
 # Enable telemetry
 telemetry = TelemetryConfig(
@@ -784,10 +786,10 @@ FileNotFoundError: OAI_CONFIG_LIST.json not found
 import os
 
 config_path = os.path.join(os.getcwd(), "OAI_CONFIG_LIST.json")
-config_list = autogen.config_list_from_json(config_path)
+config_list = autogen.llm_config.config.config_list_from_json(config_path)
 
 # Or specify full path
-config_list = autogen.config_list_from_json("/path/to/OAI_CONFIG_LIST.json")
+config_list = autogen.llm_config.config.config_list_from_json("/path/to/OAI_CONFIG_LIST.json")
 ```
 
 ### Issue 3: Version Conflicts

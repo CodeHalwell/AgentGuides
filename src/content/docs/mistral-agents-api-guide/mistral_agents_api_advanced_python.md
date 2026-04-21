@@ -21,7 +21,7 @@ Upstream: https://github.com/mistralai/client-python/releases | https://docs.mis
 
 
 ```python
-from mistralai import Mistral
+from mistralai.client import Mistral
 import os, json
 
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])

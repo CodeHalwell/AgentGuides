@@ -116,7 +116,7 @@ Sequential orchestration chains agents where each agent's output feeds the next 
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 def create_data_pipeline():
     """Create a sequential data processing pipeline"""
@@ -1143,7 +1143,7 @@ orchestrator.emit_event("error.occurred", "Validation failed on record 523")
 import os
 import logging
 from typing import List, Dict, Any
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

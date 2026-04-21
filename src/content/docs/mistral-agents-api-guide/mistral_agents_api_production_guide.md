@@ -70,7 +70,7 @@ DATADOG_SITE=datadoghq.com
 ### Horizontal Scaling (Multiple Instances)
 
 ```python
-from mistralai import Mistral
+from mistralai.client import Mistral
 import os
 from typing import Optional
 
@@ -501,7 +501,7 @@ class RateLimiter:
 ### Connection Pooling
 
 ```python
-from mistralai import Mistral
+from mistralai.client import Mistral
 import asyncio
 
 class OptimisedClientPool:

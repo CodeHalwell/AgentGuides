@@ -121,7 +121,7 @@ Mistral Agents API implements **Anthropic's MCP specification**, ensuring compat
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 

@@ -45,7 +45,7 @@ The Python Code Execution connector provides a **secure, sandboxed environment**
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
@@ -1137,7 +1137,7 @@ rag_agent = client.beta.agents.create(
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 def create_comprehensive_agent():
     """Create agent with all connectors for maximum capability"""

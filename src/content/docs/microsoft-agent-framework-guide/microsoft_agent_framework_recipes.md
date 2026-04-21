@@ -37,8 +37,8 @@ Demonstrates basic agent creation and execution
 
 import asyncio
 import os
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 
@@ -48,11 +48,11 @@ async def create_simple_agent():
     # Credentials
     async with AzureCliCredential() as credential:
         # Initialize Azure AI client
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             
             # Create agent with system instructions
-            agent = ChatAgent(
-                chat_client=client,
+            agent = Agent(
+                client=client,
                 instructions="You are a helpful assistant. Provide accurate, concise answers."
             )
             
@@ -65,9 +65,9 @@ async def multi_turn_conversation():
     """Multi-turn conversation example"""
     
     async with AzureCliCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
-            agent = ChatAgent(
-                chat_client=client,
+        async with FoundryChatClient(credential=credential) as client:
+            agent = Agent(
+                client=client,
                 instructions="You are a Python programming tutor."
             )
             
@@ -188,8 +188,8 @@ Demonstrates production-grade error handling
 
 import asyncio
 import logging
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 from azure.core.exceptions import AzureError
 
@@ -208,7 +208,7 @@ class AgentWithErrorHandling:
         self.max_retries = 3
         self.retry_delay = 2  # seconds
     
-    async def run_with_retry(self, agent: ChatAgent, query: str):
+    async def run_with_retry(self, agent: Agent, query: str):
         """Execute agent query with retry logic"""
         
         for attempt in range(self.max_retries):
@@ -236,9 +236,9 @@ class AgentWithErrorHandling:
         
         try:
             async with AzureCliCredential() as credential:
-                async with AzureAIAgentClient(async_credential=credential) as client:
-                    agent = ChatAgent(
-                        chat_client=client,
+                async with FoundryChatClient(credential=credential) as client:
+                    agent = Agent(
+                        client=client,
                         instructions="You are helpful"
                     )
                     
@@ -282,8 +282,8 @@ Demonstrates agent orchestration for complex tasks
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 
@@ -303,20 +303,20 @@ class DocumentAnalysisWorkflow:
         self.client = client
         
         # Create specialised agents
-        self.extraction_agent = ChatAgent(
-            chat_client=client,
+        self.extraction_agent = Agent(
+            client=client,
             instructions="You are an expert at extracting key information from documents. "
                         "Focus on facts, figures, and important details."
         )
         
-        self.analysis_agent = ChatAgent(
-            chat_client=client,
+        self.analysis_agent = Agent(
+            client=client,
             instructions="You are a data analyst. Analyse extracted information "
                         "and identify trends, patterns, and insights."
         )
         
-        self.summary_agent = ChatAgent(
-            chat_client=client,
+        self.summary_agent = Agent(
+            client=client,
             instructions="You are an expert at creating executive summaries. "
                         "Synthesise information into clear, actionable recommendations."
         )
@@ -375,7 +375,7 @@ async def run_workflow():
     """
     
     async with AzureCliCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             workflow = DocumentAnalysisWorkflow(client)
             
             print("=== Document Analysis Workflow ===\n")
@@ -404,13 +404,13 @@ Demonstrates tool composition for complex scenarios
 
 import asyncio
 from typing import Annotated
-from agent_framework import ChatAgent, ai_function
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent, tool
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 
 # Define multiple tools
-@ai_function(description="Get the current weather for a location")
+@tool(description="Get the current weather for a location")
 async def get_weather(location: Annotated[str, "City name"]) -> str:
     """Fetch weather information"""
     weather_data = {
@@ -421,7 +421,7 @@ async def get_weather(location: Annotated[str, "City name"]) -> str:
     return weather_data.get(location, "Unknown location")
 
 
-@ai_function(description="Calculate travel time between two cities")
+@tool(description="Calculate travel time between two cities")
 async def calculate_travel_time(
     origin: Annotated[str, "Starting city"],
     destination: Annotated[str, "Destination city"]
@@ -438,7 +438,7 @@ async def calculate_travel_time(
     return distances.get(key, "Route not available")
 
 
-@ai_function(description="Look up hotel availability and prices")
+@tool(description="Look up hotel availability and prices")
 async def check_hotels(
     city: Annotated[str, "City name"],
     check_in: Annotated[str, "Check-in date (YYYY-MM-DD)"]
@@ -451,11 +451,11 @@ async def run_travel_agent():
     """Create agent with multiple tools for travel planning"""
     
     async with AzureCliCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as client:
+        async with FoundryChatClient(credential=credential) as client:
             
             # Create agent with multiple tools
-            agent = ChatAgent(
-                chat_client=client,
+            agent = Agent(
+                client=client,
                 tools=[get_weather, calculate_travel_time, check_hotels],
                 instructions="""You are a travel planning assistant. Help users plan trips by:
                 1. Checking weather at destinations
@@ -502,8 +502,8 @@ import asyncio
 import json
 from datetime import datetime
 from azure.cosmos.aio import CosmosClient
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 
@@ -557,7 +557,7 @@ class PersistentMemoryAgent:
         
         return "\n".join(history)
     
-    async def execute_with_context(self, user_id: str, query: str, agent: ChatAgent) -> str:
+    async def execute_with_context(self, user_id: str, query: str, agent: Agent) -> str:
         """Execute agent query with historical context"""
         
         # Load history
@@ -589,9 +589,9 @@ async def run_persistent_agent():
     
     try:
         async with AzureCliCredential() as credential:
-            async with AzureAIAgentClient(async_credential=credential) as client:
-                agent = ChatAgent(
-                    chat_client=client,
+            async with FoundryChatClient(credential=credential) as client:
+                agent = Agent(
+                    client=client,
                     instructions="You are a helpful personal assistant who remembers previous conversations."
                 )
                 
@@ -641,8 +641,8 @@ import asyncio
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import Vector
 from azure.identity.aio import DefaultAzureCredential
-from agent_framework import ChatAgent
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 
 
 class RAGAgent:
@@ -654,7 +654,7 @@ class RAGAgent:
         self.search_client = None
         self.agent = None
     
-    async def initialize(self, ai_client: AzureAIAgentClient):
+    async def initialize(self, ai_client: FoundryChatClient):
         """Initialize RAG components"""
         
         credential = DefaultAzureCredential()
@@ -667,8 +667,8 @@ class RAGAgent:
         )
         
         # Create agent
-        self.agent = ChatAgent(
-            chat_client=ai_client,
+        self.agent = Agent(
+            client=ai_client,
             instructions="""You are a knowledge assistant. Answer questions based on 
             the provided context from the knowledge base. If information is not available, 
             say so clearly."""
@@ -719,7 +719,7 @@ async def run_rag_agent():
     search_index = "documents"
     
     async with DefaultAzureCredential() as credential:
-        async with AzureAIAgentClient(async_credential=credential) as ai_client:
+        async with FoundryChatClient(credential=credential) as ai_client:
             
             rag_agent = RAGAgent(search_endpoint, search_index)
             await rag_agent.initialize(ai_client)
@@ -860,7 +860,7 @@ public class AgentFunction
 Debug Pattern: Inspect agent internals
 """
 
-class DebuggableAgent(ChatAgent):
+class DebuggableAgent(Agent):
     """Agent with debugging capabilities"""
     
     async def run_with_debug(self, query: str, debug: bool = True):
@@ -888,7 +888,7 @@ class DebuggableAgent(ChatAgent):
 Monitoring Pattern: Track tool calls
 """
 
-class MonitoredAgent(ChatAgent):
+class MonitoredAgent(Agent):
     """Agent that monitors tool execution"""
     
     def __init__(self, *args, **kwargs):

@@ -14,7 +14,7 @@ Copy-paste ready code examples for common use cases. All recipes require `pip in
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 def create_web_search_agent():
     """Create and use a web search agent"""
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 class MemoryChatbot:
     """Chatbot with persistent memory across sessions"""
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 ```python
 import os
 import asyncio
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 class MultiAgentOrchestrator:
     """Coordinate multiple agents without external frameworks"""
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 ```python
 import os
 import json
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 class CustomToolAgent:
     """Agent with custom tools defined via schema"""
@@ -384,7 +384,7 @@ if __name__ == "__main__":
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 class RAGSystem:
     """Retrieval-Augmented Generation using document library"""
@@ -472,7 +472,7 @@ if __name__ == "__main__":
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 def streaming_conversation():
     """Get real-time streaming responses"""
@@ -520,7 +520,7 @@ if __name__ == "__main__":
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 def branching_conversations():
     """Restart conversation from specific point"""
@@ -573,7 +573,7 @@ if __name__ == "__main__":
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 class ErrorHandlingExample:
     """Best practices for error handling"""
@@ -654,7 +654,7 @@ if __name__ == "__main__":
 
 ```python
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 class MistralAgentApp:
     """Complete application using Mistral Agents"""
