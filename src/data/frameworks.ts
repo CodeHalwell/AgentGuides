@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.84.1',
+    version: 'v1.85.0',
   },
   {
     id: 'openai-agents',
@@ -48,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.14.3',
+    version: 'v0.14.4',
   },
   {
     id: 'openai-agents-ts',
@@ -91,7 +91,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'conditional-routing'],
-    version: 'v1.1.8',
+    version: 'v1.1.9',
   },
   {
     id: 'langgraph-ts',
@@ -113,7 +113,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Intermediate',
     useCases: ['rag', 'search', 'knowledge-retrieval'],
-    version: 'v0.14.20',
+    version: 'v0.14.21',
   },
   {
     id: 'llamaindex-ts',
@@ -155,7 +155,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'v1.0.1',
+    version: 'core 1.1.0 · providers 1.0.0b260421',
   },
   {
     id: 'google-adk',
@@ -166,7 +166,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['gcp', 'gemini', 'multi-agent'],
-    version: 'v1.31.0',
+    version: 'v1.31.1',
   },
   {
     id: 'claude-sdk',
@@ -177,7 +177,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.1.63',
+    version: 'v0.1.64',
   },
   {
     id: 'claude-sdk-ts',
@@ -199,7 +199,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],
-    version: 'v2.4.0',
+    version: 'v2.4.1',
   },
   {
     id: 'semantic-kernel',
@@ -210,7 +210,7 @@ export const frameworks: Framework[] = [
     category: 'Enterprise',
     difficulty: 'Intermediate',
     useCases: ['enterprise', 'microsoft', 'plugins'],
-    version: 'Python 1.41.2 / .NET 1.74.0',
+    version: 'Python 1.36.0 / .NET 1.74.0',
   },
 ];
 

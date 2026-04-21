@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.11.5** · April 2026 · Python 3.10+
+    **v0.12.0** · April 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Research-grade multi-agent systems, GroupChat, event-driven conversations.
@@ -75,13 +75,18 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 ## Install, minimal example
 
 ```python
-from autogen import ConversableAgent, config_list_from_json
+from autogen import ConversableAgent, LLMConfig
 
-config_list = config_list_from_json("OAI_CONFIG_LIST")
+# Option A — inline config
+llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4o"})
+
+# Option B — load from OAI_CONFIG_LIST env var or file
+# llm_config = LLMConfig.from_json(env="OAI_CONFIG_LIST")
+# llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST.json")
 
 agent = ConversableAgent(
     name="assistant",
-    llm_config={"config_list": config_list},
+    llm_config=llm_config,
     system_message="You are a helpful assistant.",
 )
 
@@ -90,6 +95,8 @@ reply = agent.generate_reply(
 )
 print(reply)
 ```
+
+> `config_list_from_json` is **not** re-exported at the top of `autogen` in v0.11+. Use `LLMConfig` / `LLMConfig.from_json` (preferred) or the deep path `from autogen.llm_config.config import config_list_from_json`.
 
 Ready? **[Start Zero → Hero Step 1 →](./ag2_comprehensive_guide/#overview)**
 

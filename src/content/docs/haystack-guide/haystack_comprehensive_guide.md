@@ -2637,14 +2637,14 @@ result = pipeline.run({
 })
 ```
 
-## AgentToolInvoker (v2.23.0+)
+## ToolInvoker
 
-Declarative tool calling component that handles all tool execution logic:
+Declarative tool-calling component that handles all tool execution logic. Import path: `haystack.components.tools.ToolInvoker`. (An earlier draft of this page referred to this as `AgentToolInvoker (v2.23+)` — that class name does not exist in haystack-ai 2.28.0.)
 
 ```python
 from haystack.components.agents import Agent
+from haystack.components.tools import ToolInvoker
 from haystack.tools import ComponentTool
-from haystack import Pipeline
 
 # Define tools as Haystack components
 web_search = ComponentTool(
@@ -2653,7 +2653,11 @@ web_search = ComponentTool(
     description="Search the web for current information",
 )
 
+# Option A: pass tools to an Agent (Agent owns its own ToolInvoker internally)
 agent = Agent(chat_generator=chat_gen, tools=[web_search])
+
+# Option B: use ToolInvoker directly in a custom pipeline
+invoker = ToolInvoker(tools=[web_search], raise_on_failure=True)
 ```
 
 ## Revision History
@@ -2662,7 +2666,7 @@ agent = Agent(chat_generator=chat_gen, tools=[web_search])
 |---------|------|---------|
 | 2.27.0 | April 1, 2026 | Python 3.9 dropped (min 3.10); 42 new integrations; `ChatMessage` internal structure refactored |
 | 2.25.0 | February 2026 | `PipelineTool`, runtime tool injection, Jinja2 prompts, transformers v5 |
-| 2.23.0 | January 2026 | `AgentToolInvoker`, structured component outputs with Pydantic, native OpenAI Responses API |
+| 2.23.0 | January 2026 | `ToolInvoker` hardened (docs previously called this `AgentToolInvoker`), structured component outputs with Pydantic, native OpenAI Responses API |
 | 2.22.0 | December 2025 | `LLMRanker`, `GreedyVariadicRouterComponent`, incremental document store updates |
 | 2.21.0 | December 2025 | `SearchableToolset`, per-message cost tracking |
 | 2.19.0 | November 2025 | Previous documented version |

@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.84.1** · April 2026 · Python 3.10+
+    **v1.85.0** · April 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -96,7 +96,7 @@ class Answer(BaseModel):
     value: int
     reasoning: str
 
-agent = Agent('openai:gpt-4o', result_type=Answer)
+agent = Agent('openai:gpt-4o', output_type=Answer)
 
 result = agent.run_sync("What is 15 + 27?")
 print(result.data)  # Answer(value=42, reasoning='...')

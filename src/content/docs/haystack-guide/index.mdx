@@ -57,7 +57,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Error handling & resilience" href="./haystack_comprehensive_guide/#error-handling-and-resilience" />
   <LinkCard title="SearchableToolset (v2.21+)" href="./haystack_comprehensive_guide/#searchabletoolset-v2210" />
   <LinkCard title="LLMRanker (v2.22+)" href="./haystack_comprehensive_guide/#llmranker-v2220" />
-  <LinkCard title="AgentToolInvoker (v2.23+)" href="./haystack_comprehensive_guide/#agenttoolinvoker-v2230" />
+  <LinkCard title="ToolInvoker" href="./haystack_comprehensive_guide/#toolinvoker" />
   <LinkCard title="Provider-agnostic design" href="./haystack_comprehensive_guide/#provider-agnostic-design-philosophy" />
   <LinkCard title="Observability" href="./haystack_observability_python/" />
 </CardGrid>
@@ -79,16 +79,16 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 ## What's new in v2.28.0 (April 2026)
 
 - Stabilisation and bug fixes following 2.28 RCs.
-- `SearchableToolset`, `LLMRanker`, and `AgentToolInvoker` stabilised.
+- `SearchableToolset`, `LLMRanker`, and `ToolInvoker` stabilised.
 - Expanded provider support (Anthropic, Gemini, Mistral, Ollama).
 - Multi-agent guide published (October 2025).
 
 ## Install, minimal example
 
 ```python
+from haystack.components.agents import Agent
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
-from haystack import Agent
 
 agent = Agent(
     chat_generator=OpenAIChatGenerator(model="gpt-4o"),
