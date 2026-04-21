@@ -352,10 +352,10 @@ This documentation has been carefully researched and written to provide the most
 
 ---
 
-**Last Updated**: April 16, 2026
+**Last Updated**: April 20, 2026
 **Coverage**: LangGraph.js, TypeScript
 **Intended Audience**: Beginners to Advanced Developers
-**Target Production**: Node.js 18+, TypeScript 4.7+, `@langchain/langgraph` 1.2.8
+**Target Production**: Node.js 18+, TypeScript 4.7+, `@langchain/langgraph` 1.2.9
 
 Start your learning journey by opening **langchain_langgraph_comprehensive_guide.md** and beginning with the installation section!
 
@@ -365,6 +365,7 @@ Start your learning journey by opening **langchain_langgraph_comprehensive_guide
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-20 | 1.2.9 | Version pin updated to 1.2.9 (April 19, 2026); frameworks.ts metadata corrected to match guide header |
 | April 16, 2026 | 1.2.8 | Updated to v1.2.8; createReactAgent moved to @langgraphjs/toolkit; JSON Schema flexibility; ReducedValue / UntrackedValue types documented |
 | November 2025 | 1.0.2 | Initial TypeScript guide; stateful graphs; streaming; human-in-the-loop |
 

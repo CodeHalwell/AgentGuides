@@ -434,9 +434,39 @@ This comprehensive guide draws from:
 
 **Happy building with AG2! 🚀**
 
-*Last updated: November 2024*
-*Documentation version: 1.0 (AG2 0.2.x compatible)*
+*Last updated: April 2026*
+*Documentation version: 2.0 (AG2 0.12.0)*
 
+## ⚠️ Breaking Changes in AG2 v0.4+ (Migration from 0.2.x)
+
+AG2 has undergone significant architectural changes since the 0.2.x series this guide originally covered. The package is available as both `pyautogen` and `ag2` on PyPI; the `ag2` package is the recommended install going forward.
+
+```bash
+pip install ag2[openai]
+```
+
+Key changes since 0.2.x:
+- **Pydantic v2** is now required; Pydantic v1 is no longer supported.
+- **Python 3.10–3.13** required; Python 3.9 is no longer supported.
+- **`ConversableAgent` API** is largely stable but several internal hooks have moved — refer to the [AG2 migration docs](https://ag2ai.github.io/ag2/docs/Migration-Guide) for details.
+- **GroupChat speaker selection** now supports LLM-based, round-robin, random, and custom callable selectors via `speaker_selection_method`.
+- **Async-first orchestration** (`a_initiate_chat`, `a_run`) is recommended for production workloads.
+- **Agent-to-Agent (A2A) protocol** is available via the `ag2.interop` module for cross-framework communication.
+
+> **Current version:** AG2 0.12.0 (April 17, 2026). The guide prose and code examples reference 0.2.x patterns; the breaking changes section above documents the most critical differences. A full rewrite of examples for 0.12.x is deferred — see open items below.
+
+## 📋 Revision History
+
+| Date | Version | Summary of changes | Reviewer |
+|------|---------|-------------------|----------|
+| 2026-04-20 | 0.12.0 | Version metadata updated to 0.12.0; added breaking-changes section for 0.4+ migration (Pydantic v2, Python 3.10+, async-first, A2A interop); flagged prose/code examples as 0.2.x-era pending full rewrite | Claude routine |
+| November 2024 | 0.2.x | Initial guide; ConversableAgent; GroupChat; tools; sequential workflows | |
+
+---
+
+### Open Items (Human Review Required)
+
+- Full example rewrite for AG2 0.12.x API is out of scope for this routine pass; prose and code blocks still reference 0.2.x patterns. Recommend a dedicated rewrite sprint once 0.12.x is declared fully stable (currently approaching 1.0).
 
 ### Advanced Guides
 - autogen_advanced_multi_agent.md

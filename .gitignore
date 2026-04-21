@@ -63,3 +63,10 @@ Thumbs.db
 *.pid
 *.seed
 *.pid.lock
+
+# uv version-check environment
+uv.lock
+pyproject.toml
+.python-version
+hello.py
+main.py

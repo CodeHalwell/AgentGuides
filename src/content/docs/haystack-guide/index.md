@@ -8,7 +8,12 @@ framework: haystack
 
 > An extremely verbose, production-focused technical documentation covering Haystack from beginner to expert level, with emphasis on agentic AI, observability, and customisation.
 
-> **Current Version:** 2.27.0 (April 1, 2026) — previously 2.20.0 (November 2025)
+> **Current Version:** 2.28.0 (April 20, 2026) — previously 2.20.0 (November 2025)
+
+## 🆕 What's New in Haystack 2.28.0 (April 2026)
+
+- **Stable 2.28 release**: GA release following `2.28.0rc1` and `2.28.0rc2`; includes all features from the 2.27 line plus final stabilisation and bug fixes. Install with `pip install haystack-ai==2.28.0`.
+- For the full changelog see the [Haystack GitHub releases](https://github.com/deepset-ai/haystack/releases).
 
 ## 🆕 What's New in Haystack 2.21–2.27 (November 2025 → April 2026)
 
@@ -534,9 +539,9 @@ The goal is to be the most complete Haystack resource available while maintainin
 
 ---
 
-**Document Version**: 2.0  
-**Last Updated**: April 16, 2026  
-**Haystack Version**: 2.27.0  
+**Document Version**: 2.1  
+**Last Updated**: April 20, 2026  
+**Haystack Version**: 2.28.0  
 **Python Version**: 3.10+  
 **Status**: Production Ready
 
@@ -546,6 +551,7 @@ The goal is to be the most complete Haystack resource available while maintainin
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-20 | 2.28.0 | Version pin updated to 2.28.0 (GA release); verified via uv environment; frameworks.ts corrected from 2.15.0 to 2.28.0 |
 | April 16, 2026 | 2.27.0 | Updated to v2.27.0; added SearchableToolset, LLMRanker, PipelineTool sections; documented Python 3.9 deprecation; ChatMessage restructuring note; transformers v5 support |
 | November 2025 | 2.20.0 | Initial comprehensive guide |
 

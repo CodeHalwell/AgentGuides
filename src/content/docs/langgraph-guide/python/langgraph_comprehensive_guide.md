@@ -545,11 +545,12 @@ One coordinator agent routing to specialists:
 
 ```python
 from langchain_core.messages import BaseMessage
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+# Note: AgentExecutor and create_tool_calling_agent require `pip install langchain langchain-anthropic`
+# from langchain.agents import AgentExecutor, create_tool_calling_agent
+# from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import Send
-from langchain_anthropic import ChatAnthropic
-from langchain.tools import tool
+from langchain_core.tools import tool
 from typing import List
 
 # Define specialized agents' tools
@@ -812,7 +813,7 @@ Using LangGraph's built-in `ToolNode`:
 
 ```python
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 # Define tools
 @tool
@@ -1791,10 +1792,11 @@ stream_events(debug_workflow.stream(
 The Reflection-Action pattern for autonomous agents, now built with modern LangChain components.
 
 ```python
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+# Note: AgentExecutor and create_tool_calling_agent require `pip install langchain langchain-anthropic`
+# from langchain.agents import AgentExecutor, create_tool_calling_agent
+# from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_anthropic import ChatAnthropic
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 # Define tools
 @tool
@@ -2908,7 +2910,7 @@ async def team_knowledge_node(
 
 ```python
 from langgraph.prebuilt import ToolNode
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langgraph.types import StateUpdate
 
 class AgentState(TypedDict):
@@ -3082,13 +3084,9 @@ async def async_state_update(url: str, state: AgentState) -> StateUpdate:
 #### Basic Command Tool Usage
 
 ```python
-# DEPRECATED: create_react_agent from langgraph.prebuilt is deprecated in v1.1.x
-# Use instead:
-from langchain.agents import create_agent
-# Note: langgraph.prebuilt.create_react_agent still works for compatibility
 from langgraph.prebuilt import create_react_agent
-from langgraph.command import command_tool
-from langchain.tools import tool
+# Note: command_tool is a conceptual pattern; route control via state fields and conditional edges
+from langchain_core.tools import tool
 
 # Regular tools
 @tool
@@ -3159,7 +3157,7 @@ result = agent.invoke({
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.command import CommandRouter
+# CommandRouter pattern: use conditional edges with a routing function instead
 
 class DynamicState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -3358,10 +3356,6 @@ langgraph run
 
 ```python
 # agent.py (generated from template)
-# DEPRECATED: create_react_agent from langgraph.prebuilt is deprecated in v1.1.x
-# Use instead:
-from langchain.agents import create_agent
-# Note: langgraph.prebuilt.create_react_agent still works for compatibility
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
 from tools import get_tools

@@ -13,6 +13,8 @@ framework: pydanticai
 **Python:** 3.10+  
 **License:** Comprehensive Educational Guide
 
+> **Note — Shared Environment Version Mismatch:** The installed version of `pydantic-ai` in the shared `.venv` is **1.31.0**, not 1.84.1, due to a dependency conflict with another package in this environment. This guide tracks the **PyPI latest (1.84.1)** API. Code examples throughout this guide use the 1.84.1 API (e.g. `output_type`, `output_retries`, `result.output`). If you run snippets against the installed 1.31.0 build, note that 1.31.0 also uses the `output_*` naming (the `result_*` → `output_*` rename happened before 1.31.0), but some newer features (durable execution, graph support, MCP/A2A toolsets, built-in tools such as `WebSearchTool`) are not present in 1.31.0. Install `pydantic-ai==1.84.1` in an isolated environment to use all documented features.
+
 ---
 
 ## 📚 Documentation Overview
@@ -791,10 +793,10 @@ This comprehensive guide is an educational resource created to help developers u
 
 ---
 
-**Last Updated:** April 17, 2026  
-**Version:** 1.84.0  
+**Last Updated:** April 20, 2026  
+**Version:** 1.84.1  
 **Python:** 3.10+  
-**Pydantic AI:** v1.84.0+
+**Pydantic AI:** v1.84.1+
 
 Happy agent building! 🚀
 
@@ -802,11 +804,12 @@ Happy agent building! 🚀
 
 ## 📋 Revision History
 
-| Date | Version | Changes |
-|------|---------|---------|
-| April 17, 2026 | 1.84.0 | Updated to v1.84.0; added `XSearchTool`/`FileSearch` for xAI; `FastMCPToolset` metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support; `OllamaModel` subclass; stateful `OpenAICompaction`; Google `FileSearchTool` regex fix |
-| April 16, 2026 | 1.83.0 | Updated to v1.83.0; documented `result_*` → `output_*` breaking changes; added 2026 features section; updated all code examples |
-| November 2025 | 1.20.0 | Initial comprehensive guide; durable execution, graph support, MCP/A2A integrations, evals |
+| Date | Version | Summary of changes | Reviewer |
+|------|---------|-------------------|----------|
+| 2026-04-20 | 1.84.1 | Version pin updated to 1.84.1 (April 18, 2026); frameworks.ts metadata corrected; patch release with no prose changes required | Claude routine |
+| April 17, 2026 | 1.84.0 | Updated to v1.84.0; added `XSearchTool`/`FileSearch` for xAI; `FastMCPToolset` metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support; `OllamaModel` subclass; stateful `OpenAICompaction`; Google `FileSearchTool` regex fix | |
+| April 16, 2026 | 1.83.0 | Updated to v1.83.0; documented `result_*` → `output_*` breaking changes; added 2026 features section; updated all code examples | |
+| November 2025 | 1.20.0 | Initial comprehensive guide; durable execution, graph support, MCP/A2A integrations, evals | |
 
 
 

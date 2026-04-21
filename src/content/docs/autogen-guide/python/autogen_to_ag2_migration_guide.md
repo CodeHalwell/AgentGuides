@@ -74,7 +74,7 @@ That said, AG2 represents the future of the framework with:
 | **Governance** | Microsoft-led | Open governance |
 | **License** | MIT (pre-v0.3) | Apache 2.0 (v0.3+) |
 | **Package Name** | `autogen-agentchat` | `ag2` |
-| **Imports** | `import autogen` | `import autogen` (still works!) or `import ag2` |
+| **Imports** | `import autogen` | `import autogen` (still works!) or `from autogen import ...` (`ag2` package installs as the `autogen` module) |
 | **API** | Stable API | Same stable API |
 | **Features** | Core features | Core + 2025 enhancements |
 | **Community** | Growing | Larger, more active |
@@ -247,28 +247,28 @@ agent = autogen.ConversableAgent(
 
 **Advantage**: No code changes needed. Easy gradual migration.
 
-#### Option 2: Alias AG2 as AutoGen
+#### Option 2: Use Explicit Named Imports
 
 ```python
-# Import AG2 with AutoGen alias
-import ag2 as autogen
+# Use explicit named imports from the autogen module
+from autogen import ConversableAgent, config_list_from_json
 
-config_list = autogen.config_list_from_json("OAI_CONFIG_LIST.json")
+config_list = config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}
 
-agent = autogen.ConversableAgent(
+agent = ConversableAgent(
     name="my_agent",
     llm_config=llm_config
 )
 ```
 
-**Advantage**: Makes AG2 usage explicit while maintaining code compatibility.
+**Advantage**: Explicit imports make it clear which AG2 classes are used; avoids namespace collisions.
 
 #### Option 3: Full AG2 Imports
 
 ```python
 # Use AG2 imports directly
-from ag2 import ConversableAgent, AssistantAgent, UserProxyAgent
+from autogen import ConversableAgent, AssistantAgent, UserProxyAgent
 
 config_list = ConversableAgent.config_list_from_json("OAI_CONFIG_LIST.json")
 llm_config = {"config_list": config_list}

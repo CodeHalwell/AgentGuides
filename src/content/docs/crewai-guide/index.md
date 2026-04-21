@@ -58,8 +58,13 @@ Version 1.10.0 was yanked from PyPI. Use 1.10.1 or later.
 ## 🆕 What's New in v1.14.0 (April 7, 2026)
 
 - **Checkpoint System** (`CheckpointConfig` + `SqliteProvider`): save crew state at each task boundary; resume from the last checkpoint after failures
-  ```python
-  from crewai import Crew, CheckpointConfig
+
+  > ⚠️ **API status (verified 2026-04-20 against crewai 1.14.2):** `CheckpointConfig` was not found in the stable `crewai` 1.14.2 package via `uv` install. The checkpoint CLI commands (`crewai checkpoint list`, `crewai checkpoint info`) may be available; verify against the [official CrewAI docs](https://docs.crewai.com/) before using the Python API below.
+
+  ```text
+  # PSEUDO-CODE — CheckpointConfig not available in crewai 1.14.2 stable
+  # pip install crewai and verify API before using:
+  from crewai import Crew, CheckpointConfig  # ImportError in 1.14.2
   crew = Crew(
       agents=[...], tasks=[...],
       checkpoint_config=CheckpointConfig(provider="sqlite", db_path="crew.db")
@@ -454,13 +459,16 @@ Welcome to the future of collaborative AI systems!
 
 ## 📋 Revision History
 
-| Date | Version | Changes |
-|------|---------|---------|
-| April 16, 2026 | 1.14.0 | Updated to v1.14.0; documented CodeInterpreterTool removal; checkpoint system (SqliteProvider); structured Pydantic outputs; SSRF protections; RBAC; MCP custom servers; GPT-5/o-series stop parameter fix |
-| November 2025 | 1.5.0 | CrewAI Flows guide; MCP integration; memory systems; hierarchical processes |
+| Date | Version | Summary of changes | Reviewer |
+|------|---------|-------------------|----------|
+| 2026-04-20 | 1.14.2 | Version pin corrected to 1.14.2; added revision history entries for 1.14.1 and 1.14.2; footer metadata updated | Claude routine |
+| April 17, 2026 | 1.14.2 | Checkpoint forking with lineage tracking; `from_checkpoint` on `Agent.kickoff`; checkpoint CLI expanded; template management CLI; `reasoning_tokens` and `cache_creation_tokens` in token tracking; scoped streaming handlers; authlib/pypdf security patches; CVE-2026-39892 | |
+| April 9, 2026 | 1.14.1 | Async checkpoint TUI browser; streaming output context managers; `BaseProvider` as Pydantic `BaseModel`; dynamic tool field exclusion; CVE-2026-1839 transformers bump | |
+| April 7, 2026 | 1.14.0 | Updated to v1.14.0; documented CodeInterpreterTool removal; checkpoint system (SqliteProvider); structured Pydantic outputs; SSRF protections; RBAC; MCP custom servers; GPT-5/o-series stop parameter fix | |
+| November 2025 | 1.5.0 | CrewAI Flows guide; MCP integration; memory systems; hierarchical processes | |
 
-**Last Updated**: April 16, 2026
-**Version**: 1.14.0
+**Last Updated**: April 20, 2026
+**Version**: 1.14.2
 
 ---
 

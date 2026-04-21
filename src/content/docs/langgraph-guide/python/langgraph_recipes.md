@@ -634,7 +634,7 @@ Autonomous agent that reasons and acts:
 
 ```python
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 # Define specialized tools
 @tool
@@ -1339,9 +1339,8 @@ print(result["final_report"])
 
 ```python
 from langgraph.prebuilt import ToolNode, create_react_agent
-from langgraph.command import command_tool
 from langgraph.llm_hooks import pre_model_hook, post_model_hook
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langgraph.types import StateUpdate
 
 class ShoppingState(TypedDict):
@@ -1568,7 +1567,6 @@ print(f"LLM Cost: ${result['cost']:.4f}")
 ```python
 from langgraph.graph import StateGraph, START, END, deferred
 from langgraph.cache import cache_node
-from langgraph.command import command_tool
 
 class WorkflowState(TypedDict):
     workflow_id: str

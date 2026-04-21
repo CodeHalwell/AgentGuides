@@ -50,8 +50,6 @@ def build_graph():
 ## Error Routes and Dead Letters
 
 ```python
-from langgraph.errors import GraphRunError
-
 def runner(inputs: State):
     g = build_graph()
     app = g.compile()

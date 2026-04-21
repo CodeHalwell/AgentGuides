@@ -479,6 +479,7 @@ Choose your path above and dive in! Start with the [Comprehensive Guide](./micro
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-20 | 1.0.1 | frameworks.ts version pin corrected from '1.0 GA' to 'v1.0.1'; verified via `agent-framework` PyPI package (uv install) |
 | April 20, 2026 | 1.0.1 | Updated to v1.0.1 (April 10, 2026); bug fixes and stability improvements following GA launch |
 | April 16, 2026 | 1.0 GA | Updated to GA 1.0; `ChatClientAgentOptions.Instructions` removed; `--prerelease` flags removed; first-party connectors (Azure OpenAI, OpenAI, Anthropic, Bedrock, Gemini, Ollama); Azure App Service support |
 | November 2025 | 1.0 Preview | Initial guide; preview release; multi-agent orchestration; .NET and Python SDKs |

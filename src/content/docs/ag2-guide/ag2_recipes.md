@@ -1,12 +1,12 @@
 ---
 title: "AG2 (AutoGen) Recipes"
-description: "Version: 0.11.5 Last Updated: April 2026 Focus: Ready-to-Use Examples"
+description: "Version: 0.12.0 Last Updated: April 2026 Focus: Ready-to-Use Examples"
 framework: ag2
 ---
 
 # AG2 (AutoGen) Recipes
 
-**Version:** 0.11.5
+**Version:** 0.12.0
 **Last Updated:** April 2026
 **Focus:** Ready-to-Use Examples
 
@@ -19,7 +19,7 @@ This collection of recipes provides copy-pasteable code for common AG2 use cases
 A basic agent that chats with the user.
 
 ```python
-from ag2 import Agent, UserProxyAgent
+from autogen import Agent, UserProxyAgent
 
 assistant = Agent(name="assistant", system_message="You are a helpful AI assistant.")
 user_proxy = UserProxyAgent(name="user_proxy", human_input_mode="ALWAYS")
@@ -32,7 +32,7 @@ user_proxy.initiate_chat(assistant, message="Hello!")
 An agent that can write and execute Python code.
 
 ```python
-from ag2 import Agent, UserProxyAgent
+from autogen import Agent, UserProxyAgent
 
 assistant = Agent(
     name="coder",
@@ -52,7 +52,7 @@ user_proxy.initiate_chat(assistant, message="Plot a chart of NVDA stock price YT
 Two agents debating a topic.
 
 ```python
-from ag2 import Agent, GroupChat, GroupChatManager
+from autogen import Agent, GroupChat, GroupChatManager
 
 pro_agent = Agent(name="Pro", system_message="Argue in favor of remote work.")
 con_agent = Agent(name="Con", system_message="Argue against remote work.")
@@ -69,7 +69,7 @@ pro_agent.initiate_chat(manager, message="Let's debate remote work.")
 An agent that uses a calculator tool.
 
 ```python
-from ag2 import Agent, UserProxyAgent
+from autogen import Agent, UserProxyAgent
 
 def calculator(a: int, b: int, op: str) -> int:
     if op == "+": return a + b
