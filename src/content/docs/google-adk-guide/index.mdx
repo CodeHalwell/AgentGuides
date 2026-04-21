@@ -1,0 +1,65 @@
+---
+title: "Google ADK"
+description: "Google Agent Development Kit — GCP-native agents in Python, Go, and TypeScript."
+framework: google-adk
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+**Google's Agent Development Kit.** Build agents on Gemini with MCP, A2A, multi-agent orchestration, and native GCP IAM. Three language implementations share the same architecture.
+
+## Choose your language
+
+<CardGrid>
+  <LinkCard
+    title="🐍 Python"
+    href="/google-adk-guide/python/"
+    description="v1.31.0 · the reference implementation — full feature set, richest ecosystem."
+  />
+  <LinkCard
+    title="🐹 Go"
+    href="/google-adk-guide/go/"
+    description="v1.0.0 GA · stable APIs, goroutine-first orchestration, idiomatic Go."
+  />
+  <LinkCard
+    title="📘 TypeScript"
+    href="/google-adk-guide/typescript/"
+    description="v0.6.1 · active development — same architecture, Node + browser."
+  />
+</CardGrid>
+
+## What you'll find in each guide
+
+<CardGrid>
+  <Card title="LLMAgent" icon="rocket">
+    Core agent primitive — Gemini and other LLMs via `google-genai`.
+  </Card>
+  <Card title="Multi-agent orchestration" icon="random">
+    Orchestrator routing, specialist delegation.
+  </Card>
+  <Card title="Tools system" icon="setting">
+    Function tools, Google Cloud service tools, custom tools.
+  </Card>
+  <Card title="MCP" icon="puzzle">
+    Model Context Protocol client + server.
+  </Card>
+  <Card title="A2A protocol" icon="approve-check">
+    Cross-framework agent interop.
+  </Card>
+  <Card title="GCP IAM" icon="seti:lock">
+    Workload Identity, service accounts, VPC integration.
+  </Card>
+</CardGrid>
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | Py 1.31 / Go 1.0 / TS 0.6.1 | Parent index redesigned as language selector. |
+| April 2026 | Go 1.0 GA | Go SDK graduated to v1.0 GA. |
+| November 2025 | Py 1.18 / Go 0.1 | Initial multi-language guide. |

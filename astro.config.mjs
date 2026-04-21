@@ -56,7 +56,15 @@ export default defineConfig({
             { label: 'OpenAI Agents SDK (Python)', link: '/openai-agents-sdk-guides/' },
             { label: 'OpenAI Agents SDK (TypeScript)', link: '/openai-agents-sdk-typescript-guide/' },
             { label: 'CrewAI', link: '/crewai-guide/' },
-            { label: 'AutoGen / AG2', link: '/autogen-guide/' },
+            {
+              label: 'AutoGen / AG2',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/autogen-guide/' },
+                { label: 'AutoGen / AG2 (Python)', link: '/autogen-guide/python/' },
+                { label: 'AG2 (features-focused)', link: '/ag2-guide/' },
+              ],
+            },
             {
               label: 'LangGraph (Python)',
               collapsed: true,
@@ -101,8 +109,15 @@ export default defineConfig({
           label: 'Data & Knowledge',
           collapsed: true,
           items: [
-            { label: 'LlamaIndex (Python)', link: '/llamaindex-guide/python/' },
-            { label: 'LlamaIndex (TypeScript)', link: '/llamaindex-guide/typescript/' },
+            {
+              label: 'LlamaIndex',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/llamaindex-guide/' },
+                { label: 'Python', link: '/llamaindex-guide/python/' },
+                { label: 'TypeScript', link: '/llamaindex-guide/typescript/' },
+              ],
+            },
             { label: 'Haystack', link: '/haystack-guide/' },
             { label: 'PydanticAI', link: '/pydanticai-guide/' },
           ],
@@ -133,7 +148,16 @@ export default defineConfig({
                 { label: '.NET', link: '/microsoft-agent-framework-guide/dotnet/' },
               ],
             },
-            { label: 'Google ADK', link: '/google-adk-guide/' },
+            {
+              label: 'Google ADK',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/google-adk-guide/' },
+                { label: 'Python', link: '/google-adk-guide/python/' },
+                { label: 'Go', link: '/google-adk-guide/go/' },
+                { label: 'TypeScript', link: '/google-adk-guide/typescript/' },
+              ],
+            },
           ],
         },
         {
@@ -149,7 +173,15 @@ export default defineConfig({
           label: 'Enterprise & Lightweight',
           collapsed: true,
           items: [
-            { label: 'Semantic Kernel', link: '/semantic-kernel-guide/' },
+            {
+              label: 'Semantic Kernel',
+              collapsed: true,
+              items: [
+                { label: 'Overview', link: '/semantic-kernel-guide/' },
+                { label: 'Python', link: '/semantic-kernel-guide/python/' },
+                { label: '.NET', link: '/semantic-kernel-guide/dotnet/' },
+              ],
+            },
             { label: 'SmolAgents', link: '/smolagents-guide/' },
           ],
         },

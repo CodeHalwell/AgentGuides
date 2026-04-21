@@ -1,0 +1,117 @@
+---
+title: "Mistral Agents API"
+description: "Mistral's hosted Agents API with connectors, MCP, orchestration, and FastAPI streaming."
+framework: mistral
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Mistral's hosted Agents API.** Launched May 2025 — server-managed agents with built-in connectors (web search, code interpreter, document QA), MCP support, and multi-agent orchestration. Think OpenAI Assistants but for Mistral models.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install mistralai
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **mistralai 2.4.0** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Mistral-native workloads, hosted agents with connectors, MCP-heavy flows.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="v1 → v2 SDK break">
+  The v1.x and v2.x SDKs have incompatible APIs. Code on v1.x needs updating — see the revision history in the [comprehensive guide](./mistral_agents_api_comprehensive_guide/).
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Agent lifecycle" href="./mistral_agents_api_comprehensive_guide/#1-agent-lifecycle-diagram" description="Create, invoke, converse, destroy · 15 min" />
+  <LinkCard title="2 · Conversation flow" href="./mistral_agents_api_comprehensive_guide/#2-conversation-flow-diagram" description="Messages, threads, history · 15 min" />
+  <LinkCard title="3 · Multi-agent orchestration" href="./mistral_agents_api_orchestration_guide/" description="Supervisor, specialist routing · 25 min" />
+  <LinkCard title="4 · Tool execution" href="./mistral_agents_api_comprehensive_guide/#4-tool-execution-workflow" description="Function calling, validation · 20 min" />
+  <LinkCard title="5 · Connectors" href="./mistral_agents_api_connectors_guide/" description="Web search, code interp, doc QA · 20 min" />
+  <LinkCard title="6 · MCP integration" href="./mistral_agents_api_mcp_guide/" description="MCP client + server patterns · 20 min" />
+  <LinkCard title="7 · Memory & state" href="./mistral_agents_api_comprehensive_guide/#6-memory-persistence-architecture" description="Threads, persistence · 15 min" />
+  <LinkCard title="8 · Request/response pipeline" href="./mistral_agents_api_comprehensive_guide/#5-requestresponse-processing-pipeline" description="Under the hood · 15 min" />
+  <LinkCard title="9 · Advanced Python patterns" href="./mistral_agents_api_advanced_python/" description="Async, batching, error handling · 20 min" />
+  <LinkCard title="10 · Streaming (FastAPI)" href="./mistral_streaming_server_fastapi/" description="SSE streaming server · 20 min" />
+  <LinkCard title="11 · Production" href="./mistral_agents_api_production_guide/" description="Deployment, monitoring · 25 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent lifecycle" href="./mistral_agents_api_comprehensive_guide/#1-agent-lifecycle-diagram" />
+  <LinkCard title="Conversation flow" href="./mistral_agents_api_comprehensive_guide/#2-conversation-flow-diagram" />
+  <LinkCard title="Multi-agent orchestration" href="./mistral_agents_api_orchestration_guide/" />
+  <LinkCard title="Connectors" href="./mistral_agents_api_connectors_guide/" />
+  <LinkCard title="MCP" href="./mistral_agents_api_mcp_guide/" />
+  <LinkCard title="Tool execution workflow" href="./mistral_agents_api_comprehensive_guide/#4-tool-execution-workflow" />
+  <LinkCard title="Memory architecture" href="./mistral_agents_api_comprehensive_guide/#6-memory-persistence-architecture" />
+  <LinkCard title="Agent configuration schema" href="./mistral_agents_api_comprehensive_guide/#9-agent-configuration-schema" />
+  <LinkCard title="Advanced Python" href="./mistral_agents_api_advanced_python/" />
+  <LinkCard title="May 2025 launch updates" href="./may_2025_launch_updates/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./mistral_agents_api_comprehensive_guide/" description="Single-page technical reference + diagrams." />
+  <LinkCard title="Connectors guide" href="./mistral_agents_api_connectors_guide/" description="Built-in connectors." />
+  <LinkCard title="Orchestration guide" href="./mistral_agents_api_orchestration_guide/" description="Multi-agent patterns." />
+  <LinkCard title="MCP guide" href="./mistral_agents_api_mcp_guide/" />
+  <LinkCard title="Advanced Python" href="./mistral_agents_api_advanced_python/" />
+  <LinkCard title="Recipes" href="./mistral_agents_api_recipes/" />
+  <LinkCard title="Diagrams" href="./mistral_agents_api_diagrams/" />
+  <LinkCard title="Production guide" href="./mistral_agents_api_production_guide/" />
+  <LinkCard title="Streaming server (FastAPI)" href="./mistral_streaming_server_fastapi/" />
+  <LinkCard title="May 2025 launch updates" href="./may_2025_launch_updates/" />
+</CardGrid>
+
+## What's new in v2.4.0 (April 2026)
+
+- **v2 SDK** with refined async patterns.
+- **Connectors** — web search, code interpreter, document QA.
+- **MCP** client and server support.
+- **Orchestration** — multi-agent coordination patterns.
+
+## Install, minimal example
+
+```python
+import os
+from mistralai import Mistral
+
+client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+
+agent = client.beta.agents.create(
+    model="mistral-large-latest",
+    name="Assistant",
+    instructions="You are a helpful assistant.",
+)
+
+conversation = client.beta.conversations.start(
+    agent_id=agent.id,
+    inputs="What is 15 + 27?",
+)
+print(conversation.outputs[0].content)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./mistral_agents_api_comprehensive_guide/#1-agent-lifecycle-diagram)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | mistralai 2.4.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 2026 | mistralai 2.4.0 | v2 SDK stabilised; connectors; MCP; orchestration. |
+| May 2025 | Launch | Agents API public launch. |

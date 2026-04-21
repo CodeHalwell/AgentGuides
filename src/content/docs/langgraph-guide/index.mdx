@@ -1,0 +1,65 @@
+---
+title: "LangGraph"
+description: "Stateful, graph-based agents for LLM apps — pick your language."
+framework: langgraph
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+**Low-level orchestration for stateful, long-running LLM agents.** Explicit state, durable checkpoints, conditional routing, human-in-the-loop. Available in Python and TypeScript with identical mental models.
+
+## Choose your language
+
+<CardGrid>
+  <LinkCard
+    title="🐍 Python"
+    href="/langgraph-guide/python/"
+    description="v1.1.8 · chaptered Zero → Hero tutorial with 10 paginated chapters."
+  />
+  <LinkCard
+    title="📘 TypeScript"
+    href="/langgraph-guide/typescript/"
+    description="v1.2.9 · type-safe streaming, ReducedValue, toolkit package."
+  />
+</CardGrid>
+
+## What you'll find in both guides
+
+<CardGrid>
+  <Card title="Core concepts" icon="puzzle">
+    State, nodes, edges, compilation — the four primitives.
+  </Card>
+  <Card title="Multi-agent" icon="random">
+    Supervisor, parallel workers, handoff patterns.
+  </Card>
+  <Card title="Memory" icon="information">
+    Checkpointers for short-term, Stores for cross-thread memory.
+  </Card>
+  <Card title="Middleware" icon="setting">
+    Pre/post model hooks for guardrails, rate limiting, logging.
+  </Card>
+  <Card title="Human-in-the-loop" icon="approve-check">
+    Interrupts, multi-stage approvals, time-travel debugging.
+  </Card>
+  <Card title="Production" icon="rocket">
+    Docker, Kubernetes, observability, LangGraph Cloud.
+  </Card>
+</CardGrid>
+
+## Not sure which language?
+
+- **Python** has the larger ecosystem, more recipes, and the tutorial has been split into 10 paginated chapters for a true zero-to-hero walkthrough.
+- **TypeScript** is best if your app is already Node/browser — identical primitives, full type safety.
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | Python 1.1.8 / TS 1.2.9 | Parent index redesigned as language selector. |
+| April 16, 2026 | Python 1.1.6 / TS 1.2.8 | Python 3.9 dropped; type-safe v2 API; toolkit package. |
+| November 2025 | Python 1.0.3 / TS 1.0.2 | Initial multi-language guide. |

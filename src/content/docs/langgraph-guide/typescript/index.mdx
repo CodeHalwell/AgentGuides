@@ -1,0 +1,123 @@
+---
+title: "LangGraph (TypeScript)"
+description: "Stateful, graph-based agents for TypeScript — type-safe streaming, node caching, cross-thread memory, and middleware hooks."
+framework: langgraph
+language: typescript
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**TypeScript port of LangGraph.** Same graph-based mental model as the Python version — explicit state, durable checkpoints, conditional routing — with type-safe streaming, `ReducedValue`/`UntrackedValue` types, and the `@langgraphjs/toolkit` prebuilt agent package.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @langchain/langgraph
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.2.9** · April 2026 · Node 18+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Cycles, conditional routing, multi-agent coordination, streaming servers.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  New? Follow Zero → Hero. Coming from the Python guide? The primitives are identical; jump to **TypeScript-specific features** to catch the TS extras.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Core fundamentals" href="./langchain_langgraph_comprehensive_guide/#core-fundamentals" description="Install, state, nodes, edges, compile · 20 min" />
+  <LinkCard title="2 · Simple agents (LangChain.js)" href="./langchain_langgraph_comprehensive_guide/#simple-agents-langchainjs" description="LangChain.js primitives · 20 min" />
+  <LinkCard title="3 · Simple agents (LangGraph.js)" href="./langchain_langgraph_comprehensive_guide/#simple-agents-langgraphjs" description="StateGraph, first LangGraph agent · 25 min" />
+  <LinkCard title="4 · Multi-agent systems" href="./langchain_langgraph_comprehensive_guide/#multi-agent-systems" description="Supervisor, parallel, handoff · 25 min" />
+  <LinkCard title="5 · Tools integration" href="./langchain_langgraph_comprehensive_guide/#tools-integration" description="Tool node, custom tools · 20 min" />
+  <LinkCard title="6 · Structured output" href="./langchain_langgraph_comprehensive_guide/#structured-output" description="Zod schemas, validation · 15 min" />
+  <LinkCard title="7 · Type-safe streaming (v0.3+)" href="./langchain_langgraph_comprehensive_guide/#type-safe-stream-method-v03" description="Stream modes, typed events · 20 min" />
+  <LinkCard title="8 · Node caching" href="./langchain_langgraph_comprehensive_guide/#node-caching" description="Skip redundant work · 15 min" />
+  <LinkCard title="9 · Deferred nodes" href="./langchain_langgraph_comprehensive_guide/#deferred-nodes" description="Fan-in aggregation · 15 min" />
+  <LinkCard title="10 · Middleware (hooks)" href="./langgraph_middleware_typescript/" description="Pre/post model hooks · 20 min" />
+  <LinkCard title="11 · Cross-thread memory" href="./langchain_langgraph_comprehensive_guide/#cross-thread-memory-support" description="Shared memory across sessions · 15 min" />
+  <LinkCard title="12 · Streaming (Express)" href="./langgraph_streaming_server_express/" description="SSE streaming server · 20 min" />
+  <LinkCard title="13 · Production" href="./langchain_langgraph_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="State graph" href="./langchain_langgraph_comprehensive_guide/#core-fundamentals" />
+  <LinkCard title="Tools integration" href="./langchain_langgraph_comprehensive_guide/#tools-integration" />
+  <LinkCard title="Type-safe streaming" href="./langchain_langgraph_comprehensive_guide/#type-safe-stream-method-v03" />
+  <LinkCard title="addNode / addSequence" href="./langchain_langgraph_comprehensive_guide/#addnode-and-addsequence-methods" />
+  <LinkCard title="Node caching" href="./langchain_langgraph_comprehensive_guide/#node-caching" />
+  <LinkCard title="Deferred nodes" href="./langchain_langgraph_comprehensive_guide/#deferred-nodes" />
+  <LinkCard title="Pre/post model hooks" href="./langchain_langgraph_comprehensive_guide/#prepost-model-hooks" />
+  <LinkCard title="Middleware (dedicated)" href="./langgraph_middleware_typescript/" />
+  <LinkCard title="Cross-thread memory" href="./langchain_langgraph_comprehensive_guide/#cross-thread-memory-support" />
+  <LinkCard title="New type utilities (v1.2)" href="./langchain_langgraph_comprehensive_guide/#new-type-utilities-v12x" />
+  <LinkCard title="Observability" href="./langgraph_observability_typescript/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./langchain_langgraph_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Middleware" href="./langgraph_middleware_typescript/" />
+  <LinkCard title="Observability" href="./langgraph_observability_typescript/" />
+  <LinkCard title="Recipes" href="./langchain_langgraph_recipes/" />
+  <LinkCard title="Diagrams" href="./langchain_langgraph_diagrams/" />
+  <LinkCard title="Production guide" href="./langchain_langgraph_production_guide/" />
+  <LinkCard title="Streaming server (Express)" href="./langgraph_streaming_server_express/" />
+</CardGrid>
+
+## What's new in v1.2.9 (April 2026)
+
+- **Standard JSON Schema support** (Zod 4, Valibot, ArkType) — removes validator lock-in.
+- **`ReducedValue` type** — custom reducers with separate input/output schemas.
+- **`UntrackedValue` type** — transient per-run state that isn't checkpointed.
+- **`@langgraphjs/toolkit`** — new package for prebuilt agents like `createReactAgent`.
+
+<Aside type="caution" title="Where did createReactAgent go?">
+  `createReactAgent` moved from `@langchain/langgraph/prebuilt` to the new `@langgraphjs/toolkit` package. The old path still warns; migrate when convenient.
+</Aside>
+
+## Install, minimal example
+
+```typescript
+import { StateGraph, START, END, MemorySaver } from '@langchain/langgraph';
+import { BaseMessage } from '@langchain/core/messages';
+
+type State = { messages: BaseMessage[] };
+
+const graph = new StateGraph<State>({ channels: { messages: { reducer: (a, b) => [...a, ...b] } } })
+  .addNode('respond', async (state) => ({ messages: [/* ... */] }))
+  .addEdge(START, 'respond')
+  .addEdge('respond', END)
+  .compile({ checkpointer: new MemorySaver() });
+
+const result = await graph.invoke(
+  { messages: [] },
+  { configurable: { thread_id: 'session-1' } }
+);
+console.log(result);
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./langchain_langgraph_comprehensive_guide/#core-fundamentals)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.2.9 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 19, 2026 | 1.2.9 | Standard JSON Schema; new type utilities; toolkit package. |
+| November 2025 | 1.0.2 | Initial TypeScript guide. |
+
+**Note:** Python implementation lives at [LangGraph (Python)](/langgraph-guide/python/).

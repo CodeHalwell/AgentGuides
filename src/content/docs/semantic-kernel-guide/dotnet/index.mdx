@@ -1,0 +1,115 @@
+---
+title: "Semantic Kernel (.NET)"
+description: "Microsoft Semantic Kernel for .NET — plugins, planners, memory, MCP, A2A, and ASP.NET Core integration."
+framework: semantic-kernel
+language: dotnet
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Microsoft's enterprise SDK for .NET.** Semantic Kernel for C# brings plugins, planners, vector stores, MCP, and A2A into your ASP.NET Core, Azure Functions, and desktop apps with full Polly resilience and Application Insights observability.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    dotnet add package Microsoft.SemanticKernel
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.74.0** · April 2026 · .NET 6.0+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Azure-native .NET apps, enterprise plugins, ASP.NET integrations.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Agent Framework or Semantic Kernel?">
+  Microsoft Agent Framework unifies SK + AutoGen. For new projects, consider [Agent Framework (.NET)](/microsoft-agent-framework-guide/dotnet/). Semantic Kernel has the richer plugin/planner ecosystem today.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Installation & setup" href="./semantic_kernel_comprehensive_dotnet/#1-installation--setup" description="NuGet, builder, auth · 15 min" />
+  <LinkCard title="2 · Kernel initialization" href="./semantic_kernel_comprehensive_dotnet/#2-kernel-initialization" description="Builder, services · 15 min" />
+  <LinkCard title="3 · Service configuration" href="./semantic_kernel_comprehensive_dotnet/#3-service-configuration" description="Azure OpenAI, HuggingFace · 15 min" />
+  <LinkCard title="4 · Functions & plugins" href="./semantic_kernel_comprehensive_dotnet/#4-functions--plugins" description="Semantic + native functions · 25 min" />
+  <LinkCard title="5 · Agents & multi-agent" href="./semantic_kernel_comprehensive_dotnet/#5-agents--multi-agent-systems" description="ChatCompletionAgent, group chat · 25 min" />
+  <LinkCard title="6 · Memory & vector stores v1.34" href="./semantic_kernel_comprehensive_dotnet/#6-memory--vector-stores-v134" description="New vector store API · 20 min" />
+  <LinkCard title="7 · Planners" href="./semantic_kernel_comprehensive_dotnet/#7-planners" description="Sequential, Stepwise · 20 min" />
+  <LinkCard title="8 · MCP (March 2025)" href="./semantic_kernel_comprehensive_dotnet/#8-model-context-protocol-mcp---march-2025" description="MCP client + server · 20 min" />
+  <LinkCard title="9 · Google A2A protocol" href="./semantic_kernel_comprehensive_dotnet/#9-google-a2a-protocol" description="Cross-framework interop · 20 min" />
+  <LinkCard title="10 · Agent Framework bridge" href="./semantic_kernel_comprehensive_dotnet/#10-microsoft-agent-framework---march-2025" description="SK ↔ Agent Framework · 15 min" />
+  <LinkCard title="11 · Structured output" href="./semantic_kernel_comprehensive_dotnet/#11-structured-output" description="Validated JSON output · 15 min" />
+  <LinkCard title="12 · Error handling (Polly)" href="./semantic_kernel_comprehensive_dotnet/#12-error-handling--resilience-polly" description="Retry, circuit breaker · 15 min" />
+  <LinkCard title="13 · Observability (App Insights)" href="./semantic_kernel_comprehensive_dotnet/#13-observability-application-insights" description="Distributed tracing · 15 min" />
+  <LinkCard title="14 · ASP.NET Core integration" href="./semantic_kernel_comprehensive_dotnet/#14-aspnet-core-integration" description="DI, hosting, controllers · 20 min" />
+  <LinkCard title="15 · Best practices" href="./semantic_kernel_comprehensive_dotnet/#15-best-practices" description="Security, cost, patterns · 15 min" />
+  <LinkCard title="16 · Production" href="./semantic_kernel_production_dotnet/" description="Deployment, scaling · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Kernel initialization" href="./semantic_kernel_comprehensive_dotnet/#2-kernel-initialization" />
+  <LinkCard title="Functions & plugins" href="./semantic_kernel_comprehensive_dotnet/#4-functions--plugins" />
+  <LinkCard title="Agents & multi-agent" href="./semantic_kernel_comprehensive_dotnet/#5-agents--multi-agent-systems" />
+  <LinkCard title="Vector stores v1.34" href="./semantic_kernel_comprehensive_dotnet/#6-memory--vector-stores-v134" />
+  <LinkCard title="Planners" href="./semantic_kernel_comprehensive_dotnet/#7-planners" />
+  <LinkCard title="MCP" href="./semantic_kernel_comprehensive_dotnet/#8-model-context-protocol-mcp---march-2025" />
+  <LinkCard title="A2A protocol" href="./semantic_kernel_comprehensive_dotnet/#9-google-a2a-protocol" />
+  <LinkCard title="Agent Framework bridge" href="./semantic_kernel_comprehensive_dotnet/#10-microsoft-agent-framework---march-2025" />
+  <LinkCard title="Polly resilience" href="./semantic_kernel_comprehensive_dotnet/#12-error-handling--resilience-polly" />
+  <LinkCard title="ASP.NET Core" href="./semantic_kernel_comprehensive_dotnet/#14-aspnet-core-integration" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive (.NET)" href="./semantic_kernel_comprehensive_dotnet/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="./semantic_kernel_recipes_dotnet/" />
+  <LinkCard title="Diagrams" href="./semantic_kernel_diagrams_dotnet/" />
+  <LinkCard title="Production guide" href="./semantic_kernel_production_dotnet/" />
+</CardGrid>
+
+## What's new in v1.74.0 (April 2026)
+
+- **Vector stores v1.34** — new abstractions with pluggable providers.
+- **MCP client + server** (March 2025).
+- **Google A2A protocol** integration.
+- **Microsoft Agent Framework** bridge for gradual migration.
+- **Polly v8** resilience patterns.
+
+## Install, minimal example
+
+```csharp
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+
+var builder = Kernel.CreateBuilder();
+builder.AddOpenAIChatCompletion("gpt-4o", Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
+var kernel = builder.Build();
+
+var chat = kernel.GetRequiredService<IChatCompletionService>();
+var history = new ChatHistory("You are a helpful assistant.");
+history.AddUserMessage("What is 15 + 27?");
+
+var result = await chat.GetChatMessageContentAsync(history, kernel: kernel);
+Console.WriteLine(result.Content);
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./semantic_kernel_comprehensive_dotnet/#1-installation--setup)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.74.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 2026 | 1.74.0 | Vector stores v1.34; MCP; A2A; Agent Framework bridge. |
+
+**Other languages:** [Python](/semantic-kernel-guide/python/).

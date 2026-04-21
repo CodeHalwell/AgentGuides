@@ -1,0 +1,118 @@
+---
+title: "Amazon Bedrock Agents"
+description: "AWS-native agent platform with AgentCore runtime, Strands SDK, multi-agent collaboration, and A2A protocol."
+framework: amazon-bedrock
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**AWS-native agents on Bedrock.** Two coexisting stacks: **AgentCore** (the managed runtime with secure sandboxes) and **Strands SDK** (the open-source Python/TypeScript framework). Plus multi-agent collaboration, A2A protocol, and native IAM.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install boto3 strands-agents
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **Strands 1.36.0** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    AWS-native workloads, secure sandboxed agents, enterprise IAM.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Two stacks, one platform">
+  **AgentCore** runs hosted agents with sandboxed runtimes. **Strands SDK** is what you write locally. Pick AgentCore for managed infrastructure; pick Strands for full control.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Introduction to AgentCore" href="./bedrock_agentcore_comprehensive_guide/#introduction-to-agentcore" description="What it is, why AWS built it · 10 min" />
+  <LinkCard title="2 · Core features" href="./bedrock_agentcore_comprehensive_guide/#core-features" description="Identity, memory, tools, observability · 20 min" />
+  <LinkCard title="3 · AgentCore architecture" href="./bedrock_agentcore_comprehensive_guide/#agentcore-architecture" description="Runtime, control plane, data plane · 15 min" />
+  <LinkCard title="4 · Getting started" href="./bedrock_agentcore_comprehensive_guide/#getting-started" description="First agent via AgentCore · 20 min" />
+  <LinkCard title="5 · Secure sandbox runtime" href="./bedrock_agentcore_comprehensive_guide/#secure-sandbox-runtime" description="Isolation model, code execution · 15 min" />
+  <LinkCard title="6 · Strands SDK" href="./bedrock_strands_sdk_guide/" description="Local/OSS Python + TypeScript SDK · 30 min" />
+  <LinkCard title="7 · Multi-agent collaboration" href="./bedrock_agents_advanced_multi_agent_python/" description="Supervisor, specialists, routing · 25 min" />
+  <LinkCard title="8 · Tools & integrations" href="./bedrock_agentcore_comprehensive_guide/#integration-patterns" description="Lambda, API Gateway, S3, DynamoDB · 20 min" />
+  <LinkCard title="9 · A2A protocol" href="./bedrock_a2a_protocol_guide/" description="Cross-framework agent interop · 20 min" />
+  <LinkCard title="10 · Security & IAM" href="./bedrock_security_iam_examples/" description="IAM roles, policies, VPC · 20 min" />
+  <LinkCard title="11 · Production" href="./bedrock_agents_production_guide/" description="Deployment, scaling, cost · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="AgentCore runtime" href="./bedrock_agentcore_comprehensive_guide/#agentcore-architecture" />
+  <LinkCard title="Secure sandbox" href="./bedrock_agentcore_comprehensive_guide/#secure-sandbox-runtime" />
+  <LinkCard title="Strands SDK" href="./bedrock_strands_sdk_guide/" />
+  <LinkCard title="Multi-agent collaboration" href="./bedrock_agents_advanced_multi_agent_python/" />
+  <LinkCard title="A2A protocol" href="./bedrock_a2a_protocol_guide/" />
+  <LinkCard title="Middleware" href="./bedrock_agents_middleware_python/" />
+  <LinkCard title="Error handling" href="./bedrock_agents_error_handling_python/" />
+  <LinkCard title="Observability" href="./bedrock_agents_observability_python/" />
+  <LinkCard title="Security & IAM" href="./bedrock_security_iam_examples/" />
+  <LinkCard title="March 2025 updates" href="./march_2025_updates_summary/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Bedrock Agents comprehensive" href="./bedrock_agents_comprehensive_guide/" description="Classic Bedrock Agents API." />
+  <LinkCard title="AgentCore comprehensive" href="./bedrock_agentcore_comprehensive_guide/" description="2025 managed runtime." />
+  <LinkCard title="Strands SDK guide" href="./bedrock_strands_sdk_guide/" />
+  <LinkCard title="A2A protocol guide" href="./bedrock_a2a_protocol_guide/" />
+  <LinkCard title="Advanced multi-agent" href="./bedrock_agents_advanced_multi_agent_python/" />
+  <LinkCard title="Middleware (Python)" href="./bedrock_agents_middleware_python/" />
+  <LinkCard title="Error handling" href="./bedrock_agents_error_handling_python/" />
+  <LinkCard title="Observability" href="./bedrock_agents_observability_python/" />
+  <LinkCard title="Security & IAM examples" href="./bedrock_security_iam_examples/" />
+  <LinkCard title="Recipes" href="./bedrock_agents_recipes/" />
+  <LinkCard title="Diagrams" href="./bedrock_agents_diagrams/" />
+  <LinkCard title="Production guide" href="./bedrock_agents_production_guide/" />
+  <LinkCard title="March 2025 updates" href="./march_2025_updates_summary/" />
+</CardGrid>
+
+## What's new (April 2026 / March 2025 GA)
+
+- **Strands SDK 1.36** with expanded tool library, refined tracing, TypeScript parity.
+- **AgentCore GA** — secure sandbox runtimes, managed memory, identity via AWS IAM.
+- **Multi-agent collaboration** — supervisor-style routing between Bedrock agents.
+- **A2A protocol** — interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK.
+
+## Install, minimal example
+
+```python
+import boto3
+
+client = boto3.client("bedrock-agent-runtime")
+
+response = client.invoke_agent(
+    agentId="AGENT_ID",
+    agentAliasId="ALIAS_ID",
+    sessionId="session-1",
+    inputText="Help me analyse Q3 sales data.",
+)
+
+for event in response["completion"]:
+    print(event)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./bedrock_agentcore_comprehensive_guide/#introduction-to-agentcore)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | Strands 1.36 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 17, 2026 | Strands 1.36.0 | Expanded tool library, refined tracing, TS parity. |
+| March 2025 | AgentCore GA | Secure sandbox runtimes; managed memory; multi-agent collaboration. |
+| November 2025 | Strands ~1.0 | Initial SDK documentation. |

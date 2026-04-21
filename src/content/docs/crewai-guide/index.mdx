@@ -1,0 +1,127 @@
+---
+title: "CrewAI"
+description: "Role-based autonomous agent teams with Flows, MCP, and checkpoint resume."
+framework: crewai
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Role-based multi-agent orchestration.** Define agents with roles, goals, and backstories; chain them into crews with sequential or hierarchical processes. CrewAI Flows add event-driven workflows; checkpoints let you resume long-running crews.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install "crewai[tools]"
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.14.2** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Team simulations, research pipelines, content creation, analyst crews.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  Follow **Zero → Hero** for the tutorial path, or **Jump to a topic** if you already know what you need.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Core fundamentals" href="./crewai_comprehensive_guide/#core-fundamentals" description="Install, LLM config, initialisation · 15 min" />
+  <LinkCard title="2 · Your first agent" href="./crewai_comprehensive_guide/#simple-agents" description="Role, goal, backstory, single-agent crews · 20 min" />
+  <LinkCard title="3 · Multi-agent crews" href="./crewai_comprehensive_guide/#multi-agent-systems" description="Sequential, hierarchical, role distribution · 25 min" />
+  <LinkCard title="4 · Tools integration" href="./crewai_comprehensive_guide/#tools-integration" description="Built-in tools, custom tools, async · 20 min" />
+  <LinkCard title="5 · Structured output" href="./crewai_comprehensive_guide/#structured-output" description="Pydantic models, JSON output · 10 min" />
+  <LinkCard title="6 · Memory systems" href="./crewai_comprehensive_guide/#memory-systems" description="Short-term, long-term, entity memory · 15 min" />
+  <LinkCard title="7 · Task management" href="./crewai_comprehensive_guide/#task-management" description="Dependencies, async execution, callbacks · 15 min" />
+  <LinkCard title="8 · Process types" href="./crewai_comprehensive_guide/#process-types" description="Sequential vs hierarchical vs custom · 10 min" />
+  <LinkCard title="9 · Flows (event-driven)" href="./crewai_flows_guide/" description="@start/@listen decorators, state routing · 25 min" />
+  <LinkCard title="10 · Advanced multi-agent" href="./crewai_advanced_multi_agent_python/" description="Hierarchies, delegation, collaboration · 30 min" />
+  <LinkCard title="11 · Production" href="./crewai_production_guide/" description="Deployment, monitoring, cost controls · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent role & backstory" href="./crewai_comprehensive_guide/#simple-agents" />
+  <LinkCard title="Hierarchical process" href="./crewai_comprehensive_guide/#process-types" />
+  <LinkCard title="Custom tools" href="./crewai_comprehensive_guide/#tools-integration" />
+  <LinkCard title="Memory (short/long/entity)" href="./crewai_comprehensive_guide/#memory-systems" />
+  <LinkCard title="Structured Pydantic output" href="./crewai_comprehensive_guide/#structured-output" />
+  <LinkCard title="MCP integration" href="./crewai_comprehensive_guide/#model-context-protocol-mcp" />
+  <LinkCard title="CrewAI Flows" href="./crewai_flows_guide/" />
+  <LinkCard title="AMP Suite" href="./crewai_comprehensive_guide/#crewai-amp-suite" />
+  <LinkCard title="UV dependency mgmt" href="./crewai_comprehensive_guide/#uv-dependency-management" />
+  <LinkCard title="Agentic patterns" href="./crewai_comprehensive_guide/#agentic-patterns" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./crewai_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Advanced multi-agent" href="./crewai_advanced_multi_agent_python/" />
+  <LinkCard title="Flows guide" href="./crewai_flows_guide/" description="Event-driven workflows (2025)." />
+  <LinkCard title="Recipes" href="./crewai_recipes/" description="Blog generation, BI, support, code review, marketing, legal." />
+  <LinkCard title="Diagrams" href="./crewai_diagrams/" />
+  <LinkCard title="Production guide" href="./crewai_production_guide/" />
+</CardGrid>
+
+## What's new in v1.14.2 (April 2026)
+
+- **Checkpoint forking with lineage tracking** — branch execution from any saved checkpoint.
+- **`from_checkpoint` on `Agent.kickoff`** — resume a crew run from a named checkpoint.
+- **Checkpoint CLI** — `crewai checkpoint resume|diff|prune`.
+- **Template management CLI** — `crewai template` commands.
+- **Enriched token tracking** — `reasoning_tokens`, `cache_creation_tokens`.
+- **Scoped streaming handlers** — per-run isolation across concurrent crews.
+
+<Aside type="caution" title="Breaking changes since v1.5.0">
+  - `CodeInterpreterTool` removed from the public API.
+  - `CrewStructuredTool` moved to internal API.
+  - `stop` parameter no longer sent to GPT-5 / o-series models.
+  - v1.10.0 yanked — use 1.10.1+.
+</Aside>
+
+## Install, minimal example
+
+```python
+from crewai import Agent, Task, Crew, Process, LLM
+
+llm = LLM(model="openai/gpt-4-turbo")
+
+analyst = Agent(
+    role="Research Analyst",
+    goal="Analyse topics thoroughly",
+    backstory="Expert analyst with 10 years of experience",
+    llm=llm,
+)
+
+task = Task(
+    description="Research AI advancements in 2026",
+    expected_output="Concise analysis of key developments",
+    agent=analyst,
+)
+
+crew = Crew(agents=[analyst], tasks=[task], process=Process.sequential)
+result = crew.kickoff()
+print(result)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./crewai_comprehensive_guide/#core-fundamentals)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.14.2 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 17, 2026 | 1.14.2 | Checkpoint forking; `from_checkpoint`; checkpoint CLI; template CLI; reasoning_tokens. |
+| April 7, 2026 | 1.14.0 | Checkpoint system; Pydantic structured outputs; SSRF protections; RBAC; MCP custom servers. |
+| November 2025 | 1.5.0 | CrewAI Flows; MCP integration; memory systems; hierarchical processes. |

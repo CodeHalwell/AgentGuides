@@ -1,0 +1,104 @@
+---
+title: "AG2 (formerly AutoGen)"
+description: "Community-driven continuation of AutoGen — event-driven architecture, A2A protocol, quick research tools."
+framework: ag2
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**AG2 is the community fork of AutoGen.** Same multi-agent DNA, plus a new event-driven architecture (`autogen.beta`), A2A protocol support, and a first-class CLI.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install ag2
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v0.11.5** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Research-grade multi-agent systems, GroupChat, event-driven conversations.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Migrating from AutoGen?">
+  AG2 is drop-in compatible for most AutoGen 0.2/0.3 code. See the [AutoGen → AG2 migration guide](/autogen-guide/python/autogen_to_ag2_migration_guide/) for the full list of renames.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Overview & key features" href="./ag2_comprehensive_guide/#overview" description="What AG2 is, what changed from AutoGen · 10 min" />
+  <LinkCard title="2 · Installation" href="./ag2_comprehensive_guide/#installation" description="Install, LLM config · 10 min" />
+  <LinkCard title="3 · Basic usage" href="./ag2_comprehensive_guide/#basic-usage" description="ConversableAgent, GroupChat · 20 min" />
+  <LinkCard title="4 · Advanced concepts" href="./ag2_comprehensive_guide/#advanced-concepts" description="Tool use, human proxy, caching · 20 min" />
+  <LinkCard title="5 · Migration from legacy AutoGen" href="./ag2_comprehensive_guide/#migration-from-legacy-autogen" description="Renames, breaking changes · 15 min" />
+  <LinkCard title="6 · autogen.beta (event-driven)" href="./ag2_comprehensive_guide/#autogenbeta-event-driven-architecture-v011x" description="New event-driven API · 20 min" />
+  <LinkCard title="7 · A2A protocol" href="./ag2_comprehensive_guide/#a2a-protocol-support-v011x" description="Cross-framework agent interop · 15 min" />
+  <LinkCard title="8 · AG2 CLI" href="./ag2_comprehensive_guide/#ag2-cli-v011x" description="Project scaffolding, run, deploy · 10 min" />
+  <LinkCard title="9 · QuickResearchTool" href="./ag2_comprehensive_guide/#quickresearchtool-v011x" description="Built-in research workflow · 10 min" />
+  <LinkCard title="10 · Production" href="./ag2_production_guide/" description="Deployment, monitoring · 25 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="GroupChat" href="./ag2_comprehensive_guide/#basic-usage" />
+  <LinkCard title="Event-driven (beta)" href="./ag2_comprehensive_guide/#autogenbeta-event-driven-architecture-v011x" />
+  <LinkCard title="A2A protocol" href="./ag2_comprehensive_guide/#a2a-protocol-support-v011x" />
+  <LinkCard title="AG2 CLI" href="./ag2_comprehensive_guide/#ag2-cli-v011x" />
+  <LinkCard title="QuickResearchTool" href="./ag2_comprehensive_guide/#quickresearchtool-v011x" />
+  <LinkCard title="Migration from AutoGen" href="./ag2_comprehensive_guide/#migration-from-legacy-autogen" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./ag2_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="./ag2_recipes/" />
+  <LinkCard title="Diagrams" href="./ag2_diagrams/" />
+  <LinkCard title="Production guide" href="./ag2_production_guide/" />
+</CardGrid>
+
+## What's new in v0.11.5 (April 2026)
+
+- **`autogen.beta`** — new event-driven architecture for complex conversations.
+- **A2A protocol** — interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK.
+- **AG2 CLI** — project scaffolding, run, deploy.
+- **QuickResearchTool** — built-in research workflow helper.
+
+## Install, minimal example
+
+```python
+from autogen import ConversableAgent, config_list_from_json
+
+config_list = config_list_from_json("OAI_CONFIG_LIST")
+
+agent = ConversableAgent(
+    name="assistant",
+    llm_config={"config_list": config_list},
+    system_message="You are a helpful assistant.",
+)
+
+reply = agent.generate_reply(
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+print(reply)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./ag2_comprehensive_guide/#overview)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 0.11.5 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 5, 2026 | 0.11.5 | event-driven architecture; A2A; CLI; QuickResearchTool. |
+| November 2025 | 0.3.2 | Initial AG2 rebrand after AutoGen → AG2 community continuation. |

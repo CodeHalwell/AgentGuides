@@ -1,0 +1,112 @@
+---
+title: "Haystack"
+description: "Production-first NLP framework with agentic pipelines, tool calling, and multi-agent orchestration."
+framework: haystack
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Production-first agentic NLP.** Haystack 2.x ships a component/pipeline architecture with built-in retrieval, ranking, and LLM nodes, plus an `Agent` class with tool calling, memory, and multi-agent orchestration patterns.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install haystack-ai==2.28.0
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v2.28.0** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    RAG pipelines, search-first agents, production deployments.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  Already know Haystack 2.x? Jump to **Agent concepts** or **Multi-agent patterns**. New? Follow Zero → Hero.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Installation & setup" href="./haystack_comprehensive_guide/#installation-and-setup" description="Install, first pipeline · 10 min" />
+  <LinkCard title="2 · Architecture overview" href="./haystack_comprehensive_guide/#haystack-2x-architecture-overview" description="Components, pipelines, connections · 15 min" />
+  <LinkCard title="3 · Components & pipelines" href="./haystack_comprehensive_guide/#components-and-pipelines" description="How building blocks compose · 20 min" />
+  <LinkCard title="4 · Agent concepts" href="./haystack_comprehensive_guide/#agent-concepts-in-haystack" description="Agent loop, reasoning, state · 20 min" />
+  <LinkCard title="5 · Creating agents" href="./haystack_comprehensive_guide/#creating-agents-with-the-agent-class" description="Agent class, configuration · 20 min" />
+  <LinkCard title="6 · Tools & function calling" href="./haystack_comprehensive_guide/#tool-integration-and-function-calling" description="Built-in + custom tools · 20 min" />
+  <LinkCard title="7 · Single-purpose agents" href="./haystack_comprehensive_guide/#single-purpose-agents" description="Research, summarisation, Q&A · 20 min" />
+  <LinkCard title="8 · Conversational agents" href="./haystack_comprehensive_guide/#conversational-agents-with-memory" description="Multi-turn, memory management · 15 min" />
+  <LinkCard title="9 · Agentic workflows" href="./haystack_comprehensive_guide/#agentic-ai-workflows-production-first-design" description="Production patterns, resilience · 25 min" />
+  <LinkCard title="10 · Multi-agent pipelines" href="./haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns" description="Orchestration, delegation · 25 min" />
+  <LinkCard title="11 · Advanced agents" href="./haystack_advanced_agents_python/" description="Complex patterns, custom components · 30 min" />
+  <LinkCard title="12 · Production" href="./haystack_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent class" href="./haystack_comprehensive_guide/#creating-agents-with-the-agent-class" />
+  <LinkCard title="Tool integration" href="./haystack_comprehensive_guide/#tool-integration-and-function-calling" />
+  <LinkCard title="Conversational memory" href="./haystack_comprehensive_guide/#conversational-agents-with-memory" />
+  <LinkCard title="Multi-agent pipelines" href="./haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns" />
+  <LinkCard title="Error handling & resilience" href="./haystack_comprehensive_guide/#error-handling-and-resilience" />
+  <LinkCard title="SearchableToolset (v2.21+)" href="./haystack_comprehensive_guide/#searchabletoolset-v2210" />
+  <LinkCard title="LLMRanker (v2.22+)" href="./haystack_comprehensive_guide/#llmranker-v2220" />
+  <LinkCard title="AgentToolInvoker (v2.23+)" href="./haystack_comprehensive_guide/#agenttoolinvoker-v2230" />
+  <LinkCard title="Provider-agnostic design" href="./haystack_comprehensive_guide/#provider-agnostic-design-philosophy" />
+  <LinkCard title="Observability" href="./haystack_observability_python/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./haystack_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Advanced agents" href="./haystack_advanced_agents_python/" />
+  <LinkCard title="Multi-agent guide" href="./haystack_multi_agent_guide/" description="2025 multi-agent patterns." />
+  <LinkCard title="Recipes" href="./haystack_recipes/" />
+  <LinkCard title="Diagrams" href="./haystack_diagrams/" />
+  <LinkCard title="Observability" href="./haystack_observability_python/" />
+  <LinkCard title="Production guide" href="./haystack_production_guide/" />
+  <LinkCard title="Streaming server (FastAPI)" href="./haystack_streaming_server_fastapi/" />
+  <LinkCard title="Start here" href="./start_here/" />
+</CardGrid>
+
+## What's new in v2.28.0 (April 2026)
+
+- Stabilisation and bug fixes following 2.28 RCs.
+- `SearchableToolset`, `LLMRanker`, and `AgentToolInvoker` stabilised.
+- Expanded provider support (Anthropic, Gemini, Mistral, Ollama).
+- Multi-agent guide published (October 2025).
+
+## Install, minimal example
+
+```python
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack import Agent
+
+agent = Agent(
+    chat_generator=OpenAIChatGenerator(model="gpt-4o"),
+    system_prompt="You are a helpful research assistant.",
+)
+
+result = agent.run(messages=[ChatMessage.from_user("Summarise Haystack 2.x.")])
+print(result["messages"][-1].text)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./haystack_comprehensive_guide/#installation-and-setup)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 2.28.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 20, 2026 | 2.28.0 | GA after 2.28.0rc1/rc2; stabilisation. |
+| November 2025 | 2.20.0 | Initial documented version. |

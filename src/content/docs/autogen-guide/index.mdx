@@ -1,0 +1,38 @@
+---
+title: "AutoGen / AG2"
+description: "Microsoft AutoGen (now AG2) — research-grade multi-agent framework."
+framework: autogen
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**AutoGen has been rebranded to AG2** under community stewardship. This guide section covers the legacy AutoGen patterns that still apply, plus the migration path.
+
+<CardGrid>
+  <LinkCard
+    title="🐍 AutoGen / AG2 (Python)"
+    href="/autogen-guide/python/"
+    description="Full guide — ConversableAgent, GroupChat, function calling, memory, 2025 features."
+  />
+  <LinkCard
+    title="🆕 AG2 (newer features-focused guide)"
+    href="/ag2-guide/"
+    description="Event-driven architecture, A2A protocol, AG2 CLI, QuickResearchTool."
+  />
+</CardGrid>
+
+<Aside type="tip" title="Which one should I use?">
+  Same package, two documentation flavours. **AutoGen/AG2 (Python)** is the full technical reference. **AG2** focuses on the 2025 features (event-driven, A2A, CLI). For new projects, start with the AG2 guide.
+</Aside>
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | AG2 | Parent index redesigned as language/flavour selector. |
+| November 2024 | AG2 | Rebranded from AutoGen to AG2 under community stewardship. |

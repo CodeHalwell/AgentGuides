@@ -1,0 +1,104 @@
+---
+title: "OpenAI Agents SDK (TypeScript)"
+description: "The TypeScript port — Agent/Handoff/Guardrail primitives with HITL approvals, browser support, and Node streaming."
+framework: openai-agents-sdk
+language: typescript
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Production-ready TypeScript SDK** with the same minimal primitives as the Python version, plus first-class browser support, HITL approval flows, and Express streaming.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @openai/agents
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v0.8.3** · April 2026 · Node 18+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Full-stack agents, HITL-approved workflows, browser-side tools.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  New? Follow **Zero → Hero** in order. Migrating from Swarm? Start at [Swarm migration](./openai_agents_sdk_typescript_swarm_migration_guide/).
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Core fundamentals" href="./openai_agents_sdk_typescript_comprehensive_guide/#core-fundamentals" description="Install, first agent, Runner · 15 min" />
+  <LinkCard title="2 · Your first agent" href="./openai_agents_sdk_typescript_comprehensive_guide/#simple-agents" description="Linear chat, context, async · 20 min" />
+  <LinkCard title="3 · Multi-agent systems" href="./openai_agents_sdk_typescript_comprehensive_guide/#multi-agent-systems" description="Handoffs, specialist routing · 25 min" />
+  <LinkCard title="4 · Tools integration" href="./openai_agents_sdk_typescript_comprehensive_guide/#tools-integration" description="Function tools, MCP, built-ins · 25 min" />
+  <LinkCard title="5 · Structured output" href="./openai_agents_sdk_typescript_comprehensive_guide/#structured-output" description="Zod schemas, typed responses · 15 min" />
+  <LinkCard title="6 · Middleware" href="./openai_agents_sdk_middleware_typescript/" description="Lifecycle hooks, interceptors · 20 min" />
+  <LinkCard title="7 · Streaming (Express)" href="./openai_agents_streaming_server_express/" description="SSE streaming server · 20 min" />
+  <LinkCard title="8 · Production" href="./openai_agents_sdk_typescript_production_guide/" description="Deployment, scaling, resilience · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent primitive" href="./openai_agents_sdk_typescript_comprehensive_guide/#core-fundamentals" />
+  <LinkCard title="Handoffs" href="./openai_agents_sdk_typescript_comprehensive_guide/#multi-agent-systems" />
+  <LinkCard title="Function tools" href="./openai_agents_sdk_typescript_comprehensive_guide/#tools-integration" />
+  <LinkCard title="Structured output (Zod)" href="./openai_agents_sdk_typescript_comprehensive_guide/#structured-output" />
+  <LinkCard title="Middleware" href="./openai_agents_sdk_middleware_typescript/" />
+  <LinkCard title="2025 features" href="./openai_agents_sdk_typescript_2025_features/" />
+  <LinkCard title="Streaming server (Express)" href="./openai_agents_streaming_server_express/" />
+  <LinkCard title="Swarm migration" href="./openai_agents_sdk_typescript_swarm_migration_guide/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./openai_agents_sdk_typescript_comprehensive_guide/" description="Full technical reference." />
+  <LinkCard title="2025 features" href="./openai_agents_sdk_typescript_2025_features/" />
+  <LinkCard title="Swarm migration guide" href="./openai_agents_sdk_typescript_swarm_migration_guide/" />
+  <LinkCard title="Middleware" href="./openai_agents_sdk_middleware_typescript/" />
+  <LinkCard title="Recipes" href="./openai_agents_sdk_typescript_recipes/" />
+  <LinkCard title="Diagrams" href="./openai_agents_sdk_typescript_diagrams/" />
+  <LinkCard title="Production guide" href="./openai_agents_sdk_typescript_production_guide/" />
+  <LinkCard title="Streaming server (Express)" href="./openai_agents_streaming_server_express/" />
+</CardGrid>
+
+## What's new in v0.8.3 (April 2026)
+
+- **HITL approval flows** for tool calls in browser clients.
+- **Browser support** improvements with tree-shaken bundles.
+- **Zod v4 support** across all structured-output helpers.
+
+## Install, minimal example
+
+```typescript
+import { Agent, run } from '@openai/agents';
+
+const agent = new Agent({
+  name: 'Assistant',
+  instructions: 'You are a helpful assistant.',
+});
+
+const result = await run(agent, 'What is 2 + 2?');
+console.log(result.finalOutput);
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_typescript_comprehensive_guide/#core-fundamentals)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 0.8.3 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 9, 2026 | 0.8.3 | HITL approval flows; browser bundle improvements; Zod v4. |
+| November 2025 | 0.3.2 | Initial TypeScript guide; Swarm migration; MCP. |
+
+**Note:** Python implementation lives at [OpenAI Agents SDK (Python)](/openai-agents-sdk-guides/).

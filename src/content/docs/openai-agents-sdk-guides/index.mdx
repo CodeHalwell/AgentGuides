@@ -1,0 +1,120 @@
+---
+title: "OpenAI Agents SDK (Python)"
+description: "Production Swarm replacement — agents, handoffs, guardrails, sessions, tracing. Zero to hero with chaptered checkpoints and topic-jump anchors."
+framework: openai-agents-sdk
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**The official production-ready replacement for Swarm.** Lightweight primitives (Agent, Handoff, Guardrail, Session, Tool) with built-in tracing, MCP support, and provider-agnostic LLM access (OpenAI + 100+ via LiteLLM).
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install "openai>=2.0" openai-agents
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v0.14.3** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Multi-agent handoffs, customer-service bots, tracing-first apps.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  New to the SDK? Follow **Zero → Hero** below in order. Migrating from Swarm? Start at [Swarm migration](./openai_agents_sdk_swarm_migration_guide/).
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Install & setup" href="./openai_agents_sdk_comprehensive_guide/#installation-and-environment-setup" description="Environment, API key, first agent · 10 min" />
+  <LinkCard title="2 · Design philosophy" href="./openai_agents_sdk_comprehensive_guide/#design-philosophy" description="Why minimal primitives, where the seams are · 10 min" />
+  <LinkCard title="3 · Core primitives" href="./openai_agents_sdk_comprehensive_guide/#core-primitives" description="Agent, Handoff, Guardrail, Session, Tool, Runner · 20 min" />
+  <LinkCard title="4 · Your first agent" href="./openai_agents_sdk_comprehensive_guide/#simple-agents" description="Linear chat, context, async patterns · 20 min" />
+  <LinkCard title="5 · Multi-agent systems" href="./openai_agents_sdk_comprehensive_guide/#multi-agent-systems" description="Handoffs, specialist routing · 25 min" />
+  <LinkCard title="6 · Tools integration" href="./openai_agents_sdk_comprehensive_guide/#tools-integration" description="Function tools, MCP, built-in tools · 20 min" />
+  <LinkCard title="7 · Structured outputs" href="./openai_agents_sdk_comprehensive_guide/#structured-outputs" description="Pydantic validation, type-safe responses · 15 min" />
+  <LinkCard title="8 · Guardrails & safety" href="./openai_agents_sdk_comprehensive_guide/#guardrails" description="Input/output validation, custom checks · 15 min" />
+  <LinkCard title="9 · Middleware" href="./openai_agents_sdk_middleware_python/" description="Lifecycle hooks, custom processing · 20 min" />
+  <LinkCard title="10 · Tracing & observability" href="./openai_agents_sdk_comprehensive_guide/#tracing-and-observability" description="Platform traces, Langfuse/AgentOps · 15 min" />
+  <LinkCard title="11 · Production" href="./openai_agents_sdk_production_guide/" description="Deployment, scaling, resilience · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent primitive" href="./openai_agents_sdk_comprehensive_guide/#core-primitives" />
+  <LinkCard title="Handoffs" href="./openai_agents_sdk_comprehensive_guide/#multi-agent-systems" />
+  <LinkCard title="Function tools" href="./openai_agents_sdk_comprehensive_guide/#tools-integration" />
+  <LinkCard title="MCP integration" href="./openai_agents_sdk_comprehensive_guide/#model-context-protocol" />
+  <LinkCard title="Guardrails" href="./openai_agents_sdk_comprehensive_guide/#guardrails" />
+  <LinkCard title="Sessions (SQLite/Redis/SQLAlchemy)" href="./openai_agents_sdk_comprehensive_guide/#memory-systems" />
+  <LinkCard title="Agentic patterns" href="./openai_agents_sdk_comprehensive_guide/#agentic-patterns" />
+  <LinkCard title="Responses API" href="./openai_agents_sdk_comprehensive_guide/#responses-api-integration" />
+  <LinkCard title="Realtime experiences" href="./openai_agents_sdk_comprehensive_guide/#realtime-experiences" />
+  <LinkCard title="Model providers (LiteLLM)" href="./openai_agents_sdk_comprehensive_guide/#model-providers" />
+  <LinkCard title="Sandbox agents (v0.14)" href="./openai_agents_sdk_2025_features/" />
+  <LinkCard title="Swarm migration" href="./openai_agents_sdk_swarm_migration_guide/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./openai_agents_sdk_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="2025 features" href="./openai_agents_sdk_2025_features/" description="Sandbox agents, WebSocket transport, tracing, LiteLLM, MCP." />
+  <LinkCard title="Swarm migration guide" href="./openai_agents_sdk_swarm_migration_guide/" description="Side-by-side code comparisons + migration checklist." />
+  <LinkCard title="Advanced multi-agent" href="./openai_agents_sdk_advanced_multi_agent_python/" />
+  <LinkCard title="Middleware (Python)" href="./openai_agents_sdk_middleware_python/" />
+  <LinkCard title="Recipes" href="./openai_agents_sdk_recipes/" description="Customer service, research, code review, translation, moderation." />
+  <LinkCard title="Diagrams" href="./openai_agents_sdk_diagrams/" />
+  <LinkCard title="Production guide" href="./openai_agents_sdk_production_guide/" />
+  <LinkCard title="Streaming server (FastAPI)" href="./openai_agents_streaming_server_fastapi/" />
+</CardGrid>
+
+## What's new in v0.14.3 (April 2026)
+
+- **Sandbox agents** — persistent isolated workspaces with files, directories, Git repos, snapshots. Backends: local Unix, Docker, Blaxel, E2B, Modal, Runloop, Vercel.
+- **WebSocket transport** for OpenAI Responses models — low-latency multi-turn conversations via `responses_websocket_session()`.
+- **Sync function tools** now run on worker threads via `asyncio.to_thread()`.
+
+<Aside type="caution" title="Breaking changes from v0.6.x">
+  - Requires `openai>=2.0` — v1.x is no longer supported.
+  - **Python 3.9 dropped**; minimum is now 3.10.
+  - MCP tool failures propagate as exceptions by default — configure `failure_error_function` to restore previous behaviour.
+  - `Agent#as_tool()` return type narrowed from `Tool` to `FunctionTool`.
+</Aside>
+
+## Install, minimal example
+
+```python
+from agents import Agent, Runner
+
+agent = Agent(
+    name="Assistant",
+    instructions="You are a helpful assistant.",
+)
+
+result = Runner.run_sync(agent, "What is 2 + 2?")
+print(result.final_output)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_comprehensive_guide/#installation-and-environment-setup)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 0.14.3 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| 2026-04-20 | 0.14.3 | Patch release; no breaking changes from 0.14.2. |
+| April 16, 2026 | 0.14.0 | Sandbox agents; WebSocket transport; openai v2 requirement; Python 3.9 dropped. |
+| November 2025 | 0.6.1 | Initial 2025 features; Swarm migration; MCP; guardrails; sessions. |
+
+**Note:** TypeScript implementation lives at [OpenAI Agents SDK (TypeScript)](/openai-agents-sdk-typescript-guide/).

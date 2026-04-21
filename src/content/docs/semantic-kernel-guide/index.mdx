@@ -1,0 +1,84 @@
+---
+title: "Semantic Kernel"
+description: "Microsoft Semantic Kernel — enterprise SDK with plugins, planners, vector stores, MCP, and A2A. Pick your language."
+framework: semantic-kernel
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Microsoft's enterprise SDK for integrating LLMs** with plugins, planners, and vector stores. Deep Azure AI integration, MCP, A2A, and a bridge into the newer Microsoft Agent Framework.
+
+<CardGrid>
+  <Card title="Languages" icon="puzzle">
+    Python 3.10+ · .NET 6.0+
+  </Card>
+  <Card title="Latest" icon="information">
+    Python **v1.41.2** · .NET **v1.74.0** · April 2026
+  </Card>
+  <Card title="Best for" icon="rocket">
+    Enterprise plugin-based agents, Microsoft 365 integrations, Azure-native apps.
+  </Card>
+</CardGrid>
+
+## Choose your language
+
+<CardGrid>
+  <LinkCard
+    title="🐍 Python"
+    href="/semantic-kernel-guide/python/"
+    description="v1.41.2 · asyncio, FastAPI, MCP client+server, A2A integration."
+  />
+  <LinkCard
+    title="C# .NET"
+    href="/semantic-kernel-guide/dotnet/"
+    description="v1.74.0 · DI, Polly resilience, Application Insights, ASP.NET Core."
+  />
+</CardGrid>
+
+## Cross-cutting reference (language-agnostic)
+
+<CardGrid>
+  <LinkCard
+    title="Comprehensive"
+    href="./semantic_kernel_comprehensive_guide/"
+    description="Architecture + concepts reference."
+  />
+  <LinkCard
+    title="Production"
+    href="./semantic_kernel_production_guide/"
+    description="Deployment, scaling, monitoring."
+  />
+  <LinkCard
+    title="Diagrams"
+    href="./semantic_kernel_diagrams/"
+    description="Architecture + flow diagrams."
+  />
+  <LinkCard
+    title="Recipes"
+    href="./semantic_kernel_recipes/"
+    description="Copy-paste patterns for common scenarios."
+  />
+</CardGrid>
+
+<Aside type="tip" title="Agent Framework or Semantic Kernel?">
+  Microsoft Agent Framework unifies SK + AutoGen. For new projects, consider [Agent Framework](/microsoft-agent-framework-guide/). Semantic Kernel remains fully supported and has the richer plugin/planner ecosystem.
+</Aside>
+
+## What's new (April 2026)
+
+- **Vector stores v1.34** — new abstractions with pluggable providers.
+- **MCP client + server** (March 2025).
+- **Google A2A protocol** integration.
+- **Microsoft Agent Framework bridge** for gradual migration.
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | Py 1.41.2 / .NET 1.74 | Parent index redesigned as language selector + cross-cutting guides. |
+| April 2026 | Py 1.41.2 / .NET 1.74 | Vector stores v1.34; MCP; A2A; Agent Framework bridge. |

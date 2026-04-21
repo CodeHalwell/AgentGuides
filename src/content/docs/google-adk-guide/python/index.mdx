@@ -1,0 +1,111 @@
+---
+title: "Google ADK (Python)"
+description: "Google Agent Development Kit — GCP-native agents with MCP, A2A, and Gemini integration."
+framework: google-adk
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Google's Agent Development Kit.** Build agents on Gemini (and any LLM via `google-genai`) with MCP support, A2A protocol, multi-agent orchestration, and native GCP IAM.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install google-adk google-genai
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.31.0** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    GCP-native workloads, Gemini-first agents, Vertex AI integration.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  New? Follow Zero → Hero. Setting up IAM? Jump to [IAM examples](./google_adk_iam_examples/).
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Introduction" href="./google_adk_comprehensive_guide/#introduction" description="What ADK is, why Google built it · 10 min" />
+  <LinkCard title="2 · Core fundamentals" href="./google_adk_comprehensive_guide/#core-fundamentals" description="Install, auth, first agent · 25 min" />
+  <LinkCard title="3 · Simple agents" href="./google_adk_comprehensive_guide/#simple-agents" description="LLMAgent, chat, async · 25 min" />
+  <LinkCard title="4 · Multi-agent systems" href="./google_adk_comprehensive_guide/#multi-agent-systems" description="Orchestrator, specialists · 30 min" />
+  <LinkCard title="5 · Tools integration" href="./google_adk_comprehensive_guide/#tools-integration" description="Function tools, Google Cloud tools · 30 min" />
+  <LinkCard title="6 · Structured output" href="./google_adk_comprehensive_guide/#structured-output" description="Pydantic validation · 15 min" />
+  <LinkCard title="7 · MCP" href="./google_adk_comprehensive_guide/#model-context-protocol-mcp" description="MCP client + server · 20 min" />
+  <LinkCard title="8 · Agentic patterns" href="./google_adk_comprehensive_guide/#agentic-patterns" description="ReAct, planning, reflection · 20 min" />
+  <LinkCard title="9 · Memory systems" href="./google_adk_comprehensive_guide/#memory-systems" description="Short-term, long-term, vector · 25 min" />
+  <LinkCard title="10 · Advanced Python" href="./google_adk_advanced_python/" description="Complex patterns, customisation · 30 min" />
+  <LinkCard title="11 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
+  <LinkCard title="12 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="LLMAgent" href="./google_adk_comprehensive_guide/#simple-agents" />
+  <LinkCard title="Multi-agent orchestration" href="./google_adk_comprehensive_guide/#multi-agent-systems" />
+  <LinkCard title="Tools integration" href="./google_adk_comprehensive_guide/#tools-integration" />
+  <LinkCard title="MCP" href="./google_adk_comprehensive_guide/#model-context-protocol-mcp" />
+  <LinkCard title="Memory systems" href="./google_adk_comprehensive_guide/#memory-systems" />
+  <LinkCard title="Agentic patterns" href="./google_adk_comprehensive_guide/#agentic-patterns" />
+  <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
+  <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./google_adk_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
+  <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
+  <LinkCard title="Recipes" href="./google_adk_recipes/" />
+  <LinkCard title="Diagrams" href="./google_adk_diagrams/" />
+  <LinkCard title="Production guide" href="./google_adk_production_guide/" />
+</CardGrid>
+
+## What's new in v1.31.0 (April 2026)
+
+- **A2A protocol** — cross-framework interop.
+- **MCP client + server** — full MCP support.
+- **Expanded tools library** — Google Cloud services, third-party providers.
+- **Workload Identity** — simplified GKE/Cloud Run auth.
+
+## Install, minimal example
+
+```python
+from google.adk.agents import LlmAgent
+from google.genai import types
+
+agent = LlmAgent(
+    name="assistant",
+    model="gemini-2.0-flash-exp",
+    instruction="You are a helpful assistant.",
+)
+
+response = agent.run(types.Content(
+    parts=[types.Part.from_text(text="What is 15 + 27?")]
+))
+print(response.text)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#introduction)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.31.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 17, 2026 | 1.31.0 | A2A; MCP; expanded tools; Workload Identity. |
+| November 2025 | 1.18.0 | Initial documented version. |
+
+**Note:** Other languages: [Go](/google-adk-guide/go/) · [TypeScript](/google-adk-guide/typescript/).

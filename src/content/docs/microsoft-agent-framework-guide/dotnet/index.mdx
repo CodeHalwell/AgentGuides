@@ -1,0 +1,124 @@
+---
+title: "Microsoft Agent Framework (.NET)"
+description: "GA 1.0 unified .NET agent SDK — ChatClientAgent, multi-agent orchestration, MCP, A2A, Azure RBAC."
+framework: microsoft-agent-framework
+language: dotnet
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**GA 1.0 unified .NET SDK that merges Semantic Kernel and AutoGen.** Build C# agents with `ChatClientAgent`, orchestrate multi-agent workflows, integrate with Azure AI services via managed identity, and stream via SignalR or SSE.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    dotnet add package Microsoft.Agents.AI
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.0.1** · April 2026 · .NET 8.0+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Enterprise .NET agents, Azure-native deployments, RBAC, multi-agent orchestration.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="Migrating from Preview">
+  `ChatClientAgentOptions.Instructions` is removed — pass instructions directly to the `ChatClientAgent` constructor. The `--prerelease` flag is no longer needed.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Introduction" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#introduction" description="What the framework is · 10 min" />
+  <LinkCard title="2 · Core fundamentals" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#core-fundamentals" description="DI, IChatClient, configuration · 20 min" />
+  <LinkCard title="3 · Simple agents" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#simple-agents" description="ChatClientAgent, chat, async · 25 min" />
+  <LinkCard title="4 · Multi-agent systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#multi-agent-systems" description="Sequential, concurrent, handoff · 30 min" />
+  <LinkCard title="5 · Tools integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#tools-integration" description="Function tools, built-ins · 20 min" />
+  <LinkCard title="6 · Structured output" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#structured-output" description="Typed responses, validation · 15 min" />
+  <LinkCard title="7 · MCP" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#model-context-protocol-mcp" description="MCP client + server · 20 min" />
+  <LinkCard title="8 · Agentic patterns" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="ReAct, planning, reflection · 20 min" />
+  <LinkCard title="9 · Memory systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" description="Cosmos DB, SQL, Azure Search · 20 min" />
+  <LinkCard title="10 · Azure AI integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#azure-ai-integration" description="Azure OpenAI, Content Safety · 15 min" />
+  <LinkCard title="11 · Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" description="Managed Identity, Entra ID · 20 min" />
+  <LinkCard title="12 · Semantic Kernel bridge" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" description="SK plugin compat · 15 min" />
+  <LinkCard title="13 · 2025 features" href="./microsoft_agent_framework_dotnet_2025_features/" description="A2A, graphs, declarative · 25 min" />
+  <LinkCard title="14 · Advanced" href="./microsoft_agent_framework_dotnet_advanced/" description="Complex patterns, customisation · 30 min" />
+  <LinkCard title="15 · Streaming (SSE)" href="./microsoft_agent_streaming_server_dotnet/" description=".NET streaming server · 20 min" />
+  <LinkCard title="16 · Production" href="./microsoft_agent_framework_dotnet_production_guide/" description="Deployment, scaling · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="ChatClientAgent" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#simple-agents" />
+  <LinkCard title="Multi-agent orchestration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#multi-agent-systems" />
+  <LinkCard title="Tools integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#tools-integration" />
+  <LinkCard title="MCP" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#model-context-protocol-mcp" />
+  <LinkCard title="Memory systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" />
+  <LinkCard title="Context engineering" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#context-engineering" />
+  <LinkCard title="Azure AI" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#azure-ai-integration" />
+  <LinkCard title="Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" />
+  <LinkCard title="Copilot Studio" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#copilot-studio-integration" />
+  <LinkCard title="Semantic Kernel integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" />
+  <LinkCard title="2025 features" href="./microsoft_agent_framework_dotnet_2025_features/" />
+  <LinkCard title="Streaming server" href="./microsoft_agent_streaming_server_dotnet/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive (.NET)" href="./microsoft_agent_framework_dotnet_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="2025 features" href="./microsoft_agent_framework_dotnet_2025_features/" />
+  <LinkCard title="Advanced" href="./microsoft_agent_framework_dotnet_advanced/" />
+  <LinkCard title="Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" />
+  <LinkCard title="Recipes" href="./microsoft_agent_framework_dotnet_recipes/" />
+  <LinkCard title="Diagrams" href="./microsoft_agent_framework_dotnet_diagrams/" />
+  <LinkCard title="Production guide" href="./microsoft_agent_framework_dotnet_production_guide/" />
+  <LinkCard title="Streaming server" href="./microsoft_agent_streaming_server_dotnet/" />
+</CardGrid>
+
+## What's new in GA 1.0 (April 2026)
+
+- **Stable APIs** with LTS commitment.
+- **First-party service connectors** via `IChatClient`: Azure OpenAI, OpenAI, Anthropic Claude, Amazon Bedrock, Google Gemini, Ollama.
+- **Unified orchestration** — sequential, concurrent, handoff, group chat, Magentic-One.
+- **Azure App Service support**.
+
+## Install, minimal example
+
+```csharp
+using Microsoft.Agents.AI;
+using Azure.AI.OpenAI;
+
+var client = new AzureOpenAIClient(
+    new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+    new DefaultAzureCredential()
+);
+
+var agent = new ChatClientAgent(
+    chatClient: client.GetChatClient("gpt-4o"),
+    instructions: "You are a helpful assistant."
+);
+
+var response = await agent.RunAsync("What is 15 + 27?");
+Console.WriteLine(response.Text);
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./microsoft_agent_framework_dotnet_comprehensive_guide/#introduction)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.0.1 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 10, 2026 | 1.0.1 | Patch release. |
+| April 3-7, 2026 | 1.0 GA | GA; stable APIs; first-party connectors; Azure App Service. |
+| November 2025 | 1.0 Preview | Initial .NET guide. |
+
+**Other languages:** [Python](/microsoft-agent-framework-guide/python/).

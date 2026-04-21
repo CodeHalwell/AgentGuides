@@ -1,0 +1,116 @@
+---
+title: "Google ADK (Go)"
+description: "Google Agent Development Kit for Go — v1.0 GA with idiomatic goroutines, MCP, and A2A protocol."
+framework: google-adk
+language: go
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Google ADK for Go — v1.0 GA.** Build Gemini-powered agents with idiomatic Go concurrency, type-safe interfaces, MCP, A2A, and native GCP integration.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    go get cloud.google.com/go/adk
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.0.0 GA** · April 2026 · Go 1.21+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Low-latency agent services, idiomatic Go backends, GCP-native deployment.
+  </Card>
+</CardGrid>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Installation & setup" href="./google_adk_go_comprehensive_guide/#installation-and-setup" description="Install, auth, first agent · 15 min" />
+  <LinkCard title="2 · Core architecture" href="./google_adk_go_comprehensive_guide/#core-architecture" description="Package layout, interfaces · 20 min" />
+  <LinkCard title="3 · Package overview" href="./google_adk_go_comprehensive_guide/#package-overview" description="Imports, dependencies · 15 min" />
+  <LinkCard title="4 · Types & interfaces" href="./google_adk_go_comprehensive_guide/#types-and-interfaces" description="Core types, generics · 25 min" />
+  <LinkCard title="5 · LLMAgent" href="./google_adk_go_comprehensive_guide/#llmagent" description="First agent, chat, streaming · 25 min" />
+  <LinkCard title="6 · Agent orchestration" href="./google_adk_go_comprehensive_guide/#agent-orchestration" description="Multi-agent patterns · 30 min" />
+  <LinkCard title="7 · Tools system" href="./google_adk_go_comprehensive_guide/#tools-system" description="Function tools, built-in tools · 25 min" />
+  <LinkCard title="8 · MCP" href="./google_adk_go_comprehensive_guide/#model-context-protocol-mcp" description="MCP client + server · 20 min" />
+  <LinkCard title="9 · A2A protocol" href="./google_adk_go_comprehensive_guide/#agent2agent-a2a-protocol" description="Cross-framework interop · 20 min" />
+  <LinkCard title="10 · Go idioms & patterns" href="./google_adk_go_comprehensive_guide/#go-idioms-and-patterns" description="goroutines, channels, contexts · 25 min" />
+  <LinkCard title="11 · Session management" href="./google_adk_go_comprehensive_guide/#session-management" description="Persistence, threads · 15 min" />
+  <LinkCard title="12 · Testing" href="./google_adk_go_comprehensive_guide/#testing" description="Mocking, integration tests · 20 min" />
+  <LinkCard title="13 · Production" href="./google_adk_go_production_guide/" description="Deployment, scaling · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="LLMAgent" href="./google_adk_go_comprehensive_guide/#llmagent" />
+  <LinkCard title="Agent orchestration" href="./google_adk_go_comprehensive_guide/#agent-orchestration" />
+  <LinkCard title="Tools system" href="./google_adk_go_comprehensive_guide/#tools-system" />
+  <LinkCard title="MCP" href="./google_adk_go_comprehensive_guide/#model-context-protocol-mcp" />
+  <LinkCard title="A2A protocol" href="./google_adk_go_comprehensive_guide/#agent2agent-a2a-protocol" />
+  <LinkCard title="Go idioms" href="./google_adk_go_comprehensive_guide/#go-idioms-and-patterns" />
+  <LinkCard title="Session management" href="./google_adk_go_comprehensive_guide/#session-management" />
+  <LinkCard title="Testing" href="./google_adk_go_comprehensive_guide/#testing" />
+  <LinkCard title="Best practices" href="./google_adk_go_comprehensive_guide/#best-practices" />
+  <LinkCard title="v1.0 GA changes" href="./google_adk_go_comprehensive_guide/#whats-new-in-v100-ga" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./google_adk_go_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="./google_adk_go_recipes/" />
+  <LinkCard title="Production guide" href="./google_adk_go_production_guide/" />
+</CardGrid>
+
+## What's new in v1.0.0 GA (April 2026)
+
+- **GA release** with stable APIs.
+- **A2A protocol** client and server.
+- **MCP** full support.
+- **Goroutine-first orchestration** — agents cooperate via channels.
+
+## Install, minimal example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "cloud.google.com/go/adk"
+)
+
+func main() {
+    agent := adk.NewLLMAgent(adk.LLMAgentConfig{
+        Name:        "assistant",
+        Model:       "gemini-2.0-flash-exp",
+        Instruction: "You are a helpful assistant.",
+    })
+
+    resp, err := agent.Run(context.Background(), "What is 15 + 27?")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(resp.Text)
+}
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./google_adk_go_comprehensive_guide/#installation-and-setup)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.0.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 8, 2026 | 1.0.0 GA | Stable APIs; A2A; MCP; goroutine orchestration. |
+| November 2025 | 0.1.0 | Initial Go port. |
+
+**Other languages:** [Python](/google-adk-guide/python/) · [TypeScript](/google-adk-guide/typescript/).

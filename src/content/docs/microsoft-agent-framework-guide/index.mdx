@@ -1,0 +1,112 @@
+---
+title: "Microsoft Agent Framework"
+description: "GA 1.0 unified agent SDK that merges Semantic Kernel and AutoGen — pick your language, plus cross-cutting protocol guides."
+framework: microsoft-agent-framework
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**GA 1.0 unified SDK** that consolidates Semantic Kernel's plugin/tool system and AutoGen's multi-agent orchestration. First-party service connectors, Azure-native observability, and A2A protocol support — across both .NET and Python.
+
+<CardGrid>
+  <Card title="Status" icon="approve-check">
+    **GA 1.0.1** · April 2026 · LTS commitment
+  </Card>
+  <Card title="Languages" icon="puzzle">
+    Python 3.10+ · .NET 8.0+
+  </Card>
+  <Card title="Best for" icon="rocket">
+    Azure-native agents, enterprise multi-agent orchestration, A2A.
+  </Card>
+</CardGrid>
+
+## Choose your language
+
+<CardGrid>
+  <LinkCard
+    title="🐍 Python"
+    href="/microsoft-agent-framework-guide/python/"
+    description="v1.0.1 · asyncio-first, Pydantic types, FastAPI integration."
+  />
+  <LinkCard
+    title="C# .NET"
+    href="/microsoft-agent-framework-guide/dotnet/"
+    description="v1.0.1 · DI, ChatClientAgent, Azure RBAC, ASP.NET Core integration."
+  />
+</CardGrid>
+
+## Cross-cutting protocol guides
+
+These apply to both languages and cover protocols/features that span the framework.
+
+<CardGrid>
+  <LinkCard
+    title="A2A protocol"
+    href="./microsoft_agent_framework_a2a_protocol/"
+    description="Cross-framework agent interop — OpenAI SDK, Claude SDK, LangGraph, Google ADK."
+  />
+  <LinkCard
+    title="Graph workflows & declarative agents"
+    href="./microsoft_agent_framework_graphs_declarative/"
+    description="Directed graphs, YAML/JSON agent configs, time-travel debugging."
+  />
+  <LinkCard
+    title="Enterprise 2025"
+    href="./microsoft_agent_framework_enterprise_2025/"
+    description="OpenTelemetry, Content Safety, Entra ID, HIPAA/GDPR/SOX/PCI configurations."
+  />
+  <LinkCard
+    title="Comprehensive (language-agnostic)"
+    href="./microsoft_agent_framework_comprehensive_guide/"
+    description="Architecture + concepts reference — applies to both Python and .NET."
+  />
+  <LinkCard
+    title="Production (language-agnostic)"
+    href="./microsoft_agent_framework_production_guide/"
+    description="Deployment strategies, cost optimisation, disaster recovery."
+  />
+  <LinkCard
+    title="Diagrams"
+    href="./microsoft_agent_framework_diagrams/"
+    description="Architecture + flow diagrams."
+  />
+  <LinkCard
+    title="Recipes"
+    href="./microsoft_agent_framework_recipes/"
+    description="Copy-paste patterns for common scenarios."
+  />
+  <LinkCard
+    title="Migration notice"
+    href="./migration_notice/"
+    description="Preview → GA migration notes."
+  />
+</CardGrid>
+
+## What's new in GA 1.0 (April 2026)
+
+- **Stable APIs** with LTS commitment — no more `--prerelease` flag.
+- **First-party service connectors** via `IChatClient`: Azure OpenAI, OpenAI, Anthropic Claude, Amazon Bedrock, Google Gemini, Ollama.
+- **Unified orchestration** — sequential, concurrent, handoff, group chat, and Magentic-One patterns built in.
+- **Azure App Service support** for multi-agent deployment.
+- **A2A Protocol**, **Graph-based Workflows**, **Declarative YAML/JSON**, **OpenTelemetry** — full enterprise feature set.
+
+<Aside type="caution" title="Migrating from Preview to GA">
+  - `ChatClientAgentOptions.Instructions` removed — pass instructions directly to the `ChatClientAgent` constructor.
+  - Package names: `agent-framework`, `agent-framework-core`, `agent-framework-openai` (no preview suffix).
+  - Dependency floor: `>=1.0.0,<2` — RC installs incompatible.
+  - From standalone Semantic Kernel or AutoGen? See the [official migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-semantic-kernel/) (~2–4 hours).
+</Aside>
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.0.1 | Parent index redesigned as language selector + cross-cutting guides. |
+| April 10, 2026 | 1.0.1 | Patch release. |
+| April 3-7, 2026 | 1.0 GA | Graduated from Preview; first-party connectors; Azure App Service. |
+| November 2025 | 1.0 Preview | Initial unified SDK. |

@@ -1,0 +1,116 @@
+---
+title: "PydanticAI"
+description: "Type-safe agents with validated outputs, dependency injection, durable execution, and graph support."
+framework: pydanticai
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**The Pydantic way for Generative AI.** Type-safe agents with validated inputs/outputs, FastAPI-inspired dependency injection, and — new in 2025 — durable execution, graph-based workflows, and a first-class evals framework.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install pydantic-ai
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.84.1** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Typed APIs, structured output, validated data pipelines, evals-driven agents.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  Coming from Pydantic/FastAPI? Skim **Philosophy & core concepts** then jump to **Structured output**. New to agents? Follow Zero → Hero.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Philosophy & core concepts" href="./pydantic_ai_comprehensive_guide/#philosophy--core-concepts" description="Why type safety, design principles · 10 min" />
+  <LinkCard title="2 · Installation & setup" href="./pydantic_ai_comprehensive_guide/#installation--setup" description="Install, first agent, LLM config · 15 min" />
+  <LinkCard title="3 · Core fundamentals" href="./pydantic_ai_comprehensive_guide/#core-fundamentals" description="Agent, Model, RunContext, tools · 20 min" />
+  <LinkCard title="4 · Your first agent" href="./pydantic_ai_comprehensive_guide/#simple-agents" description="Query/response, streaming, async · 20 min" />
+  <LinkCard title="5 · Type safety & validation" href="./pydantic_ai_comprehensive_guide/#type-safety--validation" description="Pydantic models for everything · 15 min" />
+  <LinkCard title="6 · Structured output" href="./pydantic_ai_comprehensive_guide/#structured-output" description="Typed response models, retries · 15 min" />
+  <LinkCard title="7 · Tools & function calling" href="./pydantic_ai_comprehensive_guide/#tools--function-calling" description="@agent.tool decorator, validation · 20 min" />
+  <LinkCard title="8 · Dependency injection" href="./pydantic_ai_comprehensive_guide/#dependency-injection" description="FastAPI-style deps, testing, mocking · 15 min" />
+  <LinkCard title="9 · Graph support" href="./pydantic_ai_graph_support/" description="Typed state graphs (2025) · 25 min" />
+  <LinkCard title="10 · Durable execution" href="./pydantic_ai_durable_execution/" description="Checkpointing, resume, Temporal-style · 25 min" />
+  <LinkCard title="11 · Evals" href="./pydantic_ai_evals_2025/" description="LLM-as-judge, regression testing · 20 min" />
+  <LinkCard title="12 · Production" href="./pydantic_ai_production_guide/" description="Deployment, observability, cost · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent primitive" href="./pydantic_ai_comprehensive_guide/#core-fundamentals" />
+  <LinkCard title="Structured output" href="./pydantic_ai_comprehensive_guide/#structured-output" />
+  <LinkCard title="Tools (typed)" href="./pydantic_ai_comprehensive_guide/#tools--function-calling" />
+  <LinkCard title="Dependency injection" href="./pydantic_ai_comprehensive_guide/#dependency-injection" />
+  <LinkCard title="Graph support" href="./pydantic_ai_graph_support/" />
+  <LinkCard title="Durable execution" href="./pydantic_ai_durable_execution/" />
+  <LinkCard title="Evals" href="./pydantic_ai_evals_2025/" />
+  <LinkCard title="Integrations 2025" href="./pydantic_ai_integrations_2025/" />
+  <LinkCard title="Advanced patterns" href="./pydantic_ai_advanced_patterns/" />
+  <LinkCard title="Error testing" href="./pydantic_ai_advanced_error_testing/" />
+  <LinkCard title="Streaming server" href="./pydantic_ai_streaming_server_fastapi/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./pydantic_ai_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Advanced patterns" href="./pydantic_ai_advanced_patterns/" />
+  <LinkCard title="Advanced error testing" href="./pydantic_ai_advanced_error_testing/" />
+  <LinkCard title="Durable execution (2025)" href="./pydantic_ai_durable_execution/" />
+  <LinkCard title="Graph support (2025)" href="./pydantic_ai_graph_support/" />
+  <LinkCard title="Integrations 2025" href="./pydantic_ai_integrations_2025/" />
+  <LinkCard title="Evals (2025)" href="./pydantic_ai_evals_2025/" />
+  <LinkCard title="Recipes" href="./pydantic_ai_recipes/" />
+  <LinkCard title="Diagrams" href="./pydantic_ai_diagrams/" />
+  <LinkCard title="Production guide" href="./pydantic_ai_production_guide/" />
+  <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
+</CardGrid>
+
+## What's new in v1.84.1 (April 2026)
+
+- **Durable execution** — checkpointing and resume for long-running agents.
+- **Graph support** — typed state graphs with Pydantic nodes.
+- **Evals framework** — LLM-as-judge, regression suites, CI integration.
+- **Advanced integrations** — Logfire, OpenTelemetry, observability providers.
+
+## Install, minimal example
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+class Answer(BaseModel):
+    value: int
+    reasoning: str
+
+agent = Agent('openai:gpt-4o', result_type=Answer)
+
+result = agent.run_sync("What is 15 + 27?")
+print(result.data)  # Answer(value=42, reasoning='...')
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#philosophy--core-concepts)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.84.1 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 18, 2026 | 1.84.1 | Patch; bug fixes. |
+| April 17, 2026 | 1.84.0 | Evals framework; graph support improvements. |
+| November 2025 | 1.14.x | Initial 2025 guide with durable execution, graphs, integrations. |

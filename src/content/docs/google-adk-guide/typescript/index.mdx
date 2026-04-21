@@ -1,0 +1,64 @@
+---
+title: "Google ADK (TypeScript)"
+description: "TypeScript port of the Google Agent Development Kit — active development."
+framework: google-adk
+language: typescript
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**TypeScript port of Google ADK.** Currently in active development — the same architecture as the Python and Go versions, adapted for Node.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @google/adk
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v0.6.1** · April 2026 · Node 18+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Full-stack Gemini agents, Node backends, browser-compatible flows.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="Active development">
+  The TypeScript port is evolving quickly. For the most complete feature set today, see the [Python](/google-adk-guide/python/) and [Go](/google-adk-guide/go/) guides — patterns port cleanly.
+</Aside>
+
+## Getting started
+
+<CardGrid>
+  <LinkCard title="Python reference" href="/google-adk-guide/python/" description="Complete ADK feature documentation — patterns apply." />
+  <LinkCard title="Go reference" href="/google-adk-guide/go/" description="GA 1.0 Go SDK documentation." />
+</CardGrid>
+
+## Install, minimal example
+
+```typescript
+import { LLMAgent } from '@google/adk';
+
+const agent = new LLMAgent({
+  name: 'assistant',
+  model: 'gemini-2.0-flash-exp',
+  instruction: 'You are a helpful assistant.',
+});
+
+const response = await agent.run('What is 15 + 27?');
+console.log(response.text);
+```
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 0.6.1 | Index redesigned with language-selector style. |
+| April 4, 2026 | 0.6.1 | Active development release. |
+
+**Other languages:** [Python](/google-adk-guide/python/) · [Go](/google-adk-guide/go/).

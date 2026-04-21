@@ -1,0 +1,115 @@
+---
+title: "AutoGen / AG2 (Python)"
+description: "Microsoft AutoGen (now AG2) — research-grade multi-agent framework with GroupChat and event-driven architecture."
+framework: autogen
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Research-grade multi-agent framework.** AutoGen pioneered GroupChat-style multi-agent conversations; AG2 is the community continuation with event-driven architecture and A2A protocol.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install "ag2[openai]"
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **AG2** · 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Research, experimentation, GroupChat, human-proxy workflows.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="AutoGen → AG2">
+  AutoGen has been rebranded to AG2 under community stewardship. The package is `ag2`; the legacy `autogen` imports are aliased. See the [migration guide](./autogen_to_ag2_migration_guide/).
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Introduction & overview" href="./autogen_comprehensive_guide/#introduction-and-overview" description="Core ideas, mental model · 10 min" />
+  <LinkCard title="2 · Core fundamentals" href="./autogen_comprehensive_guide/#core-fundamentals" description="ConversableAgent, LLM config · 25 min" />
+  <LinkCard title="3 · Simple agents" href="./autogen_comprehensive_guide/#simple-agents" description="First agent, chat, code execution · 25 min" />
+  <LinkCard title="4 · Multi-agent systems" href="./autogen_comprehensive_guide/#multi-agent-systems" description="GroupChat, speaker selection · 30 min" />
+  <LinkCard title="5 · Tools & function integration" href="./autogen_comprehensive_guide/#tools-and-function-integration" description="Registered functions, async tools · 20 min" />
+  <LinkCard title="6 · Structured output" href="./autogen_comprehensive_guide/#structured-output-and-data-validation" description="Pydantic validation · 15 min" />
+  <LinkCard title="7 · Agentic patterns" href="./autogen_comprehensive_guide/#agentic-patterns-and-workflows" description="Reflection, debate, planning · 20 min" />
+  <LinkCard title="8 · Memory & context" href="./autogen_comprehensive_guide/#memory-systems-and-context-management" description="Conversation memory · 15 min" />
+  <LinkCard title="9 · Context engineering" href="./autogen_comprehensive_guide/#context-engineering" description="Summaries, compression · 15 min" />
+  <LinkCard title="10 · AG2 2025 features" href="./autogen_comprehensive_guide/#ag2-2025-features" description="Event-driven, A2A, CLI · 25 min" />
+  <LinkCard title="11 · AutoGen → AG2 migration" href="./autogen_to_ag2_migration_guide/" description="Renames, breaking changes · 15 min" />
+  <LinkCard title="12 · Advanced multi-agent" href="./autogen_advanced_multi_agent/" description="Complex topologies · 30 min" />
+  <LinkCard title="13 · Production" href="./autogen_production_guide/" description="Deployment, monitoring · 25 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="ConversableAgent" href="./autogen_comprehensive_guide/#core-fundamentals" />
+  <LinkCard title="GroupChat" href="./autogen_comprehensive_guide/#multi-agent-systems" />
+  <LinkCard title="Function integration" href="./autogen_comprehensive_guide/#tools-and-function-integration" />
+  <LinkCard title="Structured output" href="./autogen_comprehensive_guide/#structured-output-and-data-validation" />
+  <LinkCard title="Agentic patterns" href="./autogen_comprehensive_guide/#agentic-patterns-and-workflows" />
+  <LinkCard title="Memory systems" href="./autogen_comprehensive_guide/#memory-systems-and-context-management" />
+  <LinkCard title="AG2 2025 features" href="./autogen_comprehensive_guide/#ag2-2025-features" />
+  <LinkCard title="AutoGen → AG2 migration" href="./autogen_to_ag2_migration_guide/" />
+  <LinkCard title="Observability" href="./autogen_observability_python/" />
+  <LinkCard title="Advanced multi-agent" href="./autogen_advanced_multi_agent/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./autogen_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Advanced multi-agent" href="./autogen_advanced_multi_agent/" />
+  <LinkCard title="AutoGen → AG2 migration" href="./autogen_to_ag2_migration_guide/" />
+  <LinkCard title="Observability" href="./autogen_observability_python/" />
+  <LinkCard title="Recipes" href="./autogen_recipes/" />
+  <LinkCard title="Diagrams" href="./autogen_diagrams/" />
+  <LinkCard title="Production guide" href="./autogen_production_guide/" />
+</CardGrid>
+
+## What's new
+
+- **AG2 rebrand** (Nov 2024) — community continuation; legacy `autogen` imports preserved via aliases.
+- **Event-driven architecture** (`autogen.beta`) — typed events for complex conversations.
+- **A2A protocol** — cross-framework interop.
+- **AG2 CLI** — scaffolding and deploy helpers.
+
+## Install, minimal example
+
+```python
+from autogen import ConversableAgent, config_list_from_json
+
+config_list = config_list_from_json("OAI_CONFIG_LIST")
+
+agent = ConversableAgent(
+    name="assistant",
+    llm_config={"config_list": config_list},
+    system_message="You are a helpful assistant.",
+)
+
+reply = agent.generate_reply(
+    messages=[{"role": "user", "content": "What is 2 + 2?"}]
+)
+print(reply)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./autogen_comprehensive_guide/#introduction-and-overview)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | AG2 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| November 2024 | AG2 | Rebranded from AutoGen to AG2. |
+
+**Note:** For the newer [AG2 guide](/ag2-guide/), focusing on 2025 features (event-driven, A2A, CLI), visit that framework's page.

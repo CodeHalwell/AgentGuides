@@ -1,0 +1,59 @@
+---
+title: "LlamaIndex"
+description: "RAG-first agent framework — pick your language."
+framework: llamaindex
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+**The data framework for LLM apps.** Turn unstructured data into agent-queryable knowledge — document loaders, vector indices, query engines, tools, and multi-agent orchestration.
+
+## Choose your language
+
+<CardGrid>
+  <LinkCard
+    title="🐍 Python"
+    href="/llamaindex-guide/python/"
+    description="v0.14.20 · 100+ data connectors, ReAct agents, llama-agents package."
+  />
+  <LinkCard
+    title="📘 TypeScript"
+    href="/llamaindex-guide/typescript/"
+    description="@llamaindex/workflow 1.1.4 · event-driven workflows for Node and browser."
+  />
+</CardGrid>
+
+## What you'll find in both guides
+
+<CardGrid>
+  <Card title="Data ingestion" icon="document">
+    Document loaders, chunking, embeddings.
+  </Card>
+  <Card title="Vector indices" icon="list-format">
+    Summary, tree, vector store, list indices.
+  </Card>
+  <Card title="Query engines" icon="magnifier">
+    RAG, subquestion, multi-step, router engines.
+  </Card>
+  <Card title="Agents" icon="rocket">
+    ReAct agents, function-calling agents, tool use.
+  </Card>
+  <Card title="Multi-agent" icon="random">
+    `llama-agents` (Python) / workflow orchestration (TypeScript).
+  </Card>
+  <Card title="Production" icon="setting">
+    Observability, caching, scaling strategies.
+  </Card>
+</CardGrid>
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | Py 0.14.20 / TS 1.1.4 | Parent index redesigned as language selector. |
+| April 2026 | Py 0.14.20 / TS 1.1.4 | llama-agents stabilisation; scoped TS packages. |

@@ -1,0 +1,115 @@
+---
+title: "Anthropic Claude Agent SDK (Python)"
+description: "Claude-native agent SDK — tools, Computer Use, MCP, extended thinking, session rewind."
+framework: anthropic-claude-sdk
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Claude-first agent SDK.** The production successor to the Code SDK — Computer Use, MCP, extended thinking, checkpointing, and session rewind, all tuned for Claude.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install claude-agent-sdk
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v0.1.63** · April 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Claude-exclusive apps, Computer Use, MCP-heavy workflows, durable sessions.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Migrating from the Code SDK?">
+  The SDK was renamed from Code SDK to Agent SDK. See the [migration guide](./anthropic_claude_agent_sdk_migration_guide/).
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Introduction" href="./anthropic_claude_agent_sdk_comprehensive_guide/#introduction" description="What's the SDK, when to use it · 10 min" />
+  <LinkCard title="2 · Installation & auth" href="./anthropic_claude_agent_sdk_comprehensive_guide/#installation--authentication" description="API key, client setup · 10 min" />
+  <LinkCard title="3 · Core architecture" href="./anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" description="Agent, tools, sessions · 20 min" />
+  <LinkCard title="4 · Your first agent" href="./anthropic_claude_agent_sdk_comprehensive_guide/#simple-agents" description="Chat, streaming, async · 25 min" />
+  <LinkCard title="5 · Tools & integration" href="./anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" description="Custom tools, tool use loop · 25 min" />
+  <LinkCard title="6 · Multi-agent systems" href="./anthropic_claude_agent_sdk_comprehensive_guide/#multi-agent-systems" description="Sub-agents, delegation · 20 min" />
+  <LinkCard title="7 · Computer Use API" href="./anthropic_claude_agent_sdk_comprehensive_guide/#computer-use-api" description="Screenshots, mouse/keyboard, VNC · 30 min" />
+  <LinkCard title="8 · MCP" href="./anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" description="Filesystem, git, HTTP servers · 20 min" />
+  <LinkCard title="9 · Structured output" href="./anthropic_claude_agent_sdk_comprehensive_guide/#structured-output" description="JSON schema, validated responses · 15 min" />
+  <LinkCard title="10 · Sessions & memory" href="./anthropic_claude_agent_sdk_comprehensive_guide/#session-management" description="Persistence, replay, forking · 20 min" />
+  <LinkCard title="11 · Extended thinking" href="./anthropic_claude_agent_sdk_comprehensive_guide/#extended-thinking-configuration-v0160" description="Reasoning budgets (v0.1.60+) · 10 min" />
+  <LinkCard title="12 · File checkpointing" href="./anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-session-rewind-v0160" description="Session rewind (v0.1.60+) · 15 min" />
+  <LinkCard title="13 · Production" href="./anthropic_claude_agent_sdk_production_guide/" description="Deployment, monitoring · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Core architecture" href="./anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" />
+  <LinkCard title="Tools & integration" href="./anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" />
+  <LinkCard title="Computer Use" href="./anthropic_claude_agent_sdk_comprehensive_guide/#computer-use-api" />
+  <LinkCard title="MCP" href="./anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" />
+  <LinkCard title="Session management" href="./anthropic_claude_agent_sdk_comprehensive_guide/#session-management" />
+  <LinkCard title="Context engineering" href="./anthropic_claude_agent_sdk_comprehensive_guide/#context-engineering" />
+  <LinkCard title="Permissions" href="./anthropic_claude_agent_sdk_comprehensive_guide/#advanced-permissions" />
+  <LinkCard title="Agentic patterns" href="./anthropic_claude_agent_sdk_comprehensive_guide/#agentic-patterns" />
+  <LinkCard title="Extended thinking" href="./anthropic_claude_agent_sdk_comprehensive_guide/#extended-thinking-configuration-v0160" />
+  <LinkCard title="File checkpointing" href="./anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-session-rewind-v0160" />
+  <LinkCard title="Code SDK migration" href="./anthropic_claude_agent_sdk_migration_guide/" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./anthropic_claude_agent_sdk_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Migration guide" href="./anthropic_claude_agent_sdk_migration_guide/" description="Code SDK → Agent SDK." />
+  <LinkCard title="Recipes" href="./anthropic_claude_agent_sdk_recipes/" />
+  <LinkCard title="Diagrams" href="./anthropic_claude_agent_sdk_diagrams/" />
+  <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" />
+</CardGrid>
+
+## What's new in v0.1.63 (April 2026)
+
+- **Extended thinking configuration** — control reasoning token budgets.
+- **File checkpointing** — save and restore session state.
+- **Session rewind** — travel back to any turn in a conversation.
+- **Computer Use stability improvements** for long-running VM sessions.
+
+## Install, minimal example
+
+```python
+from anthropic import Anthropic
+from claude_agent_sdk import Agent
+
+client = Anthropic()
+
+agent = Agent(
+    client=client,
+    model="claude-3-5-sonnet-latest",
+    system="You are a helpful assistant.",
+)
+
+response = agent.run("What is 15 + 27?")
+print(response.content)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./anthropic_claude_agent_sdk_comprehensive_guide/#introduction)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 0.1.63 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 18, 2026 | 0.1.63 | Stability fixes. |
+| April 16, 2026 | 0.1.60 | Extended thinking; file checkpointing; session rewind. |
+| 2025 | Rebrand | Renamed from Claude Code SDK to Claude Agent SDK. |
+
+**Note:** TypeScript implementation lives at [Claude Agent SDK (TypeScript)](/anthropic-claude-agent-sdk-typescript-guide/).

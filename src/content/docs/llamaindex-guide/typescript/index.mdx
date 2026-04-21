@@ -1,0 +1,97 @@
+---
+title: "LlamaIndex (TypeScript)"
+description: "Event-driven agentic workflows in TypeScript — RAG, agent coordination, typed event handling."
+framework: llamaindex
+language: typescript
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Event-driven agentic workflows for TypeScript.** Use `@llamaindex/workflow` to model agents as typed events and handlers. First-class RAG, query engines, and agent coordination — all with TypeScript types.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @llamaindex/workflow @llamaindex/core
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **@llamaindex/workflow 1.1.4** · April 2026 · Node 18+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Typed event-driven agents, full-stack RAG apps, browser-compatible flows.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="Migrating from the monorepo package">
+  The legacy `llamaindex` monolith package is superseded by scoped packages: `@llamaindex/workflow`, `@llamaindex/core`, provider-specific packages. Migrate to the scoped ones.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Installation & setup" href="./llamaindex_workflows_typescript_comprehensive_guide/#1-installation-and-setup" description="Scoped packages, LLM/embeddings · 15 min" />
+  <LinkCard title="2 · Core concepts" href="./llamaindex_workflows_typescript_comprehensive_guide/#2-core-concepts" description="Events, handlers, workflow state · 20 min" />
+  <LinkCard title="3 · Async operations" href="./llamaindex_workflows_typescript_comprehensive_guide/#3-async-operations-and-promises" description="Promises, concurrency · 15 min" />
+  <LinkCard title="4 · Event handling & routing" href="./llamaindex_workflows_typescript_comprehensive_guide/#4-event-handling-and-routing" description="Typed event handlers · 20 min" />
+  <LinkCard title="5 · Complete RAG workflow" href="./llamaindex_workflows_typescript_comprehensive_guide/#5-complete-rag-workflow-example" description="Full end-to-end RAG agent · 30 min" />
+  <LinkCard title="6 · Agent coordination" href="./llamaindex_workflows_typescript_comprehensive_guide/#6-agent-coordination" description="Multi-agent workflows · 25 min" />
+  <LinkCard title="7 · Production" href="./llamaindex_typescript_production_guide/" description="Deployment, scaling · 30 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Core concepts" href="./llamaindex_workflows_typescript_comprehensive_guide/#2-core-concepts" />
+  <LinkCard title="Event handling" href="./llamaindex_workflows_typescript_comprehensive_guide/#4-event-handling-and-routing" />
+  <LinkCard title="RAG workflow example" href="./llamaindex_workflows_typescript_comprehensive_guide/#5-complete-rag-workflow-example" />
+  <LinkCard title="Multi-agent coordination" href="./llamaindex_workflows_typescript_comprehensive_guide/#6-agent-coordination" />
+  <LinkCard title="Async operations" href="./llamaindex_workflows_typescript_comprehensive_guide/#3-async-operations-and-promises" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Workflows comprehensive" href="./llamaindex_workflows_typescript_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="./llamaindex_typescript_recipes/" />
+  <LinkCard title="Production guide" href="./llamaindex_typescript_production_guide/" />
+</CardGrid>
+
+## What's new in @llamaindex/workflow 1.1.4 (April 2026)
+
+- Scoped package migration finalised.
+- Typed event handlers stabilised.
+- RAG workflow patterns documented end-to-end.
+
+## Install, minimal example
+
+```typescript
+import { Workflow, StartEvent, StopEvent, step } from '@llamaindex/workflow';
+
+class MyAgent extends Workflow {
+  @step()
+  async respond(ev: StartEvent): Promise<StopEvent> {
+    return new StopEvent({ result: `Echo: ${ev.data.input}` });
+  }
+}
+
+const workflow = new MyAgent();
+const result = await workflow.run({ input: 'Hello!' });
+console.log(result);
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./llamaindex_workflows_typescript_comprehensive_guide/#1-installation-and-setup)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.1.4 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| April 2026 | 1.1.4 | Scoped package migration; event handlers stabilised. |
+
+**Note:** Python implementation lives at [LlamaIndex (Python)](/llamaindex-guide/python/).

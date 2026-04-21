@@ -1,0 +1,101 @@
+---
+title: "SmolAgents"
+description: "Minimalist code-centric agents in ~1,000 lines — the fastest path to a working agent."
+framework: smolagents
+language: python
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**The smallest complete agent framework.** A `CodeAgent` writes Python to accomplish tasks; a `ToolCallingAgent` uses JSON tool-calling. The entire core is ~1,000 lines — readable, hackable, and a great first step into agents.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install smolagents
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **v1.24.0** · January 2026 · Python 3.10+
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Learning, prototyping, simple automation, code-first workflows.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  Brand new to agents? This is the easiest framework to get running in 5 minutes. Follow Zero → Hero.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Introduction & philosophy" href="./smolagents_comprehensive_guide/#introduction--philosophy" description="Why code > JSON · 10 min" />
+  <LinkCard title="2 · Installation & setup" href="./smolagents_comprehensive_guide/#installation--setup" description="Install, LLM config, hello world · 10 min" />
+  <LinkCard title="3 · Core concepts & architecture" href="./smolagents_comprehensive_guide/#core-concepts--architecture" description="Agent, Tool, Memory · 15 min" />
+  <LinkCard title="4 · Model configuration" href="./smolagents_comprehensive_guide/#model-configuration--selection" description="100+ LLM providers · 15 min" />
+  <LinkCard title="5 · Simple agents fundamentals" href="./smolagents_comprehensive_guide/#simple-agents-fundamentals" description="First agent walk-through · 20 min" />
+  <LinkCard title="6 · Tools: building blocks" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" description="Built-in + custom tools · 20 min" />
+  <LinkCard title="7 · CodeAgent (code paradigm)" href="./smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" description="Python-writing agent · 25 min" />
+  <LinkCard title="8 · ToolCallingAgent" href="./smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" description="JSON tool-calling variant · 15 min" />
+  <LinkCard title="9 · Multi-agent & orchestration" href="./smolagents_comprehensive_guide/#multi-agent-systems--orchestration" description="Managed agents, delegation · 20 min" />
+  <LinkCard title="10 · Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" description="Schema-validated output · 15 min" />
+  <LinkCard title="11 · Production" href="./smolagents_production_guide/" description="Deployment, safety, cost · 25 min" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="CodeAgent" href="./smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" />
+  <LinkCard title="ToolCallingAgent" href="./smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" />
+  <LinkCard title="Custom tools" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" />
+  <LinkCard title="Multi-agent orchestration" href="./smolagents_comprehensive_guide/#multi-agent-systems--orchestration" />
+  <LinkCard title="Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" />
+  <LinkCard title="2025 features deep-dive" href="./smolagents_comprehensive_guide/#2025-features-deep-dive" />
+  <LinkCard title="Model selection (100+ LLMs)" href="./smolagents_comprehensive_guide/#model-configuration--selection" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="./smolagents_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="./smolagents_recipes/" />
+  <LinkCard title="Diagrams" href="./smolagents_diagrams/" />
+  <LinkCard title="Production guide" href="./smolagents_production_guide/" />
+</CardGrid>
+
+## What's new in v1.24.0 (January 2026)
+
+- Expanded model provider coverage (Anthropic, Gemini, Ollama improvements).
+- Tool call performance optimisations.
+- Multi-agent orchestration patterns stabilised.
+
+## Install, minimal example
+
+```python
+from smolagents import CodeAgent, tool
+
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+agent = CodeAgent(tools=[add_numbers])
+result = agent.run("What is 15 + 27?")
+print(result)
+```
+
+Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#introduction--philosophy)**
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| January 16, 2026 | 1.24.0 | Expanded model providers; tool call perf; multi-agent patterns. |
+| November 2025 | 1.23.0 | Initial documented version. |
