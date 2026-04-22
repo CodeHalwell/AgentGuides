@@ -8,7 +8,7 @@ language: python
 # Google ADK Advanced (Python)
 
 
-Latest: 1.30.0 | Updated: April 2026
+Latest: 2.0.0b1 | Updated: April 2026
 Upstream: https://github.com/google/adk-python | https://google.github.io/adk-docs/get-started/python/
 
 ## Patterns
@@ -18,16 +18,38 @@ Upstream: https://github.com/google/adk-python | https://google.github.io/adk-do
 
 ## Quickstart Pattern
 
+Use `LlmAgent` (the parameter is singular `instruction`, not `instructions`) and wire everything through an `InMemoryRunner` for local development. `Runner` takes a single root `agent=` (or `app=`) — there is no `agents=` list parameter.
+
 ```python
-from google.adk import Agent, Runner
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.tools import AgentTool
+from google.adk.runners import InMemoryRunner
 
-researcher = Agent(name="researcher", instructions="Research and cite sources.")
-writer = Agent(name="writer", instructions="Draft and refine copy.")
+researcher = LlmAgent(
+    name="researcher",
+    model="gemini-2.5-flash",
+    instruction="Research the topic and cite sources.",
+)
+writer = LlmAgent(
+    name="writer",
+    model="gemini-2.5-flash",
+    instruction="Draft and refine copy using the `researcher` tool.",
+    tools=[AgentTool(agent=researcher)],
+)
 
-runner = Runner(agents=[researcher, writer])
-result = runner.run("Summarize LangGraph with references")
-print(result.output)
+async def main():
+    runner = InMemoryRunner(agent=writer, app_name="pipeline")
+    events = await runner.run_debug(
+        "Summarise LangGraph with references",
+        user_id="u1",
+        session_id="s1",
+    )
+
+asyncio.run(main())
 ```
+
+See the [agents page](./agents/) for the full constructor surface and the [runner page](./runner-and-sessions/) for production wiring.
 
 ## Deployment
 - Package for Cloud Run; use Secret Manager for keys
