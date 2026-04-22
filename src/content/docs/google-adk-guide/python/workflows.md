@@ -194,10 +194,10 @@ workflow = Workflow(
 
 ## Loops
 
-Replace `LoopAgent` with a self-referential edge and an escalate condition:
+Replace `LoopAgent` with a routing map that either loops back to the same node or flows to a terminal node (any node with no outgoing edges). There is **no** `END_NODE` sentinel — terminality is structural.
 
 ```python
-from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
+from google.adk.workflow import Workflow, node, START
 
 @node(rerun_on_resume=True)
 async def critic(draft: str, ctx) -> str:
@@ -207,24 +207,33 @@ async def critic(draft: str, ctx) -> str:
     ctx.route = "continue"
     return draft[:500]  # trimmed draft fed back in
 
+@node
+def publish(draft: str) -> str:
+    return draft  # terminal: no outgoing edge
+
 loop = Workflow(
     name="refine",
     edges=[
-        (START, critic, {"continue": critic, "done": END_NODE}),
+        (START, critic, {"continue": critic, "done": publish}),
     ],
 )
 ```
 
-`max_concurrency=1` + a routing map back to the same node gives you a bounded loop. Persist iteration count in `ctx.state` if you need `max_iterations` semantics.
+`publish` is the terminal node — the workflow finishes when routing lands there. Persist iteration count in `ctx.state` if you need `max_iterations` semantics, and set `max_concurrency=1` to keep the loop single-threaded.
 
 ## JoinNode
 
 Fan-in that waits for **all** declared predecessors. Useful after a `(START, (a, b, c), join)` fan-out.
 
 ```python
-from google.adk.workflow import JoinNode, Workflow, START
+from google.adk.agents import LlmAgent
+from google.adk.workflow import JoinNode, Workflow, node, START
+
+a = LlmAgent(name="a", model="gemini-2.5-flash", instruction="Reply 'A'.", mode="single_turn")
+b = LlmAgent(name="b", model="gemini-2.5-flash", instruction="Reply 'B'.", mode="single_turn")
 
 join = JoinNode(name="merge")
+
 @node
 def finalize(node_input: dict) -> str:
     # node_input is a dict keyed by predecessor name

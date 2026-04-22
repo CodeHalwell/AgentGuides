@@ -184,7 +184,7 @@ Register `ReflectAndRetryToolPlugin` at the app level. Flaky tools get up to `ma
 
 ## Gotchas
 
-- A callback that returns **any** truthy value short-circuits the chain — `return None` is required to let the chain continue.
+- A callback that returns **any non-None** value short-circuits the chain — `return None` is required to let the chain continue. Returning `False`, `0`, or `{}` also short-circuits because the runtime checks `is not None`, not truthiness.
 - Plugins execute before agent callbacks at the same hook. A plugin returning non-`None` prevents the agent's own callback from running.
 - `LlmAgent.global_instruction` is deprecated — migrate to `GlobalInstructionPlugin`.
 - `RunConfig.save_input_blobs_as_artifacts` is deprecated — migrate to `SaveFilesAsArtifactsPlugin`.

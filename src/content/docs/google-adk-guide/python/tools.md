@@ -48,7 +48,7 @@ Everything in `google.adk.tools` is lazy-loaded (`tools/__init__.py`):
 | `ExampleTool` | Class | Few-shot example injector |
 | `AuthToolArguments` | Class | Auth-required tool arguments |
 | `TransferToAgentTool`, `transfer_to_agent` | Class + singleton | Injected automatically when `sub_agents` is set |
-| `MCPToolset` / `McpToolset` | Class | Connects to an MCP server |
+| `McpToolset` | Class | Connects to an MCP server (also exported as `MCPToolset` for back-compat) |
 | `APIHubToolset` | Class | Wraps APIs registered in Google API Hub |
 | `ApiRegistry` | Class | Builds tools from OpenAPI specs |
 | `ToolContext` | Class | Passed to every tool via `tool_context=` |
