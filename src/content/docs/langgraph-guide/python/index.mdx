@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.1.9** · April 2026 · Python 3.10 – 3.14
+    **v1.1.9** · April 22, 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -47,6 +47,15 @@ A chaptered tutorial that takes you from a first graph to a production-ready age
   <LinkCard title="10 · Production & troubleshooting" href="/langgraph-guide/python/chapter-10-production/" description="Docker, CLI, SDK, common pitfalls · 20 min" />
 </CardGrid>
 
+<Aside type="note" title="Looking for a reference?">
+  The Zero → Hero chapters are task-oriented tutorials. If you already know the
+  shape of LangGraph and want exact signatures, feature tables, and breaking-change
+  history for a single primitive, jump to the **Reference** section near the bottom
+  of this page — one page per API (StateGraph, Checkpointers, Store, Functional
+  API, Command/Send, streaming modes). Each is verified line-by-line against the
+  installed `langgraph==1.1.9` source.
+</Aside>
+
 ## Jump to a topic
 
 Need one specific concept? Land directly on the chapter that owns it.
@@ -63,10 +72,29 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Interrupts (HITL)" href="/langgraph-guide/python/chapter-07-human-in-the-loop/#basic-interrupts" />
   <LinkCard title="Middleware (create_agent)" href="/langgraph-guide/python/chapter-08-middleware-hooks/" />
   <LinkCard title="ReAct pattern" href="/langgraph-guide/python/chapter-09-advanced-patterns/#pattern-1-react-reasoning--acting" />
-  <LinkCard title="Functional API" href="/langgraph-guide/python/chapter-09-advanced-patterns/#functional-api-langgraph-10" />
+  <LinkCard title="Functional API" href="/langgraph-guide/python/reference-functional-api/" />
+  <LinkCard title="Command / Send" href="/langgraph-guide/python/reference-command-and-send/" />
+  <LinkCard title="Stream modes (v1 / v2)" href="/langgraph-guide/python/reference-streaming-modes/" />
+  <LinkCard title="StateGraph API" href="/langgraph-guide/python/reference-state-graph/" />
+  <LinkCard title="Checkpointers matrix" href="/langgraph-guide/python/reference-checkpointers/" />
+  <LinkCard title="Store (long-term memory)" href="/langgraph-guide/python/reference-store/" />
 </CardGrid>
 
 ## Reference
+
+Every page below is introspected against the installed `langgraph==1.1.9` /
+`langgraph-checkpoint==4.0.2` / `langgraph-checkpoint-sqlite==3.0.3` /
+`langgraph-checkpoint-postgres==3.0.5` source. If a signature disagrees with an
+older blog post or docs page, the source wins.
+
+<CardGrid>
+  <LinkCard title="StateGraph API reference" href="/langgraph-guide/python/reference-state-graph/" description="Constructor, add_node (all 4 overloads), add_edge, add_conditional_edges, add_sequence, compile, Runtime, retry/cache/defer/destinations." />
+  <LinkCard title="Checkpointers reference" href="/langgraph-guide/python/reference-checkpointers/" description="Feature matrix for InMemorySaver, Sqlite, AsyncSqlite, Postgres, AsyncPostgres, ShallowPostgres — plus durability modes and connection strings." />
+  <LinkCard title="Store (long-term memory) reference" href="/langgraph-guide/python/reference-store/" description="BaseStore, InMemoryStore, namespaces, IndexConfig (vector search), TTLConfig, InjectedStore for tools." />
+  <LinkCard title="Functional API reference" href="/langgraph-guide/python/reference-functional-api/" description="@entrypoint, @task, entrypoint.final, previous, injecting Runtime, feature matrix vs StateGraph." />
+  <LinkCard title="Command / Send reference" href="/langgraph-guide/python/reference-command-and-send/" description="Command(update, goto, resume, graph), Send for fan-out, interrupt + resume, Command.PARENT, Overwrite." />
+  <LinkCard title="Streaming modes reference" href="/langgraph-guide/python/reference-streaming-modes/" description="All seven stream_mode values, v1 vs v2 typing, StreamPart discriminated union, GraphOutput, subgraphs=True." />
+</CardGrid>
 
 <CardGrid>
   <LinkCard title="Single-page comprehensive guide" href="/langgraph-guide/python/langgraph_comprehensive_guide/" description="All chapters in one long page — best for search and printing." />
@@ -88,7 +116,29 @@ Need one specific concept? Land directly on the chapter that owns it.
 - **Time-travel fixes** — replays no longer reuse stale `RESUME` values with interrupts and subgraphs.
 
 <Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==1.1.9` in April 2026. Earlier drafts of these pages documented a `langgraph.llm_hooks` module and a `langgraph.cache.cache_node` decorator — neither exists. The real middleware API is `langchain.agents.create_agent(middleware=[...])`; see [Chapter 8](./chapter-08-middleware-hooks/).
+  Introspected against `langgraph==1.1.9`, `langgraph-checkpoint==4.0.2`,
+  `langgraph-prebuilt==1.0.10`, `langgraph-checkpoint-sqlite==3.0.3`,
+  `langgraph-checkpoint-postgres==3.0.5` in April 2026.
+
+  Known corrections vs older drafts / third-party guides:
+
+  - `langgraph.llm_hooks` and `langgraph.cache.cache_node` **do not exist**. The
+    middleware system is `langchain.agents.create_agent(middleware=[...])`; see
+    [Chapter 8](./chapter-08-middleware-hooks/).
+  - `create_react_agent` in `langgraph.prebuilt` is **deprecated in v1.0** in
+    favor of `langchain.agents.create_agent`. It still runs, with a warning.
+  - `AgentState` / `AgentStatePydantic` moved from `langgraph.prebuilt` to
+    `langchain.agents`.
+  - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)`
+    are **context managers** (`with ... as saver:`), not factories that return
+    a saver directly. Some earlier examples omitted the `with`; see the
+    [Checkpointers reference](./reference-checkpointers/).
+  - `Interrupt.ns`, `Interrupt.when`, `Interrupt.resumable` were removed in v0.6;
+    only `Interrupt.value` and `Interrupt.id` remain.
+  - `checkpoint_during=False` on `invoke`/`stream` is deprecated — use
+    `durability="exit"` (or `"sync"` / `"async"`).
+  - `ShallowPostgresSaver` is deprecated as of `langgraph-checkpoint-postgres`
+    2.0.20. Use `PostgresSaver` + `durability="exit"`.
 </Aside>
 
 ## Install, minimal example
@@ -127,6 +177,7 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-22 | 1.1.9 | Added six source-verified reference pages: [StateGraph](./reference-state-graph/), [Checkpointers](./reference-checkpointers/), [Store](./reference-store/), [Functional API](./reference-functional-api/), [Command / Send](./reference-command-and-send/), [Streaming modes](./reference-streaming-modes/). Corrected stale guidance: `create_react_agent` deprecated in v1.0; `from_conn_string` is a context manager; `ShallowPostgresSaver` deprecated. |
 | 2026-04-21 | 1.1.8 | Index redesigned into Zero → Hero chaptered tutorial + Jump-to-topic grid; duplicated sections removed. |
 | 2026-04-20 | 1.1.8 | Version pin updated to 1.1.8; frameworks.ts metadata aligned. |
 | April 16, 2026 | 1.1.6 | Python 3.9 dropped; type-safe v2 streaming/invoke API; Pydantic/dataclass coercion; Python 3.14 support; time-travel fixes. |
