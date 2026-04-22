@@ -41,36 +41,61 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 <CardGrid>
   <LinkCard title="1 · Setup & core fundamentals" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals" description="Install, architecture, unified SDK, authentication · 20 min" />
   <LinkCard title="2 · Your first agent" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" description="Agent basics, lifecycle, task execution · 20 min" />
-  <LinkCard title="3 · Multi-agent orchestration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems" description="Sequential, concurrent, handoff, group chat, Magentic · 30 min" />
-  <LinkCard title="4 · Tools integration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#tools-integration" description="Built-in Azure tools, custom tools, MCP · 20 min" />
-  <LinkCard title="5 · Structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" description="Pydantic schemas, validation, type-safe responses · 15 min" />
-  <LinkCard title="6 · Graph workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#graph-based-workflows---python" description="Directed graphs, streaming, checkpointing, time-travel · 25 min" />
-  <LinkCard title="7 · Declarative agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" description="YAML/JSON config, Pydantic validation · 15 min" />
-  <LinkCard title="8 · A2A protocol (cross-framework)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#agent2agent-a2a-protocol---python" description="Interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK · 20 min" />
-  <LinkCard title="9 · Observability (OpenTelemetry)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#opentelemetry-integration---python" description="Distributed tracing, custom metrics, Azure Monitor · 15 min" />
-  <LinkCard title="10 · Production" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, scaling, security, DR · 30 min" />
+  <LinkCard title="3 · Model providers" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/" description="OpenAI, Azure OpenAI, Foundry, Anthropic, Ollama, Bedrock · 15 min" />
+  <LinkCard title="4 · Tools" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/" description="@tool, FunctionTool, approval gates, schemas, runtime context · 15 min" />
+  <LinkCard title="5 · MCP integration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/" description="MCPStdioTool, MCPStreamableHTTPTool, MCPWebsocketTool · 20 min" />
+  <LinkCard title="6 · Skills" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/" description="Progressive-disclosure domain knowledge, scripts, resources · 15 min" />
+  <LinkCard title="7 · Middleware" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/" description="Agent / chat / function middleware, redaction, retries · 20 min" />
+  <LinkCard title="8 · Multi-agent orchestration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/" description="Sequential, Concurrent, Handoff, GroupChat, Magentic · 30 min" />
+  <LinkCard title="9 · Human in the loop" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/" description="request_info, response_handler, orchestration HITL, tool approval · 20 min" />
+  <LinkCard title="10 · Checkpointing" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/" description="Persist and resume workflows across restarts · 15 min" />
+  <LinkCard title="11 · Compaction" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/" description="Sliding window, summarization, token-budget strategies · 15 min" />
+  <LinkCard title="12 · Observability & telemetry" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/" description="OpenTelemetry spans, metrics, logs, Azure Monitor · 20 min" />
+  <LinkCard title="13 · Evaluation" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/" description="evaluate_agent, LocalEvaluator, @evaluator, ground-truth checks · 20 min" />
+  <LinkCard title="14 · Structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" description="Pydantic schemas, validation, type-safe responses · 15 min" />
+  <LinkCard title="15 · Graph workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#graph-based-workflows---python" description="Directed graphs, streaming, time-travel · 25 min" />
+  <LinkCard title="16 · Declarative agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" description="YAML/JSON config, Pydantic validation · 15 min" />
+  <LinkCard title="17 · A2A protocol" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#agent2agent-a2a-protocol---python" description="Interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK · 20 min" />
+  <LinkCard title="18 · Production" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, scaling, security, DR · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="Unified SDK architecture" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals" />
+  <LinkCard title="Model providers (OpenAI, Azure, Foundry, Anthropic, Ollama, Bedrock)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/" />
+  <LinkCard title="Multi-agent orchestration (5 builders)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/" />
+  <LinkCard title="Middleware — agent / chat / function" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/" />
+  <LinkCard title="Tools — @tool & FunctionTool" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/" />
+  <LinkCard title="MCP tools (stdio, streamable HTTP, websocket)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/" />
+  <LinkCard title="Skills — progressive-disclosure knowledge" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/" />
+  <LinkCard title="Human in the loop — request_info & approval" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/" />
+  <LinkCard title="Checkpointing — pause/resume workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/" />
+  <LinkCard title="Compaction — stay inside the context window" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/" />
+  <LinkCard title="Observability & telemetry (OpenTelemetry)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/" />
+  <LinkCard title="Evaluation — evaluate_agent, LocalEvaluator" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/" />
   <LinkCard title="Agent lifecycle" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" />
-  <LinkCard title="Orchestration patterns" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#multi-agent-systems" />
-  <LinkCard title="Tool registration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#tools-integration" />
   <LinkCard title="Pydantic structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" />
   <LinkCard title="Graph workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#graph-based-workflows---python" />
   <LinkCard title="A2A cross-framework" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#agent2agent-a2a-protocol---python" />
   <LinkCard title="Declarative YAML agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" />
-  <LinkCard title="OpenTelemetry tracing" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#opentelemetry-integration---python" />
   <LinkCard title="Content safety" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#content-safety---python" />
   <LinkCard title="Async best practices" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#async-best-practices" />
-  <LinkCard title="Azure AI Agents example" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#azure-ai-agents-python-example" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
+  <LinkCard title="Model providers" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/" description="Every first-party chat client — real constructors." />
+  <LinkCard title="Multi-agent orchestration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/" description="Sequential, Concurrent, Handoff, GroupChat, Magentic." />
+  <LinkCard title="Middleware" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/" description="Agent / chat / function pipelines, short-circuit patterns." />
+  <LinkCard title="Tools" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/" description="@tool decorator, FunctionTool, approval, schemas, context." />
+  <LinkCard title="MCP integration" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/" description="Stdio, streamable HTTP, websocket — approval and headers." />
+  <LinkCard title="Skills" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/" description="Progressive-disclosure knowledge via Skill / SkillsProvider." />
+  <LinkCard title="Human in the loop" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/" description="request_info, response_handler, tool approval, resume." />
+  <LinkCard title="Checkpointing" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/" description="File / in-memory storage, custom backends, resume semantics." />
+  <LinkCard title="Compaction" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/" description="Sliding window, summarization, token-budget strategies." />
+  <LinkCard title="Observability & telemetry" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/" description="OpenTelemetry spans, metrics, logs, Azure Monitor integration." />
+  <LinkCard title="Evaluation" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/" description="evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator." />
   <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/" description="Single-page technical reference — all core concepts." />
   <LinkCard title="2025 features" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/" description="A2A, graph workflows, declarative agents, OpenTelemetry." />
   <LinkCard title="Advanced" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/" description="Azure AI Agents, production deployment patterns." />
@@ -88,12 +113,12 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 - **Declarative agents (beta)** — `agent_framework.declarative.AgentFactory` / `WorkflowFactory` load from YAML.
 - **A2A (beta)** — one class, `agent_framework.a2a.A2AAgent`, wraps a remote A2A endpoint as a local `Agent`.
 
-<Aside type="caution" title="Breaking changes in 2026 beta line">
+<Aside type="caution" title="Breaking changes in 2026 releases">
   - `display_name` parameter removed from agents.
-  - `context_providers` (plural list) renamed to `context_provider` (singular).
-  - `middleware` now requires a list — no longer accepts a single instance.
+  - `middleware=` now requires a list — no longer accepts a single instance.
   - `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
-  - `AggregateContextProvider` removed.
+  - `AggregateContextProvider` removed — compose `ContextProvider` instances directly.
+  - `context_providers` stays **plural** in `agent-framework-core==1.1.0` (verified against source). An earlier draft of this guide incorrectly said it was renamed to singular.
   - Migrating from standalone Semantic Kernel or AutoGen? See the [official guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/) — ~2–4 hours for a typical app.
 </Aside>
 
@@ -125,6 +150,8 @@ Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-22 | 1.0.3 | Added dedicated pages: Tools, Skills, Checkpointing, Compaction, Observability & Telemetry, Evaluation. Zero→Hero reflow to 18 steps; Jump-to-topic grid and Reference card grid updated. |
+| 2026-04-22 | 1.0.2 | Added dedicated pages: Model Providers, Orchestration, Middleware, MCP, Human-in-the-loop. Verified against source of `agent-framework-core==1.1.0`; corrected `context_providers` plural-vs-singular errata. |
 | 2026-04-21 | 1.0.1 | Index redesigned into Zero → Hero reading order + Jump-to-topic grid using Starlight cards. |
 | 2026-04-20 | 1.0.1 | Version pin corrected to `v1.0.1`; verified via `agent-framework` PyPI package. |
 | April 16, 2026 | 1.0 GA | Graduated from Preview; `ChatClientAgentOptions.Instructions` removed; first-party connectors; Azure App Service support. |
