@@ -125,7 +125,7 @@ class SemanticSearch(BaseTool):
 | `args_schema` | derived | Pydantic model of arguments; validated before `_run`. |
 | `cache_function` | always-cache | Callable `(args, result) -> bool` deciding whether to cache this call. |
 | `result_as_answer` | `False` | When `True`, the tool's output becomes the agent's final answer for that task. |
-| `max_usage_count` | `None` | Hard cap on how many times the agent can call this tool per task. Raises `ToolUsageLimitExceededError` when exceeded. |
+| `max_usage_count` | `None` | Hard cap on how many times the agent can call this tool per task. Over-limit behaviour depends on the call path — see [Usage caps](#usage-caps). |
 
 ```python
 def no_cache(_args, _result): return False
@@ -166,7 +166,12 @@ def external_api(q: str) -> str:
     ...
 ```
 
-The 4th call in one task returns the sentinel error string `"Tool usage limit exceeded..."` rather than executing — the agent sees the message and usually adapts.
+Two call paths, two behaviours (both are in the installed source):
+
+- **Direct call** — `BaseTool.run()` / `Tool.run()`: `_claim_usage()` returns the sentinel string `"Tool '...' has reached its usage limit of N times..."` instead of executing. The caller sees a normal return value.
+- **Agent executor** — the executor wraps the tool as a `CrewStructuredTool` (internal API), whose `_run` / `_arun` **raises `ToolUsageLimitExceededError`** when over-limit. The executor catches it and feeds the message back to the LLM, so the agent sees the limit message as a tool observation and usually adapts.
+
+Catch the exception if you're driving the structured tool yourself; if you're calling `tool.run(...)` directly, check for the sentinel string in the return value.
 
 Reset per-tool counters between runs:
 

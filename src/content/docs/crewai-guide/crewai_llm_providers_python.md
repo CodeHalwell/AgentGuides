@@ -98,7 +98,8 @@ The default `LLM` class extends `BaseLLM` with LiteLLM-specific knobs:
 | `stop` | `list[str]` | Stop sequences. |
 | `seed` | `int \| None` | Deterministic sampling where supported. |
 | `presence_penalty`, `frequency_penalty`, `logit_bias` | `float` / `dict` | OpenAI-style knobs. |
-| `api_base`, `api_version`, `api_key` | `str` | Point at a self-hosted endpoint. |
+| `base_url` | `str \| None` | Inherited from `BaseLLM`. Used by native OpenAI-compatible paths (`ollama/...`, `hosted_vllm/...`). |
+| `api_base`, `api_version`, `api_key` | `str` | `LLM`-specific. `api_base` is the LiteLLM-style endpoint override; both `base_url` and `api_base` are passed through, so either name works for the fallback path. |
 | `reasoning_effort` | `"none" \| "low" \| "medium" \| "high"` | For o1/o3/o4 and compatible reasoning models. |
 | `thinking` | `Any` | Anthropic extended thinking config. |
 | `stream` | `bool` | Global default — `Crew(stream=True)` overrides per run. |

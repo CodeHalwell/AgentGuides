@@ -319,7 +319,7 @@ cond = ConditionalTask(
 ## Gotchas
 
 - **`output_pydantic` vs `response_model`** — the first is prompt-driven and can still parse-fail; the second uses provider-native structured outputs and is enforced.
-- **`max_retries` is deprecated on `Task`** — use `guardrail_max_retries`. The old field will be removed in 1.0.0 per the source deprecation note.
+- **`max_retries` is deprecated on `Task`** — use `guardrail_max_retries`. The source docstring says "will be removed in v1.0.0" (written before the 1.x line, so effectively: a future major). Treat it as already-deprecated and avoid it in new code.
 - **Sequential crews don't let you wait for a specific task** — use `context=[t1, t2]` to pin ordering.
 - **Hierarchical tasks with `agent=` still obey delegation** — the manager can route them elsewhere.
 - **`input_files` supersedes `Agent.multimodal=True`.** That flag is deprecated and is removed in 2.0.

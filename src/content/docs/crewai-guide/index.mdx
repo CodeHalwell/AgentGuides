@@ -57,7 +57,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="BaseTool subclass" href="./crewai_tools_python/#basetool-subclass" />
   <LinkCard title="MCP server bridging" href="./crewai_tools_python/#mcp-server-tools--agentmcps" />
   <LinkCard title="Memory scope & slice" href="./crewai_memory_python/#scope-and-slice-views" />
-  <LinkCard title="Knowledge source types" href="./crewai_memory_python/" />
+  <LinkCard title="Knowledge source types" href="./crewai_knowledge_python/#built-in-sources" />
   <LinkCard title="LLM routing rules" href="./crewai_llm_providers_python/#how-routing-works" />
   <LinkCard title="Reasoning / thinking models" href="./crewai_llm_providers_python/#reasoning-models" />
   <LinkCard title="Custom BaseLLM" href="./crewai_llm_providers_python/#custom-llm--subclass-basellm" />
@@ -137,10 +137,10 @@ Ready? **[Start Zero → Hero Step 1 →](./crewai_comprehensive_guide/#core-fun
 
 ## Revision history
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-04-22 | 1.14.3a2 | Added 7 source-verified reference pages: Agent API, Task API, Memory, Knowledge, Tools, LLM providers, CLI. Corrected checkpoint import path (`crewai.state.provider.sqlite_provider`), field name (`checkpoint=`, not `checkpoint_config=`), and resume API (`from_checkpoint=CheckpointConfig(restore_from=...)`). Added errata banner to the AMP Suite section (imports fabricated; use CLI). |
-| 2026-04-21 | 1.14.2 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| April 17, 2026 | 1.14.2 | Checkpoint forking; `from_checkpoint`; checkpoint CLI; template CLI; reasoning_tokens. |
-| April 7, 2026 | 1.14.0 | Checkpoint system; Pydantic structured outputs; SSRF protections; RBAC; MCP custom servers. |
-| November 2025 | 1.5.0 | CrewAI Flows; MCP integration; memory systems; hierarchical processes. |
+| Date | Version | Changes | Reviewer |
+|------|---------|---------|----------|
+| 2026-04-22 | 1.14.3a2 | Added 7 source-verified reference pages: Agent API, Task API, Memory, Knowledge, Tools, LLM providers, CLI. Corrected checkpoint import path (`crewai.state.provider.sqlite_provider`), field name (`checkpoint=`, not `checkpoint_config=`), and resume API (`from_checkpoint=CheckpointConfig(restore_from=...)`). Added errata banner to the AMP Suite section (imports fabricated; use CLI). | Claude (Opus 4.7) |
+| 2026-04-21 | 1.14.2 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
+| April 17, 2026 | 1.14.2 | Checkpoint forking; `from_checkpoint`; checkpoint CLI; template CLI; reasoning_tokens. | — |
+| April 7, 2026 | 1.14.0 | Checkpoint system; Pydantic structured outputs; SSRF protections; RBAC; MCP custom servers. | — |
+| November 2025 | 1.5.0 | CrewAI Flows; MCP integration; memory systems; hierarchical processes. | — |

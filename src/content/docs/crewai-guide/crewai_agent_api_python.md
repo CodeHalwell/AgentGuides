@@ -68,7 +68,7 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `knowledge_config` | `KnowledgeConfig \| None` | `None` | Limits/threshold for knowledge retrieval. |
 | `mcps` | `list[str \| MCPServerConfig] \| None` | `None` | MCP server references — URL, bare slug, or config object. `"server#tool"` filters to one tool. |
 | `apps` | `list[PlatformAppOrAction] \| None` | `None` | CrewAI Platform app integrations (e.g. `"gmail"`, `"gmail/send_email"`). |
-| `a2a` | `A2AConfig \| ... \| None` | `None` | Agent-to-Agent config (remote agents). |
+| `a2a` | `A2AConfig \| A2AClientConfig \| A2AServerConfig \| list[A2AConfig \| A2AClientConfig \| A2AServerConfig] \| None` | `None` | Agent-to-Agent config (remote agents). |
 | `guardrail` | `str \| GuardrailType \| None` | `None` | Validator applied to agent output. |
 | `guardrail_max_retries` | `int` | `3` | Retries when the guardrail fails. |
 | `step_callback` | `Callable \| None` | `None` | Called after every agent step. |
