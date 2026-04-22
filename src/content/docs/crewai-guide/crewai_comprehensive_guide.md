@@ -1517,14 +1517,14 @@ crew = Crew(
 CrewAI 1.14.0 introduces a production-grade checkpoint system for resumable crew execution. This is essential for long-running tasks that may be interrupted.
 
 ```python
-from crewai import Crew, Agent, Task
-# NOTE: crewai.checkpoint module not found in stable 1.14.2 — verify before use
-from crewai.checkpoint import CheckpointConfig, SqliteProvider
+from crewai import Crew, Agent, Task, CheckpointConfig
+from crewai.state.provider.sqlite_provider import SqliteProvider
 
 # Configure checkpointing with SQLite backend
 checkpoint_config = CheckpointConfig(
-    provider=SqliteProvider(db_path="crew_checkpoints.db"),
-    checkpoint_interval=1,  # Save after every task
+    provider=SqliteProvider(),
+    location="crew_checkpoints.db",   # SQLite file; JsonProvider defaults to a directory
+    on_events=["task_completed"],     # when to persist
 )
 
 research_agent = Agent(
@@ -1543,23 +1543,26 @@ research_task = Task(
 crew = Crew(
     agents=[research_agent],
     tasks=[research_task],
-    checkpoint_config=checkpoint_config,
+    checkpoint=checkpoint_config,     # field is `checkpoint`, not `checkpoint_config`
 )
 
 # Run - automatically saves checkpoints
 result = crew.kickoff()
 
-# Resume from checkpoint if execution was interrupted
-# result = crew.kickoff(resume_from_checkpoint=True)
+# Resume from the last checkpoint
+result = crew.kickoff(from_checkpoint=CheckpointConfig(restore_from="crew_checkpoints.db"))
 ```
 
 **CLI Commands:**
 ```bash
-# List available checkpoints
-crewai checkpoint list
+# List available checkpoints (path arg optional)
+crewai checkpoint list ./.checkpoints
 
-# Show checkpoint details
-crewai checkpoint info <checkpoint_id>
+# Show the latest checkpoint or pass a file
+crewai checkpoint info ./.checkpoints
+
+# Resume the most recent run
+crewai checkpoint resume
 ```
 
 ---
@@ -2184,6 +2187,8 @@ print(f"Final result: {result}")
 ---
 
 ## CrewAI AMP Suite
+
+> **Errata (April 2026):** the Python snippets below reference a `crewai.amp` module that **does not exist** in the installed package (`crewai==1.14.3a2`). The AMP platform is real but is accessed through the `crewai` CLI (`crewai login`, `crewai deploy ...`, `crewai org ...`, `crewai enterprise configure ...`) — see the [CLI page](./crewai_cli_python/). The `AMPCrew`, `AuthConfig`, `DeploymentConfig`, etc. names below are not importable. Treat this section as a conceptual overview until rewritten.
 
 ### Introduction to CrewAI AMP
 
