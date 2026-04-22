@@ -77,6 +77,9 @@ agent = Agent(
 Azure OpenAI with API key:
 
 ```python
+import os
+from agent_framework.openai import OpenAIChatClient
+
 client = OpenAIChatClient(
     model=os.environ["AZURE_OPENAI_CHAT_MODEL"],
     azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],

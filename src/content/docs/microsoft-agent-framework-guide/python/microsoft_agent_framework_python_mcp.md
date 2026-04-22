@@ -67,6 +67,7 @@ Notes:
 
 ```python
 from agent_framework import Agent, MCPStreamableHTTPTool
+from agent_framework.openai import OpenAIChatClient
 
 async with MCPStreamableHTTPTool(
     name="learn",
@@ -87,6 +88,9 @@ async with MCPStreamableHTTPTool(
 Use `header_provider` to inject a header derived from `function_invocation_kwargs` on the outer `agent.run(...)` call. This avoids building a new `httpx.AsyncClient` per tenant.
 
 ```python
+from agent_framework import Agent, MCPStreamableHTTPTool
+from agent_framework.openai import OpenAIChatClient
+
 mcp = MCPStreamableHTTPTool(
     name="billing-api",
     url="https://mcp.example.com",
@@ -115,7 +119,8 @@ mcp = MCPStreamableHTTPTool(name="internal", url="https://mcp.corp/api", http_cl
 ## WebSocket
 
 ```python
-from agent_framework import MCPWebsocketTool
+from agent_framework import Agent, MCPWebsocketTool
+from agent_framework.openai import OpenAIChatClient
 
 async with MCPWebsocketTool(
     name="realtime",

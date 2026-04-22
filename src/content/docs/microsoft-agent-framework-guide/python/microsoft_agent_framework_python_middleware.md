@@ -152,6 +152,8 @@ from agent_framework import FunctionMiddleware, FunctionInvocationContext
 
 class RetryOnError(FunctionMiddleware):
     def __init__(self, attempts: int = 3, backoff: float = 0.5) -> None:
+        if attempts < 1:
+            raise ValueError("attempts must be >= 1")
         self.attempts = attempts
         self.backoff = backoff
 
@@ -164,6 +166,7 @@ class RetryOnError(FunctionMiddleware):
             except Exception as exc:
                 last_exc = exc
                 await asyncio.sleep(self.backoff * (2**i))
+        assert last_exc is not None  # attempts >= 1 guarantees we saw at least one exception
         raise last_exc  # give up
 ```
 
@@ -173,15 +176,21 @@ Chat middleware sees the finalised `ChatResponse` after the model call. Rewrite 
 
 ```python
 import re
-from agent_framework import ChatMiddleware, ChatContext
+from agent_framework import ChatMiddleware, ChatContext, ChatResponse
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
 class Redactor(ChatMiddleware):
+    """Redacts emails from non-streaming responses.
+
+    `ChatContext.result` is only a `ChatResponse` when `context.stream is False`.
+    For streaming calls, register a `stream_transform_hooks` entry instead.
+    """
+
     async def process(self, context: ChatContext, call_next) -> None:
         await call_next()
-        if context.result is None:
+        if context.stream or not isinstance(context.result, ChatResponse):
             return
         for msg in context.result.messages:
             for content in msg.contents:
@@ -189,7 +198,21 @@ class Redactor(ChatMiddleware):
                     content.text = EMAIL_RE.sub("[email]", content.text)
 ```
 
-`ChatContext.result` is a `ChatResponse` for non-streaming calls and a `ResponseStream[ChatResponseUpdate, ChatResponse]` for streaming. Use `context.stream_transform_hooks` when you need to rewrite streamed tokens as they arrive.
+`ChatContext.result` is a `ChatResponse` for non-streaming calls and a `ResponseStream[ChatResponseUpdate, ChatResponse]` for streaming. For streaming, append to `context.stream_transform_hooks` to rewrite each `ChatResponseUpdate` as it arrives:
+
+```python
+def redact_update(update):
+    for content in update.contents or []:
+        if getattr(content, "text", None):
+            content.text = EMAIL_RE.sub("[email]", content.text)
+    return update
+
+
+class StreamingRedactor(ChatMiddleware):
+    async def process(self, context: ChatContext, call_next) -> None:
+        context.stream_transform_hooks.append(redact_update)
+        await call_next()
+```
 
 ## Passing per-run data through the pipeline
 

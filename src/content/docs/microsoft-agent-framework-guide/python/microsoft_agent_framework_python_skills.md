@@ -127,7 +127,8 @@ skills/
 ```
 
 ```python
-from agent_framework import SkillsProvider
+from agent_framework import Agent, SkillsProvider
+from agent_framework.openai import OpenAIChatClient
 
 provider = SkillsProvider(skill_paths="./skills")
 agent = Agent(client=OpenAIChatClient(), context_providers=[provider])
@@ -152,6 +153,7 @@ File-based scripts need a `SkillScriptRunner` — the framework doesn't assume h
 ```python
 import json
 import subprocess
+import sys
 from pathlib import Path
 from agent_framework import SkillsProvider, Skill, SkillScript
 
@@ -159,7 +161,8 @@ from agent_framework import SkillsProvider, Skill, SkillScript
 def subprocess_runner(skill: Skill, script: SkillScript, args: dict | None = None) -> str:
     path = Path(skill.path) / script.path
     result = subprocess.run(
-        ["python", str(path), "--args", json.dumps(args or {})],
+        # sys.executable keeps the runner in the same venv/pyenv as the host.
+        [sys.executable, str(path), "--args", json.dumps(args or {})],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:

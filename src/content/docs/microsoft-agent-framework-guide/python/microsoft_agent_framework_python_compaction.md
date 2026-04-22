@@ -93,11 +93,15 @@ Compose cheaper strategies first; fall back to hard exclusion to meet a strict c
 
 ```python
 from agent_framework import (
-    TokenBudgetComposedStrategy,
+    CharacterEstimatorTokenizer,
+    SelectiveToolCallCompactionStrategy,
     SlidingWindowStrategy,
     SummarizationStrategy,
-    CharacterEstimatorTokenizer,
+    TokenBudgetComposedStrategy,
 )
+from agent_framework.openai import OpenAIChatClient
+
+summariser_client = OpenAIChatClient(model="gpt-4o-mini")
 
 strategy = TokenBudgetComposedStrategy(
     token_budget=8_000,
