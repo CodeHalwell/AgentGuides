@@ -10,7 +10,7 @@ sidebar:
 
 # Streaming modes — API reference
 
-Verified against **`langgraph==1.1.9`** (`/tmp/langgraph-install/langgraph/types.py`, `/tmp/langgraph-install/langgraph/pregel/main.py`).
+Verified against **`langgraph==1.1.9`** (modules: `langgraph.types`, `langgraph.pregel.main`).
 
 Every compiled graph (both `StateGraph` and `@entrypoint` workflows) exposes:
 
@@ -292,6 +292,8 @@ async for msg, meta in graph.astream(inp, cfg, stream_mode="messages"):
 ### 2. Server-Sent Events with multiple modes
 
 ```python
+import json
+
 async for mode, data in graph.astream(inp, cfg, stream_mode=["updates", "messages"]):
     if mode == "updates" and "__interrupt__" in data:
         yield f"event: interrupt\ndata: {json.dumps([i.value for i in data['__interrupt__']])}\n\n"

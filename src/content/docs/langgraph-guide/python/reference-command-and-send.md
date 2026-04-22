@@ -10,7 +10,7 @@ sidebar:
 
 # Command, Send & control flow — API reference
 
-Verified against **`langgraph==1.1.9`** (`/tmp/langgraph-install/langgraph/types.py`).
+Verified against **`langgraph==1.1.9`** (module: `langgraph.types`).
 
 LangGraph's control flow primitives live in `langgraph.types`:
 

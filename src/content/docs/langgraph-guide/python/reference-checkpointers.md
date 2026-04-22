@@ -10,7 +10,7 @@ sidebar:
 
 # Checkpointers — API reference
 
-Verified against **`langgraph-checkpoint==4.0.2`**, **`langgraph-checkpoint-sqlite==3.0.3`**, **`langgraph-checkpoint-postgres==3.0.5`** (source: `/tmp/langgraph-install/langgraph/checkpoint/`, `/tmp/langgraph-cpt/langgraph/checkpoint/{sqlite,postgres}/`).
+Verified against **`langgraph-checkpoint==4.0.2`**, **`langgraph-checkpoint-sqlite==3.0.3`**, **`langgraph-checkpoint-postgres==3.0.5`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
 
 A checkpointer is a `BaseCheckpointSaver` subclass. It persists the per-thread history of `Checkpoint`/`CheckpointTuple` objects so the graph can pause (`interrupt`), resume (`Command(resume=...)`), replay (`get_state_history`), time-travel, and keep short-term memory across invocations.
 
@@ -68,8 +68,12 @@ print(graph.invoke({"count": 0}, cfg))   # {'count': 2} — state resumed from c
 ```python
 from langgraph.checkpoint.memory import InMemorySaver
 
-saver = InMemorySaver(*, serde=None, factory=defaultdict)
+saver = InMemorySaver()
+# Or, with a custom serializer:
+# saver = InMemorySaver(serde=my_serde)
 ```
+
+Full constructor: `InMemorySaver(*, serde=None, factory=defaultdict)`. `factory` swaps the underlying mapping type (e.g., a `PersistentDict` for on-disk simulation in tests); most callers leave it at the default.
 
 Stores checkpoints in a nested `defaultdict`. Lost at process exit. Implements both sync and async methods (`aget`, `aput`, etc.) — it's fine to use under `asyncio`.
 
