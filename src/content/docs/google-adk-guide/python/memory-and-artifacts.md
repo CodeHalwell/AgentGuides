@@ -39,7 +39,7 @@ runner = Runner(
 
 ## Memory service landscape
 
-`BaseMemoryService` (`memory/base_memory_service.py:44`) defines three operations:
+`BaseMemoryService` (`memory/base_memory_service.py:44`) defines the following operations:
 
 | Method | Purpose |
 |---|---|

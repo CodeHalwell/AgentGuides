@@ -195,7 +195,7 @@ Runners accept an optional `artifact_service=`. When configured, tools can call 
 | Service | Storage |
 |---|---|
 | `InMemoryArtifactService()` | Dict in memory |
-| `FileArtifactService(root_path=...)` | Local filesystem |
+| `FileArtifactService(root_dir=...)` | Local filesystem |
 | `GcsArtifactService(bucket_name=...)` | Google Cloud Storage |
 
 See [memory-and-artifacts](./memory-and-artifacts/) for detailed semantics and versioning.
@@ -213,7 +213,7 @@ Uses fixed `user_id="debug_user_id"`, `session_id="debug_session_id"`. Reuse the
 `Runner(app=app, session_service=VertexAiSessionService(...), memory_service=VertexAiMemoryBankService(...))`. Combine with `ArtifactEngine`-backed GCS storage and `CloudTracePlugin` for full GCP integration.
 
 ### 3 — Local SQLite persistence
-`DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db")` plus `FileArtifactService(root_path="./artifacts")`. Works offline; easy to ship in a Docker image.
+`DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db")` plus `FileArtifactService(root_dir="./artifacts")`. Works offline; easy to ship in a Docker image.
 
 ### 4 — Rewinding bad turns
 If an invocation went off the rails, `await runner.rewind_async(user_id=..., session_id=..., rewind_before_invocation_id=bad_id)` inverts the state and artifact deltas of events from that invocation forward. The session is left in its pre-invocation state; the user can retry.
