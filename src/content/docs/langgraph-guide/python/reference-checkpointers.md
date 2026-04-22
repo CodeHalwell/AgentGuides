@@ -37,18 +37,20 @@ pip install langgraph-checkpoint-postgres
 ## Minimal runnable example
 
 ```python
+import operator
 import sqlite3
+from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 
 class S(TypedDict):
-    count: int
+    count: Annotated[int, operator.add]   # reducer: add new values to existing
 
 
 def bump(state: S) -> dict:
-    return {"count": state["count"] + 1}
+    return {"count": 1}   # adds 1 to the persisted value via the reducer
 
 
 builder = StateGraph(S).add_node("bump", bump)
@@ -60,8 +62,14 @@ graph = builder.compile(checkpointer=checkpointer)
 
 cfg = {"configurable": {"thread_id": "t-1"}}
 print(graph.invoke({"count": 0}, cfg))   # {'count': 1}
-print(graph.invoke({"count": 0}, cfg))   # {'count': 2} — state resumed from checkpoint
+print(graph.invoke({"count": 0}, cfg))   # {'count': 2} — accumulated from checkpoint
+print(graph.invoke({"count": 0}, cfg))   # {'count': 3}
 ```
+
+> Without the `operator.add` reducer, `"count"` uses default `LastValue`
+> semantics and every call would reset it back to `0`. A reducer (or a
+> `MessagesState`-style append-only channel) is what makes state *grow*
+> across runs — the checkpointer only persists it.
 
 ## `InMemorySaver`
 

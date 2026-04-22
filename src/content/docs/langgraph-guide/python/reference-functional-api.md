@@ -36,8 +36,9 @@ def summarize(text: str) -> str:
 
 @entrypoint(checkpointer=InMemorySaver())
 def pipeline(urls: list[str]) -> list[str]:
-    pages = [fetch(u) for u in urls]           # futures, in parallel
-    return [summarize(p.result()) for p in pages]
+    pages = [fetch(u) for u in urls]           # fetch futures, in parallel
+    summaries = [summarize(p.result()) for p in pages]  # summarize futures
+    return [s.result() for s in summaries]     # resolve before returning
 
 
 cfg = {"configurable": {"thread_id": "run-1"}}
