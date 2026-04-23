@@ -265,7 +265,12 @@ assert results.result_counts["failed"] == 0, results.error
 ```python
 import json
 import sys
-from agent_framework import LocalEvaluator, evaluate_agent, keyword_check
+from agent_framework import (
+    LocalEvaluator,
+    evaluate_agent,
+    keyword_check,
+    tool_called_check,
+)
 
 
 async def ci_gate(agent, queries: list[str]) -> None:

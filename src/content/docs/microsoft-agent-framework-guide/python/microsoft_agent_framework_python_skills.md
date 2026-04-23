@@ -191,6 +191,7 @@ async def subprocess_runner(
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
     except asyncio.TimeoutError:
         proc.kill()
+        await proc.wait()            # reap the child so we don't leak zombies
         raise RuntimeError(f"Script {script.name} timed out after 30s")
 
     if proc.returncode != 0:
@@ -255,6 +256,7 @@ class DockerSkillRunner:
             )
         except asyncio.TimeoutError:
             proc.kill()
+            await proc.wait()
             raise RuntimeError(
                 f"Docker execution of {script.path} timed out after {self.timeout}s"
             )
@@ -302,20 +304,22 @@ agent = Agent(
 )
 
 session = agent.create_session()
-stream = agent.run_stream("Run the nightly report", session=session)
+stream = agent.run("Run the nightly report", session=session, stream=True)
 
-async for event in stream:
-    for message in event.messages:
-        for content in message.contents:
-            if content.type == "function_approval_request":
-                print(f"Approve script {content.function_call.name}"
-                      f" with args {content.function_call.arguments}?")
-                # Present to a human, collect a decision, then resume.
-                response = content.to_function_approval_response(approved=True)
-                await agent.run(response, session=session)
+async for update in stream:
+    if update.type == "function_approval_request":
+        proposal = update.data
+        print(f"Approve script {proposal.function_call.name}"
+              f" with args {proposal.function_call.arguments}?")
+        # Present to a human, collect a decision, then resume THIS stream
+        # so the paused tool call can continue in-place.
+        approval = proposal.to_function_approval_response(approved=True)
+        await stream.send_response(approval)
+    elif update.type == "message":
+        print(update.text)
 ```
 
-Reject with `approved=False` and the model is told the call was declined — it can either stop, retry with different arguments, or pick a different approach.
+Reject with `approved=False` and the model is told the call was declined — it can either stop, retry with different arguments, or pick a different approach. Always send the response back through the active `stream` (via `stream.send_response(...)`) rather than starting a fresh `agent.run(...)` — a new run would leave the original paused invocation unresolved.
 
 ## Mixing code-defined and file-based skills
 
