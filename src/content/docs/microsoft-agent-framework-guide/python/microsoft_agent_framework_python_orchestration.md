@@ -274,3 +274,225 @@ See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for h
 - **Open-ended research with replanning** → `MagenticBuilder` with plan review.
 
 All five produce an identical `Workflow` object, so checkpointing, streaming, and HITL patterns work the same across them.
+
+## Building arbitrary graphs with `WorkflowBuilder` and `AgentExecutor`
+
+The five builders above cover the common topologies. When you need something shaped differently — a custom router, a deterministic transform between two agents, a sub-workflow nested inside another — drop to `WorkflowBuilder` and wire `AgentExecutor` nodes manually.
+
+```python
+from agent_framework import AgentExecutor, WorkflowBuilder
+
+research_node = AgentExecutor(researcher)
+analyse_node = AgentExecutor(analyst)
+write_node = AgentExecutor(writer)
+
+workflow = (
+    WorkflowBuilder(start_executor=research_node)
+    .add_edge(research_node, analyse_node)
+    .add_edge(analyse_node, write_node)
+    .build()
+)
+
+result = await workflow.run("Quantum sensors in 2026")
+```
+
+`WorkflowBuilder(start_executor=..., output_executors=[...])` both accept an executor instance or a bare agent — the builder wraps agents in `AgentExecutor` automatically. Use `add_chain([a, b, c])` as a shorthand when the edges are strictly linear.
+
+`AgentExecutor` is the executor that `SequentialBuilder` / `HandoffBuilder` / etc. wrap your agents in behind the scenes. Constructing it directly lets you:
+
+- Reuse the same executor instance at multiple positions in a graph (shared message cache).
+- Control context inheritance via `context_mode` (see below).
+- Mix with non-agent `Executor` subclasses for deterministic transforms.
+
+### Controlling context flow — `context_mode`
+
+When one `AgentExecutor` sends its response downstream to another `AgentExecutor`, the downstream executor has three options for how much of the upstream conversation to inherit:
+
+| `context_mode` | Behaviour |
+|---|---|
+| `"full"` (default) | Append the entire upstream conversation (prior messages + agent response). Preserves full context chains across many hops. |
+| `"last_agent"` | Append only the upstream agent's own response messages. Keeps the prompt small at the cost of losing earlier turns. |
+| `"custom"` | Pass a `context_filter` callable that picks the messages to inherit. |
+
+```python
+from agent_framework import AgentExecutor, Message, WorkflowBuilder
+
+
+def drop_tool_calls(history: list[Message]) -> list[Message]:
+    """Strip function_call / function_result content before passing to the summariser."""
+    return [m for m in history if m.role in {"user", "assistant", "system"}]
+
+
+summariser = AgentExecutor(
+    writer,
+    context_mode="custom",
+    context_filter=drop_tool_calls,
+)
+```
+
+### Transforming agent output — `AgentExecutorResponse.with_text`
+
+A custom executor inserted between two `AgentExecutor` nodes can transform the text without breaking the context chain. The catch: if you just emit a plain `str`, the next `AgentExecutor.from_str` handler wipes the cache because only the string lands. Use `AgentExecutorResponse.with_text(...)` instead — the framework keeps the full prior conversation and only substitutes the final assistant message:
+
+```python
+from agent_framework import AgentExecutorResponse, WorkflowContext, executor
+
+
+@executor(
+    id="translate_to_english",
+    input=AgentExecutorResponse,
+    output=AgentExecutorResponse,
+)
+async def translate(
+    response: AgentExecutorResponse,
+    ctx: WorkflowContext[AgentExecutorResponse, AgentExecutorResponse],
+) -> None:
+    english = await translate_text(response.agent_response.text, target="en")
+    await ctx.send_message(response.with_text(english))
+```
+
+The downstream `AgentExecutor` now sees the translation as the assistant turn, with every prior message (researcher findings, tool calls, system prompt) still in the cache. Without `with_text`, the translation would arrive as a bare `str` and the writer would start from zero context.
+
+### Manual routing with edges
+
+`WorkflowBuilder` exposes helper methods for the common edge shapes — the packaged builders use them internally:
+
+```python
+from agent_framework import Case, Default, WorkflowBuilder
+
+# Fan out to three reviewers, fan in to a merger.
+builder = WorkflowBuilder(start_executor=router)
+builder.add_fan_out_edges(router, [reviewer_a, reviewer_b, reviewer_c])
+builder.add_fan_in_edges([reviewer_a, reviewer_b, reviewer_c], merger)
+
+# Switch on the router's output — each Case is a condition + target pair.
+builder.add_switch_case_edge_group(
+    source=triage,
+    cases=[
+        Case(condition=lambda msg: msg.category == "billing", target=billing_agent),
+        Case(condition=lambda msg: msg.category == "technical", target=technical_agent),
+        Default(target=general_agent),
+    ],
+)
+
+# Also available:
+#   .add_chain([a, b, c])               — A → B → C shorthand
+#   .add_edge(a, b, condition=lambda m: ...)   — conditional single edge
+#   .add_multi_selection_edge_group(...)       — fan-out with a picker
+```
+
+## Nested workflows — `WorkflowExecutor` and sub-workflows
+
+`WorkflowExecutor` wraps a whole `Workflow` as a single node in a parent workflow. Great for reuse (a "document pipeline" sub-workflow called from many higher-level flows) and for isolating state between phases.
+
+```python
+from agent_framework import AgentExecutor, WorkflowBuilder, WorkflowExecutor
+
+# Inner workflow — turn a research prompt into a structured dossier.
+inner = SequentialBuilder(participants=[researcher, analyst]).build()
+
+# Outer workflow — call the dossier producer, then the writer.
+dossier_node = WorkflowExecutor(inner, id="dossier")
+writer_node = AgentExecutor(writer, id="writer")
+
+outer = (
+    WorkflowBuilder(start_executor=dossier_node)
+    .add_edge(dossier_node, writer_node)
+    .build()
+)
+
+result = await outer.run("Mercury fuel cells")
+```
+
+### Passing requests from child to parent
+
+A sub-workflow can "ask" its parent for information — the parent sees a `SubWorkflowRequestMessage`, resolves it, and sends back a `SubWorkflowResponseMessage`. This is how you plug a sub-workflow into a parent that owns a database connection, an auth token, or human-in-the-loop approval.
+
+```python
+from agent_framework import (
+    Executor,
+    SubWorkflowRequestMessage,
+    SubWorkflowResponseMessage,
+    WorkflowContext,
+    handler,
+)
+
+
+class UserLookupExecutor(Executor):
+    """Parent-side handler that resolves a sub-workflow's user lookup request."""
+
+    def __init__(self, user_db):
+        super().__init__("user_lookup")
+        self._users = user_db
+
+    @handler
+    async def on_request(
+        self,
+        request: SubWorkflowRequestMessage,
+        ctx: WorkflowContext[SubWorkflowResponseMessage],
+    ) -> None:
+        event = request.source_event
+        # event.data carries whatever the inner executor sent via ctx.request_info(...)
+        user_id = event.data
+        profile = self._users.get(user_id, {"name": "<unknown>"})
+
+        # create_response validates the return type against the original request.
+        response = request.create_response(data=profile)
+        await ctx.send_message(response, target_id=request.executor_id)
+
+
+# Wire the lookup handler into the parent workflow.
+outer = (
+    WorkflowBuilder(start_executor=dossier_node)
+    .add_edge(dossier_node, UserLookupExecutor(user_db={"u-1": {"name": "Ada"}}))
+    .add_edge(dossier_node, writer_node)
+    .build()
+)
+```
+
+Inside the inner workflow, an executor triggers a request by emitting a `WorkflowEvent` via `ctx.request_info(event, response_type=dict)` — the framework captures it, wraps it in `SubWorkflowRequestMessage`, and routes it to the parent. The inner executor pauses until the matching `SubWorkflowResponseMessage` arrives and resumes with the response data.
+
+Set `propagate_request=True` on the `WorkflowExecutor` to forward requests further up (to the grandparent or the workflow caller) instead of handling them in the parent:
+
+```python
+propagating = WorkflowExecutor(inner, id="dossier", propagate_request=True)
+```
+
+And `allow_direct_output=True` makes the sub-workflow's `ctx.yield_output(...)` calls surface directly in the parent workflow's event stream rather than being re-emitted as messages — useful when you want the sub-workflow's output to be the parent's output verbatim.
+
+### Type checking across the boundary
+
+`WorkflowExecutor.input_types` derives from the wrapped workflow's start executor — the parent workflow validates messages at graph build time, so mismatches fail early:
+
+```python
+assert SubWorkflowResponseMessage in dossier_node.input_types
+assert dossier_node.input_types == inner.input_types + [SubWorkflowResponseMessage]
+```
+
+## Streaming events
+
+Every workflow — built from one of the five builders or from `WorkflowBuilder` directly — can stream incremental events:
+
+```python
+async for event in workflow.run("Topic", stream=True):
+    if event.type == "output":
+        print("output:", event.data)
+    elif event.type == "executor_completed":
+        print(f"[{event.executor_id}] done")
+    elif event.type == "request_info":
+        print(f"waiting on {event.request_type.__name__}")
+    elif event.type == "failed":
+        print(f"workflow failed: {event.details}")
+```
+
+Event types you'll see (the `type` attribute is a `Literal[...]` string):
+
+- `started` / `failed` — workflow-level lifecycle.
+- `superstep_started` / `superstep_completed` — one super-step of the graph just advanced.
+- `executor_invoked` / `executor_completed` / `executor_failed` — per-executor transitions.
+- `output` — a consumable output yielded by an executor.
+- `request_info` — a sub-workflow (or any executor) is asking for external data; see the HITL / sub-workflow sections above.
+- `group_chat` / `handoff_sent` / `magentic_orchestrator` — pattern-specific events from the built-in orchestrators.
+- `warning` / `error` — diagnostic events; inspect `event.details` for the error payload.
+
+`event.origin` tells you whether the event came from the framework itself (`WorkflowEventSource.FRAMEWORK`) or from an executor (`WorkflowEventSource.EXECUTOR`) — useful when you want to skip framework-emitted super-step events and only see outputs from your own code.

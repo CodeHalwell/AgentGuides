@@ -126,6 +126,85 @@ local = LocalEvaluator(mentions_celsius, short_enough, llm_judge)
 
 Supported parameter names (pick any subset): `query`, `response`, `expected_output`, `conversation`, `tools`, `context`.
 
+## Conversation splits — choosing what "response" means
+
+`EvalItem` stores a full conversation and derives `query` / `response` from it via a `ConversationSplitter` strategy. The built-in `ConversationSplit` enum gives you two strategies out of the box; anything callable with signature `(list[Message]) -> (list[Message], list[Message])` satisfies the `ConversationSplitter` protocol.
+
+```python
+from agent_framework import ConversationSplit, EvalItem, Message
+
+conversation = [
+    Message(role="system", contents=["You are an assistant."]),
+    Message(role="user", contents=["What's 2+2?"]),
+    Message(role="assistant", contents=["4"]),
+    Message(role="user", contents=["Square that."]),
+    Message(role="assistant", contents=["16"]),
+]
+
+# Default strategy — last_turn. Query = everything up to the last user msg; response = after.
+item = EvalItem(conversation=conversation)
+assert item.query == "Square that."
+assert item.response == "16"
+
+# FULL strategy — evaluate the whole trajectory against the first user msg.
+item_full = EvalItem(conversation=conversation, split_strategy=ConversationSplit.FULL)
+assert item_full.query == "What's 2+2?"
+assert "4" in item_full.response and "16" in item_full.response
+```
+
+### Custom splitter — evaluate just before a tool call
+
+A custom splitter is a plain callable. Here's one that splits just before the agent called a retrieval tool — perfect for evaluating whether the agent generated a *good* retrieval query, independent of whether the tool returned good results:
+
+```python
+from agent_framework import ConversationSplitter, EvalItem, Message
+
+
+def split_before_tool(tool_name: str) -> ConversationSplitter:
+    """Return a splitter that isolates everything up to a named tool call."""
+
+    def _split(conversation: list[Message]) -> tuple[list[Message], list[Message]]:
+        for i, msg in enumerate(conversation):
+            for c in msg.contents or []:
+                if getattr(c, "type", None) == "function_call" and getattr(c, "name", None) == tool_name:
+                    return conversation[:i], conversation[i:]
+        # No matching tool call — fall back to the static last-turn splitter.
+        return EvalItem._split_last_turn_static(conversation)
+
+    return _split
+
+
+item = EvalItem(
+    conversation=recorded_transcript,
+    split_strategy=split_before_tool("retrieve_docs"),
+)
+```
+
+### Splitter + evaluate_agent
+
+Pass the splitter through `evaluate_agent` via `conversation_split=` so every recorded item uses the same strategy:
+
+```python
+from agent_framework import ConversationSplit, LocalEvaluator, evaluate_agent, keyword_check
+
+results = await evaluate_agent(
+    agent=agent,
+    queries=queries,
+    conversation_split=ConversationSplit.FULL,
+    evaluators=LocalEvaluator(keyword_check("summary")),
+)
+
+# Or with a custom splitter (any callable matching the ConversationSplitter protocol):
+results = await evaluate_agent(
+    agent=agent,
+    queries=queries,
+    conversation_split=split_before_tool("retrieve_docs"),
+    evaluators=LocalEvaluator(keyword_check("retrieved")),
+)
+```
+
+Use `ConversationSplit.LAST_TURN` when you care about the latest answer and `ConversationSplit.FULL` when you care about the whole trajectory (did the agent stay on-task across N turns?). Drop to a custom splitter when the evaluation boundary depends on domain-specific signals — tool calls, explicit handoffs, state transitions.
+
 ## Ground-truth comparisons
 
 Pass expected outputs and tool calls; checks that care about them use those fields on `EvalItem`.
