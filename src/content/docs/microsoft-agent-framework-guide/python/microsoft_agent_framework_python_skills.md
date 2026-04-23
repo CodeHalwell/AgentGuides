@@ -211,15 +211,22 @@ For untrusted scripts, isolate execution. This runner shells out to `docker run`
 ```python
 import asyncio
 import json
-import shlex
 from agent_framework import Skill, SkillScript
 
 
 class DockerSkillRunner:
-    def __init__(self, image: str, *, network: str = "none", memory: str = "512m") -> None:
+    def __init__(
+        self,
+        image: str,
+        *,
+        network: str = "none",
+        memory: str = "512m",
+        timeout: float = 60,
+    ) -> None:
         self.image = image
         self.network = network
         self.memory = memory
+        self.timeout = timeout
 
     async def __call__(
         self,
@@ -242,7 +249,15 @@ class DockerSkillRunner:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self.timeout
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise RuntimeError(
+                f"Docker execution of {script.path} timed out after {self.timeout}s"
+            )
         if proc.returncode != 0:
             raise RuntimeError(stderr.decode("utf-8"))
         return stdout.decode("utf-8")

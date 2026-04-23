@@ -238,7 +238,7 @@ checkpoints = await storage.list_checkpoints(workflow_name="research-pipeline")
 
 # Build an id -> checkpoint map and walk from latest backwards.
 by_id = {c.checkpoint_id: c for c in checkpoints}
-latest = max(checkpoints, key=lambda c: c.timestamp)
+latest = max(checkpoints, key=lambda c: c.timestamp) if checkpoints else None
 chain = []
 cursor = latest
 while cursor is not None:
