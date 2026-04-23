@@ -85,7 +85,34 @@ summariser = SummarizationStrategy(
 )
 ```
 
-Triggers only when needed; preserves goals, decisions, and unresolved items via the default prompt. Override with `prompt=` for domain-specific summaries.
+Triggers only when `included_non_system_count > target_count + threshold` — idle conversations don't pay for summaries they don't need. Once triggered, the strategy walks groups oldest-first, keeps the newest ones up to `target_count`, and replaces the rest with one summary message that links back to the original group IDs via annotations.
+
+### Domain-specific summarisation prompt
+
+The default prompt preserves goals, decisions, and unresolved items. Override with `prompt=` when you want a different shape:
+
+```python
+support_summariser = SummarizationStrategy(
+    client=OpenAIChatClient(model="gpt-4o-mini"),
+    target_count=6,
+    threshold=3,
+    prompt=(
+        "You are summarising a customer support conversation. "
+        "Produce at most 4 bullet points covering:\n"
+        "- The customer's problem and any account identifiers mentioned.\n"
+        "- Diagnostic steps already attempted.\n"
+        "- Agreements or promises made by the support agent.\n"
+        "- Any open questions or pending escalations.\n"
+        "Do NOT restate pleasantries or repeat exact quotes."
+    ),
+)
+```
+
+The summary message keeps `group_annotation.summary_of_group_ids` and `summary_of_message_ids` metadata so you can later walk back to the original turns — useful for audit trails or "expand this summary" UI affordances.
+
+### Graceful fallback
+
+If the summariser client fails (timeout, rate limit, parse error), `SummarizationStrategy` logs a warning and returns `False` *without* mutating the message list. Composed strategies (`TokenBudgetComposedStrategy`) then fall through to the next strategy. Pair with a cheap sliding-window strategy so you degrade predictably when summarisation is unavailable.
 
 ## Token-budget composed strategy
 
@@ -178,6 +205,47 @@ await agent.run("Now write the summary.", session=session)   # session history c
 ```
 
 `before_strategy` runs when messages are loaded into the run; `after_strategy` compacts what's persisted back into session state so the *next* turn starts smaller. Either can be `None` to skip that phase.
+
+### Swapping in `FileHistoryProvider`
+
+For durable sessions across process restarts, replace `InMemoryHistoryProvider` with `FileHistoryProvider` (experimental — `agent_framework._sessions`). It writes one JSON-Lines file per `session_id` under a root directory:
+
+```python
+from agent_framework import Agent, CompactionProvider, FileHistoryProvider, SlidingWindowStrategy
+from agent_framework.openai import OpenAIChatClient
+
+
+history = FileHistoryProvider(
+    storage_path="./sessions",
+    skip_excluded=True,             # don't reload compacted-out messages on the next turn
+)
+
+compaction = CompactionProvider(
+    before_strategy=SlidingWindowStrategy(keep_last_groups=20),
+    history_source_id=history.source_id,
+)
+
+agent = Agent(client=OpenAIChatClient(), context_providers=[history, compaction])
+
+# A distinct session_id picks up the corresponding file on the next call.
+session = agent.create_session(session_id="user-42")
+await agent.run("Continue where we left off.", session=session)
+```
+
+`FileHistoryProvider` resolves `session_id` against `storage_path` and **rejects any id that would escape the storage directory** — `../` traversal is blocked and resolved paths are validated against the storage root. Treat the storage directory as trusted application state, not a secret store; the JSONL contents are plaintext. For multi-process deployments, use the Redis or Cosmos history providers instead so concurrent writers don't race on the same file.
+
+The `store_inputs`, `store_outputs`, `store_context_messages`, and `load_messages` flags let the same class act as an audit log (`load_messages=False`), a write-only evaluation trace, or a full primary store:
+
+```python
+audit_log = FileHistoryProvider(
+    storage_path="./audit",
+    source_id="audit",
+    load_messages=False,            # never reload — purely a write destination
+    store_inputs=True,
+    store_outputs=True,
+    store_context_messages=True,    # also capture messages injected by other providers
+)
+```
 
 ### Per-agent via chat client
 

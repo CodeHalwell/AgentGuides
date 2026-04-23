@@ -150,22 +150,52 @@ See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/#tool-a
 
 ## Result parsing
 
-By default, the return value is `str(...)`-ed (or JSON-serialised for dataclasses and Pydantic models). Override with `result_parser=` to emit multi-part content, attach images, or trim long output:
+By default, the return value is `str(...)`-ed (or JSON-serialised for dataclasses and Pydantic models). Override with `result_parser=` to emit multi-part content, attach images, or trim long output.
+
+The framework uses a single unified `Content` class with classmethod constructors (`Content.from_text`, `Content.from_uri`, `Content.from_data`, `Content.from_error`, …). A result parser returns either a string or a `list[Content]`:
 
 ```python
-from agent_framework import tool, TextContent, ImageContent, Content
+from agent_framework import tool, Content
 
 
 def parse_weather_result(result: dict) -> list[Content]:
-    return [
-        TextContent(text=f"{result['temp']}°C — {result['summary']}"),
-        # ImageContent built from a URL for the weather icon, etc.
+    parts: list[Content] = [
+        Content.from_text(f"{result['temp']}°C — {result['summary']}")
     ]
+    if icon_url := result.get("icon_url"):
+        parts.append(Content.from_uri(uri=icon_url, media_type="image/png"))
+    return parts
 
 
 @tool(result_parser=parse_weather_result)
 def get_weather(location: str) -> dict:
-    return {"temp": 22, "summary": "Sunny"}
+    return {
+        "temp": 22,
+        "summary": "Sunny",
+        "icon_url": "https://cdn.example.com/weather/sunny.png",
+    }
+```
+
+Return a `str` to keep things simple — the framework wraps it in a single `Content.from_text(...)` for you. Return `list[Content]` only when you need multi-part output (image + caption, JSON + human-readable summary).
+
+### Trimming verbose tool output
+
+The model does not need the whole body of a 400-row SQL result — shrink it before the tokens land in context:
+
+```python
+import json
+from agent_framework import tool, Content
+
+
+def top_n_preview(result: list[dict]) -> str:
+    head = result[:10]
+    summary = f"{len(result)} rows (showing first 10)\n"
+    return summary + json.dumps(head, default=str, indent=2)
+
+
+@tool(result_parser=top_n_preview)
+def run_query(sql: str) -> list[dict]:
+    return execute(sql)                # might return thousands of rows
 ```
 
 ## Invocation limits
@@ -176,6 +206,41 @@ def get_weather(location: str) -> dict:
 - Use per-request limits instead: pass `FunctionInvocationConfiguration(max_function_calls=3)` to `agent.run(...)`.
 
 `max_invocation_exceptions` puts a ceiling on how many times a tool can error before the agent stops calling it — a simple circuit breaker.
+
+### Per-request tool-loop caps
+
+`FunctionInvocationConfiguration` is the authoritative knob for runaway tool calls on a single `agent.run(...)`. Two levers that work together:
+
+- `max_iterations` caps the number of **model roundtrips** in the tool loop. Each roundtrip may contain several parallel tool calls, so this alone does not bound total executions.
+- `max_function_calls` caps the **total number of tool executions** across all iterations. This is the primary cost guard.
+
+```python
+from agent_framework import FunctionInvocationConfiguration
+
+config: FunctionInvocationConfiguration = {
+    "max_iterations": 5,
+    "max_function_calls": 20,
+    "max_consecutive_errors_per_request": 3,
+    "terminate_on_unknown_calls": True,
+    "include_detailed_errors": False,        # avoid leaking stack traces to the model
+}
+
+await agent.run(
+    "Research the order pipeline",
+    function_invocation_configuration=config,
+)
+```
+
+Applied at the chat-client level, the same settings act as a default for every run:
+
+```python
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+client.function_invocation_configuration["max_function_calls"] = 20
+```
+
+`max_function_calls` is a **best-effort** limit — it's checked *after* each batch of parallel calls completes. A single iteration that emits 20 parallel calls will run all 20 even if the limit is 10; the next iteration then bails out. Combine with `max_iterations` to bound worst-case wall time.
 
 ## Declaration-only tools
 
@@ -220,6 +285,46 @@ fetcher = FunctionTool(
 
 agent = Agent(client=OpenAIChatClient(), tools=[fetcher])
 ```
+
+### Generating tools from a spec
+
+Build tools at startup from a config table, a JSON spec, or an OpenAPI document — the same `FunctionTool` surface handles both the declaration and the callable:
+
+```python
+from agent_framework import FunctionTool, Agent
+from agent_framework.openai import OpenAIChatClient
+
+API_SPECS = [
+    {"name": "list_customers", "endpoint": "/customers", "description": "List all customers"},
+    {"name": "get_customer", "endpoint": "/customers/{id}", "description": "Fetch one customer"},
+]
+
+
+def make_tool(spec: dict) -> FunctionTool:
+    async def call(**kwargs) -> str:
+        # Late-bind the endpoint template to runtime args
+        url = spec["endpoint"].format(**kwargs)
+        return await http_get(url)
+
+    call.__name__ = spec["name"]                     # important — drives schema naming
+
+    return FunctionTool(
+        name=spec["name"],
+        description=spec["description"],
+        func=call,
+        input_model={
+            "type": "object",
+            "properties": {"id": {"type": "string"}},
+            "required": [] if "{id}" not in spec["endpoint"] else ["id"],
+        },
+    )
+
+
+tools = [make_tool(s) for s in API_SPECS]
+agent = Agent(client=OpenAIChatClient(), tools=tools)
+```
+
+This keeps the agent definition stable — you add a new row to `API_SPECS`, redeploy, and the model automatically sees the new tool.
 
 ## Passing tools to the agent
 

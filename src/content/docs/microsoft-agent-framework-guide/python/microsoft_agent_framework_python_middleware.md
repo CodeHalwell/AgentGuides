@@ -127,7 +127,7 @@ Run-level middleware runs **inside** agent-level middleware (outer-to-inner: cto
 Skip the model entirely when the input fails a policy check:
 
 ```python
-from agent_framework import AgentMiddleware, AgentResponse, Message, Role, TextContent
+from agent_framework import AgentMiddleware, AgentResponse, Content, Message
 
 
 class ProfanityBlock(AgentMiddleware):
@@ -135,11 +135,18 @@ class ProfanityBlock(AgentMiddleware):
         last = context.messages[-1] if context.messages else None
         if last and "sensitive-term" in (last.text or "").lower():
             context.result = AgentResponse(
-                messages=[Message(role=Role.ASSISTANT, contents=[TextContent("Blocked by policy.")])],
+                messages=[
+                    Message(
+                        role="assistant",
+                        contents=[Content.from_text("Blocked by policy.")],
+                    )
+                ],
             )
             return                       # do NOT call call_next
         await call_next()
 ```
+
+`agent_framework` ships a single unified `Content` class — construct text content via `Content.from_text(...)`, images via `Content.from_uri(...)`, errors via `Content.from_error(...)`, etc. There are no separate `TextContent`/`ImageContent` classes.
 
 ## Retrying a failed tool call
 

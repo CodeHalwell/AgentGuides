@@ -145,6 +145,45 @@ results = await evaluate_agent(
 )
 ```
 
+### How `tool_call_args_match` actually matches
+
+The built-in `tool_call_args_match` check does a **subset match** on the arguments — expected keys must be present with the expected values, but the actual call may carry additional arguments that aren't asserted against:
+
+```python
+# Expected
+ExpectedToolCall("get_weather", {"location": "NYC"})
+
+# Passes — actual has the expected key/value, plus one extra
+{"location": "NYC", "unit": "celsius"}
+
+# Fails — value mismatch
+{"location": "Seattle"}
+
+# Passes when arguments=None — only the name is checked
+ExpectedToolCall("get_weather", arguments=None)
+```
+
+This lets you write tight assertions that don't break when the agent (or the model) starts passing extra optional arguments to a tool.
+
+### Multi-tool sequences
+
+`expected_tool_calls` is a list per query — use it to assert the agent followed a specific plan:
+
+```python
+results = await evaluate_agent(
+    agent=agent,
+    queries=["Plan a trip to Paris for next weekend"],
+    expected_tool_calls=[[
+        ExpectedToolCall("get_weather", {"location": "Paris"}),
+        ExpectedToolCall("search_flights", {"destination": "Paris"}),
+        ExpectedToolCall("search_hotels"),       # only name, args unchecked
+    ]],
+    evaluators=LocalEvaluator(tool_call_args_match),
+)
+```
+
+`tool_call_args_match` is **order-insensitive** — each expected call is matched against the actual call list by name, not by position. Use a custom `@evaluator` if you need to enforce ordering.
+
 ## Pre-recorded responses
 
 Evaluate the agent you already have (no re-running) — useful for replaying production transcripts:
@@ -218,6 +257,42 @@ One `EvalResults` comes back per evaluator — local first, then foundry. Merge 
 [results] = await evaluate_agent(agent=agent, queries=queries, evaluators=local)
 assert results.result_counts["failed"] == 0, results.error
 ```
+
+### Actionable failure output for CI
+
+`EvalItemResult.scores` carries per-check `EvalScoreResult` entries. Walk them to print a machine-readable diff plus a human-readable reason per failure:
+
+```python
+import json
+import sys
+from agent_framework import LocalEvaluator, evaluate_agent, keyword_check
+
+
+async def ci_gate(agent, queries: list[str]) -> None:
+    local = LocalEvaluator(keyword_check("weather"), tool_called_check("get_weather"))
+    [results] = await evaluate_agent(agent=agent, queries=queries, evaluators=local)
+
+    failures = [item for item in results.items if item.status == "fail"]
+    if not failures:
+        print(f"pass: {results.result_counts['passed']}/{len(results.items)}")
+        return
+
+    for item in failures:
+        failed_checks = [s for s in item.scores if not s.passed]
+        print(json.dumps({
+            "id": item.item_id,
+            "input": item.input_text,
+            "output": item.output_text,
+            "failed": [
+                {"check": s.name, "reason": (s.sample or {}).get("reason")}
+                for s in failed_checks
+            ],
+        }, indent=2))
+
+    sys.exit(1)
+```
+
+Plug that into a pytest test or a standalone CI step — the failing check name plus `reason` is enough to triage most regressions without opening the transcript UI.
 
 ## Patterns
 

@@ -274,3 +274,86 @@ See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for h
 - **Open-ended research with replanning** → `MagenticBuilder` with plan review.
 
 All five produce an identical `Workflow` object, so checkpointing, streaming, and HITL patterns work the same across them.
+
+## Dropping down to `WorkflowBuilder`
+
+When none of the built-in patterns fit, build directly with `WorkflowBuilder`. Agents and bare `Executor` subclasses coexist on the same graph — the builder auto-wraps agents into `AgentExecutor` instances, reusing wrappers for the same agent object:
+
+```python
+from agent_framework import (
+    WorkflowBuilder, Executor, WorkflowContext, handler, Case, Default,
+)
+from typing_extensions import Never
+
+
+class Classifier(Executor):
+    """Pure-code classifier that decides which specialist runs next."""
+
+    @handler
+    async def classify(self, text: str, ctx: WorkflowContext[dict]) -> None:
+        kind = "refund" if "refund" in text.lower() else "billing"
+        await ctx.send_message({"kind": kind, "text": text})
+
+
+classifier = Classifier(id="classify")
+
+# `billing` and `refund` are Agent instances defined elsewhere.
+workflow = (
+    WorkflowBuilder(start_executor=classifier)
+    .add_switch_case_edge_group(
+        classifier,
+        [
+            Case(condition=lambda p: p["kind"] == "billing", target=billing),
+            Case(condition=lambda p: p["kind"] == "refund",  target=refund),
+            Default(target=fallback),
+        ],
+    )
+    .build()
+)
+```
+
+### Dynamic fan-out with a selection function
+
+`add_multi_selection_edge_group` evaluates a selector per payload and sends the message to the subset of targets it returns. Good for priority routing or feature-flag gated workers:
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class Task:
+    priority: str
+    data: str
+
+
+def pick_workers(task: Task, available: list[str]) -> list[str]:
+    if task.priority == "high":
+        return available                    # broadcast to all workers
+    return [available[0]]                   # single worker for low-priority
+
+
+workflow = (
+    WorkflowBuilder(start_executor=dispatcher)
+    .add_multi_selection_edge_group(
+        dispatcher,
+        [worker_a, worker_b, worker_c],
+        selection_func=pick_workers,
+    )
+    .build()
+)
+```
+
+### Collecting outputs from a subset of executors
+
+By default the workflow yields outputs from any executor that calls `ctx.yield_output(...)`. Restrict to specific ones with `output_executors=` — useful when upstream nodes emit debug traces you don't want in the final `get_outputs()`:
+
+```python
+workflow = (
+    WorkflowBuilder(
+        start_executor=classifier,
+        output_executors=[billing, refund, fallback],
+    )
+    .add_switch_case_edge_group(classifier, cases=[...])
+    .build()
+)
+```

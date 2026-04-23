@@ -172,9 +172,26 @@ Or disable MCP prompts entirely when you only want tools:
 MCPStdioTool(name="fs", command="...", load_prompts=False)
 ```
 
+### Inspecting what the server advertises
+
+After entering the `async with` block the tool populates `functions` (and optionally `prompts`). Use this to log what's been loaded or to build a runtime tool picker:
+
+```python
+async with MCPStdioTool(
+    name="github",
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-github"],
+) as mcp:
+    for fn in mcp.functions:
+        print(f"{fn.name}: {fn.description[:60]}")
+    # Prompts advertised by the server (if load_prompts was True):
+    for prompt in getattr(mcp, "prompts", []):
+        print(f"prompt {prompt.name}: {prompt.description}")
+```
+
 ## Parsing tool results
 
-The default parser coerces MCP `CallToolResult` into a string for the model. Override it for structured returns (images, multi-part content):
+The default parser coerces MCP `CallToolResult` into a string for the model. Override it when the server returns structured data you want to surface as multi-part content (images plus alt text, JSON plus a summary, etc.):
 
 ```python
 from mcp import types
@@ -182,13 +199,21 @@ from agent_framework import Content, MCPStreamableHTTPTool
 
 
 def parse_image_result(result: types.CallToolResult) -> list[Content]:
-    # Surface images as ImageContent instead of stringifying them
     out: list[Content] = []
     for c in result.content:
-        if isinstance(c, types.ImageContent):
-            out.append(...)  # build agent_framework ImageContent
-        else:
-            out.append(...)
+        if isinstance(c, types.TextContent):
+            out.append(Content.from_text(c.text))
+        elif isinstance(c, types.ImageContent):
+            # MCP images come as base64 — preserve them as a data URI.
+            data_uri = f"data:{c.mimeType};base64,{c.data}"
+            out.append(Content.from_uri(uri=data_uri, media_type=c.mimeType))
+        elif isinstance(c, types.EmbeddedResource):
+            res = c.resource
+            text = getattr(res, "text", None)
+            if text:
+                out.append(Content.from_text(text))
+    if result.isError:
+        out.append(Content.from_error(message="MCP server returned an error"))
     return out
 
 
@@ -197,6 +222,17 @@ mcp = MCPStreamableHTTPTool(
     url="https://diagrammer.example.com/mcp",
     parse_tool_results=parse_image_result,
 )
+```
+
+Per-tool overrides are also possible — connect once, inspect `mcp.functions`, then set `result_parser` on the individual `FunctionTool` instances you care about:
+
+```python
+async with MCPStreamableHTTPTool(name="analytics", url="https://analytics.example.com/mcp") as mcp:
+    # Find the specific tool and override only its parser.
+    query = next(f for f in mcp.functions if f.name == "analytics_run_query")
+    query.result_parser = lambda r: Content.from_text(f"rows: {len(r.content)}")
+
+    agent = Agent(client=OpenAIChatClient(), tools=mcp)
 ```
 
 ## MCP sampling callbacks

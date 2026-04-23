@@ -180,6 +180,98 @@ class CounterExecutor(Executor):
         self._count = state.get("count", 0)
 ```
 
+### Persisting a dataclass
+
+Dataclasses work cleanly because the built-in encoder picks up anything pickle-safe — register the type in `allowed_checkpoint_types` and it round-trips:
+
+```python
+from dataclasses import dataclass, field, asdict
+from typing import Any
+from agent_framework import Executor, WorkflowContext, FileCheckpointStorage, handler
+
+
+@dataclass
+class OrderState:
+    seen_ids: set[str] = field(default_factory=set)
+    total_cents: int = 0
+
+
+class OrderCollector(Executor):
+    def __init__(self) -> None:
+        super().__init__(id="order-collector")
+        self.state = OrderState()
+
+    @handler
+    async def on_order(self, order: dict[str, Any], ctx: WorkflowContext) -> None:
+        if order["id"] in self.state.seen_ids:
+            return                                # already processed
+        self.state.seen_ids.add(order["id"])
+        self.state.total_cents += int(order["total_cents"])
+
+    async def on_checkpoint_save(self) -> dict[str, Any]:
+        # Convert the dataclass to something the JSON/pickle encoder can handle.
+        return {"state": asdict(self.state) | {"seen_ids": list(self.state.seen_ids)}}
+
+    async def on_checkpoint_restore(self, state: dict[str, Any]) -> None:
+        payload = state.get("state", {})
+        self.state = OrderState(
+            seen_ids=set(payload.get("seen_ids", [])),
+            total_cents=payload.get("total_cents", 0),
+        )
+
+
+storage = FileCheckpointStorage(
+    "/var/lib/agent-framework/checkpoints",
+    allowed_checkpoint_types=["__main__:OrderState"],
+)
+```
+
+## Inspecting the checkpoint chain
+
+`list_checkpoints` returns the full `WorkflowCheckpoint` objects — use it to walk `previous_checkpoint_id` and show progress or build an audit trail:
+
+```python
+from agent_framework import FileCheckpointStorage
+
+storage = FileCheckpointStorage("/var/lib/agent-framework/checkpoints")
+checkpoints = await storage.list_checkpoints(workflow_name="research-pipeline")
+
+# Build an id -> checkpoint map and walk from latest backwards.
+by_id = {c.checkpoint_id: c for c in checkpoints}
+latest = max(checkpoints, key=lambda c: c.timestamp)
+chain = []
+cursor = latest
+while cursor is not None:
+    chain.append(cursor)
+    cursor = by_id.get(cursor.previous_checkpoint_id) if cursor.previous_checkpoint_id else None
+
+for cp in reversed(chain):
+    pending = len(cp.pending_request_info_events)
+    print(f"{cp.timestamp} iter={cp.iteration_count} pending_hitl={pending}")
+```
+
+`pending_request_info_events` is populated whenever the workflow paused on a HITL request — the count tells you if the workflow is waiting on a human or still running.
+
+## Multiple workflows, one storage directory
+
+Storage is scoped to the **directory** but filtered by `workflow_name`. Run several workflows against the same `FileCheckpointStorage` and `get_latest(workflow_name=...)` picks only the relevant chain:
+
+```python
+storage = FileCheckpointStorage("/var/lib/agents/checkpoints")
+
+research_wf = WorkflowBuilder(
+    start_executor=researcher, checkpoint_storage=storage, name="research-pipeline"
+).add_edge(researcher, writer).build()
+
+support_wf = WorkflowBuilder(
+    start_executor=triage, checkpoint_storage=storage, name="support-routing"
+).add_edge(triage, specialist).build()
+
+# Distinct namespaces — no collision between the two workflows.
+latest_research = await storage.get_latest(workflow_name="research-pipeline")
+latest_support = await storage.get_latest(workflow_name="support-routing")
+```
+
 ## Pickle safety
 
 `FileCheckpointStorage` serialises state as JSON with base64-encoded pickle for complex objects. By default it restores only a safe built-in set plus `agent_framework.*` types and `openai.types`. To allow your own types, pass fully-qualified names:
