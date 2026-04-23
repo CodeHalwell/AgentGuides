@@ -282,7 +282,7 @@ agent = Agent(client=build_client(), instructions="Helpful assistant.")
 
 ## Embeddings
 
-Every provider with embedding support exposes an `*EmbeddingClient` alongside its chat client:
+Every provider with embedding support exposes an `*EmbeddingClient` alongside its chat client. All satisfy `SupportsGetEmbeddings` and return the same `GeneratedEmbeddings[list[float], EmbeddingGenerationOptions]` type, so you can swap them freely.
 
 ```python
 from agent_framework.openai import OpenAIEmbeddingClient
@@ -291,8 +291,105 @@ from agent_framework.foundry import FoundryEmbeddingClient
 from agent_framework.amazon import BedrockEmbeddingClient
 
 embeddings = OpenAIEmbeddingClient(model="text-embedding-3-large")
-vectors = await embeddings.get_embeddings(["hello", "world"])
+result = await embeddings.get_embeddings(["hello", "world"])
+
+for vec in result:
+    print(vec.dimensions, vec.model, vec.vector[:4])
+# `result.usage` is a UsageDetails (dict-like); key names vary by provider.
+print("tokens used:", (result.usage or {}).get("total_tokens", 0))
 ```
+
+### The `Embedding` and `GeneratedEmbeddings` types
+
+`get_embeddings` always returns a `GeneratedEmbeddings` — it subclasses `list[Embedding]`, so iteration, indexing, and `len(...)` work as you'd expect. Each `Embedding` is generic over the vector type (usually `list[float]`, sometimes `list[int]` or `bytes` for quantised providers):
+
+```python
+from agent_framework import Embedding, GeneratedEmbeddings
+
+# Constructing an Embedding directly — dimensions default to len(vector).
+single = Embedding(vector=[0.1, 0.2, 0.3], model="text-embedding-3-small")
+assert single.dimensions == 3
+
+# Wrapping a list of them as a GeneratedEmbeddings — this is the shape your
+# code should handle from every *EmbeddingClient.
+batch = GeneratedEmbeddings(
+    [single, Embedding(vector=[0.4, 0.5, 0.6])],
+    usage={"prompt_tokens": 10, "total_tokens": 10},
+)
+assert len(batch) == 2
+```
+
+### Picking dimensions (OpenAI text-embedding-3-*)
+
+The OpenAI `text-embedding-3-*` models support a `dimensions` parameter that lets you request a shorter vector without a separate model. Pass it through `OpenAIEmbeddingOptions`:
+
+```python
+from agent_framework.openai import OpenAIEmbeddingClient, OpenAIEmbeddingOptions
+
+client = OpenAIEmbeddingClient(model="text-embedding-3-large")
+
+# 256-dim embeddings — cheaper to store, 4x smaller vector DB footprint.
+result = await client.get_embeddings(
+    ["hello"],
+    options=OpenAIEmbeddingOptions(dimensions=256, encoding_format="float"),
+)
+assert result[0].dimensions == 256
+```
+
+### Provider-neutral duck typing
+
+Any code that embeds can take the `SupportsGetEmbeddings` protocol instead of a concrete class — type checkers will accept every first-party client and any subclass of `BaseEmbeddingClient` you write yourself:
+
+```python
+from agent_framework import SupportsGetEmbeddings
+
+
+async def index(client: SupportsGetEmbeddings, docs: list[str]) -> list[list[float]]:
+    result = await client.get_embeddings(docs)
+    return [e.vector for e in result]
+```
+
+### Custom embedding client
+
+Subclass `BaseEmbeddingClient` when you need to wrap a provider that isn't first-party or want to add batching/caching/shadowing on top of an existing one. The full pattern lives in the [Advanced page](./microsoft_agent_framework_python_advanced/#custom-embedding-client--baseembeddingclient); the short version:
+
+```python
+from agent_framework import BaseEmbeddingClient, Embedding, GeneratedEmbeddings
+
+
+class StubEmbeddingClient(BaseEmbeddingClient):
+    OTEL_PROVIDER_NAME = "stub"
+
+    async def get_embeddings(self, values, *, options=None):
+        return GeneratedEmbeddings(
+            [Embedding(vector=[0.0] * 8, model="stub") for _ in values],
+            options=options,
+        )
+```
+
+## Swapping the model on an existing client
+
+Every client accepts `model=` at construction and remembers it. But you can also override the model for a single call without building a new client — use `options=` on the agent run:
+
+```python
+from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
+
+default_client = OpenAIChatClient(model="gpt-5-mini")
+
+agent = Agent(client=default_client, instructions="…")
+
+# Upgrade to a bigger model just for this one tricky question.
+response = await agent.run(
+    "Prove Fermat's last theorem in two sentences.",
+    options=OpenAIChatOptions(model="gpt-5", temperature=0.2),
+)
+```
+
+`options` is a provider-specific `TypedDict` — `OpenAIChatOptions`, `OpenAIChatCompletionOptions`, `OpenAIEmbeddingOptions`, and the equivalents under `agent_framework.anthropic`, `agent_framework.amazon`, `agent_framework.ollama`, etc. IDE autocomplete drives you through every tunable. The values merge with the client's defaults; anything you omit stays as the client was constructed.
+
+## Building your own chat client
+
+For a provider that isn't in the first-party list, or to wrap an existing client with caching / shadow traffic / logging, subclass `BaseChatClient`. Implement one method — `_inner_get_response` — and inherit middleware, telemetry, and the function calling loop for free. See the full recipe in [Advanced → Custom chat client](./microsoft_agent_framework_python_advanced/#custom-chat-client--basechatclient).
 
 ## Picking a provider
 

@@ -213,6 +213,52 @@ mcp = MCPStreamableHTTPTool(
 )
 ```
 
+## Hosted MCP — the `SupportsMCPTool` protocol
+
+The three MCP classes above run the MCP client **in your process**. Some providers (notably OpenAI's Responses API via certain deployments, and the Foundry model garden) can run the MCP client **server-side** — you tell the provider the MCP URL, the provider opens the connection, discovers tools, and calls them for you. No subprocess or HTTP client in your Python process.
+
+Chat clients that support this implement `SupportsMCPTool`. Feature-detect at runtime before calling `get_mcp_tool(...)`:
+
+```python
+from agent_framework import Agent, SupportsMCPTool
+from agent_framework.openai import OpenAIChatClient
+
+
+client = OpenAIChatClient(model="gpt-5")
+
+if isinstance(client, SupportsMCPTool):
+    mcp_tool = client.get_mcp_tool(
+        name="learn",
+        url="https://learn.microsoft.com/api/mcp",
+    )
+    agent = Agent(
+        client=client,
+        instructions="Answer Microsoft documentation questions.",
+        tools=[mcp_tool],
+    )
+    response = await agent.run("How does DefaultAzureCredential pick a credential?")
+else:
+    # Fall back to in-process MCP.
+    from agent_framework import MCPStreamableHTTPTool
+    async with MCPStreamableHTTPTool(name="learn", url="https://learn.microsoft.com/api/mcp") as mcp_tool:
+        agent = Agent(client=client, tools=[mcp_tool])
+        response = await agent.run("...")
+```
+
+When to prefer hosted MCP:
+
+- The MCP server and the model provider already have a trust relationship — no need to re-mint auth tokens in your code.
+- You don't want to manage a long-running HTTP client or handle reconnects.
+- Latency matters — the provider can often keep a warm connection open across requests.
+
+When to stick with in-process (`MCPStdioTool` / `MCPStreamableHTTPTool` / `MCPWebsocketTool`):
+
+- You need `header_provider=` for multi-tenant auth — hosted MCP typically doesn't support per-request headers.
+- You want `approval_mode` gating every individual tool — this is an in-process feature.
+- You need to parse `CallToolResult` with a custom `parse_tool_results=` callback.
+
+The `SupportsMCPTool` protocol is `runtime_checkable`, so the `isinstance(...)` guard is a normal runtime check — no stub subclassing needed. See the [Advanced → Capability protocols](./microsoft_agent_framework_python_advanced/#capability-protocols--supports) section for the full set of `Supports*` protocols (file search, web search, code interpreter, image generation).
+
 ## Exposing an agent as an MCP server
 
 Flip the direction — let other agents consume yours over MCP. The `agent_framework.devui` or `agent_framework_chatkit` hosting packages expose an agent as a streamable-HTTP MCP endpoint; see those sub-packages for the deployment recipe.
