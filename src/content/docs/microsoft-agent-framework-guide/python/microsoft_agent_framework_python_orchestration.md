@@ -345,7 +345,7 @@ from agent_framework import AgentExecutorResponse, WorkflowContext, executor
 )
 async def translate(
     response: AgentExecutorResponse,
-    ctx: WorkflowContext[AgentExecutorResponse, str],
+    ctx: WorkflowContext[AgentExecutorResponse, AgentExecutorResponse],
 ) -> None:
     english = await translate_text(response.agent_response.text, target="en")
     await ctx.send_message(response.with_text(english))

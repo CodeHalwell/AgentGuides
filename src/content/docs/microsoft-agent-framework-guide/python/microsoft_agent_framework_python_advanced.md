@@ -250,7 +250,7 @@ class DocumentContextProvider(ContextProvider):
             return
         snippets = await self._retriever.search(user_msgs[-1].text, top_k=3)
         context.extend_messages(
-            self,
+            self.source_id,
             [Message(role="system", contents=[f"<context>\n{s}\n</context>"]) for s in snippets],
         )
 ```
