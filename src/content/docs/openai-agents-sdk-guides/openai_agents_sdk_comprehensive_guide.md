@@ -4,7 +4,7 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: 0.14.2 | Updated: April 20, 2026
+Latest: 0.14.5 | Updated: April 23, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -3129,10 +3129,108 @@ This comprehensive framework enables developers to build production-grade AI app
 
 ---
 
+## Configurable Retry Policy (v0.14.3+)
+
+`ModelRetrySettings` lets you configure per-agent retry behaviour for transient model errors — rate limits, network failures, and provider-side timeouts — without wrapping every `Runner.run()` call in custom exception handling.
+
+```python
+# Installed: openai-agents==0.14.5
+from agents import Agent, Runner, ModelRetrySettings, ModelRetryBackoffSettings
+
+agent = Agent(
+    name='Resilient Agent',
+    instructions='Answer questions concisely.',
+    model_settings_overrides={
+        'retry': ModelRetrySettings(
+            max_retries=5,
+            backoff=ModelRetryBackoffSettings(
+                initial_delay=0.5,
+                max_delay=30.0,
+                multiplier=2.0,
+                jitter=True,
+            ),
+        )
+    },
+)
+```
+
+`RetryPolicy` accepts a callable that receives `RetryPolicyContext` (with `.normalized` — a `ModelRetryNormalizedError`) and returns a `RetryDecision`. This lets you implement custom logic, such as routing to a fallback provider on specific error codes.
+
+Source: `agents.ModelRetrySettings`, `agents.ModelRetryBackoffSettings`, `agents.RetryDecision`, `agents.RetryPolicy`, `agents.RetryPolicyContext`, `agents.ModelRetryNormalizedError` — verified against installed 0.14.5.
+
+---
+
+## Run Error Handlers (v0.14.4+)
+
+`RunErrorHandlers` lets you register typed callbacks that intercept exceptions thrown during a run and return either a result, new messages, or `None` to re-raise.
+
+```python
+# Installed: openai-agents==0.14.5
+from agents import Agent, Runner, RunConfig
+from agents import RunErrorHandlers, RunErrorHandlerInput, RunErrorHandlerResult
+
+def handle_timeout(inp: RunErrorHandlerInput) -> RunErrorHandlerResult | None:
+    if isinstance(inp.error, TimeoutError):
+        # Return a graceful fallback message
+        return RunErrorHandlerResult(output='Request timed out. Please try again.')
+    return None  # Re-raise anything else
+
+agent = Agent(name='My Agent', instructions='Be helpful.')
+
+result = Runner.run_sync(
+    agent,
+    'Explain quantum entanglement.',
+    run_config=RunConfig(error_handlers=RunErrorHandlers(handlers=[handle_timeout])),
+)
+```
+
+Source: `agents.RunErrorHandlers`, `agents.RunErrorHandlerInput`, `agents.RunErrorHandlerResult`, `agents.RunErrorData`, `agents.RunErrorDetails` — verified against installed 0.14.5.
+
+---
+
+## ShellTool and ToolSearchTool (v0.14.5)
+
+`ShellTool` gives an agent the ability to execute shell commands in a configured environment. It integrates with the SandboxAgent container abstraction — use `LocalShellTool` for local filesystem access.
+
+```python
+# Installed: openai-agents==0.14.5
+from agents import Agent, Runner
+from agents import ShellTool, LocalShellTool, LocalShellExecutor
+
+# Local shell tool — executes commands on the host
+local_shell = LocalShellTool(executor=LocalShellExecutor())
+
+agent = Agent(
+    name='Dev Agent',
+    instructions='Help the user with code and filesystem tasks.',
+    tools=[local_shell],
+)
+```
+
+`ToolSearchTool` is a hosted tool that enables an agent to dynamically discover and invoke other registered tools by name or description — useful when the tool catalogue is too large to enumerate in the system prompt.
+
+```python
+# Installed: openai-agents==0.14.5
+from agents import Agent, ToolSearchTool
+
+agent = Agent(
+    name='Dynamic Agent',
+    instructions='Use ToolSearchTool to find the right capability.',
+    tools=[ToolSearchTool(description='Search the tool catalogue for the best match.')],
+)
+```
+
+Source: `agents.ShellTool.__init__(executor, name, needs_approval, on_approval, environment)`, `agents.LocalShellTool`, `agents.ToolSearchTool` — verified against installed 0.14.5.
+
+---
+
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.14.5 | April 23, 2026 | `ShellTool` / `LocalShellTool` / `LocalShellExecutor` for shell command execution; `ToolSearchTool` for dynamic tool discovery; `ModelRetrySettings`/`ModelRetryBackoffSettings`/`RetryDecision`/`RetryPolicy`/`RetryPolicyContext`/`ModelRetryNormalizedError` for configurable retry; `RunErrorHandlers`/`RunErrorHandlerInput`/`RunErrorHandlerResult`/`RunErrorData`/`RunErrorDetails` for typed run-error interception. No breaking changes. Snippets executed against installed 0.14.5. |
+| 0.14.4 | April 21, 2026 | `RunErrorHandler` typed callbacks for run-level exception interception; `RunErrorData`/`RunErrorDetails` for structured error context; patch stability fixes |
+| 0.14.3 | April 20, 2026 | `ModelRetrySettings` / `ModelRetryBackoffSettings` configurable retry; `RetryDecision` / `RetryPolicy` / `RetryPolicyContext`; normalised error model `ModelRetryNormalizedError`; patch fixes |
 | 0.14.2 | April 18, 2026 | Default Realtime model updated to `gpt-realtime-1.5`; `MCPServer` exposes `list_resources()`, `list_resource_templates()`, `read_resource()`; `MCPServerStreamableHttp` exposes `session_id` for resuming sessions across reconnects; Chat Completions opt-in reasoning-content replay via `should_replay_reasoning_content`; runtime and session edge case fixes; no breaking changes |
 | 0.14.1 | April 2026 | Patch release for SandboxAgent stability improvements |
 | 0.14.0 | April 2026 | **SandboxAgent** (beta) for persistent isolated workspaces; `openai` v2.x hard requirement; Python 3.9 dropped; sync tools auto-wrapped with `asyncio.to_thread`; MCP errors as exceptions |

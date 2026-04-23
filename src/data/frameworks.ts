@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.85.1',
+    version: 'v1.86.0',
   },
   {
     id: 'openai-agents',
@@ -48,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.14.4',
+    version: 'v0.14.5',
   },
   {
     id: 'openai-agents-ts',
@@ -59,6 +59,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'web'],
+    version: 'v0.8.5',
   },
   {
     id: 'crewai',
@@ -124,6 +125,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Intermediate',
     useCases: ['rag', 'search', 'web'],
+    version: '@llamaindex/core v0.6.23',
   },
   {
     id: 'haystack',
@@ -188,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.2.117',
+    version: 'v0.2.118',
   },
   {
     id: 'mistral',

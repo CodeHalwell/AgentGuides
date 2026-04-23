@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.85.1** · April 2026 · Python 3.10+
+    **v1.86.0** · April 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -98,13 +98,13 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.85.1 (April 2026)
+## What's new in v1.86.0 (April 2026)
 
-- **8 built-in tools** — `WebSearchTool`, `WebFetchTool`, `CodeExecutionTool`, `ImageGenerationTool`, `FileSearchTool`, `MemoryTool`, `MCPServerTool`, `XSearchTool` via `builtin_tools=[...]` on `Agent`. `UrlContextTool` is **deprecated** — replace with `WebFetchTool`.
-- **Embeddings API** — `Embedder` / `EmbeddingModel` / `EmbeddingSettings` in `pydantic_ai.embeddings` for first-class embedding workflows.
-- **AG UI adapter** — `AGUIApp` and `AGUIAdapter` in `pydantic_ai.ag_ui` serve any agent as an [AG UI Protocol](https://docs.ag-ui.com) compliant endpoint.
-- **Human-in-the-loop** — `ApprovalRequired` / `ApprovalRequiredToolset` intercept tool calls for human review before execution.
-- **Deferred loading** — `DeferredLoadingToolset`, `DeferredToolRequests`, `DeferredToolResults` for lazy tool initialisation.
+- **Audio and video multimodal inputs** — `AudioUrl`, `VideoUrl`, `AudioFormat`, `VideoFormat`, `AudioMediaType`, `VideoMediaType` for passing audio/video directly in user messages.
+- **`CombinedToolset`** — merges multiple toolsets into one; simplifies composing tool groups from separate modules.
+- **Deferred tool execution** — `CallDeferred`, `DeferredToolRequests`, `DeferredToolResults` for tools that delegate execution back to the caller.
+- **`AgentSpec`**, **`StructuredDict`**, **`UploadedFile`**, **`CompactionPart`** added to the public API.
+- Prior (v1.85.x): 8 built-in tools, embeddings API, AG UI adapter (`from pydantic_ai.ag_ui import AGUIApp`), `ApprovalRequiredToolset` for HITL, `DeferredLoadingToolset`.
 - Prior (v1.84.x): durable execution, graph support, evals framework, Logfire/OpenTelemetry.
 
 ## Install, minimal example
@@ -131,6 +131,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-04-23 | pydantic-ai 1.86.0 | Version bumped 1.85.1 → 1.86.0; "What's new" updated for audio/video multimodal types, `CombinedToolset`, deferred tool execution API, `AgentSpec`/`StructuredDict`/`UploadedFile`/`CompactionPart`; AG UI import path clarified. Snippets verified against installed 1.86.0. | Claude routine |
 | 2026-04-22 | pydantic-ai 1.85.1 | Added 7 new deep-dive pages, all verified against installed 1.85.1 source: **Output types & validators** (ToolOutput / NativeOutput / PromptedOutput / TextOutput / StructuredDict + output_validator), **Message history** (ModelMessagesTypeAdapter, HistoryProcessor, capture_run_messages), **Testing** (TestModel, FunctionModel, Agent.override), **Model providers & fallback** (every prefix in `providers/__init__.py`, FallbackModel with custom handlers, gateway), **Streaming** (run_stream, run_stream_events, iter, AgentStream), **Toolsets** (FunctionToolset, Combined/Prefixed/Filtered/Prepared/Approval/Deferred/External), **Built-in tools** (WebSearch, WebFetch, CodeExecution, ImageGeneration, FileSearch, Memory, MCPServer, XSearch). Index re-ordered into an 18-step Zero → Hero reading order; Jump-to-topic and Reference grids re-indexed. | Claude routine |
 | 2026-04-22 | pydantic-ai 1.85.1 | Version bumped 1.85.0 → 1.85.1; "What's new" section updated for v1.85.x (8 built-in tools, embeddings API, AG UI adapter, ApprovalRequiredToolset HITL, DeferredLoadingToolset); fabricated `pydantic_ai.common_tools` imports replaced with correct `pydantic_ai.builtin_tools` API; `UrlContextTool` deprecation noted. Snippets verified against installed 1.85.1. | Claude routine |
 | 2026-04-21 | pydantic-ai 1.84.1 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |

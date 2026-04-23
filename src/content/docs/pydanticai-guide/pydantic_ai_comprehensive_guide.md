@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.85.1 (April 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.86.0 (April 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.85.1 | Updated: April 22, 2026
+Latest: 1.86.0 | Updated: April 23, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.85.1 (April 2026)  
+**Version:** 1.86.0 (April 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1925,13 +1925,13 @@ asyncio.run(main())
 
 ---
 
-## AG UI Integration (v1.85.x)
+## AG UI Integration (v1.85.x+)
 
 `pydantic_ai.ag_ui` provides an [AG UI Protocol](https://docs.ag-ui.com) adapter so any
 PydanticAI agent can be served as a standards-compliant AG UI endpoint.
 
 ```python
-# Installed: pydantic-ai==1.85.1
+# Installed: pydantic-ai==1.86.0
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import AGUIApp
 
@@ -1946,7 +1946,80 @@ app = AGUIApp(agent=agent)
 # api.mount('/agent', app)
 ```
 
-`AGUIApp` handles SSE event streaming, tool-call events, and the AG UI state protocol automatically.
+`AGUIApp` handles SSE event streaming, tool-call events, and the AG UI state protocol automatically. Import path is `pydantic_ai.ag_ui`, not the top-level `pydantic_ai` namespace.
+
+---
+
+## Audio and Video Multimodal Inputs (v1.86.0)
+
+1.86.0 adds first-class audio and video URL types alongside the existing `ImageUrl`. Pass them directly in user messages; the model provider handles transcription or vision as appropriate.
+
+```python
+# Installed: pydantic-ai==1.86.0
+from pydantic_ai import Agent, AudioUrl, VideoUrl, AudioFormat, VideoFormat
+
+agent = Agent('openai:gpt-4o-audio-preview')
+
+async def main() -> None:
+    result = await agent.run([
+        'Transcribe and summarise this recording.',
+        AudioUrl(url='https://example.com/meeting.mp3', format=AudioFormat.mp3),
+    ])
+    print(result.output)
+```
+
+Available format literals: `AudioFormat` (`mp3`, `wav`, `ogg`, `flac`, `m4a`) and `VideoFormat` (`mp4`, `webm`, `mov`). Source: `pydantic_ai.messages` — `AudioUrl`, `VideoUrl`, `AudioFormat`, `VideoFormat`, `AudioMediaType`, `VideoMediaType` — verified against installed 1.86.0.
+
+---
+
+## CombinedToolset (v1.86.0)
+
+`CombinedToolset` merges multiple toolsets into a single object, simplifying agent construction when tool groups are composed from separate modules.
+
+```python
+# Installed: pydantic-ai==1.86.0
+from pydantic_ai import Agent, CombinedToolset
+from pydantic_ai.toolsets import FunctionToolset
+
+def search(query: str) -> str:
+    return f'Results for {query}'
+
+def send_email(to: str, body: str) -> str:
+    return f'Sent to {to}'
+
+search_toolset = FunctionToolset(tools=[search])
+email_toolset = FunctionToolset(tools=[send_email])
+
+combined = CombinedToolset(toolsets=[search_toolset, email_toolset])
+agent = Agent('openai:gpt-4o', toolsets=[combined])
+```
+
+Source: `pydantic_ai.CombinedToolset.__init__(toolsets: Sequence[AbstractToolset])` — verified against installed 1.86.0.
+
+---
+
+## Deferred Tool Execution (v1.86.0)
+
+`DeferredLoadingToolset` wraps any toolset so that tool schemas are registered at agent startup but the actual tool implementations are resolved lazily at call time — useful for toolsets backed by external registries.
+
+`CallDeferred` is a sentinel return value that a tool can raise to defer its own execution back to the caller; the caller then resolves it and submits results via `DeferredToolResults`.
+
+```python
+# Installed: pydantic-ai==1.86.0
+from pydantic_ai import Agent, CallDeferred, DeferredLoadingToolset, DeferredToolRequests, DeferredToolResults
+from pydantic_ai.toolsets import FunctionToolset
+
+def my_tool(query: str) -> str | CallDeferred:
+    # Defer to an external executor for specific queries
+    if query.startswith('sql:'):
+        return CallDeferred(metadata={'query': query})
+    return f'Result for {query}'
+
+toolset = DeferredLoadingToolset(wrapped=FunctionToolset(tools=[my_tool]))
+agent = Agent('openai:gpt-4o', toolsets=[toolset])
+```
+
+Source: `pydantic_ai.CallDeferred`, `pydantic_ai.DeferredLoadingToolset`, `pydantic_ai.DeferredToolRequests`, `pydantic_ai.DeferredToolResults` — verified against installed 1.86.0.
 
 ---
 
@@ -1954,6 +2027,7 @@ app = AGUIApp(agent=agent)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.86.0 | April 23, 2026 | `AudioUrl`, `VideoUrl`, `AudioFormat`, `VideoFormat` — audio/video multimodal input types; `CombinedToolset` for merging toolset groups; `CallDeferred`/`DeferredLoadingToolset`/`DeferredToolRequests`/`DeferredToolResults` for deferred tool execution; `AgentSpec`, `StructuredDict`, `UploadedFile`, `CompactionPart` added to public API. AG UI import path clarified: `from pydantic_ai.ag_ui import AGUIApp` (not top-level). Snippets executed against installed 1.86.0. |
 | 1.85.1 | April 22, 2026 | Patch fix; `UrlContextTool` marked deprecated (use `WebFetchTool`). Built-in tools, embeddings, AG UI, and `ApprovalRequiredToolset` verified against installed package. `pydantic_ai.common_tools` stub corrected to `pydantic_ai.builtin_tools` with correct class names. Snippets executed against 1.85.1. |
 | 1.85.0 | April 21, 2026 | New embeddings API (`Embedder`, `EmbeddingModel`, `EmbeddingSettings`); AG UI adapter (`AGUIApp`, `AGUIAdapter`, `run_ag_ui`); `ApprovalRequired`/`ApprovalRequiredToolset` for HITL; `DeferredLoadingToolset`; `UrlContextTool` deprecated in favour of `WebFetchTool` |
 | 1.84.1 | April 18, 2026 | Skip tool hooks for internal output tools; always pass dict-shaped validated args to hooks for single-`BaseModel` tools |
