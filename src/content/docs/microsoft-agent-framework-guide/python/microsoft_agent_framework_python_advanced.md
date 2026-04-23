@@ -134,19 +134,25 @@ agent = Agent(client=cached, instructions="…")
 The embeddings surface follows the same shape as chat — one abstract method, generic over the input type (`str` by default), output type (typically `list[float]`), and options.
 
 ```python
+import hashlib
 from collections.abc import Sequence
 from agent_framework import BaseEmbeddingClient, Embedding, GeneratedEmbeddings
 
 
 class HashEmbeddingClient(BaseEmbeddingClient):
-    """Toy deterministic embedding — useful for tests that need repeatable vectors."""
+    """Toy deterministic embedding — useful for tests that need repeatable vectors.
+
+    Uses SHA-256 so the vectors are stable across processes; Python's built-in
+    ``hash()`` is salted per process for strings (PYTHONHASHSEED) and would
+    produce different output on every run.
+    """
 
     OTEL_PROVIDER_NAME = "hash-toy"
 
     async def get_embeddings(self, values, *, options=None):
         vectors = [
             Embedding(
-                vector=[(hash(v) >> i) & 0xFF for i in range(8)],
+                vector=list(hashlib.sha256(v.encode("utf-8")).digest()[:8]),
                 model="hash-toy-v1",
             )
             for v in values
