@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.85.1 (April 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.86.1 (April 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.85.1 | Updated: April 22, 2026
+Latest: 1.86.1 | Updated: April 24, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.85.1 (April 2026)  
+**Version:** 1.86.1 (April 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1931,7 +1931,7 @@ asyncio.run(main())
 PydanticAI agent can be served as a standards-compliant AG UI endpoint.
 
 ```python
-# Installed: pydantic-ai==1.85.1
+# Installed: pydantic-ai==1.86.1
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import AGUIApp
 
@@ -1950,10 +1950,112 @@ app = AGUIApp(agent=agent)
 
 ---
 
+## Capabilities API (v1.86.x)
+
+PydanticAI 1.86.0 introduces a composable **Capabilities** system. Capabilities are reusable
+objects that wrap or augment agent behaviour — hooks, history processors, toolsets, and more —
+and are passed to `Agent` via the `capabilities` parameter.
+
+### Hooks: decorator-based middleware
+
+`pydantic_ai.capabilities.Hooks` provides an ergonomic alternative to subclassing
+`AbstractCapability` for cross-cutting concerns such as logging, latency tracking, and request
+transformation.
+
+```python
+# Installed: pydantic-ai==1.86.1
+import asyncio
+from typing import Any
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Hooks
+
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def log_request(ctx: RunContext, request_context: Any) -> Any:
+    print(f"[hook] model request: {request_context}")
+    return request_context  # must return the (optionally modified) context
+
+@hooks.on.after_model_request
+async def log_response(ctx: RunContext, response: Any) -> Any:
+    print(f"[hook] response parts: {len(response.parts)}")
+    return response
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks], defer_model_check=True)
+```
+
+The `hooks.on` namespace exposes the following hooks (all optional, all async):
+
+| Hook | Signature | Purpose |
+|------|-----------|---------|
+| `before_model_request` | `(ctx, request_context) → request_context` | Inspect or mutate the model request before sending |
+| `after_model_request` | `(ctx, response) → response` | Inspect or mutate the model response after receiving |
+| `before_tool_execute` | `(ctx, tool_name, raw_args) → raw_args` | Inspect raw tool arguments before validation |
+| `after_tool_execute` | `(ctx, tool_name, result) → result` | Inspect or mutate the tool result after execution |
+| `before_tool_validate` | `(ctx, tool_name, validated_args) → validated_args` | Inspect validated arguments before execution |
+| `before_run` | `(ctx) → None` | Called at the start of the agent run |
+| `after_run` | `(ctx, result) → result` | Called at the end of the agent run |
+
+Hooks can carry an optional `timeout` (seconds) per registered function:
+
+```python
+# Installed: pydantic-ai==1.86.1
+from pydantic_ai.capabilities import Hooks
+
+hooks = Hooks()
+
+@hooks.on.before_model_request(timeout=5.0)
+async def slow_hook(ctx, request_context):
+    # raises HookTimeoutError if this exceeds 5 s
+    return request_context
+```
+
+Source: `pydantic_ai/capabilities/hooks.py` (installed pydantic-ai 1.86.1).
+
+### ModelProfile: describing model behaviour
+
+`pydantic_ai.profiles.ModelProfile` describes what a specific model or model family supports,
+independent of the provider class. The framework ships `DEFAULT_PROFILE`; providers override
+it per model.
+
+```python
+# Installed: pydantic-ai==1.86.1
+from pydantic_ai.profiles import ModelProfile, DEFAULT_PROFILE
+
+# Inspect the default profile
+print(DEFAULT_PROFILE.supports_tools)          # True
+print(DEFAULT_PROFILE.supports_thinking)       # False
+print(DEFAULT_PROFILE.supported_builtin_tools) # frozenset of 8 tool classes
+
+# Define a custom profile for a hypothetical restricted model
+restricted = ModelProfile(
+    supports_tools=False,
+    supports_json_schema_output=False,
+    default_structured_output_mode='prompted',
+)
+```
+
+`ModelProfile` fields (source: `pydantic_ai/profiles/__init__.py`, installed 1.86.1):
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `supports_tools` | `bool` | `True` | Tool/function calling supported |
+| `supports_tool_return_schema` | `bool` | `False` | Native return schema in tool definitions |
+| `supports_json_schema_output` | `bool` | `False` | Native structured output with JSON schema |
+| `supports_json_object_output` | `bool` | `False` | JSON-mode output (no schema) |
+| `supports_image_output` | `bool` | `False` | Image generation responses |
+| `default_structured_output_mode` | `str` | `'tool'` | `'tool'`, `'json_schema'`, `'json_object'`, or `'prompted'` |
+| `supports_thinking` | `bool` | `False` | Extended thinking / chain-of-thought tokens |
+| `supported_builtin_tools` | `frozenset` | Full toolset | Built-in tools the model can use |
+
+---
+
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.86.1 | April 24, 2026 | Patch fix for Capabilities API. Snippets executed against installed 1.86.1; `Hooks`, `ModelProfile`, `DEFAULT_PROFILE` all import successfully. New Capabilities API section added to this guide. |
+| 1.86.0 | April 23, 2026 | Introduces `capabilities` parameter on `Agent.__init__`; new `pydantic_ai.capabilities` module (`Hooks`, `AbstractCapability`, `CombinedCapability`, `HistoryProcessor`, `Thinking`, `ThreadExecutor`, `WebFetch`, `WebSearch`, `ImageGeneration`, `MCP`, `Toolset`); new `pydantic_ai.profiles` module (`ModelProfile`, `ModelProfileSpec`, `DEFAULT_PROFILE`); new `pydantic_ai.ui` module (`UIAdapter`, `UIEventStream`, `MessagesBuilder`). |
 | 1.85.1 | April 22, 2026 | Patch fix; `UrlContextTool` marked deprecated (use `WebFetchTool`). Built-in tools, embeddings, AG UI, and `ApprovalRequiredToolset` verified against installed package. `pydantic_ai.common_tools` stub corrected to `pydantic_ai.builtin_tools` with correct class names. Snippets executed against 1.85.1. |
 | 1.85.0 | April 21, 2026 | New embeddings API (`Embedder`, `EmbeddingModel`, `EmbeddingSettings`); AG UI adapter (`AGUIApp`, `AGUIAdapter`, `run_ag_ui`); `ApprovalRequired`/`ApprovalRequiredToolset` for HITL; `DeferredLoadingToolset`; `UrlContextTool` deprecated in favour of `WebFetchTool` |
 | 1.84.1 | April 18, 2026 | Skip tool hooks for internal output tools; always pass dict-shaped validated args to hooks for single-`BaseModel` tools |
