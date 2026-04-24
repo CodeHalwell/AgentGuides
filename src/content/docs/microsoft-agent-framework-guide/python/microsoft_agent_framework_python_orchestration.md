@@ -345,15 +345,22 @@ When to share:
 
 ### Cloning executors for graph reuse — `AgentExecutor.clone`
 
-`AgentExecutor.clone(deep=True)` returns an independent copy — same agent configuration, fresh cache, fresh session (unless you pass the original's session back in). Use this when the same agent appears at multiple positions in a graph and each occurrence needs its own message cache:
+When the same agent appears at multiple positions in a graph, wrap it in two separate `AgentExecutor`s with distinct ids — the constructor gives each one its own cache and session:
 
 ```python
 first_pass  = AgentExecutor(reviewer, id="review_a")
-second_pass = first_pass.clone()            # deep copy; same agent, new cache
-second_pass._id = "review_b"                # give the clone a unique id for the graph
+second_pass = AgentExecutor(reviewer, id="review_b")   # same agent, independent executor state
 ```
 
-`deep=False` produces a shallow copy that still shares the underlying agent and session — useful if you want the clones to read from the same conversation state but be distinct graph nodes.
+`AgentExecutor.clone(deep=True)` is for snapshotting an executor that has already accumulated in-memory state (cached messages, open sessions, handler configuration) so the copy picks up exactly where the original left off:
+
+```python
+snapshot = first_pass.clone()            # deepcopy — preserves cache and session contents
+# snapshot.id == first_pass.id — ids are copied as-is; use clone() inside rollback / fan-out
+# tooling where the replica runs in a different workflow scope than the original.
+```
+
+`deep=False` produces a shallow copy that shares the underlying agent, cache, and session with the original — useful for observability wrappers that want read-through access to the live state, but unsafe for graphs where both copies will receive messages.
 
 ### Controlling context flow — `context_mode`
 
@@ -441,6 +448,15 @@ from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import SequentialBuilder, ConcurrentBuilder
 
+client = OpenAIChatClient()
+
+# A peer agent that runs alongside the inner pipeline.
+fact_checker = Agent(
+    client=client,
+    name="fact-checker",
+    instructions="Flag any claim that cannot be verified against a primary source.",
+)
+
 # Inner pipeline — takes a topic, returns a dossier.
 dossier_pipeline = SequentialBuilder(participants=[researcher, analyst]).build()
 
@@ -450,8 +466,7 @@ dossier_agent = dossier_pipeline.as_agent(
     description="Research a topic and produce a structured dossier.",
 )
 
-# Outer pipeline — dossier agent runs alongside a fact-checker in parallel,
-# then a writer merges their output.
+# Outer pipeline — dossier agent runs alongside the fact-checker in parallel.
 merged = (
     ConcurrentBuilder(participants=[dossier_agent, fact_checker])
     .build()
@@ -613,7 +628,13 @@ If you don't pass `selection_func_name=` the framework tries to derive it from t
 
 ```python
 from dataclasses import dataclass
-from agent_framework import Case, Default, Executor, WorkflowBuilder
+from agent_framework import (
+    Case,
+    Default,
+    Executor,
+    FunctionExecutor,
+    WorkflowBuilder,
+)
 
 
 @dataclass
@@ -625,6 +646,14 @@ class Ticket:
 class DeadLetter(Executor):
     def __init__(self) -> None:
         super().__init__(id="dead_letter", defer_discovery=True)
+
+
+# Minimal stand-ins — in a real workflow these would be AgentExecutors wrapping
+# named agents, or FunctionExecutors running your handler code.
+classifier   = FunctionExecutor(lambda raw: Ticket(**raw), id="classify")
+vip_billing  = FunctionExecutor(lambda t: "vip billing handled",   id="vip_billing")
+billing      = FunctionExecutor(lambda t: "billing handled",       id="billing")
+technical    = FunctionExecutor(lambda t: "technical handled",     id="technical")
 
 
 workflow = (

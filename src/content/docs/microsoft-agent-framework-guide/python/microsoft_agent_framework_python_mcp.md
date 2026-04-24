@@ -301,13 +301,15 @@ The `async with mcp_tool:` idiom handles connect + close for you. For long-runni
 
 ```python
 from agent_framework import MCPStreamableHTTPTool
+from agent_framework.openai import OpenAIChatClient
 
 mcp = MCPStreamableHTTPTool(name="learn", url="https://learn.microsoft.com/api/mcp")
+client = OpenAIChatClient()                                  # reuse one HTTP pool
 
-await mcp.connect()                                         # open once
+await mcp.connect()                                          # open once
 try:
     for _ in range(100):
-        agent = Agent(client=OpenAIChatClient(), tools=mcp) # reuses the open session
+        agent = Agent(client=client, tools=mcp)              # reuses the open session
         await agent.run("…")
 finally:
     await mcp.close()                                        # close once

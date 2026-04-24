@@ -177,7 +177,11 @@ The workflow resumes, dispatches each response to the executor that raised the r
 `WorkflowCheckpoint.previous_checkpoint_id` forms a chain; `delete(...)` removes one file. To delete an entire aborted run, walk the chain and delete each step:
 
 ```python
-async def delete_run(storage: FileCheckpointStorage, tip_checkpoint_id: str) -> int:
+from agent_framework import CheckpointStorage
+
+
+async def delete_run(storage: CheckpointStorage, tip_checkpoint_id: str) -> int:
+    """Works with any CheckpointStorage backend — File, InMemory, Redis, Cosmos."""
     count = 0
     cursor = await storage.load(tip_checkpoint_id)
     while True:

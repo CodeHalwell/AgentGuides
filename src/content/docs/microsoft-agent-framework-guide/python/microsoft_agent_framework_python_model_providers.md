@@ -441,9 +441,10 @@ class Extracted(BaseModel):
     score: float
     topics: list[str]
 
+options: ChatOptions = {"response_format": Extracted}
 response = await agent.run(
     "Summarise this review: 'Fast shipping, but the fabric snagged.'",
-    options=ChatOptions(response_format=Extracted),
+    options=options,
 )
 print(response.value.sentiment, response.value.score)
 ```
