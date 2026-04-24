@@ -146,6 +146,51 @@ async for event in stream:
     ...
 ```
 
+### Walking a checkpoint's pending requests before responding
+
+`WorkflowCheckpoint.pending_request_info_events` carries every HITL request the workflow is blocked on. Inspect it to build the `responses=` map automatically — useful when you have many concurrent approvals waiting:
+
+```python
+from agent_framework import FileCheckpointStorage
+
+storage = FileCheckpointStorage("/var/lib/agents/checkpoints")
+latest = await storage.get_latest(workflow_name="research-pipeline")
+
+if latest and latest.pending_request_info_events:
+    # Auto-approve everything the user has already signed off on in an upstream system.
+    responses = {
+        event.request_id: approval_store.lookup_decision(event.request_id)
+        for event in latest.pending_request_info_events
+    }
+
+    result = await workflow.run(
+        checkpoint_id=latest.checkpoint_id,
+        responses=responses,
+        checkpoint_storage=storage,    # re-attach storage so further steps keep saving
+    )
+```
+
+The workflow resumes, dispatches each response to the executor that raised the request, and continues stepping until it idles or hits the next HITL gate. Any request IDs you omit from `responses` stay pending and the workflow saves a fresh checkpoint with them still outstanding — safe to call repeatedly.
+
+### Delete a partial run
+
+`WorkflowCheckpoint.previous_checkpoint_id` forms a chain; `delete(...)` removes one file. To delete an entire aborted run, walk the chain and delete each step:
+
+```python
+async def delete_run(storage: FileCheckpointStorage, tip_checkpoint_id: str) -> int:
+    count = 0
+    cursor = await storage.load(tip_checkpoint_id)
+    while True:
+        await storage.delete(cursor.checkpoint_id)
+        count += 1
+        if not cursor.previous_checkpoint_id:
+            break
+        cursor = await storage.load(cursor.previous_checkpoint_id)
+    return count
+```
+
+Prefer `list_checkpoint_ids(workflow_name=...)` + `get_latest` for the common case ("keep last N"). Only walk the chain when you need to surgically remove one branch of checkpoints without affecting sibling runs.
+
 ### List and prune old checkpoints
 
 ```python

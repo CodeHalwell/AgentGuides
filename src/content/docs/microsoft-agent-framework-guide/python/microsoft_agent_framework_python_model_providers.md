@@ -367,6 +367,102 @@ class StubEmbeddingClient(BaseEmbeddingClient):
         )
 ```
 
+## Provider-neutral request options — `ChatOptions`
+
+Every provider-specific options TypedDict (`OpenAIChatOptions`, `AnthropicChatOptions`, etc.) extends the generic `ChatOptions` base. When you're writing code that should work against any client, type against `ChatOptions` — it captures the common denominator across all providers. All fields are optional (`total=False`), so you only set what you need.
+
+```python
+from agent_framework import ChatOptions
+
+common: ChatOptions = {
+    "model": "gpt-5-mini",
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "max_tokens": 2_000,
+    "stop": ["\n\nUSER:"],
+    "seed": 1337,
+    "frequency_penalty": 0.0,
+    "presence_penalty": 0.1,
+    "user": "user-42",               # end-user id for provider-side abuse tracking
+    "metadata": {"env": "prod"},     # attached to the request; provider may echo it back
+}
+
+response = await agent.run("Summarise the dataset.", options=common)
+```
+
+The fields `ChatOptions` defines — every first-party client accepts at least this subset:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `model` | `str` | Override the model for this one call |
+| `temperature` / `top_p` | `float` | Sampling temperature and nucleus probability |
+| `max_tokens` | `int` | Upper bound on output tokens |
+| `stop` | `str \| Sequence[str]` | Stop sequences |
+| `seed` | `int` | Reproducibility hint (providers may ignore) |
+| `logit_bias` | `dict[str \| int, float]` | Per-token bias map |
+| `frequency_penalty` / `presence_penalty` | `float` | Repetition / novelty penalties |
+| `tools` | `Sequence[FunctionTool \| Callable \| …] \| None` | Per-call tool list (additive over the agent's) |
+| `tool_choice` | `ToolMode \| "auto" \| "required" \| "none"` | Force a tool, require any tool, or disable tools |
+| `allow_multiple_tool_calls` | `bool` | Permit the model to request more than one tool per turn |
+| `response_format` | `type[BaseModel] \| Mapping \| None` | Structured output — pass a Pydantic class or a JSON schema |
+| `metadata` | `dict[str, Any]` | Free-form metadata the provider round-trips on the request |
+| `user` | `str` | End-user identifier (OpenAI / Anthropic use it for abuse detection) |
+| `store` | `bool` | Provider-side conversation storage (OpenAI Responses API, Foundry) |
+| `conversation_id` | `str` | Continue a provider-managed conversation |
+| `instructions` | `str` | Per-call system instructions override |
+
+### Forcing a specific tool with `ToolMode`
+
+`tool_choice` accepts either the shorthand literal strings or a `ToolMode` dict for when you want to pin the model to one specific function:
+
+```python
+from agent_framework import ChatOptions, ToolMode
+
+pin_to_search: ChatOptions = {
+    "tool_choice": ToolMode(mode="required", required_function_name="search_products"),
+    "allow_multiple_tool_calls": False,
+}
+
+await agent.run("Find red sneakers under $100", options=pin_to_search)
+```
+
+`mode="none"` disables tools entirely for one call (useful when you want a pure summary of the conversation without further tool-use); `mode="required"` without `required_function_name` forces the model to pick *some* tool.
+
+### Structured output in one line
+
+`response_format` accepts a Pydantic model — the response comes back as a typed object via `response.value`:
+
+```python
+from pydantic import BaseModel
+from agent_framework import ChatOptions
+
+class Extracted(BaseModel):
+    sentiment: str
+    score: float
+    topics: list[str]
+
+response = await agent.run(
+    "Summarise this review: 'Fast shipping, but the fabric snagged.'",
+    options=ChatOptions(response_format=Extracted),
+)
+print(response.value.sentiment, response.value.score)
+```
+
+Providers that don't support structured output natively fall back to JSON-mode + client-side validation — same surface either way.
+
+### Merging with client-level defaults
+
+Every client accepts the same TypedDict on construction. The call-level `options=` is a shallow merge on top: keys you set win, keys you omit inherit from the client.
+
+```python
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient(model="gpt-5-mini", temperature=0.7)
+
+# Inherits temperature=0.7; only max_tokens is overridden.
+await agent.run("Draft a tweet.", options={"max_tokens": 280})
+```
+
 ## Swapping the model on an existing client
 
 Every client accepts `model=` at construction and remembers it. But you can also override the model for a single call without building a new client — use `options=` on the agent run:
@@ -386,6 +482,16 @@ response = await agent.run(
 ```
 
 `options` is a provider-specific `TypedDict` — `OpenAIChatOptions`, `OpenAIChatCompletionOptions`, `OpenAIEmbeddingOptions`, and the equivalents under `agent_framework.anthropic`, `agent_framework.amazon`, `agent_framework.ollama`, etc. IDE autocomplete drives you through every tunable. The values merge with the client's defaults; anything you omit stays as the client was constructed.
+
+### When to reach for the provider-specific TypedDict
+
+Use the generic `ChatOptions` whenever the knobs you need are common across providers — that keeps the call site interoperable. Drop to the provider-specific dict only when you need a feature the base can't describe:
+
+- **OpenAI-only** (via `OpenAIChatOptions`): `reasoning`, `prompt_cache_key`, `prompt_cache_retention`, `service_tier`, `top_logprobs`, `truncation`, `background`, `include`, `max_tool_calls`, `continuation_token`.
+- **Anthropic-only**: extended-thinking parameters, cache-control directives.
+- **Bedrock-only**: `guardrail` references, `additional_model_request_fields`.
+
+Mixing them is fine — a provider-specific dict is a superset of `ChatOptions`, so code typed against the base still accepts it.
 
 ## Building your own chat client
 

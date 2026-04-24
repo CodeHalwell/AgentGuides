@@ -304,6 +304,57 @@ result = await workflow.run("Quantum sensors in 2026")
 - Control context inheritance via `context_mode` (see below).
 - Mix with non-agent `Executor` subclasses for deterministic transforms.
 
+### Sharing an `AgentSession` across executors
+
+Every `AgentExecutor` owns an `AgentSession` internally. By default each executor creates its own session — useful when you want each node to have isolated conversation state, but wasteful when several executors wrap the same agent (e.g. a multi-turn loop) or you want a shared scratchpad.
+
+Pass `session=` to reuse a single session across every executor that should share state:
+
+```python
+from agent_framework import Agent, AgentExecutor, WorkflowBuilder
+from agent_framework.openai import OpenAIChatClient
+
+planner = Agent(client=OpenAIChatClient(), name="planner", instructions="Break tasks down.")
+actor   = Agent(client=OpenAIChatClient(), name="actor",   instructions="Execute steps.")
+
+# Both executors write into the same session — the actor sees the planner's
+# notes in session.state and can update a shared scratchpad.
+shared = planner.create_session(session_id="job-42")
+
+plan_node  = AgentExecutor(planner, session=shared, id="plan")
+act_node   = AgentExecutor(actor,   session=shared, id="act")
+
+workflow = (
+    WorkflowBuilder(start_executor=plan_node)
+    .add_edge(plan_node, act_node)
+    .build()
+)
+```
+
+`shared.state` is a plain mutable dict — tools, middleware, and context providers on either agent read and write it. That's how you pass "what's already been tried" between planner and actor without stuffing it into the conversation history.
+
+When to keep sessions separate:
+
+- Each executor answers a different part of the same question (review → summariser) and neither needs the other's scratchpad.
+- You want to parallelise multiple runs with distinct `session_id`s so context providers (mem0, Redis) don't collide.
+
+When to share:
+
+- Multi-turn loops where one agent plans, another executes, and a third verifies — all against the same scratchpad.
+- A supervisor agent that needs to see what a worker remembered from an earlier turn.
+
+### Cloning executors for graph reuse — `AgentExecutor.clone`
+
+`AgentExecutor.clone(deep=True)` returns an independent copy — same agent configuration, fresh cache, fresh session (unless you pass the original's session back in). Use this when the same agent appears at multiple positions in a graph and each occurrence needs its own message cache:
+
+```python
+first_pass  = AgentExecutor(reviewer, id="review_a")
+second_pass = first_pass.clone()            # deep copy; same agent, new cache
+second_pass._id = "review_b"                # give the clone a unique id for the graph
+```
+
+`deep=False` produces a shallow copy that still shares the underlying agent and session — useful if you want the clones to read from the same conversation state but be distinct graph nodes.
+
 ### Controlling context flow — `context_mode`
 
 When one `AgentExecutor` sends its response downstream to another `AgentExecutor`, the downstream executor has three options for how much of the upstream conversation to inherit:
@@ -380,6 +431,64 @@ builder.add_switch_case_edge_group(
 #   .add_edge(a, b, condition=lambda m: ...)   — conditional single edge
 #   .add_multi_selection_edge_group(...)       — fan-out with a picker
 ```
+
+## Wrapping a workflow as an agent — `Workflow.as_agent`
+
+Any `Workflow` can be exposed as an `Agent` — same `.run(...)` surface, same streaming events, same compatibility with orchestration builders. This lets you plug a whole multi-step pipeline into a higher-level orchestration as if it were a single agent, without manually instantiating `WorkflowAgent`:
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+from agent_framework_orchestrations import SequentialBuilder, ConcurrentBuilder
+
+# Inner pipeline — takes a topic, returns a dossier.
+dossier_pipeline = SequentialBuilder(participants=[researcher, analyst]).build()
+
+# Wrap it as an agent so it composes with other builders.
+dossier_agent = dossier_pipeline.as_agent(
+    name="dossier-agent",
+    description="Research a topic and produce a structured dossier.",
+)
+
+# Outer pipeline — dossier agent runs alongside a fact-checker in parallel,
+# then a writer merges their output.
+merged = (
+    ConcurrentBuilder(participants=[dossier_agent, fact_checker])
+    .build()
+)
+
+result = await merged.run("Post-quantum cryptography migration")
+```
+
+Caveats worth knowing:
+
+- The workflow's **start executor must accept `list[Message]`** as one of its input types. `Workflow.as_agent()` raises `ValueError` at wrap time if the start executor can't accept the converted messages — check early, not at run time.
+- You can pass `context_providers=` to the wrapped agent, same as a normal `Agent`. The providers run around every invocation of the inner workflow.
+- The returned `WorkflowAgent` is itself a `SupportsAgentRun`, so it drops into `SequentialBuilder`, `HandoffBuilder`, `AgentExecutor`, or any other place that takes an agent.
+
+### Converting string inputs to messages
+
+The wrapping layer normalises the caller's input (string / `Message` / list of either) into `list[Message]` before handing it to the workflow's start executor. Inside the workflow, the start executor decorates its handler with `input=list[Message]`:
+
+```python
+from agent_framework import Executor, Message, WorkflowContext, handler
+
+
+class IntakeExecutor(Executor):
+    def __init__(self) -> None:
+        super().__init__(id="intake")
+
+    @handler
+    async def on_messages(
+        self,
+        messages: list[Message],            # must be list[Message] for as_agent() compat
+        ctx: WorkflowContext[dict],
+    ) -> None:
+        topic = messages[-1].text           # last user message as the topic
+        await ctx.send_message({"topic": topic})
+```
+
+If your start executor was written to accept a `dict` directly, either rewrite it to accept `list[Message]` or sandwich a small intake executor in front of it when you want the `as_agent()` surface.
 
 ## Nested workflows — `WorkflowExecutor` and sub-workflows
 
@@ -468,6 +577,77 @@ And `allow_direct_output=True` makes the sub-workflow's `ctx.yield_output(...)` 
 assert SubWorkflowResponseMessage in dossier_node.input_types
 assert dossier_node.input_types == inner.input_types + [SubWorkflowResponseMessage]
 ```
+
+### `FanOutEdgeGroup` rules and serialization
+
+`.add_fan_out_edges(...)` and `.add_multi_selection_edge_group(...)` both instantiate a `FanOutEdgeGroup` under the hood. A few constraints the class enforces that are easy to miss:
+
+- **At least two targets.** The constructor raises `ValueError("FanOutEdgeGroup must contain at least two targets.")` when you pass a single-target list. Drop to `.add_edge(source, target)` for 1:1 flows.
+- **Stable IDs for selection functions.** When the graph is serialised (checkpointing, `.to_dict()` / `.from_dict()` round trips), the selector callable itself cannot cross the wire. Pass `selection_func_name=` with a stable identifier so deserialisation can re-resolve the callable from your registry.
+
+```python
+from agent_framework import FanOutEdgeGroup
+
+# Not using the builder helper — useful for code that introspects / serialises
+# the edge group itself. The builder's .add_multi_selection_edge_group(...) is
+# still the normal way to add one to a workflow.
+broadcast = FanOutEdgeGroup(
+    source_id="dispatcher",
+    target_ids=["worker_a", "worker_b", "worker_c"],
+    selection_func=lambda msg, available: (
+        available if msg.get("broadcast") else [available[0]]
+    ),
+    selection_func_name="broadcast_or_primary",  # stable — used during deserialisation
+    id="primary-dispatch",                         # stable edge-group id
+)
+
+assert broadcast.target_ids == ["worker_a", "worker_b", "worker_c"]
+# target_ids returns a shallow copy so callers can't mutate the group in place.
+```
+
+If you don't pass `selection_func_name=` the framework tries to derive it from the callable's `__qualname__`; lambdas and closures don't have a useful one, which is why you'll want the explicit name for anything you plan to persist.
+
+### Switch-case with `Case` and `Default`
+
+`add_switch_case_edge_group` accepts a list of `Case` predicates plus a terminal `Default`. The first matching `Case` wins — evaluation is top-to-bottom — so order your conditions from most specific to least specific:
+
+```python
+from dataclasses import dataclass
+from agent_framework import Case, Default, Executor, WorkflowBuilder
+
+
+@dataclass
+class Ticket:
+    category: str
+    priority: str
+
+
+class DeadLetter(Executor):
+    def __init__(self) -> None:
+        super().__init__(id="dead_letter", defer_discovery=True)
+
+
+workflow = (
+    WorkflowBuilder(start_executor=classifier)
+    .add_switch_case_edge_group(
+        source=classifier,
+        cases=[
+            # Most specific first — high-priority billing jumps the queue.
+            Case(
+                condition=lambda t: t.priority == "P0" and t.category == "billing",
+                target=vip_billing,
+            ),
+            Case(condition=lambda t: t.category == "billing",   target=billing),
+            Case(condition=lambda t: t.category == "technical", target=technical),
+            # Default is mandatory — guarantees routing never produces an empty target.
+            Default(target=DeadLetter()),
+        ],
+    )
+    .build()
+)
+```
+
+`Default` is not optional — the framework guarantees every message lands somewhere, even if no `Case` predicate matches. Point its target at a dead-letter executor if that's the correct behaviour for "I have no idea what to do with this."
 
 ## Streaming events
 

@@ -295,6 +295,59 @@ When to stick with in-process (`MCPStdioTool` / `MCPStreamableHTTPTool` / `MCPWe
 
 The `SupportsMCPTool` protocol is `runtime_checkable`, so the `isinstance(...)` guard is a normal runtime check — no stub subclassing needed. See the [Advanced → Capability protocols](./microsoft_agent_framework_python_advanced/#capability-protocols--supports) section for the full set of `Supports*` protocols (file search, web search, code interpreter, image generation).
 
+## Lifecycle — connect, reset, close
+
+The `async with mcp_tool:` idiom handles connect + close for you. For long-running servers where you want the same tool instance to survive across many agent invocations, manage the lifecycle explicitly:
+
+```python
+from agent_framework import MCPStreamableHTTPTool
+
+mcp = MCPStreamableHTTPTool(name="learn", url="https://learn.microsoft.com/api/mcp")
+
+await mcp.connect()                                         # open once
+try:
+    for _ in range(100):
+        agent = Agent(client=OpenAIChatClient(), tools=mcp) # reuses the open session
+        await agent.run("…")
+finally:
+    await mcp.close()                                        # close once
+```
+
+### Reconnecting after a transport error
+
+If the remote server drops the connection or rotates a token, call `connect(reset=True)` to tear down the stale session and open a fresh one without replacing the tool instance:
+
+```python
+try:
+    response = await agent.run("Query the MCP server")
+except ConnectionError:
+    await mcp.connect(reset=True)                           # reset + reconnect in one call
+    response = await agent.run("Query the MCP server")
+```
+
+Pair `reset=True` with your own backoff logic when you want a long-lived MCP tool that self-heals across transient failures — the default `async with` scope can't cover that because it wants a clean open/close.
+
+### Lifetime and transport-level termination
+
+`terminate_on_close=True` (the default for HTTP transports) closes the underlying httpx connection when `close()` runs. Set it to `False` when your `http_client=` is shared with other callers and you don't want the tool to terminate the pool:
+
+```python
+import httpx
+from agent_framework import MCPStreamableHTTPTool
+
+shared = httpx.AsyncClient(timeout=30)                      # used by other parts of your app
+
+mcp = MCPStreamableHTTPTool(
+    name="internal",
+    url="https://mcp.corp/api",
+    http_client=shared,
+    terminate_on_close=False,                               # don't kill the shared client
+    request_timeout=15,                                     # per-request timeout (seconds)
+)
+```
+
+`request_timeout` applies to every MCP call (tool invocation, prompt fetch, server ping) — set it independently of the httpx client's global timeout when you want tighter per-call bounds.
+
 ## Exposing an agent as an MCP server
 
 Flip the direction — let other agents consume yours over MCP. The `agent_framework.devui` or `agent_framework_chatkit` hosting packages expose an agent as a streamable-HTTP MCP endpoint; see those sub-packages for the deployment recipe.
