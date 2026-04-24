@@ -313,6 +313,7 @@ from pydantic import BaseModel, Field
 from typing import List
 
 from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
 class UserProfile(BaseModel):
     """A model to hold structured user information."""
@@ -320,7 +321,7 @@ class UserProfile(BaseModel):
     age: int = Field(description="The user's age.")
     interests: List[str] = Field(description="A list of the user's interests.")
 
-async def extract_structured_data(client, text: str) -> UserProfile:
+async def extract_structured_data(client: OpenAIChatClient, text: str) -> UserProfile:
     agent = Agent(
         client=client,
         instructions="Extract user profile information from the text provided.",
@@ -331,7 +332,6 @@ async def extract_structured_data(client, text: str) -> UserProfile:
     return response.value
 
 # --- Usage ---
-# from agent_framework.openai import OpenAIChatClient
 # text_blob = "My name is Jane Doe, I'm 28, and I love hiking and programming in Python."
 # profile = await extract_structured_data(OpenAIChatClient(), text_blob)
 # print(profile.model_dump_json(indent=2))
