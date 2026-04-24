@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.1.65 | Updated: April 22, 2026
+Latest: 0.1.66 | Updated: April 24, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -2931,7 +2931,8 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.1.65 | April 22, 2026 | Patch release; bundled Claude Code CLI updated; dependency pinning improvements. Version bump confirmed against PyPI `claude-agent-sdk 0.1.65`. |
+| 0.1.66 | April 23, 2026 | Patch release; stability improvements. Version bump confirmed against PyPI `claude-agent-sdk 0.1.66`. |
+| 0.1.65 | April 22, 2026 | Patch release; bundled Claude Code CLI updated; dependency pinning improvements. |
 | 0.1.64 | April 20, 2026 | Patch release; stability and dependency updates. |
 | 0.1.63 | April 18, 2026 | `get_context_usage()` on `ClaudeSDKClient` with per-category breakdown (system/conversation/tool tokens); `typing.Annotated` for per-parameter descriptions in `@tool` and `create_sdk_mcp_server`; `tool_use_id` and `agent_id` in `ToolPermissionContext` |
 | 0.1.60 | April 16, 2026 | Extended thinking configuration (`ThinkingConfigAdaptive`, `ThinkingConfigEnabled`, `ThinkingConfigDisabled`); `effort` field for thinking depth control; file checkpointing and session rewind |
