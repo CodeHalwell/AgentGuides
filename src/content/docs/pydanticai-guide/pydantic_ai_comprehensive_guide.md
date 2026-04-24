@@ -1965,18 +1965,19 @@ transformation.
 ```python
 # Installed: pydantic-ai==1.86.1
 import asyncio
-from pydantic_ai import Agent
+from typing import Any
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import Hooks
 
 hooks = Hooks()
 
 @hooks.on.before_model_request
-async def log_request(ctx, request_context):
+async def log_request(ctx: RunContext, request_context: Any) -> Any:
     print(f"[hook] model request: {request_context}")
     return request_context  # must return the (optionally modified) context
 
-@hooks.on.after_model_response
-async def log_response(ctx, response):
+@hooks.on.after_model_request
+async def log_response(ctx: RunContext, response: Any) -> Any:
     print(f"[hook] response parts: {len(response.parts)}")
     return response
 
@@ -1988,11 +1989,12 @@ The `hooks.on` namespace exposes the following hooks (all optional, all async):
 | Hook | Signature | Purpose |
 |------|-----------|---------|
 | `before_model_request` | `(ctx, request_context) → request_context` | Inspect or mutate the model request before sending |
-| `after_model_response` | `(ctx, response) → response` | Inspect or mutate the model response after receiving |
-| `before_tool_execute` | `(ctx, tool_name, raw_args) → raw_args` | Inspect raw arguments before validation |
-| `after_tool_execute` | `(ctx, tool_name, result) → result` | Inspect or mutate the tool result |
+| `after_model_request` | `(ctx, response) → response` | Inspect or mutate the model response after receiving |
+| `before_tool_execute` | `(ctx, tool_name, raw_args) → raw_args` | Inspect raw tool arguments before validation |
+| `after_tool_execute` | `(ctx, tool_name, result) → result` | Inspect or mutate the tool result after execution |
 | `before_tool_validate` | `(ctx, tool_name, validated_args) → validated_args` | Inspect validated arguments before execution |
-| `wrap_run` | `(ctx, handler) → result` | Wrap the entire agent run |
+| `before_run` | `(ctx) → None` | Called at the start of the agent run |
+| `after_run` | `(ctx, result) → result` | Called at the end of the agent run |
 
 Hooks can carry an optional `timeout` (seconds) per registered function:
 
@@ -2044,7 +2046,7 @@ restricted = ModelProfile(
 | `supports_image_output` | `bool` | `False` | Image generation responses |
 | `default_structured_output_mode` | `str` | `'tool'` | `'tool'`, `'json_schema'`, `'json_object'`, or `'prompted'` |
 | `supports_thinking` | `bool` | `False` | Extended thinking / chain-of-thought tokens |
-| `supported_builtin_tools` | `frozenset` | all 8 tools | Built-in tools the model can use |
+| `supported_builtin_tools` | `frozenset` | Full toolset | Built-in tools the model can use |
 
 ---
 

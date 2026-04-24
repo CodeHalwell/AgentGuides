@@ -125,7 +125,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Intermediate',
     useCases: ['rag', 'search', 'web'],
-    version: '@llamaindex/core v0.6.23',
+    version: 'v0.6.23',
   },
   {
     id: 'haystack',
