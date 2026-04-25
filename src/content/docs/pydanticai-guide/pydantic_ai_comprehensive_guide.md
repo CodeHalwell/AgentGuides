@@ -2103,7 +2103,7 @@ Source: `pydantic_ai/capabilities/reinject_system_prompt.py` (installed 1.87.0).
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 
-async def keep_last_10(messages, info):
+async def keep_last_10(messages):
     """Retain only the 10 most recent messages to cap token usage."""
     return messages[-10:]
 
