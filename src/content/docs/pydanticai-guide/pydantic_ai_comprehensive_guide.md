@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.86.1 (April 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.87.0 (April 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.86.1 | Updated: April 24, 2026
+Latest: 1.87.0 | Updated: April 26, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.86.1 (April 2026)  
+**Version:** 1.87.0 (April 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1950,9 +1950,9 @@ app = AGUIApp(agent=agent)
 
 ---
 
-## Capabilities API (v1.86.x)
+## Capabilities API (v1.86.x–1.87.x)
 
-PydanticAI 1.86.0 introduces a composable **Capabilities** system. Capabilities are reusable
+PydanticAI 1.86.0 introduced a composable **Capabilities** system. Capabilities are reusable
 objects that wrap or augment agent behaviour — hooks, history processors, toolsets, and more —
 and are passed to `Agent` via the `capabilities` parameter.
 
@@ -1963,7 +1963,7 @@ and are passed to `Agent` via the `capabilities` parameter.
 transformation.
 
 ```python
-# Installed: pydantic-ai==1.86.1
+# Installed: pydantic-ai==1.87.0
 import asyncio
 from typing import Any
 from pydantic_ai import Agent, RunContext
@@ -1984,22 +1984,41 @@ async def log_response(ctx: RunContext, response: Any) -> Any:
 agent = Agent('openai:gpt-4o', capabilities=[hooks], defer_model_check=True)
 ```
 
-The `hooks.on` namespace exposes the following hooks (all optional, all async):
+The `Hooks` constructor (and `hooks.on` namespace) exposes the following hooks (all optional, all async).
+Updated to reflect the full surface in installed pydantic-ai 1.87.0
+(`pydantic_ai/capabilities/hooks.py`):
 
-| Hook | Signature | Purpose |
-|------|-----------|---------|
-| `before_model_request` | `(ctx, request_context) → request_context` | Inspect or mutate the model request before sending |
-| `after_model_request` | `(ctx, response) → response` | Inspect or mutate the model response after receiving |
-| `before_tool_execute` | `(ctx, tool_name, raw_args) → raw_args` | Inspect raw tool arguments before validation |
-| `after_tool_execute` | `(ctx, tool_name, result) → result` | Inspect or mutate the tool result after execution |
-| `before_tool_validate` | `(ctx, tool_name, validated_args) → validated_args` | Inspect validated arguments before execution |
-| `before_run` | `(ctx) → None` | Called at the start of the agent run |
-| `after_run` | `(ctx, result) → result` | Called at the end of the agent run |
+| Group | Hook | Purpose |
+|-------|------|---------|
+| Run lifecycle | `before_run` | Called once at the start of an agent run |
+| Run lifecycle | `after_run` | Called once at the end of an agent run |
+| Run lifecycle | `run` | Wrap the entire run (generator) |
+| Run lifecycle | `run_error` | Called if the run raises an exception |
+| Node lifecycle *(new 1.87)* | `before_node_run` | Called before each graph node executes |
+| Node lifecycle *(new 1.87)* | `after_node_run` | Called after each graph node completes |
+| Node lifecycle *(new 1.87)* | `node_run` | Wrap a single node's execution |
+| Node lifecycle *(new 1.87)* | `node_run_error` | Called if a node raises an exception |
+| Event stream *(new 1.87)* | `run_event_stream` | Wrap the entire event stream generator |
+| Event stream *(new 1.87)* | `event` | Intercept or transform individual stream events |
+| Model request | `before_model_request` | Inspect or mutate the model request before sending |
+| Model request | `after_model_request` | Inspect or mutate the model response after receiving |
+| Model request | `model_request` | Wrap the model call (generator) |
+| Model request | `model_request_error` | Called if the model call raises |
+| Tool prepare | `prepare_tools` | Filter or augment the tool list before each model call |
+| Tool validate | `before_tool_validate` | Inspect raw args before Pydantic validation |
+| Tool validate | `after_tool_validate` | Inspect validated args after validation |
+| Tool validate | `tool_validate` | Wrap the full validation step |
+| Tool validate | `tool_validate_error` | Called on validation failure |
+| Tool execute | `before_tool_execute` | Inspect or mutate validated args before execution |
+| Tool execute | `after_tool_execute` | Inspect or mutate the tool result after execution |
+| Tool execute | `tool_execute` | Wrap the full tool execution |
+| Tool execute | `tool_execute_error` | Called if tool execution raises |
+| Deferred tools *(new 1.87)* | `deferred_tool_calls` | Handle tool calls that the framework defers (see below) |
 
 Hooks can carry an optional `timeout` (seconds) per registered function:
 
 ```python
-# Installed: pydantic-ai==1.86.1
+# Installed: pydantic-ai==1.87.0
 from pydantic_ai.capabilities import Hooks
 
 hooks = Hooks()
@@ -2010,7 +2029,75 @@ async def slow_hook(ctx, request_context):
     return request_context
 ```
 
-Source: `pydantic_ai/capabilities/hooks.py` (installed pydantic-ai 1.86.1).
+Source: `pydantic_ai/capabilities/hooks.py` (installed pydantic-ai 1.87.0).
+
+### Deferred tool calls (v1.87.0)
+
+`pydantic_ai.capabilities.HandleDeferredToolCalls` is a new capability that intercepts tool calls
+before they are dispatched, giving application code the opportunity to approve, enrich metadata,
+or supply pre-computed results without running the tool function at all.
+
+```python
+# Installed: pydantic-ai==1.87.0
+from pydantic_ai import Agent, DeferredToolRequests, DeferredToolResults
+from pydantic_ai.capabilities import HandleDeferredToolCalls
+
+def my_deferred_handler(ctx, requests: DeferredToolRequests) -> DeferredToolResults | None:
+    results = {}
+    for call in requests.calls:
+        if call.tool_name == "expensive_lookup":
+            # Return a pre-computed value instead of running the tool
+            results[call.tool_call_id] = {"value": 42, "source": "cache"}
+    # Return None to let the framework execute unhandled calls normally
+    return DeferredToolResults(calls=results) if results else None
+
+agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[HandleDeferredToolCalls(my_deferred_handler)],
+    defer_model_check=True,
+)
+```
+
+`DeferredToolRequests` carries the list of pending `ToolCallPart` objects plus optional per-call
+metadata. `DeferredToolResults` maps `tool_call_id → result` for any calls you handle; calls
+without a result entry are executed by the framework normally.
+
+Source: `pydantic_ai/capabilities/deferred_tool_handler.py` and
+`pydantic_ai/capabilities/hooks.py` (installed pydantic-ai 1.87.0). Imports verified:
+`from pydantic_ai.capabilities import HandleDeferredToolCalls` and
+`from pydantic_ai import DeferredToolRequests, DeferredToolResults` — both pass with
+`-W error::DeprecationWarning`.
+
+### CapabilityOrdering: controlling execution order (v1.87.0)
+
+When multiple capabilities are composed, `CapabilityOrdering` controls their relative order.
+Pass it as the `ordering` keyword argument when constructing a `Hooks` (or any capability):
+
+```python
+# Installed: pydantic-ai==1.87.0
+from pydantic_ai.capabilities import Hooks, CapabilityOrdering
+
+# This hooks instance runs before any other capability
+hooks = Hooks(
+    ordering=CapabilityOrdering(position='first'),
+)
+
+# This hooks instance runs after all others
+audit_hooks = Hooks(
+    ordering=CapabilityOrdering(position='last'),
+)
+```
+
+`CapabilityOrdering` fields (source: `pydantic_ai/capabilities/hooks.py`, installed 1.87.0):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `position` | `'first' \| 'last' \| None` | Pin this capability to the front or back of the chain |
+| `wraps` | `Sequence[CapabilityRef]` | Capabilities this one must wrap (run outside of) |
+| `wrapped_by` | `Sequence[CapabilityRef]` | Capabilities that must wrap this one |
+| `requires` | `Sequence[type[AbstractCapability]]` | Capabilities that must be present for this to function |
+
+Source: `pydantic_ai/capabilities/_ordering.py` (installed pydantic-ai 1.87.0).
 
 ### ModelProfile: describing model behaviour
 
@@ -2019,13 +2106,13 @@ independent of the provider class. The framework ships `DEFAULT_PROFILE`; provid
 it per model.
 
 ```python
-# Installed: pydantic-ai==1.86.1
+# Installed: pydantic-ai==1.87.0
 from pydantic_ai.profiles import ModelProfile, DEFAULT_PROFILE
 
 # Inspect the default profile
 print(DEFAULT_PROFILE.supports_tools)          # True
 print(DEFAULT_PROFILE.supports_thinking)       # False
-print(DEFAULT_PROFILE.supported_builtin_tools) # frozenset of 8 tool classes
+print(DEFAULT_PROFILE.supported_builtin_tools) # frozenset of built-in tool classes
 
 # Define a custom profile for a hypothetical restricted model
 restricted = ModelProfile(
@@ -2035,7 +2122,7 @@ restricted = ModelProfile(
 )
 ```
 
-`ModelProfile` fields (source: `pydantic_ai/profiles/__init__.py`, installed 1.86.1):
+`ModelProfile` fields (source: `pydantic_ai/profiles/__init__.py`, installed 1.87.0):
 
 | Field | Type | Default | Purpose |
 |-------|------|---------|---------|
@@ -2054,6 +2141,7 @@ restricted = ModelProfile(
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.87.0 | April 26, 2026 | Node-level hooks (`before_node_run`, `after_node_run`, `node_run`, `node_run_error`); event stream hooks (`run_event_stream`, `event`); `HandleDeferredToolCalls` capability with `DeferredToolRequests`/`DeferredToolResults`; `CapabilityOrdering` system (`position`, `wraps`, `wrapped_by`, `requires`); `deferred_tool_calls` hook on `Hooks`. Capabilities API section expanded; hooks reference table updated. All new symbols verified against installed 1.87.0 with `-W error::DeprecationWarning`. |
 | 1.86.1 | April 24, 2026 | Patch fix for Capabilities API. Snippets executed against installed 1.86.1; `Hooks`, `ModelProfile`, `DEFAULT_PROFILE` all import successfully. New Capabilities API section added to this guide. |
 | 1.86.0 | April 23, 2026 | Introduces `capabilities` parameter on `Agent.__init__`; new `pydantic_ai.capabilities` module (`Hooks`, `AbstractCapability`, `CombinedCapability`, `HistoryProcessor`, `Thinking`, `ThreadExecutor`, `WebFetch`, `WebSearch`, `ImageGeneration`, `MCP`, `Toolset`); new `pydantic_ai.profiles` module (`ModelProfile`, `ModelProfileSpec`, `DEFAULT_PROFILE`); new `pydantic_ai.ui` module (`UIAdapter`, `UIEventStream`, `MessagesBuilder`). |
 | 1.85.1 | April 22, 2026 | Patch fix; `UrlContextTool` marked deprecated (use `WebFetchTool`). Built-in tools, embeddings, AG UI, and `ApprovalRequiredToolset` verified against installed package. `pydantic_ai.common_tools` stub corrected to `pydantic_ai.builtin_tools` with correct class names. Snippets executed against 1.85.1. |

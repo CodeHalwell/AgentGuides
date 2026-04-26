@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.86.1',
+    version: 'v1.87.0',
   },
   {
     id: 'openai-agents',
@@ -48,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.14.5',
+    version: 'v0.14.6',
   },
   {
     id: 'openai-agents-ts',
@@ -70,7 +70,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['team-simulation', 'customer-service', 'orchestration'],
-    version: 'v1.14.2',
+    version: 'v1.14.3',
   },
   {
     id: 'autogen',
@@ -81,7 +81,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['research', 'multi-agent', 'experimentation'],
-    version: 'v0.12.0',
+    version: 'v0.12.1',
   },
   {
     id: 'langgraph-py',
@@ -179,7 +179,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.1.66',
+    version: 'v0.1.68',
   },
   {
     id: 'claude-sdk-ts',

@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.86.1** · April 2026 · Python 3.10+
+    **v1.87.0** · April 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -131,6 +131,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-04-26 | pydantic-ai 1.87.0 | Version bumped 1.86.1 → 1.87.0; Capabilities API section expanded with node-level hooks, deferred tool call handling, and CapabilityOrdering system; hooks reference table updated; all new symbols verified against installed 1.87.0 with `-W error::DeprecationWarning`. | Claude routine |
 | 2026-04-24 | pydantic-ai 1.86.1 | Version bumped 1.85.1 → 1.86.1; "What's new" updated for v1.86.x (Capabilities API, Hooks, ModelProfile, UI module); Capabilities API section added to comprehensive guide with verified snippets. | Claude routine |
 | 2026-04-22 | pydantic-ai 1.85.1 | Added 7 new deep-dive pages, all verified against installed 1.85.1 source: **Output types & validators** (ToolOutput / NativeOutput / PromptedOutput / TextOutput / StructuredDict + output_validator), **Message history** (ModelMessagesTypeAdapter, HistoryProcessor, capture_run_messages), **Testing** (TestModel, FunctionModel, Agent.override), **Model providers & fallback** (every prefix in `providers/__init__.py`, FallbackModel with custom handlers, gateway), **Streaming** (run_stream, run_stream_events, iter, AgentStream), **Toolsets** (FunctionToolset, Combined/Prefixed/Filtered/Prepared/Approval/Deferred/External), **Built-in tools** (WebSearch, WebFetch, CodeExecution, ImageGeneration, FileSearch, Memory, MCPServer, XSearch). Index re-ordered into an 18-step Zero → Hero reading order; Jump-to-topic and Reference grids re-indexed. | Claude routine |
 | 2026-04-22 | pydantic-ai 1.85.1 | Version bumped 1.85.0 → 1.85.1; "What's new" section updated for v1.85.x (8 built-in tools, embeddings API, AG UI adapter, ApprovalRequiredToolset HITL, DeferredLoadingToolset); fabricated `pydantic_ai.common_tools` imports replaced with correct `pydantic_ai.builtin_tools` API; `UrlContextTool` deprecation noted. Snippets verified against installed 1.85.1. | Claude routine |
