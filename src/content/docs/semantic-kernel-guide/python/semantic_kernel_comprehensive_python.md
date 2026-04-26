@@ -1575,128 +1575,86 @@ sk_agent = SkA2AAgent(
 
 ---
 
-## 19. Microsoft Agent Framework Integration - 2025
+## 19. Microsoft Agent Framework Integration - 2026
 
 ### Overview
 
-Microsoft is unifying its agent ecosystem with a common Agent Framework SDK that connects Semantic Kernel, AutoGen, and Microsoft 365 Copilot agents. Python integration is in progress (following .NET release in March 2025).
+Microsoft has unified its agent ecosystem with the **Agent Framework** SDK — a single library that merges Semantic Kernel and AutoGen into one Pythonic surface. The package name and import root is `agent_framework` (underscores); install with `pip install agent-framework`. Core Python went GA on April 3, 2026 as `agent-framework-core==1.1.0`. See the [Microsoft Agent Framework Python guide](/microsoft-agent-framework-guide/python/) for full coverage.
 
-**Status:** Experimental (Python SDK expected Q2 2025)
+Key points when migrating SK → Agent Framework:
 
-### Agent Framework Concepts
+- The primary agent class is `Agent` (from `agent_framework`) — construct with `Agent(client=<ChatClient>, instructions=..., tools=[...])`.
+- Chat clients live under provider subpackages: `agent_framework.openai.OpenAIChatClient`, `agent_framework.foundry.FoundryChatClient`, `agent_framework.anthropic.AnthropicClient`, etc.
+- Tools are Python functions decorated with `@tool` from `agent_framework`.
+- Multi-agent orchestration uses `WorkflowBuilder` (graphs with fan-in / fan-out / switch-case edges).
+- Cross-framework interop uses the **A2A protocol** — `agent_framework.a2a.A2AAgent` wraps a remote A2A endpoint as a local `Agent`.
+
+### Agent Framework: a minimal unified example
 
 ```python
-# Conceptual API (subject to change)
+# pip install agent-framework agent-framework-openai
+import asyncio
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
 
-from microsoft.agent_framework import (
-    UnifiedAgent,
-    AgentRegistry,
-    AgentCapability,
-    AgentGovernance
-)
+@tool(description="Search an internal knowledge base.")
+def search_kb(query: str) -> str:
+    return f"Results for: {query}"
 
-# Create agent with unified SDK
-agent = UnifiedAgent(
-    name="sk_unified_agent",
-    framework="semantic-kernel",  # or "autogen", "copilot"
-    capabilities=[
-        AgentCapability.CHAT,
-        AgentCapability.TOOL_USE,
-        AgentCapability.MEMORY
-    ],
-    governance_policy=AgentGovernance(
-        max_tokens_per_hour=100000,
-        allowed_tools=["approved_tools/*"],
-        content_filter_enabled=True,
-        audit_logging=True
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a helpful assistant grounded in the internal KB.",
+        tools=[search_kb],
     )
-)
+    response = await agent.run("What's the quarterly revenue trend?")
+    print(response.text)
 
-# Register with enterprise registry
-registry = AgentRegistry(
-    endpoint=os.environ["AGENT_REGISTRY_ENDPOINT"],
-    credential=DefaultAzureCredential()
-)
-
-await registry.register(agent)
+asyncio.run(main())
 ```
 
-### Cross-Framework Communication
+### Cross-Framework Communication (A2A)
+
+`agent_framework.a2a.A2AAgent` wraps any remote agent that speaks the Agent2Agent (A2A) protocol — LangGraph, Google ADK, Claude Agent SDK, OpenAI SDK — as a local `Agent` instance:
 
 ```python
-# SK agent communicating with AutoGen agent via Agent Framework
+from agent_framework.a2a import A2AAgent
 
-from microsoft.agent_framework import AgentClient
+# Point at a remote A2A endpoint (any framework that speaks A2A).
+autogen_agent = A2AAgent(url="https://research-agent.example.com/a2a", name="Researcher")
 
-# Create client
-client = AgentClient(
-    registry_endpoint=os.environ["AGENT_REGISTRY_ENDPOINT"],
-    credential=DefaultAzureCredential()
-)
-
-# Discover agents
-agents = await client.discover_agents(
-    capabilities=[AgentCapability.RESEARCH],
-    framework="autogen"  # Find AutoGen agents
-)
-
-# Communicate with AutoGen agent from SK
-autogen_agent = agents[0]
-response = await client.send_message(
-    to_agent=autogen_agent.id,
-    message="Research quantum computing trends",
-    sender_context={"framework": "semantic-kernel", "agent": "sk_agent"}
-)
-
-print(f"AutoGen response: {response.content}")
+response = await autogen_agent.run("Research quantum computing trends")
+print(response.text)
 ```
 
-### Enterprise Governance
+### Enterprise governance
+
+The public `agent_framework` package does not ship a dedicated governance module. Enterprise governance is typically implemented via **middleware** — `@chat_middleware`, `@agent_middleware`, `@function_middleware` — which can enforce token budgets, redact PII, filter content, and emit audit logs. See [Middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) for the full reference.
 
 ```python
-from microsoft.agent_framework.governance import (
-    GovernancePolicy,
-    ContentFilter,
-    AuditLogger
+from agent_framework import Agent, chat_middleware, ChatContext
+from agent_framework.openai import OpenAIChatClient
+import logging, re
+
+@chat_middleware
+async def redact_pii(context: ChatContext, next):
+    for message in context.messages:
+        message.text = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED-SSN]", message.text or "")
+    await next(context)
+
+@chat_middleware
+async def audit_log(context: ChatContext, next):
+    logging.info("prompt_tokens_estimate=%d", sum(len((m.text or "").split()) for m in context.messages))
+    await next(context)
+    # Response is now on `context.response` — log the completion here too.
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Process the request.",
+    middleware=[redact_pii, audit_log],   # list — single-instance form was removed in 2026 releases
 )
 
-# Define governance policy
-policy = GovernancePolicy(
-    name="enterprise_policy",
-    rules=[
-        {
-            "type": "token_limit",
-            "max_tokens_per_hour": 100000,
-            "max_tokens_per_request": 4000
-        },
-        {
-            "type": "tool_allowlist",
-            "allowed_tools": [
-                "Microsoft.SemanticKernel.Plugins.Core.*",
-                "CustomPlugin.ApprovedFunction"
-            ]
-        },
-        {
-            "type": "content_filter",
-            "filters": ["pii", "profanity", "sensitive_data"]
-        },
-        {
-            "type": "audit",
-            "log_all_interactions": True,
-            "retention_days": 90
-        }
-    ]
-)
-
-# Apply policy to agent
-agent.apply_governance(policy)
-
-# All agent actions are now governed
-result = await agent.invoke("Process sensitive customer data")
-# - Token usage tracked
-# - Content filtered
-# - Audit logged
-# - Tool usage validated
+result = await agent.run("Process sensitive customer data")
 ```
 
 ---

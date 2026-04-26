@@ -14,14 +14,15 @@ Latest: 1.0.1 | Updated: April 20, 2026
 
 ---
 
-> **Errata (April 2026).** Significant portions of this guide's Python code examples use a pseudo-`microsoft.agents.ai` namespace and `AgentFactory` pattern that does **not** match the installed Python package. Verified reality for `agent-framework-core==1.1.0`:
+> **API reference (verified against `agent-framework-core==1.1.0`).**
 >
-> - **Package name / import root:** `agent_framework` (underscores), not `microsoft.agents.ai`.
-> - **Primary agent class:** `Agent` (not `AgentFactory`/`ChatAgent`). Construct with `Agent(client=<ChatClient>, instructions=...)`.
-> - **Chat clients:** `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, etc. — not `microsoft.agents.ai.azure.add_azure_openai`.
-> - **Tool decorator:** `@tool` from `agent_framework` (not `@ai_function`).
->
-> Where you see `from microsoft.agents.ai import ...` or `AgentFactory` below, substitute the real imports above. The [A2A](../microsoft_agent_framework_a2a_protocol/), [Workflows & Declarative Agents](../microsoft_agent_framework_graphs_declarative/), and [2025 features](./microsoft_agent_framework_python_2025_features/) pages have already been rewritten against the real API. The minimal index example at the [Python overview](./) also uses the correct imports.
+> - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
+> - **Primary agent class:** `Agent`. Construct with `Agent(client=<ChatClient>, instructions=..., tools=[...])`.
+> - **Chat clients:** `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, plus Bedrock / Ollama in the `1.0.0b` provider line.
+> - **Tool decorator:** `@tool` from `agent_framework`.
+> - **Multi-turn state:** `session = agent.create_session()`, then `await agent.run(prompt, session=session)`.
+> - **Workflows:** `WorkflowBuilder` (with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges`) from `agent_framework`.
+> - **Declarative YAML agents (beta):** `AgentFactory` / `WorkflowFactory` from `agent_framework.declarative`.
 
 ---
 
@@ -82,11 +83,12 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # 2. Install the core package
-pip install microsoft-agents-ai --pre
+pip install agent-framework
 
-# 3. Install provider-specific packages
-pip install microsoft-agents-ai-azure --pre
-pip install azure-identity
+# 3. Install provider-specific packages (pick what you need)
+pip install agent-framework-azure-ai       # Azure AI Foundry chat client
+pip install agent-framework-openai         # OpenAI / Azure OpenAI chat clients
+pip install azure-identity                 # DefaultAzureCredential, managed identity
 ```
 
 ### Authentication and Configuration
@@ -137,35 +139,34 @@ credential = DefaultAzureCredential()
 ```python
 # main.py
 import asyncio
-from microsoft.agents.ai import AgentFactory
-from microsoft.agents.ai.azure import add_azure_openai
 from azure.identity.aio import DefaultAzureCredential
+
+from agent_framework import Agent
+from agent_framework.openai import AzureOpenAIChatClient
 from config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT
 
 async def main():
-    # Create the agent factory and configure it
-    factory = AgentFactory()
-    
-    # Use DefaultAzureCredential for secure, passwordless auth
+    # Use DefaultAzureCredential for secure, passwordless auth.
     credential = DefaultAzureCredential()
-    
-    factory.add_azure_openai(
+
+    # Construct the chat client — pick any first-party provider
+    # (OpenAIChatClient, AzureOpenAIChatClient, FoundryChatClient,
+    # AnthropicClient, OllamaChatClient, BedrockChatClient).
+    client = AzureOpenAIChatClient(
         endpoint=AZURE_OPENAI_ENDPOINT,
         deployment_name=AZURE_OPENAI_DEPLOYMENT,
-        credential=credential
+        credential=credential,
     )
 
-    # Create a simple chat agent
-    agent = await factory.create_agent(
-        "Agent",
-        instructions="You are a helpful AI assistant for Python developers."
+    # Create a simple chat agent.
+    agent = Agent(
+        client=client,
+        instructions="You are a helpful AI assistant for Python developers.",
     )
 
-    # Interact with the agent
-    thread = await agent.create_thread()
-    response = await thread.invoke("What are decorators in Python?")
-    
-    print(response.get_content())
+    # Single-turn call.
+    response = await agent.run("What are decorators in Python?")
+    print(response.text)
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -188,29 +189,31 @@ For low-level subclassing, inherit from `BaseAgent` (`from agent_framework impor
 
 ```python
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
-async def run_chat_agent(factory: AgentFactory):
-    agent = await factory.create_agent(
-        Agent,
-        instructions="You are a friendly and helpful assistant."
+async def run_chat_agent() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a friendly and helpful assistant.",
     )
-    
-    thread = await agent.create_thread()
-    
+
+    # A session carries conversation history across turns.
+    session = agent.create_session()
+
     print("Starting conversation... (type 'exit' to quit)")
     while True:
         user_input = input("You: ")
-        if user_input.lower() == 'exit':
+        if user_input.lower() == "exit":
             break
-            
-        response = await thread.invoke(user_input)
-        print(f"Assistant: {response.get_content()}")
+
+        response = await agent.run(user_input, session=session)
+        print(f"Assistant: {response.text}")
 ```
 
 ### Agent Lifecycle
 
-Agents are designed to be managed via the `AgentFactory`, which handles resource allocation and disposal. Using `async with` ensures that resources like HTTP clients and credentials are properly managed.
+The chat client owns the underlying HTTP session and credentials; when the client supports it, use `async with` to close those resources deterministically. Agents themselves are cheap to construct — you typically build one per role and reuse it across requests. Sessions are per-conversation and hold `ChatHistoryProvider` state (in-memory by default); create a new session per user or request.
 
 ---
 
@@ -226,48 +229,35 @@ Agents are designed to be managed via the `AgentFactory`, which handles resource
 
 ```python
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
 class RouterWorkflow:
-    def __init__(self, factory: AgentFactory):
-        self._factory = factory
-        self._router = None
-        self._billing_agent = None
-        self._tech_agent = None
-
-    async def initialize(self):
-        self._router = await self._factory.create_agent(
-            Agent,
-            instructions="You are a router. Classify the user's query as 'Billing' or 'Technical'. Respond with only one of those words."
+    def __init__(self, client: OpenAIChatClient):
+        self._router = Agent(
+            client=client,
+            instructions="You are a router. Classify the user's query as 'Billing' or 'Technical'. Respond with only one of those words.",
         )
-        self._billing_agent = await self._factory.create_agent(
-            Agent,
-            instructions="You are a billing support expert."
+        self._billing_agent = Agent(
+            client=client,
+            instructions="You are a billing support expert.",
         )
-        self._tech_agent = await self._factory.create_agent(
-            Agent,
-            instructions="You are a technical support expert."
+        self._tech_agent = Agent(
+            client=client,
+            instructions="You are a technical support expert.",
         )
 
-    async def handle_request(self, user_query: str):
-        router_thread = await self._router.create_thread()
-        route_response = await router_thread.invoke(user_query)
-        route = route_response.get_content()
+    async def handle_request(self, user_query: str) -> str:
+        route_response = await self._router.run(user_query)
+        route = route_response.text
 
-        if "Billing" in route:
-            target_agent = self._billing_agent
-        else:
-            target_agent = self._tech_agent
-            
-        conversation_thread = await target_agent.create_thread()
-        await conversation_thread.add_message(content=user_query, role="user")
-        final_response = await conversation_thread.invoke("Address the user's query.")
-        
-        return final_response.get_content()
+        target_agent = self._billing_agent if "Billing" in route else self._tech_agent
+
+        final_response = await target_agent.run(user_query)
+        return final_response.text
 
 # --- Usage ---
-# workflow = RouterWorkflow(factory)
-# await workflow.initialize()
+# workflow = RouterWorkflow(OpenAIChatClient())
 # response = await workflow.handle_request("I have a problem with my invoice.")
 # print(response)
 ```
@@ -278,10 +268,10 @@ class RouterWorkflow:
 
 ### Defining and Using Tools
 
-Tools are standard Python functions decorated with `@ai_function` to expose them to an agent.
+Tools are standard Python functions decorated with `@tool` from `agent_framework`.
 
 ```python
-from microsoft.agents.ai.tool import tool
+from agent_framework import tool
 from typing import Annotated
 
 @tool(description="Get the current time in a specified timezone.")
@@ -297,17 +287,20 @@ async def get_current_time(
         return "Unknown timezone."
 
 # --- Attaching the tool to an agent ---
-# agent = await factory.create_agent(
-#     Agent,
+# from agent_framework import Agent
+# from agent_framework.openai import OpenAIChatClient
+#
+# agent = Agent(
+#     client=OpenAIChatClient(),
 #     instructions="You can get the current time.",
-#     tools=[get_current_time]
+#     tools=[get_current_time],
 # )
-# response = await agent.create_thread().invoke("What time is it in New York?")
+# response = await agent.run("What time is it in New York?")
 ```
 
 ### Built-in Azure Tools
 
-The `microsoft-agents-ai-azure` package provides tools for interacting with Azure services like Azure AI Search.
+The `agent-framework-azure-ai` package provides chat clients and tool wrappers for Azure AI services. Retrieval against Azure AI Search is typically exposed as a `@tool`-decorated function that wraps the `azure-search-documents` SDK (see Recipe 6 in the [recipes page](./microsoft_agent_framework_python_recipes/)).
 
 ---
 
@@ -319,27 +312,28 @@ Force an agent to respond in a specific JSON schema using Pydantic models.
 from pydantic import BaseModel, Field
 from typing import List
 
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
 class UserProfile(BaseModel):
     """A model to hold structured user information."""
     name: str = Field(description="The user's full name.")
     age: int = Field(description="The user's age.")
     interests: List[str] = Field(description="A list of the user's interests.")
 
-async def extract_structured_data(factory: AgentFactory, text: str) -> UserProfile:
-    agent = await factory.create_agent(
-        Agent,
-        instructions="Extract user profile information from the text provided."
+async def extract_structured_data(client: OpenAIChatClient, text: str) -> UserProfile:
+    agent = Agent(
+        client=client,
+        instructions="Extract user profile information from the text provided.",
     )
-    thread = await agent.create_thread()
-    
-    # Pass the Pydantic model as the expected response type
-    response = await thread.invoke(text, response_type=UserProfile)
-    
-    return response.get_content()
+
+    # Pass the Pydantic model as the expected response type.
+    response = await agent.run(text, response_format=UserProfile)
+    return response.value
 
 # --- Usage ---
 # text_blob = "My name is Jane Doe, I'm 28, and I love hiking and programming in Python."
-# profile = await extract_structured_data(factory, text_blob)
+# profile = await extract_structured_data(OpenAIChatClient(), text_blob)
 # print(profile.model_dump_json(indent=2))
 ```
 

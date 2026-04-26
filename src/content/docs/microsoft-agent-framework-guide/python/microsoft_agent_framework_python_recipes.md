@@ -7,7 +7,7 @@ language: python
 
 # Microsoft Agent Framework Python - Recipes and Code Patterns
 
-> **Errata (April 2026).** Many recipes below import from a pseudo-`microsoft.agents.ai` namespace and use an `AgentFactory` pattern that does **not** exist in the installed Python SDK. The real package is `agent_framework` (underscores); the primary class is `Agent`; chat clients come from `agent_framework.foundry`, `agent_framework.openai`, etc. See the full reconciliation at the top of the [comprehensive guide](./microsoft_agent_framework_python_comprehensive_guide/). When you lift a recipe below, substitute the correct imports — the patterns themselves are still instructive even where the symbol names are stale.
+All recipes on this page target the real `agent_framework` package (verified against `agent-framework-core==1.1.0`). The primary agent class is `Agent`; chat clients come from `agent_framework.openai`, `agent_framework.foundry`, `agent_framework.anthropic`, etc. The tool decorator is `@tool` from `agent_framework`. Multi-turn state is managed via `agent.create_session()`; workflow orchestration uses `WorkflowBuilder` from `agent_framework`.
 
 This document provides a collection of practical, copy-paste-ready Python recipes for building common agentic patterns with the Microsoft Agent Framework for Python.
 
@@ -22,7 +22,7 @@ These recipes are for developers new to the framework and cover fundamental conc
 
 ### Recipe 1: Simple Chat Agent (Python)
 
-This is the "Hello, World!" of the Agent Framework — a basic conversational agent that maintains history across turns. Rewritten against the real `agent_framework` package (previous drafts used a pseudo-`microsoft.agents.ai.AgentFactory` API that does not exist).
+This is the "Hello, World!" of the Agent Framework — a basic conversational agent that maintains history across turns.
 
 ```python
 # simple_chat_agent.py
@@ -54,8 +54,6 @@ if __name__ == "__main__":
     asyncio.run(run_interactive())
 ```
 
-> **Note:** recipes 2 through 11 below still use the pseudo-`microsoft.agents.ai` / `AgentFactory` pattern from an earlier draft. Apply the same translation shown here — import from `agent_framework`, construct `Agent(client=..., instructions=..., tools=[...])` directly, use `agent.create_session()` for multi-turn — until those recipes are individually rewritten. The [A2A](../microsoft_agent_framework_a2a_protocol/), [Workflows](../microsoft_agent_framework_graphs_declarative/) and [2025 features](./microsoft_agent_framework_python_2025_features/) pages already use the real API end-to-end.
-
 ### Recipe 2: Agent with a Single Tool
 
 This recipe shows how to add a simple tool to an agent, allowing it to perform an action.
@@ -64,8 +62,8 @@ This recipe shows how to add a simple tool to an agent, allowing it to perform a
 # agent_with_tool.py
 import asyncio
 from datetime import datetime, timezone
-from microsoft.agents.ai import AgentFactory, Agent
-from microsoft.agents.ai.tool import tool
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
 
 # 1. Define the tool
 @tool(description="Gets the current UTC date and time.")
@@ -73,18 +71,15 @@ def get_current_time() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 async def run_tool_agent():
-    factory = AgentFactory()
-
-    # 2. Create the agent and add the tool
-    agent = await factory.create_agent(
-        Agent,
+    # 2. Create the agent with the tool attached
+    agent = Agent(
+        client=OpenAIChatClient(),
         instructions="You have a tool to get the current time. Use it when asked.",
-        tools=[get_current_time]
+        tools=[get_current_time],
     )
 
-    thread = await agent.create_thread()
-    response = await thread.invoke("What time is it right now?")
-    print(f"Assistant: {response.get_content()}")
+    response = await agent.run("What time is it right now?")
+    print(f"Assistant: {response.text}")
 
 if __name__ == "__main__":
     asyncio.run(run_tool_agent())
@@ -97,8 +92,8 @@ This recipe demonstrates how to handle errors within a tool gracefully.
 ```python
 # error_handling_tool.py
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
-from microsoft.agents.ai.tool import tool
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
 
 @tool(description="Divides two numbers.")
 def divide(numerator: float, denominator: float) -> str:
@@ -108,18 +103,15 @@ def divide(numerator: float, denominator: float) -> str:
     return str(numerator / denominator)
 
 async def run_error_handling():
-    factory = AgentFactory()
-    agent = await factory.create_agent(
-        Agent,
+    agent = Agent(
+        client=OpenAIChatClient(),
         instructions="You are a math assistant.",
-        tools=[divide]
+        tools=[divide],
     )
 
-    thread = await agent.create_thread()
-    
     # Trigger the error
-    response = await thread.invoke("What is 10 divided by 0?")
-    print(f"Assistant: {response.get_content()}")
+    response = await agent.run("What is 10 divided by 0?")
+    print(f"Assistant: {response.text}")
     # Expected: "I cannot divide by zero. Could you please provide a different number?"
 
 if __name__ == "__main__":
@@ -139,49 +131,45 @@ This recipe shows how to chain two agents together: a researcher and a summarize
 ```python
 # sequential_workflow.py
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
 class SequentialWorkflow:
-    def __init__(self, factory: AgentFactory):
-        self.factory = factory
+    def __init__(self, client: OpenAIChatClient):
+        self.client = client
 
     async def run(self, topic: str):
         # 1. Define agents
-        researcher = await self.factory.create_agent(
-            Agent,
-            instructions="You are a world-class researcher. Find detailed information on the given topic."
+        researcher = Agent(
+            client=self.client,
+            instructions="You are a world-class researcher. Find detailed information on the given topic.",
         )
-        summarizer = await self.factory.create_agent(
-            Agent,
-            instructions="You are a skilled editor. Summarize the provided text into a single, concise paragraph."
+        summarizer = Agent(
+            client=self.client,
+            instructions="You are a skilled editor. Summarize the provided text into a single, concise paragraph.",
         )
 
-        # 2. Execute sequential flow
-        # Use a single thread to pass context between agents
-        thread = await researcher.create_thread()
-
-        # Step 1: Researcher gathers information
+        # 2. Execute sequential flow — pass the researcher's output directly to the summarizer.
         print("Researching...")
-        await thread.invoke(f"Please research the topic: {topic}")
-        
-        # Step 2: Summarizer is invoked on the same thread. It sees the researcher's output.
+        research = await researcher.run(f"Please research the topic: {topic}")
+
         print("Summarizing...")
-        summary_response = await summarizer.invoke(
-            thread=thread, 
-            message="Please summarize your findings."
+        summary = await summarizer.run(
+            f"Please summarize the following research findings:\n\n{research.text}"
         )
 
-        return summary_response.get_content()
+        return summary.text
 
 async def main():
-    factory = AgentFactory()
-    workflow = SequentialWorkflow(factory)
+    workflow = SequentialWorkflow(OpenAIChatClient())
     result = await workflow.run("Quantum Computing")
     print(f"Result:\n{result}")
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+For a graph-based variant with checkpointing and fan-in / fan-out edges, use `WorkflowBuilder` from `agent_framework` — see the [Workflows & Declarative Agents page](../microsoft_agent_framework_graphs_declarative/).
 
 ### Recipe 5: Agent with Multiple Tools and a Router
 
@@ -190,54 +178,38 @@ This recipe demonstrates a router agent that decides which specialist agent shou
 ```python
 # router_agent.py
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
 class RouterWorkflow:
-    def __init__(self, factory: AgentFactory):
-        self.factory = factory
-        self.router = None
-        self.billing = None
-        self.tech = None
-
-    async def initialize(self):
-        self.router = await self.factory.create_agent(
-            Agent,
-            instructions="You are a request router. Determine if a query is 'Billing' or 'Technical'. Respond with only one word."
+    def __init__(self, client: OpenAIChatClient):
+        self.router = Agent(
+            client=client,
+            instructions="You are a request router. Determine if a query is 'Billing' or 'Technical'. Respond with only one word.",
         )
-        self.billing = await self.factory.create_agent(
-            Agent, 
-            instructions="You are a billing support specialist."
+        self.billing = Agent(
+            client=client,
+            instructions="You are a billing support specialist.",
         )
-        self.tech = await self.factory.create_agent(
-            Agent, 
-            instructions="You are a technical support specialist."
+        self.tech = Agent(
+            client=client,
+            instructions="You are a technical support specialist.",
         )
 
     async def handle_request(self, user_input: str) -> str:
-        # 1. Route the request
-        router_thread = await self.router.create_thread()
-        route_response = await router_thread.invoke(user_input)
-        route = route_response.get_content()
+        # 1. Route the request (stateless single-turn call).
+        route_response = await self.router.run(user_input)
+        route = route_response.text
 
-        # 2. Select target agent
-        if "Billing" in route:
-            target_agent = self.billing
-        else:
-            target_agent = self.tech
+        # 2. Select target agent.
+        target_agent = self.billing if "Billing" in route else self.tech
 
-        # 3. Process with target agent
-        # Create a fresh thread for the actual conversation
-        conversation_thread = await target_agent.create_thread()
-        await conversation_thread.add_message(role="user", content=user_input)
-        
-        response = await conversation_thread.invoke("Provide a helpful response.")
-        return response.get_content()
+        # 3. Process with target agent.
+        response = await target_agent.run(user_input)
+        return response.text
 
 async def main():
-    factory = AgentFactory()
-    workflow = RouterWorkflow(factory)
-    await workflow.initialize()
-    
+    workflow = RouterWorkflow(OpenAIChatClient())
     response = await workflow.handle_request("My invoice is incorrect.")
     print(f"Response: {response}")
 
@@ -247,44 +219,44 @@ if __name__ == "__main__":
 
 ### Recipe 6: Memory Integration with Azure AI Search
 
-This recipe shows how to configure an agent to use Azure AI Search for long-term memory and RAG.
+This recipe shows how to expose Azure AI Search as a retrieval tool so an agent can ground answers in a long-term knowledge index. `agent-framework-core==1.1.0` does not ship a dedicated `AzureAISearchMemory` class — the idiomatic pattern is a `@tool`-decorated function that wraps the `azure-search-documents` client.
 
 ```python
 # memory_agent.py
 import asyncio
 import os
+from typing import Annotated
+
 from azure.identity.aio import DefaultAzureCredential
-from microsoft.agents.ai import AgentFactory, Agent
-from microsoft.agents.ai.memory.azure import AzureAISearchMemory
+from azure.search.documents.aio import SearchClient
+
+from agent_framework import Agent, tool
+from agent_framework.foundry import FoundryChatClient
+
+ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
+INDEX = "agent-memory"
+
+async def _search(query: str, top: int = 3) -> list[str]:
+    credential = DefaultAzureCredential()
+    async with SearchClient(endpoint=ENDPOINT, index_name=INDEX, credential=credential) as client:
+        results = []
+        async for doc in await client.search(search_text=query, top=top):
+            results.append(doc.get("content", ""))
+        return results
+
+@tool(description="Retrieve relevant documents from the agent's knowledge base.")
+async def search_knowledge(query: Annotated[str, "The search query"]) -> str:
+    hits = await _search(query)
+    return "\n\n".join(hits) if hits else "No relevant documents found."
 
 async def run_memory_agent():
-    factory = AgentFactory()
-    
-    # Configure Azure AI Search Memory
-    credential = DefaultAzureCredential()
-    memory = AzureAISearchMemory(
-        endpoint=os.getenv("AZURE_SEARCH_ENDPOINT"),
-        credential=credential,
-        index_name="agent-memory"
+    agent = Agent(
+        client=FoundryChatClient(),
+        instructions="You answer questions using the search_knowledge tool when helpful.",
+        tools=[search_knowledge],
     )
-    
-    # Create an agent with memory access
-    # Note: In Python, memory is often injected via tools or specific RAG patterns
-    # This example assumes a RAG-enabled agent pattern
-    
-    agent = await factory.create_agent(
-        Agent,
-        instructions="You answer questions based on your knowledge base.",
-        memory=memory # Hypothetical direct integration or via tools
-    )
-    
-    # Ingest data
-    await memory.upsert("doc-1", "The Agent Framework supports Python and .NET.")
-    
-    # Query
-    thread = await agent.create_thread()
-    response = await thread.invoke("What languages are supported?")
-    print(response.get_content())
+    response = await agent.run("What languages does the Agent Framework support?")
+    print(response.text)
 
 if __name__ == "__main__":
     asyncio.run(run_memory_agent())
@@ -302,15 +274,18 @@ This builds on the memory recipe to create a full RAG agent that can ingest and 
 
 ```python
 # rag_agent.py
+import asyncio
 from typing import Annotated
-from microsoft.agents.ai.tool import tool
+
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
 
 class KnowledgeBase:
     def __init__(self):
-        self.docs = {}
+        self.docs: dict[str, str] = {}
 
-    def add_doc(self, id: str, content: str):
-        self.docs[id] = content
+    def add_doc(self, doc_id: str, content: str) -> None:
+        self.docs[doc_id] = content
 
     def search(self, query: str) -> str:
         # Simple keyword search for demonstration
@@ -325,51 +300,47 @@ def search_knowledge(query: Annotated[str, "The search query"]) -> str:
     return kb.search(query)
 
 async def run_rag():
-    factory = AgentFactory()
-    agent = await factory.create_agent(
-        Agent,
+    agent = Agent(
+        client=OpenAIChatClient(),
         instructions="Use the search_knowledge tool to answer questions.",
-        tools=[search_knowledge]
+        tools=[search_knowledge],
     )
-    
-    thread = await agent.create_thread()
-    response = await thread.invoke("What does the framework unify?")
-    print(response.get_content())
+    response = await agent.run("What does the framework unify?")
+    print(response.text)
+
+if __name__ == "__main__":
+    asyncio.run(run_rag())
 ```
 
-### Recipe 8: Complex Multi-Agent Orchestration with `Workflow`
+### Recipe 8: Complex Multi-Agent Orchestration with `WorkflowBuilder`
 
-This recipe uses the `Workflow` engine for a more robust and explicit multi-agent collaboration.
+This recipe uses `WorkflowBuilder` — the real graph-based orchestration engine in `agent-framework-core` — for a robust and explicit multi-agent collaboration. Each agent becomes an executor node; edges define the flow.
 
 ```python
 # workflow_orchestration.py
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
-from microsoft.agents.ai.orchestration import Workflow
+from agent_framework import Agent, WorkflowBuilder
+from agent_framework.openai import OpenAIChatClient
 
 async def run_workflow(topic: str):
-    factory = AgentFactory()
-    
+    client = OpenAIChatClient()
+
     # 1. Define agents
-    researcher = await factory.create_agent(Agent, instructions="You are a researcher.")
-    analyst = await factory.create_agent(Agent, instructions="You are a data analyst.")
-    writer = await factory.create_agent(Agent, instructions="You are a technical writer.")
+    researcher = Agent(client=client, instructions="You are a researcher. Produce bullet-point findings.")
+    analyst = Agent(client=client, instructions="You are a data analyst. Extract insights from findings.")
+    writer = Agent(client=client, instructions="You are a technical writer. Turn insights into a short report.")
 
-    # 2. Create workflow
-    workflow = Workflow("ResearchPaper")
+    # 2. Build a sequential workflow: researcher -> analyst -> writer
+    workflow = (
+        WorkflowBuilder(start_executor=researcher)
+        .add_edge(researcher, analyst)
+        .add_edge(analyst, writer)
+        .build()
+    )
 
-    # 3. Add steps
-    step1 = workflow.add_agent(researcher)
-    step2 = workflow.add_agent(analyst)
-    step3 = workflow.add_agent(writer)
-
-    # 4. Define flow
-    workflow.add_edge(step1, step2)
-    workflow.add_edge(step2, step3)
-
-    # 5. Execute
-    result = await workflow.execute(context={"topic": topic})
-    print(result.get_last_message().content)
+    # 3. Execute — the starting message flows through each agent.
+    result = await workflow.run(f"Write a brief report on: {topic}")
+    print(result.get_outputs()[-1])
 
 if __name__ == "__main__":
     asyncio.run(run_workflow("AI Agents"))
@@ -389,32 +360,30 @@ This recipe shows how to create a web API endpoint to interact with an agent.
 # main.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from microsoft.agents.ai import AgentFactory, Agent
-import asyncio
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
 app = FastAPI()
-factory = AgentFactory()
-agent = None
+agent: Agent | None = None
 
 class ChatRequest(BaseModel):
     message: str
 
 @app.on_event("startup")
-async def startup():
+async def startup() -> None:
     global agent
-    agent = await factory.create_agent(
-        Agent,
-        instructions="You are a helpful API assistant."
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a helpful API assistant.",
     )
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    if not agent:
+    if agent is None:
         raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    thread = await agent.create_thread()
-    response = await thread.invoke(request.message)
-    return {"reply": response.get_content()}
+
+    response = await agent.run(request.message)
+    return {"reply": response.text}
 
 # Run with: uvicorn main:app --reload
 ```
@@ -427,24 +396,23 @@ This recipe demonstrates how to trigger an agent workflow from an Azure Queue St
 # function_app.py
 import azure.functions as func
 import logging
-from microsoft.agents.ai import AgentFactory, Agent
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 
 app = func.FunctionApp()
 
+# In production, cache the chat client / agent across invocations (warm start)
+# rather than reconstructing on every message.
+_client = FoundryChatClient()
+_agent = Agent(client=_client, instructions="Process the task.")
+
 @app.queue_trigger(arg_name="msg", queue_name="agent-tasks", connection="AzureWebJobsStorage")
 async def process_queue_item(msg: func.QueueMessage):
-    logging.info(f"Python Queue trigger processed message: {msg.get_body().decode('utf-8')}")
-    
-    user_query = msg.get_body().decode('utf-8')
-    
-    # Initialize agent (in production, use a singleton or cached factory)
-    factory = AgentFactory()
-    agent = await factory.create_agent(Agent, instructions="Process the task.")
-    
-    thread = await agent.create_thread()
-    response = await thread.invoke(user_query)
-    
-    logging.info(f"Agent response: {response.get_content()}")
+    user_query = msg.get_body().decode("utf-8")
+    logging.info(f"Python Queue trigger processed message: {user_query}")
+
+    response = await _agent.run(user_query)
+    logging.info(f"Agent response: {response.text}")
 ```
 
 ---
@@ -460,18 +428,23 @@ Stream the agent's thoughts and tool calls in real-time to understand its decisi
 ```python
 # debug_streaming.py
 import asyncio
-from microsoft.agents.ai import AgentFactory, Agent
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
 async def debug_stream():
-    factory = AgentFactory()
-    agent = await factory.create_agent(Agent, instructions="Helpful assistant.")
-    thread = await agent.create_thread()
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="Helpful assistant.",
+    )
 
-    async for message in thread.stream("Tell me a joke."):
-        if message.role == "tool":
-            print(f"\033[90m[Tool Call: {message.content}]\033[0m") # Gray
-        elif message.role == "assistant":
-            print(f"\033[92m[Assistant]: {message.content}\033[0m") # Green
+    async for update in agent.run_stream("Tell me a joke."):
+        # Each update is an AgentResponseUpdate with incremental text and/or tool calls.
+        if update.tool_calls:
+            for call in update.tool_calls:
+                print(f"\033[90m[Tool Call: {call.name}({call.arguments})]\033[0m")  # Gray
+        if update.text:
+            print(f"\033[92m{update.text}\033[0m", end="", flush=True)  # Green
+    print()
 
 if __name__ == "__main__":
     asyncio.run(debug_stream())
