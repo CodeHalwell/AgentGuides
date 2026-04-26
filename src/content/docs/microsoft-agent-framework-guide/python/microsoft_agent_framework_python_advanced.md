@@ -189,6 +189,169 @@ class BatchedEmbeddingClient(BaseEmbeddingClient):
         return GeneratedEmbeddings(all_embeddings, options=options)
 ```
 
+### `Embedding` is generic over the vector type
+
+`Embedding` is `Generic[EmbeddingT]`, so the static type of the vector follows what the client produced. That matters when you mix providers — most return `list[float]`, but some (Azure OpenAI in `base64` mode, Cohere binary embeddings) return `bytes` or `list[int]`:
+
+```python
+from datetime import datetime, timezone
+from agent_framework import Embedding
+
+dense:    Embedding[list[float]] = Embedding(vector=[0.1, 0.2, 0.3], model="text-embedding-3-small")
+binary:   Embedding[bytes]       = Embedding(vector=b"\x01\x02\x03\x04", model="cohere-embed-binary")
+quantum:  Embedding[list[int]]   = Embedding(vector=[1, -1, 0, 1], model="cohere-embed-int8")
+
+# `dimensions` is lazy — uses len(vector) for sized vectors, returns None for opaque scalar types.
+assert dense.dimensions == 3
+assert binary.dimensions == 4    # len(bytes) — useful for byte-quantised vectors
+```
+
+If you need to pin the dimension (e.g. when the wire format is `bytes` but the conceptual dimension count is different), pass `dimensions=` explicitly:
+
+```python
+half_precision = Embedding(
+    vector=b"\x00" * 3072,         # 1536 fp16 components packed
+    dimensions=1536,
+    model="text-embedding-3-small",
+    additional_properties={"encoding": "fp16"},
+    created_at=datetime.now(timezone.utc),
+)
+```
+
+`additional_properties` is a free-form metadata dict — useful for stamping the chunk id, source URL, page number, anything you need to retrieve alongside the vector when you persist embeddings to a vector store.
+
+### Cosine similarity helper
+
+The framework intentionally doesn't ship a similarity function — `numpy` (or your preferred lib) handles it better. If you're not already using numpy, this works on plain lists:
+
+```python
+import math
+from agent_framework import Embedding
+
+
+def cosine(a: Embedding[list[float]], b: Embedding[list[float]]) -> float:
+    if a.dimensions != b.dimensions:
+        raise ValueError(f"dimension mismatch: {a.dimensions} vs {b.dimensions}")
+    dot = sum(x * y for x, y in zip(a.vector, b.vector))
+    norm_a = math.sqrt(sum(x * x for x in a.vector))
+    norm_b = math.sqrt(sum(y * y for y in b.vector))
+    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+```
+
+### Persisting embeddings with their metadata
+
+Because `Embedding` carries `model`, `created_at`, and `additional_properties`, you can fold the bookkeeping into the vector itself rather than maintaining parallel arrays:
+
+```python
+import json
+from datetime import datetime, timezone
+from agent_framework import Embedding
+
+
+def to_payload(e: Embedding[list[float]], *, source_uri: str, chunk_id: int) -> dict:
+    return {
+        "vector": e.vector,
+        "dimensions": e.dimensions,
+        "model": e.model,
+        "created_at": (e.created_at or datetime.now(timezone.utc)).isoformat(),
+        "metadata": {**e.additional_properties, "source_uri": source_uri, "chunk_id": chunk_id},
+    }
+
+
+# Round-trip back into Embedding when reading from your store:
+def from_payload(payload: dict) -> Embedding[list[float]]:
+    return Embedding(
+        vector=list(payload["vector"]),
+        dimensions=payload.get("dimensions"),
+        model=payload.get("model"),
+        created_at=datetime.fromisoformat(payload["created_at"]) if payload.get("created_at") else None,
+        additional_properties=dict(payload.get("metadata", {})),
+    )
+```
+
+## `ChatResponseUpdate` and `AgentResponse` — streaming and aggregation
+
+When you call `agent.run(..., stream=True)` you get a `ResponseStream` of `AgentResponseUpdate` objects (which wrap `ChatResponseUpdate`). Both update types and both response types are `SerializationMixin`, so they round-trip cleanly to dicts and JSON.
+
+### Aggregating updates manually
+
+The framework normally calls `AgentResponse.from_updates` for you, but you can do it yourself when you're tee-ing the stream:
+
+```python
+from agent_framework import AgentResponse, AgentResponseUpdate, ChatResponseUpdate
+
+# Mid-stream, you can build a partial response from whatever updates you've collected so far:
+partial: list[AgentResponseUpdate] = []
+async for update in agent.run("Tell me a joke.", stream=True):
+    partial.append(update)
+    print(update.text, end="", flush=True)
+
+final: AgentResponse = AgentResponse.from_updates(partial)
+print()
+print(final.finish_reason)        # 'stop' | 'length' | 'tool_calls' | …
+print(final.usage_details)        # {'input_tokens': ..., 'output_tokens': ..., 'total_tokens': ...}
+```
+
+`from_updates` coalesces sibling text contents in the same message, merges annotations, and sets the canonical `finish_reason` from the last update that carried one.
+
+### Structured output via `value`
+
+When you pass `response_format=` (a Pydantic model or a JSON schema dict) to the run, the response carries the parsed object on `response.value`:
+
+```python
+from pydantic import BaseModel
+from agent_framework import Agent, ChatOptions
+from agent_framework.openai import OpenAIChatClient
+
+
+class WeatherReport(BaseModel):
+    location: str
+    temperature_c: float
+    condition: str
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Always reply with the requested JSON shape.",
+)
+
+response = await agent.run(
+    "Weather in Paris right now?",
+    options=ChatOptions(response_format=WeatherReport),
+)
+print(response.text)              # the raw JSON the model produced
+report: WeatherReport = response.value   # parsed Pydantic instance
+print(report.temperature_c)
+```
+
+`response.value` is **lazy** — parsing only happens on first access. If the JSON doesn't validate against the schema, `value` raises `pydantic.ValidationError`. Catch it at the call site so you can handle invalid model output without it bubbling up through middleware.
+
+### `user_input_requests` for HITL
+
+For workflows that emit `request_info` events, `AgentResponse.user_input_requests` flattens all the pending request contents into one list — handy when wiring up a UI:
+
+```python
+response = await agent.run("Run my approval flow.", session=session)
+for req in response.user_input_requests:
+    # `req` is a Content with user_input_request set — show it to the user.
+    print(req.user_input_request)
+```
+
+`Content.user_input_request` is the typed payload (e.g. an approval request, a free-form text request) — see the HITL guide for the resume cycle.
+
+### Serialising responses for replay / audit
+
+`AgentResponse` and `ChatResponseUpdate` round-trip via `to_dict` / `from_dict` and `to_json` / `from_json`:
+
+```python
+saved = response.to_json()
+# … later …
+restored = AgentResponse.from_json(saved)
+print(restored.text)
+```
+
+By default the **`raw_representation`** field is excluded from serialisation — that's the provider-native object (the underlying OpenAI / Anthropic / Bedrock SDK type) which usually isn't JSON-serialisable. If you need to keep it, pass `exclude={...}` to `to_dict`.
+
 ## Custom context provider — `ContextProvider`
 
 `ContextProvider` is the base class for anything that mutates the `SessionContext` before a run (injecting messages, tools, instructions, or middleware) or observes the response afterwards. The `SkillsProvider` from the [Skills page](./microsoft_agent_framework_python_skills/) is itself a `ContextProvider`. Roll your own when you have domain-specific context to attach.

@@ -140,6 +140,8 @@ export default defineConfig({
                     { label: 'Comprehensive guide', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/' },
                     { label: '2025 features', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/' },
                     { label: 'Advanced', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/' },
+                    { label: 'Sessions & context providers', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/' },
+                    { label: 'Functional workflows', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/' },
                     { label: 'Recipes', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/' },
                     { label: 'Diagrams', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_diagrams/' },
                     { label: 'Production guide', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/' },

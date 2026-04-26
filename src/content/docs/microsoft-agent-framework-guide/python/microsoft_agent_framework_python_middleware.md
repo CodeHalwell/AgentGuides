@@ -34,6 +34,37 @@ Three ways to end execution:
 2. **Short-circuit** — set `context.result = ...` and **return without calling `call_next`**. Downstream middleware and the actual model / tool call are skipped.
 3. **Hard termination** — `raise MiddlewareTermination("reason", result=...)`. Unwinds the pipeline; the agent returns the attached result (or re-raises if none).
 
+### `MiddlewareTermination` in detail
+
+`MiddlewareTermination` is a control-flow exception that the framework catches *only* in agent and chat pipelines — function middleware lets it bubble up so it can signal "stop the tool loop" to the surrounding chat call. The `result=` payload becomes the agent's `context.result`:
+
+```python
+from agent_framework import (
+    AgentMiddleware, AgentContext, AgentResponse, Content, Message,
+    MiddlewareTermination,
+)
+
+
+class HardCutOff(AgentMiddleware):
+    """Hard-fail with a canned response when the user is over quota."""
+
+    def __init__(self, quota_remaining: int) -> None:
+        self.quota_remaining = quota_remaining
+
+    async def process(self, context: AgentContext, call_next) -> None:
+        if self.quota_remaining <= 0:
+            raise MiddlewareTermination(
+                "quota_exhausted",
+                result=AgentResponse(
+                    messages=[Message(role="assistant", contents=[Content.from_text("Quota exceeded.")])],
+                ),
+            )
+        self.quota_remaining -= 1
+        await call_next()
+```
+
+If you raise `MiddlewareTermination` *without* a `result`, post-processing is still skipped but the agent run returns `None` for that call — useful when you want to silently no-op (e.g. a request that was already de-duplicated).
+
 ## Decorator form
 
 Use the matching decorator to tag a plain function. The tag tells the agent which pipeline the function belongs to, so `middleware=[...]` can mix and match.
@@ -108,6 +139,68 @@ agent = Agent(
 ```
 
 Mix decorator-style and class-style freely — both land in the same pipeline.
+
+### How the framework decides which kind of middleware your function is
+
+When you pass a plain async function in `middleware=[...]`, the framework runs `_determine_middleware_type` against it. The rules, in order:
+
+1. **Decorator marker wins** — `@agent_middleware` / `@chat_middleware` / `@function_middleware` set a private `_middleware_type` attribute on the function.
+2. **Else, the parameter type annotation** — the first parameter's annotation must be `AgentContext`, `ChatContext`, or `FunctionInvocationContext`.
+3. **If both are present, they must match.** Mismatched decorator + annotation raises `MiddlewareException` at construction time, not at first call — so misconfiguration shows up as a quick fail at startup.
+4. **Neither present → exception.** `Cannot determine middleware type for function …`.
+
+Practical implication: if you don't want to import the decorator, just type-annotate `context`:
+
+```python
+from agent_framework import Agent, ChatContext
+
+
+async def log_chat(context: ChatContext, call_next) -> None:
+    print(f"messages → {len(context.messages)}")
+    await call_next()
+
+
+agent = Agent(client=OpenAIChatClient(), middleware=[log_chat])
+```
+
+Class-form middleware is recognised by `isinstance` against `AgentMiddleware` / `ChatMiddleware` / `FunctionMiddleware`, so the class hierarchy is the source of truth — no annotation needed.
+
+### Class-form pattern: stateful retry with exponential backoff
+
+```python
+import asyncio
+from collections.abc import Awaitable, Callable
+from agent_framework import AgentMiddleware, AgentContext
+
+
+class ExponentialRetry(AgentMiddleware):
+    """Retry the whole agent run on transient errors, with bounded backoff."""
+
+    def __init__(self, *, max_attempts: int = 3, base_delay: float = 0.5) -> None:
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be >= 1")
+        self.max_attempts = max_attempts
+        self.base_delay = base_delay
+
+    async def process(
+        self,
+        context: AgentContext,
+        call_next: Callable[[], Awaitable[None]],
+    ) -> None:
+        last_exc: Exception | None = None
+        for attempt in range(self.max_attempts):
+            try:
+                await call_next()
+                return
+            except (asyncio.TimeoutError, ConnectionError) as exc:
+                last_exc = exc
+                await asyncio.sleep(self.base_delay * (2**attempt))
+        # Re-raise so the caller sees the underlying failure.
+        assert last_exc is not None
+        raise last_exc
+```
+
+Notice this catches *transient* errors only — a `ValueError` from a tool would bubble out unchanged. That's deliberate; you don't want to retry on programming bugs.
 
 ## Agent-level vs run-level
 
@@ -218,6 +311,62 @@ def redact_update(update):
 class StreamingRedactor(ChatMiddleware):
     async def process(self, context: ChatContext, call_next) -> None:
         context.stream_transform_hooks.append(redact_update)
+        await call_next()
+```
+
+## Streaming hooks — the three lifecycles
+
+For streaming runs, `context.result` is a `ResponseStream`, not a `ChatResponse` / `AgentResponse`. Mutating it directly would force you to reimplement the iterator protocol; instead, append callables to the three hook lists on the context and the framework runs them at the right point:
+
+| Hook list | When it fires | Signature |
+|---|---|---|
+| `stream_transform_hooks` | Every streamed update, as it's yielded | `(update) -> update \| Awaitable[update]` |
+| `stream_cleanup_hooks` | Once after consumption ends, before the result hook | `() -> None \| Awaitable[None]` |
+| `stream_result_hooks` | Once on the *finalised* `ChatResponse` / `AgentResponse` | `(response) -> response \| Awaitable[response]` |
+
+```python
+import re
+from agent_framework import ChatContext, ChatMiddleware, ChatResponse, ChatResponseUpdate
+
+
+CARD_RE = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
+
+
+class StreamingPanRedactor(ChatMiddleware):
+    """Replace credit-card-shaped substrings on every streamed update AND the final response."""
+
+    async def process(self, context: ChatContext, call_next) -> None:
+        def transform(update: ChatResponseUpdate) -> ChatResponseUpdate:
+            for content in update.contents:
+                if getattr(content, "text", None):
+                    content.text = CARD_RE.sub("[redacted]", content.text)
+            return update
+
+        def finalize(response: ChatResponse) -> ChatResponse:
+            for msg in response.messages:
+                for content in msg.contents:
+                    if getattr(content, "text", None):
+                        content.text = CARD_RE.sub("[redacted]", content.text)
+            return response
+
+        if context.stream:
+            context.stream_transform_hooks.append(transform)
+            context.stream_result_hooks.append(finalize)
+        await call_next()
+        # For non-streaming, also redact context.result here.
+        if not context.stream and isinstance(context.result, ChatResponse):
+            finalize(context.result)
+```
+
+`stream_transform_hooks` is the place for chunk-by-chunk redaction — running the regex on every update keeps PII out of the live UI. `stream_result_hooks` then re-runs on the aggregated response so any text that landed mid-chunk (i.e. a card number split across two updates) is cleaned up post-hoc.
+
+If you only need the cleanup phase (e.g. close a span or release a connection), `stream_cleanup_hooks` is a simple `() -> None` list:
+
+```python
+class TraceStream(ChatMiddleware):
+    async def process(self, context, call_next):
+        span = tracer.start_span("chat.stream")
+        context.stream_cleanup_hooks.append(span.end)
         await call_next()
 ```
 

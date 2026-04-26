@@ -35,6 +35,39 @@ class CompactionStrategy(Protocol):
 
 Returns `True` if the message list was modified.
 
+## Truncation — single threshold, hard cap
+
+`TruncationStrategy` is the workhorse strategy when you want one knob ("never exceed N") with deterministic behaviour. It runs after groups are annotated, then drops whole non-system groups oldest-first until the metric is back under `compact_to`.
+
+```python
+from agent_framework import TruncationStrategy
+
+# Message-count mode (default — no tokenizer)
+msg_strategy = TruncationStrategy(
+    max_n=40,         # trigger when included messages > 40
+    compact_to=24,    # trim down to 24
+    preserve_system=True,
+)
+
+# Token-count mode — pass a tokenizer and the same numbers become token thresholds
+from agent_framework import CharacterEstimatorTokenizer
+
+token_strategy = TruncationStrategy(
+    max_n=8_000,
+    compact_to=5_000,
+    tokenizer=CharacterEstimatorTokenizer(),
+)
+```
+
+A few things from the source worth knowing:
+
+- The metric is **either tokens or messages**, never both — when `tokenizer=` is set, both `max_n` and `compact_to` are token counts.
+- `compact_to` is **required** and must be `> 0` and `<= max_n`. The constructor raises `ValueError` otherwise.
+- Tool-call groups stay atomic: the strategy never excludes a function-call message without its function-result message, even if that means crossing `compact_to` slightly.
+- `preserve_system=True` (the default) excludes only non-system groups, so a multi-paragraph system prompt is never truncated.
+
+If you need to truncate while keeping the *most-recent* tool-call results readable but dropping their full payloads, layer `ToolResultCompactionStrategy` *before* truncation in a `TokenBudgetComposedStrategy`.
+
 ## Sliding window — simplest
 
 ```python
@@ -271,19 +304,97 @@ await agent.run("…", compaction_strategy=SlidingWindowStrategy(keep_last_group
 
 ## Custom strategies
 
-Anything callable that matches the protocol works:
+Anything callable that matches the `CompactionStrategy` protocol works — `__call__(messages) -> bool`. Two flavours: a plain async function for stateless logic, or a class when you need configuration.
+
+### Stateless — drop tool errors from old turns
 
 ```python
+from agent_framework import Message
+from agent_framework._compaction import set_excluded
+
+
 async def drop_old_errors(messages: list[Message]) -> bool:
     changed = False
     for m in messages:
         if m.role == "tool" and "error" in (m.text or "").lower():
-            from agent_framework._compaction import set_excluded
             changed = set_excluded(m, excluded=True, reason="old_error") or changed
     return changed
 ```
 
-Compose with the built-ins via `TokenBudgetComposedStrategy` or call inline.
+`set_excluded(message, excluded=True, reason=...)` is the canonical way to mark a message excluded — it returns `True` when the inclusion state actually changed, which is the bool your strategy needs to return.
+
+### Class form — keep at most N user turns
+
+A real-world strategy usually needs config. The class form gives you a constructor:
+
+```python
+from agent_framework import Message
+from agent_framework._compaction import (
+    _ordered_group_ids_from_annotations,
+    _group_messages_by_id,
+    _group_kind_map,
+    set_excluded,
+)
+
+
+class MaxUserTurnsStrategy:
+    """Keep only the most recent N user-message groups (their assistant replies ride along)."""
+
+    def __init__(self, *, max_user_turns: int) -> None:
+        if max_user_turns <= 0:
+            raise ValueError("max_user_turns must be > 0")
+        self.max_user_turns = max_user_turns
+
+    async def __call__(self, messages: list[Message]) -> bool:
+        ordered_ids = _ordered_group_ids_from_annotations(messages)
+        kinds = _group_kind_map(messages)
+        grouped = _group_messages_by_id(messages)
+
+        user_group_ids = [gid for gid in ordered_ids if kinds.get(gid) == "user"]
+        if len(user_group_ids) <= self.max_user_turns:
+            return False
+
+        keep = set(user_group_ids[-self.max_user_turns:])
+        changed = False
+        for gid in user_group_ids:
+            if gid in keep:
+                continue
+            for m in grouped.get(gid, []):
+                changed = set_excluded(m, excluded=True, reason="max_user_turns") or changed
+        return changed
+```
+
+The internals (`_ordered_group_ids_from_annotations`, `_group_messages_by_id`, `_group_kind_map`) are private but deliberately stable — every built-in strategy uses them. Importing them from `agent_framework._compaction` is the supported way to write strategies that respect the framework's atomic group boundaries.
+
+### Manually walking the annotations
+
+If you want to inspect what's been annotated (e.g. in a unit test), `annotate_message_groups` is the public entry point:
+
+```python
+from agent_framework import Message
+from agent_framework._compaction import annotate_message_groups, group_messages
+
+messages = [
+    Message(role="system", contents=["You are helpful."]),
+    Message(role="user", contents=["Where is Paris?"]),
+    Message(role="assistant", contents=["France."]),
+]
+
+annotate_message_groups(messages)
+for m in messages:
+    print(m.role, m.additional_properties["_group"])
+# system    {'id': 'group_msg_0', 'kind': 'system', 'index': 0, ...}
+# user      {'id': 'group_msg_1', 'kind': 'user', 'index': 1, ...}
+# assistant {'id': 'group_msg_2', 'kind': 'assistant_text', 'index': 2, ...}
+
+# Just the spans, without mutating messages:
+spans = group_messages(messages)
+print(spans[0])  # {'group_id': 'group_msg_0', 'kind': 'system', 'start_index': 0, 'end_index': 0, 'has_reasoning': False}
+```
+
+Calling `annotate_message_groups` repeatedly is safe — it re-annotates only the un-annotated tail by default. Pass `force_reannotate=True` to re-do the whole list (e.g. after a structural change).
+
+Compose any custom strategy with the built-ins via `TokenBudgetComposedStrategy` or call inline via `apply_compaction(messages, strategy=mine)`.
 
 ## Inspecting what compaction did
 
