@@ -1,10 +1,10 @@
 ---
 title: "Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide"
-description: "Latest: SK Python 1.41.2 / .NET 1.74.0 | Updated: April 2026"
+description: "Latest: SK Python 1.41.3 / .NET 1.74.0 | Updated: April 2026"
 framework: semantic-kernel
 ---
 
-Latest: SK Python 1.41.2 / .NET 1.74.0 | Updated: April 2026
+Latest: SK Python 1.41.3 / .NET 1.74.0 | Updated: April 2026
 # Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide
 
 **Version:** 1.0  
@@ -108,7 +108,7 @@ pip install semantic-kernel[all]
 Create a `requirements.txt` file:
 
 ```
-semantic-kernel>=1.41.2
+semantic-kernel>=1.41.3
 python-dotenv>=1.0.0
 aiohttp>=3.8.0
 openai>=1.0.0
@@ -2121,6 +2121,13 @@ public class CommunicatingAgent
 ---
 
 **Note:** This comprehensive guide has been abbreviated due to token constraints. The full version includes extensive code examples, diagrams, architecture patterns, and production-ready implementations for all 14 sections. Please see the accompanying files for diagrams, production guidance, and practical recipes.
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.41.3 | April 28, 2026 | Version bumped 1.41.2 → 1.41.3 (patch release); header, description, and `requirements.txt` pin updated. PyPI confirms 1.41.3 as latest stable. |
+| 1.41.2 | April 2026 | Full MCP server/client support; A2A protocol; Oracle database connector; Google GenAI SDK migration; Python 3.10+ required. |
 
 
 
