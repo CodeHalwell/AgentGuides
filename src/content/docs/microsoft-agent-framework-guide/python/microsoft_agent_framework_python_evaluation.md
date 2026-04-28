@@ -307,6 +307,192 @@ results = await evaluate_workflow(
 
 `evaluate_workflow` runs the workflow end-to-end for each query, extracts the final output, and produces the same `EvalItem` shape. Tool definitions and conversation history are pulled from the workflow's agent executors automatically.
 
+## Custom `Evaluator` — going beyond `LocalEvaluator`
+
+`LocalEvaluator` is a single concrete implementation of the `Evaluator` protocol — a `name: str` attribute plus one async method:
+
+```python
+class Evaluator(Protocol):
+    name: str
+
+    async def evaluate(
+        self,
+        items: Sequence[EvalItem],
+        *,
+        eval_name: str = "Eval",
+    ) -> EvalResults: ...
+```
+
+Roll your own evaluator when you need behaviour that doesn't fit `LocalEvaluator`'s "every check must pass" rule — weighted scoring, golden-dataset comparisons that need warm caches, federation across multiple backends, or per-item parallelism budgets.
+
+### Weighted scorer
+
+Aggregate multiple scorers into one numeric score, with a configurable pass threshold:
+
+```python
+from collections.abc import Awaitable, Callable, Sequence
+from agent_framework import (
+    EvalItem,
+    EvalItemResult,
+    EvalResults,
+    EvalScoreResult,
+    LocalEvaluator,
+    evaluate_agent,
+    keyword_check,
+)
+
+
+class WeightedScorer:
+    """Aggregate multiple scorers into one weighted pass/fail decision.
+
+    Each scorer returns a float in ``[0, 1]``. The item passes overall when
+    the weighted average meets ``threshold``. Per-scorer ``passed`` flags use
+    ``per_scorer_threshold`` (default ``0.5``) so individual results stay
+    interpretable independently of the global aggregate.
+    """
+
+    def __init__(
+        self,
+        scorers: dict[str, tuple[float, Callable[[EvalItem], float | Awaitable[float]]]],
+        *,
+        threshold: float = 0.7,
+        per_scorer_threshold: float = 0.5,
+        name: str = "weighted",
+    ) -> None:
+        self.name = name
+        self.scorers = scorers
+        self.threshold = threshold
+        self.per_scorer_threshold = per_scorer_threshold
+        total_weight = sum(weight for weight, _ in scorers.values())
+        if total_weight <= 0:
+            raise ValueError("scorer weights must sum to a positive number")
+        self._total_weight = total_weight
+
+    async def _score_one(self, item: EvalItem) -> tuple[float, list[EvalScoreResult]]:
+        per_scorer_scores: list[EvalScoreResult] = []
+        weighted_sum = 0.0
+        for name, (weight, fn) in self.scorers.items():
+            raw = fn(item)
+            value = await raw if hasattr(raw, "__await__") else raw
+            score = max(0.0, min(1.0, float(value)))
+            weighted_sum += weight * score
+            # Per-scorer pass uses its own cutoff so a passing aggregate doesn't
+            # mask a failing individual scorer in `per_evaluator` counts.
+            per_scorer_scores.append(
+                EvalScoreResult(name=name, score=score, passed=score >= self.per_scorer_threshold)
+            )
+        return weighted_sum / self._total_weight, per_scorer_scores
+
+    async def evaluate(
+        self,
+        items: Sequence[EvalItem],
+        *,
+        eval_name: str = "Weighted",
+    ) -> EvalResults:
+        passed = 0
+        failed = 0
+        result_items: list[EvalItemResult] = []
+        per_check: dict[str, dict[str, int]] = {
+            name: {"passed": 0, "failed": 0, "errored": 0} for name in self.scorers
+        }
+        for idx, item in enumerate(items):
+            score, per_scorer = await self._score_one(item)
+            item_passed = score >= self.threshold
+            if item_passed:
+                passed += 1
+            else:
+                failed += 1
+            for s in per_scorer:
+                per_check[s.name]["passed" if s.passed else "failed"] += 1
+            result_items.append(
+                EvalItemResult(
+                    item_id=str(idx),
+                    status="pass" if item_passed else "fail",
+                    scores=[*per_scorer, EvalScoreResult(name="weighted", score=score, passed=item_passed)],
+                    input_text=item.query,
+                    output_text=item.response,
+                )
+            )
+        return EvalResults(
+            provider=self.name,
+            eval_id="weighted",
+            run_id=eval_name,
+            status="completed",
+            result_counts={"passed": passed, "failed": failed, "errored": 0},
+            per_evaluator=per_check,
+            items=result_items,
+        )
+
+
+def length_score(item: EvalItem) -> float:
+    # Reward responses between 50 and 400 chars; penalise anything outside.
+    n = len(item.response)
+    if 50 <= n <= 400:
+        return 1.0
+    return max(0.0, 1.0 - abs(n - 200) / 800)
+
+
+def cites_temperature(item: EvalItem) -> float:
+    return 1.0 if "°C" in item.response or "celsius" in item.response.lower() else 0.0
+
+
+scorer = WeightedScorer(
+    scorers={
+        "length": (1.0, length_score),
+        "temperature_cited": (3.0, cites_temperature),  # 3× weight
+    },
+    threshold=0.7,
+)
+
+# Run side-by-side with LocalEvaluator — evaluate_agent accepts a list.
+all_results = await evaluate_agent(
+    agent=agent,
+    queries=["What's the weather in Paris?", "How hot is it in Cairo?"],
+    evaluators=[LocalEvaluator(keyword_check("weather")), scorer],
+)
+
+local_results, weighted_results = all_results
+print(weighted_results.per_evaluator)
+# {'length': {...}, 'temperature_cited': {...}}
+```
+
+The custom evaluator slots into the same pipeline as `LocalEvaluator` and Microsoft Foundry — `evaluate_agent` returns one `EvalResults` per evaluator, in registration order, so callers stay framework-agnostic.
+
+### Federating across backends
+
+Wrap two evaluators behind one `Evaluator` so callers see them as a single backend:
+
+```python
+class FederatedEvaluator:
+    """Run two evaluators sequentially and combine their pass/fail counts."""
+
+    def __init__(self, *backends, name: str = "federated") -> None:
+        self.name = name
+        self.backends = backends
+
+    async def evaluate(self, items, *, eval_name="Federated") -> EvalResults:
+        all_results = [await b.evaluate(items, eval_name=eval_name) for b in self.backends]
+        merged_counts = {"passed": 0, "failed": 0, "errored": 0}
+        merged_per_check: dict[str, dict[str, int]] = {}
+        merged_items: list[EvalItemResult] = []
+        for r in all_results:
+            for k, v in r.result_counts.items():
+                merged_counts[k] = merged_counts.get(k, 0) + v
+            merged_per_check.update(r.per_evaluator)
+            merged_items.extend(r.items)
+        return EvalResults(
+            provider=self.name,
+            eval_id="federated",
+            run_id=eval_name,
+            status="completed",
+            result_counts=merged_counts,
+            per_evaluator=merged_per_check,
+            items=merged_items,
+        )
+```
+
+This is the pattern Microsoft Foundry's `FoundryEvals` uses internally to combine groundedness, relevance, and safety into a single result object — with a custom `Evaluator` you can do the same for whichever scorers you have.
+
 ## Cloud + local composition
 
 Microsoft Foundry ships a richer evaluator with groundedness, relevance, safety, and PII checks. Install `agent-framework-foundry` and mix it in — `evaluate_agent` accepts a list:

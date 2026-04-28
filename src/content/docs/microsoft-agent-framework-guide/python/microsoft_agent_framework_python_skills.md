@@ -82,6 +82,47 @@ async def stock() -> str:
 
 The decorator uses the function name and docstring as defaults. Both sync and async callables work.
 
+### Per-request resource via `**kwargs`
+
+Resource functions can opt into `**kwargs` to receive runtime arguments forwarded by `agent.run(..., function_invocation_kwargs={...})`. The framework only forwards `**kwargs` when the function declares it — adding the parameter is a deliberate signal that you want runtime data.
+
+```python
+from agent_framework import Agent, Skill, SkillsProvider
+from agent_framework.openai import OpenAIChatClient
+
+
+tenant_skill = Skill(
+    name="tenant-pricing",
+    description="Fetch pricing matrix for the current tenant.",
+    content="Use `read_skill_resource('tenant-pricing', 'matrix')` to see the current matrix.",
+)
+
+
+@tenant_skill.resource
+async def matrix(**kwargs) -> str:
+    """Return the pricing matrix for the active tenant."""
+    tenant_id = kwargs.get("tenant_id", "default")
+    rows = await pricing_db.fetch_matrix(tenant_id)
+    return "\n".join(f"{r.sku}: {r.price}" for r in rows)
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a pricing assistant.",
+    context_providers=[SkillsProvider(skills=[tenant_skill])],
+)
+
+# tenant_id flows through function_invocation_kwargs into the resource's **kwargs.
+await agent.run(
+    "What's the SKU price for ACME's PRO plan?",
+    function_invocation_kwargs={"tenant_id": "acme"},
+)
+```
+
+Without `**kwargs` in the signature, the framework calls the resource as `function()` — runtime kwargs are silently dropped. The detection happens at construction (`SkillResource.__init__` inspects the signature once), so adding or removing `**kwargs` does require a fresh resource registration.
+
+The same `**kwargs` rule applies to `SkillScript`. Use it when you want the agent's per-call arguments validated against the schema (the regular path) **plus** ambient runtime data (tenant id, request id, user id) the model never sees.
+
 ## Scripts
 
 Skills can bundle executable code too. Code-defined scripts run in-process (no runner needed):
