@@ -326,12 +326,17 @@ class MemoryChatCache(ChatMiddleware):
 
     @staticmethod
     def _key(messages: list[Message], options: dict[str, Any]) -> str:
+        # Use Message.to_dict() so non-text content (function calls, images,
+        # tool results) and structured option values participate in the key.
+        # `default=str` covers anything not natively JSON-serialisable
+        # (e.g. enum values, datetimes) so distinct objects produce distinct keys.
         blob = json.dumps(
             {
-                "m": [(m.role, m.text or "") for m in messages],
-                "o": {k: v for k, v in options.items() if isinstance(v, (str, int, float, bool))},
+                "m": [m.to_dict() for m in messages],
+                "o": options,
             },
             sort_keys=True,
+            default=str,
         )
         return hashlib.sha256(blob.encode()).hexdigest()
 

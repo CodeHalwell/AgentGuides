@@ -345,8 +345,10 @@ from agent_framework import (
 class WeightedScorer:
     """Aggregate multiple scorers into one weighted pass/fail decision.
 
-    Each scorer returns a float in ``[0, 1]``. The item passes when the
-    weighted average exceeds ``threshold``.
+    Each scorer returns a float in ``[0, 1]``. The item passes overall when
+    the weighted average meets ``threshold``. Per-scorer ``passed`` flags use
+    ``per_scorer_threshold`` (default ``0.5``) so individual results stay
+    interpretable independently of the global aggregate.
     """
 
     def __init__(
@@ -354,11 +356,13 @@ class WeightedScorer:
         scorers: dict[str, tuple[float, Callable[[EvalItem], float | Awaitable[float]]]],
         *,
         threshold: float = 0.7,
+        per_scorer_threshold: float = 0.5,
         name: str = "weighted",
     ) -> None:
         self.name = name
         self.scorers = scorers
         self.threshold = threshold
+        self.per_scorer_threshold = per_scorer_threshold
         total_weight = sum(weight for weight, _ in scorers.values())
         if total_weight <= 0:
             raise ValueError("scorer weights must sum to a positive number")
@@ -372,8 +376,10 @@ class WeightedScorer:
             value = await raw if hasattr(raw, "__await__") else raw
             score = max(0.0, min(1.0, float(value)))
             weighted_sum += weight * score
+            # Per-scorer pass uses its own cutoff so a passing aggregate doesn't
+            # mask a failing individual scorer in `per_evaluator` counts.
             per_scorer_scores.append(
-                EvalScoreResult(name=name, score=score, passed=score >= self.threshold)
+                EvalScoreResult(name=name, score=score, passed=score >= self.per_scorer_threshold)
             )
         return weighted_sum / self._total_weight, per_scorer_scores
 

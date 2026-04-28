@@ -655,7 +655,6 @@ A real-world example: shard a stream of orders by region, with a fallback for un
 ```python
 from typing import Any
 from agent_framework import (
-    Executor,
     FanOutEdgeGroup,
     FunctionExecutor,
     WorkflowBuilder,

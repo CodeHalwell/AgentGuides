@@ -164,6 +164,7 @@ from agent_framework import (
     BaseChatClient,
     ChatResponse,
     ChatResponseUpdate,
+    Content,
     Message,
     ResponseStream,
 )
@@ -190,13 +191,13 @@ class EchoChatClient(BaseChatClient):
                 for token in text.split():
                     yield ChatResponseUpdate(
                         role="assistant",
-                        contents=[token + " "],
+                        contents=[Content.from_text(token + " ")],
                     )
             return self._build_response_stream(_iter())
 
         async def _single() -> ChatResponse:
             return ChatResponse(
-                messages=[Message(role="assistant", contents=[text])],
+                messages=[Message(role="assistant", contents=[Content.from_text(text)])],
                 response_id="echo-1",
             )
 

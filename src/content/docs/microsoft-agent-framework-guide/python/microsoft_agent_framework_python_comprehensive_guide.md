@@ -422,7 +422,6 @@ agent = Agent(client=client, context_providers=[primary_history, audit])
 `FileHistoryProvider` accepts `dumps=` / `loads=` callables. Each one receives a dict (for `dumps`) or text/bytes (for `loads`) and must round-trip cleanly. The hook is the right place to add envelope encryption, schema redaction, or version migration:
 
 ```python
-import base64
 import json
 import os
 from cryptography.fernet import Fernet
@@ -436,12 +435,13 @@ fernet = Fernet(os.environ["AF_HISTORY_KEY"].encode())
 
 def encrypted_dumps(payload: dict) -> str:
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    return base64.b64encode(fernet.encrypt(body)).decode("ascii")
+    # Fernet tokens are already URL-safe base64 — no extra encoding needed.
+    return fernet.encrypt(body).decode("ascii")
 
 
 def encrypted_loads(line: str | bytes) -> dict:
-    raw = line if isinstance(line, bytes) else line.encode("ascii")
-    return json.loads(fernet.decrypt(base64.b64decode(raw)))
+    token = line if isinstance(line, bytes) else line.encode("ascii")
+    return json.loads(fernet.decrypt(token))
 
 
 encrypted_history = FileHistoryProvider(
