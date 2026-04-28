@@ -843,19 +843,24 @@ builder.add_edge_group(collector)
 
 #### Round-tripping through serialised form
 
-When a callable can't be persisted (lambdas, closures, instance methods on objects unavailable at load time), supply `selection_func_name=` (fan-out) or `condition_name=` (switch case) so the deserialised group can re-resolve the callable from your registry:
+When a callable can't be persisted (lambdas, closures, instance methods on objects unavailable at load time), supply `selection_func_name=` (fan-out) or `condition_name=` (switch case) so the deserialised group can re-resolve the callable from your registry. The clean pattern is to read the persisted name and reconstruct the case fresh with the live callable — never patch the placeholder in place:
 
 ```python
-restored = SwitchCaseEdgeGroupCase.from_dict({
-    "target_id": "csv_handler",
-    "condition_name": "is_csv_payload",
-})
-# `restored.condition` is now a placeholder that raises RuntimeError if invoked —
-# replace it before running the workflow:
-restored._condition = condition_registry["is_csv_payload"]
+persisted = {"target_id": "csv_handler", "condition_name": "is_csv_payload"}
+
+# A peek at the deserialised case tells you which name to look up.
+stub = SwitchCaseEdgeGroupCase.from_dict(persisted)
+assert stub.condition_name == "is_csv_payload"     # placeholder raises if invoked
+
+# Rebuild via the public constructor with the resolved callable.
+restored = SwitchCaseEdgeGroupCase(
+    condition=condition_registry["is_csv_payload"],
+    target_id=stub.target_id,
+    condition_name=stub.condition_name,
+)
 ```
 
-The `_missing_callable` placeholder fails loudly (`RuntimeError: Callable 'is_csv_payload' is unavailable after serialization`) so a forgotten registration crashes the run instead of silently routing to the wrong branch.
+The `from_dict`-produced placeholder fails loudly (`RuntimeError: Callable 'is_csv_payload' is unavailable after serialization`) so a forgotten registration crashes the run instead of silently routing to the wrong branch. Reconstructing rather than mutating the placeholder keeps you on the supported public surface — `_condition` is an internal field and may be renamed without notice.
 
 ## Streaming events
 

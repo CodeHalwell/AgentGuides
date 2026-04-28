@@ -242,7 +242,7 @@ Two practical consequences:
 
 #### Inspecting compaction in tests
 
-`apply_compaction` is the synchronous entry point — handy in unit tests so you can assert on inclusion without spinning up an agent:
+`apply_compaction` is the entry point you call directly — it's an async coroutine, so wrap it in `asyncio.run` (or `await` it from an async test). Handy in unit tests so you can assert on inclusion without spinning up an agent:
 
 ```python
 import asyncio

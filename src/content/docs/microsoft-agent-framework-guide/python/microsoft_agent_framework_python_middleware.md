@@ -234,9 +234,11 @@ When `context.stream is True`, `context.result` is a `ResponseStream[ChatRespons
 Each list accepts sync **or** async callables. Add to it before calling `call_next()` so the hook runs against the stream the underlying client returns.
 
 ```python
+import logging
 import re
 from agent_framework import ChatMiddleware, ChatContext, ChatResponseUpdate
 
+logger = logging.getLogger(__name__)
 PHONE_RE = re.compile(r"\+?\d[\d -]{8,}\d")
 
 
@@ -261,7 +263,7 @@ class StreamingPiiRedactor(ChatMiddleware):
 
         # Always clean up — even if the consumer aborts mid-stream.
         async def close_span():
-            metrics.record("chat.stream.completed", labels={"middleware": "pii"})
+            logger.info("chat.stream.completed middleware=pii")
 
         context.stream_transform_hooks.append(redact_chunk)
         context.stream_result_hooks.append(final_pass)

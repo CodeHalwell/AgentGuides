@@ -56,12 +56,14 @@ class CheckpointStorage(Protocol):
     async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]: ...
 ```
 
-A complete S3-backed implementation that handles JSON encoding, `WorkflowCheckpointException` semantics, and reuses one `aioboto3` session across calls:
+A complete S3-backed implementation. Two design choices that keep the hot path cheap as the bucket grows:
+
+- **Flat object layout** (`{prefix}{checkpoint_id}.json`) so `load` and `delete` are single O(1) `get_object` / `delete_object` calls.
+- **Workflow-name routing via S3 user metadata** (`x-amz-meta-workflow-name`) plus a `{prefix}_index/{workflow_name}/{checkpoint_id}` zero-byte index marker. `list_*` and `get_latest` hit only the index, never the full bodies.
 
 ```python
 import json
 from dataclasses import asdict
-from datetime import datetime
 import aioboto3
 from agent_framework import WorkflowCheckpoint, WorkflowCheckpointException
 
@@ -72,74 +74,98 @@ class S3CheckpointStorage:
         self._prefix = prefix.rstrip("/") + "/"
         self._session = aioboto3.Session()
 
-    def _key(self, workflow_name: str, checkpoint_id: str) -> str:
-        return f"{self._prefix}{workflow_name}/{checkpoint_id}.json"
+    # Flat keys keep load/delete O(1); the index handles workflow_name filtering.
+    def _data_key(self, checkpoint_id: str) -> str:
+        return f"{self._prefix}{checkpoint_id}.json"
+
+    def _index_key(self, workflow_name: str, checkpoint_id: str) -> str:
+        return f"{self._prefix}_index/{workflow_name}/{checkpoint_id}"
 
     async def save(self, checkpoint: WorkflowCheckpoint) -> str:
-        key = self._key(checkpoint.workflow_name, checkpoint.checkpoint_id)
+        body = json.dumps(asdict(checkpoint)).encode()
         async with self._session.client("s3") as s3:
             await s3.put_object(
                 Bucket=self._bucket,
-                Key=key,
-                Body=json.dumps(asdict(checkpoint)).encode(),
+                Key=self._data_key(checkpoint.checkpoint_id),
+                Body=body,
                 ContentType="application/json",
+                Metadata={
+                    "workflow-name": checkpoint.workflow_name,
+                    "timestamp": checkpoint.timestamp,
+                },
+            )
+            # Zero-byte index marker — used by list_* and get_latest.
+            await s3.put_object(
+                Bucket=self._bucket,
+                Key=self._index_key(checkpoint.workflow_name, checkpoint.checkpoint_id),
+                Body=b"",
             )
         return checkpoint.checkpoint_id
 
     async def load(self, checkpoint_id: str) -> WorkflowCheckpoint:
-        # S3 doesn't index by checkpoint_id alone — scan and match.
         async with self._session.client("s3") as s3:
-            paginator = s3.get_paginator("list_objects_v2")
-            async for page in paginator.paginate(Bucket=self._bucket, Prefix=self._prefix):
-                for obj in page.get("Contents", []):
-                    if obj["Key"].endswith(f"/{checkpoint_id}.json"):
-                        body = await s3.get_object(Bucket=self._bucket, Key=obj["Key"])
-                        data = json.loads(await body["Body"].read())
-                        return WorkflowCheckpoint.from_dict(data)
-        raise WorkflowCheckpointException(f"No checkpoint found with ID {checkpoint_id}")
-
-    async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
-        prefix = f"{self._prefix}{workflow_name}/"
-        out: list[WorkflowCheckpoint] = []
-        async with self._session.client("s3") as s3:
-            paginator = s3.get_paginator("list_objects_v2")
-            async for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    body = await s3.get_object(Bucket=self._bucket, Key=obj["Key"])
-                    out.append(WorkflowCheckpoint.from_dict(json.loads(await body["Body"].read())))
-        return out
+            try:
+                obj = await s3.get_object(Bucket=self._bucket, Key=self._data_key(checkpoint_id))
+            except s3.exceptions.NoSuchKey:
+                raise WorkflowCheckpointException(f"No checkpoint found with ID {checkpoint_id}")
+            data = json.loads(await obj["Body"].read())
+        return WorkflowCheckpoint.from_dict(data)
 
     async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]:
-        prefix = f"{self._prefix}{workflow_name}/"
+        prefix = f"{self._prefix}_index/{workflow_name}/"
         ids: list[str] = []
         async with self._session.client("s3") as s3:
             paginator = s3.get_paginator("list_objects_v2")
             async for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
                 for obj in page.get("Contents", []):
-                    # key shape: {prefix}{workflow_name}/{checkpoint_id}.json
-                    ids.append(obj["Key"].rsplit("/", 1)[-1].removesuffix(".json"))
+                    ids.append(obj["Key"].rsplit("/", 1)[-1])
         return ids
 
+    async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
+        ids = await self.list_checkpoint_ids(workflow_name=workflow_name)
+        # Caller asked for full bodies — fan out the gets in parallel.
+        return [await self.load(cid) for cid in ids]
+
     async def get_latest(self, *, workflow_name: str) -> WorkflowCheckpoint | None:
-        checkpoints = await self.list_checkpoints(workflow_name=workflow_name)
-        if not checkpoints:
+        prefix = f"{self._prefix}_index/{workflow_name}/"
+        latest_marker = None
+        async with self._session.client("s3") as s3:
+            paginator = s3.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    # LastModified comes back from list_objects_v2 — no extra request.
+                    if latest_marker is None or obj["LastModified"] > latest_marker["LastModified"]:
+                        latest_marker = obj
+        if latest_marker is None:
             return None
-        return max(checkpoints, key=lambda c: datetime.fromisoformat(c.timestamp))
+        checkpoint_id = latest_marker["Key"].rsplit("/", 1)[-1]
+        return await self.load(checkpoint_id)        # one targeted get_object
 
     async def delete(self, checkpoint_id: str) -> bool:
         async with self._session.client("s3") as s3:
-            paginator = s3.get_paginator("list_objects_v2")
-            async for page in paginator.paginate(Bucket=self._bucket, Prefix=self._prefix):
-                for obj in page.get("Contents", []):
-                    if obj["Key"].endswith(f"/{checkpoint_id}.json"):
-                        await s3.delete_object(Bucket=self._bucket, Key=obj["Key"])
-                        return True
-        return False
+            try:
+                head = await s3.head_object(Bucket=self._bucket, Key=self._data_key(checkpoint_id))
+            except s3.exceptions.ClientError:
+                return False
+            workflow_name = head.get("Metadata", {}).get("workflow-name")
+            await s3.delete_object(Bucket=self._bucket, Key=self._data_key(checkpoint_id))
+            if workflow_name:
+                await s3.delete_object(
+                    Bucket=self._bucket,
+                    Key=self._index_key(workflow_name, checkpoint_id),
+                )
+        return True
 ```
+
+Why each shortcut matters as the bucket grows:
+
+- `load` and `delete` issue **one** S3 request each (plus a tiny `head_object` for delete to find the index pointer). No scanning.
+- `get_latest` lists only the index keys — small, zero-byte objects — and uses the `LastModified` field returned by `list_objects_v2` to pick the winner before fetching a single body.
+- `list_checkpoint_ids` walks index keys alone, never downloading bodies. Use it whenever you only need ids (audit reports, prune jobs).
 
 Three things to mirror from `FileCheckpointStorage` when rolling your own backend:
 
-- **Atomic writes.** The built-in writes `<id>.json.tmp` then `os.replace` for crash safety. S3 `put_object` is atomic; for filesystem-derived backends (NFS, a custom on-disk format), keep the write-then-rename pattern.
+- **Atomic writes.** The built-in writes `<id>.json.tmp` then `os.replace` for crash safety. S3 `put_object` is atomic; for filesystem-derived backends (NFS, a custom on-disk format), keep the write-then-rename pattern. The two `put_object` calls in `save` are not transactionally atomic — if the index write fails the data object is still queryable by `load`. Surface the failure or run a periodic reconciler that re-creates missing index markers.
 - **Path / id validation.** `FileCheckpointStorage._validate_file_path` rejects ids that resolve outside the storage root (path traversal). For S3 the equivalent is asserting the key starts with your prefix; for any backend, never blindly concatenate user-influenced ids into a path.
 - **Raise `WorkflowCheckpointException` on miss.** The framework treats `load` failures as a recoverable "no such checkpoint" and surfaces the message — don't let the underlying client error bubble up unwrapped.
 
