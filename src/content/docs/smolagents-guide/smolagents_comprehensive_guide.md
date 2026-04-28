@@ -971,6 +971,7 @@ class Model(ABC):
 The default model implementation uses Hugging Face's Inference API:
 
 ```python
+import os
 from smolagents import CodeAgent, InferenceClientModel
 
 # Minimal configuration (uses HF defaults)
@@ -2443,8 +2444,7 @@ result = agent.run("Analyse the dataset [1, 2, 3, 4, 5, 100]")
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.24.0 | 2026-04-27 | Corrected `HfApiModel` status: fully removed (raises `ImportError`), not deprecated with a shim. Removed invalid `max_retries` constructor parameter from `InferenceClientModel` example; valid parameters are `model_id`, `provider`, `token`, `timeout`, `client_kwargs`, `api_key`, `bill_to`, `base_url`. Verified against installed smolagents 1.24.0. | Claude routine |
-| 1.24.0 | January 16, 2026 | `HfApiModel` removed (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents |
+| 1.24.0 | 2026-04-27 | `HfApiModel` removed (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents. Guide corrections (2026-04-27): clarified that `HfApiModel` is fully removed (raises `ImportError`), not deprecated with a shim; removed invalid `max_retries` argument from `InferenceClientModel` example (not a constructor parameter); added missing `import os` to code block. Verified against installed smolagents 1.24.0. |
 | 1.23.0 | November 2025 | Previous documented version |
 
 
