@@ -41,37 +41,41 @@ graph TD
 
 ## 2. Agent Lifecycle (AsyncIO)
 
-The lifecycle of a Python agent within an `asyncio` event loop.
+The lifecycle of a Python agent within an `asyncio` event loop. State across turns is held in an `AgentSession` (paired with a `HistoryProvider` like `InMemoryHistoryProvider` or `FileHistoryProvider`).
 
 ```mermaid
 sequenceDiagram
     participant App as Application (Main Loop)
-    participant Factory as AgentFactory
     participant Agent as Agent
-    participant Thread as AgentThread
+    participant Session as AgentSession
+    participant Provider as HistoryProvider
     participant LLM as LLM Service
 
-    App->>Factory: create_agent(instructions, tools)
-    Factory-->>Agent: Returns Agent Instance
-    
-    App->>Agent: create_thread()
-    Agent-->>Thread: Returns Thread Instance
-    
+    App->>Agent: Agent(client=..., instructions=..., tools=[...])
+
+    App->>Agent: create_session(session_id="user-42")
+    Agent-->>Session: Returns AgentSession instance
+
+    Provider->>Session: get_messages() — load prior turns
+
     loop Conversation Loop
-        App->>Thread: invoke(user_input)
-        activate Thread
-        Thread->>Thread: Add User Message to History
-        Thread->>LLM: Send History + System Prompt
-        LLM-->>Thread: Response (Content or Tool Call)
-        
+        App->>Agent: run(user_input, session=session)
+        activate Agent
+        Agent->>Session: append user message
+        Agent->>LLM: send messages + tools
+
         alt Tool Call Required
-            Thread->>Thread: Execute Python Tool (await)
-            Thread->>LLM: Send Tool Result
-            LLM-->>Thread: Final Response
+            LLM-->>Agent: function_call content
+            Agent->>Agent: invoke @tool function (await)
+            Agent->>LLM: send tool result
+            LLM-->>Agent: final assistant message
+        else Direct Reply
+            LLM-->>Agent: assistant message
         end
-        
-        Thread-->>App: Return AgentResponse
-        deactivate Thread
+
+        Agent->>Provider: save_messages(...)
+        Agent-->>App: AgentResponse
+        deactivate Agent
     end
 ```
 
@@ -149,4 +153,52 @@ sequenceDiagram
     LLM-->>Agent: "You can configure authentication using..."
     Agent-->>User: Final Answer
 ```
+
+---
+
+## 6. Auto-generating Workflow Diagrams with `WorkflowViz`
+
+Every `Workflow` produced by `WorkflowBuilder` (or any orchestration builder — `SequentialBuilder`, `ConcurrentBuilder`, `HandoffBuilder`, `GroupChatBuilder`, `MagenticBuilder`) can be visualized at runtime via `agent_framework.WorkflowViz`. No separate import needed for diagram generation; for SVG/PNG/PDF export install `graphviz` (`pip install graphviz>=0.20.0` plus the system `dot` binary).
+
+```python
+from agent_framework import Agent, AgentExecutor, WorkflowBuilder, WorkflowViz
+from agent_framework.openai import OpenAIChatClient
+
+
+client = OpenAIChatClient()
+researcher = AgentExecutor(Agent(client=client, name="researcher"))
+analyst = AgentExecutor(Agent(client=client, name="analyst"))
+writer = AgentExecutor(Agent(client=client, name="writer"))
+
+workflow = (
+    WorkflowBuilder(start_executor=researcher, name="research-pipeline")
+    .add_edge(researcher, analyst)
+    .add_edge(analyst, writer)
+    .build()
+)
+
+viz = WorkflowViz(workflow)
+
+# Mermaid (no system dependencies — paste straight into Markdown / docs)
+print(viz.to_mermaid())
+
+# Graphviz DOT (use any DOT renderer)
+print(viz.to_digraph())
+
+# Render to a file — needs the graphviz Python package + the dot binary on PATH
+viz.save_svg("workflow.svg")            # convenience wrapper
+viz.save_png("workflow.png")
+viz.export(format="pdf", filename="workflow.pdf")
+
+# Include the framework's auto-injected glue executors for debugging:
+viz.export(format="svg", filename="workflow-debug.svg", include_internal_executors=True)
+```
+
+`include_internal_executors=False` (default) hides the framework's plumbing nodes (start dispatchers, conversation marshalling) so the diagram matches what you wrote in the builder. Flip to `True` when you're debugging why a message isn't reaching its target.
+
+`WorkflowViz` is marked release-candidate (`ReleaseCandidateFeature.WORKFLOW_VIZ`); using it emits a `FeatureStageWarning` once per process. Silence it with `warnings.filterwarnings("ignore", category=FeatureStageWarning)` if you regenerate diagrams in CI.
+
+### Sub-workflow rendering
+
+`WorkflowExecutor` (a workflow nested inside another workflow as a node) renders as a separate cluster under the parent diagram. The viz walks the composition tree automatically, so a multi-level workflow round-trips into a Mermaid graph that mirrors the actual call hierarchy.
 

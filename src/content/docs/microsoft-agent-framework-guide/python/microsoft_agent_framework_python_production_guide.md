@@ -283,3 +283,71 @@ async def get_session():
     return session
 ```
 
+---
+
+## 8. Local Interactive Testing Before Deploying
+
+Before pushing to ACA, smoke-test the agent against a real model using `agent-framework-devui`. It's a built-in FastAPI/Uvicorn server (re-exported as `agent_framework.devui`) that exposes any agent or workflow over an OpenAI-compatible HTTP API plus a web UI.
+
+```python
+# devui_app.py
+from agent_framework import Agent
+from agent_framework.devui import serve
+from agent_framework.foundry import FoundryChatClient
+
+
+def build_agent() -> Agent:
+    return Agent(
+        client=FoundryChatClient(),                    # picks up FOUNDRY_PROJECT_ENDPOINT / FOUNDRY_MODEL
+        instructions="You are an internal support agent.",
+    )
+
+
+if __name__ == "__main__":
+    serve(
+        entities=[build_agent()],
+        host="127.0.0.1",
+        port=8080,
+        auto_open=True,
+        instrumentation_enabled=True,                  # surfaces OpenTelemetry traces in the UI
+    )
+```
+
+Hardening before sharing the URL with a teammate:
+
+- Use `mode="user"` instead of the default `"developer"` — generic error messages, admin endpoints disabled.
+- `auth_enabled=True` enforces a Bearer token on every request. Pass `DEVUI_AUTH_TOKEN` in the environment to keep the same token across restarts; otherwise the server auto-generates one and prints it on startup.
+- Network-exposing the server (`host="0.0.0.0"`) without auth raises a loud startup warning — DevUI is a development harness, not a production runtime.
+
+For directory-style discovery (one folder per agent), use `serve(entities_dir="./agents", ...)` or run `devui ./agents --port 8080 --auth` from the CLI.
+
+---
+
+## 9. Choosing the Right Chat Client for Production
+
+Three first-party clients dominate Azure deployments:
+
+| Client | Best for | Notes |
+|---|---|---|
+| `OpenAIChatClient` (Azure mode) | Standard Azure OpenAI deployments — direct endpoint + key/Entra | Smallest dependency footprint; reads `AZURE_OPENAI_*` env vars |
+| `agent_framework.foundry.FoundryChatClient` | Microsoft Foundry projects — model deployment, evaluation, private networking | Reads `FOUNDRY_PROJECT_ENDPOINT` / `FOUNDRY_MODEL`; supports `AIProjectClient` reuse for OAuth helpers |
+| `agent_framework.foundry.FoundryAgent` | Service-managed agents — identity, threads, tool definitions live in Foundry | Use when you want the agent to outlive your process / be visible in the Foundry portal |
+
+`FoundryChatClient` constructor accepts either `(project_endpoint=, model=, credential=)` or a pre-built `project_client=AIProjectClient(...)`. The latter is the right choice when your service already shares an `AIProjectClient` for evaluations or memory:
+
+```python
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
+
+project = AIProjectClient(
+    endpoint="https://corp-foundry.services.ai.azure.com",
+    credential=DefaultAzureCredential(),
+)
+
+client = FoundryChatClient(project_client=project, model="gpt-4o-mini")
+agent = Agent(client=client, instructions="...")
+```
+
+All three clients implement the same `SupportsChatGetResponse` protocol, so you can swap them without touching agent / tool / middleware code.
