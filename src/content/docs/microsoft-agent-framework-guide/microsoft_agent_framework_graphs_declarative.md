@@ -6,7 +6,7 @@ framework: microsoft-agent-framework
 
 # Workflows & Declarative Agents
 
-> **Errata (April 2026).** An earlier draft of this page described an `agent_framework.graphs` module with classes like `AgentGraph`, `GraphNode`, `GraphEdge`, `ConditionalEdge`, `CheckpointConfig`, `HITLConfig`, `TimeTravelConfig`, `ErrorPolicy`, and `ObservabilityConfig`. **None of those classes exist** in the `agent-framework` package. This page was rewritten after direct introspection of `agent-framework-core==1.1.0` and `agent-framework-declarative==1.0.0b260421`.
+> **Errata (April 2026).** An earlier draft of this page described an `agent_framework.graphs` module with classes like `AgentGraph`, `GraphNode`, `GraphEdge`, `ConditionalEdge`, `CheckpointConfig`, `HITLConfig`, `TimeTravelConfig`, `ErrorPolicy`, and `ObservabilityConfig`. **None of those classes exist** in the `agent-framework` package. This page was rewritten after direct introspection of `agent-framework-core==1.2.1` and `agent-framework-declarative==1.0.0b260428`.
 
 Two real capabilities ship under this umbrella:
 
@@ -23,7 +23,7 @@ pip install agent-framework
 
 The workflow types are exported from the top-level `agent_framework` package.
 
-### Primitives (verified against `agent-framework-core==1.1.0`)
+### Primitives (verified against `agent-framework-core==1.2.1`)
 
 | Class / function | Purpose |
 |---|---|
@@ -178,7 +178,7 @@ The `FileCheckpointStorage` API exposes `.save`, `.load`, `.get_latest`, `.list_
 pip install agent-framework-declarative --pre
 ```
 
-### Primitives (verified against `agent-framework-declarative==1.0.0b260421`)
+### Primitives (verified against `agent-framework-declarative==1.0.0b260428`)
 
 | Class | Purpose |
 |---|---|

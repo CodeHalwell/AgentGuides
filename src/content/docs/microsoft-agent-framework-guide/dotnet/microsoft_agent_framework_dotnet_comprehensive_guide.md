@@ -5,7 +5,7 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-Latest: 1.1.0
+Latest: 1.2.1
 # Microsoft Agent Framework .NET - Comprehensive Technical Guide
 
 **Release:** October 2025  

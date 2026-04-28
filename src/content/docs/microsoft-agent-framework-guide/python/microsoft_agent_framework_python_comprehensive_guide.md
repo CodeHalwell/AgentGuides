@@ -1,20 +1,19 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Release: GA April 3, 2026; patch 1.0.1 April 10, 2026 Framework Version: 1.0.1 Target Platform: Python 3.10+"
+description: "Framework Version: 1.2.1 Target Platform: Python 3.10+"
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest: 1.0.1 | Updated: April 20, 2026
+Latest: 1.2.1 | Updated: April 28, 2026
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Release:** GA April 3, 2026; patch 1.0.1 April 10, 2026
-**Framework Version:** 1.0.1
+**Framework Version:** 1.2.1
 **Target Platform:** Python 3.10+
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.1.0`).**
+> **API reference (verified against `agent-framework-core==1.2.1`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Primary agent class:** `Agent`. Construct with `Agent(client=<ChatClient>, instructions=..., tools=[...])`.
@@ -1139,3 +1138,11 @@ Same pattern works for `SupportsAgentRun`, `SupportsChatGetResponse`, and `Suppo
 | MCPStdio / HTTP / WebSocket transports | [MCP](./microsoft_agent_framework_python_mcp/) |
 | Skills (progressive-disclosure knowledge) | [Skills](./microsoft_agent_framework_python_skills/) |
 | BaseChatClient / BaseEmbeddingClient / ContextProvider extension points | [Advanced Patterns](./microsoft_agent_framework_python_advanced/) |
+
+---
+
+## Revision history
+
+| Date | Framework version (installed) | Summary of changes | Reviewer |
+|------|-------------------------------|--------------------|----------|
+| 2026-04-28 | agent-framework-core 1.2.1 | Bumped core 1.1.0 → 1.2.1; providers 1.0.0b260421 → 1.0.0b260428. All version strings and `agent-framework-core==` pin updated. Imports verified against installed 1.2.1. | Claude routine |

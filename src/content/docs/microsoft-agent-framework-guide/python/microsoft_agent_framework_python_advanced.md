@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Advanced Patterns"
-description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.1.0."
+description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.2.1."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 This page covers the extensibility hooks in `agent-framework-core` that the feature-level pages gloss over: writing your own chat client, embedding client, or context provider, feature-detecting clients at runtime via the `Supports*` protocols, and opting into experimental/RC APIs.
 
-Verified against `agent-framework-core==1.1.0`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
+Verified against `agent-framework-core==1.2.1`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
 
 ## Custom chat client — `BaseChatClient`
 

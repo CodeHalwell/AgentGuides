@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Multi-Agent Orchestration"
-description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders — all from agent-framework-orchestrations 1.0.0b260421. Real signatures and runnable examples."
+description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders — all from agent-framework-orchestrations 1.0.0b260428. Real signatures and runnable examples."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 Five built-in orchestration patterns ship in `agent-framework-orchestrations`. Each is a fluent builder that produces a `Workflow` — the same object type returned by `WorkflowBuilder`. Once you have a workflow, run it with `workflow.run(...)` or stream events with `workflow.run(..., stream=True)`.
 
-All signatures below are verified against `agent-framework-orchestrations==1.0.0b260421`.
+All signatures below are verified against `agent-framework-orchestrations==1.0.0b260428`.
 
 | Pattern | Builder | Topology | Use case |
 |---|---|---|---|
@@ -100,7 +100,7 @@ Dispatches the same input to every participant in parallel and aggregates the re
 from agent_framework_orchestrations import ConcurrentBuilder
 
 workflow = ConcurrentBuilder(participants=[researcher, analyst, writer]).build()
-result = await workflow.run("Summarise agent-framework 1.1.0")
+result = await workflow.run("Summarise agent-framework 1.2.1")
 ```
 
 Custom aggregator (sync or async, returning a value or `None`):

@@ -9,7 +9,7 @@ language: python
 
 Skills are a **progressive-disclosure** knowledge pattern. Instead of stuffing every reference doc and procedure into the system prompt, you advertise skill *names and descriptions* (cheap), let the model decide which to load (`load_skill`), and then fetch resources (`read_skill_resource`) or run scripts (`run_skill_script`) on demand. The total context stays small until the agent actually needs deeper knowledge.
 
-This follows the [Agent Skills specification](https://agentskills.io). Verified against `agent-framework-core==1.1.0` (`agent_framework._skills`). Marked `experimental` — API may evolve.
+This follows the [Agent Skills specification](https://agentskills.io). Verified against `agent-framework-core==1.2.1` (`agent_framework._skills`). Marked `experimental` — API may evolve.
 
 ## The primitives
 

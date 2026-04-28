@@ -6,7 +6,7 @@ framework: microsoft-agent-framework
 
 # A2A Protocol
 
-> **Errata (April 2026).** An earlier draft of this page described a sprawling `agent_framework.a2a` submodule with classes like `A2AProtocolAdapter`, `A2AClient`, `A2AMessage`, `OAuth2Authentication`, `EntraIdAuthentication`, `MutualTLSAuthentication`, `ApiKeyAuthentication`, `AccessPolicy`, `SigningConfig`, `RateLimitConfig`, `CircuitBreakerConfig`, and `EncryptionConfig`. **None of those classes exist.** The `agent_framework.a2a` package exports exactly one class: `A2AAgent`. This page was rewritten after direct introspection of `agent-framework-a2a==1.0.0b260421`.
+> **Errata (April 2026).** An earlier draft of this page described a sprawling `agent_framework.a2a` submodule with classes like `A2AProtocolAdapter`, `A2AClient`, `A2AMessage`, `OAuth2Authentication`, `EntraIdAuthentication`, `MutualTLSAuthentication`, `ApiKeyAuthentication`, `AccessPolicy`, `SigningConfig`, `RateLimitConfig`, `CircuitBreakerConfig`, and `EncryptionConfig`. **None of those classes exist.** The `agent_framework.a2a` package exports exactly one class: `A2AAgent`. This page was rewritten after direct introspection of `agent-framework-a2a==1.0.0b260428`.
 
 ## What A2A actually is
 

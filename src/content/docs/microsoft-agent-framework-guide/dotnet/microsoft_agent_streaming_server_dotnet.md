@@ -7,7 +7,7 @@ language: dotnet
 
 # Microsoft Agent Streaming Server (.NET)
 
-Latest: 1.1.0
+Latest: 1.2.1
 Last verified: 2025-11
 
 

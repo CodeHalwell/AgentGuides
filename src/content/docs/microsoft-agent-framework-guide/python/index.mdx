@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python)"
-description: "Unified Python agent SDK — core stable at 1.1.0, provider packages in 1.0.0 beta (April 2026)."
+description: "Unified Python agent SDK — core stable at 1.2.1, provider packages in 1.0.0 beta (April 2026)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    Core **1.1.0** stable · providers `1.0.0b260421` beta · April 2026 · Python 3.10 – 3.13
+    Core **1.2.1** stable · providers `1.0.0b260428` beta · April 2026 · Python 3.10 – 3.13
   </Card>
   <Card title="Best for" icon="puzzle">
     Azure-native agents, multi-agent orchestration via `WorkflowBuilder`, cross-framework A2A, declarative YAML agents.
@@ -27,7 +27,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="caution" title="Earlier drafts had fabricated APIs">
-  Pages under this guide previously documented `agent_framework.graphs.AgentGraph`, `agent_framework.a2a.A2AProtocolAdapter`, `AzureAIAgentClient`, `ChatAgent`, `ai_function`, and other names that **do not exist**. The real primary agent class in Python is `Agent`; the Azure chat client is `FoundryChatClient` from `agent_framework.foundry`. Pages were rewritten in April 2026 after introspecting `agent-framework-core==1.1.0`. See [Errata in the comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) for the running list.
+  Pages under this guide previously documented `agent_framework.graphs.AgentGraph`, `agent_framework.a2a.A2AProtocolAdapter`, `AzureAIAgentClient`, `ChatAgent`, `ai_function`, and other names that **do not exist**. The real primary agent class in Python is `Agent`; the Azure chat client is `FoundryChatClient` from `agent_framework.foundry`. Pages were rewritten in April 2026 after introspecting `agent-framework-core==1.2.1`. See [Errata in the comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) for the running list.
 </Aside>
 
 <Aside type="tip" title="Where to start">
@@ -106,7 +106,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 
 ## What's shipped (April 2026 introspection)
 
-- **Stable core APIs** — `agent-framework-core 1.1.0` with LTS commitment.
+- **Stable core APIs** — `agent-framework-core 1.2.1` with LTS commitment.
 - **First-party chat clients** — `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, plus Bedrock / Ollama in the `1.0.0b` provider line.
 - **Middleware** — `@chat_middleware` / `@agent_middleware` / `@function_middleware` decorators and base classes; pass `middleware=[...]` (must be a list in 2026 releases).
 - **Workflows** — `WorkflowBuilder` with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_switch_case_edge_group`; checkpoint via `FileCheckpointStorage` / `InMemoryCheckpointStorage`.
@@ -118,7 +118,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   - `middleware=` now requires a list — no longer accepts a single instance.
   - `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
   - `AggregateContextProvider` removed — compose `ContextProvider` instances directly.
-  - `context_providers` stays **plural** in `agent-framework-core==1.1.0` (verified against source). An earlier draft of this guide incorrectly said it was renamed to singular.
+  - `context_providers` stays **plural** in `agent-framework-core==1.2.1` (verified against source). An earlier draft of this guide incorrectly said it was renamed to singular.
   - Migrating from standalone Semantic Kernel or AutoGen? See the [official guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/) — ~2–4 hours for a typical app.
 </Aside>
 
@@ -140,7 +140,7 @@ async def main():
 asyncio.run(main())
 ```
 
-> Previous drafts of this page used a `ChatAgent(chat_client=...)` minimal example. `ChatAgent` is not a public class in `agent-framework-core` 1.1.0 — the primary agent class is `Agent` and the keyword is `client=` (not `chat_client=`).
+> Previous drafts of this page used a `ChatAgent(chat_client=...)` minimal example. `ChatAgent` is not a public class in `agent-framework-core` 1.2.1 — the primary agent class is `Agent` and the keyword is `client=` (not `chat_client=`).
 
 Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals)**
 
@@ -150,8 +150,9 @@ Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-28 | 1.2.1 | Core bumped 1.1.0 → 1.2.1; provider beta bumped 1.0.0b260421 → 1.0.0b260428. All `agent-framework-core==1.1.0` references updated to 1.2.1. Imports verified against installed package. |
 | 2026-04-22 | 1.0.3 | Added dedicated pages: Tools, Skills, Checkpointing, Compaction, Observability & Telemetry, Evaluation. Zero→Hero reflow to 18 steps; Jump-to-topic grid and Reference card grid updated. |
-| 2026-04-22 | 1.0.2 | Added dedicated pages: Model Providers, Orchestration, Middleware, MCP, Human-in-the-loop. Verified against source of `agent-framework-core==1.1.0`; corrected `context_providers` plural-vs-singular errata. |
+| 2026-04-22 | 1.0.2 | Added dedicated pages: Model Providers, Orchestration, Middleware, MCP, Human-in-the-loop. Verified against source of `agent-framework-core==1.2.1`; corrected `context_providers` plural-vs-singular errata. |
 | 2026-04-21 | 1.0.1 | Index redesigned into Zero → Hero reading order + Jump-to-topic grid using Starlight cards. |
 | 2026-04-20 | 1.0.1 | Version pin corrected to `v1.0.1`; verified via `agent-framework` PyPI package. |
 | April 16, 2026 | 1.0 GA | Graduated from Preview; `ChatClientAgentOptions.Instructions` removed; first-party connectors; Azure App Service support. |
