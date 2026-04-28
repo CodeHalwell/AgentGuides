@@ -183,4 +183,4 @@ The rule of thumb: if a reader tracing your graph would be surprised the behavio
 
 ## What this chapter replaced
 
-Earlier drafts of this chapter documented `@pre_model_hook` / `@post_model_hook` decorators imported from `langgraph.llm_hooks`. **That module does not exist.** The real primitives are `create_agent(middleware=[...])` in `langchain.agents` (new, recommended) and `create_react_agent(pre_model_hook=..., post_model_hook=...)` in `langgraph.prebuilt` (older, deprecated). This chapter has been rewritten against the installed packages (`langchain` and `langgraph==1.1.9`).
+Earlier drafts of this chapter documented `@pre_model_hook` / `@post_model_hook` decorators imported from `langgraph.llm_hooks`. **That module does not exist.** The real primitives are `create_agent(middleware=[...])` in `langchain.agents` (new, recommended) and `create_react_agent(pre_model_hook=..., post_model_hook=...)` in `langgraph.prebuilt` (older, deprecated). This chapter has been rewritten against the installed packages (`langchain` and `langgraph==1.1.10`).

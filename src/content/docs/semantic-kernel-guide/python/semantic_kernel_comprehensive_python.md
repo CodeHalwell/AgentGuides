@@ -5,14 +5,14 @@ framework: semantic-kernel
 language: python
 ---
 
-Latest: 1.41.2 | Updated: April 2026
+Latest: 1.41.3 | Updated: April 28, 2026
 # Semantic Kernel Comprehensive Guide (Python)
 
 **Complete Python Reference for Building AI Agents and Agentic Systems**
 
-Last Updated: April 2026
+Last Updated: April 28, 2026
 Python Version: 3.10+ (3.9 dropped as of v1.41.2)
-Semantic Kernel: 1.41.2+
+Semantic Kernel: 1.41.3+
 
 ---
 
@@ -2238,6 +2238,7 @@ await adapter.start(port=8080)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.41.3 | April 28, 2026 | Version bumped 1.41.2 → 1.41.3 (patch release); header and version references updated. PyPI confirms 1.41.3 as latest stable. |
 | 1.41.2 | April 8, 2026 | Full MCP server/client support; A2A protocol; Oracle database connector; Google GenAI SDK migration; Python 3.10+ required |
 | 1.38.0 | November 2025 | Previous documented version |
 

@@ -10,7 +10,7 @@ sidebar:
 
 # Streaming modes — API reference
 
-Verified against **`langgraph==1.1.9`** (modules: `langgraph.types`, `langgraph.pregel.main`).
+Verified against **`langgraph==1.1.10`** (modules: `langgraph.types`, `langgraph.pregel.main`).
 
 Every compiled graph (both `StateGraph` and `@entrypoint` workflows) exposes:
 

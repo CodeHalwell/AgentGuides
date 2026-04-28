@@ -4,7 +4,7 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: 0.14.6 | Updated: April 25, 2026
+Latest: 0.14.7 | Updated: April 28, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -3133,6 +3133,7 @@ This comprehensive framework enables developers to build production-grade AI app
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.14.7 | April 28, 2026 | Patch release; stability improvements. Version confirmed against installed `openai-agents 0.14.7` (`.routine-envs/main-py-0428`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified. |
 | 0.14.6 | April 25, 2026 | Patch release; stability improvements. Version confirmed against installed `openai-agents 0.14.6` (`.routine-envs/main-py-0425`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified. |
 | 0.14.5 | April 23, 2026 | Patch releases (0.14.3–0.14.5); stability improvements. Version confirmed against PyPI `openai-agents 0.14.5`. |
 | 0.14.2 | April 18, 2026 | Default Realtime model updated to `gpt-realtime-1.5`; `MCPServer` exposes `list_resources()`, `list_resource_templates()`, `read_resource()`; `MCPServerStreamableHttp` exposes `session_id` for resuming sessions across reconnects; Chat Completions opt-in reasoning-content replay via `should_replay_reasoning_content`; runtime and session edge case fixes; no breaking changes |

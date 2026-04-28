@@ -457,7 +457,7 @@ print("Cache hit:", result["cache_hit"])  # True
 
 ## Further built-in features
 
-Below this point, earlier drafts documented several "v1.0.3+ features" that do not exist in the installed `langgraph==1.1.9` package. The following were removed after verifying against the installed library:
+Below this point, earlier drafts documented several "v1.0.3+ features" that do not exist in the installed `langgraph==1.1.10` package. The following were removed after verifying against the installed library:
 
 - **Node Caching** — `langgraph.cache.cache_node`, `SemanticCache`, `CachePolicy` are not real. For caching today, use LangGraph's long-term `Store` (see [Chapter 5 — Memory & persistence](/langgraph-guide/python/chapter-05-memory/)) or wrap expensive tool calls with Python's own `functools.lru_cache` / a Redis client (the "Caching and Memoization" pattern above is the real approach).
 - **Deferred Nodes** — `@deferred(wait_for=[...])` and `langgraph.graph.deferred` do not exist. Fan-in is already native: an edge from multiple sources into the same target waits for all upstream nodes to complete before that target runs (see [Chapter 3 — Parallel Worker Pattern](/langgraph-guide/python/chapter-03-multi-agent/#example-2-parallel-worker-pattern)).

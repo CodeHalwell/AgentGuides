@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.1.68 | Updated: April 25, 2026
+Latest: 0.1.69 | Updated: April 28, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -2931,6 +2931,7 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.1.69 | April 28, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.69` (`.routine-envs/main-py-0428`); `query`, `ClaudeAgentOptions` imports verified. |
 | 0.1.68 | April 25, 2026 | Patch release (0.1.67–0.1.68); stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.68` (`.routine-envs/main-py-0425`); `query`, `ClaudeAgentOptions` imports verified. |
 | 0.1.66 | April 23, 2026 | Patch release; stability improvements. Version bump confirmed against PyPI `claude-agent-sdk 0.1.66`. |
 | 0.1.65 | April 22, 2026 | Patch release; bundled Claude Code CLI updated; dependency pinning improvements. |
