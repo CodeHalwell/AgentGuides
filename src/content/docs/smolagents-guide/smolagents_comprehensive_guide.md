@@ -971,6 +971,7 @@ class Model(ABC):
 The default model implementation uses Hugging Face's Inference API:
 
 ```python
+import os
 from smolagents import CodeAgent, InferenceClientModel
 
 # Minimal configuration (uses HF defaults)
@@ -992,8 +993,7 @@ model = InferenceClientModel(
     model_id="deepseek-ai/DeepSeek-R1",
     provider="together",
     token=os.environ.get("HF_TOKEN"),
-    timeout=30.0,
-    max_retries=3
+    timeout=120,
 )
 
 # Create agent with InferenceClient model
@@ -1002,18 +1002,17 @@ result = agent.run("What is 2 + 2?")
 print(result)  # Output: 4
 ```
 
-**v1.24.0+ Note: `HfApiModel` has been deprecated.** Use `InferenceClientModel` for all new code:
+**v1.24.0 Note: `HfApiModel` has been removed.** It raises `ImportError` in v1.24.0. Use `InferenceClientModel` for all code:
 
 ```python
-# CURRENT (v1.24.0+): Use InferenceClientModel
+# CURRENT: Use InferenceClientModel
 from smolagents import InferenceClientModel, CodeAgent
 
 model = InferenceClientModel(model_id="Qwen/Qwen2.5-72B-Instruct")
 agent = CodeAgent(tools=[], model=model)
 
-# DEPRECATED (still works with shim in v1.24.0):
-# from smolagents import HfApiModel
-# model = HfApiModel(model_id="Qwen/Qwen2.5-72B-Instruct")  # DeprecationWarning
+# REMOVED in v1.24.0 — raises ImportError:
+# from smolagents import HfApiModel  # ImportError: cannot import name 'HfApiModel'
 ```
 
 **Recommended Models for Different Use Cases:**
@@ -2445,7 +2444,7 @@ result = agent.run("Analyse the dataset [1, 2, 3, 4, 5, 100]")
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.24.0 | January 16, 2026 | `HfApiModel` deprecated (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents |
+| 1.24.0 | 2026-04-27 | `HfApiModel` removed (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents. Guide corrections (2026-04-27): clarified that `HfApiModel` is fully removed (raises `ImportError`), not deprecated with a shim; removed invalid `max_retries` argument from `InferenceClientModel` example (not a constructor parameter); added missing `import os` to code block. Verified against installed smolagents 1.24.0. |
 | 1.23.0 | November 2025 | Previous documented version |
 
 
