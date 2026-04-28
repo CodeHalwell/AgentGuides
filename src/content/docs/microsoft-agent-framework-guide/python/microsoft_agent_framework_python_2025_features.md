@@ -162,6 +162,123 @@ The framework is async-first:
 - **Durable agents on Azure Functions.** `agent-framework-azurefunctions` + `agent-framework-durabletask` expose `DurableAIAgent`, `DurableAIAgentClient`, and `AgentFunctionApp` for long-running orchestrations.
 - **Multiple LLM providers.** Swap Foundry, OpenAI, Anthropic, Bedrock, Ollama, and local Foundry via the chat-client of the same interface (`SupportsChatGetResponse`).
 
+## Sessions and conversation history
+
+`AgentSession` is a lightweight state container — provider instances live on the agent, the session only carries `session_id`, an optional `service_session_id` (for service-side history like OpenAI Responses), and a mutable `state: dict[str, Any]` shared across providers.
+
+```python
+from agent_framework import Agent, AgentSession, FileHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+history = FileHistoryProvider(storage_path="./sessions", skip_excluded=True)
+agent = Agent(client=OpenAIChatClient(), context_providers=[history])
+
+session = agent.create_session(session_id="user-42")        # picks up ./sessions/user-42.jsonl
+await agent.run("Continue the chat", session=session)
+
+# Session round-trips cleanly through to_dict/from_dict — handy if you want to
+# stash a snapshot in your own datastore alongside the JSONL.
+snapshot = session.to_dict()
+restored = AgentSession.from_dict(snapshot)
+```
+
+Built-in providers (`InMemoryHistoryProvider`, `FileHistoryProvider`) plus the Redis/Cosmos backends in the beta sub-packages all subclass `HistoryProvider`. To roll your own, override `get_messages()` and `save_messages()` — the rest of the lifecycle (`load_messages` / `store_inputs` / `store_outputs` / `store_context_messages` flags) is handled by the parent.
+
+## MCP — three transports, one tool surface
+
+```python
+from agent_framework import Agent, MCPStreamableHTTPTool, MCPStdioTool, MCPWebsocketTool
+from agent_framework.openai import OpenAIChatClient
+
+# Streamable HTTP (most remote MCP servers)
+async with MCPStreamableHTTPTool(
+    name="learn",
+    url="https://learn.microsoft.com/api/mcp",
+    request_timeout=30,
+    # Per-request auth headers from agent.run(..., function_invocation_kwargs=...)
+    header_provider=lambda kwargs: {"Authorization": f"Bearer {kwargs['token']}"},
+) as learn:
+    agent = Agent(client=OpenAIChatClient(), tools=learn)
+    await agent.run("Explain DefaultAzureCredential",
+                    function_invocation_kwargs={"token": user_token})
+
+# Stdio (local servers — filesystem, git, sqlite, etc.)
+async with MCPStdioTool(
+    name="filesystem",
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+) as fs:
+    agent = Agent(client=OpenAIChatClient(), tools=fs)
+
+# WebSocket (bidirectional realtime)
+async with MCPWebsocketTool(name="realtime", url="wss://service.example.com/mcp") as rt:
+    agent = Agent(client=OpenAIChatClient(), tools=rt)
+```
+
+Per-tool approval gates work uniformly:
+
+```python
+mcp = MCPStdioTool(
+    name="git",
+    command="uvx",
+    args=["mcp-server-git"],
+    approval_mode={
+        "always_require_approval": ["git_push", "git_reset"],
+        "never_require_approval": ["git_status", "git_diff"],
+    },
+)
+```
+
+For hosted MCP (the provider runs the MCP client server-side), feature-detect via `isinstance(client, SupportsMCPTool)` and call `client.get_mcp_tool(name=..., url=...)`. See the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) for full transport, header, and approval coverage.
+
+## Magentic — manager + workers + replanning
+
+`MagenticBuilder` is the most sophisticated of the orchestration patterns: a manager agent maintains a task ledger, dispatches to workers, and can replan when a stall is detected.
+
+```python
+from agent_framework_orchestrations import MagenticBuilder, StandardMagenticManager
+
+workflow = (
+    MagenticBuilder(
+        participants=[researcher, analyst, writer],
+        manager_agent=StandardMagenticManager(client=OpenAIChatClient(model="gpt-4o")),
+        enable_plan_review=True,        # pause after the initial plan for human review
+        checkpoint_storage=storage,     # resume across process restarts
+    )
+    .with_human_input_on_stall()        # ask a human when the manager loops
+    .build()
+)
+```
+
+The plan-review HITL event is durable — combined with checkpointing, a user can come back hours later in a different pod and approve the plan, and the workflow resumes from the exact superstep that paused.
+
+## Custom workflow executors
+
+Beyond agents, workflows accept arbitrary executors. The `@executor` decorator is the lightweight form; subclassing `Executor` gives access to per-instance state and `@response_handler` for HITL.
+
+```python
+from agent_framework import AgentExecutorResponse, WorkflowContext, executor
+
+
+@executor(
+    id="upper_case_executor",
+    input=AgentExecutorResponse,
+    output=AgentExecutorResponse,
+    workflow_output=str,
+)
+async def upper_case(
+    response: AgentExecutorResponse,
+    ctx: WorkflowContext[AgentExecutorResponse, str],
+) -> None:
+    upper_text = response.agent_response.text.upper()
+    # with_text preserves the prior conversation chain so downstream
+    # AgentExecutors still see the full history.
+    await ctx.send_message(response.with_text(upper_text))
+    await ctx.yield_output(upper_text)
+```
+
+The `with_text` helper on `AgentExecutorResponse` matters when you transform agent output and want the next `AgentExecutor` to retain conversation history — sending a plain `str` instead would invoke `from_str` on the downstream executor and reset its message cache.
+
 ## Further reading
 
 - [Microsoft Learn — Agent Framework](https://learn.microsoft.com/agent-framework/)

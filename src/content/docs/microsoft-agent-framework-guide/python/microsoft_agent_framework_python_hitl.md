@@ -102,6 +102,44 @@ for evt in result.get_request_info_events():
 result = await workflow.run(responses={"<id>": "technical"})
 ```
 
+### Explicit response-handler types
+
+`@response_handler` defaults to introspecting parameter annotations. When you're using forward references (the request/response classes are imported lazily), or you're building executors dynamically and don't want to lock the parameter types, switch to the **explicit-types** form. **All** types must come from decorator parameters in this mode — annotation-based introspection is disabled.
+
+```python
+from agent_framework import Executor, WorkflowContext, handler, response_handler
+
+
+class Approver(Executor):
+    @handler
+    async def submit(self, draft: str, ctx: WorkflowContext[str, str]) -> None:
+        await ctx.request_info(Approval(draft=draft), response_type=bool)
+
+    # Required: request= and response=. Optional: output= (for ctx.send_message)
+    # and workflow_output= (for ctx.yield_output). String forward references
+    # (e.g. request="Approval") resolve against the decorated function's globals.
+    @response_handler(request=Approval, response=bool, workflow_output=str)
+    async def on_decision(self, original_request, approved, ctx):
+        await ctx.yield_output("approved" if approved else "rejected")
+```
+
+When you mix the two modes the framework raises at registration — be explicit about which one you want. Explicit forward-reference example for a request type imported in another module:
+
+```python
+@response_handler(request="my_app.requests:BudgetCheck", response=bool)
+async def on_budget(self, original_request, approved, ctx): ...
+```
+
+Inspect what handlers are registered on an executor at runtime via the `is_request_supported(request_type, response_type)` method that `RequestInfoMixin` adds:
+
+```python
+executor = Approver(id="approver")
+assert executor.is_request_supported(Approval, bool)         # True
+assert not executor.is_request_supported(Approval, str)      # different response type
+```
+
+Useful for unit-testing wiring before you stand up the workflow.
+
 ## Orchestration HITL
 
 ### Sequential — approve after each stage
