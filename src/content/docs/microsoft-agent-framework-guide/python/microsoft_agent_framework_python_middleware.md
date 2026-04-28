@@ -300,6 +300,105 @@ await agent.run("...", function_invocation_kwargs={"tenant_id": "acme"})
 
 `function_invocation_kwargs` in the outer `agent.run(...)` call surfaces as `context.kwargs` inside function middleware, so any runtime secrets, tenant IDs, or request-scoped state flow through cleanly.
 
+## `ChatMiddleware` — caching the model call
+
+Because chat middleware wraps the actual model invocation (every iteration of the tool loop), it's the right place to short-circuit the network call when you already have the answer:
+
+```python
+import hashlib
+import json
+import time
+from agent_framework import ChatContext, ChatMiddleware, ChatResponse, Message
+
+
+class MemoryChatCache(ChatMiddleware):
+    """In-memory chat-call cache keyed on the (messages, options) pair.
+
+    Skips downstream chat clients on a cache hit by setting ``context.result``
+    *without* calling ``call_next()``. Streaming calls fall through to the
+    real client — caching streams without re-yielding chunks needs more care.
+    """
+
+    def __init__(self, ttl_seconds: float = 300) -> None:
+        self.ttl = ttl_seconds
+        self._store: dict[str, tuple[float, ChatResponse]] = {}
+
+    @staticmethod
+    def _key(messages: list[Message], options: dict) -> str:
+        blob = json.dumps(
+            {
+                "m": [(m.role, m.text or "") for m in messages],
+                "o": {k: v for k, v in options.items() if isinstance(v, (str, int, float, bool))},
+            },
+            sort_keys=True,
+        )
+        return hashlib.sha256(blob.encode()).hexdigest()
+
+    async def process(self, context: ChatContext, call_next) -> None:
+        if context.stream:
+            await call_next()
+            return
+
+        key = self._key(list(context.messages), dict(context.options or {}))
+        cached = self._store.get(key)
+        if cached and cached[0] >= time.monotonic():
+            context.result = cached[1]              # short-circuit: skip the model
+            return
+
+        await call_next()
+        if isinstance(context.result, ChatResponse):
+            self._store[key] = (time.monotonic() + self.ttl, context.result)
+```
+
+Two things this pattern leans on that aren't immediately obvious:
+
+- **Setting `context.result` before `call_next()` skips the model.** No tool loop iteration is consumed. This is different from agent middleware, which short-circuits the entire run (but the model would still see the cached response on the next agent call).
+- **Stream caching is opt-in.** The pattern above bypasses cache lookups when `context.stream is True`. For streaming caches, accumulate chunks in a `stream_transform_hooks` callback and replay them via a synthetic `ResponseStream` — the [streaming hooks section](#streaming-hooks-on-chatcontext) shows the hook-based shape.
+
+## `agent_middleware` decorator with stateful closures
+
+The `@agent_middleware` decorator marks a plain function for the agent pipeline, but the function can still capture mutable state via a closure — handy when you want middleware-as-config without writing a class:
+
+```python
+from agent_framework import Agent, AgentContext, agent_middleware
+
+
+def make_concurrency_limiter(max_inflight: int):
+    """Limit how many runs can be in flight concurrently for this agent."""
+    import asyncio
+    semaphore = asyncio.Semaphore(max_inflight)
+
+    @agent_middleware
+    async def limiter(context: AgentContext, call_next) -> None:
+        async with semaphore:
+            await call_next()
+
+    return limiter
+
+
+def make_run_counter():
+    """Count completed runs by name — useful for cheap traffic dashboards."""
+    counts: dict[str, int] = {}
+
+    @agent_middleware
+    async def counter(context: AgentContext, call_next) -> None:
+        await call_next()
+        counts[context.agent.name or "<unnamed>"] = counts.get(context.agent.name or "<unnamed>", 0) + 1
+
+    counter.counts = counts                         # expose for inspection
+    return counter
+
+
+limiter = make_concurrency_limiter(max_inflight=4)
+counter = make_run_counter()
+
+agent = Agent(client=client, name="research", middleware=[limiter, counter])
+# After running:
+print(counter.counts)
+```
+
+`@agent_middleware` (and its `@chat_middleware` / `@function_middleware` siblings) sets a `_middleware_type` attribute on the function so the framework routes it into the right pipeline — that's the only difference between the bare callable and an explicit `AgentMiddleware` subclass. Mixing decorated functions with class-based middleware in the same `middleware=[...]` list is fully supported.
+
 ## Emitting OpenTelemetry spans
 
 Agent-framework auto-emits `agent_framework.*` spans without any middleware. Use middleware only when you want a business-level span around it:

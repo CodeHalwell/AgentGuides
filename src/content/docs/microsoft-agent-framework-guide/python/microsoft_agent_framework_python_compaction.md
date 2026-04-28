@@ -50,6 +50,57 @@ projected = await apply_compaction(messages, strategy=strategy)
 
 Good default. Deterministic, no extra LLM calls, preserves system anchors.
 
+### What "groups" means in practice
+
+A *group* is whatever the framework's group annotator considered a single logical unit — typically a user turn, an assistant turn, or a tool-call group (a function call **plus** its tool-result message stay together). Counting groups instead of messages is what lets the strategy keep tool calls atomic: it never strands a `function_call` without its `function_result`.
+
+```python
+import asyncio
+from agent_framework import (
+    Content,
+    EXCLUDED_KEY,
+    EXCLUDE_REASON_KEY,
+    Message,
+    SlidingWindowStrategy,
+    apply_compaction,
+)
+
+# A short conversation with system anchor + 4 user/assistant pairs + a tool-call group.
+messages = [
+    Message(role="system", contents=[Content.from_text("Be concise.")]),
+    *[
+        Message(role=role, contents=[Content.from_text(f"{role} {i}")])
+        for i in range(4)
+        for role in ("user", "assistant")
+    ],
+    Message(role="assistant", contents=[Content.from_function_call(
+        call_id="c1", name="lookup", arguments={"id": 42},
+    )]),
+    Message(role="tool", contents=[Content.from_function_result(
+        call_id="c1", result={"status": "ok"},
+    )]),
+]
+
+strategy = SlidingWindowStrategy(keep_last_groups=2, preserve_system=True)
+asyncio.run(apply_compaction(messages, strategy=strategy))
+
+excluded = [m for m in messages if m.additional_properties.get(EXCLUDED_KEY)]
+print(len(excluded), "messages excluded with reason",
+      excluded[0].additional_properties.get(EXCLUDE_REASON_KEY))
+# 6 messages excluded with reason sliding_window
+```
+
+Two things this snippet illustrates:
+
+- **System messages survive `preserve_system=True`.** Even with `keep_last_groups=2`, the system anchor is untouched and isn't counted toward the kept-groups quota.
+- **The tool-call group counts as one group.** Both the `function_call` and the `function_result` survive together — `keep_last_groups=2` keeps the latest user/assistant turn and the tool group, not 2 messages out of 3.
+
+### Edge cases worth knowing
+
+- `keep_last_groups <= 0` raises `ValueError` at construction — you cannot configure a window of size zero.
+- `preserve_system=False` lets the strategy drop the system anchor too. Use this when system instructions are duplicated by an `instructions=` parameter on the agent (the framework injects them again on each call) and you don't want to pay for both copies.
+- The strategy mutates messages in place via `additional_properties[EXCLUDED_KEY] = True`. Call `included_messages(messages)` to get the projected view, or filter on `EXCLUDED_KEY` directly when you want to display "32 messages collapsed" in your UI.
+
 ## Selective tool-call compaction
 
 ```python

@@ -646,6 +646,70 @@ assert broadcast.target_ids == ["worker_a", "worker_b", "worker_c"]
 
 If you don't pass `selection_func_name=` the framework tries to derive it from the callable's `__qualname__`; lambdas and closures don't have a useful one, which is why you'll want the explicit name for anything you plan to persist.
 
+### `FanOutEdgeGroup` selectors — runtime routing
+
+`selection_func` is invoked **per message** with `(payload, available_target_ids)` and must return the subset of ids that should receive the payload. Returning all of them is equivalent to omitting the selector. Returning `[]` causes the message to be dropped — use this when the right answer to "where should this go?" is sometimes "nowhere".
+
+A real-world example: shard a stream of orders by region, with a fallback for unknown regions:
+
+```python
+from agent_framework import (
+    Executor,
+    FanOutEdgeGroup,
+    FunctionExecutor,
+    WorkflowBuilder,
+)
+
+
+def shard_by_region(order: dict, available: list[str]) -> list[str]:
+    region = (order.get("region") or "").lower()
+    if region == "eu":
+        return ["worker_eu"]
+    if region in ("us", "ca"):
+        return ["worker_na"]
+    if region in ("jp", "kr", "sg", "in"):
+        return ["worker_apac"]
+    return ["dead_letter"]                       # everything else
+
+
+# Stand-in executors — in a real workflow these would be AgentExecutors
+# wrapping region-specific agents.
+ingest = FunctionExecutor(lambda raw: raw, id="ingest")
+worker_eu   = FunctionExecutor(lambda o: o, id="worker_eu")
+worker_na   = FunctionExecutor(lambda o: o, id="worker_na")
+worker_apac = FunctionExecutor(lambda o: o, id="worker_apac")
+dead_letter = FunctionExecutor(lambda o: o, id="dead_letter")
+
+shard = FanOutEdgeGroup(
+    source_id=ingest.id,
+    target_ids=[worker_eu.id, worker_na.id, worker_apac.id, dead_letter.id],
+    selection_func=shard_by_region,
+    selection_func_name="shard_by_region",      # stable id for serialisation
+    id="region-shard",
+)
+
+workflow = (
+    WorkflowBuilder(start_executor=ingest)
+    .add_executors([worker_eu, worker_na, worker_apac, dead_letter])
+    .add_edge_group(shard)
+    .build()
+)
+```
+
+Three properties of the selector that surface in serialisation and debugging:
+
+- **`available` is a defensive copy.** Mutating the list inside the selector is harmless to the framework. Return a new list — don't try to "filter in place."
+- **The callable does NOT cross checkpoints.** When the workflow is checkpointed (`checkpoint_storage=...`) only `selection_func_name` is persisted. On resume, the runner looks up the same name in the running process — keep the selector module-level so the import path stays stable.
+- **No selector means broadcast.** A `FanOutEdgeGroup` constructed with `selection_func=None` (or no kwarg at all) sends every message to every target — the same semantics as `.add_fan_out_edges(...)` without a selector.
+
+Inspect a configured group at runtime — the API exposes a snapshot of the configuration without leaking the live callable identity:
+
+```python
+print(shard.target_ids)          # ['worker_eu', 'worker_na', 'worker_apac', 'dead_letter']
+print(shard.selection_func is shard_by_region)  # True — same callable, no copy
+print(shard.to_dict()["selection_func_name"])   # 'shard_by_region'
+```
+
 ### Switch-case with `Case` and `Default`
 
 `add_switch_case_edge_group` accepts a list of `Case` predicates plus a terminal `Default`. The first matching `Case` wins — evaluation is top-to-bottom — so order your conditions from most specific to least specific:

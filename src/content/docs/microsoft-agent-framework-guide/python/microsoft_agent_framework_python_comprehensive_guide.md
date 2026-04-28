@@ -417,6 +417,79 @@ audit = FileHistoryProvider(
 agent = Agent(client=client, context_providers=[primary_history, audit])
 ```
 
+#### Custom JSON encoders — encrypted history at rest
+
+`FileHistoryProvider` accepts `dumps=` / `loads=` callables. Each one receives a dict (for `dumps`) or text/bytes (for `loads`) and must round-trip cleanly. The hook is the right place to add envelope encryption, schema redaction, or version migration:
+
+```python
+import base64
+import json
+import os
+from cryptography.fernet import Fernet
+from agent_framework import Agent, FileHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+
+# Key management is your problem — pull from KMS, Key Vault, AWS SSM, etc.
+fernet = Fernet(os.environ["AF_HISTORY_KEY"].encode())
+
+
+def encrypted_dumps(payload: dict) -> str:
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(fernet.encrypt(body)).decode("ascii")
+
+
+def encrypted_loads(line: str | bytes) -> dict:
+    raw = line if isinstance(line, bytes) else line.encode("ascii")
+    return json.loads(fernet.decrypt(base64.b64decode(raw)))
+
+
+encrypted_history = FileHistoryProvider(
+    storage_path="./sessions-encrypted",
+    dumps=encrypted_dumps,
+    loads=encrypted_loads,
+    skip_excluded=True,
+)
+agent = Agent(client=OpenAIChatClient(), context_providers=[encrypted_history])
+```
+
+`FileHistoryProvider` writes one line per message, which is what makes the per-line encrypt/decrypt pattern safe — corruption of one line never tanks the entire session file. Two operational notes:
+
+- **Validate the round-trip in tests.** A buggy `dumps`/`loads` pair will surface as `ValueError("History line N in '<file>' did not deserialize to a mapping.")`. The provider re-raises with the offending line number so failures pinpoint the corrupt entry.
+- **Treat the provider as single-host trust boundary.** The path-traversal guards (`session_id` validated against the storage root, encoded fallback for reserved names like `CON`/`NUL` on Windows, striped per-file locks) defend against malicious session ids — but **not** against another process scribbling into the same directory. Use `agent-framework-redis` or `agent-framework-azure-cosmos` for multi-host setups.
+
+#### Selective storage — capture only what you need
+
+The `store_*` flags compose freely. A common pattern is a primary store plus a redacted audit copy:
+
+```python
+primary = FileHistoryProvider(
+    storage_path="./sessions",
+    source_id="primary",
+    store_inputs=True,
+    store_outputs=True,
+    store_context_messages=False,   # don't bloat with retrieved snippets
+)
+
+audit = FileHistoryProvider(
+    storage_path="./audit",
+    source_id="audit",
+    load_messages=False,             # never reload — audit is write-only
+    store_inputs=True,
+    store_outputs=True,
+    store_context_messages=True,
+    store_context_from={"doc_retriever"},  # only retain retrieval traces
+    skip_excluded=False,             # capture compacted messages too — full forensic trail
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    context_providers=[doc_retriever, primary, audit],
+)
+```
+
+`store_context_from` accepts a set of `source_id` strings — only context messages tagged with one of those ids are persisted. Pair with the [advanced page's `ContextProvider` example](./microsoft_agent_framework_python_advanced/#custom-context-provider--contextprovider) so each provider's `source_id` is distinct and your audit log tells you which provider produced each captured message.
+
 ### Building a custom history backend
 
 Subclass `HistoryProvider` and implement two methods. Anything that lets you persist messages keyed by `session_id` works — Postgres, S3, even a Notion table.
