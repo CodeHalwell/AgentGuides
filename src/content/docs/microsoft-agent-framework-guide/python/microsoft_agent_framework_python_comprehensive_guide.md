@@ -534,6 +534,48 @@ class PostgresHistoryProvider(HistoryProvider):
 
 The `load_messages`, `store_inputs`, `store_outputs`, and `store_context_messages` flags inherited from `HistoryProvider` work exactly the same as the file-backed implementation — your subclass only needs the two storage methods.
 
+### Serializing sessions across requests — `AgentSession.to_dict()`
+
+`AgentSession` itself is a lightweight wrapper around a `session_id` and a mutable `state` dict. The history (messages) lives **inside** the session's `state` when you use `InMemoryHistoryProvider` — so `session.to_dict()` captures everything you need to send a session to another worker, store it in Redis between requests, or hand off across a network boundary.
+
+```python
+import json
+
+from agent_framework import Agent, AgentSession, InMemoryHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a helpful assistant.",
+    context_providers=[InMemoryHistoryProvider()],
+)
+
+# Turn 1 — serialize after the first turn.
+session = agent.create_session(session_id="user-7")
+await agent.run("Remember: my favourite colour is teal.", session=session)
+
+snapshot = session.to_dict()
+# Persist somewhere durable. The dict is JSON-safe — every value either is
+# a primitive or implements SerializationProtocol (e.g. Message.to_dict()).
+redis_client.set(f"session:{session.session_id}", json.dumps(snapshot))
+```
+
+A separate worker can rehydrate the session and continue:
+
+```python
+raw = redis_client.get(f"session:user-7")
+restored = AgentSession.from_dict(json.loads(raw))
+response = await agent.run("What's my favourite colour?", session=restored)
+print(response.text)        # mentions teal — full history is restored
+```
+
+Two practical notes:
+
+- `to_dict()` skips `service_session_id` if you didn't set one (provider-side conversation IDs from OpenAI Responses, Anthropic, etc.). When the chat client manages history server-side, persisting only `session_id` + `service_session_id` is enough — no message bodies cross the wire.
+- Custom values you put into `session.state` round-trip cleanly **only** if they implement `to_dict()`/`from_dict()` (the framework's `SerializationProtocol`). Strings, ints, floats, bools, `None`, lists, and dicts are passed through unchanged.
+
+For longer-lived agents, prefer a real `HistoryProvider` subclass (Postgres, Redis, Cosmos) over `to_dict()` round-trips — the provider handles incremental writes per turn, so you don't pay to re-serialize the whole conversation on every request.
+
 ---
 
 ## Compaction in 30 lines
@@ -805,6 +847,72 @@ workflow = (
 ```
 
 Use `add_chain([a, b, c])` as a shortcut for `.add_edge(a, b).add_edge(b, c)` when you have a long linear pipeline.
+
+### Filtering which executors yield outputs — `output_executors`
+
+By default, every executor that calls `ctx.yield_output(...)` contributes to `WorkflowRunResult.get_outputs()`. In a fan-out / fan-in graph that's noisy — you typically only care about the final aggregator. Pass `output_executors=[...]` to the builder to filter:
+
+```python
+from agent_framework import WorkflowBuilder
+
+workflow = (
+    WorkflowBuilder(
+        start_executor=parser,
+        name="research-pipeline",
+        output_executors=[final_writer],   # only this executor's yields surface
+    )
+    .add_fan_out_edges(parser, [worker_a, worker_b, worker_c])
+    .add_fan_in_edges([worker_a, worker_b, worker_c], final_writer)
+    .build()
+)
+
+result = await workflow.run("seed text")
+print(result.get_outputs())                # contains only final_writer's output
+```
+
+Outputs from upstream executors still flow through the graph (they're consumed by the next handler), they just aren't surfaced through the run result. This is the cheapest way to keep `result.get_outputs()` deterministic when many nodes can yield.
+
+### Conditional edges — gate a single connection
+
+`add_edge(source, target, condition=...)` accepts a predicate that runs against the routed message. Useful for "route to specialist only if confidence high enough" patterns without falling back to switch-case:
+
+```python
+from agent_framework import WorkflowBuilder
+
+def is_high_confidence(payload) -> bool:
+    return getattr(payload, "confidence", 0.0) >= 0.85
+
+workflow = (
+    WorkflowBuilder(start_executor=triager)
+    .add_edge(triager, fast_responder)                          # always runs
+    .add_edge(triager, specialist, condition=is_high_confidence)  # only if confident
+    .build()
+)
+```
+
+The condition is `Callable[[Any], bool | Awaitable[bool]]` — synchronous or async, both work. Returning `False` (or a falsy value) skips the edge silently; the source executor isn't told whether the message was routed.
+
+### Auto-wrapping — pass agents directly to the builder
+
+Every builder method (`add_edge`, `add_fan_out_edges`, `add_fan_in_edges`, `add_switch_case_edge_group`, `add_multi_selection_edge_group`, `add_chain`, plus the `start_executor=` constructor parameter) accepts either an `Executor` or an `Agent`. Agents are auto-wrapped in an `AgentExecutor` once and reused across calls — same agent, same wrapper:
+
+```python
+from agent_framework import Agent, WorkflowBuilder
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+researcher = Agent(client=client, name="researcher", instructions="...")
+writer = Agent(client=client, name="writer", instructions="...")
+
+# No AgentExecutor wrapping needed — the builder handles it.
+workflow = (
+    WorkflowBuilder(start_executor=researcher, name="research")
+    .add_edge(researcher, writer)
+    .build()
+)
+```
+
+Reach for an explicit `AgentExecutor` only when you need a non-default `context_mode` (see above) or you want to give the wrapper a custom `id` that differs from the agent name.
 
 ### Visualizing a workflow
 

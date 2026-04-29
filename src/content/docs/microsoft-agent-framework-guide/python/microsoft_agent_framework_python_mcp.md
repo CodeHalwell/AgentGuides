@@ -63,6 +63,32 @@ Notes:
 - `command` + `args` + `env` are forwarded to `mcp.client.stdio.StdioServerParameters`.
 - Use `async with` so the subprocess is cleaned up when the agent finishes.
 
+### Passing environment + encoding to a stdio child process
+
+`MCPStdioTool` forwards `env`, `args`, and `encoding` straight through to `StdioServerParameters`. Anything else — buffering knobs, custom `cwd`, etc. — comes through `**kwargs` (the constructor merges it with the explicit args before constructing `StdioServerParameters`). Use it to ship secrets to a child server or to pin the wire encoding when running on Windows:
+
+```python
+import os
+from agent_framework import MCPStdioTool
+
+postgres_mcp = MCPStdioTool(
+    name="pg",
+    command="uvx",
+    args=["mcp-server-postgres"],
+    env={
+        # Passed to the MCP child as environment variables. The agent process
+        # still reads them here, so treat them as sensitive in logs/traces;
+        # the model won't see them unless you explicitly forward them.
+        "DATABASE_URL": os.environ["DATABASE_URL"],
+        "PGPASSWORD": os.environ["DB_PASSWORD"],
+    },
+    encoding="utf-8",         # Avoid Windows cp1252 mojibake on logs / SQL output.
+    request_timeout=15,        # Per-MCP-call timeout (seconds), independent of the child.
+)
+```
+
+Treat the spawned process like any other dependency — log its stderr through your normal subprocess plumbing if the MCP server doesn't already forward useful diagnostics over the JSON-RPC channel.
+
 ## Streamable HTTP — remote MCP servers
 
 ```python

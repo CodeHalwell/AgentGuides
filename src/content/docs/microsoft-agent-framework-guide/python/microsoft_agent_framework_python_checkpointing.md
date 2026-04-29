@@ -42,6 +42,53 @@ disk = FileCheckpointStorage("/var/lib/agent-framework/checkpoints")
 
 For Azure Cosmos DB, install `agent-framework-azure-cosmos` and use `agent_framework_azure_cosmos.CosmosCheckpointStorage`. For Redis, install `agent-framework-redis` and pick the Redis-backed storage class.
 
+### Allow-listing app-specific types
+
+`FileCheckpointStorage` deserializes pickled state behind a strict allow-list. Out of the box it accepts Python primitives, `datetime` / `uuid`, every `agent_framework` type, and `openai.types`. **Anything else raises `WorkflowCheckpointException` on load.** This is deliberate — pickle lets attackers run arbitrary code if a malicious checkpoint sneaks into the storage path.
+
+When your workflow stores domain objects (Pydantic models, dataclasses, enums), declare them via `allowed_checkpoint_types`:
+
+```python
+from dataclasses import dataclass
+from agent_framework import FileCheckpointStorage, WorkflowBuilder
+
+
+@dataclass
+class ResearchState:
+    topic: str
+    confidence: float
+
+
+# Each entry is "module:qualname" — same shape pickle uses internally.
+# The check is an exact match (no subclass walk), so list every concrete
+# class you actually persist; allowing `enum:Enum` does NOT permit subclasses.
+storage = FileCheckpointStorage(
+    "/var/lib/agents/checkpoints",
+    allowed_checkpoint_types=[
+        "my_app.models:ResearchState",
+        "my_app.models:ResearchOutcome",
+        "my_app.models:ResearchStatus",      # list each enum subclass you store
+    ],
+)
+
+workflow = (
+    WorkflowBuilder(
+        start_executor=researcher,
+        checkpoint_storage=storage,
+        name="research-pipeline",
+    )
+    .add_edge(researcher, writer)
+    .build()
+)
+```
+
+Two operational notes:
+
+- The list is **frozen at construction time** — passing it later won't take effect. Build storage once at startup with the full app type set.
+- The error message names the class that failed the allow-list, so missing entries are easy to fix during a staging run before production.
+
+For multi-tenant deployments where each tenant has its own type universe, build a tenant-keyed dict of storages instead of granting one global allow-list everything.
+
 ### Custom backend
 
 `CheckpointStorage` is a `Protocol` — structural typing means anything with the six required `async` methods satisfies it. No `isinstance` or inheritance check happens at attach time, only the duck-typed call. The full surface area:

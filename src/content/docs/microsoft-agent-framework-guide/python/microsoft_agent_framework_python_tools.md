@@ -207,6 +207,29 @@ def run_query(sql: str) -> list[dict]:
 
 `max_invocation_exceptions` puts a ceiling on how many times a tool can error before the agent stops calling it — a simple circuit breaker.
 
+### Reading `invocation_count` for cheap dashboards
+
+Every `FunctionTool` increments a public `invocation_count` integer on each call. Sample it from middleware (or a periodic job) without holding any state of your own:
+
+```python
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def fetch_inventory(sku: str) -> str:
+    return query_inventory(sku)
+
+
+agent = Agent(client=OpenAIChatClient(), tools=[fetch_inventory])
+
+# After a batch of runs:
+print(f"fetch_inventory called {fetch_inventory.invocation_count} times")
+fetch_inventory.invocation_count = 0    # reset for the next reporting window
+```
+
+Combine with `max_invocations=N` to cap **per-process** spend on expensive tools (e.g. paid third-party APIs) without setting a per-request `FunctionInvocationConfiguration`.
+
 ### Per-request tool-loop caps
 
 `FunctionInvocationConfiguration` is the authoritative knob for runaway tool calls on a single `agent.run(...)`. Two levers that work together:
@@ -241,6 +264,47 @@ client.function_invocation_configuration["max_function_calls"] = 20
 ```
 
 `max_function_calls` is a **best-effort** limit — it's checked *after* each batch of parallel calls completes. A single iteration that emits 20 parallel calls will run all 20 even if the limit is 10; the next iteration then bails out. Combine with `max_iterations` to bound worst-case wall time.
+
+## Tool classification — `kind`
+
+`kind` is a free-form string the framework propagates to provider adapters and observability layers. The first-party providers use it to decide how each tool is rendered to the model — for example, OpenAI's Responses API may surface `kind="hosted"` tools as a different shape than ordinary function tools. Use the same string to filter tools in your own dashboards or middleware:
+
+```python
+from agent_framework import tool
+
+
+@tool(kind="readonly", additional_properties={"team": "platform", "owner": "search"})
+def search_kb(query: str) -> str:
+    """Read-only access to the internal knowledge base."""
+    ...
+
+
+@tool(kind="mutating", additional_properties={"team": "platform", "requires_audit": True})
+def archive_ticket(ticket_id: str) -> str:
+    """Move the ticket to long-term storage."""
+    ...
+```
+
+Read both fields from middleware to enforce policy:
+
+```python
+from agent_framework import FunctionMiddleware, MiddlewareTermination
+
+
+class ReadOnlyGuard(FunctionMiddleware):
+    """Block mutating tools unless the caller passed approval=True."""
+
+    async def process(self, context, call_next) -> None:
+        kind = context.function.kind
+        approved = context.kwargs.get("approval") is True
+        if kind == "mutating" and not approved:
+            raise MiddlewareTermination(
+                f"{context.function.name} is mutating; approval=True required",
+            )
+        await call_next()
+```
+
+`additional_properties` is just a `dict[str, Any]` — drop anything in there that travels with the tool: cost class, owning team, downstream rate limit headers, audit category. The framework never inspects the contents; it's a slot for your own metadata so you don't have to maintain a parallel registry.
 
 ## Declaration-only tools
 

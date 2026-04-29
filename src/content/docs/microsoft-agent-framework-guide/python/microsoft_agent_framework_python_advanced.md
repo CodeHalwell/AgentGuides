@@ -466,6 +466,139 @@ class DocumentContextProvider(ContextProvider):
 
 Compare with `HistoryProvider` (in the same module): use `HistoryProvider` for persistent conversation storage, use plain `ContextProvider` for one-shot context injection per run.
 
+### Using provider-scoped `state` for cross-turn memory
+
+`state` is the second-class citizen most provider implementations underuse. Each provider sees an isolated dict keyed by `source_id` — perfect for caching expensive lookups across turns of the same session, or for tracking cumulative spend without polluting the messages list.
+
+```python
+import time
+from agent_framework import Agent, ContextProvider, Message
+from agent_framework.openai import OpenAIChatClient
+
+
+class UserProfileProvider(ContextProvider):
+    """Fetch the user's profile once per session and reuse it on every turn.
+
+    Stashing the profile in provider state avoids hitting the profile API on
+    every agent.run() call. ``state`` is automatically scoped to this provider,
+    so multiple providers can each maintain their own caches without colliding.
+    """
+
+    DEFAULT_SOURCE_ID = "user_profile"
+
+    def __init__(self, profile_client, *, ttl: float = 3600) -> None:
+        super().__init__(self.DEFAULT_SOURCE_ID)
+        self._client = profile_client
+        self._ttl = ttl
+
+    async def before_run(self, *, agent, session, context, state) -> None:
+        user_id = context.kwargs.get("user_id")
+        if not user_id:
+            return
+
+        cache: dict = state.setdefault("cache", {})
+        entry = cache.get(user_id)
+        now = time.monotonic()
+
+        if entry is None or now - entry["fetched_at"] > self._ttl:
+            profile = await self._client.fetch(user_id)
+            entry = {"profile": profile, "fetched_at": now}
+            cache[user_id] = entry
+
+        context.extend_instructions(
+            self.source_id,
+            f"User profile: name={entry['profile'].name}, plan={entry['profile'].plan}.",
+        )
+
+    async def after_run(self, *, agent, session, context, state) -> None:
+        # Tally turn count against this user's profile entry.
+        user_id = context.kwargs.get("user_id")
+        if user_id:
+            cache = state.setdefault("cache", {})
+            if user_id in cache:
+                cache[user_id]["turns"] = cache[user_id].get("turns", 0) + 1
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a personalised assistant.",
+    context_providers=[UserProfileProvider(profile_client)],
+)
+
+session = agent.create_session(session_id="user-7")
+await agent.run("What's my plan?", session=session, user_id="user-7")
+await agent.run("Upgrade me.", session=session, user_id="user-7")  # cache hit
+```
+
+Note that the comments above emphasize:
+
+- `state` is a **provider-scoped** dict — distinct from `session.state` (cross-provider). Mutate it freely without coordinating with other providers.
+- `state` survives across `before_run` / `after_run` of the same session. The framework persists it through `session.to_dict()` if the values implement `SerializationProtocol`.
+- For ephemeral per-run scratch space, use `context.metadata` instead — that dict is rebuilt every call.
+
+### Combining `before_run` and `after_run` for a citation tracker
+
+When you want the model to cite sources, the cleanest pattern is a single provider that injects retrieved snippets *before* the call and harvests citation IDs *after* it:
+
+```python
+import re
+from agent_framework import ContextProvider, Message
+
+
+class CitationProvider(ContextProvider):
+    DEFAULT_SOURCE_ID = "citations"
+    # Doc IDs may contain hyphens (UUIDs), dots, or colons depending on the
+    # retriever — `\w+` alone would silently drop everything after the first
+    # `-`, so accept the common URL-safe id alphabet here.
+    CITE_PATTERN = re.compile(r"\[\[doc:([\w.:-]+)\]\]")
+
+    def __init__(self, retriever) -> None:
+        super().__init__(self.DEFAULT_SOURCE_ID)
+        self._retriever = retriever
+
+    async def before_run(self, *, agent, session, context, state) -> None:
+        last_user = next(
+            (m for m in reversed(context.input_messages) if m.role == "user"),
+            None,
+        )
+        if not last_user:
+            return
+        docs = await self._retriever.search(last_user.text, top_k=5)
+        # Stash the docs so after_run can correlate citations back to URLs.
+        state.setdefault("docs_by_id", {}).update({d.id: d for d in docs})
+        context.extend_messages(
+            self.source_id,
+            [
+                Message(
+                    role="system",
+                    contents=[f"[[doc:{d.id}]] {d.title}\n{d.excerpt}"],
+                )
+                for d in docs
+            ],
+        )
+        context.extend_instructions(
+            self.source_id,
+            "Cite sources using [[doc:ID]] markers.",
+        )
+
+    async def after_run(self, *, agent, session, context, state) -> None:
+        if not context.response:
+            return
+        cited_ids = set()
+        for msg in context.response.messages:
+            for content in msg.contents:
+                text = getattr(content, "text", None) or ""
+                cited_ids.update(self.CITE_PATTERN.findall(text))
+        # Surface a structured citations payload through session.state for the caller.
+        session.state["last_citations"] = [
+            {"id": cid, "url": state["docs_by_id"][cid].url}
+            for cid in cited_ids
+            if cid in state.get("docs_by_id", {})
+        ]
+```
+
+After every run the caller can read `session.state["last_citations"]` to render footnotes alongside the agent's reply — no parsing of the model output needed in user code.
+
 ## Capability protocols — `Supports*`
 
 Several first-party client classes publish optional capabilities through `runtime_checkable` protocols. Use `isinstance(client, Supports*)` to feature-detect at runtime:
