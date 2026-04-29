@@ -2058,7 +2058,7 @@ new capability classes that cover the most common cross-cutting concerns without
 
 ### New capability classes
 
-All classes are importable from `pydantic_ai.capabilities` (confirmed against installed 1.87.0).
+All classes are importable from `pydantic_ai.capabilities` (confirmed against installed 1.87.0; API confirmed unchanged in 1.88.0).
 
 | Class | Constructor | Purpose |
 |-------|-------------|---------|
@@ -2092,7 +2092,7 @@ agent = Agent(
 # agent's configured one. replace_existing=False (default): only inject when absent.
 ```
 
-Source: `pydantic_ai/capabilities/reinject_system_prompt.py` (installed 1.87.0).
+Source: `pydantic_ai/capabilities/reinject_system_prompt.py` (installed 1.87.0; confirmed unchanged in 1.88.0).
 
 ### `ProcessHistory` — composable history management
 
@@ -2114,7 +2114,7 @@ agent = Agent(
 )
 ```
 
-Source: `pydantic_ai/capabilities/process_history.py` (installed 1.87.0).
+Source: `pydantic_ai/capabilities/process_history.py` (installed 1.87.0; confirmed unchanged in 1.88.0).
 
 ### `WrapperCapability` — composing custom capabilities
 
@@ -2140,7 +2140,7 @@ async def log_req(ctx, request_context):
 logged_hooks = LoggingWrapper(hooks, label='my-agent')
 ```
 
-Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0).
+Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed unchanged in 1.88.0).
 
 ---
 
