@@ -534,7 +534,7 @@ class PostgresHistoryProvider(HistoryProvider):
 
 The `load_messages`, `store_inputs`, `store_outputs`, and `store_context_messages` flags inherited from `HistoryProvider` work exactly the same as the file-backed implementation — your subclass only needs the two storage methods.
 
-### Serialising sessions across requests — `AgentSession.to_dict()`
+### Serializing sessions across requests — `AgentSession.to_dict()`
 
 `AgentSession` itself is a lightweight wrapper around a `session_id` and a mutable `state` dict. The history (messages) lives **inside** the session's `state` when you use `InMemoryHistoryProvider` — so `session.to_dict()` captures everything you need to send a session to another worker, store it in Redis between requests, or hand off across a network boundary.
 
@@ -550,7 +550,7 @@ agent = Agent(
     context_providers=[InMemoryHistoryProvider()],
 )
 
-# Turn 1 — serialise after the first turn.
+# Turn 1 — serialize after the first turn.
 session = agent.create_session(session_id="user-7")
 await agent.run("Remember: my favourite colour is teal.", session=session)
 
@@ -574,7 +574,7 @@ Two practical notes:
 - `to_dict()` skips `service_session_id` if you didn't set one (provider-side conversation IDs from OpenAI Responses, Anthropic, etc.). When the chat client manages history server-side, persisting only `session_id` + `service_session_id` is enough — no message bodies cross the wire.
 - Custom values you put into `session.state` round-trip cleanly **only** if they implement `to_dict()`/`from_dict()` (the framework's `SerializationProtocol`). Strings, ints, floats, bools, `None`, lists, and dicts are passed through unchanged.
 
-For longer-lived agents, prefer a real `HistoryProvider` subclass (Postgres, Redis, Cosmos) over `to_dict()` round-trips — the provider handles incremental writes per turn, so you don't pay to re-serialise the whole conversation on every request.
+For longer-lived agents, prefer a real `HistoryProvider` subclass (Postgres, Redis, Cosmos) over `to_dict()` round-trips — the provider handles incremental writes per turn, so you don't pay to re-serialize the whole conversation on every request.
 
 ---
 

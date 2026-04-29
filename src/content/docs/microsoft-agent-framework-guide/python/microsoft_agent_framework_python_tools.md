@@ -230,6 +230,41 @@ fetch_inventory.invocation_count = 0    # reset for the next reporting window
 
 Combine with `max_invocations=N` to cap **per-process** spend on expensive tools (e.g. paid third-party APIs) without setting a per-request `FunctionInvocationConfiguration`.
 
+### Per-request tool-loop caps
+
+`FunctionInvocationConfiguration` is the authoritative knob for runaway tool calls on a single `agent.run(...)`. Two levers that work together:
+
+- `max_iterations` caps the number of **model roundtrips** in the tool loop. Each roundtrip may contain several parallel tool calls, so this alone does not bound total executions.
+- `max_function_calls` caps the **total number of tool executions** across all iterations. This is the primary cost guard.
+
+```python
+from agent_framework import FunctionInvocationConfiguration
+
+config: FunctionInvocationConfiguration = {
+    "max_iterations": 5,
+    "max_function_calls": 20,
+    "max_consecutive_errors_per_request": 3,
+    "terminate_on_unknown_calls": True,
+    "include_detailed_errors": False,        # avoid leaking stack traces to the model
+}
+
+await agent.run(
+    "Research the order pipeline",
+    function_invocation_configuration=config,
+)
+```
+
+Applied at the chat-client level, the same settings act as a default for every run:
+
+```python
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+client.function_invocation_configuration["max_function_calls"] = 20
+```
+
+`max_function_calls` is a **best-effort** limit — it's checked *after* each batch of parallel calls completes. A single iteration that emits 20 parallel calls will run all 20 even if the limit is 10; the next iteration then bails out. Combine with `max_iterations` to bound worst-case wall time.
+
 ## Tool classification — `kind`
 
 `kind` is a free-form string the framework propagates to provider adapters and observability layers. The first-party providers use it to decide how each tool is rendered to the model — for example, OpenAI's Responses API may surface `kind="hosted"` tools as a different shape than ordinary function tools. Use the same string to filter tools in your own dashboards or middleware:
@@ -270,41 +305,6 @@ class ReadOnlyGuard(FunctionMiddleware):
 ```
 
 `additional_properties` is just a `dict[str, Any]` — drop anything in there that travels with the tool: cost class, owning team, downstream rate limit headers, audit category. The framework never inspects the contents; it's a slot for your own metadata so you don't have to maintain a parallel registry.
-
-### Per-request tool-loop caps
-
-`FunctionInvocationConfiguration` is the authoritative knob for runaway tool calls on a single `agent.run(...)`. Two levers that work together:
-
-- `max_iterations` caps the number of **model roundtrips** in the tool loop. Each roundtrip may contain several parallel tool calls, so this alone does not bound total executions.
-- `max_function_calls` caps the **total number of tool executions** across all iterations. This is the primary cost guard.
-
-```python
-from agent_framework import FunctionInvocationConfiguration
-
-config: FunctionInvocationConfiguration = {
-    "max_iterations": 5,
-    "max_function_calls": 20,
-    "max_consecutive_errors_per_request": 3,
-    "terminate_on_unknown_calls": True,
-    "include_detailed_errors": False,        # avoid leaking stack traces to the model
-}
-
-await agent.run(
-    "Research the order pipeline",
-    function_invocation_configuration=config,
-)
-```
-
-Applied at the chat-client level, the same settings act as a default for every run:
-
-```python
-from agent_framework.openai import OpenAIChatClient
-
-client = OpenAIChatClient()
-client.function_invocation_configuration["max_function_calls"] = 20
-```
-
-`max_function_calls` is a **best-effort** limit — it's checked *after* each batch of parallel calls completes. A single iteration that emits 20 parallel calls will run all 20 even if the limit is 10; the next iteration then bails out. Combine with `max_iterations` to bound worst-case wall time.
 
 ## Declaration-only tools
 

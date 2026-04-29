@@ -44,7 +44,7 @@ For Azure Cosmos DB, install `agent-framework-azure-cosmos` and use `agent_frame
 
 ### Allow-listing app-specific types
 
-`FileCheckpointStorage` deserialises pickled state behind a strict allow-list. Out of the box it accepts Python primitives, `datetime` / `uuid`, every `agent_framework` type, and `openai.types`. **Anything else raises `WorkflowCheckpointException` on load.** This is deliberate — pickle lets attackers run arbitrary code if a malicious checkpoint sneaks into the storage path.
+`FileCheckpointStorage` deserializes pickled state behind a strict allow-list. Out of the box it accepts Python primitives, `datetime` / `uuid`, every `agent_framework` type, and `openai.types`. **Anything else raises `WorkflowCheckpointException` on load.** This is deliberate — pickle lets attackers run arbitrary code if a malicious checkpoint sneaks into the storage path.
 
 When your workflow stores domain objects (Pydantic models, dataclasses, enums), declare them via `allowed_checkpoint_types`:
 

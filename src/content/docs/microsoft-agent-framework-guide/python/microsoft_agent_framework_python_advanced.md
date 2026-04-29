@@ -530,7 +530,7 @@ await agent.run("What's my plan?", session=session, user_id="user-7")
 await agent.run("Upgrade me.", session=session, user_id="user-7")  # cache hit
 ```
 
-Note that the source comments emphasise:
+Note that the comments above emphasize:
 
 - `state` is a **provider-scoped** dict — distinct from `session.state` (cross-provider). Mutate it freely without coordinating with other providers.
 - `state` survives across `before_run` / `after_run` of the same session. The framework persists it through `session.to_dict()` if the values implement `SerializationProtocol`.
@@ -547,7 +547,10 @@ from agent_framework import ContextProvider, Message
 
 class CitationProvider(ContextProvider):
     DEFAULT_SOURCE_ID = "citations"
-    CITE_PATTERN = re.compile(r"\[\[doc:(\w+)\]\]")
+    # Doc IDs may contain hyphens (UUIDs), dots, or colons depending on the
+    # retriever — `\w+` alone would silently drop everything after the first
+    # `-`, so accept the common URL-safe id alphabet here.
+    CITE_PATTERN = re.compile(r"\[\[doc:([\w.:-]+)\]\]")
 
     def __init__(self, retriever) -> None:
         super().__init__(self.DEFAULT_SOURCE_ID)

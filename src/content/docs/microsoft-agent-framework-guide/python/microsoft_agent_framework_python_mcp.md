@@ -76,7 +76,9 @@ postgres_mcp = MCPStdioTool(
     command="uvx",
     args=["mcp-server-postgres"],
     env={
-        # The MCP server reads these on stdin → the agent never sees them.
+        # Passed to the MCP child as environment variables. The agent process
+        # still reads them here, so treat them as sensitive in logs/traces;
+        # the model won't see them unless you explicitly forward them.
         "DATABASE_URL": os.environ["DATABASE_URL"],
         "PGPASSWORD": os.environ["DB_PASSWORD"],
     },
