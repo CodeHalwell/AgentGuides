@@ -278,13 +278,12 @@ class PolicyManager(MagenticManagerBase):
             "writer: produce one-page brief",
         ]
 
-    async def select_next_speaker(self, context: MagenticContext) -> str:
+    async def select_next_speaker(self, context: MagenticContext) -> str | None:
         # Round-robin in plan order — no LLM needed.
-        completed = [s.completed for s in context.progress_ledger.steps]
         for step in context.progress_ledger.steps:
             if not step.completed:
                 return step.assignee
-        return None    # done
+        return None    # all steps complete
 
     async def assess_progress(self, context: MagenticContext) -> bool:
         return all(s.completed for s in context.progress_ledger.steps)

@@ -364,7 +364,7 @@ All three clients implement the same `SupportsChatGetResponse` protocol, so you 
 # app.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
-from agent_framework import Agent, FileCheckpointStorage, InMemoryHistoryProvider
+from agent_framework import Agent, InMemoryHistoryProvider
 from agent_framework.foundry import FoundryChatClient
 
 
@@ -419,14 +419,28 @@ Tools and context providers that declare `**kwargs` see the runtime data; `addit
 
 ```python
 import asyncio
+import logging
+from agent_framework import CheckpointStorage, Workflow
 
-async def safe_run(workflow, user_input: str, timeout_s: float = 60.0):
+logger = logging.getLogger(__name__)
+
+
+async def safe_run(
+    workflow: Workflow,
+    user_input: str,
+    *,
+    storage: CheckpointStorage,
+    timeout_s: float = 60.0,
+):
     try:
         return await asyncio.wait_for(workflow.run(user_input), timeout=timeout_s)
     except asyncio.TimeoutError:
         # Save the latest checkpoint so a human can resume manually.
         latest = await storage.get_latest(workflow_name=workflow.name)
-        log.warning("workflow_timeout", checkpoint_id=latest and latest.checkpoint_id)
+        logger.warning(
+            "workflow_timeout checkpoint_id=%s",
+            latest.checkpoint_id if latest else None,
+        )
         raise
 ```
 
@@ -461,16 +475,16 @@ For workflow-level limits put the semaphore in your handler instead of around `a
 
 ### Health checks that don't burn tokens
 
-A liveness probe that calls `agent.run("ping")` costs real money. Probe a cheap dependency instead:
+A liveness probe that calls `agent.run("ping")` costs real money on every probe interval. Keep `/healthz` as a lightweight local liveness signal — it answers "is this Python process still running?" — and let the orchestrator's network probe answer "is the upstream model up?":
 
 ```python
 @app.get("/healthz")
 async def healthz(agent: Agent = Depends(get_agent)):
-    # Verify the chat client is reachable without invoking the model.
+    # Liveness only — does NOT touch the chat client. The process is up if this returns.
     return {"status": "ok", "agent": agent.name, "version": agent.id}
 ```
 
-If you must verify model connectivity, do it once on startup (not per-probe) by issuing a tiny structured call — and cache the result for the next 60 seconds.
+If you genuinely need a readiness probe that proves the model deployment is reachable, run a separate `/readyz` that issues a token-free call (e.g. an Azure OpenAI `models` listing or an `AIProjectClient.connections.list()` call) on startup, caches the result for 60 seconds, and returns 503 until the probe succeeds. Never make the model probe synchronous on every probe — the cost adds up fast at K8s default 10-second intervals.
 
 ### Checkpoint hygiene
 
@@ -493,29 +507,43 @@ Run it nightly per workflow name. Aim for `keep` ≥ longest plausible HITL paus
 When the model API is degraded, fail fast rather than waiting for every request to time out:
 
 ```python
+import asyncio
+import time
 from agent_framework import ChatMiddleware, ChatContext, MiddlewareTermination
 
 
 class ModelCircuitBreaker(ChatMiddleware):
+    """A simple async-safe circuit breaker.
+
+    `ChatMiddleware.process` runs concurrently across requests, so the failure
+    counter and open-until timestamp are guarded by an `asyncio.Lock`. The lock
+    is only held while reading/mutating state — never around `call_next()` —
+    so it does not serialise model traffic.
+    """
+
     def __init__(self, *, fail_threshold: int = 5, recover_seconds: float = 30.0) -> None:
         self._fail_count = 0
         self._open_until: float = 0.0
         self._fail_threshold = fail_threshold
         self._recover_seconds = recover_seconds
+        self._lock = asyncio.Lock()
 
     async def process(self, context: ChatContext, call_next) -> None:
-        import time
-        if time.time() < self._open_until:
-            raise MiddlewareTermination("model unavailable — circuit open")
+        async with self._lock:
+            if time.time() < self._open_until:
+                raise MiddlewareTermination("model unavailable — circuit open")
 
         try:
             await call_next()
-            self._fail_count = 0
         except Exception:
-            self._fail_count += 1
-            if self._fail_count >= self._fail_threshold:
-                self._open_until = time.time() + self._recover_seconds
+            async with self._lock:
+                self._fail_count += 1
+                if self._fail_count >= self._fail_threshold:
+                    self._open_until = time.time() + self._recover_seconds
             raise
+        else:
+            async with self._lock:
+                self._fail_count = 0
 ```
 
 Pair with a retry middleware that catches `MiddlewareTermination("model unavailable...")` and routes to a fallback agent (or a static answer). Two layers, single circuit-breaker source of truth.

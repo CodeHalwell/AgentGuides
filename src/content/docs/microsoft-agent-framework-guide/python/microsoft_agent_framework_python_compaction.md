@@ -422,7 +422,32 @@ Excluded messages stay in the list tagged with `EXCLUDED_KEY=True` and `EXCLUDE_
 
 ## End-to-end recipes for each strategy
 
-The full constructor signatures are short — every example below is a complete, runnable strategy you can drop into a `CompactionProvider`.
+The full constructor signatures are short. Each recipe builds on the same shared scaffolding — instantiate it once and reuse across the rest of this section:
+
+```python
+import tiktoken
+from agent_framework import (
+    InMemoryHistoryProvider,
+    TokenizerProtocol,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+class TiktokenTokenizer:
+    """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
+
+    def __init__(self, model: str = "gpt-4o-mini") -> None:
+        self._enc = tiktoken.encoding_for_model(model)
+
+    def count_tokens(self, text: str) -> int:
+        return len(self._enc.encode(text))
+
+
+# Cheap model used for summarisation only — separate from the agent's main model.
+summary_client = OpenAIChatClient(model="gpt-4o-mini")
+tokenizer: TokenizerProtocol = TiktokenTokenizer()
+history = InMemoryHistoryProvider()
+```
 
 ### `SummarizationStrategy` — long research conversations
 
@@ -432,16 +457,11 @@ When earlier context still matters but you don't want to ship every turn, summar
 from agent_framework import (
     Agent,
     CompactionProvider,
-    InMemoryHistoryProvider,
     SummarizationStrategy,
 )
-from agent_framework.openai import OpenAIChatClient
-
-# Use the cheapest summariser you trust — it runs every time the threshold trips.
-summary_client = OpenAIChatClient(model="gpt-4o-mini")
 
 summariser = SummarizationStrategy(
-    client=summary_client,
+    client=summary_client,           # defined in the shared scaffolding above
     target_count=6,        # keep ~6 most-recent non-system messages verbatim
     threshold=4,           # trigger once we exceed target_count + threshold = 10
     prompt=(
@@ -451,9 +471,8 @@ summariser = SummarizationStrategy(
     ),
 )
 
-history = InMemoryHistoryProvider()
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-5"),
+    client=OpenAIChatClient(model="gpt-4o"),
     instructions="You are a research assistant for a multi-week project.",
     context_providers=[
         history,
@@ -471,27 +490,17 @@ If the summariser call fails, the strategy logs a warning and returns `False` �
 Run cheaper strategies first; fall through to summarisation only when needed; have a deterministic fallback that excludes oldest groups when even the LLM summariser couldn't squeeze under budget:
 
 ```python
-import tiktoken
 from agent_framework import (
     SlidingWindowStrategy,
     SummarizationStrategy,
     TokenBudgetComposedStrategy,
-    TokenizerProtocol,
     ToolResultCompactionStrategy,
 )
 
-
-class TiktokenTokenizer:
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
-        self._enc = tiktoken.encoding_for_model(model)
-
-    def count_tokens(self, text: str) -> int:
-        return len(self._enc.encode(text))
-
-
+# `summary_client` and `tokenizer` come from the shared scaffolding above.
 budget_strategy = TokenBudgetComposedStrategy(
     token_budget=24_000,                 # never ship more than 24k tokens
-    tokenizer=TiktokenTokenizer(),
+    tokenizer=tokenizer,
     early_stop=True,                     # stop as soon as we're under budget
     strategies=[
         # 1. Cheapest first — drop tool-call chatter.

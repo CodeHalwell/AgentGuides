@@ -161,11 +161,13 @@ cache_hits = meter.create_counter(
     unit="{request}",
 )
 
-with tracer.start_as_current_span("price_quote", attributes={"sku": sku}):
-    if cached := cache.get(sku):
-        cache_hits.add(1, {"sku.tier": cached.tier})
-        return cached
-    return await agent.run(f"Price quote for {sku}")
+
+async def price_quote(sku: str, *, cache, agent):
+    with tracer.start_as_current_span("price_quote", attributes={"sku": sku}):
+        if cached := cache.get(sku):
+            cache_hits.add(1, {"sku.tier": cached.tier})
+            return cached
+        return await agent.run(f"Price quote for {sku}")
 ```
 
 ## Reading framework attributes with `OtelAttr`
@@ -173,7 +175,8 @@ with tracer.start_as_current_span("price_quote", attributes={"sku": sku}):
 `OtelAttr` is the single source of truth for every span attribute the framework emits. Use it to filter, sample, or post-process spans without typing string keys:
 
 ```python
-from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.context import Context
+from opentelemetry.sdk.trace import ReadableSpan, Span
 from opentelemetry.sdk.trace.export import SpanProcessor
 from agent_framework.observability import OtelAttr
 
@@ -183,6 +186,10 @@ class TokenSpendProcessor(SpanProcessor):
 
     def __init__(self) -> None:
         self.totals: dict[str, int] = {}
+
+    def on_start(self, span: Span, parent_context: Context | None = None) -> None:
+        # No-op — counting happens once spans are finalised in `on_end`.
+        return
 
     def on_end(self, span: ReadableSpan) -> None:
         if span.name != OtelAttr.CHAT_COMPLETION_OPERATION.value:
@@ -245,14 +252,14 @@ A custom `SpanProcessor` can drop spans the exporter never sees — useful when 
 
 ```python
 from opentelemetry.sdk.trace import ReadableSpan
-from opentelemetry.sdk.trace.export import SpanExportResult
+from opentelemetry.sdk.trace.export import SpanExportResult, SpanExporter
 from agent_framework.observability import OtelAttr
 
 
-class DropInternalEdgeSpans:
+class DropInternalEdgeSpans(SpanExporter):
     """Wrap any exporter to drop edge-group spans below a configurable threshold."""
 
-    def __init__(self, inner, *, min_duration_ms: float = 50.0) -> None:
+    def __init__(self, inner: SpanExporter, *, min_duration_ms: float = 50.0) -> None:
         self._inner = inner
         self._min_ns = min_duration_ms * 1_000_000
 
@@ -264,7 +271,11 @@ class DropInternalEdgeSpans:
         ]
         return self._inner.export(keep) if keep else SpanExportResult.SUCCESS
 
-    def shutdown(self):
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        # Forward flush so graceful shutdown drains the wrapped exporter.
+        return self._inner.force_flush(timeout_millis)
+
+    def shutdown(self) -> None:
         self._inner.shutdown()
 ```
 
