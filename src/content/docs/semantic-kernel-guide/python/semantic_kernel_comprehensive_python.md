@@ -5,12 +5,12 @@ framework: semantic-kernel
 language: python
 ---
 
-Latest: 1.41.3 | Updated: April 28, 2026
+Latest: 1.41.3 | Updated: April 29, 2026
 # Semantic Kernel Comprehensive Guide (Python)
 
 **Complete Python Reference for Building AI Agents and Agentic Systems**
 
-Last Updated: April 28, 2026
+Last Updated: April 29, 2026
 Python Version: 3.10+ (3.9 dropped as of v1.41.2)
 Semantic Kernel: 1.41.3+
 
@@ -59,6 +59,14 @@ pip install "semantic-kernel[openai,azure]"
 # Additional dependencies
 pip install python-dotenv tenacity opentelemetry-sdk pydantic
 ```
+
+> **Note for `uv` users:** semantic-kernel 1.37+ depends on `azure-ai-agents>=1.2.0b3`, a pre-release package. `uv pip install semantic-kernel` will resolve to 1.36.0 by default. To get 1.41.3, pass `--prerelease=allow`:
+>
+> ```bash
+> uv pip install "semantic-kernel[openai,azure]" --prerelease=allow
+> ```
+>
+> Standard `pip install` resolves 1.41.3 correctly without this flag.
 
 ### Full Installation (All Features)
 
@@ -2238,6 +2246,7 @@ await adapter.start(port=8080)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.41.3 | April 29, 2026 | Added install note for `uv` users: 1.37+ requires `--prerelease=allow` due to `azure-ai-agents>=1.2.0b3` transitive pre-release dependency; standard `pip install` unaffected. Verified `Requires-Python >=3.10` against installed 1.41.3 wheel; Python 3.10+ minimum confirmed correct. Symbols verified: `Kernel`, `OpenAIChatCompletion`, `kernel_function`, `ChatCompletionAgent`, `AgentGroupChat`. Source: installed `semantic-kernel==1.41.3` via `/tmp/sk-test` (Python 3.12.3). |
 | 1.41.3 | April 28, 2026 | Version bumped 1.41.2 → 1.41.3 (patch release); header and version references updated. PyPI confirms 1.41.3 as latest stable. |
 | 1.41.2 | April 8, 2026 | Full MCP server/client support; A2A protocol; Oracle database connector; Google GenAI SDK migration; Python 3.10+ required |
 | 1.38.0 | November 2025 | Previous documented version |
