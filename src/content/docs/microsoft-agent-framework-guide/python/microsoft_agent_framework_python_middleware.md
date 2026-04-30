@@ -148,6 +148,121 @@ class ProfanityBlock(AgentMiddleware):
 
 `agent_framework` ships a single unified `Content` class — construct text content via `Content.from_text(...)`, images via `Content.from_uri(...)`, errors via `Content.from_error(...)`, etc. There are no separate `TextContent`/`ImageContent` classes.
 
+## Caching tool results — `FunctionMiddleware`
+
+Pure or read-mostly tools shouldn't re-run when the model asks the same question twice in a row. Function middleware sees every tool call and can short-circuit by setting `context.result` and raising `MiddlewareTermination`:
+
+```python
+import json
+from typing import Any
+from agent_framework import (
+    FunctionMiddleware,
+    FunctionInvocationContext,
+    MiddlewareTermination,
+)
+
+
+class FunctionCallCache(FunctionMiddleware):
+    """Memoise idempotent tools across a single agent run (or longer).
+
+    Keyed on (tool_name, arguments) — argument order is normalised by JSON
+    sort_keys. Only caches tools tagged `kind="readonly"`; everything else
+    falls through.
+    """
+
+    def __init__(self) -> None:
+        self._cache: dict[str, Any] = {}
+
+    @staticmethod
+    def _key(name: str, arguments: dict[str, Any]) -> str:
+        return f"{name}::{json.dumps(arguments, sort_keys=True, default=str)}"
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        # Only cache tools that explicitly opt in via @tool(kind="readonly")
+        if context.function.kind != "readonly":
+            await call_next()
+            return
+
+        key = self._key(context.function.name, context.arguments or {})
+        if key in self._cache:
+            # Short-circuit: skip the wrapped call entirely.
+            raise MiddlewareTermination(
+                "cache hit",
+                result=self._cache[key],
+            )
+
+        await call_next()
+        if context.result is not None:
+            self._cache[key] = context.result
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="…",
+    middleware=[FunctionCallCache()],
+)
+```
+
+The `kind` filter is a contract with the tool authors: opt in with `@tool(kind="readonly")` and the cache covers you; otherwise the call goes through. Two extensions you'll commonly want:
+
+- Add a TTL by storing `(time.monotonic(), value)` tuples and checking expiry on hit.
+- Move the cache to Redis to share across replicas — same shape, swap the dict for an async client.
+
+## Per-tool circuit breaker
+
+A flaky downstream API can burn through the agent's iteration budget retrying the same broken tool. Trip a per-tool circuit after N consecutive failures, then refuse subsequent calls for a cool-down window:
+
+```python
+import time
+from collections import defaultdict
+from agent_framework import (
+    FunctionMiddleware,
+    FunctionInvocationContext,
+    MiddlewareTermination,
+)
+
+
+class CircuitBreaker(FunctionMiddleware):
+    """Open the circuit on N consecutive failures; refuse calls for cool_down seconds."""
+
+    def __init__(self, *, threshold: int = 3, cool_down: float = 60.0) -> None:
+        self.threshold = threshold
+        self.cool_down = cool_down
+        self._failures: dict[str, int] = defaultdict(int)
+        self._opened_at: dict[str, float] = {}
+
+    def _is_open(self, tool: str) -> bool:
+        opened = self._opened_at.get(tool)
+        if opened is None:
+            return False
+        if time.monotonic() - opened > self.cool_down:
+            # Half-open: clear state and allow the next call through.
+            self._opened_at.pop(tool, None)
+            self._failures[tool] = 0
+            return False
+        return True
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        tool = context.function.name
+        if self._is_open(tool):
+            raise MiddlewareTermination(
+                f"{tool} circuit open — refusing call",
+                result=f"[{tool} unavailable; try again later]",
+            )
+
+        try:
+            await call_next()
+        except Exception:
+            self._failures[tool] += 1
+            if self._failures[tool] >= self.threshold:
+                self._opened_at[tool] = time.monotonic()
+            raise
+        else:
+            self._failures[tool] = 0          # reset on success
+```
+
+`MiddlewareTermination(result=...)` lets you hand the model a synthetic answer when the circuit is open — much friendlier than letting the exception propagate. The model can either retry a different tool or apologise to the user; either way, you stop hammering the broken backend.
+
 ## Retrying a failed tool call
 
 Function middleware is the natural place for per-tool retries:

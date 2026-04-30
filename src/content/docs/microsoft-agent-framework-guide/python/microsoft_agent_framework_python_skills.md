@@ -406,6 +406,74 @@ async for update in stream:
 
 Reject with `approved=False` and the model is told the call was declined — it can either stop, retry with different arguments, or pick a different approach. Always send the response back through the active `stream` (via `stream.send_response(...)`) rather than starting a fresh `agent.run(...)` — a new run would leave the original paused invocation unresolved.
 
+## Decorator reference — `@skill.resource` and `@skill.script`
+
+Both decorators accept two forms — bare (no parens) and parameterised. Bare uses the function name and docstring; parameterised lets you override either:
+
+```python
+import inspect
+from agent_framework import Skill
+
+skill = Skill(
+    name="db-ops",
+    description="PostgreSQL read-only operations.",
+    content="Use load_skill to fetch the schema first, then craft queries.",
+)
+
+
+# Bare — name = "schema", description = the docstring
+@skill.resource
+def schema() -> str:
+    """Compact PostgreSQL schema for the analytics warehouse."""
+    return open("schema.sql").read()
+
+
+# Parameterised — override name and description
+@skill.resource(name="recent-incidents", description="Last 7 days of pager-duty incidents.")
+async def fetch_incidents() -> str:
+    rows = await pager_duty.list_incidents(days=7)
+    return "\n".join(f"- {r.title} ({r.severity})" for r in rows)
+
+
+# Bare script — name = "list_tables"
+@skill.script
+def list_tables() -> str:
+    """Return all table names as a JSON list."""
+    import json
+    return json.dumps(db_inspect.tables())
+
+
+# Parameterised async script
+@skill.script(name="run_query", description="Run a SELECT and return up to 100 rows as JSON.")
+async def execute_query(sql: str) -> str:
+    if not sql.strip().lower().startswith("select"):
+        raise ValueError("Only SELECT queries are permitted.")
+    rows = await db.fetch(sql, limit=100)
+    return json.dumps([dict(r) for r in rows])
+```
+
+The decorators only mutate the `Skill` instance — they return the **original function unchanged**, so you can still call the function directly from your own code (e.g. for unit tests).
+
+### What the agent sees
+
+- `load_skill("db-ops")` → returns the skill `content` plus a list of resources / scripts with their descriptions.
+- `read_skill_resource("db-ops", "schema")` → calls `schema()` and returns the result.
+- `run_skill_script("db-ops", "run_query", {"sql": "SELECT 1"})` → invokes `execute_query("SELECT 1")`.
+
+The framework passes script arguments by name, so the function signature drives the JSON schema the model sees. Use `Annotated[T, "..."]` or Pydantic field metadata on parameters when you need richer descriptions.
+
+### Schema introspection
+
+`SkillScript` exposes the JSON schema for the script's parameters via `parameters_schema`:
+
+```python
+script = next(s for s in skill.scripts if s.name == "run_query")
+print(script.parameters_schema)
+# {'type': 'object', 'properties': {'sql': {...}}, 'required': ['sql']}
+```
+
+Useful when you want to validate inputs server-side before letting a runner execute them, or when you're building an admin UI that lists available scripts.
+
 ## Mixing code-defined and file-based skills
 
 Both sources co-exist:

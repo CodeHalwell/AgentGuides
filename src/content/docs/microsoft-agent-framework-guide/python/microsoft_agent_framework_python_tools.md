@@ -421,6 +421,199 @@ For transient failures, add a `FunctionMiddleware` retry wrapper (see [Middlewar
 
 Chat clients that support rich function output can stream content as the tool runs. Use an async generator and return `ResponseStream`-compatible content — or more commonly, just return the final value and rely on the model's own streaming.
 
+## Composing agents — `as_tool()` and `as_mcp_server()`
+
+Every concrete agent (`Agent`, custom `BaseAgent` subclasses) can be turned into a tool that other agents call. There are two doors:
+
+- `agent.as_tool()` — wraps the agent in a `FunctionTool`. Other agents (in this process) call it like any other function.
+- `agent.as_mcp_server()` — wraps the agent in an MCP `Server` with one tool. Anything that speaks MCP can call it remotely.
+
+### `as_tool()` — supervisor / specialist composition
+
+Use this when the supervisor agent needs to delegate a narrow task to a specialist with its own instructions, model, or tool set:
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+
+# Specialist agent — narrow job, narrow toolset
+billing = Agent(
+    client=OpenAIChatClient(model="gpt-4o-mini"),     # cheaper model for the specialist
+    name="billing_specialist",
+    description="Resolves invoice, refund and subscription questions.",
+    instructions="Only answer billing questions. Refuse anything else politely.",
+    tools=[lookup_invoice, refund_charge],
+)
+
+# Supervisor agent — broad job, delegates via the wrapped specialist
+supervisor = Agent(
+    client=OpenAIChatClient(model="gpt-4o"),
+    name="customer_support",
+    instructions="Triage user questions. Delegate billing topics to the specialist tool.",
+    tools=[
+        billing.as_tool(
+            name="ask_billing",
+            description="Delegate billing questions; returns the specialist's reply verbatim.",
+            arg_name="question",
+            arg_description="The user's billing question, copied verbatim.",
+        ),
+    ],
+)
+
+response = await supervisor.run("Why was I charged twice on April 1st?")
+```
+
+Tunable knobs (all keyword-only):
+
+| Argument | Effect |
+|---|---|
+| `name` | Tool name surfaced to the model. Defaults to the agent's sanitised name. |
+| `description` | Tool description. Defaults to the agent's `description`. |
+| `arg_name` | Parameter the model fills with the task. Defaults to `"task"`. |
+| `arg_description` | Description of that parameter. Defaults to `"Task for {tool_name}"`. |
+| `approval_mode` | `"always_require"` to gate the delegation behind a HITL check. |
+| `stream_callback` | Async/sync callable invoked for each `AgentResponseUpdate` from the specialist's stream. |
+| `propagate_session` | When `True`, the supervisor's `AgentSession` is forwarded into the specialist's `run()` so they share history. Default `False`. |
+
+### Streaming the specialist's progress
+
+Hook `stream_callback` to surface intermediate updates from the specialist to your UI without changing the supervisor's contract:
+
+```python
+async def on_specialist_update(update) -> None:
+    if update.text:
+        await ws.send_text(update.text)        # forward partial output to the browser
+
+
+supervisor = Agent(
+    client=OpenAIChatClient(),
+    name="supervisor",
+    tools=[
+        billing.as_tool(
+            name="ask_billing",
+            stream_callback=on_specialist_update,
+        ),
+    ],
+)
+```
+
+The supervisor still sees a single string return value. The callback only side-channels the streamed tokens.
+
+### Sharing a session — `propagate_session=True`
+
+By default, every delegated call starts a fresh conversation in the specialist. Flip `propagate_session=True` when you want the specialist to **see** the same conversation history as the supervisor (e.g. a multi-turn debugging assistant where a sub-agent should know what was already said):
+
+```python
+debugger = Agent(client=OpenAIChatClient(), name="debugger", instructions="…")
+
+supervisor = Agent(
+    client=OpenAIChatClient(),
+    name="supervisor",
+    tools=[debugger.as_tool(propagate_session=True)],
+)
+
+session = supervisor.create_session()
+await supervisor.run("My function returns None on Monday — here's the code.", session=session)
+await supervisor.run("Now find the bug.", session=session)
+# The debugger sees both turns when it gets called.
+```
+
+### `as_mcp_server()` — expose an agent over MCP
+
+Same wrapping, different transport. `as_mcp_server()` returns an `mcp.server.lowlevel.Server` that lists exactly one tool — the agent itself. Drop it into any MCP-compatible runner:
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    name="docs_agent",
+    description="Answers questions about our internal documentation.",
+    instructions="Only answer using the indexed docs.",
+)
+
+server = agent.as_mcp_server(
+    server_name="docs-mcp",
+    version="1.0.0",
+    instructions="Use the docs_agent tool for any question about internal docs.",
+)
+```
+
+Now any MCP client — Claude Desktop, an LLM IDE, or another `Agent` configured with `MCPStdioTool` / `MCPStreamableHTTPTool` — can drive your agent through the standard tool surface. This is the cleanest way to turn a single-purpose agent into a service consumable by **other** agents written in any language.
+
+> Requires the optional `mcp` dependency. `as_mcp_server()` raises `ModuleNotFoundError` with a friendly message if it's missing.
+
+## Tools that return rich content — `Content.from_*`
+
+When you opt into `result_parser`, the framework gives you a unified `Content` model with classmethods for every payload kind. A single tool can return text, JSON, errors, and binary data in one list — the agent and the chat client decide how to render each piece.
+
+```python
+from agent_framework import tool, Content
+
+
+def parse_inventory(payload: dict) -> list[Content]:
+    parts: list[Content] = []
+
+    # Human-readable summary
+    parts.append(Content.from_text(f"{payload['count']} items in stock"))
+
+    # Raw JSON for the model to reason about
+    parts.append(Content.from_text(payload["json_blob"]))
+
+    # An image from the warehouse camera
+    if image_url := payload.get("camera_url"):
+        parts.append(Content.from_uri(uri=image_url, media_type="image/jpeg"))
+
+    # Embedded binary (e.g. a small PDF report)
+    if pdf_bytes := payload.get("report_pdf"):
+        parts.append(Content.from_data(data=pdf_bytes, media_type="application/pdf"))
+
+    # Surface a soft error without raising
+    if payload.get("warning"):
+        parts.append(Content.from_error(message=payload["warning"]))
+
+    return parts
+
+
+@tool(result_parser=parse_inventory)
+def get_inventory(sku: str) -> dict:
+    return inventory_lookup(sku)
+```
+
+The four constructors you'll reach for:
+
+| Method | When | Carries |
+|---|---|---|
+| `Content.from_text` | Human-readable strings, JSON, summaries | `text` |
+| `Content.from_uri` | Remote images, PDFs, audio | `uri`, `media_type` |
+| `Content.from_data` | Inline binary (base64 internally) | `data`, `media_type` |
+| `Content.from_error` | Soft failures the model should reason about | `message`, optional `code` |
+
+Returning a single `str` is shorthand for `Content.from_text(...)`. Use the explicit list only when you need the multi-part shape.
+
+## Skipping result parsing — `SKIP_PARSING`
+
+The framework wraps every tool result in `list[Content]` by default. If you're piping the raw return value straight into another sandbox (e.g. a Python interpreter loop, a custom executor, or a reasoning harness), the wrapping is wasted work and lossy. Two ways to opt out:
+
+```python
+from agent_framework import tool, FunctionTool, SKIP_PARSING
+
+
+# Tool always returns raw value
+@tool(result_parser=SKIP_PARSING)
+def crunch_numbers(values: list[float]) -> dict:
+    return {"mean": sum(values) / len(values), "raw": values}
+
+
+# Or skip per-call without changing the tool definition
+result = await some_tool.invoke(arguments={"x": 1}, skip_parsing=True)
+# result is the raw return value, NOT list[Content]
+```
+
+`SKIP_PARSING` makes `invoke()` return whatever the wrapped function returned — a dict, a Pydantic model, a numpy array. Useful when an outer harness already understands the type and would only have to undo the `Content` wrapping.
+
 ## Patterns
 
 **One agent, many backends.** Keep tool signatures stable and swap implementations via DI. Register the same set with every agent.

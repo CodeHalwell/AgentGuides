@@ -126,6 +126,95 @@ local = LocalEvaluator(mentions_celsius, short_enough, llm_judge)
 
 Supported parameter names (pick any subset): `query`, `response`, `expected_output`, `conversation`, `tools`, `context`.
 
+### Reference — what each `@evaluator` parameter receives
+
+The framework introspects the function signature and only passes the parameters you declare. Mix and match:
+
+| Parameter | Type | What it carries |
+|---|---|---|
+| `query` | `str` | The user query for this `EvalItem` (last user message under `LAST_TURN` split, or the whole user side under `FULL`). |
+| `response` | `str` | The assistant response under the same split. |
+| `expected_output` | `str` | Ground-truth answer if you provided one via `evaluate_agent(expected_output=...)`. |
+| `conversation` | `list[Message]` | The full conversation, untouched by splitter. Inspect tool calls, system prompts, multi-turn flow. |
+| `tools` | `list[FunctionTool]` | The tools the agent had registered when it produced the response. |
+| `context` | `str \| None` | Grounding context provided to `evaluate_agent(context=...)`. |
+
+A single check can pull whatever combination it needs:
+
+```python
+from agent_framework import CheckResult, evaluator, FunctionTool, Message
+
+
+@evaluator(name="cite_only_documented_tools")
+def only_documented_tools(
+    response: str,
+    conversation: list[Message],
+    tools: list[FunctionTool],
+) -> CheckResult:
+    """Fail if the response cites tool names the agent doesn't actually have."""
+    declared = {t.name for t in tools}
+    cited = {
+        c.name
+        for msg in conversation
+        for c in (msg.contents or [])
+        if c.type == "function_call" and c.name
+    }
+    hallucinated = cited - declared
+    return CheckResult(
+        passed=not hallucinated,
+        reason=(
+            "all cited tools are declared"
+            if not hallucinated
+            else f"hallucinated tool names: {sorted(hallucinated)}"
+        ),
+        check_name="cite_only_documented_tools",
+    )
+```
+
+You can return a plain `bool` or `float` for simple checks; reach for `CheckResult` when you want the failure reason in `EvalScoreResult.sample["reason"]` so it propagates to your CI logs and dashboards.
+
+### Async LLM-judge with rate limiting
+
+When the judge is itself an LLM call, async + a semaphore is the right shape — the framework awaits async checks transparently:
+
+```python
+import asyncio
+from agent_framework import CheckResult, evaluator
+from agent_framework.openai import OpenAIChatClient
+
+judge_client = OpenAIChatClient(model="gpt-4o-mini")
+judge_semaphore = asyncio.Semaphore(8)        # cap concurrency to 8 in-flight judges
+
+JUDGE_PROMPT = """\
+Score the assistant response on a 0.0 – 1.0 scale for factual accuracy
+given the user's question and the grounding context. Reply with the score on
+the first line and a one-line reason on the second.
+"""
+
+
+@evaluator(name="factuality_judge")
+async def factuality(query: str, response: str, context: str) -> CheckResult:
+    async with judge_semaphore:
+        result = await judge_client.get_response(
+            messages=[
+                {"role": "system", "content": JUDGE_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Question: {query}\nContext: {context}\nResponse: {response}",
+                },
+            ],
+        )
+    score_line, _, reason = result.text.partition("\n")
+    score = float(score_line.strip())
+    return CheckResult(
+        passed=score >= 0.7,
+        reason=f"score={score:.2f} — {reason.strip()}",
+        check_name="factuality_judge",
+    )
+```
+
+`LocalEvaluator` runs every check for every item via `asyncio.gather`, so the semaphore is what actually bounds spend on the judge model.
+
 ## Conversation splits — choosing what "response" means
 
 `EvalItem` stores a full conversation and derives `query` / `response` from it via a `ConversationSplitter` strategy. The built-in `ConversationSplit` enum gives you two strategies out of the box; anything callable with signature `(list[Message]) -> (list[Message], list[Message])` satisfies the `ConversationSplitter` protocol.
