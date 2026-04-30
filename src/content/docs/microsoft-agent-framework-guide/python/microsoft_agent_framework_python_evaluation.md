@@ -205,7 +205,14 @@ async def factuality(query: str, response: str, context: str) -> CheckResult:
             ],
         )
     score_line, _, reason = result.text.partition("\n")
-    score = float(score_line.strip())
+    try:
+        score = float(score_line.strip())
+    except ValueError:
+        return CheckResult(
+            passed=False,
+            reason=f"could not parse score from judge output: {result.text[:80]!r}",
+            check_name="factuality_judge",
+        )
     return CheckResult(
         passed=score >= 0.7,
         reason=f"score={score:.2f} — {reason.strip()}",

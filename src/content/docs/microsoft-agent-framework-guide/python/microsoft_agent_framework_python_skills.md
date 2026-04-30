@@ -425,7 +425,8 @@ skill = Skill(
 @skill.resource
 def schema() -> str:
     """Compact PostgreSQL schema for the analytics warehouse."""
-    return open("schema.sql").read()
+    with open("schema.sql", encoding="utf-8") as f:
+        return f.read()
 
 
 # Parameterised — override name and description
