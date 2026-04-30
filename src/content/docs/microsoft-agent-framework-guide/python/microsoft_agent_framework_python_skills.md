@@ -412,6 +412,7 @@ Both decorators accept two forms — bare (no parens) and parameterised. Bare us
 
 ```python
 import inspect
+import json
 from agent_framework import Skill
 
 skill = Skill(
@@ -440,7 +441,6 @@ async def fetch_incidents() -> str:
 @skill.script
 def list_tables() -> str:
     """Return all table names as a JSON list."""
-    import json
     return json.dumps(db_inspect.tables())
 
 
