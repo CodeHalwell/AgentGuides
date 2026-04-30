@@ -137,7 +137,7 @@ The framework introspects the function signature and only passes the parameters 
 | `expected_output` | `str` | Ground-truth answer if you provided one via `evaluate_agent(expected_output=...)`. |
 | `conversation` | `list[Message]` | The full conversation, untouched by splitter. Inspect tool calls, system prompts, multi-turn flow. |
 | `tools` | `list[FunctionTool]` | The tools the agent had registered when it produced the response. |
-| `context` | `str \| None` | Grounding context provided to `evaluate_agent(context=...)`. |
+| `context` | `Optional[str]` | Grounding context provided to `evaluate_agent(context=...)`. |
 
 A single check can pull whatever combination it needs:
 

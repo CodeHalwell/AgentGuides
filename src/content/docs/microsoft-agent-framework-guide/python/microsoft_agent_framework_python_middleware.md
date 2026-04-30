@@ -150,16 +150,18 @@ class ProfanityBlock(AgentMiddleware):
 
 ## Caching tool results — `FunctionMiddleware`
 
-Pure or read-mostly tools shouldn't re-run when the model asks the same question twice in a row. Function middleware sees every tool call and can short-circuit by setting `context.result` and raising `MiddlewareTermination`:
+Pure or read-mostly tools shouldn't re-run when the model asks the same question twice in a row. Function middleware sees every tool call and can short-circuit on a cache hit — either by setting `context.result` and returning, or by raising `MiddlewareTermination(result=...)` when you want to unwind the whole pipeline. The example below uses the `MiddlewareTermination` form so the result is delivered all the way back to the agent without further middleware running:
 
 ```python
 import json
 from typing import Any
 from agent_framework import (
+    Agent,
     FunctionMiddleware,
     FunctionInvocationContext,
     MiddlewareTermination,
 )
+from agent_framework.openai import OpenAIChatClient
 
 
 class FunctionCallCache(FunctionMiddleware):

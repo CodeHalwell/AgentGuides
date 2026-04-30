@@ -411,7 +411,6 @@ Reject with `approved=False` and the model is told the call was declined — it 
 Both decorators accept two forms — bare (no parens) and parameterised. Bare uses the function name and docstring; parameterised lets you override either:
 
 ```python
-import inspect
 import json
 from agent_framework import Skill
 

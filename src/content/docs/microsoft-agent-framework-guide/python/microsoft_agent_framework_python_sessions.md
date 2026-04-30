@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Sessions & history"
-description: "AgentSession, HistoryProvider, InMemoryHistoryProvider, FileHistoryProvider, register_state_type, multi-provider audit logs, and serialising sessions across processes. Verified against agent-framework-core 1.2.2."
+description: "AgentSession, HistoryProvider, InMemoryHistoryProvider, FileHistoryProvider, register_state_type, multi-provider audit logs, and serializing sessions across processes. APIs stable from agent-framework-core 1.1.0; verified against 1.2.2."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -15,7 +15,7 @@ A **session** is one logical conversation with an agent. The framework splits re
 | `HistoryProvider` (subclass) | The actual messages — read/write to disk, Redis, in-memory, … | Process-long, attached to the agent |
 | `Agent` | Orchestrates providers, threads `state` through them on every run | Process-long |
 
-This page walks the moving parts in `agent_framework._sessions` and the patterns that fall out of them. Verified against `agent-framework-core==1.2.2`.
+This page walks the moving parts in `agent_framework._sessions` and the patterns that fall out of them. The public surface (`AgentSession`, `HistoryProvider`, `InMemoryHistoryProvider`, `FileHistoryProvider`, `register_state_type`) has been stable since `agent-framework-core==1.1.0`; the examples below were re-verified against `1.2.2`, which matches what the rest of this guide targets unless a section explicitly says otherwise.
 
 ## TL;DR
 
@@ -191,6 +191,7 @@ from agent_framework import (
     InMemoryHistoryProvider,
     SlidingWindowStrategy,
 )
+from agent_framework.openai import OpenAIChatClient
 
 history = InMemoryHistoryProvider(skip_excluded=True)
 compaction = CompactionProvider(after_strategy=SlidingWindowStrategy(keep_last_groups=20))
@@ -241,7 +242,6 @@ So `agent.create_session(session_id="../etc/passwd")` is safe — it lands insid
 Inject your own JSON serialisers to add envelope encryption, schema migration, or PII redaction:
 
 ```python
-import base64
 import json
 import os
 from cryptography.fernet import Fernet
@@ -252,14 +252,15 @@ cipher = Fernet(key)
 
 
 def encrypt_dumps(payload: dict) -> str:
-    plaintext = json.dumps(payload, ensure_ascii=False).encode()
-    token = cipher.encrypt(plaintext)
-    return base64.urlsafe_b64encode(token).decode()  # single line, JSONL-safe
+    # Fernet tokens are already URL-safe base64 — single line, no extra encoding required.
+    plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    return cipher.encrypt(plaintext).decode("ascii")
 
 
 def decrypt_loads(line: str | bytes) -> dict:
-    token = base64.urlsafe_b64decode(line)
-    return json.loads(cipher.decrypt(token).decode())
+    if isinstance(line, str):
+        line = line.encode("ascii")
+    return json.loads(cipher.decrypt(line).decode("utf-8"))
 
 
 history = FileHistoryProvider(
@@ -271,8 +272,8 @@ history = FileHistoryProvider(
 
 Two operational notes:
 
-- `dumps` **must** return single-line JSON (no `\n` / `\r`) — the provider validates this and raises if you violate it.
-- Both callables must round-trip cleanly. Test with `dumps(loads(x)) == x`.
+- `dumps` **must** return a single-line `str` or `bytes` (no `\n` / `\r`) — the provider validates this and raises if you violate it. The output does not have to be JSON; any single-line representation that round-trips through `loads` to a mapping is accepted, which is what makes this encrypted-token pattern work.
+- Both callables must round-trip cleanly. Test with `loads(dumps(x)) == x` for a representative payload.
 
 ## Agent lifecycle helpers
 
