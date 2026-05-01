@@ -217,6 +217,30 @@ support_summariser = SummarizationStrategy(
 
 The summary message keeps `group_annotation.summary_of_group_ids` and `summary_of_message_ids` metadata so you can later walk back to the original turns — useful for audit trails or "expand this summary" UI affordances.
 
+### Tuning `target_count` and `threshold`
+
+`SummarizationStrategy` has two knobs that govern *when* it runs and *how aggressively* it shrinks. Both default to small values that are reasonable for chat — but understanding them is the difference between a strategy that fires every turn and one that fires once an hour:
+
+| Parameter | Default | What it controls |
+|---|---|---|
+| `target_count` | `4` | After summarisation, how many included non-system messages to retain. The strategy keeps groups from the *end* of history backward until at least `target_count` messages remain. |
+| `threshold` | `2` | Hysteresis. The strategy only triggers when the current included non-system message count exceeds `target_count + threshold`. Set higher to trigger less often, lower to trigger sooner. |
+
+In practice:
+
+```python
+# Aggressive — collapses anything past 6 messages, fires every turn beyond 8.
+SummarizationStrategy(client=summariser_client, target_count=4, threshold=2)
+
+# Lazy — only fires once history grows past 60, then collapses to ~40.
+SummarizationStrategy(client=summariser_client, target_count=40, threshold=20)
+
+# No hysteresis — re-summarises every turn that exceeds target_count.
+SummarizationStrategy(client=summariser_client, target_count=10, threshold=0)
+```
+
+A high `threshold` is what keeps you from re-running the summariser on every single turn — the LLM call isn't free, and stable summaries across multiple turns are usually preferred. The strategy preserves atomic group boundaries, so the actual retained count may exceed `target_count` slightly (e.g. a tool-call group of 3 messages won't be split).
+
 ### Graceful fallback
 
 If the summariser client fails (timeout, rate limit, parse error), `SummarizationStrategy` logs a warning and returns `False` *without* mutating the message list. Composed strategies (`TokenBudgetComposedStrategy`) then fall through to the next strategy. Pair with a cheap sliding-window strategy so you degrade predictably when summarisation is unavailable.

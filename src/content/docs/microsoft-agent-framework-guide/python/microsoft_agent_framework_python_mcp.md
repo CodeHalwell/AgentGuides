@@ -158,27 +158,72 @@ async with MCPWebsocketTool(
 
 ## Approval gates
 
-Require human approval before specific MCP tools run:
+The `approval_mode` parameter accepts four shapes — three string sentinels and one typed dict:
+
+| Value | Effect |
+|---|---|
+| `"always_require"` | Every tool invocation emits a `function_approval_request` event. |
+| `"never_require"` | Bypass approval entirely — the tool runs as soon as the model calls it. |
+| `MCPSpecificApproval` (dict) | Per-tool whitelist / blacklist. |
+| `None` (default) | Inherit the server's default — usually `"never_require"`. |
+
+For per-tool control, use the typed dict — it gives you static type checking and the exact key names the framework expects:
 
 ```python
+from agent_framework import MCPStdioTool, MCPSpecificApproval
+
+# Use the TypedDict for the dict literal — IDE autocompletes the keys.
+git_approval: MCPSpecificApproval = {
+    "always_require_approval": ["git_push", "git_reset", "git_force_push"],
+    "never_require_approval": ["git_status", "git_diff", "git_log"],
+}
+
 mcp = MCPStdioTool(
     name="git",
     command="uvx",
     args=["mcp-server-git"],
-    approval_mode={
-        "always_require_approval": ["git_push", "git_reset"],
-        "never_require_approval": ["git_status", "git_diff"],
-    },
+    approval_mode=git_approval,
 )
 ```
 
-Alternatives:
+Tools listed in **both** lists require approval (the safe default). Tools not in either list inherit the server-side default. When approval is required the workflow emits a `function_approval_request` event; respond with `event.data.to_function_approval_response(approved=True)` and re-run with that response. See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for the full loop.
 
-- `approval_mode="always_require"` — every tool invocation emits an approval event.
-- `approval_mode="never_require"` — bypass approval entirely.
-- `approval_mode=None` (default) — inherit the server's default.
+### Approval + middleware audit log
 
-When approval is required the workflow emits a `function_approval_request` event; respond with `event.data.to_function_approval_response(approved=True)` and re-run with that response. See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for the full loop.
+Pair the per-tool whitelist with a `FunctionMiddleware` that logs every approval-required call so a security team can review history asynchronously:
+
+```python
+import json
+import logging
+from agent_framework import FunctionMiddleware, FunctionInvocationContext
+
+audit_log = logging.getLogger("agent.audit")
+
+
+class ApprovalAudit(FunctionMiddleware):
+    """Log structured records for every tool that requires approval, before it runs."""
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        if context.function.approval_mode == "always_require":
+            audit_log.info(
+                "approval_required",
+                extra={
+                    "tool": context.function.name,
+                    "args": json.dumps(context.arguments or {}, default=str),
+                    "session_id": (context.session.session_id if context.session else None),
+                },
+            )
+        await call_next()
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    middleware=[ApprovalAudit()],
+    tools=[mcp],
+)
+```
+
+Combine with structured logging (JSON output → SIEM) and you have an auditable record of every privileged MCP invocation.
 
 ## Filtering which tools load
 
@@ -378,7 +423,81 @@ mcp = MCPStreamableHTTPTool(
 
 ## Exposing an agent as an MCP server
 
-Flip the direction — let other agents consume yours over MCP. The `agent_framework.devui` or `agent_framework_chatkit` hosting packages expose an agent as a streamable-HTTP MCP endpoint; see those sub-packages for the deployment recipe.
+Flip the direction — let other agents consume yours over MCP. Every `Agent` (and concrete `BaseAgent` subclass) ships an `as_mcp_server()` helper that wraps the agent in an `mcp.server.lowlevel.Server` exposing one tool. Drop it into any MCP runner — stdio, the official `mcp dev` harness, or a hosted streamable-HTTP service:
+
+```python
+import anyio
+from mcp.server.stdio import stdio_server
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        name="docs_agent",
+        description="Answers questions about our internal documentation.",
+        instructions="Only answer using the indexed docs.",
+    )
+
+    server = agent.as_mcp_server(
+        server_name="docs-mcp",
+        version="1.0.0",
+        instructions="Use docs_agent for any question about internal docs.",
+    )
+
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+
+anyio.run(main)
+```
+
+What the wrapper does for you:
+
+- Calls `agent.as_tool()` internally to produce the single advertised tool.
+- Wires `list_tools`, `call_tool`, and `set_logging_level` handlers on the MCP server.
+- Forwards the agent's `name` / `description` to the MCP tool surface.
+- Maps the agent's text output to MCP `TextContent`. Image/audio outputs are dropped with a warning — MCP server-side rich content forwarding isn't implemented yet.
+
+Now any MCP client — Claude Desktop, an LLM IDE, or another `Agent` configured with `MCPStdioTool` / `MCPStreamableHTTPTool` — can drive the agent through the standard tool surface. This is the cleanest way to publish a single-purpose agent for cross-language consumption.
+
+### As an MCP child of another agent
+
+`as_mcp_server()` plus stdio plus another agent's `MCPStdioTool` lets you compose two agents over MCP locally without any HTTP plumbing. Useful for pipeline-style architectures where each step is a small, replaceable agent:
+
+```python
+# child_agent.py — packaged as an executable script
+import anyio
+from mcp.server.stdio import stdio_server
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+async def main() -> None:
+    agent = Agent(client=OpenAIChatClient(), name="summariser", instructions="Summarise.")
+    server = agent.as_mcp_server(server_name="summariser")
+    async with stdio_server() as (r, w):
+        await server.run(r, w, server.create_initialization_options())
+
+anyio.run(main)
+```
+
+```python
+# supervisor.py
+async with MCPStdioTool(
+    name="summariser",
+    command="python",
+    args=["child_agent.py"],
+) as child:
+    supervisor = Agent(client=OpenAIChatClient(), name="supervisor", tools=child)
+    response = await supervisor.run("Summarise the attached doc.")
+```
+
+The two processes talk over MCP — kill or restart the child without touching the supervisor.
+
+### Deployed MCP servers
+
+For HTTP/SSE deployments, the `agent_framework.devui` and `agent_framework_chatkit` hosting packages turn `as_mcp_server()` output into a streamable-HTTP endpoint with auth, multi-session routing, and OpenTelemetry tracing — see those sub-packages for production recipes.
 
 ## Common patterns
 
