@@ -15,7 +15,7 @@ Agent Framework ships three human-in-the-loop (HITL) patterns:
 
 All three surface the same `"request_info"` / `"function_approval_request"` events, so a single event loop in the caller can handle any of them.
 
-Verified against `agent-framework-core==1.1.0`.
+Verified against `agent-framework-core==1.2.2`.
 
 ## Workflow-level `request_info`
 

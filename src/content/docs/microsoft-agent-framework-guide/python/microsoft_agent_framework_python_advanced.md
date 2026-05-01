@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Advanced Patterns"
-description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.1.0."
+description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.2.2."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 This page covers the extensibility hooks in `agent-framework-core` that the feature-level pages gloss over: writing your own chat client, embedding client, or context provider, feature-detecting clients at runtime via the `Supports*` protocols, and opting into experimental/RC APIs.
 
-Verified against `agent-framework-core==1.1.0`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
+Verified against `agent-framework-core==1.2.2`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
 
 ## Custom agent — `BaseAgent` and `RawAgent`
 
@@ -672,7 +672,7 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 warnings.filterwarnings("error", category=FeatureStageWarning)
 ```
 
-The currently gated features:
+The currently gated features (verified against `agent-framework-core==1.2.2`):
 
 | Stage | Enum member | Covers |
 |---|---|---|
@@ -681,9 +681,19 @@ The currently gated features:
 | Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
 | Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
 | Experimental | `ExperimentalFeature.TOOLBOXES` | Toolbox APIs (preview) |
-| Release candidate | `ReleaseCandidateFeature.WORKFLOW_VIZ` | `WorkflowViz` diagram rendering |
+| Release candidate | *(empty in 1.2.2)* | The enum exists but has no members in this release — features that previously sat at RC have either been promoted to stable or rolled back to experimental. |
 
-The list above mirrors the enum in `agent_framework._feature_stage` for `agent-framework-core==1.2.x`. Members are added each release as new previews land, so check the enum at runtime (`list(ExperimentalFeature)`) when you need an authoritative answer in CI.
+Both enums are stage-scoped inventories, not stable introspection surfaces. Members move or disappear as features advance — the docstring on `ReleaseCandidateFeature` is explicit about this. Always enumerate at runtime when you need an authoritative list:
+
+```python
+from agent_framework import ExperimentalFeature, ReleaseCandidateFeature
+
+print([f.value for f in ExperimentalFeature])
+# ['EVALS', 'FILE_HISTORY', 'FUNCTIONAL_WORKFLOWS', 'SKILLS', 'TOOLBOXES']
+
+print([f.value for f in ReleaseCandidateFeature])
+# []  ← empty in 1.2.2; non-empty in releases that have RC features queued
+```
 
 Inspect any class or callable at runtime to see what stage it belongs to:
 
@@ -694,7 +704,45 @@ print(LocalEvaluator.__feature_stage__)  # "experimental"
 print(LocalEvaluator.__feature_id__)     # "EVALS"
 ```
 
-Use this in CI to fail the build if anyone imports an experimental API without an explicit opt-in — e.g. assert that every class you import in production code has `__feature_stage__` unset or equal to `"stable"`.
+Use this in CI to fail the build if anyone imports an experimental API without an explicit opt-in:
+
+```python
+# tests/test_no_unstable_imports.py
+import importlib
+import pytest
+
+
+PROD_MODULES = ["my_app.agents", "my_app.workflows", "my_app.tools"]
+STABLE_STAGES = {None, "stable"}
+
+
+@pytest.mark.parametrize("modname", PROD_MODULES)
+def test_module_uses_only_stable_apis(modname: str) -> None:
+    mod = importlib.import_module(modname)
+    for name in dir(mod):
+        obj = getattr(mod, name)
+        # Use getattr with a default — the attribute disappears when a
+        # feature is promoted to stable, so absence means "stable".
+        stage = getattr(obj, "__feature_stage__", None)
+        assert stage in STABLE_STAGES, (
+            f"{modname}.{name} is at stage={stage!r} — wrap usage in an "
+            "explicit opt-in so the team knows it can change without notice."
+        )
+```
+
+When you genuinely want to depend on a staged API, silence its specific warning rather than the whole `FeatureStageWarning` category — that way you still hear about *new* staged APIs you accidentally pull in:
+
+```python
+import warnings
+from agent_framework._feature_stage import ExperimentalWarning
+
+# Allow `LocalEvaluator` (EVALS) but keep every other staged warning loud.
+warnings.filterwarnings(
+    "ignore",
+    message=r"\[EVALS\] .*",
+    category=ExperimentalWarning,
+)
+```
 
 ## Functional workflows — `@workflow` and `@step`
 
@@ -747,6 +795,57 @@ async def pipeline(url: str) -> str:
 ```
 
 The framework only re-executes `fetch` and `transform` once per logical call site. Loops keep distinct cache keys via the call counter, so `for url in urls: await fetch(url)` works as expected.
+
+#### What `@step` actually wraps — `StepWrapper`
+
+The `@step` decorator returns a `StepWrapper`, which is transparent outside a workflow context (call it from a unit test and it just runs the function) and switched-on inside one (caching + lifecycle events + `RunContext` injection + per-step checkpointing). A few practical consequences:
+
+```python
+from agent_framework import workflow, step
+
+@step
+async def expensive(x: int) -> int:
+    print(f"running expensive({x})")
+    return x * x
+
+
+# Outside a workflow: behaves like a plain async function. No caching.
+import asyncio
+asyncio.run(expensive(5))         # prints "running expensive(5)" → returns 25
+asyncio.run(expensive(5))         # prints "running expensive(5)" again — no cache
+
+
+@workflow
+async def pipeline(x: int) -> int:
+    a = await expensive(x)        # call_index=0 → cache miss, runs
+    b = await expensive(x + 1)    # call_index=1 → distinct key, runs
+    return a + b
+
+
+# Inside a workflow: each call site is cached on (step_name, call_index).
+# A second `pipeline.run(...)` with the same input rebuilds the cache from
+# scratch — caching is per run, not global.
+```
+
+The cache is keyed on `(step_name, call_index)`, **not on arguments**. That means:
+
+- A second call to the same step inside the same run is treated as a fresh call site (it gets `call_index=1`) and will execute again, even if the arguments are identical.
+- Arguments are recorded in the cache value so HITL replay and checkpoint restore can deliver the recorded result without re-running the function. After a `request_info()` suspension, the framework replays the workflow function from the top and serves cached results until it reaches the call site that suspended.
+- `executor_bypassed` events are emitted on cache hits so you can spot replay noise in observability dashboards. `executor_invoked` / `executor_completed` events fire only on live calls.
+
+If a step needs to *always* run (e.g., it depends on the wall clock or external state), don't decorate it with `@step` — use a plain async function inside the `@workflow` body. Or use a name that varies per call:
+
+```python
+import time
+from agent_framework import step
+
+@step  # explicit name keeps the cache deterministic
+async def measure_now(label: str) -> float: ...
+
+# Want every call uncached? Skip the decorator:
+async def now_uncached() -> float:
+    return time.time()
+```
 
 ### `RunContext` — HITL, custom events, and per-run state
 

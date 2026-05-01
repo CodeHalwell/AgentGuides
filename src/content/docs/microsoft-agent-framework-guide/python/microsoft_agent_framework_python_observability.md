@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Observability & Telemetry"
-description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework-core 1.1.0. Enable instrumentation, ship to Azure Monitor / OTLP / console, or the VS Code AI Toolkit."
+description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework-core 1.2.2. Enable instrumentation, ship to Azure Monitor / OTLP / console, or the VS Code AI Toolkit."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 `agent-framework-core` emits OpenTelemetry signals following the **GenAI semantic conventions**. Every agent run, model call, tool invocation, workflow executor, and edge group is a span; every chat completion emits a duration histogram and a token-usage histogram. Nothing is exported by default — you opt in either by calling a helper, setting one env var, or wiring your own OTel providers.
 
-Verified against `agent-framework-core==1.1.0` (`agent_framework.observability`).
+Verified against `agent-framework-core==1.2.2` (`agent_framework.observability`).
 
 ## Three ways to turn it on
 

@@ -23,7 +23,7 @@ pip install agent-framework
 
 The workflow types are exported from the top-level `agent_framework` package.
 
-### Primitives (verified against `agent-framework-core==1.1.0`)
+### Primitives (verified against `agent-framework-core==1.2.2`)
 
 | Class / function | Purpose |
 |---|---|
@@ -178,7 +178,7 @@ The `FileCheckpointStorage` API exposes `.save`, `.load`, `.get_latest`, `.list_
 pip install agent-framework-declarative --pre
 ```
 
-### Primitives (verified against `agent-framework-declarative==1.0.0b260421`)
+### Primitives (verified against `agent-framework-declarative==1.0.0b260429`)
 
 | Class | Purpose |
 |---|---|

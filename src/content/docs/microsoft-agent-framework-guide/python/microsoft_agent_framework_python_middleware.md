@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Middleware"
-description: "Agent, chat, and function middleware in agent-framework-core 1.1.0 — real signatures, short-circuit patterns, telemetry, retries, and redaction."
+description: "Agent, chat, and function middleware in agent-framework-core 1.2.2 — real signatures, short-circuit patterns, telemetry, retries, and redaction."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -15,7 +15,7 @@ Middleware is how you intercept agent runs without subclassing `Agent`. Three le
 | **Chat** | A single model request inside the tool loop | `ChatContext` | Per-call observability, prompt caching, token accounting, response rewriting |
 | **Function** | A single tool invocation | `FunctionInvocationContext` | Argument validation, PII redaction, approval gates, per-tool telemetry |
 
-All three ship in `agent_framework`; imports below are stable in `agent-framework-core==1.1.0`.
+All three ship in `agent_framework`; imports below are stable in `agent-framework-core==1.2.2`.
 
 ## The `call_next` contract
 
@@ -346,6 +346,89 @@ class RetryOnError(FunctionMiddleware):
         assert last_exc is not None  # attempts >= 1 guarantees we saw at least one exception
         raise last_exc  # give up
 ```
+
+## Rewriting tool results — `FunctionInvocationContext.result`
+
+`FunctionInvocationContext.result` is `None` until you `await call_next()`; afterwards it holds whatever the tool returned. You can both **observe** it (for logging) and **override** it before it lands back in the chat loop. This is the cleanest way to redact, truncate, or normalise tool output without touching the tool itself.
+
+```python
+import json
+from agent_framework import FunctionMiddleware, FunctionInvocationContext
+
+
+class TruncateLargeJSON(FunctionMiddleware):
+    """Cap a tool's JSON return value at N characters so an oversized DB row
+    or web-scrape doesn't blow the model's context window.
+
+    `context.result` is whatever the tool returned — could be a string, dict,
+    Pydantic model, dataclass, or `None`. Cast carefully before mutating.
+    """
+
+    def __init__(self, max_chars: int = 4_000) -> None:
+        self.max_chars = max_chars
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        await call_next()
+
+        # Serialise dict / list / model into JSON for length checks; pass strings through.
+        as_text = (
+            context.result
+            if isinstance(context.result, str)
+            else json.dumps(context.result, default=str)
+        )
+        if len(as_text) > self.max_chars:
+            context.result = (
+                as_text[: self.max_chars]
+                + f"\n…[truncated {len(as_text) - self.max_chars} chars]"
+            )
+```
+
+`FunctionInvocationContext` also exposes a `metadata` dict that's shared across **every middleware in the same invocation**. Use it to forward a request-id, a tenant marker, or a timing measurement from one middleware to another without touching the tool's signature:
+
+```python
+import logging
+import time
+from agent_framework import (
+    Agent,
+    FunctionMiddleware,
+    FunctionInvocationContext,
+)
+from agent_framework.openai import OpenAIChatClient
+
+log = logging.getLogger(__name__)
+
+
+class StartTimer(FunctionMiddleware):
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        context.metadata["my_app.t0"] = time.monotonic()
+        await call_next()
+
+
+class RecordLatency(FunctionMiddleware):
+    """Reads the timestamp another middleware put on `context.metadata`.
+
+    Both middleware run on the same `FunctionInvocationContext` instance, so
+    metadata flows freely. Just be careful with key names — namespace yours
+    (`my_app.t0`, `my_app.tenant`) so middleware from different teams don't
+    clobber each other.
+
+    Replace ``log.info`` with your real metrics emitter (Prometheus, OpenTelemetry,
+    StatsD, …); it's left as a logger here so the snippet runs without extra deps.
+    """
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        await call_next()
+        elapsed_ms = (time.monotonic() - context.metadata["my_app.t0"]) * 1_000
+        log.info("tool.%s.latency_ms=%.2f", context.function.name, elapsed_ms)
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    middleware=[StartTimer(), RecordLatency(), TruncateLargeJSON(max_chars=8_000)],
+)
+```
+
+The `arguments` field on `FunctionInvocationContext` is **already validated** — it's either a Pydantic model instance (when the tool's schema produced one) or a `Mapping[str, Any]`. You can mutate it before `call_next()` to inject defaults, or use it to short-circuit when the args fail an external policy check by raising `MiddlewareTermination(result=...)`.
 
 ## Redacting sensitive outputs
 
@@ -697,4 +780,4 @@ print(final.value)  # parsed Address instance, lazily validated
 - `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
 - `AggregateContextProvider` removed — compose providers directly.
 
-The `context_providers` parameter on `Agent` is still **plural** in 1.1.0, contrary to earlier drafts of this guide.
+The `context_providers` parameter on `Agent` is still **plural** in 1.2.2, contrary to earlier drafts of this guide.

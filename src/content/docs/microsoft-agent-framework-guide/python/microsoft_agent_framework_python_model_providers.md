@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Model Providers"
-description: "Real imports and constructors for every first-party chat client in agent-framework 1.1.0: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Ollama, Bedrock, GitHub Copilot, Copilot Studio."
+description: "Real imports and constructors for every first-party chat client in agent-framework 1.2.2: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Ollama, Bedrock, GitHub Copilot, Copilot Studio."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 Every chat client in `agent-framework` implements the same `SupportsChatGetResponse` protocol, so `Agent(client=...)` accepts them interchangeably. The import is always `agent_framework.<provider>.<ClassName>` — **no Azure SDK import is required for any of these**. The Azure SDK only becomes relevant for authentication (`azure-identity`) or for Azure-specific storage providers.
 
-This page was verified against `agent-framework-core==1.1.0` and provider packages at `1.0.0b260421` (April 2026). Each sub-package is imported lazily from the `agent_framework.<provider>` namespace — you install the provider package and import from `agent_framework.<provider>`.
+This page was verified against `agent-framework-core==1.2.2` and provider packages at `1.0.0b260429` (April 2026). Each sub-package is imported lazily from the `agent_framework.<provider>` namespace — you install the provider package and import from `agent_framework.<provider>`.
 
 ## Provider index
 
@@ -118,7 +118,7 @@ async with AzureCliCredential() as credential:
         ),
         instructions="You are a helpful assistant.",
     )
-    response = await agent.run("Summarise agent-framework 1.1.0 in one line.")
+    response = await agent.run("Summarise agent-framework 1.2.2 in one line.")
 ```
 
 Env vars: `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`.

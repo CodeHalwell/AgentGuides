@@ -157,7 +157,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'core 1.1.0 · providers 1.0.0b260421',
+    version: 'core 1.2.2 · providers 1.0.0b260429',
   },
   {
     id: 'google-adk',

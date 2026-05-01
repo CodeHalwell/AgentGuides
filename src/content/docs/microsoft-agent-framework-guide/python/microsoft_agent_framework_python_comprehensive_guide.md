@@ -14,7 +14,7 @@ Latest: 1.0.1 | Updated: April 20, 2026
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.1.0`).**
+> **API reference (verified against `agent-framework-core==1.2.2`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Primary agent class:** `Agent`. Construct with `Agent(client=<ChatClient>, instructions=..., tools=[...])`.
@@ -373,6 +373,76 @@ asyncio.run(main())
 ```
 
 For HITL flows that need to inject an approval response **mid-stream**, the same `ResponseStream` exposes `await stream.send_response(...)` — used for `function_approval_request` events without restarting the run.
+
+### Inspecting an `AgentResponseUpdate`
+
+Each chunk is a fully-typed `AgentResponseUpdate` carrying `contents`, `role`, `author_name`, `agent_id`, `response_id`, `message_id`, `created_at`, `finish_reason`, and `continuation_token`. A few attributes are particularly useful when building richer UIs over the raw stream:
+
+```python
+async for update in agent.run("Plan tomorrow's release.", stream=True):
+    # 1. Plain text fragment (None for non-text chunks like tool calls).
+    if update.text:
+        ui.append_text(update.text)
+
+    # 2. In multi-agent runs, `author_name` and `agent_id` distinguish which
+    #    agent emitted the chunk so you can colour-code it in the UI.
+    if update.author_name:
+        ui.set_speaker(update.author_name)
+
+    # 3. HITL approvals surface as Content items inside the update — there's
+    #    a property that filters them out for you.
+    for request in update.user_input_requests:
+        await approval_queue.put((update.response_id, request))
+
+    # 4. The `finish_reason` lands on the **final** update of a streamed run.
+    if update.finish_reason is not None:
+        ui.mark_complete(update.finish_reason)
+```
+
+### Persisting and replaying updates
+
+`AgentResponseUpdate` is a `SerializationMixin` dataclass — round-trips through `to_dict()` / `from_dict()` and `to_json()` / `from_json()`. Useful for buffering chunks to a queue, replaying them in tests, or shipping them over a websocket without the framework on the receiving end:
+
+```python
+from agent_framework import AgentResponseUpdate
+
+# Persist each chunk as it arrives
+chunks: list[str] = []
+async for update in agent.run("Hello", stream=True):
+    chunks.append(update.to_json())
+
+# Later — restore the exact same updates
+restored = [AgentResponseUpdate.from_json(line) for line in chunks]
+```
+
+For non-streaming consumers that received a chunked feed, rebuild a single `AgentResponse` from the buffer:
+
+```python
+from agent_framework import AgentResponse, AgentResponseUpdate
+
+updates = [AgentResponseUpdate.from_json(line) for line in chunks]
+final = AgentResponse.from_updates(updates)
+print(final.text)            # joined text
+print(final.user_input_requests)
+```
+
+When a Pydantic schema is configured for structured output, pass `output_format_type=` and the assembled response lazily validates `final.value`:
+
+```python
+from pydantic import BaseModel
+from agent_framework import AgentResponse
+
+
+class ReleasePlan(BaseModel):
+    version: str
+    date: str
+
+
+final = AgentResponse.from_updates(updates, output_format_type=ReleasePlan)
+plan: ReleasePlan = final.value      # validated on first access
+```
+
+For a streaming source, the async equivalent `AgentResponse.from_update_generator(stream)` consumes an async iterator and returns a single `AgentResponse` — handy when you want to forward a streaming provider's output to a non-streaming caller without dropping tool calls or the `finish_reason`.
 
 ---
 
@@ -1070,6 +1140,50 @@ async def on_decision(self, original_request, approved, ctx):
 ```
 
 The full HITL loop on the caller side is in the [HITL page](./microsoft_agent_framework_python_hitl/).
+
+### Exposing a workflow as an agent — `Workflow.as_agent()`
+
+Every `Workflow` has an `as_agent(name=..., description=..., context_providers=...)` method that returns a `WorkflowAgent`. The wrapper satisfies `SupportsAgentRun`, so the workflow drops into anywhere an `Agent` is expected — multi-agent orchestrations, `Agent.as_tool()` chains, FastAPI routes, etc.
+
+```python
+from agent_framework import Agent, AgentExecutor, WorkflowBuilder
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+
+# Inner pipeline: classify → resolve.
+classifier = AgentExecutor(Agent(client=client, name="classifier", instructions="Tag the message."))
+resolver = AgentExecutor(Agent(client=client, name="resolver", instructions="Answer."))
+
+triage = (
+    WorkflowBuilder(start_executor=classifier, name="support-triage")
+    .add_edge(classifier, resolver)
+    .build()
+)
+
+# Wrap the whole graph as an agent — same interface as a single-LLM Agent.
+triage_agent = triage.as_agent(
+    name="support_triage",
+    description="Classifies a support ticket and produces a resolution.",
+)
+
+# Drop it into a higher-level supervisor as a tool.
+supervisor = Agent(
+    client=client,
+    name="supervisor",
+    instructions="Route messages to specialised tools.",
+    tools=[triage_agent.as_tool()],
+)
+
+response = await supervisor.run("My laptop won't charge — please help.")
+print(response.text)
+```
+
+A few facts that aren't obvious from the signature alone:
+
+- The wrapper streams `WorkflowEvent` objects under the hood and surfaces them as `AgentResponseUpdate` chunks when called with `stream=True`. Pending HITL requests inside the workflow surface as `Content` items with `user_input_request` set, so the same UI code that handles per-tool approval handles workflow-level HITL too.
+- `context_providers=` on `as_agent()` attaches the providers to the wrapper — they see the *outer* `Agent.run` calls, not the inner workflow's executors.
+- Workflow state is preserved across `agent.run(...)` calls (the same workflow instance is reused). To get a fresh run, build a new `Workflow` and call `as_agent` again.
 
 ---
 

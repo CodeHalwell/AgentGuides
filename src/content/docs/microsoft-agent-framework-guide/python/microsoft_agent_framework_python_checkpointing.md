@@ -9,7 +9,7 @@ language: python
 
 Checkpointing captures the full execution state of a workflow at every superstep so you can pause, crash, redeploy, or hand off to a different process and pick up exactly where you left off. It's the backbone for long-running agent workflows, human-in-the-loop pauses that last days, and durable multi-agent orchestrations.
 
-Verified against `agent-framework-core==1.1.0` (`agent_framework._workflows._checkpoint`).
+Verified against `agent-framework-core==1.2.2` (`agent_framework._workflows._checkpoint`).
 
 ## What lives in a checkpoint
 

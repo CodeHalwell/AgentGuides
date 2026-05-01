@@ -7,7 +7,7 @@ language: python
 
 # Microsoft Agent Framework Python - Recipes and Code Patterns
 
-All recipes on this page target the real `agent_framework` package (verified against `agent-framework-core==1.1.0`). The primary agent class is `Agent`; chat clients come from `agent_framework.openai`, `agent_framework.foundry`, `agent_framework.anthropic`, etc. The tool decorator is `@tool` from `agent_framework`. Multi-turn state is managed via `agent.create_session()`; workflow orchestration uses `WorkflowBuilder` from `agent_framework`.
+All recipes on this page target the real `agent_framework` package (verified against `agent-framework-core==1.2.2`). The primary agent class is `Agent`; chat clients come from `agent_framework.openai`, `agent_framework.foundry`, `agent_framework.anthropic`, etc. The tool decorator is `@tool` from `agent_framework`. Multi-turn state is managed via `agent.create_session()`; workflow orchestration uses `WorkflowBuilder` from `agent_framework`.
 
 This document provides a collection of practical, copy-paste-ready Python recipes for building common agentic patterns with the Microsoft Agent Framework for Python.
 
@@ -219,7 +219,7 @@ if __name__ == "__main__":
 
 ### Recipe 6: Memory Integration with Azure AI Search
 
-This recipe shows how to expose Azure AI Search as a retrieval tool so an agent can ground answers in a long-term knowledge index. `agent-framework-core==1.1.0` does not ship a dedicated `AzureAISearchMemory` class — the idiomatic pattern is a `@tool`-decorated function that wraps the `azure-search-documents` client.
+This recipe shows how to expose Azure AI Search as a retrieval tool so an agent can ground answers in a long-term knowledge index. `agent-framework-core==1.2.2` does not ship a dedicated `AzureAISearchMemory` class — the idiomatic pattern is a `@tool`-decorated function that wraps the `azure-search-documents` client.
 
 ```python
 # memory_agent.py
