@@ -9,7 +9,7 @@ Latest: 1.32.0 | Updated: May 1, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** April 19, 2026  
+**Last Updated:** May 1, 2026  
 **Framework:** Google Agent Development Kit (ADK)  
 **Target Audience:** Beginner to Advanced Developers
 

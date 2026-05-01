@@ -8,7 +8,7 @@ Latest: 0.12.2 | Updated: May 1, 2026
 # AG2 (AutoGen) Comprehensive Guide
 
 **Version:** 0.12.2
-**Last Updated:** April 2026
+**Last Updated:** May 2026
 **Focus:** Modern AutoGen (AG2) Framework
 
 ## Overview
