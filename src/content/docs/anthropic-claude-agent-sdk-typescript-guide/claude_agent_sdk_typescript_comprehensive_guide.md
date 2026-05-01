@@ -4,7 +4,7 @@ description: "The Claude Agent SDK is the official TypeScript library for buildi
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-Latest: 0.2.123 | Updated: April 29, 2026
+Latest: 0.2.126 | Updated: May 1, 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -3264,6 +3264,7 @@ The comprehensive guide continues with detailed sections on each topic with exte
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.2.126 | May 1, 2026 | Patch releases (0.2.124–0.2.126); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.126` (latest, 2026-05-01). Note: 0.2.125 was not published; sequence goes 0.2.124 → 0.2.126. |
 | 0.2.123 | April 29, 2026 | Patch releases (0.2.122–0.2.123); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.123`. |
 | 0.2.121 | April 28, 2026 | Patch releases (0.2.120–0.2.121); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.121`. |
 | 0.2.119 | April 24, 2026 | Patch releases (0.2.118–0.2.119); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.119`. |

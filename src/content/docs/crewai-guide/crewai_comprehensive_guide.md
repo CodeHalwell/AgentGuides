@@ -4,7 +4,7 @@ description: "1. Introduction 2. Core Fundamentals 3. Simple Agents 4. Multi-Age
 framework: crewai
 ---
 
-Latest: 1.14.3 | Updated: April 25, 2026
+Latest: 1.14.4 | Updated: May 1, 2026
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 
@@ -2471,6 +2471,8 @@ This comprehensive guide now includes all features through CrewAI v1.14.2 (April
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.14.4 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `crewai 1.14.4` (`.routine-envs/check-crewai-0501`); `Agent`, `Task`, `Crew` imports verified with `-W error::DeprecationWarning`. |
+| 1.14.3 | April 25, 2026 | Pre-release 1.14.3a2 confirmed stable; stability improvements. |
 | 1.14.2 | April 17, 2026 | Checkpoint forking with lineage tracking; `from_checkpoint` parameter on `Agent.kickoff`; checkpoint resume/diff/prune CLI commands; template management commands; enriched LLM token tracking (reasoning + cache creation tokens); scoped streaming handlers (prevents cross-run chunk contamination); Bedrock tool call argument preservation fix; cyclic JSON schema fix in MCP tool resolution; `flow_finished` event fix after HITL resume; cryptography pinned to 46.0.7 (CVE-2026-39892); security patches for authlib, langchain-text-splitters, pypdf |
 | 1.14.1 | April 9, 2026 | Async checkpoint TUI browser; `aclose()`/`close()` and async context manager support for streaming outputs; `BaseProvider` refactored as Pydantic `BaseModel` with `provider_type` discriminator; devtools CLI switched to `tomlkit`; dynamic tool field exclusion (replaces hardcoded denylist); transformers bumped to 5.5.0 (CVE-2026-1839) |
 | 1.14.0 | April 7, 2026 | Checkpoint system (`CheckpointConfig`, `SqliteProvider`); `CodeInterpreterTool` hard-removed; structured Pydantic outputs via `response_format`; before/after tool hooks; GPT-5/o-series vision support; SSRF and path traversal protections; native OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras) |

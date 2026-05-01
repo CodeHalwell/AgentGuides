@@ -1,14 +1,14 @@
 ---
 title: "AG2 (AutoGen) Comprehensive Guide"
-description: "Version: 0.12.1 Last Updated: April 2026 Focus: Modern AutoGen (AG2) Framework"
+description: "Version: 0.12.2 Last Updated: May 2026 Focus: Modern AutoGen (AG2) Framework"
 framework: ag2
 ---
 
-Latest: 0.12.1 | Updated: April 25, 2026
+Latest: 0.12.2 | Updated: May 1, 2026
 # AG2 (AutoGen) Comprehensive Guide
 
-**Version:** 0.12.1
-**Last Updated:** April 2026
+**Version:** 0.12.2
+**Last Updated:** May 1, 2026
 **Focus:** Modern AutoGen (AG2) Framework
 
 ## Overview
@@ -179,6 +179,7 @@ result = await agent.a_run("What are the latest developments in quantum computin
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.12.2 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `ag2 0.12.2` (`.routine-envs/check-ag2-0501`); `autogen.ConversableAgent` import verified with `-W error::DeprecationWarning`. |
 | 0.12.1 | April 25, 2026 | Patch release; stability improvements. Version confirmed against installed `ag2 0.12.1` (`.routine-envs/ag2-py-0425`); `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `ConversableAgent` imports verified. |
 | 0.12.0 | April 2026 | Minor release following 0.11.5; continued event-driven and A2A improvements. |
 | 0.11.5 | April 5, 2026 | Security fixes (CVE-2026-23745, CVE-2026-23950, CVE-2026-24842); `QuickResearchTool` for parallel research; Gemini client streaming; `RemyxCodeExecutor` for containerised execution |

@@ -676,11 +676,14 @@ The currently gated features:
 
 | Stage | Enum member | Covers |
 |---|---|---|
-| Experimental | `ExperimentalFeature.EXPERIMENTAL` (generic) | Anything without a more specific ID |
 | Experimental | `ExperimentalFeature.SKILLS` | `Skill`, `SkillResource`, `SkillScript`, `SkillsProvider` |
 | Experimental | `ExperimentalFeature.EVALS` | `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `@evaluator` |
-| Experimental | `ExperimentalFeature.COMPACTION` | `SlidingWindowStrategy`, `SummarizationStrategy`, `TokenBudgetComposedStrategy`, `SelectiveToolCallCompactionStrategy`, `ToolResultCompactionStrategy` |
+| Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
+| Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
+| Experimental | `ExperimentalFeature.TOOLBOXES` | Toolbox APIs (preview) |
 | Release candidate | `ReleaseCandidateFeature.WORKFLOW_VIZ` | `WorkflowViz` diagram rendering |
+
+The list above mirrors the enum in `agent_framework._feature_stage` for `agent-framework-core==1.2.x`. Members are added each release as new previews land, so check the enum at runtime (`list(ExperimentalFeature)`) when you need an authoritative answer in CI.
 
 Inspect any class or callable at runtime to see what stage it belongs to:
 
@@ -692,6 +695,312 @@ print(LocalEvaluator.__feature_id__)     # "EVALS"
 ```
 
 Use this in CI to fail the build if anyone imports an experimental API without an explicit opt-in — e.g. assert that every class you import in production code has `__feature_stage__` unset or equal to `"stable"`.
+
+## Functional workflows — `@workflow` and `@step`
+
+Graph-based `WorkflowBuilder` is great for fan-out/fan-in topologies that need explicit edges, but for the *vast majority* of pipelines you really just want to write Python. The `@workflow` decorator (experimental, gated behind `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`) lets you do exactly that — native `if`/`else`, `for`, `asyncio.gather`, whatever — while keeping the framework's HITL, checkpointing, and event stream on tap.
+
+### The minimum viable workflow
+
+```python
+import asyncio
+from agent_framework import workflow
+
+
+@workflow
+async def my_pipeline(data: str) -> str:
+    return data.upper()
+
+
+result = asyncio.run(my_pipeline.run("hello"))
+print(result.get_outputs())  # ['HELLO']
+```
+
+`my_pipeline` is now a `FunctionalWorkflow` instance. It exposes the same `run(message, *, stream=False, responses=..., checkpoint_id=...)` surface as graph workflows and returns a `WorkflowRunResult`.
+
+A workflow function takes **at most one** non-`RunContext` parameter. That single parameter is the message you pass to `.run()`. Bundle multiple inputs into a dict or Pydantic model.
+
+### Adding `@step` for caching, checkpointing, and events
+
+Plain async functions work inside `@workflow`, but wrapping them in `@step` gives you per-call caching keyed on `(step_name, call_index)`. On HITL replay or checkpoint restore, completed steps are skipped instead of re-run.
+
+```python
+import json
+from agent_framework import workflow, step
+
+
+@step
+async def fetch(url: str) -> dict:
+    # Real HTTP call — would re-run on every replay without @step.
+    return await http_get(url)
+
+
+@step(name="transform")  # parameterised form: explicit display name
+async def transform(raw: dict) -> str:
+    return json.dumps(raw)
+
+
+@workflow
+async def pipeline(url: str) -> str:
+    raw = await fetch(url)
+    return await transform(raw)
+```
+
+The framework only re-executes `fetch` and `transform` once per logical call site. Loops keep distinct cache keys via the call counter, so `for url in urls: await fetch(url)` works as expected.
+
+### `RunContext` — HITL, custom events, and per-run state
+
+When a workflow needs human-in-the-loop input, custom events, or key/value state, declare a `RunContext` parameter (by type annotation, or by parameter name `ctx`):
+
+```python
+from agent_framework import workflow, RunContext
+
+
+@workflow
+async def review_workflow(draft: str, ctx: RunContext) -> str:
+    feedback = await ctx.request_info(
+        request_data={"draft": draft},
+        response_type=str,
+    )
+    ctx.set_state("last_feedback", feedback)
+    return f"{draft}\n\nReviewer says: {feedback}"
+```
+
+On the first call to `request_info` the workflow **suspends** by raising an internal interruption signal (caught by the framework). The caller receives a `WorkflowRunResult` whose `get_request_info_events()` lists the pending requests. To resume, pass `responses={request_id: value}`:
+
+```python
+async def main():
+    first = await review_workflow.run("draft v1")
+    pending = first.get_request_info_events()
+    request_id = pending[0].request_id
+
+    final = await review_workflow.run(
+        responses={request_id: "Tighten the third paragraph."},
+    )
+    print(final.get_outputs()[-1])
+```
+
+The same `request_id` round-trip works under streaming too — pass `stream=True` and consume `WorkflowEvent`s from the returned `ResponseStream`.
+
+`RunContext` also exposes:
+
+- `add_event(event)` — emit application-specific events alongside framework lifecycle events. Useful for progress reporting and trace correlation.
+- `get_state(key, default=None)` / `set_state(key, value)` — workflow-scoped key/value state. Persisted across HITL pauses and saved into checkpoints when checkpoint storage is configured. Keys starting with `_` are reserved.
+- `is_streaming()` — whether the current run was started with `stream=True`.
+- `get_run_context()` (module-level helper) — fetch the active `RunContext` from any function called transitively from a workflow, even when you didn't thread `ctx` through every signature.
+
+### Hooking up checkpointing
+
+Pass `checkpoint_storage=` to the decorator or to `.run()`. The framework checkpoints after each completed step:
+
+```python
+from agent_framework import workflow, step, FileCheckpointStorage
+
+storage = FileCheckpointStorage("/var/lib/checkpoints")
+
+
+@workflow(name="research", checkpoint_storage=storage)
+async def research(topic: str) -> str:
+    notes = await gather_notes(topic)
+    summary = await summarise(notes)
+    return summary
+
+
+# Resume from the latest checkpoint of this workflow definition.
+latest = await storage.get_latest(workflow_name="research")
+if latest is not None:
+    result = await research.run(checkpoint_id=latest.checkpoint_id)
+```
+
+Checkpoints are keyed on the workflow definition (name + `graph_signature_hash`), not on a specific instance — any process running the same `@workflow` function can resume them.
+
+### Adapting a functional workflow as an agent
+
+`FunctionalWorkflow.as_agent()` returns a `FunctionalWorkflowAgent` that satisfies `SupportsAgentRun`. Pending HITL requests surface as `FunctionApprovalRequestContent` items, exactly like the graph `WorkflowAgent`:
+
+```python
+agent = review_workflow.as_agent(name="reviewer")
+response = await agent.run("Please review this draft.")
+```
+
+The adapter is the right entry point when you want a functional pipeline to plug into a multi-agent supervisor or be used wherever `Agent`-shaped objects are expected.
+
+### When to choose functional vs graph workflows
+
+| Choose `@workflow` when | Choose `WorkflowBuilder` when |
+|---|---|
+| Logic is mostly sequential or uses standard Python control flow | You need explicit fan-out / fan-in / switch-case topology |
+| Branching depends on runtime values that are awkward to express as edges | You want the topology validated up-front (type compatibility, connectivity) |
+| You want minimal ceremony — one decorator, one async function | You're handing the workflow to a non-Python visualisation or runtime |
+| You need ad-hoc parallelism (`asyncio.gather`) inside the workflow | You want declarative graph export (e.g., for `WorkflowViz`) |
+
+Functional workflows are experimental — silence the `ExperimentalWarning` with the patterns from the previous section, or pin them in CI to prove no surprise breakage.
+
+## Building messages with `Content` factory methods
+
+`Content` is the **single unified container** for every variant the framework knows about — text, images, function calls, tool results, errors, hosted-file references, MCP tool calls, shell commands, OAuth consent prompts. You almost never construct it via the `__init__`; use the factory class methods so you don't have to remember which `__init__` keyword goes with which content type.
+
+```python
+from agent_framework import Content
+
+# Plain text
+text = Content.from_text("Hello world.")
+
+# Reasoning trace (for models that emit chain-of-thought tokens separately)
+reasoning = Content.from_text_reasoning("Let me think step by step…")
+
+# Inline binary data (image, audio, file). Encoded into a data: URI internally.
+with open("chart.png", "rb") as f:
+    image = Content.from_data(f.read(), media_type="image/png")
+
+# Linked external resource
+remote_image = Content.from_uri(
+    "https://example.com/chart.png", media_type="image/png"
+)
+
+# Hosted file already uploaded to the provider
+hosted = Content.from_hosted_file(file_id="file_abc123", media_type="application/pdf")
+hosted_vector_store = Content.from_hosted_vector_store(vector_store_id="vs_xyz")
+
+# Function/tool calls — the framework emits these for you, but you can construct
+# them when replaying transcripts or building eval fixtures.
+call = Content.from_function_call("call_42", "get_weather", arguments={"city": "Seattle"})
+result = Content.from_function_result("call_42", result={"temp_c": 18, "conditions": "sunny"})
+
+# Error from a failed tool, model call, or upstream service
+err = Content.from_error(message="Rate limit exceeded", error_code="429")
+
+# Token usage record (attached to a Message for observability pipelines)
+from agent_framework import UsageDetails
+usage = Content.from_usage(UsageDetails(input_token_count=120, output_token_count=80))
+```
+
+The `media_type` on `from_data` / `from_uri` is what providers and middleware key on to pick the right transport (vision input vs. attachment vs. inline blob). Always set it.
+
+For tool integrations the framework ships with, there are dedicated factories that capture provider-specific payload shapes:
+
+| Factory | Returns content type |
+|---|---|
+| `Content.from_search_tool_call` / `from_search_tool_result` | Hosted web/file search calls |
+| `Content.from_code_interpreter_tool_call` / `from_code_interpreter_tool_result` | Hosted code interpreter calls |
+| `Content.from_image_generation_tool_call` / `from_image_generation_tool_result` | Hosted image generation calls |
+| `Content.from_mcp_server_tool_call` / `from_mcp_server_tool_result` | MCP tool invocations |
+| `Content.from_shell_tool_call` / `from_shell_tool_result` / `from_shell_command_output` | Shell tool invocations and their stdout/stderr/exit_code records |
+| `Content.from_function_approval_request` / `from_function_approval_response` | HITL approval gates around tool calls |
+| `Content.from_oauth_consent_request` | OAuth consent prompts forwarded to the user |
+
+Round-trip serialisation works on every variant via `Content.to_dict()` / `Content.from_dict(...)`, so you can persist a transcript and hydrate it later without losing structure. Add provider-specific extras through `additional_properties=` and keep the original SDK payload on `raw_representation=` if you need to debug provider quirks.
+
+## Exception hierarchy
+
+Every framework exception inherits from `AgentFrameworkException`, which logs the message at debug level on construction (turn it off per-call with `log_level=None`). The hierarchy mirrors the layers of the framework, so you can catch as broadly or as narrowly as makes sense for your call site.
+
+```
+AgentFrameworkException                    # base — every framework error
+├── AgentException                         # raised inside an Agent.run loop
+│   ├── AgentInvalidAuthException
+│   ├── AgentInvalidRequestException
+│   ├── AgentInvalidResponseException
+│   └── AgentContentFilterException
+├── ChatClientException                    # raised by chat clients
+│   ├── ChatClientInvalidAuthException
+│   ├── ChatClientInvalidRequestException
+│   ├── ChatClientInvalidResponseException
+│   └── ChatClientContentFilterException
+├── IntegrationException                   # external service / dependency
+│   ├── IntegrationInitializationError
+│   ├── IntegrationInvalidAuthException
+│   ├── IntegrationInvalidRequestException
+│   ├── IntegrationInvalidResponseException
+│   └── IntegrationContentFilterException
+├── ContentError
+│   └── AdditionItemMismatch              # mismatched types when merging streamed chunks
+├── ToolException
+│   ├── ToolExecutionException
+│   └── UserInputRequiredException        # tool needs HITL input to proceed
+├── MiddlewareException
+│   └── MiddlewareTermination             # control-flow exit from a middleware pipeline
+├── SettingNotFoundError                   # config not resolvable from env / kwargs
+└── WorkflowException
+    ├── WorkflowValidationError
+    │   ├── EdgeDuplicationError
+    │   ├── TypeCompatibilityError
+    │   └── GraphConnectivityError
+    └── WorkflowRunnerException
+        ├── WorkflowConvergenceException
+        └── WorkflowCheckpointException
+```
+
+`AgentFrameworkException.__init__` accepts an `inner_exception=` and a `log_level=` (default `logging.DEBUG = 10`, set to `None` to skip logging). Most framework code wraps third-party exceptions with these so you keep both the high-level reason and the underlying cause:
+
+```python
+import logging
+from agent_framework import (
+    AgentFrameworkException,
+    MiddlewareException,
+    MiddlewareTermination,
+)
+
+log = logging.getLogger(__name__)
+
+try:
+    response = await agent.run("Hello")
+except MiddlewareTermination as exc:
+    # Short-circuit from a middleware: exc.result holds whatever was passed in.
+    fallback_text = getattr(exc, "result", None) or "Request blocked."
+except MiddlewareException as exc:
+    # Anything else gone wrong inside the middleware pipeline.
+    log.exception("middleware failure")
+except AgentFrameworkException as exc:
+    # Last-resort catch — keeps you out of provider-specific exception classes.
+    log.exception("framework failure: %s", exc)
+```
+
+`UserInputRequiredException` is special: it's raised by tool middleware when a wrapped sub-agent needs HITL input, and carries the request `Content` items on `exc.contents` so the outer agent can surface them instead of swallowing them as a generic tool error.
+
+## Workflow validation errors
+
+`WorkflowBuilder.build()` runs a graph validator before returning a `Workflow`. Failures raise `WorkflowValidationError` subclasses with a `validation_type: ValidationTypeEnum` field, so you can branch on the kind of validation problem programmatically:
+
+```python
+from agent_framework import (
+    EdgeDuplicationError,
+    GraphConnectivityError,
+    TypeCompatibilityError,
+    ValidationTypeEnum,
+    WorkflowBuilder,
+    WorkflowValidationError,
+)
+
+try:
+    workflow = builder.build()
+except EdgeDuplicationError as exc:
+    print(f"duplicate edge: {exc.edge_id}")
+except TypeCompatibilityError as exc:
+    print(
+        f"{exc.source_executor_id} → {exc.target_executor_id}: "
+        f"source emits {exc.source_types}, target accepts {exc.target_types}"
+    )
+except GraphConnectivityError as exc:
+    print(f"connectivity: {exc.message}")
+except WorkflowValidationError as exc:
+    # Generic catch-all — exc.validation_type tells you which check fired.
+    if exc.validation_type is ValidationTypeEnum.HANDLER_OUTPUT_ANNOTATION:
+        ...
+```
+
+The validation types currently emitted:
+
+| `ValidationTypeEnum` member | Trigger |
+|---|---|
+| `EDGE_DUPLICATION` | Two identical `(source, target)` edges added to the builder |
+| `EXECUTOR_DUPLICATION` | Two executors registered under the same id |
+| `TYPE_COMPATIBILITY` | Source executor's output types and target's handler types are disjoint |
+| `GRAPH_CONNECTIVITY` | Unreachable executors, missing start, or no path to an output node |
+| `HANDLER_OUTPUT_ANNOTATION` | Executor handler missing the output-type annotation the validator needs |
+| `OUTPUT_VALIDATION` | Declared output executors don't actually emit the workflow's declared output type |
+
+`str(exc)` on any of these is formatted as `[VALIDATION_TYPE] human-readable message`, which is what surfaces in test failures and CI logs.
 
 ## Resilience patterns
 

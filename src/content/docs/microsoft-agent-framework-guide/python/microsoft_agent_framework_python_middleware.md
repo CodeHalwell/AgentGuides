@@ -148,6 +148,59 @@ class ProfanityBlock(AgentMiddleware):
 
 `agent_framework` ships a single unified `Content` class — construct text content via `Content.from_text(...)`, images via `Content.from_uri(...)`, errors via `Content.from_error(...)`, etc. There are no separate `TextContent`/`ImageContent` classes.
 
+### Hard termination via `MiddlewareTermination`
+
+`MiddlewareTermination` is a control-flow exception that unwinds the entire pipeline immediately. Code that runs **after `await call_next()` under normal flow** is skipped in every outer middleware — but `try`/`finally` blocks and `async with` cleanup still execute as the exception propagates, so context-manager-based metric flushing, span-closing, or lock release still works as expected. `MiddlewareTermination` carries an optional `result=` payload that becomes the agent's final response.
+
+```python
+from agent_framework import (
+    AgentMiddleware,
+    AgentContext,
+    AgentResponse,
+    Content,
+    Message,
+    MiddlewareTermination,
+)
+
+
+class HardBudgetGuard(AgentMiddleware):
+    """Reject the call outright when over a per-tenant quota.
+
+    Compared to `context.result = ...; return`, raising `MiddlewareTermination`
+    skips every other middleware's after-call code too — useful when you don't
+    want token-counting, metric, or cache-write middleware to mistakenly
+    record a request as successful.
+    """
+
+    def __init__(self, quota: dict[str, int]) -> None:
+        self.quota = quota
+
+    async def process(self, context: AgentContext, call_next) -> None:
+        tenant = context.metadata.get("tenant_id")
+        if tenant and self.quota.get(tenant, 0) <= 0:
+            raise MiddlewareTermination(
+                f"tenant {tenant} over quota",
+                result=AgentResponse(
+                    messages=[
+                        Message(
+                            role="assistant",
+                            contents=[Content.from_text("Quota exhausted.")],
+                        )
+                    ],
+                ),
+            )
+        await call_next()
+```
+
+When `MiddlewareTermination(result=R)` is raised the agent returns `R` as if it were the normal result. Raised without `result=`, it becomes a regular exception you can catch and translate at the call site:
+
+```python
+try:
+    response = await agent.run("Hello")
+except MiddlewareTermination as exc:
+    print(f"blocked: {exc}")  # exc.result is None
+```
+
 ## Caching tool results — `FunctionMiddleware`
 
 Pure or read-mostly tools shouldn't re-run when the model asks the same question twice in a row. Function middleware sees every tool call and can short-circuit on a cache hit — either by setting `context.result` and returning, or by raising `MiddlewareTermination(result=...)` when you want to unwind the whole pipeline. The example below uses the `MiddlewareTermination` form so the result is delivered all the way back to the agent without further middleware running:
@@ -543,6 +596,61 @@ class TraceRun(AgentMiddleware):
             span.set_attribute("response.length", len(context.result.text))
 ```
 
+## Building a synthetic `ChatResponse`
+
+When chat middleware wants to satisfy a request from a cache, mock, or fallback model, hand back a fully-formed `ChatResponse` rather than a raw string. Downstream code (token accounting, telemetry, structured-output parsing) treats it identically to a real model response.
+
+```python
+from agent_framework import (
+    ChatMiddleware,
+    ChatContext,
+    ChatResponse,
+    Content,
+    Message,
+    UsageDetails,
+)
+
+
+class CacheLookup(ChatMiddleware):
+    def __init__(self, cache: dict[str, str]) -> None:
+        self.cache = cache
+
+    async def process(self, context: ChatContext, call_next) -> None:
+        key = context.messages[-1].text if context.messages else ""
+        cached = self.cache.get(key)
+        if cached is not None and not context.stream:
+            context.result = ChatResponse(
+                messages=[Message(role="assistant", contents=[Content.from_text(cached)])],
+                model=context.options.get("model") if context.options else None,
+                finish_reason="stop",
+                usage_details=UsageDetails(input_token_count=0, output_token_count=0),
+            )
+            return                                      # short-circuit
+        await call_next()
+```
+
+When you need to assemble a `ChatResponse` from a stream (e.g. you're proxying a streaming provider and want to give non-streaming consumers the joined result), `ChatResponse.from_updates(updates)` and `ChatResponse.from_update_generator(async_iter)` consolidate `ChatResponseUpdate` chunks into a single response, including structured-output parsing when you pass `output_format_type=`.
+
+```python
+from agent_framework import ChatResponse
+
+# Sync path: list of updates already collected
+final = ChatResponse.from_updates(updates)
+
+# Async path: forward an async iterator straight from a streaming client
+final = await ChatResponse.from_update_generator(client.get_streaming_response("hi"))
+
+# Structured output: pass a Pydantic model and read `final.value`
+final = await ChatResponse.from_update_generator(
+    client.get_streaming_response("Extract", response_format=Address),
+    output_format_type=Address,
+)
+print(final.text)   # raw text
+print(final.value)  # parsed Address instance, lazily validated
+```
+
+`final.value` triggers parsing on first access — if the response text doesn't match the schema you'll see a `pydantic.ValidationError` (or `ValueError` for non-Pydantic JSON-schema formats), which is exactly the boundary you want for structured-output retries.
+
 ## Context quick reference
 
 ### `AgentContext`
@@ -555,11 +663,16 @@ class TraceRun(AgentMiddleware):
 | `tools` | override | Run-scoped tool override. |
 | `options` | `Mapping[str, Any]` | Merged `ChatOptions` dict. |
 | `stream` | `bool` | True for streaming runs. |
+| `compaction_strategy` | `CompactionStrategy \| None` | Per-run compaction override. |
+| `tokenizer` | `TokenizerProtocol \| None` | Per-run tokenizer override. |
 | `metadata` | `dict` | Shared across middleware in this run. |
 | `result` | `AgentResponse \| ResponseStream` | Set to short-circuit. |
 | `kwargs` | `dict` | Run-level keyword args. |
 | `client_kwargs` | `dict` | Forwarded to chat client. |
 | `function_invocation_kwargs` | `dict` | Forwarded to tool invocation. |
+| `stream_transform_hooks` | `list[Callable]` | Per-update transformers (streaming runs). |
+| `stream_result_hooks` | `list[Callable]` | Hooks on the joined `AgentResponse` after streaming. |
+| `stream_cleanup_hooks` | `list[Callable]` | Cleanup callbacks once the stream is consumed. |
 
 ### `ChatContext`
 

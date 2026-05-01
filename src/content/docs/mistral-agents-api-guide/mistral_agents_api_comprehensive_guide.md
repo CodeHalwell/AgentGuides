@@ -4,10 +4,10 @@ description: "> BREAKING: Mistral SDK v2.0.1 (March 12, 2026) is NOT backwards-c
 framework: mistral-agents-api
 ---
 
-Latest: 2.4.3 | Updated: April 28, 2026
+Latest: 2.4.4 | Updated: May 1, 2026
 # Mistral Agents API: Visual Architecture and Diagrams
 
-> **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.3**.
+> **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.4**.
 
 This document provides comprehensive visual representations of Mistral Agents API architecture, data flows, and patterns.
 
@@ -700,6 +700,7 @@ All diagrams use ASCII art for clarity and can be copied/shared easily. For more
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.4.4 | May 1, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.4` (`.routine-envs/check-mistral2-0501`); `from mistralai.client import Mistral` import verified with `-W error::DeprecationWarning`. |
 | 2.4.3 | April 28, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.3` (`.routine-envs/main-py-0428`); `from mistralai.client import Mistral` import verified. |
 | 2.4.2 | April 23, 2026 | Patch release. Version bump confirmed against PyPI `mistralai 2.4.2`. |
 | 2.4.1 | April 22, 2026 | Header updated from stale 2.0.1 to current 2.4.1; confirmed correct `from mistralai.client import Mistral` import path. |
