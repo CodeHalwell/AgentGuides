@@ -676,11 +676,14 @@ The currently gated features:
 
 | Stage | Enum member | Covers |
 |---|---|---|
-| Experimental | `ExperimentalFeature.EXPERIMENTAL` (generic) | Anything without a more specific ID |
 | Experimental | `ExperimentalFeature.SKILLS` | `Skill`, `SkillResource`, `SkillScript`, `SkillsProvider` |
 | Experimental | `ExperimentalFeature.EVALS` | `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `@evaluator` |
-| Experimental | `ExperimentalFeature.COMPACTION` | `SlidingWindowStrategy`, `SummarizationStrategy`, `TokenBudgetComposedStrategy`, `SelectiveToolCallCompactionStrategy`, `ToolResultCompactionStrategy` |
+| Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
+| Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
+| Experimental | `ExperimentalFeature.TOOLBOXES` | Toolbox APIs (preview) |
 | Release candidate | `ReleaseCandidateFeature.WORKFLOW_VIZ` | `WorkflowViz` diagram rendering |
+
+The list above mirrors the enum in `agent_framework._feature_stage` for `agent-framework-core==1.2.x`. Members are added each release as new previews land, so check the enum at runtime (`list(ExperimentalFeature)`) when you need an authoritative answer in CI.
 
 Inspect any class or callable at runtime to see what stage it belongs to:
 
@@ -722,6 +725,7 @@ A workflow function takes **at most one** non-`RunContext` parameter. That singl
 Plain async functions work inside `@workflow`, but wrapping them in `@step` gives you per-call caching keyed on `(step_name, call_index)`. On HITL replay or checkpoint restore, completed steps are skipped instead of re-run.
 
 ```python
+import json
 from agent_framework import workflow, step
 
 
@@ -930,11 +934,14 @@ AgentFrameworkException                    # base — every framework error
 `AgentFrameworkException.__init__` accepts an `inner_exception=` and a `log_level=` (default `logging.DEBUG = 10`, set to `None` to skip logging). Most framework code wraps third-party exceptions with these so you keep both the high-level reason and the underlying cause:
 
 ```python
+import logging
 from agent_framework import (
     AgentFrameworkException,
     MiddlewareException,
     MiddlewareTermination,
 )
+
+log = logging.getLogger(__name__)
 
 try:
     response = await agent.run("Hello")

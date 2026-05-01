@@ -150,7 +150,7 @@ class ProfanityBlock(AgentMiddleware):
 
 ### Hard termination via `MiddlewareTermination`
 
-`MiddlewareTermination` is a control-flow exception that unwinds the entire pipeline immediately — every outer middleware's post-`call_next` code is **skipped**. It carries an optional `result=` payload that becomes the agent's final response.
+`MiddlewareTermination` is a control-flow exception that unwinds the entire pipeline immediately. Code that runs **after `await call_next()` under normal flow** is skipped in every outer middleware — but `try`/`finally` blocks and `async with` cleanup still execute as the exception propagates, so context-manager-based metric flushing, span-closing, or lock release still works as expected. `MiddlewareTermination` carries an optional `result=` payload that becomes the agent's final response.
 
 ```python
 from agent_framework import (

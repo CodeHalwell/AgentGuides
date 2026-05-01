@@ -129,8 +129,12 @@ Given a transcript with three tool-call groups for `get_weather` / `get_forecast
 
 ```python
 import asyncio
-from agent_framework import Content, Message, ToolResultCompactionStrategy
-from agent_framework._compaction import annotate_message_groups, project_included_messages
+from agent_framework import (
+    Content,
+    Message,
+    ToolResultCompactionStrategy,
+    apply_compaction,
+)
 
 messages = [
     Message(role="user", contents=[Content.from_text("Weather in Seattle?")]),
@@ -149,10 +153,12 @@ messages = [
     ]),
 ]
 
-annotate_message_groups(messages)
-asyncio.run(ToolResultCompactionStrategy(keep_last_tool_call_groups=1)(messages))
+projected = asyncio.run(apply_compaction(
+    messages,
+    strategy=ToolResultCompactionStrategy(keep_last_tool_call_groups=1),
+))
 
-for m in project_included_messages(messages):
+for m in projected:
     text = m.text or ", ".join(c.type for c in m.contents)
     print(f"[{m.role:9}] {text}")
 ```
@@ -167,7 +173,7 @@ prints:
 [tool     ] function_result
 ```
 
-Notice how the first `(call_1, function_result)` pair is gone from the projection — replaced by the synthetic summary. The most recent group (`call_2`) survives untouched because `keep_last_tool_call_groups=1`. Only `project_included_messages(...)` returns the trimmed list; the raw `messages` list still contains the originals so you can render them in a debug UI or inspect annotations later.
+`apply_compaction` is the public helper that annotates groups, runs the strategy in place, and returns the projected list a model would actually receive. The first `(call_1, function_result)` pair is gone from the projection — replaced by the synthetic summary. The most recent group (`call_2`) survives untouched because `keep_last_tool_call_groups=1`. The raw `messages` list still contains the originals (with exclusion annotations) so you can render them in a debug UI or inspect annotations later.
 
 The summary message carries `summary_of_message_ids` and `summary_of_group_ids` annotations linking back to the originals, so an audit-trail UI can offer a "show original tool calls" affordance without any extra bookkeeping.
 
