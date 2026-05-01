@@ -25,6 +25,36 @@ Verified against `agent-framework-core==1.1.0` (`agent_framework._workflows._che
 
 A checkpoint is keyed on the **workflow definition**, not a specific instance — any process running the same `WorkflowBuilder` output can restore it.
 
+### `WorkflowCheckpoint` field reference
+
+`WorkflowCheckpoint` is a `slots=True` dataclass. Every field is constructible by keyword and round-trips through `to_dict()` / `from_dict()`:
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `workflow_name` | `str` | required | Logical group key. Workflows sharing this name are expected to share topology. |
+| `graph_signature_hash` | `str` | required | Hash of the topology — checked on restore for compatibility. |
+| `checkpoint_id` | `str` | UUID4 | Auto-generated unless you override. |
+| `previous_checkpoint_id` | `str \| None` | `None` | Forms a linked list across iterations of the same run. |
+| `timestamp` | `str` | `datetime.now(UTC).isoformat()` | ISO 8601, used for ordering by `get_latest`. |
+| `messages` | `dict[str, list[WorkflowMessage]]` | `{}` | In-flight inter-executor messages. |
+| `state` | `dict[str, Any]` | `{}` | Committed user/executor state. Reserved keys live under `_executor_state`. |
+| `pending_request_info_events` | `dict[str, WorkflowEvent]` | `{}` | Outstanding HITL requests not yet resolved. |
+| `iteration_count` | `int` | `0` | Superstep number when the checkpoint was taken. |
+| `metadata` | `dict[str, Any]` | `{}` | Free-form metadata (graph signature, environment, deploy id…). |
+| `version` | `str` | `"1.0"` | Checkpoint format version. Bumped if the schema changes. |
+
+`from_dict` raises `WorkflowCheckpointException` if required fields are missing — a useful boundary when you're loading checkpoints from an external system that might be on a stale schema.
+
+```python
+from agent_framework import WorkflowCheckpoint, WorkflowCheckpointException
+
+raw = {"workflow_name": "research", "graph_signature_hash": "abc"}
+try:
+    cp = WorkflowCheckpoint.from_dict(raw)
+except WorkflowCheckpointException as exc:
+    log.error("malformed checkpoint payload: %s", exc)
+```
+
 ## Storage backends
 
 All three implementations share the `CheckpointStorage` protocol (`save`, `load`, `list_checkpoints`, `delete`, `get_latest`, `list_checkpoint_ids`).
@@ -41,6 +71,55 @@ disk = FileCheckpointStorage("/var/lib/agent-framework/checkpoints")
 ```
 
 For Azure Cosmos DB, install `agent-framework-azure-cosmos` and use `agent_framework_azure_cosmos.CosmosCheckpointStorage`. For Redis, install `agent-framework-redis` and pick the Redis-backed storage class.
+
+### Hands-on: `InMemoryCheckpointStorage` round-trip
+
+The in-memory backend is the same code path the workflow runtime exercises in tests. Use it in unit tests, in notebook scratchpads, or when you want zero-config persistence for the duration of a single process. It deep-copies on `save`, so the saved checkpoint is immune to subsequent mutation of the originating object.
+
+```python
+import asyncio
+from agent_framework import InMemoryCheckpointStorage, WorkflowCheckpoint
+
+
+async def main() -> None:
+    storage = InMemoryCheckpointStorage()
+
+    cp = WorkflowCheckpoint(
+        workflow_name="research",
+        graph_signature_hash="abc123",
+        state={"step_1": "done", "topic": "agent frameworks"},
+        iteration_count=3,
+        metadata={"environment": "staging"},
+    )
+    cp_id = await storage.save(cp)
+    # cp_id is the same as cp.checkpoint_id (a generated UUID4 unless you set it)
+
+    loaded = await storage.load(cp_id)
+    assert loaded.state == {"step_1": "done", "topic": "agent frameworks"}
+    assert loaded.iteration_count == 3
+
+    # Filter by workflow_name — supports multi-tenant single-process tests.
+    saved = await storage.list_checkpoints(workflow_name="research")
+    assert len(saved) == 1
+
+    # `get_latest` orders by `timestamp`, falling back to insertion order.
+    latest = await storage.get_latest(workflow_name="research")
+    assert latest is not None and latest.checkpoint_id == cp_id
+
+    # Delete returns True on hit, False on miss — never raises.
+    assert await storage.delete(cp_id) is True
+    assert await storage.delete(cp_id) is False
+    assert await storage.list_checkpoint_ids(workflow_name="research") == []
+
+
+asyncio.run(main())
+```
+
+Three things to remember about the in-memory backend:
+
+- **Process-scoped.** State is lost on restart. Don't reach for it in production — even a quick autoscaler reshuffle will lose all in-flight work.
+- **Deep-copies on save and load.** Mutating the dataclass after `save` doesn't change what you'll get back from `load`. Unit tests that assert "checkpoint isolation" can rely on that contract.
+- **`load` of a missing id raises `WorkflowCheckpointException`** — exactly the same behaviour as `FileCheckpointStorage`. Catch that exception (or its parent `WorkflowRunnerException`) in tests rather than reaching for `None` checks.
 
 ### Allow-listing app-specific types
 

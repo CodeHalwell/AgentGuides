@@ -121,6 +121,56 @@ strategy = ToolResultCompactionStrategy(keep_last_tool_call_groups=1)
 
 Replaces older tool-call groups with a short summary like `[Tool results: get_weather: sunny, 18°C; get_forecast: rain Tue]` instead of excluding them. You keep the provenance at a fraction of the tokens.
 
+`keep_last_tool_call_groups=0` collapses **every** included tool-call group; the most recent ones are summarised too. `keep_last_tool_call_groups=N` (the default is `1`) leaves the newest `N` groups untouched.
+
+### What the summary actually looks like
+
+Given a transcript with three tool-call groups for `get_weather` / `get_forecast`, the strategy mutates the message list **in place** and inserts a synthesised summary message at the start of each compacted group while marking the original messages excluded:
+
+```python
+import asyncio
+from agent_framework import Content, Message, ToolResultCompactionStrategy
+from agent_framework._compaction import annotate_message_groups, project_included_messages
+
+messages = [
+    Message(role="user", contents=[Content.from_text("Weather in Seattle?")]),
+    Message(role="assistant", contents=[
+        Content.from_function_call("c1", "get_weather", arguments={"city": "Seattle"}),
+    ]),
+    Message(role="tool", contents=[
+        Content.from_function_result("c1", result="sunny, 18°C"),
+    ]),
+    Message(role="user", contents=[Content.from_text("And Friday?")]),
+    Message(role="assistant", contents=[
+        Content.from_function_call("c2", "get_forecast", arguments={"city": "Seattle"}),
+    ]),
+    Message(role="tool", contents=[
+        Content.from_function_result("c2", result="clear, 22°C"),
+    ]),
+]
+
+annotate_message_groups(messages)
+asyncio.run(ToolResultCompactionStrategy(keep_last_tool_call_groups=1)(messages))
+
+for m in project_included_messages(messages):
+    text = m.text or ", ".join(c.type for c in m.contents)
+    print(f"[{m.role:9}] {text}")
+```
+
+prints:
+
+```text
+[user     ] Weather in Seattle?
+[assistant] [Tool results: get_weather: sunny, 18°C]
+[user     ] And Friday?
+[assistant] function_call
+[tool     ] function_result
+```
+
+Notice how the first `(call_1, function_result)` pair is gone from the projection — replaced by the synthetic summary. The most recent group (`call_2`) survives untouched because `keep_last_tool_call_groups=1`. Only `project_included_messages(...)` returns the trimmed list; the raw `messages` list still contains the originals so you can render them in a debug UI or inspect annotations later.
+
+The summary message carries `summary_of_message_ids` and `summary_of_group_ids` annotations linking back to the originals, so an audit-trail UI can offer a "show original tool calls" affordance without any extra bookkeeping.
+
 ## LLM summarisation
 
 Uses a chat client to summarise older history into a single assistant message:
