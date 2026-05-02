@@ -1,16 +1,16 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Release: GA April 3, 2026; patch 1.0.1 April 10, 2026 Framework Version: 1.0.1 Target Platform: Python 3.10+"
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.2.2 — chat clients, tools, sessions, middleware, MCP, skills, workflows, evaluation, and observability."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest: 1.0.1 | Updated: April 20, 2026
+Latest verified release: 1.2.2 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Release:** GA April 3, 2026; patch 1.0.1 April 10, 2026
-**Framework Version:** 1.0.1
+**Framework Version:** 1.2.2 (`agent-framework` and `agent-framework-core`)
 **Target Platform:** Python 3.10+
+**Quick check:** `pip index versions agent-framework`
 
 ---
 
