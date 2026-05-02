@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.89.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.89.1 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.89.0 | Updated: May 1, 2026
+Latest: 1.89.1 | Updated: May 2, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.89.0 (May 2026)  
+**Version:** 1.89.1 (May 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -2148,6 +2148,7 @@ Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed uncha
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.89.1 | May 2, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.89.1` (`.routine-envs/check-pydantic-0502`); `Agent`, `OpenAIModel` imports verified with `-W error::DeprecationWarning`. |
 | 1.89.0 | May 1, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.89.0` (`.routine-envs/check-pydantic-0501`); `Agent`, `OpenAIModel` imports verified with `-W error::DeprecationWarning`. |
 | 1.88.0 | April 29, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.88.0` (`.routine-envs/main-py-0429`); `Agent`, `OpenAIModel` imports verified. |
 | 1.87.0 | April 25, 2026 | Expanded Capabilities API: 9 new capability classes (`WrapperCapability`, `ReinjectSystemPrompt`, `ProcessHistory`, `ProcessEventStream`, `HandleDeferredToolCalls`, `IncludeToolReturnSchemas`, `PrefixTools`, `PrepareTools`, `SetToolMetadata`); new type aliases (`RawToolArgs`, `ValidatedToolArgs`, `CapabilityRef`, `CapabilityPosition`, `CapabilityOrdering`); `CAPABILITY_TYPES` registry. New capabilities section added. All symbols confirmed against installed 1.87.0 (`pydantic_ai/capabilities/__init__.py`). |

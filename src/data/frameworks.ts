@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.89.0',
+    version: 'v1.89.1',
   },
   {
     id: 'openai-agents',
@@ -48,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.15.0',
+    version: 'v0.15.1',
   },
   {
     id: 'openai-agents-ts',

@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.89.0** · May 2026 · Python 3.10+
+    **v1.89.1** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -98,8 +98,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.89.0 (May 2026)
+## What's new in v1.89.1 (May 2026)
 
+- **v1.89.1 (May 2)** — Patch release; maintenance and dependency updates.
 - **v1.89.0 (May 1)** — Patch release; maintenance and dependency updates.
 - **v1.88.0 (April 29)** — Patch release; maintenance and dependency updates.
 - **v1.87.0** — Expanded Capabilities API — 9 new capability classes added to `pydantic_ai.capabilities`: `WrapperCapability` (base for decorating capabilities), `ReinjectSystemPrompt` (guards against system prompt being truncated away), `ProcessHistory` (composable history transformation), `ProcessEventStream` (custom event handling), `HandleDeferredToolCalls` (inline deferred tool resolution), `IncludeToolReturnSchemas` (per-tool return schema injection), `PrefixTools` (capability-level tool prefixing), `PrepareTools` (capability-level tool preparation), `SetToolMetadata` (capability-level metadata tagging). New type aliases: `RawToolArgs`, `ValidatedToolArgs`, `CapabilityRef`, `CapabilityPosition`, `CapabilityOrdering`. `CAPABILITY_TYPES` registry for dynamic capability construction.
@@ -131,6 +132,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-02 | pydantic-ai 1.89.1 | Version bumped 1.89.0 → 1.89.1; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `OpenAIModel` imports verified against installed 1.89.1 (`.routine-envs/check-pydantic-0502`). | Claude routine |
 | 2026-05-01 | pydantic-ai 1.89.0 | Version bumped 1.88.0 → 1.89.0; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `OpenAIModel` imports verified against installed 1.89.0 (`.routine-envs/check-pydantic-0501`). | Claude routine |
 | 2026-04-29 | pydantic-ai 1.88.0 | Version bumped 1.87.0 → 1.88.0; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `OpenAIModel` imports verified against installed 1.88.0 (`.routine-envs/main-py-0429`). | Claude routine |
 | 2026-04-25 | pydantic-ai 1.87.0 | Version bumped 1.86.1 → 1.87.0; "What's new" updated for v1.87.0 (9 new capability classes); new Capabilities API (v1.87.x) section added to comprehensive guide documenting `WrapperCapability`, `ReinjectSystemPrompt`, `ProcessHistory`, `ProcessEventStream`, `HandleDeferredToolCalls`, `IncludeToolReturnSchemas`, `PrefixTools`, `PrepareTools`, `SetToolMetadata`. All symbols verified against installed 1.87.0. | Claude routine |
