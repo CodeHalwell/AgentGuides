@@ -55,6 +55,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="13 · Evaluation" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/" description="evaluate_agent, LocalEvaluator, @evaluator, ground-truth checks · 20 min" />
   <LinkCard title="14 · Structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" description="Pydantic schemas, validation, type-safe responses · 15 min" />
   <LinkCard title="15 · Graph workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#graph-based-workflows---python" description="Directed graphs, streaming, time-travel · 25 min" />
+  <LinkCard title="15b · Functional workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/" description="@workflow, @step, RunContext, HITL, checkpointing · 20 min" />
   <LinkCard title="16 · Declarative agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" description="YAML/JSON config, Pydantic validation · 15 min" />
   <LinkCard title="17 · A2A protocol" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#agent2agent-a2a-protocol---python" description="Interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK · 20 min" />
   <LinkCard title="18 · Production" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, scaling, security, DR · 30 min" />
@@ -78,6 +79,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Agent lifecycle" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#simple-agents" />
   <LinkCard title="Pydantic structured output" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#structured-output" />
   <LinkCard title="Graph workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#graph-based-workflows---python" />
+  <LinkCard title="Functional workflows (@workflow / @step)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/" />
   <LinkCard title="A2A cross-framework" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#agent2agent-a2a-protocol---python" />
   <LinkCard title="Declarative YAML agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" />
   <LinkCard title="Content safety" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#content-safety---python" />
@@ -101,6 +103,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Evaluation" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/" description="evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator." />
   <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/" description="Single-page technical reference — all core concepts." />
   <LinkCard title="2025 features" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/" description="A2A, graph workflows, declarative agents, OpenTelemetry." />
+  <LinkCard title="Functional workflows" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/" description="@workflow, @step, RunContext HITL, as_agent(), checkpointing." />
   <LinkCard title="Advanced" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/" description="Azure AI Agents, production deployment patterns." />
   <LinkCard title="Recipes" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/" description="Copy-paste code for common scenarios." />
   <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_diagrams/" description="System architecture, lifecycle, orchestration." />
@@ -112,7 +115,8 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 - **Stable core APIs** — `agent-framework-core 1.2.2` with LTS commitment.
 - **First-party chat clients** — `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, plus Bedrock / Ollama in the `1.0.0b` provider line.
 - **Middleware** — `@chat_middleware` / `@agent_middleware` / `@function_middleware` decorators and base classes; pass `middleware=[...]` (must be a list in 2026 releases).
-- **Workflows** — `WorkflowBuilder` with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_switch_case_edge_group`; checkpoint via `FileCheckpointStorage` / `InMemoryCheckpointStorage`.
+- **Workflows** — `WorkflowBuilder` with `.add_edge` / `.add_chain` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_switch_case_edge_group` / `.add_multi_selection_edge_group`; checkpoint via `FileCheckpointStorage` / `InMemoryCheckpointStorage`.
+- **Functional workflows (experimental)** — `@workflow` / `@step` decorators and `RunContext` for HITL and state — write workflows as plain `async` Python functions without graph wiring.
 - **Declarative agents (beta)** — `agent_framework.declarative.AgentFactory` / `WorkflowFactory` load from YAML.
 - **A2A (beta)** — one class, `agent_framework.a2a.A2AAgent`, wraps a remote A2A endpoint as a local `Agent`.
 
@@ -153,6 +157,7 @@ Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-04 | 1.0.5 | Added dedicated Functional Workflows page covering `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow.as_agent()`. Enhanced Graphs & Declarative page with `WorkflowViz` examples, `add_chain`, `add_multi_selection_edge_group`, `@executor` decorator, and `Agent.as_tool()`. All verified against `agent-framework-core==1.2.2` source. |
 | 2026-05-01 | 1.0.4 | Bumped pinned core/provider versions to `agent-framework-core==1.2.2` and `1.0.0b260429` provider line. Expanded streaming, function-middleware, functional-workflow, and feature-stage code examples after re-introspecting the installed library. |
 | 2026-04-22 | 1.0.3 | Added dedicated pages: Tools, Skills, Checkpointing, Compaction, Observability & Telemetry, Evaluation. Zero→Hero reflow to 18 steps; Jump-to-topic grid and Reference card grid updated. |
 | 2026-04-22 | 1.0.2 | Added dedicated pages: Model Providers, Orchestration, Middleware, MCP, Human-in-the-loop. Verified against source of `agent-framework-core==1.1.0`; corrected `context_providers` plural-vs-singular errata. |
