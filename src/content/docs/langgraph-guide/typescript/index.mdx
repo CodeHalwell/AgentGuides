@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.2.9** · April 2026 · Node 18+
+    **v1.3.0** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, streaming servers.
@@ -76,12 +76,15 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./langgraph_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v1.2.9 (April 2026)
+## What's new in v1.3.0 (May 2026)
 
-- **Standard JSON Schema support** (Zod 4, Valibot, ArkType) — removes validator lock-in.
-- **`ReducedValue` type** — custom reducers with separate input/output schemas.
-- **`UntrackedValue` type** — transient per-run state that isn't checkpointed.
-- **`@langgraphjs/toolkit`** — new package for prebuilt agents like `createReactAgent`.
+- **`MessagesZodState` / `MessagesZodMeta`** — Zod-based companion to `MessagesAnnotation`. Use `MessagesZodState` when you want full Zod type inference on your messages state instead of the `Annotation`-based API.
+- **`STREAM_EVENTS_V3_MODES`** — constant listing all valid v3 streaming modes (`"values"`, `"updates"`, `"messages"`, `"tools"`, `"custom"`, `"tasks"`). Use this to validate or enumerate mode strings at runtime.
+- **`createGraphRunStream` / `GraphRunStream` / `SubgraphRunStream`** — new lower-level functional streaming API. Complements the existing `.stream()` method on compiled graphs with explicit stream lifecycle control.
+- **Stream transformers** — `createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer` for composing stream pipelines.
+- **Schema utilities** — `isSerializableSchema`, `isStandardSchema` type guards; `getJsonSchemaFromSchema`, `getSchemaDefaultGetter` for schema-to-JSON-Schema conversion.
+- **`pushMessage`** — convenience helper for appending a message to a messages-state channel.
+- All 1.2.x features retained: standard JSON Schema (Zod 4, Valibot, ArkType), `ReducedValue`/`UntrackedValue` types, `@langgraphjs/toolkit`.
 
 <Aside type="caution" title="Where did createReactAgent go?">
   `createReactAgent` moved from `@langchain/langgraph/prebuilt` to the new `@langgraphjs/toolkit` package. The old path still warns; migrate when convenient.
@@ -115,7 +118,8 @@ Ready? **[Start Zero → Hero Step 1 →](./langchain_langgraph_comprehensive_gu
 ## Revision history
 
 | Date | Version | Changes |
-|------|---------|---------|
+|------|---------|--------|
+| 2026-05-05 | 1.3.0 | Version bumped 1.2.9 → 1.3.0; "What's new" updated for 1.3.0 (MessagesZodState/Meta, STREAM_EVENTS_V3_MODES, createGraphRunStream, stream transformers, schema utilities, pushMessage). All new symbols verified against installed `@langchain/langgraph@1.3.0` (`.routine-envs/check-0505-node`). Comprehensive guide header and revision history updated. | Claude routine |
 | 2026-04-21 | 1.2.9 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | April 19, 2026 | 1.2.9 | Standard JSON Schema; new type utilities; toolkit package. |
 | November 2025 | 1.0.2 | Initial TypeScript guide. |
