@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.1.72 | Updated: May 1, 2026
+Latest: 0.1.73 | Updated: May 5, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -46,7 +46,7 @@ The **Claude Agent SDK** is the evolution of the Claude Code SDK, renamed to ref
 ### Key Differentiators
 
 | Feature | Claude Agent SDK | Traditional LLM Libraries |
-|---------|------------------|--------------------------|
+|---------|------------------|---------------------------|
 | Computer Control | ✅ Native support | ❌ Not built-in |
 | Tool Integration | ✅ MCP-based standardisation | ⚠️ Ad-hoc implementations |
 | Context Management | ✅ Automatic compaction | ❌ Manual management |
@@ -2560,12 +2560,7 @@ async function selfCorrectingAgent(task: string, maxAttempts = 3) {
     console.log(`\n[Attempt ${attempts}/${maxAttempts}]`);
 
     const prompt = previousAttempt
-      ? `${task}
-
-Previous attempt (which had issues):
-${previousAttempt}
-
-Please try again, addressing any issues from the previous attempt.`
+      ? `${task}\n\nPrevious attempt (which had issues):\n${previousAttempt}\n\nPlease try again, addressing any issues from the previous attempt.`
       : task;
 
     const response = query({
@@ -2930,7 +2925,8 @@ options = ClaudeAgentOptions(
 ## Revision History
 
 | Version | Date | Changes |
-|---------|------|---------|
+|---------|------|----------|
+| 0.1.73 | May 5, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.73` (`.routine-envs/check-0505`); `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` imports verified with `-W error::DeprecationWarning` — all PASS. |
 | 0.1.72 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.72` (`.routine-envs/check-claude-0501`); `query`, `ClaudeAgentOptions` imports verified with `-W error::DeprecationWarning`. |
 | 0.1.71 | April 29, 2026 | Patch releases (0.1.70–0.1.71); stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.71` (`.routine-envs/main-py-0429`); `query`, `ClaudeAgentOptions` imports verified. |
 | 0.1.69 | April 28, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.69` (`.routine-envs/main-py-0428`); `query`, `ClaudeAgentOptions` imports verified. |
@@ -2946,4 +2942,3 @@ options = ClaudeAgentOptions(
 ---
 
 **This comprehensive guide covers the Claude Agent SDK from installation through advanced patterns. For additional examples and recipes, refer to the Recipes guide.**
-

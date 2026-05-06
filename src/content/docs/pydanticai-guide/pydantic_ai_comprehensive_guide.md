@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.89.1 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.90.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.89.1 | Updated: May 2, 2026
+Latest: 1.90.0 | Updated: May 5, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.89.1 (May 2026)  
+**Version:** 1.90.0 (May 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1987,7 +1987,7 @@ agent = Agent('openai:gpt-4o', capabilities=[hooks], defer_model_check=True)
 The `hooks.on` namespace exposes the following hooks (all optional, all async):
 
 | Hook | Signature | Purpose |
-|------|-----------|---------|
+|------|-----------|----------|
 | `before_model_request` | `(ctx, request_context) → request_context` | Inspect or mutate the model request before sending |
 | `after_model_request` | `(ctx, response) → response` | Inspect or mutate the model response after receiving |
 | `before_tool_execute` | `(ctx, tool_name, raw_args) → raw_args` | Inspect raw tool arguments before validation |
@@ -2038,7 +2038,7 @@ restricted = ModelProfile(
 `ModelProfile` fields (source: `pydantic_ai/profiles/__init__.py`, installed 1.86.1):
 
 | Field | Type | Default | Purpose |
-|-------|------|---------|---------|
+|-------|------|---------|----------|
 | `supports_tools` | `bool` | `True` | Tool/function calling supported |
 | `supports_tool_return_schema` | `bool` | `False` | Native return schema in tool definitions |
 | `supports_json_schema_output` | `bool` | `False` | Native structured output with JSON schema |
@@ -2061,7 +2061,7 @@ new capability classes that cover the most common cross-cutting concerns without
 All classes are importable from `pydantic_ai.capabilities` (confirmed against installed 1.87.0; API confirmed unchanged in 1.88.0).
 
 | Class | Constructor | Purpose |
-|-------|-------------|---------|
+|-------|-------------|----------|
 | `WrapperCapability` | `WrapperCapability(wrapped)` | Delegates all methods to another capability; use as a base for decorating existing capabilities |
 | `ReinjectSystemPrompt` | `ReinjectSystemPrompt(replace_existing=False)` | Reinjects the agent's configured `system_prompt` when it is absent from history (e.g. after conversation truncation) |
 | `ProcessHistory` | `ProcessHistory(processor)` | Runs a `HistoryProcessorFunc` before every model request to summarise, filter, or transform the message list |
@@ -2147,7 +2147,8 @@ Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed uncha
 ## Revision History
 
 | Version | Date | Changes |
-|---------|------|---------|
+|---------|------|----------|
+| 1.90.0 | May 5, 2026 | Patch release; `DeferredToolCalls` in `pydantic_ai.output` marked `@deprecated` — use `DeferredToolRequests` (guides already use the correct API). Version confirmed against installed `pydantic-ai 1.90.0` (`.routine-envs/check-0505`); `Agent` (TestModel), `FunctionToolset`, `DeferredToolRequests`, `HandleDeferredToolCalls`, `ImageGenerationTool`, `MemoryTool`, `XSearchTool`, `RenamedToolset`, `WrapperToolset` all import successfully with no DeprecationWarnings. |
 | 1.89.1 | May 2, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.89.1` (`.routine-envs/check-pydantic-0502`); `Agent`, `OpenAIModel` imports verified with `-W error::DeprecationWarning`. |
 | 1.89.0 | May 1, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.89.0` (`.routine-envs/check-pydantic-0501`); `Agent`, `OpenAIModel` imports verified with `-W error::DeprecationWarning`. |
 | 1.88.0 | April 29, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.88.0` (`.routine-envs/main-py-0429`); `Agent`, `OpenAIModel` imports verified. |

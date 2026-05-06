@@ -5,7 +5,7 @@ framework: langgraph
 language: typescript
 ---
 
-Latest: 1.2.9 | Updated: April 20, 2026
+Latest: 1.3.0 | Updated: May 5, 2026
 # LangChain.js and LangGraph.js Comprehensive Technical Guide
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
@@ -4986,10 +4986,70 @@ const StateAnnotation = {
 
 ---
 
+## New APIs in v1.3.0
+
+### MessagesZodState — Zod-Based Message State
+
+`MessagesZodState` is the Zod-schema companion to `MessagesAnnotation`. Use it when you want full Zod type inference rather than the `Annotation`-based state definition. `MessagesZodMeta` provides the reducer and JSON-schema metadata for the channel.
+
+```typescript
+import { StateGraph, MessagesZodState, START, END } from "@langchain/langgraph";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+
+// MessagesZodState is a Zod object schema; use .shape to access the channel
+const graph = new StateGraph(MessagesZodState)
+  .addNode("respond", async (state) => ({
+    messages: [/* new messages */],
+  }))
+  .addEdge(START, "respond")
+  .addEdge("respond", END)
+  .compile();
+
+const result = await graph.invoke({
+  messages: [new HumanMessage("Hello")],
+});
+```
+
+Source: `@langchain/langgraph@1.3.0`, `dist/index.js` — `MessagesZodState`, `MessagesZodMeta` exported at top level. Verified 2026-05-05.
+
+### STREAM_EVENTS_V3_MODES
+
+A constant array listing all valid v3 streaming modes. Use it to validate or enumerate modes at runtime without hard-coding strings.
+
+```typescript
+import { STREAM_EVENTS_V3_MODES } from "@langchain/langgraph";
+
+// ["values", "updates", "messages", "tools", "custom", "tasks"]
+console.log(STREAM_EVENTS_V3_MODES);
+
+// Useful for validating user-supplied mode strings:
+function isValidMode(mode: string): boolean {
+  return (STREAM_EVENTS_V3_MODES as readonly string[]).includes(mode);
+}
+```
+
+### pushMessage — Convenience Message Appender
+
+`pushMessage` is a helper for appending a single message to a messages-state channel without manually spreading arrays.
+
+```typescript
+import { pushMessage } from "@langchain/langgraph";
+import { AIMessage } from "@langchain/core/messages";
+
+// Inside a node, push a single message to state
+async function myNode(state: { messages: BaseMessage[] }) {
+  const reply = new AIMessage("Hello from my node.");
+  return { messages: pushMessage(reply) };
+}
+```
+
+---
+
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | May 5, 2026 | Minor release: `MessagesZodState`/`MessagesZodMeta` (Zod-based message state), `STREAM_EVENTS_V3_MODES` constant, `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream` streaming API, stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`), schema type guards (`isSerializableSchema`, `isStandardSchema`), `pushMessage` helper. All new symbols verified against installed `@langchain/langgraph@1.3.0` (`.routine-envs/check-0505-node`, Node 22). `STREAM_EVENTS_V3_MODES = ["values","updates","messages","tools","custom","tasks"]`. |
 | 1.2.9 | April 19, 2026 | Stability improvements and bug fixes following 1.2.8 |
 | 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type; `createReactAgent` moved to `@langgraphjs/toolkit` |
 | 1.0.2 | November 2025 | Previous documented version |
