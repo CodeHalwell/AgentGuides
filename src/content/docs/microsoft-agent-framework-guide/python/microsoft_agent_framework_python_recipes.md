@@ -1093,7 +1093,7 @@ from agent_framework.openai import OpenAIChatClient
 def calculator(expression: str) -> str:
     """Evaluate a simple arithmetic expression."""
     try:
-        return str(eval(expression, {"__builtins__": {}}, {}))  # noqa: S307
+        return str(eval(expression, {"__builtins__": {}}, {}))  # noqa: S307 -- WARNING: eval is unsafe for untrusted input; use a proper math parser (e.g. asteval, simpleeval) in production
     except Exception as exc:
         return f"error: {exc}"
 

@@ -338,7 +338,8 @@ local = LocalEvaluator(keyword_check("4"))
 results = await local.evaluate(items, eval_name="multi-turn regression")
 
 print(results.result_counts)
-# {'passed': 3, 'failed': 0, 'errored': 0}
+# {'passed': 2, 'failed': 1, 'errored': 0}
+# Turn 2 ("Square that result." → "16") fails keyword_check("4") — "16" ≠ "4".
 
 # Inspect per-turn results.
 for item_result in results.items:

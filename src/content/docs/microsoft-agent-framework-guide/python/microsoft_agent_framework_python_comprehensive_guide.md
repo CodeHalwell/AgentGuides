@@ -166,7 +166,7 @@ print(config)
 # Config(endpoint='https://my-resource.openai.azure.com', api_key=SecretString('**********'))
 ```
 
-`SecretString` is a `str` subclass so it passes `isinstance(value, str)` checks and can be used anywhere a plain string is expected. `get_secret_value()` provides backward compatibility with Pydantic's `SecretStr`.
+`SecretString` is a `str` subclass so it passes `isinstance(value, str)` checks and can be used anywhere a plain string is expected. `get_secret_value()` provides interface compatibility with Pydantic's `SecretStr` (though note that Pydantic's version is intentionally *not* a `str` subclass to minimise accidental leakage via string concatenation or APIs that accept `str`).
 
 ### Environment Setup & Basic Usage
 
