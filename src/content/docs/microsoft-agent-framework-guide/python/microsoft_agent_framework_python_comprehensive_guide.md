@@ -134,6 +134,40 @@ from azure.identity.aio import DefaultAzureCredential
 credential = DefaultAzureCredential()
 ```
 
+**4. Protecting credentials in logs — `SecretString`:**
+
+API keys that appear in `repr()` output can be accidentally leaked in logs, crash reports, and IDE debuggers. Wrap any sensitive string in `SecretString` to mask it everywhere while keeping the original value accessible when you need it:
+
+```python
+import os
+from dataclasses import dataclass
+from agent_framework import SecretString
+
+# The value is hidden in all repr / format / print output.
+api_key = SecretString(os.getenv("AZURE_OPENAI_API_KEY", ""))
+print(api_key)        # SecretString('**********')
+print(repr(api_key))  # SecretString('**********')
+print(f"{api_key}")   # SecretString('**********')
+
+# Retrieve the raw value only when passing it to the SDK.
+raw: str = api_key.get_secret_value()
+
+
+@dataclass
+class Config:
+    endpoint: str
+    api_key: SecretString  # repr-safe for structured logging
+
+config = Config(
+    endpoint="https://my-resource.openai.azure.com",
+    api_key=SecretString(os.getenv("AZURE_OPENAI_API_KEY", "")),
+)
+print(config)
+# Config(endpoint='https://my-resource.openai.azure.com', api_key=SecretString('**********'))
+```
+
+`SecretString` is a `str` subclass so it passes `isinstance(value, str)` checks and can be used anywhere a plain string is expected. `get_secret_value()` provides backward compatibility with Pydantic's `SecretStr`.
+
 ### Environment Setup & Basic Usage
 
 ```python
@@ -210,6 +244,57 @@ async def run_chat_agent() -> None:
         response = await agent.run(user_input, session=session)
         print(f"Assistant: {response.text}")
 ```
+
+### Typed agent options — `Agent[TypedOptions]`
+
+Pass a Pydantic model as the type parameter to unlock IDE autocomplete and runtime type-safety for model-specific options such as `parallel_tool_calls`, `max_tokens`, or provider-specific extensions:
+
+```python
+from pydantic import BaseModel
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+
+class MyOptions(BaseModel):
+    parallel_tool_calls: bool = True
+    max_tokens: int = 2048
+
+
+# Agent[MyOptions] gives full type-checking on .options and constructor kwargs.
+agent: Agent[MyOptions] = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a structured data extractor.",
+    options=MyOptions(parallel_tool_calls=False, max_tokens=512),
+)
+
+response = await agent.run("Extract: Jane Doe, 28, hikes and codes in Python.")
+```
+
+The generic parameter is erased at runtime — `Agent[MyOptions]` and `Agent` compile to the same class. Its sole purpose is IDE-level type narrowing so tooling surfaces `.options` with the correct type.
+
+### Custom telemetry tags — `additional_properties`
+
+Attach arbitrary key-value metadata to an agent via `additional_properties=`. The framework propagates these tags to every OpenTelemetry span it emits for that agent, making it easy to slice traces by tenant, deployment ring, or feature flag:
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a customer-support assistant.",
+    additional_properties={
+        "tenant_id": "acme-corp",
+        "deployment_ring": "canary",
+        "feature_flags": "new_tools,v2_prompt",
+    },
+)
+
+response = await agent.run("How do I reset my password?")
+# Every span for this agent now carries tenant_id, deployment_ring, and feature_flags.
+```
+
+Combined with `configure_otel_providers()` (see the [Observability page](./microsoft_agent_framework_python_observability/)), this lets you filter traces in Azure Monitor, Jaeger, or any OTel-compatible backend without touching your query logic.
 
 ### Agent Lifecycle
 

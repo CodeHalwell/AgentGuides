@@ -301,6 +301,70 @@ results = await evaluate_agent(
 
 Use `ConversationSplit.LAST_TURN` when you care about the latest answer and `ConversationSplit.FULL` when you care about the whole trajectory (did the agent stay on-task across N turns?). Drop to a custom splitter when the evaluation boundary depends on domain-specific signals — tool calls, explicit handoffs, state transitions.
 
+### Per-turn evaluation — `EvalItem.per_turn_items()`
+
+When a conversation has multiple back-and-forth exchanges and you want to test *every* turn — not just the last — use the static `EvalItem.per_turn_items()` helper. It splits a full conversation into one `EvalItem` per user turn, each carrying the correct cumulative context window so preceding turns remain visible to evaluators.
+
+```python
+import asyncio
+from agent_framework import (
+    EvalItem,
+    LocalEvaluator,
+    Message,
+    keyword_check,
+)
+
+# A multi-turn production trace.
+conversation = [
+    Message(role="system", contents=["You are a helpful assistant."]),
+    Message(role="user", contents=["What is 2 + 2?"]),
+    Message(role="assistant", contents=["4"]),
+    Message(role="user", contents=["Square that result."]),
+    Message(role="assistant", contents=["16"]),
+    Message(role="user", contents=["And the square root of that?"]),
+    Message(role="assistant", contents=["4"]),
+]
+
+# Split into one EvalItem per user turn.
+# Each item's `query` is the user message; `response` is the assistant reply.
+# Prior messages accumulate as context so earlier turns aren't dropped.
+items = EvalItem.per_turn_items(conversation)
+
+# Optionally attach the agent's tool definitions so tool-call checks work.
+# items = EvalItem.per_turn_items(conversation, tools=agent.tools)
+
+# Score every turn with a shared evaluator.
+local = LocalEvaluator(keyword_check("4"))
+results = await local.evaluate(items, eval_name="multi-turn regression")
+
+print(results.result_counts)
+# {'passed': 3, 'failed': 0, 'errored': 0}
+
+# Inspect per-turn results.
+for item_result in results.items:
+    print(f"query={item_result.input_text!r}  status={item_result.status}")
+```
+
+`per_turn_items()` signature:
+
+```python
+@staticmethod
+def per_turn_items(
+    conversation: list[Message],
+    *,
+    tools: list[FunctionTool] | None = None,
+    context: str | None = None,
+) -> list[EvalItem]: ...
+```
+
+| Parameter | Purpose |
+|---|---|
+| `conversation` | Full conversation including system, user, assistant, and tool messages. |
+| `tools` | Optional tool list — attached to every emitted `EvalItem` so `tool_called_check` / `tool_call_args_match` work correctly on replay items. |
+| `context` | Optional free-text context string attached to each item — useful for custom evaluators that need the original task description. |
+
+Use `per_turn_items()` when recording multi-turn production conversations and you want to regression-test that *every* step in a dialogue still passes your quality bar — not just the final response.
+
 ## Ground-truth comparisons
 
 Pass expected outputs and tool calls; checks that care about them use those fields on `EvalItem`.
@@ -402,6 +466,31 @@ results = await evaluate_workflow(
 ```
 
 `evaluate_workflow` runs the workflow end-to-end for each query, extracts the final output, and produces the same `EvalItem` shape. Tool definitions and conversation history are pulled from the workflow's agent executors automatically.
+
+### Per-agent breakdown with `EvalResults.sub_results`
+
+When evaluating a multi-agent workflow, `EvalResults.sub_results` gives you a per-agent breakdown alongside the overall totals:
+
+```python
+from agent_framework import LocalEvaluator, evaluate_workflow, keyword_check
+
+[results] = await evaluate_workflow(
+    workflow=research_pipeline,
+    queries=["Quantum computing", "Photonics"],
+    evaluators=LocalEvaluator(keyword_check("research")),
+)
+
+print(results.result_counts)
+# {'passed': 2, 'failed': 0, 'errored': 0}
+
+# Sub-results keyed by agent executor name — only populated by evaluate_workflow.
+for agent_name, sub in results.sub_results.items():
+    print(f"{agent_name}: {sub.result_counts}")
+    # researcher_agent: {'passed': 2, 'failed': 0, 'errored': 0}
+    # summarizer_agent: {'passed': 2, 'failed': 0, 'errored': 0}
+```
+
+`sub_results` is an empty dict for single-agent runs; it only populates when `evaluate_workflow` can attribute outputs to individual executor stages. Use it to pinpoint which agent in a pipeline started underperforming after a model upgrade.
 
 ## Custom `Evaluator` — going beyond `LocalEvaluator`
 

@@ -1027,6 +1027,121 @@ For custom types in `session.state`, register them once at module import via `re
 
 ---
 
+### Recipe 22 — Typed agent options with `Agent[TypedOptions]`
+
+Use the generic `Agent[MyOptions]` form to get IDE autocomplete and type-checking on model-specific parameters while keeping the rest of your code provider-agnostic.
+
+```python
+# typed_agent.py
+import asyncio
+from pydantic import BaseModel
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+
+class ExtractorOptions(BaseModel):
+    parallel_tool_calls: bool = True
+    max_tokens: int = 1024
+
+
+async def main() -> None:
+    # The type parameter is erased at runtime — purely for IDE narrowing.
+    agent: Agent[ExtractorOptions] = Agent(
+        client=OpenAIChatClient(),
+        instructions="Extract structured data from the input and return JSON.",
+        options=ExtractorOptions(parallel_tool_calls=False, max_tokens=256),
+        additional_properties={
+            "feature": "structured-extractor",
+            "version": "v2",
+        },
+    )
+
+    response = await agent.run(
+        "Jane Doe, 28 years old. Likes hiking and writing Python."
+    )
+    print(response.text)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+`additional_properties` are propagated to every OpenTelemetry span the agent emits — use them to slice traces by feature, deployment ring, or tenant in your observability backend without changing query logic.
+
+---
+
+### Recipe 23 — Multi-turn evaluation with `EvalItem.per_turn_items()`
+
+Record a multi-turn production transcript and score *every* user turn — not just the final response — using the static `EvalItem.per_turn_items()` helper.
+
+```python
+# eval_per_turn.py
+import asyncio
+from agent_framework import (
+    Agent,
+    EvalItem,
+    LocalEvaluator,
+    Message,
+    keyword_check,
+    tool_called_check,
+    tool,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def calculator(expression: str) -> str:
+    """Evaluate a simple arithmetic expression."""
+    try:
+        return str(eval(expression, {"__builtins__": {}}, {}))  # noqa: S307
+    except Exception as exc:
+        return f"error: {exc}"
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a maths tutor. Use the calculator tool for arithmetic.",
+        tools=[calculator],
+    )
+
+    # ── Record a multi-turn conversation ──────────────────────────────────────
+    session = agent.create_session()
+    await agent.run("What is 144 divided by 12?", session=session)
+    await agent.run("Multiply that result by 7.", session=session)
+    await agent.run("What is the square root of 49?", session=session)
+
+    # ── Retrieve the stored messages ──────────────────────────────────────────
+    history = await session.get_messages()
+
+    # ── Split into per-turn EvalItems ─────────────────────────────────────────
+    # Each item's `query` = user message; `response` = assistant reply.
+    # Preceding context is preserved so later turns see the full history.
+    items = EvalItem.per_turn_items(history, tools=agent.tools)
+
+    print(f"Generated {len(items)} eval items")   # 3
+
+    # ── Score every turn ──────────────────────────────────────────────────────
+    local = LocalEvaluator(
+        keyword_check("12"),           # turn 1: 144 ÷ 12 = 12
+        tool_called_check("calculator"),
+    )
+    results = await local.evaluate(items, eval_name="maths-tutor-regression")
+
+    print(results.result_counts)
+    for item_result in results.items:
+        status = "✓" if item_result.status == "pass" else "✗"
+        print(f"  {status} {item_result.input_text!r}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+This pattern is especially useful for nightly CI: record representative dialogues in production, commit the message lists, and replay them through `LocalEvaluator` without re-running the agent — a near-zero-cost regression gate.
+
+---
+
 ## Quick reference
 
 | Need | Class / function |
@@ -1037,6 +1152,9 @@ For custom types in `session.state`, register them once at module import via `re
 | Tool from a function | `@tool` from `agent_framework` |
 | Sub-agent as tool | `agent.as_tool(propagate_session=True)` |
 | Expose agent over MCP | `agent.as_mcp_server(server_name=..., version=...)` |
+| Typed model options | `Agent[MyOptions](options=MyOptions(...))` with a Pydantic model |
+| Telemetry tagging | `Agent(additional_properties={"tenant": "acme", ...})` |
+| Mask secrets in logs | `SecretString("my-key")` — repr-safe; `.get_secret_value()` for raw value |
 | Persistent sessions | `FileHistoryProvider(storage_path=...)` |
 | Encrypted sessions | `FileHistoryProvider(dumps=..., loads=...)` |
 | MCP local subprocess | `MCPStdioTool(name=, command=, args=)` |
@@ -1047,5 +1165,7 @@ For custom types in `session.state`, register them once at module import via `re
 | Workflow checkpoints | `FileCheckpointStorage(storage_path=...)` + `WorkflowBuilder(checkpoint_storage=)` |
 | Skills | `Skill(...)` + `SkillsProvider(skills=[...])` |
 | Eval gates | `LocalEvaluator(*checks)` + `evaluate_agent(...)` |
+| Per-turn eval (multi-turn) | `EvalItem.per_turn_items(conversation, tools=...)` + `LocalEvaluator.evaluate(items)` |
+| Workflow eval breakdown | `evaluate_workflow(...)` → `EvalResults.sub_results` dict |
 
 For deep dives see the framework's other Python guides: [tools](./microsoft_agent_framework_python_tools/), [sessions](./microsoft_agent_framework_python_sessions/), [middleware](./microsoft_agent_framework_python_middleware/), [MCP](./microsoft_agent_framework_python_mcp/), [skills](./microsoft_agent_framework_python_skills/), [evaluation](./microsoft_agent_framework_python_evaluation/), [checkpointing](./microsoft_agent_framework_python_checkpointing/), and [orchestration](./microsoft_agent_framework_python_orchestration/).
