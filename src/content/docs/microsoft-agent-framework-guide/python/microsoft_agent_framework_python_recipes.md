@@ -1081,7 +1081,6 @@ from agent_framework import (
     Agent,
     EvalItem,
     LocalEvaluator,
-    Message,
     keyword_check,
     tool_called_check,
     tool,
@@ -1092,8 +1091,10 @@ from agent_framework.openai import OpenAIChatClient
 @tool
 def calculator(expression: str) -> str:
     """Evaluate a simple arithmetic expression."""
+    # WARNING: eval() can be bypassed even with __builtins__ cleared.
+    # In production, use a safe parser such as asteval or simpleeval instead.
     try:
-        return str(eval(expression, {"__builtins__": {}}, {}))  # noqa: S307 -- WARNING: eval is unsafe for untrusted input; use a proper math parser (e.g. asteval, simpleeval) in production
+        return str(eval(expression, {"__builtins__": {}}, {}))  # noqa: S307
     except Exception as exc:
         return f"error: {exc}"
 
@@ -1122,10 +1123,10 @@ async def main() -> None:
     print(f"Generated {len(items)} eval items")   # 3
 
     # ── Score every turn ──────────────────────────────────────────────────────
-    local = LocalEvaluator(
-        keyword_check("12"),           # turn 1: 144 ÷ 12 = 12
-        tool_called_check("calculator"),
-    )
+    # Use a check that's valid for *all* turns: the agent should always call
+    # the calculator tool. Turn-specific keyword assertions (e.g. "12" only on
+    # turn 1) would require per-item EvalItems with expected_output= set.
+    local = LocalEvaluator(tool_called_check("calculator"))
     results = await local.evaluate(items, eval_name="maths-tutor-regression")
 
     print(results.result_counts)
@@ -1152,7 +1153,7 @@ This pattern is especially useful for nightly CI: record representative dialogue
 | Tool from a function | `@tool` from `agent_framework` |
 | Sub-agent as tool | `agent.as_tool(propagate_session=True)` |
 | Expose agent over MCP | `agent.as_mcp_server(server_name=..., version=...)` |
-| Typed model options | `Agent[MyOptions](options=MyOptions(...))` with a Pydantic model |
+| Typed model options | `agent: Agent[MyOptions] = Agent(options=MyOptions(...))` — annotation only; generic erased at runtime |
 | Telemetry tagging | `Agent(additional_properties={"tenant": "acme", ...})` |
 | Mask secrets in logs | `SecretString("my-key")` — repr-safe; `.get_secret_value()` for raw value |
 | Persistent sessions | `FileHistoryProvider(storage_path=...)` |

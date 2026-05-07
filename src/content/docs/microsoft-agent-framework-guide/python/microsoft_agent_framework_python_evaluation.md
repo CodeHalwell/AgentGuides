@@ -314,36 +314,41 @@ from agent_framework import (
     keyword_check,
 )
 
-# A multi-turn production trace.
-conversation = [
-    Message(role="system", contents=["You are a helpful assistant."]),
-    Message(role="user", contents=["What is 2 + 2?"]),
-    Message(role="assistant", contents=["4"]),
-    Message(role="user", contents=["Square that result."]),
-    Message(role="assistant", contents=["16"]),
-    Message(role="user", contents=["And the square root of that?"]),
-    Message(role="assistant", contents=["4"]),
-]
 
-# Split into one EvalItem per user turn.
-# Each item's `query` is the user message; `response` is the assistant reply.
-# Prior messages accumulate as context so earlier turns aren't dropped.
-items = EvalItem.per_turn_items(conversation)
+async def main() -> None:
+    # A multi-turn production trace.
+    conversation = [
+        Message(role="system", contents=["You are a helpful assistant."]),
+        Message(role="user", contents=["What is 2 + 2?"]),
+        Message(role="assistant", contents=["4"]),
+        Message(role="user", contents=["Square that result."]),
+        Message(role="assistant", contents=["16"]),
+        Message(role="user", contents=["And the square root of that?"]),
+        Message(role="assistant", contents=["4"]),
+    ]
 
-# Optionally attach the agent's tool definitions so tool-call checks work.
-# items = EvalItem.per_turn_items(conversation, tools=agent.tools)
+    # Split into one EvalItem per user turn.
+    # Each item's `query` is the user message; `response` is the assistant reply.
+    # Prior messages accumulate as context so earlier turns aren't dropped.
+    items = EvalItem.per_turn_items(conversation)
 
-# Score every turn with a shared evaluator.
-local = LocalEvaluator(keyword_check("4"))
-results = await local.evaluate(items, eval_name="multi-turn regression")
+    # Optionally attach the agent's tool definitions so tool-call checks work.
+    # items = EvalItem.per_turn_items(conversation, tools=agent.tools)
 
-print(results.result_counts)
-# {'passed': 2, 'failed': 1, 'errored': 0}
-# Turn 2 ("Square that result." → "16") fails keyword_check("4") — "16" ≠ "4".
+    # Score every turn with a shared evaluator.
+    local = LocalEvaluator(keyword_check("4"))
+    results = await local.evaluate(items, eval_name="multi-turn regression")
 
-# Inspect per-turn results.
-for item_result in results.items:
-    print(f"query={item_result.input_text!r}  status={item_result.status}")
+    print(results.result_counts)
+    # {'passed': 2, 'failed': 1, 'errored': 0}
+    # Turn 2 ("Square that result." → "16") fails keyword_check("4") — "16" ≠ "4".
+
+    # Inspect per-turn results.
+    for item_result in results.items:
+        print(f"query={item_result.input_text!r}  status={item_result.status}")
+
+
+asyncio.run(main())
 ```
 
 `per_turn_items()` signature:
@@ -475,20 +480,22 @@ When evaluating a multi-agent workflow, `EvalResults.sub_results` gives you a pe
 ```python
 from agent_framework import LocalEvaluator, evaluate_workflow, keyword_check
 
-[results] = await evaluate_workflow(
+all_results = await evaluate_workflow(
     workflow=research_pipeline,
     queries=["Quantum computing", "Photonics"],
     evaluators=LocalEvaluator(keyword_check("research")),
 )
 
-print(results.result_counts)
-# {'passed': 2, 'failed': 0, 'errored': 0}
+# evaluate_workflow returns one EvalResults per evaluator.
+for results in all_results:
+    print(results.result_counts)
+    # {'passed': 2, 'failed': 0, 'errored': 0}
 
-# Sub-results keyed by agent executor name — only populated by evaluate_workflow.
-for agent_name, sub in results.sub_results.items():
-    print(f"{agent_name}: {sub.result_counts}")
-    # researcher_agent: {'passed': 2, 'failed': 0, 'errored': 0}
-    # summarizer_agent: {'passed': 2, 'failed': 0, 'errored': 0}
+    # Sub-results keyed by agent executor name — only populated by evaluate_workflow.
+    for agent_name, sub in results.sub_results.items():
+        print(f"{agent_name}: {sub.result_counts}")
+        # researcher_agent: {'passed': 2, 'failed': 0, 'errored': 0}
+        # summarizer_agent: {'passed': 2, 'failed': 0, 'errored': 0}
 ```
 
 `sub_results` is an empty dict for single-agent runs; it only populates when `evaluate_workflow` can attribute outputs to individual executor stages. Use it to pinpoint which agent in a pipeline started underperforming after a model upgrade.

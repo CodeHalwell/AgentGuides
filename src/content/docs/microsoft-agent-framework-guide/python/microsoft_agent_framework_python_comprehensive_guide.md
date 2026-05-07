@@ -247,7 +247,7 @@ async def run_chat_agent() -> None:
 
 ### Typed agent options — `Agent[TypedOptions]`
 
-Pass a Pydantic model as the type parameter to unlock IDE autocomplete and runtime type-safety for model-specific options such as `parallel_tool_calls`, `max_tokens`, or provider-specific extensions:
+Pass a Pydantic model as the type parameter to unlock IDE autocomplete and static type-checking for model-specific options such as `parallel_tool_calls`, `max_tokens`, or provider-specific extensions. Runtime validation comes from constructing the Pydantic model itself — the generic parameter is erased at runtime and exists purely for static analysis:
 
 ```python
 from pydantic import BaseModel
