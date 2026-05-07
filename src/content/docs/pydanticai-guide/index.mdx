@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.90.0** · May 2026 · Python 3.10+
+    **v1.91.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -98,8 +98,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.90.0 (May 2026)
+## What's new in v1.91.0 (May 2026)
 
+- **v1.91.0 (May 7)** — Patch release; maintenance and dependency updates. `UrlContextTool` class decorated `@deprecated('Use WebFetchTool instead.')` in `pydantic_ai/builtin_tools/__init__.py` line 354 — use `WebFetchTool` in all new code. `AgentRunResult.data` renamed to `AgentRunResult.output` — update any code accessing run results via `.data`.
 - **v1.90.0 (May 5)** — Patch release; maintenance and dependency updates. `DeferredToolCalls` class in `pydantic_ai.output` marked `@deprecated` — use `DeferredToolRequests` (already the recommended API since v1.87.x).
 - **v1.89.1 (May 2)** — Patch release; maintenance and dependency updates.
 - **v1.89.0 (May 1)** — Patch release; maintenance and dependency updates.
@@ -122,7 +123,7 @@ class Answer(BaseModel):
 agent = Agent('openai:gpt-4o', output_type=Answer)
 
 result = agent.run_sync("What is 15 + 27?")
-print(result.data)  # Answer(value=42, reasoning='...')
+print(result.output)  # Answer(value=42, reasoning='...')
 ```
 
 Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#philosophy--core-concepts)**
@@ -133,6 +134,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-07 | pydantic-ai 1.91.0 | Version bumped 1.90.0 → 1.91.0; "What's new" heading updated; `UrlContextTool` deprecation (`@deprecated('Use WebFetchTool instead.')` in `builtin_tools/__init__.py:354`) and `AgentRunResult.data` → `.output` rename documented; `index.mdx` minimal example updated (`result.data` → `result.output`); comprehensive guide header updated; revision history entry added. `Agent`, `FunctionToolset`, `DeferredToolRequests`, `WebFetchTool`, `WebSearchTool`, `ImageGenerationTool`, `MemoryTool`, `XSearchTool`, `ApprovalRequiredToolset`, `DeferredLoadingToolset`, `RenamedToolset`, `WrapperToolset`, `IncludeReturnSchemasToolset`, `SetMetadataToolset`, `PreparedToolset` imports verified against installed 1.91.0 (`.routine-envs/check-0507`) with `-W error::DeprecationWarning`; `Agent(TestModel()).run_sync` executed — `result.output` confirmed present; `result.data` confirmed absent. | Claude routine |
 | 2026-05-05 | pydantic-ai 1.90.0 | Version bumped 1.89.1 → 1.90.0; "What's new" updated (DeferredToolCalls deprecated in favour of DeferredToolRequests); comprehensive guide header updated; revision history entry added. `Agent`, `TestModel`, `FunctionToolset`, `DeferredToolRequests`, `HandleDeferredToolCalls`, `ImageGenerationTool`, `MemoryTool`, `XSearchTool`, `RenamedToolset`, `WrapperToolset`, `IncludeReturnSchemasToolset`, `SetMetadataToolset`, `PreparedToolset` imports verified against installed 1.90.0 (`.routine-envs/check-0505`). | Claude routine |
 | 2026-05-02 | pydantic-ai 1.89.1 | Version bumped 1.89.0 → 1.89.1; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `OpenAIModel` imports verified against installed 1.89.1 (`.routine-envs/check-pydantic-0502`). | Claude routine |
 | 2026-05-01 | pydantic-ai 1.89.0 | Version bumped 1.88.0 → 1.89.0; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `OpenAIModel` imports verified against installed 1.89.0 (`.routine-envs/check-pydantic-0501`). | Claude routine |

@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.15.1** · May 2026 · Python 3.10+
+    **v0.16.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Multi-agent handoffs, customer-service bots, tracing-first apps.
@@ -77,12 +77,20 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./openai_agents_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v0.15.1 (May 2026)
+## What's new in v0.16.0 (May 2026)
 
+- **v0.16.0 (May 7)** — Minor release. Notable additions (all verified against installed 0.16.0 source):
+  - **`Session` / `SessionABC` / `SessionSettings`** — unified session protocol with `OpenAIConversationsSession` (conversations API) and `OpenAIResponsesCompactionSession` (auto-compaction). Import from `agents` directly.
+  - **`MultiProvider`** — routes across multiple model providers with fallback semantics; import `from agents import MultiProvider`.
+  - **`ModelRetrySettings` / `ModelRetryAdvice` / `ModelRetryAdviceRequest` / `ModelRetryBackoffSettings`** — configurable per-run retry strategy for model errors.
+  - **`ToolContext`** — subclass of `RunContextWrapper` with `tool_name`, `tool_call_id`, and `tool_arguments` fields injected by the runner; available via `from agents import ToolContext` (note: not yet in `__all__`, import from `agents.tool_context`).
+  - **`Prompt` / `DynamicPromptFunction`** — dynamic instructions via callable or structured `Prompt` objects.
+  - **`ToolTimeoutError`** — raised when a function tool exceeds its configured timeout.
+  - **`ToolInputGuardrailTripwireTriggered` / `ToolOutputGuardrailTripwireTriggered`** — new exception types for per-tool guardrail violations.
+- **v0.15.3 (May 6)**, **v0.15.2 (May 5)** — Patch releases; stability and dependency updates.
 - **v0.15.1 (May 2)** — Patch release; stability and dependency updates.
 - **v0.15.0 (May 1)** — Minor release; stability and dependency updates.
 - **v0.14.8 (April 29)** — Patch release; stability improvements.
-- **v0.14.7 (April 28)** — Patch release; stability improvements.
 - **Sandbox agents** — persistent isolated workspaces with files, directories, Git repos, snapshots. Backends: local Unix, Docker, Blaxel, E2B, Modal, Runloop, Vercel.
 - **WebSocket transport** for OpenAI Responses models — low-latency multi-turn conversations via `responses_websocket_session()`.
 - **Sync function tools** now run on worker threads via `asyncio.to_thread()`.
@@ -116,6 +124,7 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_comprehensive_guid
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-05-07 | 0.16.0 | Version bumped 0.15.1 → 0.16.0 (minor release); "What's new" section updated with Session/MultiProvider/ModelRetrySettings/ToolContext/Prompt/ToolTimeoutError additions; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `RunContextWrapper`, `Handoff`, `InputGuardrail`, `OutputGuardrail`, `MultiProvider`, `Session`, `SessionABC`, `SessionSettings`, `ModelRetrySettings`, `ToolTimeoutError`, `ToolInputGuardrailTripwireTriggered`, `ToolOutputGuardrailTripwireTriggered` imports verified against installed 0.16.0 (`.routine-envs/check-0507`). | Claude routine |
 | 2026-05-02 | 0.15.1 | Version bumped 0.15.0 → 0.15.1; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `Handoff`, `guardrail` imports verified against installed 0.15.1 (`.routine-envs/check-openai-0502`). | Claude routine |
 | 2026-05-01 | 0.15.0 | Version bumped 0.14.8 → 0.15.0; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `Handoff`, `guardrail` imports verified against installed 0.15.0 (`.routine-envs/check-openai-0501`). | Claude routine |
 | 2026-04-29 | 0.14.8 | Version bumped 0.14.7 → 0.14.8; "What's new" heading updated; comprehensive guide header updated; revision history entry added. Snippets verified against installed 0.14.8 (`.routine-envs/main-py-0429`). | Claude routine |

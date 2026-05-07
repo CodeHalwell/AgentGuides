@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.8.5** · April 2026 · Node 18+
+    **v0.10.0** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack agents, HITL-approved workflows, browser-side tools.
@@ -69,11 +69,18 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./openai_agents_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.8.5 (April 2026)
+## What's new in v0.10.0 (May 2026)
 
-- **HITL approval flows** for tool calls in browser clients.
-- **Browser support** improvements with tree-shaken bundles.
-- **Zod v4 support** across all structured-output helpers.
+Notable additions in v0.9.x–0.10.0 (all verified against installed source in `.routine-envs/check-0507-node`):
+
+- **`MemorySession`** — simple in-memory session store (`SessionHistoryRewriteAwareSession`) for demos and tests. Import: `import { MemorySession } from '@openai/agents'` (re-exported from `@openai/agents-core`). Not intended for production; use `SQLiteSession` or a database-backed session for production.
+- **Tool guardrails** (`defineToolInputGuardrail`, `defineToolOutputGuardrail`) — per-tool input/output guardrails with `ToolGuardrailBehavior` (`allow`, `rejectContent`, `throwException`). Complements existing agent-level `InputGuardrail`/`OutputGuardrail`.
+- **`toolNamespace`** — declare a tool's namespace prefix for disambiguation in multi-tool agent setups. Import: `import { toolNamespace } from '@openai/agents'`.
+- **`ModelRetrySettings` / `ModelRetryAdvice` / `ModelRetryAdviceRequest` / `ModelRetryBackoffSettings`** — configurable retry strategy with jitter and backoff. Mirror of the Python SDK's retry module.
+- **`RunContext`** — explicit runner context type (mirrors `RunContextWrapper` in Python). Import: `import { RunContext } from '@openai/agents'`.
+- **`MCPServers` / `connectMcpServers`** — managed MCP server lifecycle with reconnect options.
+- **`retryPolicies`** — built-in named retry policies accessible via `import { retryPolicies } from '@openai/agents'`.
+- **Prior (v0.8.5, April 2026):** HITL approval flows; browser bundle improvements; Zod v4.
 
 ## Install, minimal example
 
@@ -97,6 +104,7 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_typescript_compreh
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-07 | 0.10.0 | Version bumped 0.8.5 → 0.10.0 (minor releases 0.9.x–0.10.0); "What's new" rewritten; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `run`, `RunContext`, `Handoff`, `handoff`, `MemorySession`, `defineToolInputGuardrail`, `defineToolOutputGuardrail`, `toolNamespace`, `ModelRetrySettings`, `retryPolicies`, `MCPServers`, `connectMcpServers` verified against installed `@openai/agents 0.10.0` (`@openai/agents-core 0.10.0`, `.routine-envs/check-0507-node`). | Claude routine |
 | 2026-04-21 | 0.8.5 | Banner bumped to installed version 0.8.5. |
 | April 9, 2026 | 0.8.3 | HITL approval flows; browser bundle improvements; Zod v4. |
 | November 2025 | 0.3.2 | Initial TypeScript guide; Swarm migration; MCP. |

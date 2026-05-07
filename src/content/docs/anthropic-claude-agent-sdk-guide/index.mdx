@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.1.73** · May 2026 · Python 3.10+
+    **v0.1.76** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Claude-exclusive apps, Computer Use, MCP-heavy workflows, durable sessions.
@@ -74,8 +74,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" />
 </CardGrid>
 
-## What's new in v0.1.73 (May 2026)
+## What's new in v0.1.76 (May 2026)
 
+- **v0.1.74–0.1.76 (May 7)** — Three patch releases; dependency updates and stability improvements.
 - **v0.1.73 (May 5)** — Patch release; stability improvements.
 - **v0.1.72 (May 1)** — Patch release; stability improvements.
 - **v0.1.71 (April 29)** — Patch release; stability improvements.
@@ -133,6 +134,7 @@ Ready? **[Start Zero → Hero Step 1 →](./anthropic_claude_agent_sdk_comprehen
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-07 | claude-agent-sdk 0.1.76 | Version bumped 0.1.73 → 0.1.76 (three patch releases: 0.1.74, 0.1.75, 0.1.76); "What's new" updated; comprehensive guide header updated; revision history entry added. `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` imports verified against installed 0.1.76 (`.routine-envs/check-0507`) with `-W error::DeprecationWarning`. | Claude routine |
 | 2026-05-05 | claude-agent-sdk 0.1.73 | Version bumped 0.1.72 → 0.1.73; "What's new" updated; revision history entry added. `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` verified against installed 0.1.73 (`.routine-envs/check-0505`). | Claude routine |
 | 2026-05-01 | claude-agent-sdk 0.1.72 | Version bumped 0.1.71 → 0.1.72; "What's new" updated; revision history entry added. Symbols verified against installed 0.1.72 (`.routine-envs/check-claude-0501`). | Claude routine |
 | 2026-04-29 | claude-agent-sdk 0.1.71 | Version bumped 0.1.69 → 0.1.71 (two patch releases: 0.1.70, 0.1.71); "What's new" updated; revision history entry added. Symbols verified against installed 0.1.71 (`.routine-envs/main-py-0429`). | Claude routine |
