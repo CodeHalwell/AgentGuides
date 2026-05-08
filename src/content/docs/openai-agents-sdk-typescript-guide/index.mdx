@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.8.5** · April 2026 · Node 18+
+    **v0.10.1** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack agents, HITL-approved workflows, browser-side tools.
@@ -69,8 +69,19 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./openai_agents_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.8.5 (April 2026)
+## What's new in v0.10.1 (May 2026)
 
+- **v0.10.1 (May 8)** — Patch fix on top of 0.10.0. New exports confirmed (`.routine-envs/check-0508-node`):
+  - `applyPatchTool`, `shellTool` — computer use and shell execution.
+  - `RunToolApprovalItem` — HITL tool approval event.
+  - `ToolTimeoutError` — new error type for tool timeouts.
+  - `defineToolInputGuardrail`, `defineToolOutputGuardrail`, `ToolGuardrailFunctionOutputFactory` — tool-level guardrail helpers.
+  - `isOpenAIResponsesCompactionAwareSession`, `isSessionHistoryRewriteAwareSession`, `applySessionHistoryMutations` — session compaction utilities.
+  - `gpt5ReasoningSettingsRequired`, `getDefaultModel`, `isGpt5Default` — GPT-5 model helpers.
+  - `computerTool`, `hostedMcpTool`, `toolNamespace` — additional tool constructors.
+  - `BatchTraceProcessor`, `ConsoleSpanExporter` — tracing processors.
+- **v0.9.x** — Intermediate releases (0.9.0–0.9.3); stepped toward 0.10.0.
+- **v0.8.5 (April 2026)** — HITL approval flows; browser bundle improvements; Zod v4.
 - **HITL approval flows** for tool calls in browser clients.
 - **Browser support** improvements with tree-shaken bundles.
 - **Zod v4 support** across all structured-output helpers.
@@ -97,6 +108,7 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_typescript_compreh
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-08 | 0.10.1 | Version bumped 0.8.5 → 0.10.1 (skipping 0.9.x); "What's new" rewritten for 0.10.x; revision history entry added. New exports documented: `applyPatchTool`, `shellTool`, `RunToolApprovalItem`, `ToolTimeoutError`, `defineToolInputGuardrail`, `defineToolOutputGuardrail`, `isOpenAIResponsesCompactionAwareSession`, `isSessionHistoryRewriteAwareSession`. `Agent`, `run`, `Runner`, `handoff`, `tool`, `MCPServerStdio` verified against npm `@openai/agents 0.10.1` (2026-05-08, `.routine-envs/check-0508-node`). | Claude routine |
 | 2026-04-21 | 0.8.5 | Banner bumped to installed version 0.8.5. |
 | April 9, 2026 | 0.8.3 | HITL approval flows; browser bundle improvements; Zod v4. |
 | November 2025 | 0.3.2 | Initial TypeScript guide; Swarm migration; MCP. |

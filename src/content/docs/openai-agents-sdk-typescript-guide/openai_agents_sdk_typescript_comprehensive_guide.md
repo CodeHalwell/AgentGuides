@@ -4,7 +4,7 @@ description: "Version: 1.0 Last Updated: April 2026 Language: TypeScript Framewo
 framework: openai-agents-sdk-typescript
 ---
 
-Latest: 0.8.3 | Updated: April 2026
+Latest: 0.10.1 | Updated: May 8, 2026
 # OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
 
 **Version:** 1.0  
@@ -2523,6 +2523,7 @@ await session.send({ type: 'input_audio_buffer.append', audio: recordedPcm });
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.10.1 | May 8, 2026 | Version bumped 0.8.5 → 0.10.1 (two minor releases: 0.9.x, 0.10.x). New exports verified against npm `@openai/agents 0.10.1` (`.routine-envs/check-0508-node`): `applyPatchTool`, `shellTool`, `RunToolApprovalItem`, `ToolTimeoutError`, `defineToolInputGuardrail`, `defineToolOutputGuardrail`, `isOpenAIResponsesCompactionAwareSession`, `isSessionHistoryRewriteAwareSession`, `applySessionHistoryMutations`, `gpt5ReasoningSettingsRequired`, `computerTool`, `hostedMcpTool`, `toolNamespace`, `BatchTraceProcessor`, `ConsoleSpanExporter`. `Agent`, `run`, `Runner`, `handoff`, `tool` core exports verified. |
 | 0.8.3 | April 9, 2026 | Stability improvements; Zod schema validation for tool inputs; built-in tracing |
 | 0.8.0 | March 2026 | Realtime Agents with WebSocket voice/audio; Sessions API for multi-turn persistence |
 | 0.3.2 | November 2025 | Previous documented version |
