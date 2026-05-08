@@ -84,9 +84,9 @@ The directory layout for owner `alice`:
 
 ```
 ./memory/
-└── <source_id>/
-    └── <alice_encoded>/
-        └── memory/
+└── <source_id_b64>/          ← base64url-encoded provider source_id
+    └── <owner_b64>/          ← base64url-encoded owner_id (from session.state)
+        └── memory/           ← kind directory (default: "memory")
             ├── MEMORY.md           ← topic index
             ├── state.json          ← consolidation metadata
             ├── topics/
@@ -232,22 +232,22 @@ agent = Agent(
 Inspect persisted topics or the index directly — useful for admin views or memory migration tools:
 
 ```python
-import asyncio
 from agent_framework import AgentSession, MemoryFileStore
 
 
-async def print_memory_index(user_id: str) -> None:
+def print_memory_index(user_id: str) -> None:
     store = MemoryFileStore(base_path="./data/memory", owner_state_key="user_id")
 
     session = AgentSession()
     session.state["user_id"] = user_id
 
-    # Load the topic index
-    index_path = store.get_index_path(session, source_id="memory")
-    if index_path.exists():
-        print(index_path.read_text())
-    else:
+    # list_topics() is a public synchronous method — no await needed.
+    topics = store.list_topics(session, source_id="memory")
+    if not topics:
         print("No memory yet.")
+    else:
+        for record in topics:
+            print(f"  [{record.topic}]  {record.summary or '(no summary)'}")
 ```
 
 ## Filtering messages before transcript save
