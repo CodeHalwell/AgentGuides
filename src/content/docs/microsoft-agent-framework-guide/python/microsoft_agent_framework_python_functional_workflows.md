@@ -320,9 +320,9 @@ async def doc_pipeline(doc: str) -> str:
 
 `get_run_context()` returns `None` when called outside a running `@workflow`, so it is safe to call from utility code that can run in either context.
 
-### Adapting behaviour with `ctx.is_streaming`
+### Adapting behaviour with `ctx.is_streaming()`
 
-Sometimes you want to emit fine-grained events only when the caller is already consuming a stream — otherwise the overhead is wasted. Check `ctx.is_streaming` to decide:
+Sometimes you want to emit fine-grained events only when the caller is already consuming a stream — otherwise the overhead is wasted. Check `ctx.is_streaming()` to decide:
 
 ```python
 from agent_framework import RunContext, WorkflowEvent, workflow, step

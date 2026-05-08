@@ -41,7 +41,7 @@ async def main() -> None:
         context_providers=[MemoryContextProvider(store=store)],
     )
 
-    # owner_state_key routes all files to ./agent-memory/<user_id>/memory/
+    # owner_state_key routes files to ./agent-memory/<encoded_source_id>/<encoded_user_id>/memory/
     session = AgentSession(session_id="session-1")
     session.state["user_id"] = "alice"
 
@@ -273,18 +273,19 @@ Delete the owner's memory root to start fresh, or copy the directory to migrate 
 
 ```python
 import shutil
-from pathlib import Path
+from agent_framework import AgentSession, MemoryFileStore
 
-def reset_user_memory(user_id: str, base_path: str = "./memory") -> None:
+async def reset_user_memory(user_id: str, base_path: str = "./memory") -> None:
     """Delete all memory for one user — irreversible."""
-    # MemoryFileStore uses base64 encoding for the owner segment.
-    # The simplest safe approach: enumerate and match.
-    root = Path(base_path)
-    # In practice, store the encoded path from store._get_memory_root()
-    # or keep your own index mapping user_id → encoded path.
-    user_dir = root / "memory"  # source_id dir / encoded_owner / "memory"
-    if user_dir.exists():
-        shutil.rmtree(user_dir)
+    store = MemoryFileStore(base_path=base_path, owner_state_key="user_id")
+    # Build a throwaway session so the store can resolve the correct
+    # encoded path: base_path / encode(source_id) / encode(owner) / kind
+    session = AgentSession()
+    session.state["user_id"] = user_id
+    # _get_memory_root is a private helper — it may change between releases.
+    memory_root = store._get_memory_root(session, source_id="memory")
+    if memory_root.exists():
+        shutil.rmtree(memory_root)
 ```
 
 > For production use, prefer soft-deletion (rename the directory) over hard deletion so you can restore accidentally deleted memory.

@@ -291,7 +291,7 @@ async def evaluate_multi_turn() -> None:
     # Evaluate every turn with the same checks
     local = LocalEvaluator(keyword_check("laptop"), keyword_check("price"))
 
-    [results] = await local.evaluate(items)
+    results = await local.evaluate(items)
     for item_result in results.items:
         print(f"  Turn {item_result.item_id}: {item_result.status}")
         print(f"    Q: {item_result.input_text[:60]!r}")

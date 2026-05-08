@@ -143,7 +143,7 @@ agent = Agent(
 )
 ```
 
-Each provider has its own isolated tool names derived from its `source_id` (`add_todos`, `complete_todos`, etc. are shared names scoped per-session, so separate `source_id` values keep the state buckets separate on disk).
+Tool names (`add_todos`, `complete_todos`, etc.) are the same regardless of `source_id`. The `source_id` controls only storage isolation — each value gets its own separate state bucket on disk, so `"sprint"` and `"backlog"` never share data even though their tools share the same names.
 
 ## Custom instructions
 
