@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.8.5** · April 2026 · Node 18+
+    **v0.11.1** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack agents, HITL-approved workflows, browser-side tools.
@@ -69,11 +69,12 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./openai_agents_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.8.5 (April 2026)
+## What's new in v0.11.1 (May 2026)
 
-- **HITL approval flows** for tool calls in browser clients.
-- **Browser support** improvements with tree-shaken bundles.
-- **Zod v4 support** across all structured-output helpers.
+- **v0.11.1 (May 9)** — Patch; stability improvements.
+- **v0.11.0 (May 7)** — New helpers: `shellTool` (sandboxed shell command execution), `toolSearchTool` (dynamic tool discovery), `applyPatchTool` (code-patch application), `applyDiff` (diff application utility). `retryPolicies` collection for configurable retry strategies. `MemorySession` and `OpenAIConversationsSession` for structured session management. `MCPServerStreamableHttp` added to MCP server options. All confirmed in `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`).
+- **v0.9.0–v0.10.5 (May 3–6)** — Minor releases; `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `RuntimeEventEmitter`, `applySessionHistoryMutations`; performance improvements.
+- **v0.8.5 (April 2026)** — HITL approval flows; browser bundle improvements; Zod v4.
 
 ## Install, minimal example
 
@@ -97,6 +98,7 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_typescript_compreh
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-09 | 0.11.1 | Version bumped 0.8.5 → 0.11.1 (multiple minor and patch releases); "What's new" updated; comprehensive guide header updated. New symbols confirmed in installed `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`): `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `RuntimeEventEmitter`, `applySessionHistoryMutations`, `MCPServerStreamableHttp`. Revision history entry added. | Claude routine |
 | 2026-04-21 | 0.8.5 | Banner bumped to installed version 0.8.5. |
 | April 9, 2026 | 0.8.3 | HITL approval flows; browser bundle improvements; Zod v4. |
 | November 2025 | 0.3.2 | Initial TypeScript guide; Swarm migration; MCP. |
