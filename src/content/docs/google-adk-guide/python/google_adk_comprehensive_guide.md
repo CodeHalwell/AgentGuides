@@ -5,11 +5,11 @@ framework: google-adk
 language: python
 ---
 
-Latest: 1.32.0 | Updated: May 1, 2026
+Latest: 1.33.0 | Updated: May 9, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** May 1, 2026  
+**Last Updated:** May 9, 2026  
 **Framework:** Google Agent Development Kit (ADK)  
 **Target Audience:** Beginner to Advanced Developers
 
@@ -4133,6 +4133,7 @@ result = await agent.run(
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.33.0 | May 9, 2026 | Minor stable release. Version confirmed against installed `google-adk 1.33.0` (`.routine-envs/check-0509-py`); `google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.tools.FunctionTool` verified with `-W error::DeprecationWarning` — all PASS. |
 | 1.32.0 | May 1, 2026 | Stable patch release. Version confirmed against installed `google-adk 1.32.0` (`.routine-envs/check-googadk-0501`); `google.adk.agents.Agent` import verified with `-W error::DeprecationWarning`. |
 | 1.31.1 | April 2026 | Patch release; stability improvements. |
 | 1.31.0 | April 17, 2026 | Overhauled Web UI: live chat interface, session display names, structured execution traces, Graph View canvas, event filtering (by message/tool/error type), computer-use visualisation; memory bank event ingestion; Vertex AI Agent Engine Sandbox for computer use; Firestore database support; session ID tracking in LLM responses; user-agent headers for Parameter Manager and Secret Manager clients; minimum MCP version raised to 1.24.0; `FunctionDeclaration` JSON schema fallback improved; BigQuery plugin fixes (data transfers, metadata); console URL path corrections after Agent Engine deployment; event callback timing fix (plugin modifications now persist correctly) |
