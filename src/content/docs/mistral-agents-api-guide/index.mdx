@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **mistralai 2.4.4** · May 2026 · Python 3.10+
+    **mistralai 2.4.5** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Mistral-native workloads, hosted agents with connectors, MCP-heavy flows.
@@ -76,8 +76,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="May 2025 launch updates" href="./may_2025_launch_updates/" />
 </CardGrid>
 
-## What's new in v2.4.4 (May 2026)
+## What's new in v2.4.5 (May 2026)
 
+- **v2.4.5 (May 9)** — Patch release; stability improvements.
 - **v2.4.4 (May 1)** — Patch release; stability improvements.
 - **v2.4.3 (April 28)** — Patch release; stability improvements.
 - **v2 SDK** with refined async patterns.
@@ -114,6 +115,7 @@ Ready? **[Start Zero → Hero Step 1 →](./mistral_agents_api_comprehensive_gui
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-05-09 | mistralai 2.4.5 | Version bumped 2.4.4 → 2.4.5 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.5 (`.routine-envs/check-0509-py`) — note: `from mistralai import Mistral` fails (top-level module is a namespace); correct path remains `from mistralai.client import Mistral`. | Claude routine |
 | 2026-05-01 | mistralai 2.4.4 | Version bumped 2.4.3 → 2.4.4 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.4 (`.routine-envs/check-mistral2-0501`). | Claude routine |
 | 2026-04-28 | mistralai 2.4.3 | Version bumped 2.4.2 → 2.4.3 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.3. | Claude routine |
 | 2026-04-24 | mistralai 2.4.2 | Version bumped 2.4.1 → 2.4.2 (patch release April 23); version card and "What's new" updated. | — |
