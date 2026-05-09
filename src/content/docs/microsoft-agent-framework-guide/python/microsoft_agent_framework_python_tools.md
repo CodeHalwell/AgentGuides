@@ -203,7 +203,7 @@ def run_query(sql: str) -> list[dict]:
 `max_invocations` caps the **lifetime** of a tool instance. For module-level tools in long-running servers, either:
 
 - Reset explicitly: `get_weather.invocation_count = 0`
-- Use per-request limits instead: pass `FunctionInvocationConfiguration(max_function_calls=3)` to `agent.run(...)`.
+- Use per-request limits instead: set `client.function_invocation_configuration["max_function_calls"] = 3` at the client level (see [Per-request tool-loop caps](#per-request-tool-loop-caps) below).
 
 `max_invocation_exceptions` puts a ceiling on how many times a tool can error before the agent stops calling it — a simple circuit breaker.
 
@@ -235,7 +235,7 @@ Combine with `max_invocations=N` to cap **per-process** spend on expensive tools
 `FunctionInvocationConfiguration` is a `TypedDict` that configures the tool execution loop. Apply it at the **chat-client level** to set defaults for every run on that client, or override per-agent with `default_options`:
 
 ```python
-from agent_framework import Agent, FunctionInvocationConfiguration
+from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
 # Configure at the client level — applies to every agent using this client

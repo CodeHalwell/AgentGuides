@@ -12,7 +12,7 @@ Practical, runnable patterns for the real `agent_framework` package. Every recip
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.
 - **Pinned version:** `agent-framework==1.3.0`. Check the latest with `pip index versions agent-framework`.
 - **Python:** 3.10+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
-- **Verified APIs:** `Agent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `AgentMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `Skill`, `LocalEvaluator`, `WorkflowBuilder`.
+- **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `AgentMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`.
 
 ```bash
 pip install agent-framework

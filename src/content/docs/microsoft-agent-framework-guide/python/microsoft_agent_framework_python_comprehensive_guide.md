@@ -1539,25 +1539,31 @@ At session start the provider reads `MEMORY.md`, selects the `selection_limit` m
 ### Inspecting and managing the store
 
 ```python
+import asyncio
 from agent_framework import AgentSession, MemoryFileStore
 
 store = MemoryFileStore(base_path="./memory")
 session = AgentSession(session_id="user-42-s1")
 
-# List all extracted topics
-topics = store.list_topics(session, source_id="memory")
-for t in topics:
-    print(f"{t.name}: {t.summary}")
 
-# Read a specific topic
-record = store.get_topic(session, source_id="memory", topic="communication-style")
-print(record.content)
+async def inspect_memory() -> None:
+    # List all extracted topics
+    topics = await store.list_topics(session, source_id="memory")
+    for t in topics:
+        print(f"{t.name}: {t.summary}")
 
-# Delete a topic the user wants forgotten
-store.delete_topic(session, source_id="memory", topic="communication-style")
+    # Read a specific topic
+    record = await store.get_topic(session, source_id="memory", topic="communication-style")
+    print(record.content)
 
-# Rebuild the index after manual edits
-entries = store.rebuild_index(session, source_id="memory", line_limit=200, line_length=150)
+    # Delete a topic the user wants forgotten
+    await store.delete_topic(session, source_id="memory", topic="communication-style")
+
+    # Rebuild the index after manual edits
+    entries = await store.rebuild_index(session, source_id="memory", line_limit=200, line_length=150)
+
+
+asyncio.run(inspect_memory())
 ```
 
 ### Custom `MemoryStore` backend

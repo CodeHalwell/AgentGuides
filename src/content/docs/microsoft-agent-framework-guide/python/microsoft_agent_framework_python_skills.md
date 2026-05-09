@@ -133,7 +133,7 @@ pricing_skill = InlineSkill(
 Resource callables can declare `**kwargs` to receive runtime data forwarded by `agent.run(..., function_invocation_kwargs={...})`:
 
 ```python
-from agent_framework import InlineSkill, SkillsProvider
+from agent_framework import Agent, InlineSkill, SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -336,7 +336,7 @@ agent = Agent(client=OpenAIChatClient(), context_providers=[provider])
 Use `FilteringSkillsSource` to expose only skills relevant to the current user or context:
 
 ```python
-from agent_framework import FilteringSkillsSource, FileSkillsSource, SkillsProvider, Skill
+from agent_framework import FilteringSkillsSource, FileSkillsSource, SkillsProvider
 
 all_source = FileSkillsSource("./skills")
 
@@ -368,12 +368,14 @@ source = DeduplicatingSkillsSource(AggregatingSkillsSource([primary, fallback]))
 File-based scripts need a `SkillScriptRunner` — pass it to `FileSkillsSource` or `SkillsProvider.from_paths`:
 
 ```python
-from agent_framework import SkillsProvider
+import asyncio
+import json
+import sys
+from pathlib import Path
+from agent_framework import Skill, SkillScript, SkillsProvider
 
-async def subprocess_runner(skill, script, args=None):
-    import asyncio, json, sys
-    from pathlib import Path
 
+async def subprocess_runner(skill: Skill, script: SkillScript, args: dict | None = None) -> str:
     path = Path(skill.path) / script.path
     proc = await asyncio.create_subprocess_exec(
         sys.executable, str(path), "--args", json.dumps(args or {}),
@@ -402,7 +404,7 @@ For untrusted scripts, isolate execution with Docker:
 ```python
 import asyncio
 import json
-from agent_framework import Skill, SkillScript
+from agent_framework import Skill, SkillScript, SkillsProvider
 
 
 class DockerSkillRunner:
@@ -482,7 +484,7 @@ When the agent tries to run a script, the run pauses and emits a `function_appro
 Subclass `ClassSkill` when you want a parameterisable, self-contained skill type with factory methods for resources and scripts. This is the pattern for skills that need different configs per agent (e.g. different DB connection strings):
 
 ```python
-from agent_framework import ClassSkill, InlineSkillResource, SkillsProvider
+from agent_framework import Agent, ClassSkill, InlineSkillResource, SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
