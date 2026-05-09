@@ -1,20 +1,20 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.2.2 — chat clients, tools, sessions, middleware, MCP, skills, workflows, evaluation, and observability."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.3.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, evaluation, and observability."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest verified release: 1.2.2 | Python 3.10+
+Latest verified release: 1.3.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version:** 1.2.2 (`agent-framework` and `agent-framework-core`)
+**Framework Version:** 1.3.0 (`agent-framework` and `agent-framework-core`)
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.2.2`).**
+> **API reference (verified against `agent-framework-core==1.3.0`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Primary agent class:** `Agent`. Construct with `Agent(client=<ChatClient>, instructions=..., tools=[...])`.
@@ -1420,6 +1420,13 @@ Same pattern works for `SupportsAgentRun`, `SupportsChatGetResponse`, and `Suppo
 - **HITL durability** — combine HITL request_info with checkpointing so a human can come back hours later in a different process and the workflow resumes exactly where it paused.
 
 ---
+
+## Revision history
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.3.0 | May 9, 2026 | Core bumped 1.2.2 → 1.3.0. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. `MemoryStore` and `SkillResource` now emit `ExperimentalWarning` on import. Version strings updated throughout; `Agent` and `FoundryChatClient` verified against installed `agent-framework==1.3.0` (`.routine-envs/check-0509-py`). |
+| 1.2.2 | May 2026 | Guide verified against `agent-framework-core==1.2.2`; skills, functional workflows, and `Agent.as_tool()` added. |
 
 ## Where to go next
 

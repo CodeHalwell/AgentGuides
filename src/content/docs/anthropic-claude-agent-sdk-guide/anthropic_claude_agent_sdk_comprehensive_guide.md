@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.1.73 | Updated: May 5, 2026
+Latest: 0.1.80 | Updated: May 9, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -2926,6 +2926,7 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.1.80 | May 9, 2026 | Patch releases 0.1.74–0.1.80; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.80` (`.routine-envs/check-0509-py`); `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` all PASS with `-W error::DeprecationWarning`. |
 | 0.1.73 | May 5, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.73` (`.routine-envs/check-0505`); `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` imports verified with `-W error::DeprecationWarning` — all PASS. |
 | 0.1.72 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.72` (`.routine-envs/check-claude-0501`); `query`, `ClaudeAgentOptions` imports verified with `-W error::DeprecationWarning`. |
 | 0.1.71 | April 29, 2026 | Patch releases (0.1.70–0.1.71); stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.71` (`.routine-envs/main-py-0429`); `query`, `ClaudeAgentOptions` imports verified. |

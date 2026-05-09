@@ -4,7 +4,7 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: 0.15.1 | Updated: May 2, 2026
+Latest: 0.17.0 | Updated: May 9, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -3133,6 +3133,7 @@ This comprehensive framework enables developers to build production-grade AI app
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.17.0 | May 9, 2026 | Four releases (0.15.3, 0.16.0, 0.16.1, 0.17.0). New: `ShellTool`/`LocalShellTool` (sandboxed shell execution), `ToolSearchTool` (dynamic tool discovery), `ApplyPatchTool` (code-patch application), `RetryPolicy` type alias for per-agent retry configuration, `Session`/`SessionABC` session abstractions. Version confirmed against installed `openai-agents 0.17.0` (`.routine-envs/check-0509-py`); `Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC` all verified in `agents` module. |
 | 0.15.1 | May 2, 2026 | Patch release; stability and dependency updates. Version confirmed against installed `openai-agents 0.15.1` (`.routine-envs/check-openai-0502`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified with `-W error::DeprecationWarning`. |
 | 0.15.0 | May 1, 2026 | Minor release; stability and dependency updates. Version confirmed against installed `openai-agents 0.15.0` (`.routine-envs/check-openai-0501`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified with `-W error::DeprecationWarning`. |
 | 0.14.8 | April 29, 2026 | Patch release; stability improvements. Version confirmed against installed `openai-agents 0.14.8` (`.routine-envs/main-py-0429`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified. |
