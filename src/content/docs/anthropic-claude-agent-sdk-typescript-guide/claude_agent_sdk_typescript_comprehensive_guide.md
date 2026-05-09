@@ -4,7 +4,7 @@ description: "The Claude Agent SDK is the official TypeScript library for buildi
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-Latest: 0.2.128 | Updated: May 5, 2026
+Latest: 0.2.138 | Updated: May 9, 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -3264,6 +3264,7 @@ The comprehensive guide continues with detailed sections on each topic with exte
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.2.138 | May 9, 2026 | Patch releases 0.2.129–0.2.138; session management APIs promoted to stable: `InMemorySessionStore`, `forkSession`, `deleteSession`, `listSessions`, `getSessionInfo`, `getSessionMessages`, `getSubagentMessages`, `importSessionToStore`, `listSubagents`, `renameSession`, `tagSession`, `resolveSettings`, `startup`. New: `DirectConnectTransport`, `parseDirectConnectUrl`, `createSdkMcpServer`, `AbortError`, `DirectConnectError`, `EXIT_REASONS`, `HOOK_EVENTS`, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`. Verified against npm `@anthropic-ai/claude-agent-sdk@0.2.138` (2026-05-09, `.routine-envs/check-0509-node`). |
 | 0.2.128 | May 5, 2026 | Patch releases (0.2.127–0.2.128); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.128` (latest, 2026-05-05, `.routine-envs/check-0505-node`). `query` runtime export PASS; `PermissionMode`, `McpServerConfig` type exports confirmed present in `sdk.d.ts`. |
 | 0.2.126 | May 1, 2026 | Patch releases (0.2.124–0.2.126); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.126` (latest, 2026-05-01). Note: 0.2.125 was not published; sequence goes 0.2.124 → 0.2.126. |
 | 0.2.123 | April 29, 2026 | Patch releases (0.2.122–0.2.123); dependency updates; version confirmed against npm `@anthropic-ai/claude-agent-sdk 0.2.123`. |
