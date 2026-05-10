@@ -379,22 +379,24 @@ result = await kernel.invoke(
 )
 ```
 
-### Native Function with Context
+### Native Function with Arguments
+
+> **Breaking change (v1.x):** `KernelContext` has been removed from `semantic_kernel`. Pass variables as typed function parameters instead; the kernel resolves them from `KernelArguments` at invocation time.
 
 ```python
 from semantic_kernel.functions import kernel_function
-from semantic_kernel import KernelContext
+from semantic_kernel.functions import KernelArguments
 
 class ContextAwarePlugin:
     @kernel_function(description="Gets user info from context")
-    async def get_user_info(self, context: KernelContext) -> str:
-        # Access context variables
-        user_id = context.variables.get("user_id")
-        session_id = context.variables.get("session_id")
-
+    async def get_user_info(self, user_id: str, session_id: str) -> str:
         return f"User: {user_id}, Session: {session_id}"
 
 plugin = kernel.add_plugin(ContextAwarePlugin(), plugin_name="Context")
+
+# Pass variables via KernelArguments at invocation time
+args = KernelArguments(user_id="alice", session_id="abc-123")
+result = await kernel.invoke(plugin["get_user_info"], arguments=args)
 ```
 
 ---
@@ -471,7 +473,7 @@ cs_plugin = kernel.add_plugin(
 ### OpenAPI Plugin
 
 ```python
-from semantic_kernel.connectors.openapi import OpenAPIFunctionExecutionParameters
+from semantic_kernel.connectors.openapi_plugin import OpenAPIFunctionExecutionParameters
 
 # Import OpenAPI plugin from specification
 openapi_plugin = await kernel.import_plugin_from_openapi(
@@ -909,113 +911,102 @@ for text, score in results:
 
 ---
 
-## 12. Sequential Planner
+## 12. Planning via Automatic Function Calling
 
-### Basic Sequential Planner
+> **Breaking change (v1.x):** `semantic_kernel.planners` has been removed. `SequentialPlanner`, `StepwisePlanner`, and `ActionPlanner` no longer exist. The equivalent capability is delivered through `ChatCompletionAgent` with `FunctionChoiceBehavior.Auto()`, which instructs the model to select and chain functions autonomously to satisfy a goal.
+>
+> Source: `semantic_kernel.connectors.ai.function_choice_behavior` (installed 1.41.3); [SK migration guide](https://learn.microsoft.com/en-us/semantic-kernel/concepts/planning).
 
-```python
-from semantic_kernel.planners import SequentialPlanner
-
-# Create planner
-planner = SequentialPlanner(kernel)
-
-# Create plan
-ask = "I want to send an email to john@example.com saying the weather in Seattle is nice"
-plan = await planner.create_plan(ask)
-
-# Execute plan
-result = await plan.invoke(kernel)
-print(result)
-```
-
-### Sequential Planner with Custom Plugins
+### Goal-Directed Planning with an Agent
 
 ```python
+import asyncio
+from semantic_kernel import Kernel
 from semantic_kernel.functions import kernel_function
-from semantic_kernel.planners import SequentialPlanner
+from semantic_kernel.agents import ChatCompletionAgent
+from semantic_kernel.connectors.ai.open_ai import (
+    OpenAIChatCompletion,
+    OpenAIChatPromptExecutionSettings,
+)
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.contents import ChatHistory
 
 class EmailPlugin:
-    @kernel_function(description="Sends an email")
-    async def send_email(
-        self,
-        to: str,
-        subject: str,
-        body: str
-    ) -> str:
-        # Mock email sending
-        return f"Email sent to {to}"
+    @kernel_function(description="Sends an email to a recipient")
+    async def send_email(self, to: str, subject: str, body: str) -> str:
+        return f"Email sent to {to} with subject '{subject}'"
 
 class WeatherPlugin:
-    @kernel_function(description="Gets weather for a city")
+    @kernel_function(description="Gets the current weather for a city")
     async def get_weather(self, city: str) -> str:
         return f"The weather in {city} is sunny, 72°F"
 
-# Add plugins
-kernel.add_plugin(EmailPlugin(), "Email")
-kernel.add_plugin(WeatherPlugin(), "Weather")
+async def main():
+    kernel = Kernel()
+    kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-4o"))
+    kernel.add_plugin(EmailPlugin(), "Email")
+    kernel.add_plugin(WeatherPlugin(), "Weather")
 
-# Create and execute plan
-planner = SequentialPlanner(kernel)
-plan = await planner.create_plan(
-    "Get the weather in Paris and email it to alice@example.com"
-)
+    settings = OpenAIChatPromptExecutionSettings(
+        function_choice_behavior=FunctionChoiceBehavior.Auto()
+    )
+    agent = ChatCompletionAgent(
+        kernel=kernel,
+        name="Planner",
+        instructions="Accomplish the user's goal by calling the available functions in the right order.",
+        execution_settings=settings,
+    )
 
-print("Plan steps:")
-for step in plan.steps:
-    print(f"  - {step.name}: {step.description}")
+    chat = ChatHistory()
+    chat.add_user_message("Get the weather in Paris and email it to alice@example.com")
 
-result = await plan.invoke(kernel)
+    async for message in agent.invoke(chat):
+        print(message.content)
+
+asyncio.run(main())
 ```
 
----
-
-## 13. Stepwise Planner
-
-### Stepwise Planner Implementation
+### Multi-Step Research Planning
 
 ```python
-from semantic_kernel.planners import StepwisePlanner
-from semantic_kernel.planners.stepwise_planner import StepwisePlannerConfig
-
-# Configure planner
-config = StepwisePlannerConfig(
-    max_iterations=10,
-    min_iteration_time_ms=1000,
-    max_tokens=4000
+from semantic_kernel import Kernel
+from semantic_kernel.functions import kernel_function
+from semantic_kernel.agents import ChatCompletionAgent
+from semantic_kernel.connectors.ai.open_ai import (
+    OpenAIChatCompletion,
+    OpenAIChatPromptExecutionSettings,
 )
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.contents import ChatHistory
 
-# Create planner
-planner = StepwisePlanner(kernel, config)
+class ResearchPlugin:
+    @kernel_function(description="Searches for information on a topic")
+    async def search(self, query: str) -> str:
+        return f"Search results for '{query}': [results here]"
 
-# Execute with dynamic planning
-ask = "Research the latest AI trends and create a summary report"
-result = await planner.invoke(ask)
+    @kernel_function(description="Summarises a body of text into bullet points")
+    async def summarise(self, text: str) -> str:
+        return f"Summary: {text[:100]}..."
 
-print(f"Final result: {result}")
-print(f"\nSteps taken:")
-for step in result.metadata.get("steps", []):
-    print(f"  {step}")
-```
+async def run_research_agent():
+    kernel = Kernel()
+    kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-4o"))
+    kernel.add_plugin(ResearchPlugin(), "Research")
 
----
+    settings = OpenAIChatPromptExecutionSettings(
+        function_choice_behavior=FunctionChoiceBehavior.Auto()
+    )
+    agent = ChatCompletionAgent(
+        kernel=kernel,
+        name="ResearchAgent",
+        instructions="Research the topic thoroughly and produce a structured summary.",
+        execution_settings=settings,
+    )
 
-## 14. Action Planner
-
-### Action Planner for Goal-Oriented Tasks
-
-```python
-from semantic_kernel.planners import ActionPlanner
-
-# Create action planner
-planner = ActionPlanner(kernel)
-
-# Generate action plan
-ask = "What is the current population of Tokyo?"
-plan = await planner.create_plan(ask)
-
-# Execute
-result = await plan.invoke(kernel)
-print(result)
+    chat = ChatHistory()
+    chat.add_user_message("Research the latest AI trends and create a summary report")
+    async for message in agent.invoke(chat):
+        print(message.content)
 ```
 
 ---
@@ -2222,15 +2213,9 @@ await server.start(port=9090)
 
 ## A2A Protocol Support (v1.41.x)
 
-```python
-from semantic_kernel.agents import Agent
-from semantic_kernel.interop.a2a import A2AAdapter
-
-# Expose SK agent via A2A
-agent = Agent(kernel=kernel, name="sk-assistant")
-adapter = A2AAdapter(agent)
-await adapter.start(port=8080)
-```
+> **Note:** `semantic_kernel.interop.a2a` is not present in the installed 1.41.3 package. `A2AAdapter` does not import. Microsoft has announced A2A protocol integration for Semantic Kernel but it is not yet available as a stable module in 1.41.3. Monitor the [SK release notes](https://github.com/microsoft/semantic-kernel/releases) and remove this notice when `semantic_kernel.interop` ships.
+>
+> <!-- TODO: verify against upstream — `semantic_kernel.interop.a2a.A2AAdapter` absent in installed 1.41.3; verified 2026-05-10 -->
 
 ---
 
@@ -2238,6 +2223,7 @@ await adapter.start(port=8080)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.41.3 | May 10, 2026 | Symbol verification against installed 1.41.3: fixed `KernelContext` removal (replaced with `KernelArguments` pattern); fixed `semantic_kernel.connectors.openapi` → `openapi_plugin` module rename; replaced removed `semantic_kernel.planners` sections (SequentialPlanner, StepwisePlanner, ActionPlanner) with modern `ChatCompletionAgent` + `FunctionChoiceBehavior.Auto()` approach; flagged `semantic_kernel.interop.a2a.A2AAdapter` as not yet present. All verified against `.routine-envs/semantic-kernel-0510` (Python 3.12.3). | Claude routine |
 | 1.41.3 | April 28, 2026 | Version bumped 1.41.2 → 1.41.3 (patch release); header and version references updated. PyPI confirms 1.41.3 as latest stable. |
 | 1.41.2 | April 8, 2026 | Full MCP server/client support; A2A protocol; Oracle database connector; Google GenAI SDK migration; Python 3.10+ required |
 | 1.38.0 | November 2025 | Previous documented version |
