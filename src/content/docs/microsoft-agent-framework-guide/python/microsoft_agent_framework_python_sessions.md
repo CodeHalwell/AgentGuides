@@ -345,6 +345,42 @@ audit = FileHistoryProvider(
 
 Set `store_context_from` to whitelist source ids; leave `None` and set `store_context_messages=True` to persist every other source's contribution.
 
+## Per-service-call history persistence — `require_per_service_call_history_persistence`
+
+By default, history providers are invoked **once per `agent.run()` call**: `before_run` loads history at the start, and `after_run` saves it at the end. When an agent uses tools, the model may call several tools in a loop before producing a final response. If the process dies mid-loop, the entire conversation turn is lost because `after_run` never ran.
+
+Set `require_per_service_call_history_persistence=True` on the agent to save history after **every model call** in the tool loop, not just once at the end of `run()`:
+
+```python
+from agent_framework import Agent, FileHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a reliable assistant with tools.",
+    context_providers=[FileHistoryProvider(storage_path="./sessions")],
+    require_per_service_call_history_persistence=True,  # persist after every model call
+)
+
+session = agent.create_session(session_id="user-42")
+
+# Even if the process crashes after the first tool call and before the final answer,
+# the tool call + tool result are already persisted. Resuming the same session_id
+# reloads up to the last saved point.
+response = await agent.run("Book me a flight to Tokyo, then send a confirmation email.", session=session)
+```
+
+**When to use it:**
+- Long-running tool loops with external side effects (database writes, email sends, payment charges) where replay is unacceptable.
+- Unreliable or spot-instance workers where mid-run termination is routine.
+
+**When to skip it:**
+- Agents that never use tools (no tool loop → no benefit, only extra I/O).
+- Agents using service-managed conversation storage (Foundry threads, OpenAI Responses). The flag is silently a no-op when `session.service_session_id` is set or when the client sets `STORES_BY_DEFAULT = True`.
+- High-throughput, latency-sensitive paths. Each model call triggers an extra `save_messages` round-trip to your history backend.
+
+> **Note:** This flag is incompatible with service-managed conversation ids. If you pass `conversation_id=` in `options=` while this flag is on, the agent raises `AgentInvalidRequestException` rather than silently losing reliability guarantees.
+
 ## Building your own `HistoryProvider`
 
 Two coroutines, no inheritance gymnastics. Override the storage; the base class handles the load/store flags.

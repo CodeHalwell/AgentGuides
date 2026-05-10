@@ -599,6 +599,91 @@ class CitationProvider(ContextProvider):
 
 After every run the caller can read `session.state["last_citations"]` to render footnotes alongside the agent's reply — no parsing of the model output needed in user code.
 
+### Injecting per-run middleware via `context.extend_middleware()`
+
+Context providers can add **chat or function middleware** that applies only to the current invocation, not to every run the agent ever makes. This is the right mechanism for per-request concerns that change per session or per call: auth tokens, correlation IDs, per-tenant rate limits, or dynamic PII redaction policies.
+
+> **Constraint:** `extend_middleware` accepts only `ChatMiddleware` and `FunctionMiddleware` instances — not `AgentMiddleware`. The framework raises `MiddlewareException` if you try to add agent-level middleware from a context provider.
+
+```python
+import asyncio
+import uuid
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from agent_framework import (
+    Agent,
+    ChatMiddleware,
+    ContextProvider,
+    SessionContext,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+class CorrelationMiddleware(ChatMiddleware):
+    """Stamp every outgoing model call with the current request's trace ID."""
+
+    def __init__(self, trace_id: str) -> None:
+        self._trace_id = trace_id
+
+    async def process(self, context, call_next: Callable[[], Awaitable[None]]) -> None:
+        # Attach to client_kwargs so it shows up in OpenTelemetry spans and logs.
+        context.kwargs.setdefault("extra_headers", {})["X-Trace-Id"] = self._trace_id
+        await call_next()
+
+
+class RequestTracingProvider(ContextProvider):
+    """Inject a per-run correlation ID into every model call within that run.
+
+    Because the middleware is added via extend_middleware(), it only applies
+    to the single agent.run() call — the next run gets its own fresh ID.
+    Static middleware on the Agent itself would share one ID across all runs.
+    """
+
+    DEFAULT_SOURCE_ID = "request_tracing"
+
+    def __init__(self) -> None:
+        super().__init__(self.DEFAULT_SOURCE_ID)
+
+    async def before_run(
+        self, *, agent: Any, session: Any, context: SessionContext, state: dict
+    ) -> None:
+        # Prefer a trace ID passed in from the outer web framework (FastAPI, etc.)
+        trace_id = context.options.get("trace_id") or str(uuid.uuid4())
+        state["current_trace_id"] = trace_id
+        context.extend_middleware(self.source_id, CorrelationMiddleware(trace_id))
+
+    async def after_run(
+        self, *, agent: Any, session: Any, context: SessionContext, state: dict
+    ) -> None:
+        # Persist the last trace ID so callers can correlate log lines.
+        session.state["last_trace_id"] = state.get("current_trace_id")
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a helpful assistant.",
+        context_providers=[RequestTracingProvider()],
+    )
+    session = agent.create_session(session_id="user-42")
+
+    # Pass trace_id through run() options → ends up in context.options
+    response = await agent.run(
+        "Summarise today's sales figures.",
+        session=session,
+        options={"trace_id": "req-abc-123"},
+    )
+    print(response.text)
+    print("Trace ID was:", session.state.get("last_trace_id"))
+```
+
+Key design points:
+
+- **Ephemeral scope** — the middleware lives only for one `run()` call. The next call to the same agent with the same session gets fresh middleware from a fresh `before_run` invocation.
+- **Multi-instance** — stack multiple providers that each add middleware; the framework concatenates them in provider execution order.
+- **Function middleware too** — `context.extend_middleware(source_id, my_function_middleware)` works identically for `FunctionMiddleware`, letting a provider add per-call argument validators or PII redactors without registering them globally on the agent.
+
 ## Capability protocols — `Supports*`
 
 Several first-party client classes publish optional capabilities through `runtime_checkable` protocols. Use `isinstance(client, Supports*)` to feature-detect at runtime:

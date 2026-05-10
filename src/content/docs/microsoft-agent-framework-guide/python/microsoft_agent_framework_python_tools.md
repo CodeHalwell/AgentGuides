@@ -307,7 +307,7 @@ class ReadOnlyGuard(FunctionMiddleware):
 
 ## Declaration-only tools
 
-Define a tool the model can *reason about* but don't implement it — useful for client-side rendering, where the actual execution happens in a frontend:
+Define a tool the model can *reason about* without a server-side implementation. The model will emit a function call; you intercept it and handle it elsewhere — in a browser, a native app, or another service.
 
 ```python
 from agent_framework import FunctionTool
@@ -324,7 +324,68 @@ request_user_location = FunctionTool(
 )
 ```
 
-The model will emit a function call; you intercept it and handle it in your UI layer instead of letting the framework auto-invoke.
+When `func=None` is combined with no `input_model`, the tool is valid but presents an empty schema to the model (zero parameters). Always pass `input_model` for declaration-only tools so the model knows what arguments to emit.
+
+### The `declaration_only` property
+
+Inspect whether a tool has an implementation at runtime:
+
+```python
+print(request_user_location.declaration_only)   # True
+```
+
+Use this from middleware to block accidental invocation of client-side tools:
+
+```python
+from agent_framework import FunctionMiddleware, FunctionInvocationContext, ToolException
+
+
+class ClientSideOnlyGuard(FunctionMiddleware):
+    """Raise before the framework tries to invoke a declaration-only tool."""
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        if context.function.declaration_only:
+            raise ToolException(
+                f"Tool '{context.function.name}' is declaration-only. "
+                "Handle it client-side before calling the agent again."
+            )
+        await call_next()
+```
+
+### Use cases beyond client-side rendering
+
+Declaration-only tools are also useful for:
+
+- **Model capability testing** — define a schema and let the model reason about which arguments it would supply, without ever executing anything.
+- **Approval-gate placeholders** — expose the tool to the model, but hold the `func=None` slot until a human approves the action. Swap in a real callable after approval.
+- **OpenAPI stubs** — generate `FunctionTool` objects from an OpenAPI spec at startup; wire in the actual HTTP calls lazily once auth tokens are ready.
+
+```python
+from agent_framework import FunctionTool, Agent
+from agent_framework.openai import OpenAIChatClient
+from pydantic import BaseModel, Field
+
+
+class BookFlightArgs(BaseModel):
+    origin: str = Field(description="IATA airport code e.g. LHR")
+    destination: str = Field(description="IATA airport code e.g. NRT")
+    date: str = Field(description="ISO 8601 date e.g. 2026-09-15")
+
+
+# Declare without implementation — the model plans the booking
+plan_flight = FunctionTool(
+    name="book_flight",
+    description="Book a commercial flight. Requires human approval before execution.",
+    func=None,
+    input_model=BookFlightArgs,
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a travel assistant. Propose flights; a human will confirm.",
+    tools=[plan_flight],
+)
+```
 
 ## `FunctionTool` direct construction
 

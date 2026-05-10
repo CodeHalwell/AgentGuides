@@ -494,6 +494,72 @@ Use the generic `ChatOptions` whenever the knobs you need are common across prov
 
 Mixing them is fine — a provider-specific dict is a superset of `ChatOptions`, so code typed against the base still accepts it.
 
+## Typed generic agent — `Agent[ProviderOptions]`
+
+`Agent` is a generic class: `Agent[OptionsCoT]`. Annotating the type parameter tells your IDE which options dict `default_options=` and the `run()` `options=` argument accept, so every provider-specific field autocompletes and type-checks.
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
+
+client = OpenAIChatClient(model="gpt-4o")
+
+# Declare the type parameter — Agent becomes Agent[OpenAIChatOptions]
+agent: Agent[OpenAIChatOptions] = Agent(
+    client=client,
+    instructions="You are a deep reasoning assistant.",
+    default_options=OpenAIChatOptions(
+        temperature=0.7,
+        max_tokens=4096,
+        reasoning_effort="high",   # OpenAI-specific — IDE autocompletes this
+    ),
+)
+
+# Per-run options are the same TypedDict — also autocompleted
+response = await agent.run(
+    "Design a hash function resistant to length-extension attacks.",
+    options=OpenAIChatOptions(temperature=0.0),   # overrides default 0.7 for this call
+)
+print(response.text)
+```
+
+How merging works (verified from `_agents.py`):
+
+| Key | Merge rule |
+|---|---|
+| Scalar options (`temperature`, `max_tokens`, …) | Run-time value replaces the default |
+| `instructions` | Run-time value appended to the default (newline-separated) |
+| `tools` | Run-time tools appended to the default list (duplicates raise `ValueError`) |
+| `logit_bias`, `metadata` | Dicts are merged; run-time keys win |
+
+`default_options` values that are `None` are stripped at construction time, so only the keys you actually set are stored. The run-time `options=` dict is merged over the stored defaults on each `run()` call — the defaults themselves are never mutated.
+
+### Foundry and Anthropic equivalents
+
+```python
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient, FoundryChatOptions
+
+# Foundry
+foundry_agent: Agent[FoundryChatOptions] = Agent(
+    client=FoundryChatClient(model="gpt-4o"),
+    default_options=FoundryChatOptions(temperature=0.5, max_tokens=2048),
+)
+```
+
+```python
+from agent_framework import Agent
+from agent_framework.anthropic import AnthropicClient, AnthropicChatOptions
+
+# Anthropic
+claude_agent: Agent[AnthropicChatOptions] = Agent(
+    client=AnthropicClient(model="claude-sonnet-4-6"),
+    default_options=AnthropicChatOptions(max_tokens=8192),
+)
+```
+
+If you don't annotate the type parameter — `Agent(client=client, ...)` without `Agent[...]` — the agent works identically at runtime. The annotation is purely for IDE assistance; nothing enforces it at runtime. Omit it when provider-specific options are not in use.
+
 ## Building your own chat client
 
 For a provider that isn't in the first-party list, or to wrap an existing client with caching / shadow traffic / logging, subclass `BaseChatClient`. Implement one method — `_inner_get_response` — and inherit middleware, telemetry, and the function calling loop for free. See the full recipe in [Advanced → Custom chat client](./microsoft_agent_framework_python_advanced/#custom-chat-client--basechatclient).
