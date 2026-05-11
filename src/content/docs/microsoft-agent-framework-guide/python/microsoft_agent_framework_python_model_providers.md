@@ -496,7 +496,7 @@ Mixing them is fine — a provider-specific dict is a superset of `ChatOptions`,
 
 ## Typed generic agent — `Agent[ProviderOptions]`
 
-`Agent` is a generic class: `Agent[OptionsCoT]`. Annotating the type parameter tells your IDE which options dict `default_options=` and the `run()` `options=` argument accept, so every provider-specific field autocompletes and type-checks.
+Annotate `Agent` with a provider options type (e.g., `Agent[OpenAIChatOptions]`) to tell your IDE which fields `default_options=` and the `run()` `options=` argument accept, enabling autocomplete and type-checking for every provider-specific key.
 
 ```python
 from agent_framework import Agent
@@ -523,7 +523,7 @@ response = await agent.run(
 print(response.text)
 ```
 
-How merging works (verified from `_agents.py`):
+How merging works:
 
 | Key | Merge rule |
 |---|---|

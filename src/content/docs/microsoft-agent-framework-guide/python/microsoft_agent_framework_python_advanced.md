@@ -627,7 +627,8 @@ class CorrelationMiddleware(ChatMiddleware):
         self._trace_id = trace_id
 
     async def process(self, context, call_next: Callable[[], Awaitable[None]]) -> None:
-        # Attach to client_kwargs so it shows up in OpenTelemetry spans and logs.
+        # In ChatMiddleware, context.kwargs is forwarded to the underlying
+        # chat client request — use it to attach extra headers.
         context.kwargs.setdefault("extra_headers", {})["X-Trace-Id"] = self._trace_id
         await call_next()
 
@@ -648,8 +649,10 @@ class RequestTracingProvider(ContextProvider):
     async def before_run(
         self, *, agent: Any, session: Any, context: SessionContext, state: dict
     ) -> None:
-        # Prefer a trace ID passed in from the outer web framework (FastAPI, etc.)
-        trace_id = context.options.get("trace_id") or str(uuid.uuid4())
+        # Prefer a trace ID passed in as a normal run() kwarg; fall back to a
+        # fresh UUID. Normal kwargs land in context.kwargs, not context.options,
+        # keeping provider options separate from request metadata.
+        trace_id = context.kwargs.get("trace_id") or str(uuid.uuid4())
         state["current_trace_id"] = trace_id
         context.extend_middleware(self.source_id, CorrelationMiddleware(trace_id))
 
@@ -668,14 +671,19 @@ async def main() -> None:
     )
     session = agent.create_session(session_id="user-42")
 
-    # Pass trace_id through run() options → ends up in context.options
+    # Pass trace_id as a normal kwarg — it lands in context.kwargs, not in
+    # provider options, so it cannot leak into the model request payload.
     response = await agent.run(
         "Summarise today's sales figures.",
         session=session,
-        options={"trace_id": "req-abc-123"},
+        trace_id="req-abc-123",
     )
     print(response.text)
     print("Trace ID was:", session.state.get("last_trace_id"))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 Key design points:
