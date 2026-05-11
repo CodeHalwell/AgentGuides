@@ -612,11 +612,21 @@ One `EvalResults` comes back per evaluator — local first, then foundry. Merge 
 
 ## Failing the build
 
-`EvalResults.result_counts["failed"]` is non-zero when any item fails any check. In CI, assert it's zero (or call `EvalResults.raise_if_failed()` when available) — the test run halts and the failure reasons surface in `EvalItemResult.scores`:
+`EvalResults.result_counts["failed"]` is non-zero when any item fails any check. Call `results.raise_for_status()` to raise `ValueError` when failures are present — the test run halts and the failure reasons surface in `EvalItemResult.scores`. Pass an optional message to customise the exception text:
 
 ```python
 [results] = await evaluate_agent(agent=agent, queries=queries, evaluators=local)
-assert results.result_counts["failed"] == 0, results.error
+results.raise_for_status("weather agent quality gate failed")
+# → ValueError: weather agent quality gate failed (2 failed, 0 errored)
+```
+
+Convenience properties let you branch without walking the count dict:
+
+```python
+print(results.passed)     # int — items that passed all checks
+print(results.failed)     # int — items that failed at least one check
+print(results.total)      # int — total items scored
+print(results.all_passed) # bool — True iff failed == 0
 ```
 
 ### Actionable failure output for CI
@@ -776,6 +786,163 @@ def no_hallucinated_prices(response: str, context: str) -> CheckResult:
 
 When it fails, every `EvalItemResult.scores` entry for that check keeps `sample={"reason": "hallucinated prices not in context: ['$19.99']"}` — drop that into Slack and the on-call engineer can act without opening the transcript UI.
 
+## `EvalItem.per_turn_items` — evaluating multi-turn conversations
+
+`EvalItem.per_turn_items` is a static helper that splits a full multi-turn conversation into one `EvalItem` per user turn. Each item gets cumulative context — the query messages for turn N include everything up to and including the Nth user message, while the response messages cover the agent's reply up to the next user turn. Use it to evaluate how the agent performs at each step of a long conversation, not just at the final answer:
+
+```python
+import asyncio
+from agent_framework import (
+    Agent,
+    Content,
+    EvalItem,
+    LocalEvaluator,
+    Message,
+    keyword_check,
+    tool,
+    tool_called_check,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def get_weather(location: str) -> str:
+    """Get the current weather."""
+    return f"The weather in {location} is 18°C."
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a weather assistant.",
+        tools=[get_weather],
+    )
+
+    # Record a real multi-turn conversation
+    session = agent.create_session()
+    await agent.run("What's the weather in Paris?", session=session)
+    await agent.run("And in Tokyo?", session=session)
+    await agent.run("Which city is warmer?", session=session)
+
+    # Reconstruct the conversation from session history (or load from storage)
+    # For this example we build the conversation manually to demonstrate the helper:
+    conversation = [
+        Message(role="user",      contents=[Content.from_text("What's the weather in Paris?")]),
+        Message(role="assistant", contents=[Content.from_text("It's 18°C in Paris.")]),
+        Message(role="user",      contents=[Content.from_text("And in Tokyo?")]),
+        Message(role="assistant", contents=[Content.from_text("It's 18°C in Tokyo too.")]),
+        Message(role="user",      contents=[Content.from_text("Which city is warmer?")]),
+        Message(role="assistant", contents=[Content.from_text("Both are the same temperature — 18°C.")]),
+    ]
+
+    # One EvalItem per user turn, each with cumulative history as context
+    items = EvalItem.per_turn_items(
+        conversation,
+        tools=[get_weather],
+        context="Weather assistant test suite",
+    )
+    print(f"Generated {len(items)} eval items")   # → 3
+
+    local = LocalEvaluator(keyword_check("18°C"))
+    results = await local.evaluate(items, eval_name="per-turn-weather")
+
+    print(f"passed={results.passed}/{results.total}")
+    for item in results.items:
+        print(f"  turn {item.item_id}: {item.status} — query: {item.input_text!r}")
+
+
+asyncio.run(main())
+```
+
+`per_turn_items` is particularly useful for:
+- **Regression testing conversation flows** — check that the agent's mid-conversation answers are also correct, not just the final one.
+- **Evaluating grounding drift** — an LLM-judge evaluator can check whether the agent's reasoning stays consistent across turns.
+- **Tool-call coverage per turn** — pair with `tool_called_check` to assert the agent called the right tool at the right step.
+
+## `AgentEvalConverter` — bridging to cloud evaluators
+
+When you want to send evaluation items to a cloud provider (such as Microsoft Foundry) that expects OpenAI-style message dicts, `AgentEvalConverter` handles the type conversion from agent-framework's `Message` / `Content` / `FunctionTool` types. All methods are static:
+
+```python
+import asyncio
+from agent_framework import (
+    AgentEvalConverter,
+    Content,
+    EvalItem,
+    Message,
+    tool,
+)
+
+
+@tool
+def lookup_order(order_id: str) -> str:
+    """Look up an order by ID."""
+    return f"Order {order_id}: shipped"
+
+
+# A recorded conversation with a tool call
+conversation = [
+    Message(role="user",      contents=[Content.from_text("Where is order #99?")]),
+    Message(
+        role="assistant",
+        contents=[Content.from_function_call(call_id="c1", name="lookup_order", arguments={"order_id": "99"})],
+    ),
+    Message(
+        role="tool",
+        contents=[Content.from_function_result(call_id="c1", result="Order 99: shipped")],
+    ),
+    Message(role="assistant", contents=[Content.from_text("Order #99 has been shipped.")]),
+]
+
+# Convert a single message to Foundry-compatible format
+foundry_msg = AgentEvalConverter.convert_message(conversation[-1])
+# [{"role": "assistant", "content": [{"type": "text", "text": "Order #99 has been shipped."}]}]
+
+# Convert the whole conversation (tool calls become "tool_call" typed entries)
+foundry_conv = AgentEvalConverter.convert_messages(conversation)
+print(f"{len(foundry_conv)} Foundry-format messages")
+
+# Extract registered tools from an agent as JSON schema dicts for Foundry
+# (matches the tool definitions the model saw when it produced the response)
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(client=OpenAIChatClient(), tools=[lookup_order])
+tool_defs = AgentEvalConverter.extract_tools(agent)
+# [{"type": "function", "function": {"name": "lookup_order", "description": "...", "parameters": {...}}}]
+
+# Convert an agent response directly to an EvalItem for offline scoring
+async def main():
+    response = await agent.run("Where is order #99?")
+    item = AgentEvalConverter.to_eval_item(
+        query="Where is order #99?",
+        response=response,
+        agent=agent,
+        context="Order management assistant",
+    )
+    print(item.query, "→", item.response)
+
+asyncio.run(main())
+```
+
+`AgentEvalConverter.to_eval_item` is the fastest path from a live `AgentResponse` to an `EvalItem` you can feed to any evaluator — including cloud providers that need the Foundry message format:
+
+```python
+from agent_framework.foundry import FoundryEvals
+
+# Collect responses
+test_queries = ["Where is order #99?", "Has order #42 shipped?"]
+responses = []
+for query in test_queries:
+    r = await agent.run(query)
+    responses.append(AgentEvalConverter.to_eval_item(query=query, response=r, agent=agent))
+
+# Score with Foundry (groundedness, relevance, safety, …)
+foundry = FoundryEvals(project_client=project, model="gpt-4o-mini")
+[foundry_results] = await foundry.evaluate(responses, eval_name="order-agent-v2")
+foundry_results.raise_for_status()
+```
+
 ## Patterns
 
 **Smoke test in CI.** A small `LocalEvaluator` with `keyword_check` + `tool_called_check` catches regressions caused by prompt edits without spending judge tokens.
@@ -787,3 +954,5 @@ When it fails, every `EvalItemResult.scores` entry for that check keeps `sample=
 **Compare two models.** Build two agents — one per `OpenAIChatClient(model=...)` — and call `evaluate_agent` on each. Since `LocalEvaluator` is cheap, run thousands of queries locally in minutes.
 
 **Evaluate orchestrations.** `evaluate_workflow` accepts any `Workflow`, including those produced by `SequentialBuilder`, `GroupChatBuilder`, and `MagenticBuilder`. Same checks, same score aggregation.
+
+**Multi-turn evaluation.** Use `EvalItem.per_turn_items` to split recorded conversations and evaluate every intermediate response, not just the final one. Feed those items directly to `LocalEvaluator.evaluate()` for cheap CI coverage of conversation flows.

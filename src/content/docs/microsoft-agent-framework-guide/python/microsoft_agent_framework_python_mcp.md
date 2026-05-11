@@ -254,7 +254,7 @@ async with MCPStdioTool(
     args=["-y", "@modelcontextprotocol/server-github"],
 ) as mcp:
     for fn in mcp.functions:
-        print(f"{fn.name}: {fn.description[:60]}")
+        print(f"{fn.name}: {(fn.description or '')[:60]}")
     # Prompts advertised by the server (if load_prompts was True):
     for prompt in getattr(mcp, "prompts", []):
         print(f"prompt {prompt.name}: {prompt.description}")
@@ -306,19 +306,99 @@ async with MCPStreamableHTTPTool(name="analytics", url="https://analytics.exampl
     agent = Agent(client=OpenAIChatClient(), tools=mcp)
 ```
 
-## MCP sampling callbacks
+## Calling MCP tools directly
 
-Some MCP servers call back into the client to perform model sampling on the client's behalf. Pass a chat client so the tool can satisfy those callbacks:
+You don't need an agent to invoke MCP tools — `call_tool()` and `get_prompt()` let you drive the MCP server directly from your own code. Useful for testing, for orchestrators that don't use the agent tool loop, and for inspecting what a tool returns before wiring it to an agent:
 
 ```python
+import asyncio
+from agent_framework import MCPStdioTool, MCPStreamableHTTPTool
+
+
+async def direct_invocation() -> None:
+    # Stdio example — query a filesystem server directly
+    async with MCPStdioTool(
+        name="fs",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+    ) as fs:
+        # List what tools are available after connection
+        for fn in fs.functions:
+            print(fn.name, "—", (fn.description or "")[:60])
+
+        # Call a tool by name; kwargs match the tool's JSON schema parameters
+        result = await fs.call_tool("fs_list_directory", path="/tmp")
+        print("directory listing:", result)
+
+        # If the server exposes prompts, fetch one
+        if getattr(fs, "prompts", []):
+            prompt_text = await fs.get_prompt(
+                fs.prompts[0].name,
+                path="/tmp",
+            )
+            print("prompt:", prompt_text[:200])
+
+
+async def http_direct() -> None:
+    # HTTP example — call a remote tool without an agent
+    async with MCPStreamableHTTPTool(
+        name="learn",
+        url="https://learn.microsoft.com/api/mcp",
+        allowed_tools=["search"],
+    ) as learn:
+        # Verify the server is connected
+        assert learn.is_connected
+
+        result = await learn.call_tool("search", query="FoundryChatClient authentication")
+        print(result)
+
+
+asyncio.run(direct_invocation())
+asyncio.run(http_direct())
+```
+
+`call_tool` returns either a `str` (when the default parser is used) or `list[Content]` (when `parse_tool_results=` was set on the tool). The tool must be in `allowed_tools` (if that param is set) and the session must be connected — otherwise the call raises.
+
+`get_prompt` returns the rendered prompt text as a `str`. Prompts are only loaded when `load_prompts=True` (the default); disable with `MCPStdioTool(..., load_prompts=False)` to skip the prompts handshake entirely on servers that don't use them.
+
+### Checking connection state
+
+`mcp.is_connected` is `True` after a successful `connect()` or `__aenter__` and `False` after `close()` or `__aexit__`. You can also reconnect after a transport error:
+
+```python
+async with MCPStreamableHTTPTool(name="api", url="https://api.example.com/mcp") as mcp:
+    print(mcp.is_connected)   # True
+    print(len(mcp.functions)) # number of tools loaded from the server
+
+# Outside the context manager:
+print(mcp.is_connected)       # False
+```
+
+## MCP sampling callbacks
+
+Some MCP servers call back into the client to perform model sampling on the client's behalf — for example, a planning server might ask the client to generate sub-task descriptions. Pass a `client=` parameter so the framework can satisfy those server-initiated sampling requests:
+
+```python
+from agent_framework import Agent, MCPStreamableHTTPTool
 from agent_framework.openai import OpenAIChatClient
 
+# The client= parameter is used when the MCP server sends a sampling request
+# back to your process. The framework routes it through OpenAIChatClient,
+# which means the same model/deployment handles both agent calls and server
+# callbacks — keeping billing and logging in one place.
 mcp = MCPStreamableHTTPTool(
     name="planner",
     url="https://planner.example.com/mcp",
-    client=OpenAIChatClient(model="gpt-5"),
+    client=OpenAIChatClient(model="gpt-4o"),
 )
+
+async with mcp:
+    agent = Agent(client=OpenAIChatClient(), tools=mcp)
+    response = await agent.run("Build a week-long study plan for distributed systems.")
+    print(response.text)
 ```
+
+When no `client=` is passed, server-side sampling callbacks raise `NotImplementedError` — leaving it unset is safe for servers that don't use sampling.
 
 ## Hosted MCP — the `SupportsMCPTool` protocol
 

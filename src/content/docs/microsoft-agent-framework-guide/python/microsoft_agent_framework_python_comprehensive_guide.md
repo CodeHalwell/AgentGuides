@@ -1215,6 +1215,92 @@ A few facts that aren't obvious from the signature alone:
 - `context_providers=` on `as_agent()` attaches the providers to the wrapper — they see the *outer* `Agent.run` calls, not the inner workflow's executors.
 - Workflow state is preserved across `agent.run(...)` calls (the same workflow instance is reused). To get a fresh run, build a new `Workflow` and call `as_agent` again.
 
+### Exposing an agent as an MCP server — `Agent.as_mcp_server()`
+
+`RawAgent` (and `Agent`, which inherits it) can expose itself as an **MCP server**. Any MCP-compatible client — another agent using `MCPStreamableHTTPTool`, a third-party tool, or VS Code Copilot — can then invoke it as a tool. This is how you publish a specialist agent for use outside your Python process without building a separate REST API:
+
+```python
+import asyncio
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
+from mcp.server.stdio import stdio_server
+
+
+@tool
+def search_inventory(sku: str) -> str:
+    """Return real-time stock count for a SKU."""
+    return f"SKU {sku}: 142 units in stock"
+
+
+inventory_agent = Agent(
+    client=OpenAIChatClient(),
+    name="inventory-agent",
+    instructions="You are an inventory assistant. Use search_inventory to answer stock questions.",
+    tools=[search_inventory],
+)
+
+# as_mcp_server() returns mcp.server.lowlevel.Server — it is transport-agnostic.
+# Wire it to a transport by calling server.run(read_stream, write_stream, init_options).
+mcp_server = inventory_agent.as_mcp_server(
+    server_name="InventoryAgent",
+    version="1.0.0",
+    instructions="Call this agent to query real-time inventory levels.",
+)
+
+# Option 1 — stdio transport (CLI tools, VS Code extensions, local testing)
+async def run_stdio():
+    init_options = mcp_server.create_initialization_options()
+    async with stdio_server() as (read_stream, write_stream):
+        await mcp_server.run(read_stream, write_stream, init_options)
+
+asyncio.run(run_stdio())
+
+# Option 2 — streamable HTTP transport (production)
+# from mcp.server.streamable_http import StreamableHTTPServerTransport
+# transport = StreamableHTTPServerTransport(mcp_session_id=None)
+# init_options = mcp_server.create_initialization_options()
+# async def run_http():
+#     async with transport.connect() as (read_stream, write_stream):
+#         await mcp_server.run(read_stream, write_stream, init_options)
+# # transport.handle_request is an ASGI callable — mount it in Starlette / FastAPI:
+# from starlette.applications import Starlette
+# from starlette.routing import Route
+# app = Starlette(routes=[Route("/mcp", transport.handle_request, methods=["GET", "POST"])])
+# # uvicorn.run(app, host="0.0.0.0", port=8080)
+```
+
+Consuming the published agent from another agent in the same or a different process:
+
+```python
+from agent_framework import Agent, MCPStreamableHTTPTool
+from agent_framework.openai import OpenAIChatClient
+
+# The inventory agent is now running at http://localhost:8080
+async with MCPStreamableHTTPTool(
+    name="inventory",
+    url="http://localhost:8080/mcp",
+    description="Remote inventory agent",
+) as inventory_mcp:
+    orchestrator = Agent(
+        client=OpenAIChatClient(),
+        instructions="You coordinate warehouse operations.",
+        tools=inventory_mcp,
+    )
+    response = await orchestrator.run("Do we have enough SKU-9921 for the weekend sale?")
+    print(response.text)
+```
+
+`as_mcp_server()` parameters:
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `server_name` | `"Agent"` | Prefix for the MCP tool name exposed to clients (`"<server_name>_run"`). |
+| `version` | `None` (auto) | Semantic version string advertised in the MCP server handshake. |
+| `instructions` | `None` | Override the server-level instructions hint (shown to MCP clients). |
+| `lifespan` | `None` | `AsyncContextManager` called once when the server starts/stops — use it to connect pools, wire telemetry, or warm caches. |
+
+The method requires `mcp` to be installed (included in the default `agent-framework` install). The returned `mcp.server.lowlevel.Server` is transport-agnostic — mount it over stdio, streamable HTTP, or WebSocket depending on how your clients connect.
+
 ---
 
 ## Multi-Agent Orchestration Patterns

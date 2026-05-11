@@ -464,6 +464,208 @@ Apply auth checks in the handler so users can only access sessions they own — 
 
 **`session.state` mutation outside an agent run.** Providers run in `before_run` / `after_run`. Mutating `state` while a run is in flight is undefined behaviour — do it before/after `agent.run(...)`.
 
+## `SessionContext` — per-run pipeline state
+
+`SessionContext` is created fresh for each `agent.run()` call and threaded through every `ContextProvider` in order. It is the channel through which providers inject context, instructions, tools, and middleware before the model is called. You never construct one yourself — the framework creates it and passes it to `before_run` / `after_run`.
+
+The most useful methods when writing a custom provider:
+
+| Method | Purpose |
+|---|---|
+| `extend_messages(source, messages)` | Inject context messages (e.g. RAG results, persona snippets) under a named source key |
+| `extend_instructions(source_id, instructions)` | Append dynamic system-prompt fragments |
+| `extend_tools(source_id, tools)` | Register extra tools for this run only |
+| `extend_middleware(source_id, middleware)` | Add per-run chat or function middleware |
+| `get_messages(*, sources=None, exclude_sources=None, include_input=False, include_response=False)` | Read back all accumulated messages |
+| `get_middleware()` | Retrieve the flat list of middleware added by all providers |
+
+### Writing a custom `ContextProvider`
+
+Subclass `ContextProvider` when you need to inject context that doesn't map cleanly to history or skills — feature flags, A/B instructions, tenant-scoped prompts, live RAG results:
+
+```python
+import asyncio
+from typing import Any
+from agent_framework import Agent, ContextProvider, AgentSession, SessionContext
+from agent_framework import Message, Content
+from agent_framework.openai import OpenAIChatClient
+
+
+class TenantContextProvider(ContextProvider):
+    """Injects tenant-specific instructions and a live persona snippet."""
+
+    DEFAULT_SOURCE_ID = "tenant_ctx"
+
+    def __init__(self) -> None:
+        super().__init__(source_id=self.DEFAULT_SOURCE_ID)
+
+    async def before_run(
+        self,
+        *,
+        agent: Any,
+        session: AgentSession,
+        context: SessionContext,
+        state: dict[str, Any],
+    ) -> None:
+        tenant_id: str = session.state.get("tenant_id", "default")
+
+        # Append a dynamic system-prompt fragment
+        context.extend_instructions(
+            self.source_id,
+            f"You are serving tenant '{tenant_id}'. Always address them formally.",
+        )
+
+        # Inject a context message (appears before the user's message in the model's view)
+        persona = await self._fetch_persona(tenant_id)
+        context.extend_messages(
+            self.source_id,
+            [Message(role="system", contents=[Content.from_text(persona)])],
+        )
+
+    async def after_run(
+        self,
+        *,
+        agent: Any,
+        session: AgentSession,
+        context: SessionContext,
+        state: dict[str, Any],
+    ) -> None:
+        # Inspect the response after the run completes.
+        if context.response:
+            session.state["last_response_len"] = len(context.response.text or "")
+
+    async def _fetch_persona(self, tenant_id: str) -> str:
+        # Replace with a real DB / cache call
+        personas = {
+            "acme": "ACME Corp persona: formal tone, no jargon.",
+            "default": "Standard persona: helpful and concise.",
+        }
+        return personas.get(tenant_id, personas["default"])
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a helpful assistant.",
+        context_providers=[TenantContextProvider()],
+    )
+
+    session = agent.create_session()
+    session.state["tenant_id"] = "acme"
+
+    response = await agent.run("Summarise our Q3 results.", session=session)
+    print(response.text)
+    print("response len stored:", session.state["last_response_len"])
+
+
+asyncio.run(main())
+```
+
+### Injecting per-run tools from a provider
+
+`extend_tools` adds tools dynamically based on per-request state — useful when the tool set varies per tenant, user role, or feature flag:
+
+```python
+from typing import Any
+from agent_framework import Agent, ContextProvider, AgentSession, SessionContext, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def search_crm(query: str) -> str:
+    """Search the internal CRM."""
+    return f"CRM results for {query!r}"
+
+
+@tool
+def admin_wipe_data(user_id: str) -> str:
+    """Wipe all data for a user (admin only)."""
+    return f"Wiped data for user {user_id}"
+
+
+class RoleBasedToolProvider(ContextProvider):
+    DEFAULT_SOURCE_ID = "role_tools"
+
+    def __init__(self) -> None:
+        super().__init__(source_id=self.DEFAULT_SOURCE_ID)
+
+    async def before_run(
+        self,
+        *,
+        agent: Any,
+        session: AgentSession,
+        context: SessionContext,
+        state: dict[str, Any],
+    ) -> None:
+        role = session.state.get("role", "user")
+        tools = [search_crm]
+        if role == "admin":
+            tools.append(admin_wipe_data)
+        context.extend_tools(self.source_id, tools)
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a CRM assistant.",
+    context_providers=[RoleBasedToolProvider()],
+)
+```
+
+### Inspecting accumulated context
+
+Read back what all providers have contributed, useful for debugging or audit logging. `SessionContext.instructions`, `SessionContext.tools`, and `SessionContext.context_messages` are documented public attributes — not implementation details — and are safe to read in any provider's `after_run`:
+
+```python
+async def debug_context(agent, session):
+    """Log every context message and instruction after the model run completes."""
+    from agent_framework import ContextProvider, SessionContext, AgentSession
+    from typing import Any
+
+    class ContextDebugger(ContextProvider):
+        def __init__(self):
+            super().__init__(source_id="debugger")
+
+        async def before_run(self, *, agent: Any, session: AgentSession, context: SessionContext, state: dict[str, Any]):
+            pass  # other providers run first (order matters)
+
+        async def after_run(self, *, agent: Any, session: AgentSession, context: SessionContext, state: dict[str, Any]):
+            # Runs after all providers have completed before_run AND the model has responded.
+            all_ctx = context.get_messages(include_input=True, include_response=True)
+            print(f"  messages in context: {len(all_ctx)}")
+            print(f"  instructions added: {len(context.instructions)}")
+            print(f"  extra tools registered: {len(context.tools)}")
+            for source, msgs in context.context_messages.items():
+                print(f"    [{source}] → {len(msgs)} messages")
+```
+
+### `PerServiceCallHistoryPersistingMiddleware`
+
+When `require_per_service_call_history_persistence=True` is set on an agent, the framework wraps each model call with a `PerServiceCallHistoryPersistingMiddleware` that flushes history after every model roundtrip — not just at the end of the outer `agent.run()`. This is useful for long-running agentic loops where a process crash mid-run would otherwise lose all intermediate turns:
+
+```python
+from agent_framework import Agent, FileHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+history = FileHistoryProvider(storage_path="./conversations")
+
+# Flush history after EVERY model call inside the tool loop, not just after the outer run.
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research assistant.",
+    context_providers=[history],
+    require_per_service_call_history_persistence=True,
+)
+
+session = agent.create_session(session_id="long-research-session")
+# Even if this crashes after 20 tool calls, the next run will resume with all 20 turns already persisted.
+response = await agent.run(
+    "Research the top 10 papers on diffusion models and summarise each one.",
+    session=session,
+)
+```
+
+The trade-off: every model call now incurs a history write. For short, single-turn agents this is wasted I/O; for multi-tool research agents it protects hours of work from a single process crash.
+
 ## See also
 
 - [Compaction](./microsoft_agent_framework_python_compaction/) — pair a `CompactionStrategy` with the history provider for long-running conversations.

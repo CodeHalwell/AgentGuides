@@ -529,7 +529,106 @@ A few practical notes:
 - **Hook order matters** — hooks run in the order they were registered. Stack the cheap deterministic redactor before the expensive LLM-based moderation hook so the cleaner output reaches the moderator.
 - **Sync hooks are fine** — the framework `await`s anything that returns an awaitable and otherwise calls the hook directly.
 - **Don't mix `context.result = ...` with hooks** — for streaming, set the hooks; the framework wires them into the live stream. Setting `context.result` to a fresh `ResponseStream` wholesale only makes sense for synthetic short-circuit responses.
-- **Mirroring for non-streaming.** `AgentContext` exposes the same trio (`stream_transform_hooks` / `stream_result_hooks` / `stream_cleanup_hooks`) for agent-level streaming — register them there if you want the redactor to apply across every chat call inside one agent run.
+- **Mirroring for non-streaming.** `AgentContext` exposes the same trio (`stream_transform_hooks` / `stream_result_hooks` / `stream_cleanup_hooks`) for agent-level streaming — register them there if you want the redactor to apply across the whole agent run, not per-model-call.
+
+## Streaming hooks on `AgentContext`
+
+`AgentContext` streaming hooks operate at the **outer agent run boundary** — they see the assembled `AgentResponseUpdate` stream that the caller consumes, not individual model call chunks. This makes them the right layer for:
+
+- Injecting run-level spans that open when the first token arrives and close when the consumer finishes
+- Transforming the final `AgentResponse` (e.g. post-processing structured output)
+- Releasing run-scoped locks or quotas once the consumer is done
+
+The three hooks on `AgentContext` behave exactly like their `ChatContext` equivalents:
+
+| Hook | Fires | Receives |
+|---|---|---|
+| `stream_transform_hooks` | Once per `AgentResponseUpdate` yielded to the caller | `AgentResponseUpdate` — return the (optionally mutated) update |
+| `stream_result_hooks` | Once, on the final `AgentResponse` after the stream completes | `AgentResponse` — return the (optionally mutated) response |
+| `stream_cleanup_hooks` | Once, after the stream is fully consumed | Nothing — `() -> None` or `() -> Awaitable[None]` |
+
+```python
+import asyncio
+import logging
+import time
+from agent_framework import (
+    Agent,
+    AgentContext,
+    AgentMiddleware,
+    AgentResponse,
+    AgentResponseUpdate,
+)
+from agent_framework.openai import OpenAIChatClient
+
+logger = logging.getLogger(__name__)
+
+
+class AgentStreamingInstrumentor(AgentMiddleware):
+    """Attach timing and word-count telemetry to every streaming agent run.
+
+    Hooks registered on AgentContext fire once per run — unlike ChatContext
+    hooks, which fire once per model call inside the tool loop. Use this layer
+    when you need a single outer span that covers all LLM calls and tool
+    invocations made during one agent.run().
+    """
+
+    async def process(self, context: AgentContext, call_next) -> None:
+        if not context.stream:
+            await call_next()
+            return
+
+        run_start = time.monotonic()
+        word_count = 0
+
+        def count_words(update: AgentResponseUpdate) -> AgentResponseUpdate:
+            nonlocal word_count
+            if update.text:
+                word_count += len(update.text.split())
+            return update
+
+        async def record_result(response: AgentResponse) -> AgentResponse:
+            elapsed_ms = (time.monotonic() - run_start) * 1_000
+            logger.info(
+                "agent.streaming_run.completed",
+                extra={
+                    "agent": context.agent.name,
+                    "elapsed_ms": round(elapsed_ms, 1),
+                    "output_words": word_count,
+                    "finish_reasons": response.finish_reasons,
+                },
+            )
+            return response
+
+        async def cleanup() -> None:
+            # Fires even if the consumer breaks out of the stream early.
+            logger.debug("agent.stream.consumer.done agent=%s", context.agent.name)
+
+        context.stream_transform_hooks.append(count_words)
+        context.stream_result_hooks.append(record_result)
+        context.stream_cleanup_hooks.append(cleanup)
+        await call_next()
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a helpful assistant.",
+    middleware=[AgentStreamingInstrumentor()],
+)
+
+
+async def main():
+    # The hooks only activate for streaming runs:
+    stream = agent.run("Explain transformer attention in 3 paragraphs.", stream=True)
+    async for update in stream:
+        if update.text:
+            print(update.text, end="", flush=True)
+    # AgentStreamingInstrumentor logs elapsed_ms and output_words once here.
+
+
+asyncio.run(main())
+```
+
+Key difference from `ChatContext` hooks: if the agent makes 3 tool calls and 4 LLM roundtrips to answer your question, `ChatContext.stream_transform_hooks` would fire for every token from every one of those 4 model calls. `AgentContext.stream_transform_hooks` fires for every token in the **outer** `ResponseStream` that the caller iterates — typically the same tokens, but scoped to one accounting boundary instead of four.
 
 ## Passing per-run data through the pipeline
 
