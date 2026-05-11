@@ -1247,11 +1247,8 @@ mcp_server = inventory_agent.as_mcp_server(
     instructions="Call this agent to query real-time inventory levels.",
 )
 
-# Mount it on a Starlette/FastAPI app using the MCP streamable HTTP transport
-from mcp.server.fastmcp import FastMCP
-from starlette.applications import Starlette
-
-# Option 1 — bare uvicorn/Starlette (production path)
+# Mount it on any ASGI server — create_streamable_http_app() returns the app directly
+# Option 1 — bare uvicorn (production path)
 app = mcp_server.create_streamable_http_app()
 # uvicorn.run(app, host="0.0.0.0", port=8080)
 

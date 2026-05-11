@@ -616,7 +616,7 @@ agent = Agent(
 Read back what all providers have contributed, useful for debugging or audit logging:
 
 ```python
-async def debug_context(agent, session, prompt):
+async def debug_context(agent, session):
     """Log every context message and instruction before the model call."""
     from agent_framework import ContextProvider, SessionContext, AgentSession
     from typing import Any
@@ -625,10 +625,10 @@ async def debug_context(agent, session, prompt):
         def __init__(self):
             super().__init__(source_id="debugger")
 
-        async def before_run(self, *, agent, session, context: SessionContext, state):
+        async def before_run(self, *, agent: Any, session: AgentSession, context: SessionContext, state: dict[str, Any]):
             pass  # other providers run first (order matters)
 
-        async def after_run(self, *, agent, session, context: SessionContext, state):
+        async def after_run(self, *, agent: Any, session: AgentSession, context: SessionContext, state: dict[str, Any]):
             # Runs after all providers have completed before_run AND the model has responded.
             all_ctx = context.get_messages(include_input=True, include_response=True)
             print(f"  messages in context: {len(all_ctx)}")

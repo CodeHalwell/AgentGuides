@@ -848,7 +848,7 @@ async def main() -> None:
 
     print(f"passed={results.passed}/{results.total}")
     for item in results.items:
-        print(f"  turn {item.item_id}: {item.status} — query: {items[int(item.item_id)].query!r}")
+        print(f"  turn {item.item_id}: {item.status} — query: {item.input_text!r}")
 
 
 asyncio.run(main())
@@ -927,6 +927,7 @@ print(item.query, "→", item.response)
 from agent_framework.foundry import FoundryEvals
 
 # Collect responses
+test_queries = ["Where is order #99?", "Has order #42 shipped?"]
 responses = []
 for query in test_queries:
     r = await agent.run(query)

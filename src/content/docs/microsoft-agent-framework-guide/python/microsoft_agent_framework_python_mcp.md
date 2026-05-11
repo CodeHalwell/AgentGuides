@@ -254,7 +254,7 @@ async with MCPStdioTool(
     args=["-y", "@modelcontextprotocol/server-github"],
 ) as mcp:
     for fn in mcp.functions:
-        print(f"{fn.name}: {fn.description[:60]}")
+        print(f"{fn.name}: {(fn.description or '')[:60]}")
     # Prompts advertised by the server (if load_prompts was True):
     for prompt in getattr(mcp, "prompts", []):
         print(f"prompt {prompt.name}: {prompt.description}")
@@ -324,7 +324,7 @@ async def direct_invocation() -> None:
     ) as fs:
         # List what tools are available after connection
         for fn in fs.functions:
-            print(fn.name, "—", fn.description[:60])
+            print(fn.name, "—", (fn.description or "")[:60])
 
         # Call a tool by name; kwargs match the tool's JSON schema parameters
         result = await fs.call_tool("fs_list_directory", path="/tmp")
@@ -350,7 +350,7 @@ async def http_direct() -> None:
         assert learn.is_connected
 
         result = await learn.call_tool("search", query="FoundryChatClient authentication")
-        print(result[:500])
+        print(result)
 
 
 asyncio.run(direct_invocation())
