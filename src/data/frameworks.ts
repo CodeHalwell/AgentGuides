@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.89.1',
+    version: 'v1.93.0',
   },
   {
     id: 'openai-agents',
@@ -48,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.15.1',
+    version: 'v0.17.1',
   },
   {
     id: 'openai-agents-ts',
@@ -59,7 +59,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'web'],
-    version: 'v0.8.5',
+    version: 'v0.11.3',
   },
   {
     id: 'crewai',
@@ -81,7 +81,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['research', 'multi-agent', 'experimentation'],
-    version: 'v0.12.2',
+    version: 'v0.12.3',
   },
   {
     id: 'langgraph-py',
@@ -103,7 +103,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'web'],
-    version: 'v1.2.9',
+    version: 'v1.3.0',
   },
   {
     id: 'llamaindex-py',
@@ -157,7 +157,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'core 1.2.2 · providers 1.0.0b260429',
+    version: 'v1.3.0',
   },
   {
     id: 'google-adk',
@@ -168,7 +168,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['gcp', 'gemini', 'multi-agent'],
-    version: 'v1.32.0',
+    version: 'v1.33.0',
   },
   {
     id: 'claude-sdk',
@@ -179,7 +179,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.1.72',
+    version: 'v0.1.80',
   },
   {
     id: 'claude-sdk-ts',
@@ -190,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.2.126',
+    version: 'v0.2.138',
   },
   {
     id: 'mistral',
@@ -201,7 +201,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],
-    version: 'v2.4.4',
+    version: 'v2.4.5',
   },
   {
     id: 'semantic-kernel',

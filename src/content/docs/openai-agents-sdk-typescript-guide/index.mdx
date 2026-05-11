@@ -71,7 +71,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## What's new in v0.11.3 (May 2026)
 
-- **v0.11.3 (May 11)** — Patch; stability improvements. All documented symbols confirmed present in `@openai/agents@0.11.3` (`.routine-envs/check-0511-node`).
+- **v0.11.3 (May 11)** — Patch; stability improvements. All key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`, `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`) confirmed present in `@openai/agents@0.11.3` (`.routine-envs/check-0511-node`).
 - **v0.11.2 (May 10)** — Patch; stability improvements.
 - **v0.11.1 (May 9)** — Patch; stability improvements.
 - **v0.11.0 (May 7)** — New helpers: `shellTool` (sandboxed shell command execution), `toolSearchTool` (dynamic tool discovery), `applyPatchTool` (code-patch application), `applyDiff` (diff application utility). `retryPolicies` collection for configurable retry strategies. `MemorySession` and `OpenAIConversationsSession` for structured session management. `MCPServerStreamableHttp` added to MCP server options. All confirmed in `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`).
@@ -98,12 +98,12 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_typescript_compreh
 
 ## Revision history
 
-| Date | Version | Changes |
-|------|---------|---------|
+| Date | Version | Changes | Reviewer |
+|------|---------|---------|----------|
 | 2026-05-11 | 0.11.3 | Version bumped 0.11.1 → 0.11.3 (two patch releases: 0.11.2, 0.11.3); "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols (`shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `RuntimeEventEmitter`, `applySessionHistoryMutations`, `MCPServerStreamableHttp`) confirmed in installed `@openai/agents@0.11.3` (`.routine-envs/check-0511-node`). | Claude routine |
 | 2026-05-09 | 0.11.1 | Version bumped 0.8.5 → 0.11.1 (multiple minor and patch releases); "What's new" updated; comprehensive guide header updated. New symbols confirmed in installed `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`): `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `RuntimeEventEmitter`, `applySessionHistoryMutations`, `MCPServerStreamableHttp`. Revision history entry added. | Claude routine |
-| 2026-04-21 | 0.8.5 | Banner bumped to installed version 0.8.5. |
-| April 9, 2026 | 0.8.3 | HITL approval flows; browser bundle improvements; Zod v4. |
-| November 2025 | 0.3.2 | Initial TypeScript guide; Swarm migration; MCP. |
+| 2026-04-21 | 0.8.5 | Banner bumped to installed version 0.8.5. | — |
+| April 9, 2026 | 0.8.3 | HITL approval flows; browser bundle improvements; Zod v4. | — |
+| November 2025 | 0.3.2 | Initial TypeScript guide; Swarm migration; MCP. | — |
 
 **Note:** Python implementation lives at [OpenAI Agents SDK (Python)](/openai-agents-sdk-guides/).
