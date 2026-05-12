@@ -1,18 +1,18 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.1.10 (April 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Latest Version: LangGraph 1.2.0 (May 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
 framework: langgraph
 language: python
 ---
 
-Latest: 1.1.10 | Updated: April 28, 2026
+Latest: 1.2.0 | Updated: May 12, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.1.10 (April 2026)
+**Latest Version**: LangGraph 1.2.0 (May 2026)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
-> **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed `langgraph==1.1.10` package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
+> **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed `langgraph==1.2.0` package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
 **What's real in v1.1.x (verified April 2026):**
 - Type-safe v2 streaming / invoke API (`version="v2"`)
@@ -2217,7 +2217,7 @@ print("Cache hit:", result["cache_hit"])  # True
 
 ## Errata: removed fabricated sections
 
-The following subsections appeared in earlier drafts of this guide under a "v1.0.3 Features" heading but do not match any real API in the installed `langgraph==1.1.10` package. They have been removed:
+The following subsections appeared in earlier drafts of this guide under a "v1.0.3 Features" heading but do not match any real API in the installed `langgraph==1.2.0` package. They have been removed:
 
 - **Node Caching** — `from langgraph.cache import cache_node, SemanticCache, CachePolicy` does not exist. For caching, use LangGraph's long-term `Store` (see [Memory & Persistence](#memory--persistence)) or plain `functools.lru_cache`.
 - **Deferred Nodes** — `from langgraph.graph import deferred` and `@deferred(wait_for=[...])` are not real. Fan-in is native: edges from multiple sources into the same target wait for all upstream completions.
@@ -2522,7 +2522,8 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph==1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`; `StateGraph`, `END`, `START`, `MemorySaver`, `StreamPart`, `Command`, `Send`, `interrupt`, `entrypoint`, `task`, `InMemoryStore` imports verified. |
+| 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `MemorySaver`, `StreamPart`, `Command`, `Send`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
+| 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph==1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
 | 1.1.9 | April 22, 2026 | Patch release; six source-verified reference pages added to the guide. |
 | 1.1.8 | April 17, 2026 | Fixed strict `add_handler` type check that broke OpenTelemetry instrumentation; follows patch 1.1.7 (same day) |
 | 1.1.7 | April 17, 2026 | Intermediate patch preceding 1.1.8; stability fixes |

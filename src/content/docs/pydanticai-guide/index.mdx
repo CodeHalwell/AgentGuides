@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.93.0** · May 2026 · Python 3.10+
+    **v1.94.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -98,8 +98,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.93.0 (May 2026)
+## What's new in v1.94.0 (May 2026)
 
+- **v1.94.0 (May 12)** — Minor release; new top-level exports added: `AgentRun`, `AgentRunResult`, `StreamedRunResultSync` (synchronous counterpart to `StreamedRunResult` for CLI/notebook use). All existing guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) confirmed present in installed `pydantic-ai==1.94.0` (`.routine-envs/check-0512-py`); no `DeprecationWarning` emissions.
 - **v1.93.0 (May 9)** — `TestModel` removed from the `pydantic_ai` top-level namespace; use `from pydantic_ai.models.test import TestModel` (guides already use this path). New top-level symbols: `AgentSpec`, `UploadedFile`, `WebSearchUserLocation`, `DeferredLoadingToolset`.
 - **v1.92.0 (May 7)** — Maintenance and dependency updates.
 - **v1.91.0 (May 6)** — Maintenance and dependency updates.
@@ -136,6 +137,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-12 | pydantic-ai 1.94.0 | Version bumped 1.93.0 → 1.94.0; "What's new" updated; comprehensive guide header updated; revision history entry added. New exports `AgentRun`, `AgentRunResult`, `StreamedRunResultSync` confirmed present in installed 1.94.0 (`.routine-envs/check-0512-py`). All guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning`; no warnings. | Claude routine |
 | 2026-05-09 | pydantic-ai 1.93.0 | Version bumped 1.90.0 → 1.93.0 (three minor releases: 1.91.0, 1.92.0, 1.93.0); "What's new" updated; comprehensive guide header updated; revision history entry added. Breaking change: `TestModel` removed from `pydantic_ai` top-level — guide already uses `from pydantic_ai.models.test import TestModel` (correct path). New symbols `AgentSpec`, `UploadedFile`, `WebSearchUserLocation`, `DeferredLoadingToolset` all confirmed present in installed 1.93.0 (`.routine-envs/check-0509-py`). | Claude routine |
 | 2026-05-05 | pydantic-ai 1.90.0 | Version bumped 1.89.1 → 1.90.0; "What's new" updated (DeferredToolCalls deprecated in favour of DeferredToolRequests); comprehensive guide header updated; revision history entry added. `Agent`, `TestModel`, `FunctionToolset`, `DeferredToolRequests`, `HandleDeferredToolCalls`, `ImageGenerationTool`, `MemoryTool`, `XSearchTool`, `RenamedToolset`, `WrapperToolset`, `IncludeReturnSchemasToolset`, `SetMetadataToolset`, `PreparedToolset` imports verified against installed 1.90.0 (`.routine-envs/check-0505`). | Claude routine |
 | 2026-05-02 | pydantic-ai 1.89.1 | Version bumped 1.89.0 → 1.89.1; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `OpenAIModel` imports verified against installed 1.89.1 (`.routine-envs/check-pydantic-0502`). | Claude routine |

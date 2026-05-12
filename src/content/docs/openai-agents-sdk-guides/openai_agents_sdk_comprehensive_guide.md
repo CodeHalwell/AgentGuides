@@ -4,7 +4,7 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: 0.17.1 | Updated: May 11, 2026
+Latest: 0.17.2 | Updated: May 12, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -3133,7 +3133,8 @@ This comprehensive framework enables developers to build production-grade AI app
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.17.1 | May 11, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`): `Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`. |
+| 0.17.2 | May 12, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.2` (`.routine-envs/check-0512-py`): `Agent`, `Runner`, `Handoff`, `shellTool`, `LocalShellTool`, `toolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`. |
+| 0.17.1 | May 11, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`). |
 | 0.17.0 | May 9, 2026 | Four releases (0.15.3, 0.16.0, 0.16.1, 0.17.0). New: `ShellTool`/`LocalShellTool` (sandboxed shell execution), `ToolSearchTool` (dynamic tool discovery), `ApplyPatchTool` (code-patch application), `RetryPolicy` type alias for per-agent retry configuration, `Session`/`SessionABC` session abstractions. Version confirmed against installed `openai-agents 0.17.0` (`.routine-envs/check-0509-py`); `Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC` all verified in `agents` module. |
 | 0.15.1 | May 2, 2026 | Patch release; stability and dependency updates. Version confirmed against installed `openai-agents 0.15.1` (`.routine-envs/check-openai-0502`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified with `-W error::DeprecationWarning`. |
 | 0.15.0 | May 1, 2026 | Minor release; stability and dependency updates. Version confirmed against installed `openai-agents 0.15.0` (`.routine-envs/check-openai-0501`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified with `-W error::DeprecationWarning`. |

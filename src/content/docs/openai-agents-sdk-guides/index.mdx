@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.17.1** · May 2026 · Python 3.10+
+    **v0.17.2** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Multi-agent handoffs, customer-service bots, tracing-first apps.
@@ -77,9 +77,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./openai_agents_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v0.17.1 (May 2026)
+## What's new in v0.17.2 (May 2026)
 
-- **v0.17.1 (May 11)** — Patch release; stability and dependency improvements. All key symbols (`Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) confirmed present in installed `openai-agents==0.17.1` (`.routine-envs/check-0511-py`).
+- **v0.17.2 (May 12)** — Patch release; stability and dependency improvements. All key symbols (`Agent`, `Runner`, `Handoff`, `shellTool`, `LocalShellTool`, `toolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) confirmed present in installed `openai-agents==0.17.2` (`.routine-envs/check-0512-py`).
+- **v0.17.1 (May 11)** — Patch release; stability and dependency improvements.
 - **v0.17.0 (May 9)** — New tools and retry infrastructure. `ShellTool` and `LocalShellTool` for sandboxed shell command execution (from `agents.tool`); `ToolSearchTool` for dynamic tool discovery; `ApplyPatchTool` for code-patch application. `RetryPolicy` type alias (from `agents.retry`) for configurable per-agent retry strategies. `Session` / `SessionABC` abstractions (from `agents.memory.session`) for structured session management. All confirmed present in installed `openai-agents==0.17.0` (`.routine-envs/check-0509-py`).
 - **v0.16.1 (May 7)** — Patch; stability improvements.
 - **v0.16.0 (May 6)** — Minor release; session management restructured into `agents.memory.session`.
@@ -121,7 +122,8 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_comprehensive_guid
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
-| 2026-05-11 | 0.17.1 | Version bumped 0.17.0 → 0.17.1; "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols (`ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`) verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`). | Claude routine |
+| 2026-05-12 | 0.17.2 | Version bumped 0.17.1 → 0.17.2; "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols (`Agent`, `Runner`, `Handoff`, `shellTool`, `LocalShellTool`, `toolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.2` (`.routine-envs/check-0512-py`). | Claude routine |
+| 2026-05-11 | 0.17.1 | Version bumped 0.17.0 → 0.17.1; "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`). | Claude routine |
 | 2026-05-09 | 0.17.0 | Version bumped 0.15.1 → 0.17.0 (four releases: 0.15.3, 0.16.0, 0.16.1, 0.17.0); "What's new" section updated; comprehensive guide header updated; revision history entry added. New symbols `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC` verified against installed `openai-agents 0.17.0` (`.routine-envs/check-0509-py`). | Claude routine |
 | 2026-05-02 | 0.15.1 | Version bumped 0.15.0 → 0.15.1; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `Handoff`, `guardrail` imports verified against installed 0.15.1 (`.routine-envs/check-openai-0502`). | Claude routine |
 | 2026-05-01 | 0.15.0 | Version bumped 0.14.8 → 0.15.0; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `Handoff`, `guardrail` imports verified against installed 0.15.0 (`.routine-envs/check-openai-0501`). | Claude routine |

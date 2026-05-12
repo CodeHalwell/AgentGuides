@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.1.10** · April 28, 2026 · Python 3.10 – 3.14
+    **v1.2.0** · May 12, 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -53,7 +53,7 @@ A chaptered tutorial that takes you from a first graph to a production-ready age
   history for a single primitive, jump to the **Reference** section near the bottom
   of this page — one page per API (StateGraph, Checkpointers, Store, Functional
   API, Command/Send, streaming modes). Each is verified line-by-line against the
-  installed `langgraph==1.1.10` source.
+  installed `langgraph==1.2.0` source.
 </Aside>
 
 ## Jump to a topic
@@ -82,8 +82,8 @@ Need one specific concept? Land directly on the chapter that owns it.
 
 ## Reference
 
-Every page below is introspected against the installed `langgraph==1.1.10` /
-`langgraph-checkpoint==4.0.3` / `langgraph-checkpoint-sqlite==3.0.3` /
+Every page below is introspected against the installed `langgraph==1.2.0` /
+`langgraph-checkpoint==4.1.0` / `langgraph-checkpoint-sqlite==3.0.3` /
 `langgraph-checkpoint-postgres==3.0.5` source. If a signature disagrees with an
 older blog post or docs page, the source wins.
 
@@ -107,18 +107,19 @@ older blog post or docs page, the source wins.
   <LinkCard title="Streaming server (FastAPI)" href="/langgraph-guide/python/langgraph_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.1.x (April 2026)
+## What's new in v1.2.x (May 2026)
 
-- **Type-safe streaming (v2 API)** — opt-in with `version="v2"` on `astream()`; yields `StreamPart` objects with `type`, `ns`, `data` fields (import from `langgraph.types`).
-- **Type-safe invoke (v2 API)** — `ainvoke(..., version="v2")` returns a `GraphOutput` (from `langgraph.types`) with `.value` (final state dict) and `.interrupts` (tuple of interrupt points).
-- **Pydantic/dataclass coercion** — `invoke()` auto-coerces input dicts to the declared state type.
-- **Python 3.10 – 3.14 support** — Python 3.9 dropped in the 1.1 line.
-- **Time-travel fixes** — replays no longer reuse stale `RESUME` values with interrupts and subgraphs.
+- **`ToolRuntime` dataclass** (new in v1.2.0, `langgraph.prebuilt`) — passed to tools at execution time; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, and `execution_info`. Allows tools to inspect the current graph state and write to the stream mid-execution.
+- **`ToolCallTransformer` abstract class** (new in v1.2.0, `langgraph.prebuilt`) — base class for interceptors that transform tool call arguments before execution.
+- **`langgraph-checkpoint` 4.1.0** — minor checkpoint interface improvements; backward-compatible with all existing `MemorySaver`, `SqliteSaver`, `PostgresSaver` usage.
+- **`langgraph-prebuilt` 1.1.0** — ships `ToolRuntime` and `ToolCallTransformer`; all prior prebuilt symbols (`create_react_agent`, `ToolNode`, `ValidationNode`, `InjectedState`, `InjectedStore`) unchanged.
+- All core graph symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`).
+- **Prior (v1.1.x):** Type-safe streaming v2 API (`version="v2"` on `astream()`/`ainvoke()`); Pydantic/dataclass coercion; Python 3.10 – 3.14 support; time-travel fixes.
 
 <Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==1.1.10`, `langgraph-checkpoint==4.0.3`,
-  `langgraph-prebuilt==1.0.10`, `langgraph-checkpoint-sqlite==3.0.3`,
-  `langgraph-checkpoint-postgres==3.0.5` in April 2026.
+  Introspected against `langgraph==1.2.0`, `langgraph-checkpoint==4.1.0`,
+  `langgraph-prebuilt==1.1.0`, `langgraph-checkpoint-sqlite==3.0.3`,
+  `langgraph-checkpoint-postgres==3.0.5` in May 2026.
 
   Known corrections vs older drafts / third-party guides:
 
@@ -177,6 +178,7 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-12 | 1.2.0 | Minor release; version card and all version references updated 1.1.10 → 1.2.0; `langgraph-checkpoint` updated 4.0.3 → 4.1.0; `langgraph-prebuilt` updated to 1.1.0. "What's new" section updated with `ToolRuntime` and `ToolCallTransformer` additions. All core symbols (`StateGraph`, `END`, `START`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`). | Claude routine |
 | 2026-04-28 | 1.1.10 | Patch release; version card and reference pages updated 1.1.9 → 1.1.10; `langgraph-checkpoint` updated 4.0.2 → 4.0.3. All key symbols verified against installed 1.1.10 (`.routine-envs/main-py-0428`). | Claude routine |
 | 2026-04-22 | 1.1.9 | Added six source-verified reference pages: [StateGraph](./reference-state-graph/), [Checkpointers](./reference-checkpointers/), [Store](./reference-store/), [Functional API](./reference-functional-api/), [Command / Send](./reference-command-and-send/), [Streaming modes](./reference-streaming-modes/). Corrected stale guidance: `create_react_agent` deprecated in v1.0; `from_conn_string` is a context manager; `ShallowPostgresSaver` deprecated. |
 | 2026-04-21 | 1.1.8 | Index redesigned into Zero → Hero chaptered tutorial + Jump-to-topic grid; duplicated sections removed. |
