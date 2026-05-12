@@ -520,6 +520,8 @@ A `selection_func` receives the outgoing message and the list of candidate execu
 ```python
 from dataclasses import dataclass
 from agent_framework import (
+    Agent,
+    AgentExecutor,
     Executor,
     WorkflowBuilder,
     WorkflowContext,
@@ -547,6 +549,9 @@ def route_by_priority(task: AnalysisTask, candidate_ids: list[str]) -> list[str]
     return [cid for cid in candidate_ids if "fast" in cid]
 
 
+fast_agent = Agent(id="fast_agent", model="gpt-4o-mini", instructions="Answer concisely.")
+thorough_agent = Agent(id="thorough_agent", model="gpt-4o", instructions="Answer thoroughly.")
+
 dispatcher = Dispatcher(id="dispatcher")
 fast_worker = AgentExecutor(id="fast_worker", agent=fast_agent)
 thorough_worker = AgentExecutor(id="thorough_worker", agent=thorough_agent)
@@ -555,7 +560,7 @@ workflow = (
     WorkflowBuilder(start_executor=dispatcher)
     .add_multi_selection_edge_group(
         source=dispatcher,
-        targets=[fast_worker, thorough_worker],   # SupportsAgentRun instances
+        targets=[fast_worker, thorough_worker],
         selection_func=route_by_priority,
     )
     .build()
