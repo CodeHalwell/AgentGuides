@@ -110,7 +110,7 @@ from agent_framework import AgentExecutorResponse
 
 def join_as_bullets(responses: list[AgentExecutorResponse]) -> str:
     return "\n".join(
-        f"- ({r.executor_id}) {r.agent_response.messages[-1].text}" for r in responses
+        f"- ({r.executor_id}) {r.agent_response.text}" for r in responses
     )
 
 workflow = (
@@ -508,7 +508,7 @@ workflow = (
 )
 
 result = await workflow.run("I was charged twice on my last invoice.")
-print(result.get_outputs()[-1])
+print(result.get_outputs()[-1].text)
 ```
 
 Conditions are evaluated in declaration order; the first `Case` whose condition returns `True` wins. The `Default` case matches everything that falls through. Exactly one branch executes.
@@ -548,6 +548,8 @@ def route_by_priority(task: AnalysisTask, candidate_ids: list[str]) -> list[str]
 
 
 dispatcher = Dispatcher(id="dispatcher")
+fast_worker = AgentExecutor(id="fast_worker", agent=fast_agent)
+thorough_worker = AgentExecutor(id="thorough_worker", agent=thorough_agent)
 
 workflow = (
     WorkflowBuilder(start_executor=dispatcher)

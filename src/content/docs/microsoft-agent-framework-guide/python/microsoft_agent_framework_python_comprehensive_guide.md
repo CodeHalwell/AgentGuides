@@ -282,7 +282,7 @@ workflow = SequentialBuilder(participants=[researcher, analyst, writer]).build()
 
 async def main() -> None:
     result = await workflow.run("Advances in post-quantum cryptography")
-    print(result.get_outputs()[-1])
+    print(result.get_outputs()[-1].text)
 
 asyncio.run(main())
 ```
@@ -298,7 +298,7 @@ workflow = ConcurrentBuilder(participants=[researcher, analyst, writer]).build()
 
 # Custom aggregator — join responses with a separator.
 async def stitch(results) -> str:
-    return "\n---\n".join(r.agent_response.messages[-1].text for r in results)
+    return "\n---\n".join(r.agent_response.text for r in results)
 
 workflow_custom = (
     ConcurrentBuilder(participants=[researcher, analyst, writer])
