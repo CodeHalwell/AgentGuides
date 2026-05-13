@@ -1578,6 +1578,8 @@ The agent never "remembers" by keeping messages forever; instead it builds a com
 
 ### Quickstart with `MemoryFileStore`
 
+`MemoryFileStore` requires `owner_state_key` — a string naming the key in `session.state` that holds the logical owner (typically a user ID). The store uses that value to partition memory files on disk. Set `session.state[owner_state_key]` before the first `agent.run()` call.
+
 ```python
 import asyncio
 from datetime import timedelta
@@ -1586,8 +1588,12 @@ from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
-# File-based store — one directory per user
-store = MemoryFileStore(base_path="./memory")
+# owner_state_key tells the store which session.state key holds the user/owner ID.
+# Each unique value gets its own directory under base_path.
+store = MemoryFileStore(
+    base_path="./memory",
+    owner_state_key="user_id",   # session.state["user_id"] drives per-user partitioning
+)
 
 memory = MemoryContextProvider(
     store=store,
@@ -1608,17 +1614,30 @@ agent = Agent(
 
 
 async def main() -> None:
-    # Session 1 — store a preference
+    # Session 1 — store a preference.
+    # session.state["user_id"] MUST be set before run() — the store raises if it's missing.
     session1 = agent.create_session(session_id="user-42-s1")
+    session1.state["user_id"] = "user-42"
     await agent.run("I prefer concise bullet-point answers over long paragraphs.", session=session1)
 
-    # Session 2 — the memory provider injects the extracted preference automatically
+    # Session 2 — same user_id so the provider loads memory from the same directory.
     session2 = agent.create_session(session_id="user-42-s2")
+    session2.state["user_id"] = "user-42"
     response = await agent.run("Summarise the benefits of asyncio.", session=session2)
     print(response.text)  # Likely uses bullet points — remembered from session 1
 
 
 asyncio.run(main())
+```
+
+**Multi-user isolation.** Every distinct value of `session.state["user_id"]` gets its own subtree under `base_path`. Two users can share a single agent and store instance without their memories crossing:
+
+```python
+async def handle_request(user_id: str, message: str) -> str:
+    session = agent.create_session()
+    session.state["user_id"] = user_id   # partitions memory to ./memory/<user_id>/
+    response = await agent.run(message, session=session)
+    return response.text
 ```
 
 ### `MemoryContextProvider` constructor reference
@@ -1668,46 +1687,104 @@ At session start the provider reads `MEMORY.md`, selects the `selection_limit` m
 import asyncio
 from agent_framework import AgentSession, MemoryFileStore
 
-store = MemoryFileStore(base_path="./memory")
+store = MemoryFileStore(base_path="./memory", owner_state_key="user_id")
+
+# session.state["user_id"] must be set so the store knows which directory to read.
 session = AgentSession(session_id="user-42-s1")
+session.state["user_id"] = "user-42"
 
 
 async def inspect_memory() -> None:
-    # List all extracted topics
-    topics = await store.list_topics(session, source_id="memory")
+    # List all extracted topics for this user
+    topics = store.list_topics(session, source_id="memory")
     for t in topics:
         print(f"{t.name}: {t.summary}")
 
     # Read a specific topic
-    record = await store.get_topic(session, source_id="memory", topic="communication-style")
+    record = store.get_topic(session, source_id="memory", topic="communication-style")
     print(record.content)
 
-    # Delete a topic the user wants forgotten
-    await store.delete_topic(session, source_id="memory", topic="communication-style")
+    # Delete a topic the user wants forgotten (right-to-erasure flows)
+    store.delete_topic(session, source_id="memory", topic="communication-style")
 
-    # Rebuild the index after manual edits
-    entries = await store.rebuild_index(session, source_id="memory", line_limit=200, line_length=150)
+    # Rebuild the MEMORY.md index after manual edits to topic files
+    store.rebuild_index(session, source_id="memory", line_limit=200, line_length=150)
 
 
 asyncio.run(inspect_memory())
 ```
 
+Note: `MemoryFileStore` methods (`list_topics`, `get_topic`, `delete_topic`, `rebuild_index`) are synchronous — they perform filesystem I/O directly. The async wrapper lives in `MemoryContextProvider`, which calls them from async lifecycle hooks.
+
 ### Custom `MemoryStore` backend
 
-Implement the `MemoryStore` abstract class (12 methods) to use any durable backend — database, blob storage, vector DB:
+Subclass `MemoryStore` to use any durable backend — database, blob storage, vector DB. All abstract methods are **synchronous** (no `async`); `MemoryContextProvider` calls them from thread-pool workers when needed:
 
 ```python
-from agent_framework import MemoryStore
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from agent_framework import AgentSession, MemoryIndexEntry, MemoryStore, MemoryTopicRecord
+
 
 class MyMemoryStore(MemoryStore):
-    async def get_topic(self, session, *, source_id, topic): ...
-    async def write_topic(self, session, record, *, source_id): ...
-    async def delete_topic(self, session, *, source_id, topic): ...
-    async def list_topics(self, session, *, source_id): ...
-    async def read_state(self, session, *, source_id): ...
-    async def write_state(self, session, state, *, source_id): ...
-    # ... plus rebuild_index, get_index_text, search_transcripts, etc.
+    # get_owner_id is not abstract — override it to enable per-user isolation
+    def get_owner_id(self, session: AgentSession) -> str | None:
+        return session.state.get("user_id")
+
+    # --- 10 abstract methods that must be implemented ---
+
+    def list_topics(self, session: AgentSession, *, source_id: str) -> list[MemoryTopicRecord]:
+        ...
+
+    def get_topic(self, session: AgentSession, *, source_id: str, topic: str) -> MemoryTopicRecord:
+        ...
+
+    def write_topic(self, session: AgentSession, record: MemoryTopicRecord, *, source_id: str) -> None:
+        ...
+
+    def delete_topic(self, session: AgentSession, *, source_id: str, topic: str) -> None:
+        ...
+
+    def rebuild_index(
+        self, session: AgentSession, *, source_id: str, line_limit: int, line_length: int
+    ) -> list[MemoryIndexEntry]:   # returns MemoryIndexEntry objects, not strings
+        ...
+
+    def get_index_text(
+        self,
+        session: AgentSession,
+        *,
+        source_id: str,
+        line_limit: int,
+        line_length: int,
+        index_entries: Sequence[MemoryIndexEntry] | None = None,
+    ) -> str:
+        ...
+
+    def read_state(self, session: AgentSession, *, source_id: str) -> dict[str, Any]:
+        ...
+
+    def write_state(self, session: AgentSession, state: Mapping[str, Any], *, source_id: str) -> None:
+        ...
+
+    def get_transcripts_directory(self, session: AgentSession, *, source_id: str) -> Path:
+        ...
+
+    def search_transcripts(
+        self,
+        session: AgentSession,
+        *,
+        source_id: str,
+        query: str,
+        session_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        ...
 ```
+
+Wire it up exactly like `MemoryFileStore` — pass it as the `store=` argument to `MemoryContextProvider`. Override `get_owner_id` to return the owner key from session state so the provider can scope memory per user.
 
 ---
 
@@ -1715,7 +1792,7 @@ class MyMemoryStore(MemoryStore):
 
 > **Experimental.** `TodoProvider` and its backing stores are `ExperimentalFeature.HARNESS` in 1.3.0.
 
-`TodoProvider` gives an agent a structured task list it can manage itself. The agent receives four tools — `add_todos`, `complete_todos`, `get_remaining_todos`, and `remove_todos` — and a default system-prompt injection that tells it how to use them. The provider stores state in the session (in-memory by default) or on disk via `TodoFileStore`.
+`TodoProvider` gives an agent a structured task list it can manage itself. The agent receives five tools — `add_todos`, `complete_todos`, `remove_todos`, `get_remaining_todos`, and `get_all_todos` — and a default system-prompt injection that tells it how to use them. The provider stores state in the session (in-memory by default) or on disk via `TodoFileStore`.
 
 ### Quickstart — in-session todos
 
@@ -1733,28 +1810,37 @@ agent = Agent(
 async def main() -> None:
     session = agent.create_session()
 
-    # The agent will break the task into todos, mark them complete as it works,
-    # and use get_remaining_todos to track progress across turns.
-    r = await agent.run(
+    # Turn 1 — agent adds todos as it plans
+    r1 = await agent.run(
         "Plan a three-day product launch: marketing, engineering, and support tasks.",
         session=session,
     )
-    print(r.text)
+    print(r1.text)
+
+    # Turn 2 — agent checks get_remaining_todos and marks items complete as it works
+    r2 = await agent.run(
+        "Draft the engineering checklist and mark those tasks done.",
+        session=session,
+    )
+    print(r2.text)
+
 
 asyncio.run(main())
 ```
 
-The agent sees instructions like "Break complex work into trackable items… Use add_todos… complete_todos… get_remaining_todos…". It manages the list autonomously — no application code needed to drive it.
+The agent sees instructions like "Break complex work into trackable items… Use `add_todos`… `complete_todos`… `get_remaining_todos`…". It manages the list autonomously — no application code needed to drive it.
 
 ### Persisting todos to disk with `TodoFileStore`
 
-For todos that should survive process restarts or multi-session projects, swap in `TodoFileStore`:
+For todos that should survive process restarts or span multiple sessions, swap in `TodoFileStore`. Unlike `MemoryFileStore`, the `owner_state_key` parameter is optional — when omitted, the `session_id` itself is used as the file path component:
 
 ```python
-from agent_framework import Agent, TodoFileStore, TodoProvider
+import asyncio
+from agent_framework import Agent, AgentSession, TodoFileStore, TodoProvider
 from agent_framework.openai import OpenAIChatClient
 
-# One JSON file per session under ./todos/<session_id>/todos.json
+
+# Todos written to ./todos/<session_id>/todos.json  (no owner_state_key required)
 store = TodoFileStore(base_path="./todos")
 
 agent = Agent(
@@ -1763,48 +1849,104 @@ agent = Agent(
     context_providers=[TodoProvider(store=store)],
 )
 
-# Reuse the same session_id across runs to pick up where the agent left off.
-session = agent.create_session(session_id="project-launch-42")
+
+async def main() -> None:
+    # First run — agent creates todos
+    session = agent.create_session(session_id="project-launch-42")
+    await agent.run("Break down the launch into 10 concrete tasks.", session=session)
+
+    # Second run (new process, same session_id) — agent picks up existing todos
+    session2 = agent.create_session(session_id="project-launch-42")
+    r = await agent.run("What's still left to do?", session=session2)
+    print(r.text)
+
+
+asyncio.run(main())
 ```
 
-`TodoFileStore` writes atomically and locks per-session to avoid concurrent corruption. Pass `owner_prefix=` when multiple agents share the same `base_path` so their stores don't collide.
+Pass `owner_state_key="user_id"` when multiple users share a `base_path` so their todo files are partitioned:
+
+```python
+store = TodoFileStore(base_path="./todos", owner_state_key="user_id")
+
+session = agent.create_session()
+session.state["user_id"] = "alice"   # todos written to ./todos/alice/todos.json
+```
 
 ### `TodoProvider` constructor reference
 
 ```python
 TodoProvider(
-    source_id="todo",          # key in session.state — change if you have multiple providers
+    source_id="todo",          # key in session.state — change if you stack multiple providers
     *,
-    instructions=None,         # override the default system-prompt block
+    instructions=None,         # override the default system-prompt block (None = use built-in)
     store=None,                # TodoStore subclass; defaults to TodoSessionStore (in-memory)
 )
 ```
 
-The default `instructions` text explains all four tools in detail. Pass a custom string to tune the tone or restrict which tools the agent should use.
+**Custom instructions.** The default text explains all five tools. Override to restrict the agent or tune the tone:
+
+```python
+from agent_framework import Agent, TodoProvider
+from agent_framework.openai import OpenAIChatClient
+
+focused_provider = TodoProvider(
+    instructions=(
+        "You have a task list. Use `add_todos` to create tasks when the user asks you to plan. "
+        "Use `complete_todos` when a task is done. "
+        "Never remove tasks unless the user explicitly says to drop them."
+    ),
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a focused sprint assistant.",
+    context_providers=[focused_provider],
+)
+```
 
 ### Inspecting todos from application code
 
+Read the task list from outside the agent — useful for dashboards, webhooks, or status APIs:
+
 ```python
-from agent_framework import AgentSession, TodoFileStore, TodoSessionStore
+import asyncio
+from agent_framework import Agent, AgentSession, TodoFileStore, TodoProvider, TodoSessionStore
+from agent_framework.openai import OpenAIChatClient
 
-# --- In-memory: read directly from session.state ---
-session = agent.create_session(session_id="s1")
-await agent.run("Plan the sprint.", session=session)
-
-in_mem_store = TodoSessionStore()
-items, _ = await in_mem_store.load_state(session, source_id="todo")
-for item in items:
-    print(f"[{'x' if item.is_complete else ' '}] {item.title}")
-
-# --- File-based: load from disk ---
-file_store = TodoFileStore(base_path="./todos")
-items, _ = await file_store.load_state(
-    AgentSession(session_id="project-launch-42"),
-    source_id="todo",
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a task assistant.",
+    context_providers=[TodoProvider()],
 )
-remaining = [i for i in items if not i.is_complete]
-print(f"{len(remaining)} tasks still pending")
+
+
+async def main() -> None:
+    session = agent.create_session(session_id="s1")
+    await agent.run("Add tasks: write tests, review PR, deploy.", session=session)
+
+    # Read from in-memory store — uses the same session object
+    in_mem_store = TodoSessionStore()
+    items, _next_id = await in_mem_store.load_state(session, source_id="todo")
+    for item in items:
+        status = "✓" if item.is_complete else "·"
+        print(f"  {status} [{item.id}] {item.title}")
+
+    # --- File-based: load from disk by session_id ---
+    file_store = TodoFileStore(base_path="./todos")
+    items2, _ = await file_store.load_state(
+        AgentSession(session_id="project-launch-42"),
+        source_id="todo",
+    )
+    remaining = [i for i in items2 if not i.is_complete]
+    completed = [i for i in items2 if i.is_complete]
+    print(f"{len(remaining)} pending, {len(completed)} done")
+
+
+asyncio.run(main())
 ```
+
+**`TodoItem` fields:** `id` (int), `title` (str), `description` (str | None), `is_complete` (bool). The agent calls `complete_todos([id, ...])` and `remove_todos([id, ...])` using the integer IDs.
 
 ---
 

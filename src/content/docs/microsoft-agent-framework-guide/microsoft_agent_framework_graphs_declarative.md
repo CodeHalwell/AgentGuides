@@ -154,6 +154,84 @@ response = await agent.run("Latest AI research")
 print(response.text)
 ```
 
+### Conditional edge — `add_edge` with a condition
+
+Pass a `condition` callable to `.add_edge()` to gate activation of the target executor. The target is skipped when the predicate returns `False`:
+
+```python
+from agent_framework import FunctionExecutor, WorkflowBuilder
+
+def score(text: str) -> dict:
+    words = text.split()
+    return {"text": text, "score": len(words) / 100}
+
+def accept(payload: dict) -> str:
+    return f"Accepted: {payload['text']}"
+
+def reject(payload: dict) -> str:
+    return f"Rejected: {payload['text']}"
+
+score_node  = FunctionExecutor(score,  id="score")
+accept_node = FunctionExecutor(accept, id="accept")
+reject_node = FunctionExecutor(reject, id="reject")
+
+workflow = (
+    WorkflowBuilder(start_executor=score_node)
+    .add_edge(score_node, accept_node, condition=lambda out: out["score"] >= 0.5)
+    .add_edge(score_node, reject_node, condition=lambda out: out["score"] <  0.5)
+    .build()
+)
+```
+
+The `condition` callable receives the output value of the source executor and must return `bool`.
+
+### Collecting outputs from specific nodes — `output_executors`
+
+`result.get_outputs()` collects only values explicitly emitted via `ctx.yield_output()` — plain function return values are **not** captured. Pass `output_executors=` to further restrict which nodes' `yield_output` calls are included, useful when only some branches should contribute to the final result:
+
+```python
+from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowContext
+
+
+def split(query: str) -> dict:
+    return {"query": query}
+
+
+async def web_search(payload: dict, ctx: WorkflowContext[str, str]) -> None:
+    result = f"web: {payload['query']}"
+    await ctx.yield_output(result)   # emitted into get_outputs()
+
+
+async def db_lookup(payload: dict, ctx: WorkflowContext[str, str]) -> None:
+    result = f"db: {payload['query']}"
+    await ctx.yield_output(result)   # emitted into get_outputs()
+
+
+async def audit_log(payload: dict, ctx: WorkflowContext) -> None:
+    print(f"Audit: {payload['query']}")   # side-effect only — no yield_output call
+
+
+splitter = FunctionExecutor(split,      id="split")
+web      = FunctionExecutor(web_search, id="web")
+db       = FunctionExecutor(db_lookup,  id="db")
+audit    = FunctionExecutor(audit_log,  id="audit")
+
+# output_executors filters which yield_output calls reach get_outputs();
+# the audit node calls no yield_output so it would be excluded regardless
+workflow = (
+    WorkflowBuilder(
+        start_executor=splitter,
+        output_executors=[web, db],
+    )
+    .add_fan_out_edges(splitter, [web, db, audit])
+    .build()
+)
+
+import asyncio
+result  = asyncio.run(workflow.run("latest AI news"))
+outputs = result.get_outputs()   # ['web: latest AI news', 'db: latest AI news']
+```
+
 ### Checkpointing and resume
 
 ```python
@@ -169,6 +247,120 @@ workflow = (
 ```
 
 The `FileCheckpointStorage` API exposes `.save`, `.load`, `.get_latest`, `.list_checkpoint_ids`, `.list_checkpoints`, and `.delete`. There's no separate `HITLConfig` or `TimeTravelConfig` class — navigation through checkpoint history is done via the storage API directly.
+
+---
+
+## `WorkflowContext` — executor runtime API
+
+Every executor handler can accept an optional second parameter typed as `WorkflowContext`. The generic parameters declare which output types the executor is allowed to produce:
+
+| Annotation | What it enables |
+|---|---|
+| `WorkflowContext` | Side-effects only (no `send_message`, no `yield_output`) |
+| `WorkflowContext[OutT]` | `ctx.send_message(value: OutT)` — passes value to downstream executors |
+| `WorkflowContext[OutT, W_OutT]` | Both `send_message` and `ctx.yield_output(value: W_OutT)` — emits a workflow-level result |
+| `WorkflowContext[str \| int, bool]` | Union types — sender may emit `str` or `int`; workflow output is `bool` |
+
+### Method reference
+
+| Method / Property | Signature | Purpose |
+|---|---|---|
+| `send_message` | `async (message: OutT, target_id: str \| None = None) → None` | Send a value to downstream executors. `target_id=None` broadcasts to all successors; pass an executor ID to route to a specific one. |
+| `yield_output` | `async (output: W_OutT) → None` | Emit a workflow-level output collected by `result.get_outputs()`. |
+| `add_event` | `async (event: WorkflowEvent) → None` | Emit a custom event to listeners. Reserved types `"started"`, `"status"`, `"failed"` are blocked from user code. |
+| `request_info` | `async (request_data, response_type, *, request_id=None) → None` | Suspend the executor and request data from an external system (HITL). Requires a matching `@response_handler` on the executor class. |
+| `get_state` | `(key: str, default=None) → Any` | Read a value from the per-run workflow state dict. |
+| `set_state` | `(key: str, value: Any) → None` | Write a value into the per-run workflow state dict. |
+| `state` | `→ State` | Direct access to the `State` mapping for batch reads/writes. |
+| `source_executor_ids` | `→ list[str]` | IDs of all executors that sent the current message (multiple in fan-in). |
+| `get_source_executor_id()` | `() → str` | Single source executor ID — raises `RuntimeError` if there are multiple (fan-in). |
+| `is_streaming()` | `() → bool` | `True` when the workflow was started with `stream=True`. |
+| `request_id` | `→ str \| None` | Set only inside `@response_handler` callbacks; `None` in normal handlers. |
+| `get_sent_messages()` | `() → list` | All values sent via `send_message()` during the current handler invocation. |
+| `get_yielded_outputs()` | `() → list` | All values emitted via `yield_output()` during the current handler invocation. |
+
+### `WorkflowContext` in a `FunctionExecutor`
+
+```python
+from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowContext
+
+# Executor that broadcasts to all successors (OutT = str)
+async def enrich(text: str, ctx: WorkflowContext[str]) -> None:
+    enriched = text.strip().upper()
+    await ctx.send_message(enriched)          # all downstream executors receive this
+
+enrich_node = FunctionExecutor(enrich, id="enrich")
+
+# Executor that routes to a specific downstream node by ID
+async def route(payload: dict, ctx: WorkflowContext[dict]) -> None:
+    target = "premium" if payload.get("tier") == "pro" else "standard"
+    await ctx.send_message(payload, target_id=target)  # targeted delivery
+
+# Executor that emits both inter-executor messages AND a workflow output
+async def analyse(text: str, ctx: WorkflowContext[dict, str]) -> None:
+    result = {"words": len(text.split()), "chars": len(text)}
+    await ctx.send_message(result)            # dict → downstream executors
+    await ctx.yield_output(f"Analysis done: {result['words']} words")  # str → workflow output
+```
+
+### State sharing across executors
+
+`get_state` / `set_state` let executors share a mutable key-value dict scoped to the current workflow run:
+
+```python
+from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowContext
+
+async def fetch(query: str, ctx: WorkflowContext[str]) -> None:
+    ctx.set_state("original_query", query)    # store for later executors
+    await ctx.send_message(f"results for: {query}")
+
+async def summarise(results: str, ctx: WorkflowContext[str, str]) -> None:
+    query = ctx.get_state("original_query", default="(unknown)")
+    summary = f"Summary of '{query}': {results[:80]}"
+    await ctx.send_message(summary)
+    await ctx.yield_output(summary)           # emit as workflow-level output
+
+fetch_node     = FunctionExecutor(fetch,     id="fetch")
+summarise_node = FunctionExecutor(summarise, id="summarise")
+
+workflow = (
+    WorkflowBuilder(start_executor=fetch_node)
+    .add_edge(fetch_node, summarise_node)
+    .build()
+)
+
+import asyncio
+result = asyncio.run(workflow.run("climate change"))
+print(result.get_outputs())   # ['Summary of \'climate change\': results for: climat...']
+```
+
+### Fan-in: detecting multiple sources
+
+In fan-in scenarios an executor receives messages from several predecessors. Use `ctx.source_executor_ids` to see who sent each message:
+
+```python
+async def aggregate(results: list, ctx: WorkflowContext[str]) -> None:
+    sources = ctx.source_executor_ids   # e.g. ['worker_a', 'worker_b', 'worker_c']
+    combined = " | ".join(str(r) for r in results)
+    await ctx.send_message(f"[{', '.join(sources)}] → {combined}")
+```
+
+### Mermaid output for conditional-edge workflows
+
+The `WorkflowViz.to_mermaid()` output for a workflow with conditional edges shows standard arrows — conditions are not rendered in the diagram text but the routing is captured in the node structure:
+
+```
+flowchart TD
+  score["score"]
+  accept["accept"]
+  reject["reject"]
+  score --> accept
+  score --> reject
+```
+
+For switch/case routing the output is identical in shape; conditions live inside `Case` objects in the builder and are not expressed in Mermaid's syntax.
+
+---
 
 ## Declarative agents & workflows — the real API
 
@@ -495,6 +687,73 @@ workflow = (
 | `input` | Expected input type — used for graph-level type validation. |
 | `output` | Type of messages sent to downstream executors via `send_message`. |
 | `workflow_output` | Type of values emitted as workflow-level output via `yield_output`. |
+
+### Practical `@executor` patterns
+
+**Sync vs async** — sync functions run in a `asyncio.to_thread()` thread pool, so they never block the event loop:
+
+```python
+from agent_framework import executor, WorkflowBuilder, WorkflowContext
+
+@executor(id="fetch-sync")
+def fetch_sync(url: str) -> str:
+    import urllib.request
+    with urllib.request.urlopen(url) as r:   # blocking I/O — safe in thread pool
+        return r.read().decode()
+
+@executor(id="fetch-async")
+async def fetch_async(url: str) -> str:
+    import httpx
+    async with httpx.AsyncClient() as client:
+        return (await client.get(url)).text
+```
+
+**Targeted `send_message`** — pass `target_id=` to route to a specific downstream executor rather than broadcasting:
+
+```python
+@executor(id="router", output=dict)
+async def router(payload: dict, ctx: WorkflowContext[dict]) -> None:
+    priority = payload.get("priority", "normal")
+    target   = "urgent-handler" if priority == "high" else "standard-handler"
+    await ctx.send_message(payload, target_id=target)
+```
+
+**State sharing** — `ctx.get_state` / `ctx.set_state` pass data between non-adjacent executors in the same run:
+
+```python
+@executor(id="ingest", output=str)
+async def ingest(raw: str, ctx: WorkflowContext[str]) -> None:
+    ctx.set_state("raw_length", len(raw))
+    await ctx.send_message(raw.strip())
+
+@executor(id="report", workflow_output=str)
+async def report(processed: str, ctx: WorkflowContext[str, str]) -> None:
+    raw_length = ctx.get_state("raw_length", default=0)
+    await ctx.yield_output(f"Processed {raw_length} → {len(processed)} chars")
+```
+
+**Multiple output types with union** — declare `output=str | dict` when the executor may emit different payload shapes:
+
+```python
+@executor(id="parse", input=str, output=str | dict)
+async def parse(text: str, ctx: WorkflowContext[str | dict]) -> None:
+    try:
+        import json
+        parsed = json.loads(text)
+        await ctx.send_message(parsed)        # dict path
+    except ValueError:
+        await ctx.send_message(text.strip())  # str fallback path
+```
+
+**Emitting a workflow output** — use `workflow_output=` when the executor should also contribute to `result.get_outputs()`:
+
+```python
+@executor(id="summarise", input=str, output=str, workflow_output=str)
+async def summarise(text: str, ctx: WorkflowContext[str, str]) -> None:
+    summary = text[:200] + ("…" if len(text) > 200 else "")
+    await ctx.send_message(summary)   # downstream executors
+    await ctx.yield_output(summary)   # also collected in workflow result
+```
 
 > **Note:** Use `@executor` for module-level functions only. For class-based executors with per-instance state or `@response_handler` (HITL), subclass `Executor` directly.
 
