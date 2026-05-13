@@ -15,11 +15,11 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install haystack-ai==2.28.0
+    pip install haystack-ai==2.29.0
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.28.0** · April 2026 · Python 3.10+
+    **v2.29.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     RAG pipelines, search-first agents, production deployments.
@@ -76,12 +76,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Start here" href="./start_here/" />
 </CardGrid>
 
-## What's new in v2.28.0 (April 2026)
+## What's new in v2.29.0 (May 2026)
 
-- Stabilisation and bug fixes following 2.28 RCs.
-- `SearchableToolset`, `LLMRanker`, and `ToolInvoker` stabilised.
-- Expanded provider support (Anthropic, Gemini, Mistral, Ollama).
-- Multi-agent guide published (October 2025).
+- **v2.29.0 (May 13)** — Minor release; bug fixes and dependency updates. All guide-referenced symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) confirmed present in installed `haystack-ai==2.29.0` (`.routine-envs/check-0513-py`); no `DeprecationWarning` emissions.
+- **v2.28.0 (April 2026)** — Stabilisation and bug fixes following 2.28 RCs. `SearchableToolset`, `LLMRanker`, and `ToolInvoker` stabilised. Expanded provider support (Anthropic, Gemini, Mistral, Ollama). Multi-agent guide published (October 2025).
 
 ## Install, minimal example
 
@@ -107,6 +105,7 @@ Ready? **[Start Zero → Hero Step 1 →](./haystack_comprehensive_guide/#instal
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-13 | 2.29.0 | Version bumped 2.28.0 → 2.29.0; "What's new" updated; comprehensive guide header updated; revision history entry added. Core symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) verified with `-W error::DeprecationWarning` against installed `haystack-ai==2.29.0` (`.routine-envs/check-0513-py`); no warnings. |
 | 2026-04-21 | 2.28.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | April 20, 2026 | 2.28.0 | GA after 2.28.0rc1/rc2; stabilisation. |
 | November 2025 | 2.20.0 | Initial documented version. |

@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.94.0',
+    version: 'v1.95.0',
   },
   {
     id: 'openai-agents',
@@ -136,7 +136,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Advanced',
     useCases: ['search', 'qa', 'rag'],
-    version: 'v2.28.0',
+    version: 'v2.29.0',
   },
   {
     id: 'bedrock',
@@ -190,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.2.139',
+    version: 'v0.2.140',
   },
   {
     id: 'mistral',
