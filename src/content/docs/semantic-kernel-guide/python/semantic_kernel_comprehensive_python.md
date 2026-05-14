@@ -13,6 +13,7 @@ Latest: 1.42.0 | Updated: May 14, 2026
 Last Updated: May 14, 2026
 Python Version: 3.10+ (3.9 dropped as of v1.41.2)
 Semantic Kernel: 1.42.0+
+Install note: v1.42.0 requires pre-release resolution (`pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel`) due to the `azure-ai-agents>=1.2.0b3` dependency.
 
 ---
 

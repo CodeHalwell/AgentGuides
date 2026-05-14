@@ -15,8 +15,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install semantic-kernel
+    pip install --pre semantic-kernel
     ```
+    v1.42.0 requires `--pre` (pip) or `--prerelease=allow` (uv) — see [What's new](#whats-new-in-v1420-may-2026).
   </Card>
   <Card title="Version" icon="information">
     **v1.42.0** · May 2026 · Python 3.10+
@@ -82,7 +83,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## What's new in v1.42.0 (May 2026)
 
-- **v1.42.0 (May 14)** — Minor release. Requires `mcp>=1.26.0` (raised from 1.8) and `azure-ai-agents>=1.2.0b3` (pre-release dependency; installation requires `--prerelease=allow`). Non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`, `SelectionStrategy`, `TerminationStrategy`) verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). **Known issue:** importing `semantic_kernel.connectors.ai.open_ai` (which includes `OpenAIChatCompletion`) emits `PydanticDeprecatedSince211` from `AzureAISearchDataSource` at `azure_chat_prompt_execution_settings.py:134` — an internal SK issue; the warning does not affect non-Azure connectors at runtime. See risk register in the 2026-05-14 run report.
+- **v1.42.0 (May 14)** — Minor release. Requires `mcp>=1.26.0` (raised from 1.8) and `azure-ai-agents>=1.2.0b3` (pre-release dependency; plain `pip install semantic-kernel` will fail — use `pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel`). Non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`, `SelectionStrategy`, `TerminationStrategy`) verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). **Known issue:** importing `semantic_kernel.connectors.ai.open_ai` (which includes `OpenAIChatCompletion`) emits `PydanticDeprecatedSince211` from `AzureAISearchDataSource` at `azure_chat_prompt_execution_settings.py:134` — an internal SK issue; the warning does not affect non-Azure connectors at runtime. See risk register in the 2026-05-14 run report.
 - **v1.41.3 (April 28)** — Patch release; stability improvements.
 - **Vector store v1.34** — new API for embedding and retrieval.
 - **MCP client + server** — full Model Context Protocol support.
@@ -90,6 +91,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 - **Microsoft Agent Framework** bridge for gradual migration.
 
 ## Install, minimal example
+
+<Aside type="caution" title="PydanticDeprecatedSince211 warning">
+  In v1.42.0, importing `OpenAIChatCompletion` from `semantic_kernel.connectors.ai.open_ai` emits a `PydanticDeprecatedSince211` warning at module load time. This is an internal semantic-kernel bug; runtime behaviour is unaffected. Suppress with `warnings.filterwarnings("ignore", category=DeprecationWarning, module="semantic_kernel")` if needed.
+</Aside>
 
 ```python
 import asyncio
