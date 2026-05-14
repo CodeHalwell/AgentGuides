@@ -156,12 +156,12 @@ strategy = TruncationStrategy(max_n=10, compact_to=6, preserve_system=True)
 asyncio.run(apply_compaction(messages, strategy=strategy))
 
 kept = included_messages(messages)
-print(len(kept))          # 7 — 1 system + 6 most-recent user/assistant
+print(len(kept))          # 6 — 1 system + 5 most-recent user/assistant
 print(kept[0].role)       # system  (preserved despite oldest-first pass)
 print(kept[-1].role)      # assistant
 ```
 
-The system anchor is immune to oldest-first dropping. The strategy compacts until the included *non-system* count meets `compact_to`, then stops — so the effective kept count is `compact_to + 1` system messages.
+The metric (`max_n` and `compact_to`) counts **all** included messages — system messages included. With `compact_to=6` and one protected system message, the strategy excludes oldest non-system groups until total included count ≤ 6, leaving 1 system + 5 non-system messages. System messages cannot be excluded when `preserve_system=True`, but they still count toward the target.
 
 ### When to prefer `TruncationStrategy` over `SlidingWindowStrategy`
 
