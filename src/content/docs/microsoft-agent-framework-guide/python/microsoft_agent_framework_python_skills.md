@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Skills"
-description: "Progressive-disclosure domain knowledge for agents. InlineSkill / ClassSkill / FileSkillsSource / SkillsProvider with code-defined and file-based skills, composable sources, script runners, and approval gates. Verified against agent-framework-core 1.3.0."
+description: "Progressive-disclosure domain knowledge for agents. InlineSkill / ClassSkill / FileSkillsSource / SkillsProvider with code-defined and file-based skills, composable sources, script runners, and approval gates. Verified against agent-framework-core 1.4.0."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 Skills are a **progressive-disclosure** knowledge pattern. Instead of stuffing every reference doc and procedure into the system prompt, you advertise skill *names and descriptions* (cheap), let the model decide which to load (`load_skill`), and then fetch resources (`read_skill_resource`) or run scripts (`run_skill_script`) on demand. The total context stays small until the agent actually needs deeper knowledge.
 
-This follows the [Agent Skills specification](https://agentskills.io). Verified against `agent-framework-core==1.3.0` (`agent_framework._skills`). Marked `experimental` — API may evolve.
+This follows the [Agent Skills specification](https://agentskills.io). Verified against `agent-framework-core==1.4.0` (`agent_framework._skills`). Marked `experimental` — API may evolve.
 
 ## The primitives
 
@@ -292,6 +292,96 @@ When the user pastes a contract, read `references/clauses.md` first. For each se
 ```
 
 **Security.** File-based resource reads are protected against path traversal and symlink escape. Only load skills from trusted sources.
+
+## `InMemorySkillsSource` — hold skills in memory
+
+`InMemorySkillsSource` is the simplest `SkillsSource` implementation: it holds a fixed list of `Skill` objects in memory. Use it when you build skills programmatically and don't need file discovery.
+
+```python
+from agent_framework import (
+    Agent,
+    InlineSkill,
+    InMemorySkillsSource,
+    SkillsProvider,
+)
+from agent_framework.openai import OpenAIChatClient
+
+skill_a = InlineSkill(
+    name="db-ops",
+    description="Query and describe the production PostgreSQL database.",
+    instructions="Use read_skill_resource('db-ops', 'schema') to see the tables, then craft SELECT queries only.",
+)
+
+skill_b = InlineSkill(
+    name="reporting",
+    description="Generate structured business reports from query results.",
+    instructions="Format data as Markdown tables with a short executive summary.",
+)
+
+# Build the source explicitly — useful when skill objects come from a factory or DI container
+source = InMemorySkillsSource([skill_a, skill_b])
+
+# Pass it directly to SkillsProvider
+provider = SkillsProvider(source)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a data analyst.",
+    context_providers=[provider],
+)
+```
+
+`InMemorySkillsSource` is equivalent to passing a list directly to `SkillsProvider(source)` — the provider auto-wraps any `Sequence[Skill]` — but the explicit constructor is useful when you need to inspect or mutate the source before passing it downstream (e.g. wrap it in a `DeduplicatingSkillsSource` or `FilteringSkillsSource`).
+
+## `DelegatingSkillsSource` — composable decorators
+
+`DelegatingSkillsSource` is the abstract base class for composable source decorators. It wraps an `inner_source` and delegates `get_skills()` to it while allowing the subclass to augment, filter, cache, or transform the result. All three built-in composable sources subclass it:
+
+| Subclass | What it does |
+|---|---|
+| `DeduplicatingSkillsSource` | Removes duplicate skills (by name); first occurrence wins |
+| `FilteringSkillsSource` | Applies a predicate to filter which skills are exposed |
+| `AggregatingSkillsSource` | Combines multiple `SkillsSource` instances into one |
+
+### Custom subclass — caching example
+
+Subclass `DelegatingSkillsSource` when the built-ins don't cover your use case. The most common reason is caching: wrap any slow `SkillsSource` (file I/O, database, HTTP) in a cache layer without modifying the underlying source:
+
+```python
+import time
+from agent_framework import (
+    DelegatingSkillsSource,
+    FileSkillsSource,
+    InMemorySkillsSource,
+    InlineSkill,
+    SkillsProvider,
+    SkillsSource,
+)
+
+
+class CachingSkillsSource(DelegatingSkillsSource):
+    """Cache skills for 60 s to avoid repeated I/O."""
+
+    def __init__(self, inner_source: SkillsSource) -> None:
+        super().__init__(inner_source)
+        self._cache: list | None = None
+        self._expires_at: float = 0.0
+
+    async def get_skills(self):
+        if self._cache is None or time.monotonic() > self._expires_at:
+            self._cache = await self.inner_source.get_skills()
+            self._expires_at = time.monotonic() + 60
+        return self._cache
+
+
+# Wrap any slow source — here a file-based source — with the cache
+slow_source = FileSkillsSource("./domain-skills")
+cached_source = CachingSkillsSource(slow_source)
+
+provider = SkillsProvider(cached_source)
+```
+
+`self.inner_source` is the attribute set by `DelegatingSkillsSource.__init__`. Your `get_skills()` override calls `await self.inner_source.get_skills()` to fetch from the delegate and can transform the result freely. The cache is transparent to `SkillsProvider` — it always calls `source.get_skills()` and the caching decorator intercepts that call.
 
 ## Composable sources
 

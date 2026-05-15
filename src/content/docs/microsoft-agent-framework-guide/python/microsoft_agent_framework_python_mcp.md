@@ -17,7 +17,7 @@ Model Context Protocol (MCP) servers are first-class tool sources in `agent-fram
 
 All three are async context managers that connect lazily, discover tools and prompts from the server, and register them as `FunctionTool` instances on the agent.
 
-Verified against `agent-framework-core==1.3.0` and `mcp==1.27`.
+Verified against `agent-framework-core==1.4.0` and `mcp==1.27`.
 
 ## Install
 
@@ -144,17 +144,76 @@ mcp = MCPStreamableHTTPTool(name="internal", url="https://mcp.corp/api", http_cl
 
 ## WebSocket
 
+`MCPWebsocketTool` opens a persistent bidirectional WebSocket connection to an MCP server. Requires `pip install 'mcp[ws]'`.
+
+### Basic usage
+
 ```python
+import asyncio
 from agent_framework import Agent, MCPWebsocketTool
 from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    async with MCPWebsocketTool(
+        name="realtime",
+        url="wss://service.example.com/mcp",
+        description="Real-time event streaming service",
+        tool_name_prefix="rt",              # prefix exposed tool names, e.g. rt_subscribe
+        approval_mode="never_require",      # or "always_require"
+        request_timeout=30,                 # seconds per MCP call, default 30
+    ) as rt:
+        agent = Agent(client=OpenAIChatClient(), tools=rt)
+        response = await agent.run("Subscribe to order events for account acct-123")
+        print(response.text)
+
+
+asyncio.run(main())
+```
+
+### Passing auth headers
+
+`MCPWebsocketTool` forwards extra keyword arguments to the underlying WebSocket client. Pass `additional_headers` (or any kwarg your WebSocket library accepts) to authenticate:
+
+```python
+import os
+from agent_framework import MCPWebsocketTool
+
+ws_tool = MCPWebsocketTool(
+    name="events",
+    url="wss://events.example.com/mcp",
+    description="Authenticated event stream",
+    request_timeout=60,
+    additional_headers={
+        "Authorization": f"Bearer {os.environ['EVENTS_TOKEN']}",
+        "X-Client-Id": "agent-service",
+    },
+)
+```
+
+### Per-tool approval with `MCPSpecificApproval`
+
+Use `MCPSpecificApproval` to gate only the write/action tools while letting read tools run freely:
+
+```python
+from agent_framework import MCPWebsocketTool, MCPSpecificApproval
+
+ws_approval: MCPSpecificApproval = {
+    "always_require_approval": ["rt_publish_event", "rt_delete_subscription"],
+    "never_require_approval": ["rt_subscribe", "rt_list_subscriptions"],
+}
 
 async with MCPWebsocketTool(
     name="realtime",
     url="wss://service.example.com/mcp",
-    description="Subscribe to real-time events.",
+    approval_mode=ws_approval,
 ) as rt:
     agent = Agent(client=OpenAIChatClient(), tools=rt)
 ```
+
+When a tool requires approval, the workflow emits a `function_approval_request` event. Respond with `event.data.to_function_approval_response(approved=True)` and re-run — see the [HITL page](./microsoft_agent_framework_python_hitl/) for the full loop.
+
+> **Note:** `MCPWebsocketTool` keeps a single persistent connection open for the lifetime of the `async with` block. If the server drops the connection, call `await rt.connect(reset=True)` to re-establish it. WebSocket servers that rotate tokens will require you to rebuild the tool instance with the new credentials.
 
 ## Approval gates
 

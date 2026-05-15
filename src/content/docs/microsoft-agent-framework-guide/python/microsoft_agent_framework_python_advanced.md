@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Advanced Patterns"
-description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.3.0."
+description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.4.0."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 This page covers the extensibility hooks in `agent-framework-core` that the feature-level pages gloss over: writing your own chat client, embedding client, or context provider, feature-detecting clients at runtime via the `Supports*` protocols, and opting into experimental/RC APIs.
 
-Verified against `agent-framework-core==1.3.0`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
+Verified against `agent-framework-core==1.4.0`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
 
 ## Custom agent — `BaseAgent` and `RawAgent`
 
@@ -672,7 +672,7 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 warnings.filterwarnings("error", category=FeatureStageWarning)
 ```
 
-The currently gated features (verified against `agent-framework-core==1.3.0`):
+The currently gated features (verified against `agent-framework-core==1.4.0`):
 
 | Stage | Enum member | Covers |
 |---|---|---|
@@ -681,7 +681,7 @@ The currently gated features (verified against `agent-framework-core==1.3.0`):
 | Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
 | Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
 | Experimental | `ExperimentalFeature.TOOLBOXES` | Toolbox APIs (preview) |
-| Release candidate | *(empty in 1.3.0)* | The enum exists but has no members in this release — features that previously sat at RC have either been promoted to stable or rolled back to experimental. |
+| Release candidate | *(empty in 1.4.0)* | The enum exists but has no members in this release — features that previously sat at RC have either been promoted to stable or rolled back to experimental. |
 
 Both enums are stage-scoped inventories, not stable introspection surfaces. Members move or disappear as features advance — the docstring on `ReleaseCandidateFeature` is explicit about this. Always enumerate at runtime when you need an authoritative list:
 
@@ -692,7 +692,7 @@ print([f.value for f in ExperimentalFeature])
 # ['EVALS', 'FILE_HISTORY', 'FUNCTIONAL_WORKFLOWS', 'SKILLS', 'TOOLBOXES']
 
 print([f.value for f in ReleaseCandidateFeature])
-# []  ← empty in 1.3.0; non-empty in releases that have RC features queued
+# []  ← empty in 1.4.0; non-empty in releases that have RC features queued
 ```
 
 Inspect any class or callable at runtime to see what stage it belongs to:
