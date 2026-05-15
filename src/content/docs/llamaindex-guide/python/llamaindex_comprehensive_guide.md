@@ -425,7 +425,7 @@ for chunk in response:
 
 ### 4.1 AgentWorkflow (Primary Agent Pattern)
 
-> **Note:** `ReActAgent` was hard-removed in LlamaIndex v0.14.x and now raises `ImportError`. Use `AgentWorkflow` instead.
+> **Note:** `ReActAgent` is importable from `llama_index.core.agent` in v0.14.22 alongside `AgentWorkflow`, `FunctionAgent`, and `CodeActAgent` (confirmed against installed 0.14.22). `AgentWorkflow` is the recommended pattern for new projects; `ReActAgent` is available as a functional alternative but is not the primary documented API.
 
 `AgentWorkflow` is the primary agent pattern in LlamaIndex v0.14.x+, replacing `ReActAgent`, `FunctionCallingAgent`, `OpenAIAgent`, `AgentRunner`, and `StructuredPlanningAgent`:
 
@@ -3870,7 +3870,7 @@ This concludes the comprehensive guide section. Each topic includes conceptual e
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.14.22 | May 15, 2026 | Patch release; `Latest:` header updated 0.14.20 → 0.14.22; revision history entry added. Note: `ReActAgent`, `FunctionAgent`, `AgentWorkflow`, `CodeActAgent` confirmed importable from `llama_index.core.agent` in 0.14.22 (`.routine-envs/check-0515-llama`); no `DeprecationWarning` emissions. |
-| 0.14.20 | April 3, 2026 | `AgentWorkflow` is now the only primary agent pattern; legacy agent classes hard-removed (`ReActAgent`, `FunctionCallingAgent`, `AgentRunner`, `OpenAIAgent`, `StructuredPlanningAgent` — all raise `ImportError`); LlamaSheets integration; LiteParse document parser; Agent Client Protocol |
+| 0.14.20 | April 3, 2026 | `AgentWorkflow` introduced as the primary agent pattern; LlamaSheets integration; LiteParse document parser; Agent Client Protocol. Note: earlier reporting that `ReActAgent` and other legacy agents were hard-removed was incorrect — `ReActAgent`, `FunctionAgent`, `AgentWorkflow`, and `CodeActAgent` are all importable from `llama_index.core.agent` in 0.14.22 (confirmed `.routine-envs/check-0515-llama`); `AgentWorkflow` is the recommended pattern for new projects. |
 | 0.14.8 | Previous version | Legacy agents deprecated (still worked with warnings) |
 | 0.12.x | November 2025 | Previous documented version |
 

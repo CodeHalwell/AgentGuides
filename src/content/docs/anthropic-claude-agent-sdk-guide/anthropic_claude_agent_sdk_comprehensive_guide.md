@@ -2784,7 +2784,7 @@ options = ClaudeAgentOptions(
 # Always-on extended thinking with effort level
 options = ClaudeAgentOptions(
     thinking=ThinkingConfigEnabled(budget_tokens=10000),
-    effort="high",  # "low", "medium", "high", or "max"
+    effort="high",  # "low", "medium", "high", "xhigh", or "max"
 )
 
 # Disable thinking entirely
@@ -2800,6 +2800,7 @@ The `effort` field provides a high-level shortcut that automatically sets an app
 | `"low"` | ~1,000 tokens |
 | `"medium"` | ~5,000 tokens |
 | `"high"` | ~20,000 tokens |
+| `"xhigh"` | ~50,000 tokens |
 | `"max"` | Maximum available |
 
 ---
