@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
-description: "Verified feature set in agent-framework-core 1.3.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
+description: "Verified feature set in agent-framework-core 1.4.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -17,9 +17,9 @@ language: python
 
 | Package | Version | Status |
 |---|---|---|
-| `agent-framework-core` | 1.3.0 | Stable |
-| `agent-framework-foundry` | 1.3.0 | Stable |
-| `agent-framework-openai` | 1.3.0 | Stable |
+| `agent-framework-core` | 1.4.0 | Stable |
+| `agent-framework-foundry` | 1.4.0 | Stable |
+| `agent-framework-openai` | 1.4.0 | Stable |
 | `agent-framework-a2a` | 1.0.0b260429 | Beta |
 | `agent-framework-declarative` | 1.0.0b260429 | Beta |
 | `agent-framework-copilotstudio` | 1.0.0b260429 | Beta |
@@ -31,7 +31,7 @@ language: python
 | `agent-framework-orchestrations` | 1.0.0b260429 | Beta |
 | `agent-framework-redis` | 1.0.0b260429 | Beta |
 
-The `agent-framework` meta package (1.3.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
+The `agent-framework` meta package (1.4.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
 
 ## Agent2Agent (A2A) protocol
 

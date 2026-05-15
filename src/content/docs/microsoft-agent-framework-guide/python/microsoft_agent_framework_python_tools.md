@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
-description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.3.0."
+description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.4.0."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -11,7 +11,7 @@ Tools are how agents call back into your code. Agent Framework offers two ways t
 
 This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
 
-Verified against `agent-framework-core==1.3.0` (`agent_framework._tools`).
+Verified against `agent-framework-core==1.4.0` (`agent_framework._tools`).
 
 ## Minimal `@tool`
 
@@ -612,6 +612,128 @@ result = await some_tool.invoke(arguments={"x": 1}, skip_parsing=True)
 ```
 
 `SKIP_PARSING` makes `invoke()` return whatever the wrapped function returned — a dict, a Pydantic model, a numpy array. Useful when an outer harness already understands the type and would only have to undo the `Content` wrapping.
+
+## `FunctionExecutor` and `@executor` — function-based workflow nodes
+
+`FunctionExecutor` and its `@executor` decorator let you embed plain Python functions directly into a `WorkflowBuilder` graph without subclassing `Executor`. Sync functions run in a thread pool via `asyncio.to_thread` automatically.
+
+### Pattern 1 — `@executor` decorator (simplest)
+
+```python
+from agent_framework import FunctionExecutor, WorkflowBuilder, executor, WorkflowContext
+
+# The decorated function IS the executor — its return value becomes the output message.
+@executor(id="upper_case")
+async def upper_case(text: str) -> None:
+    return text.upper()
+```
+
+### Pattern 2 — explicit `FunctionExecutor` constructor
+
+Use this when you want to wrap an existing function without modifying it (e.g. library code or a function shared between the agent pipeline and other call sites):
+
+```python
+def word_count(doc: str) -> str:
+    return str(len(doc.split()))
+
+counter = FunctionExecutor(word_count, id="word_counter")
+```
+
+### Pattern 3 — with `WorkflowContext` for `send_message` / `yield_output`
+
+Declare a `WorkflowContext` parameter to get access to `send_message` and `yield_output`. The framework detects the parameter by type and injects it automatically — it is not part of the JSON schema.
+
+```python
+@executor(id="splitter")
+async def splitter(text: str, ctx: WorkflowContext[str]) -> None:
+    for sentence in text.split("."):
+        if sentence.strip():
+            await ctx.send_message(sentence.strip())
+```
+
+### Wiring into a workflow
+
+All three executor forms are first-class `Executor` objects — pass them directly to `WorkflowBuilder`:
+
+```python
+import asyncio
+from agent_framework import FunctionExecutor, WorkflowBuilder, executor, WorkflowContext
+
+@executor(id="upper_case")
+async def upper_case(text: str) -> None:
+    return text.upper()
+
+def word_count(doc: str) -> str:
+    return str(len(doc.split()))
+
+counter = FunctionExecutor(word_count, id="word_counter")
+
+workflow = (
+    WorkflowBuilder(start_executor=upper_case)
+    .add_edge(upper_case, counter)
+    .build()
+)
+
+result = asyncio.run(workflow.run("hello world"))
+print(result.get_outputs())
+```
+
+> **Note:** Sync functions passed to `FunctionExecutor` (or `@executor`) are automatically run in a thread pool via `asyncio.to_thread`, so blocking I/O in the function body won't stall the event loop.
+
+## Workflow visualization with `WorkflowViz`
+
+`WorkflowViz` renders any built workflow to Mermaid, DOT, or raster/vector formats. Import it from `agent_framework` — no extra dependencies for Mermaid output.
+
+```python
+from agent_framework import WorkflowViz
+
+viz = WorkflowViz(workflow)
+
+# Mermaid diagram — paste directly into a Markdown fence or GitHub comment
+print(viz.to_mermaid())
+
+# DOT format — compatible with graphviz CLI and any DOT renderer
+print(viz.to_digraph())
+
+# Export to file (requires `pip install graphviz` and the dot binary)
+# viz.export(format="svg", filename="workflow.svg")
+# viz.export(format="png")
+# viz.export(format="dot", filename="workflow.dot")
+```
+
+### Full two-node example
+
+```python
+import asyncio
+from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowViz, executor
+
+@executor(id="upper_case")
+async def upper_case(text: str) -> None:
+    return text.upper()
+
+def word_count(doc: str) -> str:
+    return str(len(doc.split()))
+
+counter = FunctionExecutor(word_count, id="word_counter")
+
+workflow = (
+    WorkflowBuilder(start_executor=upper_case)
+    .add_edge(upper_case, counter)
+    .build()
+)
+
+# Visualise before running — useful in Jupyter notebooks or CI artefacts
+viz = WorkflowViz(workflow)
+print(viz.to_mermaid())
+# Output:
+# graph LR
+#   upper_case --> word_counter
+
+result = asyncio.run(workflow.run("hello world"))
+print(result.get_outputs())
+```
+
+Pass `include_internal_executors=True` to `WorkflowViz` when debugging routing — the diagram then includes the framework's auto-injected glue nodes that are normally hidden.
 
 ## Patterns
 

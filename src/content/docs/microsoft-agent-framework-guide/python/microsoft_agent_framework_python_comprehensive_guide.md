@@ -1,20 +1,20 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.3.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, and observability."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.4.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, and observability."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest verified release: 1.3.0 | Python 3.10+
+Latest verified release: 1.4.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version:** 1.3.0 (`agent-framework` and `agent-framework-core`)
+**Framework Version:** 1.4.0 (`agent-framework` and `agent-framework-core`)
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.3.0`).**
+> **API reference (verified against `agent-framework-core==1.4.0`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
@@ -2052,6 +2052,143 @@ AgentModeProvider(
 
 ---
 
+## Prompt Injection Defense — `SecureAgentConfig` (Experimental)
+
+> **Experimental.** `SecureAgentConfig` is `ExperimentalFeature.FIDES` in 1.4.0. The API is functional but may change between minor releases.
+
+`SecureAgentConfig` is a `ContextProvider` that defends against prompt injection attacks using **information-flow control**. It labels every tool result as either `TRUSTED` or `UNTRUSTED`, prevents untrusted content from calling privileged tools, and optionally logs policy violations. The approach is inspired by the FIDES research on taint tracking for LLM pipelines.
+
+- The label tracker (`LabelTrackingFunctionMiddleware`) marks results from tools that touch external or user-controlled data as `IntegrityLabel.UNTRUSTED`.
+- The policy enforcer (`PolicyEnforcementFunctionMiddleware`) prevents untrusted-labelled context from invoking privileged tools.
+- When a violation is detected, the agent either blocks the call (`block_on_violation=True`, default) or routes it for human approval (`approval_on_violation=True`).
+
+Import from `agent_framework.security` — this is a different sub-module from the main `agent_framework` namespace:
+
+```python
+from agent_framework.security import SecureAgentConfig, IntegrityLabel, ConfidentialityLabel
+```
+
+### Quickstart
+
+```python
+import asyncio
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
+from agent_framework.security import SecureAgentConfig, IntegrityLabel, ConfidentialityLabel
+
+
+@tool
+async def fetch_news(query: str) -> str:
+    """Fetch news headlines for a query — untrusted external content."""
+    return f"[external] Top story about {query}: ..."
+
+
+@tool
+async def summarize(text: str) -> str:
+    """Summarize trusted, internal content."""
+    return f"Summary: {text[:100]}"
+
+
+security = SecureAgentConfig(
+    auto_hide_untrusted=True,                          # hide UNTRUSTED results from the model
+    default_integrity=IntegrityLabel.UNTRUSTED,        # tool calls default to untrusted
+    default_confidentiality=ConfidentialityLabel.PUBLIC,
+    block_on_violation=True,                           # block on policy violation (default)
+    enable_audit_log=True,
+    enable_policy_enforcement=True,
+)
+
+# SecureAgentConfig is a ContextProvider — pass it via context_providers=
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research assistant.",
+    tools=[fetch_news, summarize],
+    context_providers=[security],
+)
+
+
+async def main() -> None:
+    response = await agent.run("What's the latest news about quantum computing?")
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+### Allowing specific tools in untrusted context
+
+Use `allow_untrusted_tools` to whitelist tools that may run even when the call stack is tainted with untrusted data. Pair with `approval_on_violation=True` to request human approval instead of hard-blocking unknown cases:
+
+```python
+import asyncio
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
+from agent_framework.security import SecureAgentConfig, IntegrityLabel, ConfidentialityLabel
+
+
+@tool
+async def fetch_news(query: str) -> str:
+    """Fetch external news — produces UNTRUSTED output."""
+    return f"[external] News about {query}"
+
+
+@tool
+async def send_email(to: str, body: str) -> str:
+    """Send an email — privileged, must not be reachable from untrusted data."""
+    return f"sent to {to}"
+
+
+@tool
+async def log_search(query: str) -> str:
+    """Log the search query for auditing — allowed even in untrusted context."""
+    return f"logged: {query}"
+
+
+security = SecureAgentConfig(
+    auto_hide_untrusted=True,
+    default_integrity=IntegrityLabel.UNTRUSTED,
+    default_confidentiality=ConfidentialityLabel.PUBLIC,
+    allow_untrusted_tools={"log_search"},   # these tools may run in untrusted context
+    block_on_violation=False,
+    approval_on_violation=True,             # request human approval instead of hard block
+    enable_audit_log=True,
+    enable_policy_enforcement=True,
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research assistant. Do not send emails based on news content.",
+    tools=[fetch_news, send_email, log_search],
+    context_providers=[security],
+)
+
+
+async def main() -> None:
+    response = await agent.run("Find news about AI and send a summary to boss@example.com.")
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+### `SecureAgentConfig` constructor reference
+
+| Parameter | Type | Default | Effect |
+|---|---|---|---|
+| `auto_hide_untrusted` | `bool` | `False` | Hide tool results labelled `UNTRUSTED` from the model's view |
+| `default_integrity` | `IntegrityLabel` | `UNTRUSTED` | Default integrity label applied to all tool results |
+| `default_confidentiality` | `ConfidentialityLabel` | `PUBLIC` | Default confidentiality label |
+| `allow_untrusted_tools` | `set[str]` | `set()` | Tool names allowed to execute even when context is untrusted |
+| `block_on_violation` | `bool` | `True` | Block the call on a policy violation |
+| `approval_on_violation` | `bool` | `False` | Route violation to human approval instead of blocking |
+| `enable_audit_log` | `bool` | `False` | Log every policy decision to the audit logger |
+| `enable_policy_enforcement` | `bool` | `True` | Enable the `PolicyEnforcementFunctionMiddleware` |
+| `quarantine_chat_client` | `SupportsChatGetResponse \| None` | `None` | Optional isolated LLM for the `quarantined_llm` built-in security tool |
+
+`SecureAgentConfig` automatically injects `LabelTrackingFunctionMiddleware`, and (when `enable_policy_enforcement=True`) `PolicyEnforcementFunctionMiddleware`. It also adds two built-in security tools: `quarantined_llm` (runs a prompt through an isolated model without access to privileged tools) and `inspect_variable` (lets the agent inspect labelled variables before acting on them).
+
+---
+
 ## Production Deployment Cheatsheet
 
 - **Pin sub-packages** rather than the umbrella meta-install — `pip install agent-framework-core agent-framework-openai agent-framework-orchestrations` keeps the dependency tree tight.
@@ -2068,6 +2205,7 @@ AgentModeProvider(
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | May 15, 2026 | Core bumped 1.3.0 → 1.4.0. Added `SecureAgentConfig` (`ExperimentalFeature.FIDES`) section covering information-flow control, label tracking, policy enforcement, and audit logging. Added `InMemorySkillsSource`, `DelegatingSkillsSource`, `FunctionExecutor`/`@executor`, and `WorkflowViz` to the relevant reference pages. Version strings updated throughout; verified against installed `agent-framework==1.4.0`. |
 | 1.3.0 | May 9, 2026 | Core bumped 1.2.2 → 1.3.0. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. `MemoryStore` and `SkillResource` now emit `ExperimentalWarning` on import. Version strings updated throughout; `Agent` and `FoundryChatClient` verified against installed `agent-framework==1.3.0` (`.routine-envs/check-0509-py`). |
 | 1.2.2 | May 2026 | Guide verified against `agent-framework-core==1.2.2`; skills, functional workflows, and `Agent.as_tool()` added. |
 

@@ -1,17 +1,17 @@
 ---
 title: "Microsoft Agent Framework (Python) — Functional Workflows"
-description: "Build workflows with plain Python functions using the @workflow and @step decorators, RunContext for HITL and state, FunctionalWorkflow checkpointing, and as_agent() for multi-agent composition. Verified against agent-framework-core 1.3.0."
+description: "Build workflows with plain Python functions using the @workflow and @step decorators, RunContext for HITL and state, FunctionalWorkflow checkpointing, and as_agent() for multi-agent composition. Verified against agent-framework-core 1.4.0."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # Functional Workflows — Python
 
-> **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature` in `agent-framework-core==1.3.0`. The API is stable enough to build on but may change between minor releases.
+> **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature` in `agent-framework-core==1.4.0`. The API is stable enough to build on but may change between minor releases.
 
 Functional workflows let you write a workflow as a plain `async` Python function — no executor classes, no graph wiring, no edge objects. Control flow is ordinary Python: `if`/`else`, `for`, `asyncio.gather`. The framework tracks step results, emits events, handles HITL pauses, and persists checkpoints automatically.
 
-Verified against `agent-framework-core==1.3.0` (`agent_framework._workflows._functional`).
+Verified against `agent-framework-core==1.4.0` (`agent_framework._workflows._functional`).
 
 ## When to choose functional vs graph workflows
 
