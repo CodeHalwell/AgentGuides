@@ -26,7 +26,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['chatbot', 'automation', 'prototyping'],
-    version: 'v1.24.0',
+    version: 'v1.25.0',
   },
   {
     id: 'pydanticai',
@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.96.0',
+    version: 'v1.96.1',
   },
   {
     id: 'openai-agents',
@@ -114,7 +114,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Intermediate',
     useCases: ['rag', 'search', 'knowledge-retrieval'],
-    version: 'v0.14.21',
+    version: 'v0.14.22',
   },
   {
     id: 'llamaindex-ts',
@@ -157,7 +157,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'v1.3.0',
+    version: 'v1.4.0',
   },
   {
     id: 'google-adk',
@@ -179,7 +179,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.1.81',
+    version: 'v0.2.82',
   },
   {
     id: 'claude-sdk-ts',
@@ -190,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.2.141',
+    version: 'v0.3.142',
   },
   {
     id: 'mistral',

@@ -5,7 +5,7 @@ framework: llamaindex
 language: python
 ---
 
-Latest: 0.14.20 | Updated: April 2026
+Latest: 0.14.22 | Updated: May 2026
 # LlamaIndex Comprehensive Technical Guide
 
 ## Complete Framework for Building LLM-Powered Agents with RAG, Data Connectors, and Agentic Reasoning
@@ -3869,6 +3869,7 @@ This concludes the comprehensive guide section. Each topic includes conceptual e
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.14.22 | May 15, 2026 | Patch release; `Latest:` header updated 0.14.20 → 0.14.22; revision history entry added. Note: `ReActAgent`, `FunctionAgent`, `AgentWorkflow`, `CodeActAgent` confirmed importable from `llama_index.core.agent` in 0.14.22 (`.routine-envs/check-0515-llama`); no `DeprecationWarning` emissions. |
 | 0.14.20 | April 3, 2026 | `AgentWorkflow` is now the only primary agent pattern; legacy agent classes hard-removed (`ReActAgent`, `FunctionCallingAgent`, `AgentRunner`, `OpenAIAgent`, `StructuredPlanningAgent` — all raise `ImportError`); LlamaSheets integration; LiteParse document parser; Agent Client Protocol |
 | 0.14.8 | Previous version | Legacy agents deprecated (still worked with warnings) |
 | 0.12.x | November 2025 | Previous documented version |

@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.24.0** · January 2026 · Python 3.10+
+    **v1.25.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Learning, prototyping, simple automation, code-first workflows.
@@ -67,11 +67,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./smolagents_production_guide/" />
 </CardGrid>
 
-## What's new in v1.24.0 (January 2026)
+## What's new in v1.25.0 (May 2026)
 
-- Expanded model provider coverage (Anthropic, Gemini, Ollama improvements).
-- Tool call performance optimisations.
-- Multi-agent orchestration patterns stabilised.
+- **v1.25.0 (May 15)** — Minor release. `InferenceClientModel` default `model_id` changed to `Qwen/Qwen3-Next-80B-A3B-Thinking` (previously `Qwen/Qwen2.5-72B-Instruct`). Snippets that rely on the default model without an explicit `model_id` argument will now route to Qwen3 instead of Qwen2.5 — specify `model_id` explicitly if you need a particular model. `HfApiModel` remains absent (removed in v1.24.0). Core imports (`CodeAgent`, `InferenceClientModel`, `ToolCallingAgent`, `tool`, `Tool`) verified against installed `smolagents==1.25.0` (`.routine-envs/check-0515-smol`); no `DeprecationWarning` emissions.
+- **v1.24.0 (January 2026)** — Expanded model provider coverage (Anthropic, Gemini, Ollama improvements). Tool call performance optimisations. Multi-agent orchestration patterns stabilised. `HfApiModel` removed — use `InferenceClientModel`.
 
 ## Install, minimal example
 
@@ -96,6 +95,7 @@ Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#intr
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-15 | 1.25.0 | Version bumped 1.24.0 → 1.25.0; "What's new" updated noting `InferenceClientModel` default model change to `Qwen/Qwen3-Next-80B-A3B-Thinking`. Core imports verified against installed `smolagents==1.25.0` (`.routine-envs/check-0515-smol`); no `DeprecationWarning` emissions. |
 | 2026-04-21 | 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | January 16, 2026 | 1.24.0 | Expanded model providers; tool call perf; multi-agent patterns. |
 | November 2025 | 1.23.0 | Initial documented version. |

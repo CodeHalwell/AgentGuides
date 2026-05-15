@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.1.81** · May 2026 · Python 3.10+
+    **v0.2.82** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Claude-exclusive apps, Computer Use, MCP-heavy workflows, durable sessions.
@@ -74,8 +74,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" />
 </CardGrid>
 
-## What's new in v0.1.81 (May 2026)
+## What's new in v0.2.82 (May 2026)
 
+- **v0.2.82 (May 15)** — Minor release (0.1.x → 0.2.x series). The Claude Code CLI is now bundled within the package — no separate CLI installation required. `ClaudeAgentOptions` gains several new fields in 0.2.x: `agents` (multi-agent definitions), `skills` (skill loading), `sandbox` (`SandboxSettings` for network/filesystem isolation), `plugins` (`SdkPluginConfig` list), `thinking` (extended thinking config: `ThinkingConfigAdaptive`, `ThinkingConfigEnabled`, `ThinkingConfigDisabled`), `effort` (`low`/`medium`/`high`/`xhigh`/`max` effort levels), `output_format` (structured output schema), `task_budget` (`TaskBudget` — CPU/cost caps). All existing symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `PermissionMode`, `McpServerConfig`) verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0515-claude-py`); no `DeprecationWarning` emissions.
 - **v0.1.81 (May 12)** — Patch release; stability and dependency updates. `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` verified against installed 0.1.81 (`.routine-envs/check-0512-py`); no DeprecationWarnings.
 - **v0.1.74–v0.1.80 (May 6–9)** — Patch releases; stability and dependency updates.
 - **v0.1.73 (May 5)** — Patch release; stability improvements.
@@ -135,6 +136,7 @@ Ready? **[Start Zero → Hero Step 1 →](./anthropic_claude_agent_sdk_comprehen
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-15 | claude-agent-sdk 0.2.82 | Version bumped 0.1.81 → 0.2.82 (0.1.x → 0.2.x series); "What's new" updated noting bundled CLI and new `ClaudeAgentOptions` fields (`agents`, `skills`, `sandbox`, `plugins`, `thinking`, `effort`, `output_format`, `task_budget`); revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0515-claude-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-12 | claude-agent-sdk 0.1.81 | Version bumped 0.1.80 → 0.1.81; "What's new" updated; revision history entry added. `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` verified against installed 0.1.81 (`.routine-envs/check-0512-py`); no DeprecationWarnings. | Claude routine |
 | 2026-05-09 | claude-agent-sdk 0.1.80 | Version bumped 0.1.73 → 0.1.80 (seven patch releases: 0.1.74–0.1.80); "What's new" updated; revision history entry added. All symbols verified against installed 0.1.80 (`.routine-envs/check-0509-py`); no DeprecationWarnings. | Claude routine |
 | 2026-05-05 | claude-agent-sdk 0.1.73 | Version bumped 0.1.72 → 0.1.73; "What's new" updated; revision history entry added. `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` verified against installed 0.1.73 (`.routine-envs/check-0505`). | Claude routine |
