@@ -4,7 +4,7 @@ description: "The Claude Agent SDK is the official TypeScript library for buildi
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-Latest: 0.2.140 | Updated: May 13, 2026
+Latest: 0.2.141 | Updated: May 14, 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -3264,6 +3264,7 @@ The comprehensive guide continues with detailed sections on each topic with exte
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.2.141 | May 14, 2026 | Patch release; stability and dependency updates. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.2.141` (`.routine-envs/check-0514-node`): 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants. |
 | 0.2.140 | May 13, 2026 | Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.140` (`.routine-envs/check-0513-node`). |
 | 0.2.139 | May 12, 2026 | Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.139` (`.routine-envs/check-0512-node`). |
 | 0.2.138 | May 9, 2026 | Patch releases 0.2.129–0.2.138; session management APIs promoted to stable. Verified against npm `@anthropic-ai/claude-agent-sdk@0.2.138` (2026-05-09, `.routine-envs/check-0509-node`). |

@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.2.140** · May 2026 · Node 18+
+    **v0.2.141** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack Claude apps, Node streaming servers, MCP-rich workflows.
@@ -70,8 +70,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./claude_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.2.140 (May 2026)
+## What's new in v0.2.141 (May 2026)
 
+- **v0.2.141 (May 14)** — Patch release; stability and dependency updates. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.2.141` (`.routine-envs/check-0514-node`): `query`, `tool`, `createSdkMcpServer`, session management APIs (`forkSession`, `listSessions`, `getSessionInfo`, `getSessionMessages`, `InMemorySessionStore`, etc.), error types (`AbortError`, `DirectConnectError`), transport (`DirectConnectTransport`), and constants (`EXIT_REASONS`, `HOOK_EVENTS`, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`) all present.
 - **v0.2.140 (May 13)** — Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.140` (`.routine-envs/check-0513-node`).
 - **v0.2.139 (May 12)** — Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.139` (`.routine-envs/check-0512-node`).
 - **v0.2.129–0.2.138 (May 6–9)** — Ten patch releases promoting session management APIs to stable. New stable exports: `InMemorySessionStore`, `createSdkMcpServer`, `forkSession`, `deleteSession`, `listSessions`, `getSessionInfo`, `getSessionMessages`, `getSubagentMessages`, `importSessionToStore`, `listSubagents`, `renameSession`, `tagSession`, `resolveSettings`, `startup`. New error types: `AbortError`, `DirectConnectError`. New transport: `DirectConnectTransport` with `parseDirectConnectUrl`. New constants: `EXIT_REASONS`, `HOOK_EVENTS`, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`.
@@ -115,6 +116,7 @@ Ready? **[Start Zero → Hero Step 1 →](./claude_agent_sdk_typescript_comprehe
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-14 | @anthropic-ai/claude-agent-sdk 0.2.141 | Version bumped 0.2.140 → 0.2.141; "What's new" updated; comprehensive guide header updated; revision history entry added. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.2.141` (`.routine-envs/check-0514-node`): 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants. | Claude routine |
 | 2026-05-13 | @anthropic-ai/claude-agent-sdk 0.2.140 | Version bumped 0.2.139 → 0.2.140; "What's new" updated; comprehensive guide header updated; revision history entry added. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.140` (`.routine-envs/check-0513-node`). | Claude routine |
 | 2026-05-12 | @anthropic-ai/claude-agent-sdk 0.2.139 | Version bumped 0.2.138 → 0.2.139; "What's new" updated; revision history entry added. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.139` (`.routine-envs/check-0512-node`). | Claude routine |
 | 2026-05-09 | @anthropic-ai/claude-agent-sdk 0.2.138 | Version bumped 0.2.128 → 0.2.138 (ten patch releases 0.2.129–0.2.138); "What's new" updated; all exports verified against npm `@anthropic-ai/claude-agent-sdk@0.2.138` (2026-05-09, `.routine-envs/check-0509-node`). | Claude routine |

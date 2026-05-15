@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.95.0',
+    version: 'v1.96.0',
   },
   {
     id: 'openai-agents',
@@ -190,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.2.140',
+    version: 'v0.2.141',
   },
   {
     id: 'mistral',
@@ -212,7 +212,7 @@ export const frameworks: Framework[] = [
     category: 'Enterprise',
     difficulty: 'Intermediate',
     useCases: ['enterprise', 'microsoft', 'plugins'],
-    version: 'Python 1.41.3 / .NET 1.74.0',
+    version: 'Python 1.42.0 / .NET 1.74.0',
   },
 ];
 
