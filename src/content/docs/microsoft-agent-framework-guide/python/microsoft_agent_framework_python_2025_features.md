@@ -20,16 +20,16 @@ language: python
 | `agent-framework-core` | 1.4.0 | Stable |
 | `agent-framework-foundry` | 1.4.0 | Stable |
 | `agent-framework-openai` | 1.4.0 | Stable |
-| `agent-framework-a2a` | 1.0.0b260429 | Beta |
-| `agent-framework-declarative` | 1.0.0b260429 | Beta |
-| `agent-framework-copilotstudio` | 1.0.0b260429 | Beta |
-| `agent-framework-mem0` | 1.0.0b260429 | Beta |
-| `agent-framework-anthropic` | 1.0.0b260429 | Beta |
-| `agent-framework-bedrock` | 1.0.0b260429 | Beta |
-| `agent-framework-azurefunctions` | 1.0.0b260429 | Beta |
-| `agent-framework-durabletask` | 1.0.0b260429 | Beta |
-| `agent-framework-orchestrations` | 1.0.0b260429 | Beta |
-| `agent-framework-redis` | 1.0.0b260429 | Beta |
+| `agent-framework-a2a` | 1.0.0b260514 | Beta |
+| `agent-framework-declarative` | 1.0.0b260514 | Beta |
+| `agent-framework-copilotstudio` | 1.0.0b260514 | Beta |
+| `agent-framework-mem0` | 1.0.0b260514 | Beta |
+| `agent-framework-anthropic` | 1.0.0b260514 | Beta |
+| `agent-framework-bedrock` | 1.0.0b260514 | Beta |
+| `agent-framework-azurefunctions` | 1.0.0b260514 | Beta |
+| `agent-framework-durabletask` | 1.0.0b260514 | Beta |
+| `agent-framework-orchestrations` | 1.0.0b260514 | Beta |
+| `agent-framework-redis` | 1.0.0b260514 | Beta |
 
 The `agent-framework` meta package (1.4.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
 

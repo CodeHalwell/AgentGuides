@@ -16,7 +16,7 @@ This follows the [Agent Skills specification](https://agentskills.io). Verified 
 | Class | Role |
 |---|---|
 | `InlineSkill` | Code-defined skill: name, description, instructions body, zero or more resources and scripts |
-| `ClassSkill` | Base class for reusable, self-contained skill types with `create_resource()` and `create_script()` factory methods |
+| `ClassSkill` | Abstract base class for reusable, distributable skill types — subclass it, override the `instructions` property, and decorate methods with `@ClassSkill.resource` / `@ClassSkill.script` |
 | `InlineSkillResource` | Named static or dynamic content the model can fetch via `read_skill_resource` |
 | `SkillScript` | Executable code (in-process callable or file on disk) the model can invoke via `run_skill_script` |
 | `SkillsProvider` | A `ContextProvider` that advertises skills in the prompt and exposes the three tools |
@@ -571,43 +571,129 @@ When the agent tries to run a script, the run pauses and emits a `function_appro
 
 ## `ClassSkill` — reusable skill types
 
-Subclass `ClassSkill` when you want a parameterisable, self-contained skill type with factory methods for resources and scripts. This is the pattern for skills that need different configs per agent (e.g. different DB connection strings):
+Subclass `ClassSkill` to create a self-contained, distributable skill class. This pattern is ideal when different teams or deployments need the same skill with different configuration (e.g. different DB connection strings, API endpoints, or tenant IDs).
+
+The correct API (verified against `agent-framework-core==1.4.0`):
+
+- `super().__init__(frontmatter=SkillFrontmatter(name=..., description=...))` — constructor takes only `frontmatter=`.
+- `@property instructions(self) -> str` — **abstract**; must be overridden to return the skill body text.
+- `@ClassSkill.resource` — decorator that marks an instance method as a resource auto-discovered at runtime.
+- `@ClassSkill.script` — decorator that marks an instance method as an in-process script.
+
+### Minimal example with `@ClassSkill.resource` and `@ClassSkill.script`
 
 ```python
-from agent_framework import Agent, ClassSkill, InlineSkillResource, SkillsProvider
+import asyncio
+import json
+from agent_framework import (
+    Agent,
+    ClassSkill,
+    SkillFrontmatter,
+    SkillsProvider,
+)
 from agent_framework.openai import OpenAIChatClient
 
 
 class DatabaseSkill(ClassSkill):
-    """Read-only database access skill."""
+    """Read-only database access skill — one instance per connection string."""
 
     def __init__(self, connection_string: str) -> None:
         super().__init__(
-            name="database",
-            description="Query the production database.",
-            instructions="Use read_skill_resource('database', 'schema') then craft SELECT queries only.",
+            frontmatter=SkillFrontmatter(
+                name="database",
+                description="Query the production PostgreSQL database.",
+            )
         )
         self._conn = connection_string
 
-    def create_resource(self, name: str) -> InlineSkillResource | None:
-        if name == "schema":
-            return InlineSkillResource(
-                name="schema",
-                description="Database schema.",
-                function=self._fetch_schema,
-            )
-        return None
+    @property
+    def instructions(self) -> str:
+        return (
+            "Use `read_skill_resource('database', 'schema')` to see the tables. "
+            "Then craft a read-only SELECT query and run it with `run_skill_script('database', 'run-query', {\"sql\": \"...\"})`. "
+            "Never run INSERT, UPDATE, DELETE, or DROP."
+        )
 
-    async def _fetch_schema(self) -> str:
-        # In production, query information_schema here
-        return "users(id, email)\norders(id, user_id, total)"
+    @ClassSkill.resource(description="Compact database schema (tables + columns).")
+    async def schema(self) -> str:
+        # In production, query information_schema using self._conn
+        return "users(id, email, created_at)\norders(id, user_id, total, status)"
+
+    @ClassSkill.script(name="run-query", description="Execute a SELECT and return up to 100 rows as JSON.")
+    async def run_query(self, sql: str) -> str:
+        if not sql.strip().upper().startswith("SELECT"):
+            raise ValueError("Only SELECT queries are permitted.")
+        # In production: rows = await asyncpg.fetch(sql, limit=100)
+        return json.dumps([{"id": 1, "example": True}])
 
 
-db_skill = DatabaseSkill(connection_string="postgresql://localhost/prod")
+# Different agents / environments get different connection strings — same class.
+db_skill = DatabaseSkill(connection_string="postgresql://prod-host/mydb")
+
 agent = Agent(
     client=OpenAIChatClient(),
+    instructions="You are a data analyst.",
     context_providers=[SkillsProvider(db_skill)],
 )
+
+
+async def main() -> None:
+    session = agent.create_session()
+    response = await agent.run("How many orders does user 42 have?", session=session)
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+Key points from the source:
+- **Name defaults**: `@ClassSkill.resource` uses the method name (underscores → hyphens) as the resource name unless you pass `name=`.
+- **Async/sync**: Both sync and async methods work for resources and scripts.
+- **Caching**: `resources` and `scripts` properties are cached after first access. Instantiate a new `ClassSkill` object per agent that needs a fresh connection or config.
+- **Distribution**: Ship a `ClassSkill` subclass in a shared library — callers import and instantiate it, framework handles introspection.
+
+### Explicit property override — when the decorator pattern doesn't fit
+
+Override `resources` and `scripts` directly for the most control (e.g. constructing resources from a dynamic config table):
+
+```python
+from agent_framework import (
+    ClassSkill,
+    InlineSkillResource,
+    InlineSkillScript,
+    SkillFrontmatter,
+)
+
+
+class ConfigDrivenSkill(ClassSkill):
+    def __init__(self, resource_configs: list[dict]) -> None:
+        super().__init__(
+            frontmatter=SkillFrontmatter(
+                name="config-skill",
+                description="Dynamic skill built from a config table.",
+            )
+        )
+        self._configs = resource_configs
+
+    @property
+    def instructions(self) -> str:
+        names = ", ".join(c["name"] for c in self._configs)
+        return f"Available resources: {names}. Use read_skill_resource to fetch each one."
+
+    @property
+    def resources(self):
+        result = []
+        for cfg in self._configs:
+            # capture loop variable correctly
+            content = cfg["content"]
+            result.append(
+                InlineSkillResource(
+                    name=cfg["name"],
+                    description=cfg.get("description", ""),
+                    content=content,
+                )
+            )
+        return result
 ```
 
 ## `SkillsProvider` reference
