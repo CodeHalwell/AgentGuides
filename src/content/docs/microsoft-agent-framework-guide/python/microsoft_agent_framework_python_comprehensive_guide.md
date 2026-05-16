@@ -900,13 +900,14 @@ async def handle_data(self, message, ctx):
 async def handle_custom(self, message, ctx): ...
 ```
 
-### Routing patterns — fan-out, fan-in, switch-case
+### Routing patterns — fan-out, fan-in, switch-case, multi-selection, chain shortcut
 
-Beyond linear `add_edge`, `WorkflowBuilder` exposes four routing primitives. Pick the one that matches the topology you want.
+Beyond linear `add_edge`, `WorkflowBuilder` exposes five routing primitives. Pick the one that matches the topology you want.
 
-**Fan-out** — broadcast one source to many targets:
+**Fan-out** — broadcast one source to many targets concurrently:
 
 ```python
+# parser, enricher_a, enricher_b, enricher_c are Executor instances
 workflow = (
     WorkflowBuilder(start_executor=parser)
     .add_fan_out_edges(parser, [enricher_a, enricher_b, enricher_c])
@@ -914,10 +915,11 @@ workflow = (
 )
 ```
 
-**Fan-in** — converge many sources onto one target. The target's handler receives the **list** of upstream messages, so its input type must be `list[T]`:
+**Fan-in** — converge many sources onto one target. The target's handler receives the **list** of upstream messages in one call, so its input type must be `list[T]`:
 
 ```python
-from typing import Never
+from typing import NoReturn
+from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 
 
 class Aggregator(Executor):
@@ -925,68 +927,155 @@ class Aggregator(Executor):
     async def aggregate(
         self,
         results: list[str],          # one entry per fan-in source
-        ctx: WorkflowContext[Never, str],
+        ctx: WorkflowContext[NoReturn, str],
     ) -> None:
-        await ctx.yield_output(" | ".join(results))
+        combined = " | ".join(results)
+        await ctx.yield_output(combined)
 
 
+# parser, worker_a, worker_b, worker_c are Executor instances
 workflow = (
     WorkflowBuilder(start_executor=parser)
     .add_fan_out_edges(parser, [worker_a, worker_b, worker_c])
-    .add_fan_in_edges([worker_a, worker_b, worker_c], Aggregator())
+    .add_fan_in_edges([worker_a, worker_b, worker_c], Aggregator(id="agg"))
     .build()
 )
 ```
 
-**Switch-case** — first-match routing on a payload predicate. Always include a `Default(...)` to catch the fall-through:
+**Switch-case** — first-match routing on a payload predicate. Always include a `Default(...)` to catch the fall-through. Conditions are evaluated top-to-bottom; the first truthy match wins.
 
 ```python
+import asyncio
 from dataclasses import dataclass
-from agent_framework import Case, Default, Executor, WorkflowBuilder, WorkflowContext, handler
+from typing import NoReturn
+from agent_framework import (
+    Case, Default, Executor,
+    WorkflowBuilder, WorkflowContext, executor, handler,
+)
 
 
 @dataclass
-class Result:
+class ScoredText:
+    text: str
     score: int
 
 
-class Evaluator(Executor):
+class Scorer(Executor):
+    """Assign a word-count score to input text."""
     @handler
-    async def evaluate(self, text: str, ctx: WorkflowContext[Result]) -> None:
-        await ctx.send_message(Result(score=len(text)))
+    async def score(self, text: str, ctx: WorkflowContext[ScoredText]) -> None:
+        await ctx.send_message(ScoredText(text=text, score=len(text.split())))
 
+
+@executor(id="long-handler")
+async def long_handler(payload: ScoredText, ctx: WorkflowContext[NoReturn, str]) -> None:
+    await ctx.yield_output(f"[LONG] {payload.text[:40]}…")
+
+
+@executor(id="short-handler")
+async def short_handler(payload: ScoredText, ctx: WorkflowContext[NoReturn, str]) -> None:
+    await ctx.yield_output(f"[SHORT] {payload.text}")
+
+
+scorer = Scorer(id="scorer")
 
 workflow = (
-    WorkflowBuilder(start_executor=Evaluator(id="eval"))
+    WorkflowBuilder(start_executor=scorer)
     .add_switch_case_edge_group(
-        Evaluator(id="eval"),
-        [
-            Case(condition=lambda r: r.score > 100, target=long_form_handler),
-            Case(condition=lambda r: r.score > 10, target=mid_handler),
+        scorer,
+        cases=[
+            Case(condition=lambda p: p.score > 50, target=long_handler),
             Default(target=short_handler),
         ],
     )
     .build()
 )
+
+
+async def main() -> None:
+    short_result = await workflow.run("Hello world")
+    print(short_result.get_outputs()[-1])   # [SHORT] Hello world
+
+    long_input = " ".join(["word"] * 60)
+    long_result = await workflow.run(long_input)
+    print(long_result.get_outputs()[-1])    # [LONG] word word word…
+
+
+asyncio.run(main())
 ```
 
-Conditions evaluate top-to-bottom — the first one that returns truthy wins. The `Default` branch fires only if none matched.
-
-**Multi-selection** — like fan-out, but a `selection_func(message, target_ids)` returns the *subset* of targets that should receive each payload:
+**Multi-selection** — like fan-out, but a `selection_func(message, target_ids) -> list[str]` chooses *which subset* of targets receives each message. Use this when routing logic depends on the message payload at runtime (e.g. high-priority tasks use all workers; low-priority tasks use only one):
 
 ```python
-def select_workers(task, available: list[str]) -> list[str]:
-    return available if task.priority == "high" else [available[0]]
+import asyncio
+from dataclasses import dataclass
+from typing import NoReturn
+from agent_framework import (
+    Executor, FunctionExecutor, WorkflowBuilder,
+    WorkflowContext, executor, handler,
+)
 
+
+@dataclass
+class Task:
+    description: str
+    priority: str   # "high" | "low"
+
+
+class Dispatcher(Executor):
+    @handler
+    async def dispatch(self, raw: str, ctx: WorkflowContext[Task]) -> None:
+        priority = "high" if "urgent" in raw.lower() else "low"
+        await ctx.send_message(Task(description=raw, priority=priority))
+
+
+@executor(id="specialist-a")
+async def specialist_a(task: Task, ctx: WorkflowContext[NoReturn, str]) -> None:
+    await ctx.yield_output(f"[A] handled: {task.description}")
+
+
+@executor(id="specialist-b")
+async def specialist_b(task: Task, ctx: WorkflowContext[NoReturn, str]) -> None:
+    await ctx.yield_output(f"[B] handled: {task.description}")
+
+
+def route_by_priority(task: Task, target_ids: list[str]) -> list[str]:
+    """Send high-priority tasks to ALL workers; low-priority to the first only."""
+    return target_ids if task.priority == "high" else target_ids[:1]
+
+
+dispatcher = Dispatcher(id="dispatcher")
 
 workflow = (
     WorkflowBuilder(start_executor=dispatcher)
-    .add_multi_selection_edge_group(dispatcher, [worker_a, worker_b], selection_func=select_workers)
+    .add_multi_selection_edge_group(
+        dispatcher,
+        targets=[specialist_a, specialist_b],
+        selection_func=route_by_priority,
+    )
     .build()
 )
+
+
+async def main() -> None:
+    # Low-priority — only specialist_a runs
+    result = await workflow.run("Fix the login bug")
+    print(result.get_outputs())   # ['[A] handled: Fix the login bug']
+
+    # High-priority — both run concurrently
+    result = await workflow.run("Urgent: production is down")
+    print(result.get_outputs())   # ['[A] handled: ...', '[B] handled: ...']
+
+
+asyncio.run(main())
 ```
 
-Use `add_chain([a, b, c])` as a shortcut for `.add_edge(a, b).add_edge(b, c)` when you have a long linear pipeline.
+**Chain shortcut** — `add_chain([a, b, c])` is equivalent to `.add_edge(a, b).add_edge(b, c)`. Use it for long linear pipelines:
+
+```python
+# parser, enricher, writer are Executor instances
+workflow = WorkflowBuilder(start_executor=parser).add_chain([parser, enricher, writer]).build()
+```
 
 ### Filtering which executors yield outputs — `output_executors`
 
@@ -1567,7 +1656,7 @@ Same pattern works for `SupportsAgentRun`, `SupportsChatGetResponse`, and `Suppo
 
 ## Long-Term Memory — `MemoryStore` and `MemoryContextProvider`
 
-> **Experimental.** `MemoryStore` and `MemoryContextProvider` are marked `ExperimentalFeature` in 1.3.0. The API is functional but may change between minor releases.
+> **Experimental.** `MemoryStore` and `MemoryContextProvider` are marked `ExperimentalFeature` in 1.4.0. The API is functional but may change between minor releases.
 
 The memory system gives agents durable, cross-session recall. It works in two phases:
 
@@ -1790,7 +1879,7 @@ Wire it up exactly like `MemoryFileStore` — pass it as the `store=` argument t
 
 ## Agent Todo List — `TodoProvider` (Experimental HARNESS)
 
-> **Experimental.** `TodoProvider` and its backing stores are `ExperimentalFeature.HARNESS` in 1.3.0.
+> **Experimental.** `TodoProvider` and its backing stores are `ExperimentalFeature.HARNESS` in 1.4.0.
 
 `TodoProvider` gives an agent a structured task list it can manage itself. The agent receives five tools — `add_todos`, `complete_todos`, `remove_todos`, `get_remaining_todos`, and `get_all_todos` — and a default system-prompt injection that tells it how to use them. The provider stores state in the session (in-memory by default) or on disk via `TodoFileStore`.
 
@@ -1952,7 +2041,7 @@ asyncio.run(main())
 
 ## Agent Mode Provider — `AgentModeProvider` (Experimental HARNESS)
 
-> **Experimental.** `AgentModeProvider`, `set_agent_mode`, and `get_agent_mode` are `ExperimentalFeature.HARNESS` in 1.3.0.
+> **Experimental.** `AgentModeProvider`, `set_agent_mode`, and `get_agent_mode` are `ExperimentalFeature.HARNESS` in 1.4.0.
 
 `AgentModeProvider` lets an agent switch between named operating modes at runtime. Two modes ship out of the box — **plan** (interactive, ask questions) and **execute** (autonomous, minimise interruptions). You can define any set of modes and inject custom descriptions for each.
 

@@ -129,7 +129,92 @@ await agent.run(
 )
 ```
 
-`ctx.metadata` also flows from any function middleware in the pipeline — see the [Middleware page](./microsoft_agent_framework_python_middleware/).
+### `FunctionInvocationContext` field reference
+
+All fields available inside a tool that declares a `FunctionInvocationContext` parameter:
+
+| Field | Type | What it carries |
+|---|---|---|
+| `function` | `FunctionTool` | The tool being invoked — read `function.name`, `function.kind`, etc. |
+| `arguments` | `BaseModel \| Mapping[str, Any]` | Already-validated call arguments (Pydantic model when a schema produced one). Mutate before `call_next()` to inject defaults. |
+| `session` | `AgentSession \| None` | The agent session for this run; read `session.state` for user/tenant context. |
+| `kwargs` | `Mapping[str, Any]` | Extra kwargs forwarded from `agent.run(..., function_invocation_kwargs={...})`. |
+| `metadata` | `dict[str, Any]` | Shared scratchpad across **all function middleware** in the same invocation — write here in one middleware, read in the next. |
+| `result` | `Any` | `None` before `call_next()`; holds the tool's return value afterwards. Override it to rewrite the result. |
+
+### `ctx.metadata` — sharing data between tool and middleware
+
+`metadata` travels with the context through the whole function middleware stack. A middleware can stamp values in; the tool (and later middlewares) can read them. A typical use: a request-scoped trace ID injected by a logging middleware and consumed inside the tool for structured logging.
+
+```python
+import asyncio
+from typing import Annotated
+from agent_framework import (
+    Agent,
+    FunctionInvocationContext,
+    function_middleware,
+    tool,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+@function_middleware
+async def stamp_trace_id(context: FunctionInvocationContext, call_next) -> None:
+    """Stamp a trace ID before the tool runs so the tool can log it."""
+    context.metadata["trace_id"] = context.session.session_id if context.session else "no-session"
+    await call_next()
+
+
+@tool
+async def fetch_report(
+    report_id: Annotated[str, "The report identifier."],
+    ctx: FunctionInvocationContext,
+) -> str:
+    trace = ctx.metadata.get("trace_id", "unknown")
+    # include trace_id in your structured logs, spans, or audit trail
+    return f"[trace={trace}] Report {report_id}: revenue £42,000"
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a reporting assistant.",
+        tools=[fetch_report],
+        middleware=[stamp_trace_id],   # agent-level middleware injects trace IDs
+    )
+
+    session = agent.create_session(session_id="req-abc123")
+    response = await agent.run("Show me the Q1 revenue report.", session=session)
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+**Why metadata instead of globals?** Each invocation gets a fresh `FunctionInvocationContext`; metadata is isolated per call. No thread-safety concerns, no request-id bleeding between concurrent runs.
+
+### Accessing `ctx.function` for policy enforcement
+
+`context.function` exposes the full `FunctionTool` — name, kind, additional_properties. A function middleware can read these to enforce policies without hardcoding tool names:
+
+```python
+from agent_framework import FunctionInvocationContext, MiddlewareTermination, function_middleware
+
+
+@function_middleware
+async def block_mutating_without_approval(
+    context: FunctionInvocationContext, call_next
+) -> None:
+    if context.function.kind == "mutating":
+        approved = context.kwargs.get("approved") is True
+        if not approved:
+            raise MiddlewareTermination(
+                f"{context.function.name} is a mutating tool; pass approved=True to proceed."
+            )
+    await call_next()
+```
+
+`ctx.metadata` also flows from any function middleware in the pipeline — see the [Middleware page](./microsoft_agent_framework_python_middleware/) for the full middleware reference.
 
 ## Approval gates
 
