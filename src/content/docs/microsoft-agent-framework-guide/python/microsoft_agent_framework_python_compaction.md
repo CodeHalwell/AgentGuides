@@ -589,7 +589,7 @@ messages = [
     Message(role="assistant", contents=[Content.from_text("Sure! ...")]),
 ]
 
-# Annotate without running any strategy — safe, non-mutating for inclusion
+# Annotate without running any strategy — writes group metadata in place but does NOT mark exclusions
 annotate_message_groups(messages)
 
 for m in messages:
