@@ -548,16 +548,125 @@ Compose with the built-ins via `TokenBudgetComposedStrategy` or call inline.
 
 ## Inspecting what compaction did
 
-Framework helpers let you see the before/after split:
+Three low-level helpers give full visibility into the group structure and what survived compaction.
+
+### `included_messages` and `included_token_count`
 
 ```python
 from agent_framework import included_messages, included_token_count
 
-print(len(included_messages(messages)))  # how many survived
-print(included_token_count(messages))    # estimated tokens kept
+kept = included_messages(messages)
+print(len(kept))                    # how many messages survived
+print(included_token_count(messages))   # estimated token count of kept messages
 ```
 
-Excluded messages stay in the list tagged with `EXCLUDED_KEY=True` and `EXCLUDE_REASON_KEY` — useful for debugging and UI display ("32 messages compacted").
+`included_messages(messages)` returns only the messages where `EXCLUDED_KEY` is not set — effectively the list the model will receive. `included_token_count(messages)` sums the `token_count` annotations already attached to those messages (set by the group annotator); the value is zero for messages that were never annotated.
+
+Both helpers operate on the in-place-mutated list — call them after `apply_compaction()` or after the framework's own compaction pass completes.
+
+### `annotate_message_groups` — low-level group inspection
+
+`annotate_message_groups` is what the built-in strategies call internally before deciding what to exclude. It annotates each message with a `group_id`, `group_index`, and `group_type` in `additional_properties`. You can call it directly to understand the group structure without running any strategy:
+
+```python
+import asyncio
+from agent_framework import (
+    Content,
+    Message,
+    apply_compaction,
+    included_messages,
+    included_token_count,
+)
+from agent_framework._compaction import annotate_message_groups
+
+messages = [
+    Message(role="system", contents=[Content.from_text("Be concise.")]),
+    Message(role="user",   contents=[Content.from_text("What is RAG?")]),
+    Message(role="assistant", contents=[Content.from_text("RAG stands for Retrieval-Augmented Generation.")]),
+    Message(role="assistant", contents=[
+        Content.from_function_call("c1", "search_docs", arguments={"query": "RAG"}),
+    ]),
+    Message(role="tool", contents=[
+        Content.from_function_result("c1", result="RAG: retrieve then generate."),
+    ]),
+    Message(role="user",   contents=[Content.from_text("Give an example.")]),
+    Message(role="assistant", contents=[Content.from_text("Sure! ...")]),
+]
+
+# Annotate without running any strategy — safe, non-mutating for inclusion
+annotate_message_groups(messages)
+
+for m in messages:
+    props = m.additional_properties
+    print(
+        f"role={m.role:9}  "
+        f"group={props.get('group_id', '?'):4}  "
+        f"type={props.get('group_type', '?')}"
+    )
+```
+
+This prints something like:
+
+```text
+role=system    group=0     type=system
+role=user      group=1     type=user
+role=assistant group=2     type=assistant
+role=assistant group=3     type=tool_call
+role=tool      group=3     type=tool_call
+role=user      group=4     type=user
+role=assistant group=5     type=assistant
+```
+
+Key observations:
+- The `function_call` and `function_result` share **the same `group_id`** (`3`). This is how strategies keep tool calls atomic — they never exclude one without the other.
+- `group_type` values are `"system"`, `"user"`, `"assistant"`, and `"tool_call"`. Strategies use this to selectively target only tool-call groups (`SelectiveToolCallCompactionStrategy`) or to skip system anchors (`preserve_system=True`).
+- `annotate_message_groups` is **idempotent** — calling it twice on the same list is safe, and existing annotations are overwritten cleanly.
+
+### Building a debug summary
+
+Combine all three helpers to produce a human-readable before/after summary for logs or debug UIs:
+
+```python
+import asyncio
+from agent_framework import (
+    Content,
+    EXCLUDED_KEY,
+    EXCLUDE_REASON_KEY,
+    Message,
+    SlidingWindowStrategy,
+    apply_compaction,
+    included_messages,
+    included_token_count,
+)
+
+messages = [
+    Message(role="system", contents=[Content.from_text("Be concise.")]),
+    *[
+        Message(role=role, contents=[Content.from_text(f"{role} turn {i}")])
+        for i in range(6)
+        for role in ("user", "assistant")
+    ],
+]
+
+total_before = len(messages)
+asyncio.run(apply_compaction(messages, strategy=SlidingWindowStrategy(keep_last_groups=4)))
+
+kept = included_messages(messages)
+excluded = [m for m in messages if m.additional_properties.get(EXCLUDED_KEY)]
+
+print(f"Total messages : {total_before}")
+print(f"Kept           : {len(kept)}")
+print(f"Excluded       : {len(excluded)}")
+print(f"Est. tokens    : {included_token_count(messages)}")
+
+# Show the reason for the first exclusion
+if excluded:
+    reason = excluded[0].additional_properties.get(EXCLUDE_REASON_KEY, "unknown")
+    print(f"Exclusion reason: {reason}")
+# → Exclusion reason: sliding_window
+```
+
+Excluded messages stay in the original list — `apply_compaction` mutates in place and never discards messages. This lets you render "32 messages compacted" affordances in a UI or reconstruct the full history for export.
 
 ## Patterns
 
