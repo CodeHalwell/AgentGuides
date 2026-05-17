@@ -284,6 +284,54 @@ async def stateful_pipeline(items: list[str], ctx: RunContext) -> str:
 
 State survives checkpoints — `get_state` / `set_state` values are persisted when a checkpoint is taken.
 
+### `get_run_context()` — accessing RunContext from nested helpers
+
+When a utility function deep in the call stack needs to emit events or read state, pass `ctx` explicitly *or* call `get_run_context()`. The `RunContext` is stored in a `ContextVar` for the duration of the `@workflow` call, so `get_run_context()` retrieves it from any depth without threading the parameter through every signature:
+
+```python
+import asyncio
+from agent_framework import (
+    Agent,
+    WorkflowEvent,
+    get_run_context,
+    step,
+    workflow,
+)
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+extractor = Agent(client=client, name="extractor", instructions="Extract five key facts as a numbered list.")
+
+
+async def _emit_progress(message: str) -> None:
+    """Utility helper — no RunContext parameter needed at the call site."""
+    ctx = get_run_context()
+    if ctx is not None:
+        await ctx.add_event(WorkflowEvent(type="progress", data=message))
+
+
+@step
+async def extract_facts(topic: str) -> list[str]:
+    await _emit_progress(f"Extracting facts about '{topic}' …")
+    result = await extractor.run(f"Give me five facts about: {topic}")
+    await _emit_progress("Extraction complete.")
+    return [line for line in result.text.split("\n") if line.strip()]
+
+
+@workflow
+async def analysis_pipeline(topic: str) -> str:
+    facts = await extract_facts(topic)
+    return "\n".join(f"• {f}" for f in facts)
+
+
+result = asyncio.run(analysis_pipeline.run("quantum entanglement"))
+print(result.get_outputs()[-1])
+```
+
+`get_run_context()` returns `None` when called outside a running workflow, which makes helpers reusable from both workflow and non-workflow callsites. The guard `if ctx is not None` is the idiomatic pattern.
+
+> **Thread safety note.** `ContextVar` propagation follows Python's standard rules — the value is inherited by tasks created with `asyncio.create_task()` and `asyncio.gather()`, and is also propagated to threads spawned with `asyncio.to_thread()` (Python 3.9+). However, it is **not** inherited by raw `threading.Thread` instances. If you use custom threading, pass `ctx` explicitly rather than relying on `get_run_context()`.
+
 ## Parallel execution
 
 Use native `asyncio` for parallelism — no special API needed:
