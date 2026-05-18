@@ -215,6 +215,79 @@ logger.info("Processing request", extra={"custom_dimension": "value"})
 
 ## 4. Security Best Practices
 
+### Configuration management — `load_settings` and `SecretString`
+
+Agent Framework ships a built-in settings loader (`load_settings`) that reads configuration from environment variables, an optional `.env` file, and inline overrides — in that priority order. API keys are handled via `SecretString`, a `str` subclass whose `repr()` shows `SecretString('**********')` so secrets never leak into logs.
+
+**Define your settings schema as a `TypedDict`:**
+
+```python
+from typing import TypedDict
+from agent_framework import load_settings, SecretString
+
+
+class AgentSettings(TypedDict):
+    openai_api_key: SecretString         # required
+    azure_openai_endpoint: str | None    # optional — None if not set
+    max_concurrent_requests: int         # defaults to env var or provided default
+    log_level: str
+
+
+# Load from environment variables (OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, etc.)
+settings = load_settings(
+    AgentSettings,
+    env_prefix="",                         # use bare names: OPENAI_API_KEY
+    required_fields=["openai_api_key"],    # raise SettingNotFoundError if missing
+)
+
+# Use in application code — the key is a real str, just masked in repr().
+client = OpenAIChatClient(api_key=str(settings["openai_api_key"]))
+```
+
+**Loading from a `.env` file (CI / local dev):**
+
+```python
+settings = load_settings(
+    AgentSettings,
+    env_file_path=".env",          # required to exist when specified
+    env_prefix="APP_",             # env vars: APP_OPENAI_API_KEY, APP_LOG_LEVEL, etc.
+    required_fields=["openai_api_key"],
+)
+```
+
+**Mutually exclusive fields (one of two endpoints must be set):**
+
+```python
+settings = load_settings(
+    AgentSettings,
+    required_fields=[
+        "openai_api_key",                                      # must be non-None
+        ("azure_openai_endpoint", "openai_direct_endpoint"),   # exactly one must be set
+    ],
+)
+```
+
+**`SecretString` is safe to log and pass through middleware:**
+
+```python
+api_key = SecretString("sk-real-key")
+print(api_key)         # sk-real-key  — normal string behaviour
+print(repr(api_key))   # SecretString('**********')  — never leaks
+print(f"{api_key}")    # sk-real-key  — f-strings also safe (uses __str__)
+api_key.get_secret_value()  # "sk-real-key" — explicit access for downstream SDKs
+
+# SecretString IS a str — no unwrapping needed for most APIs.
+assert isinstance(api_key, str)
+```
+
+**Resolution order** (highest priority first):
+1. Inline keyword overrides passed to `load_settings`
+2. `.env` file (when `env_file_path` is provided)
+3. Environment variables (`<env_prefix><FIELD_NAME_UPPER>`)
+4. Default values from the `TypedDict` class, or `None` for optional fields
+
+`load_settings` raises `SettingNotFoundError` (a subclass of `ValueError`) when a required field can't be resolved — fail-fast at startup rather than getting an obscure `AttributeError` at first model call.
+
 ### Secrets Management
 
 Use **Azure Key Vault** to store API keys and connection strings.

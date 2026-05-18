@@ -1805,6 +1805,71 @@ asyncio.run(inspect_memory())
 
 Note: `MemoryFileStore` methods (`list_topics`, `get_topic`, `delete_topic`, `rebuild_index`) are synchronous — they perform filesystem I/O directly. The async wrapper lives in `MemoryContextProvider`, which calls them from async lifecycle hooks.
 
+### Searching raw conversation transcripts — `search_transcripts`
+
+`MemoryFileStore` stores full conversation transcripts under `<base_path>/<owner>/transcripts/`. Use `search_transcripts` to do a keyword search across those files — useful when the agent needs to recall exact wording from earlier sessions, not just the extracted-topic summaries:
+
+```python
+import asyncio
+from agent_framework import Agent, AgentSession, MemoryContextProvider, MemoryFileStore
+from agent_framework.openai import OpenAIChatClient
+
+store = MemoryFileStore(base_path="./memory", owner_state_key="user_id")
+session = AgentSession(session_id="user-42-s1")
+session.state["user_id"] = "user-42"
+
+# ── From application code — search without going through the agent ──────────
+results = store.search_transcripts(
+    session,
+    source_id="memory",
+    query="budget approval",        # keyword(s) to search for
+    session_id=None,                # None → search all sessions for this user
+    limit=10,                       # max results
+)
+
+for r in results:
+    print(r["session_id"], r["timestamp"], r["text_snippet"])
+
+# ── Inside the agent — expose search_transcripts as a tool ──────────────────
+from agent_framework import tool
+
+@tool(name="search_my_memory", approval_mode="never_require")
+def search_my_memory(query: str, limit: int = 10) -> str:
+    """Search the user's conversation history for specific information."""
+    hits = store.search_transcripts(
+        session,
+        source_id="memory",
+        query=query,
+        limit=limit,
+    )
+    if not hits:
+        return "No matching entries found."
+    return "\n---\n".join(
+        f"[{h['session_id']} / {h['timestamp']}]\n{h['text_snippet']}"
+        for h in hits
+    )
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Use search_my_memory to recall past conversations when asked.",
+    context_providers=[MemoryContextProvider(store=store, source_id="memory")],
+    tools=[search_my_memory],
+)
+```
+
+Each result dict contains at minimum `session_id`, `timestamp`, and `text_snippet`. `session_id=None` searches all sessions for the owner; pass a specific session ID to scope the search to one conversation.
+
+`search_transcripts` is a **synchronous** method — wrap it in `asyncio.to_thread` if you need to call it from an `async` context outside of an agent tool:
+
+```python
+results = await asyncio.to_thread(
+    store.search_transcripts,
+    session,
+    source_id="memory",
+    query="budget approval",
+)
+```
+
 ### Custom `MemoryStore` backend
 
 Subclass `MemoryStore` to use any durable backend — database, blob storage, vector DB. All abstract methods are **synchronous** (no `async`); `MemoryContextProvider` calls them from thread-pool workers when needed:

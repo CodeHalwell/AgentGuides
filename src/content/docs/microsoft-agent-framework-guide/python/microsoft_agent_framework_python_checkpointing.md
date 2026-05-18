@@ -457,6 +457,50 @@ class CounterExecutor(Executor):
         self._count = state.get("count", 0)
 ```
 
+### Separating serialisable state from live resources
+
+`on_checkpoint_save` must return **JSON-serialisable data only** (dicts, lists, strings, ints — no open sockets, file handles, or database connections). Use `on_checkpoint_restore` to re-open those resources after a process restart:
+
+```python
+import asyncpg
+from typing import Any
+from agent_framework import Executor, WorkflowContext, handler
+
+
+class DatabaseExecutor(Executor):
+    """Executor that holds an asyncpg connection pool.
+
+    The pool cannot be pickled, so it is excluded from the checkpoint.
+    `on_checkpoint_restore` reconnects using the DSN stored as a plain string.
+    """
+
+    def __init__(self, dsn: str) -> None:
+        super().__init__(id="db-executor")
+        self._dsn = dsn
+        self._pool: asyncpg.Pool | None = None
+
+    async def _ensure_pool(self) -> asyncpg.Pool:
+        if self._pool is None:
+            self._pool = await asyncpg.create_pool(self._dsn)
+        return self._pool
+
+    @handler
+    async def query(self, sql: str, ctx: WorkflowContext[list]) -> None:
+        pool = await self._ensure_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql)
+        await ctx.send_message([dict(r) for r in rows])
+
+    async def on_checkpoint_save(self) -> dict[str, Any]:
+        # Save only the DSN — the pool itself is not serialisable.
+        return {"dsn": self._dsn}
+
+    async def on_checkpoint_restore(self, state: dict[str, Any]) -> None:
+        self._dsn = state.get("dsn", self._dsn)
+        # Re-create the pool lazily on next query — no async work needed here.
+        self._pool = None
+```
+
 ### Persisting a dataclass
 
 Dataclasses work cleanly because the built-in encoder picks up anything pickle-safe — register the type in `allowed_checkpoint_types` and it round-trips:

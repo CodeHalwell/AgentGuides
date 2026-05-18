@@ -677,6 +677,48 @@ The four constructors you'll reach for:
 
 Returning a single `str` is shorthand for `Content.from_text(...)`. Use the explicit list only when you need the multi-part shape.
 
+### Detecting media types with `detect_media_type_from_base64`
+
+When you receive raw binary data (from a webhook, a database blob column, or a model response) and don't know the MIME type, use `detect_media_type_from_base64` to inspect the magic bytes before calling `Content.from_data`:
+
+```python
+import base64
+from agent_framework import tool, Content, detect_media_type_from_base64
+
+
+@tool(result_parser=lambda r: _parse_blob(r))
+def fetch_attachment(attachment_id: str) -> dict:
+    """Fetch a binary attachment by ID."""
+    return attachment_store.get(attachment_id)  # {"data_b64": "...", "filename": "..."}
+
+
+def _parse_blob(payload: dict) -> list[Content]:
+    data_b64: str = payload["data_b64"]
+
+    # Probe the magic bytes — returns a MIME string or None for unrecognised formats.
+    media_type = detect_media_type_from_base64(data_str=data_b64)
+
+    if media_type is None:
+        # Unrecognised binary — surface as an error so the model doesn't hallucinate a type.
+        return [Content.from_error(message=f"Unknown binary format for {payload['filename']}")]
+
+    raw_bytes = base64.b64decode(data_b64)
+    return [
+        Content.from_text(f"Attachment: {payload['filename']} ({media_type})"),
+        Content.from_data(data=raw_bytes, media_type=media_type),
+    ]
+```
+
+`detect_media_type_from_base64` accepts three mutually exclusive keyword arguments:
+
+| Argument | Accepts |
+|---|---|
+| `data_bytes` | Raw `bytes` |
+| `data_str` | Base64-encoded string (no data URI prefix) |
+| `data_uri` | Full `data:<type>;base64,<data>` URI |
+
+Recognised types: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/bmp`, `image/svg+xml`, `application/pdf`, `audio/wav`, `audio/mpeg`, `audio/ogg`, `audio/flac`. Returns `None` for text-based formats (JSON, CSV, plain text) — those don't have binary magic bytes.
+
 ## Skipping result parsing — `SKIP_PARSING`
 
 The framework wraps every tool result in `list[Content]` by default. If you're piping the raw return value straight into another sandbox (e.g. a Python interpreter loop, a custom executor, or a reasoning harness), the wrapping is wasted work and lossy. Two ways to opt out:
@@ -765,6 +807,39 @@ print(result.get_outputs())
 
 > **Note:** Sync functions passed to `FunctionExecutor` (or `@executor`) are automatically run in a thread pool via `asyncio.to_thread`, so blocking I/O in the function body won't stall the event loop.
 
+### Pattern 4 — explicit type overrides
+
+When the function signature doesn't fully express the executor's type contract (e.g. you're using generic `Any` parameters, forward references, or union types across executors), pass `input=`, `output=`, and `workflow_output=` explicitly. These take precedence over introspection:
+
+```python
+from agent_framework import executor, WorkflowContext
+
+
+# Union input type — executor accepts either str OR dict payloads.
+@executor(id="normalise", input=str | dict, output=str)
+async def normalise(message, ctx: WorkflowContext):
+    if isinstance(message, dict):
+        await ctx.send_message(message.get("text", ""))
+    else:
+        await ctx.send_message(message.strip())
+
+
+# String forward reference — useful when the type isn't imported at decoration time.
+@executor(id="router", input="UserRequest | SystemRequest", output="RouteDecision")
+async def route(message, ctx):
+    await ctx.send_message(RouteDecision(target="writer"))
+
+
+# Emit both inter-executor messages (output) and workflow-level outputs (workflow_output).
+@executor(id="summariser", input=str, output=str, workflow_output=dict)
+async def summarise(text: str, ctx: WorkflowContext[str, dict]) -> None:
+    brief = text[:200]
+    await ctx.send_message(brief)                      # routed to next executor
+    await ctx.yield_output({"summary": brief, "chars": len(text)})  # surfaces in result.get_outputs()
+```
+
+The `workflow_output` type is what appears in `result.get_outputs()` after the workflow completes. If the executor only routes messages between other executors and never calls `yield_output`, omit it.
+
 ## Workflow visualization with `WorkflowViz`
 
 `WorkflowViz` renders any built workflow to Mermaid, DOT, or raster/vector formats. Import it from `agent_framework` — no extra dependencies for Mermaid output.
@@ -819,6 +894,57 @@ print(result.get_outputs())
 ```
 
 Pass `include_internal_executors=True` to `WorkflowViz` when debugging routing — the diagram then includes the framework's auto-injected glue nodes that are normally hidden.
+
+### Exporting to files — SVG, PNG, PDF
+
+`WorkflowViz.export()` writes to disk using the system `graphviz` binary (`dot`). Install both the Python package and the native binary first:
+
+```bash
+pip install graphviz>=0.20.0
+# macOS
+brew install graphviz
+# Debian/Ubuntu
+sudo apt-get install graphviz
+```
+
+```python
+from agent_framework import WorkflowViz
+
+viz = WorkflowViz(workflow)
+
+# Save to a named file — extension must match format.
+svg_path = viz.export(format="svg", filename="pipeline.svg")
+
+# Convenience wrappers for the common formats.
+viz.save_svg("pipeline.svg")
+viz.save_png("pipeline.png")
+viz.save_pdf("pipeline.pdf")
+
+# DOT source — no graphviz binary needed.
+dot_path = viz.export(format="dot", filename="pipeline.dot")
+dot_text = viz.to_digraph()   # returns the DOT string directly
+```
+
+`export()` returns the path of the saved file. When `filename` is omitted it creates a temporary file and returns its path — useful in CI to attach as a build artifact without hard-coding a name.
+
+The `to_digraph()` / `to_mermaid()` methods never touch the filesystem, so they work even without the graphviz binary installed. Use `to_mermaid()` for GitHub wiki pages, Confluence, or any Markdown renderer; use `to_digraph()` when you need to feed the DOT output into a separate pipeline.
+
+### Embedding Mermaid in docs
+
+`to_mermaid()` output can be pasted directly into a GitHub Markdown fence:
+
+````markdown
+```mermaid
+flowchart TD
+  intake["intake (Start)"]
+  classify["classify"]
+  respond["respond"]
+  intake --> classify
+  classify --> respond
+```
+````
+
+Sub-workflows hosted by a `WorkflowExecutor` node appear as `subgraph` blocks inside the Mermaid chart. Fan-in nodes render as circles; conditional edges render as dotted arrows with a `conditional` label.
 
 ## Patterns
 

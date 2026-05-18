@@ -484,6 +484,98 @@ tool = fact_checker_agent.as_tool(
 supervisor = Agent(client=client, instructions="You coordinate research and fact-checking.", tools=[tool])
 ```
 
+## HITL combined with checkpointing — full round-trip
+
+For workflows that may pause for hours (human review, async approval), combine `request_info` with `FileCheckpointStorage` so the workflow survives a process restart between pause and resume:
+
+```python
+import asyncio
+from agent_framework import (
+    Agent,
+    FileCheckpointStorage,
+    RunContext,
+    WorkflowEvent,
+    get_run_context,
+    step,
+    workflow,
+)
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+researcher = Agent(client=client, name="researcher", instructions="Research the topic and return a concise report.")
+writer = Agent(client=client, name="writer", instructions="Turn the research into a polished article.")
+
+storage = FileCheckpointStorage("./checkpoints")
+
+
+@step
+async def research(topic: str) -> str:
+    result = await researcher.run(f"Research: {topic}")
+    return result.text
+
+
+@step
+async def draft(research_output: str) -> str:
+    result = await writer.run(f"Write article from:\n{research_output}")
+    return result.text
+
+
+@workflow(name="editorial-pipeline", checkpoint_storage=storage)
+async def editorial_pipeline(topic: str) -> str:
+    ctx = get_run_context()
+
+    research_result = await research(topic)
+
+    # Pause for human approval before publishing.
+    approval = await ctx.request_info(
+        WorkflowEvent(type="approval_request", data=research_result),
+        response_type=bool,
+    )
+
+    if not approval:
+        return f"[Rejected] Research was not approved for '{topic}'."
+
+    article = await draft(research_result)
+    return article
+
+
+# ── First run — pauses at request_info ───────────────────────────────────────
+result = asyncio.run(editorial_pipeline.run("quantum computing"))
+
+# result.state == "paused"
+# result.get_request_info_events() returns the pending event(s)
+events = result.get_request_info_events()
+print(f"Workflow paused. Pending events: {list(events.keys())}")
+
+# Persist the checkpoint ID somewhere durable (DB, queue message, etc.)
+checkpoints = asyncio.run(storage.list_checkpoints(workflow_name="editorial-pipeline"))
+latest = max(checkpoints, key=lambda c: c.timestamp)
+saved_checkpoint_id = latest.checkpoint_id
+
+# ── Process shuts down; resumes later in the same or a different pod ─────────
+
+# Build the responses dict: {request_id: response_value}
+# request_id is the key returned by get_request_info_events()
+responses = {event_id: True for event_id in events}  # human approved
+
+result2 = asyncio.run(
+    editorial_pipeline.run(
+        "quantum computing",          # original input — required even on resume
+        checkpoint_id=saved_checkpoint_id,
+        responses=responses,
+    )
+)
+
+print(result2.state)           # "completed"
+print(result2.get_outputs()[-1])  # the finished article
+```
+
+Key rules:
+- **Always pass the original `message` argument** even when resuming — `FunctionalWorkflow` needs it to reconstruct the workflow stack.
+- **`responses` keys are the `request_id` values** from `get_request_info_events()` — a dict of `{request_id: Any}`.
+- **`checkpoint_id` + `checkpoint_storage`** together let the workflow skip already-completed `@step` results; without them it would re-execute from scratch.
+- The `@workflow(checkpoint_storage=storage)` default can be overridden per-call with `run(checkpoint_storage=other_storage)`.
+
 ## `WorkflowRunResult` helpers
 
 ```python
