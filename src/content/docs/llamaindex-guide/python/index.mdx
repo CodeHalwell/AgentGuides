@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **llama-index-core v0.14.21** · April 2026 · Python 3.10+
+    **llama-index-core v0.14.22** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     RAG systems, document Q&A, enterprise knowledge agents.
@@ -77,12 +77,11 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./llamaindex_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v0.14.20 (April 2026)
+## What's new in v0.14.22 (May 2026)
 
-- Stabilised `llama-agents` package for multi-agent orchestration.
-- Enhanced streaming support with token-level events.
-- Expanded `LlamaHub` integrations (100+ data connectors).
-- Improved query-engine-as-tool patterns.
+- **v0.14.22 (May 18)** — Patch release; maintenance and dependency updates. Core symbols (`VectorStoreIndex`, `SimpleDirectoryReader`, `ReActAgent`, `QueryEngineTool`) verified against installed `llama-index-core==0.14.22` (`.routine-envs/check-0518-py`).
+- **v0.14.21** — Patch release; maintenance and dependency updates.
+- **v0.14.20 (April 2026)** — Stabilised `llama-agents` package; enhanced token-level streaming; expanded `LlamaHub` integrations (100+ data connectors); improved query-engine-as-tool patterns.
 
 ## Install, minimal example
 
@@ -111,10 +110,11 @@ Ready? **[Start Zero → Hero Step 1 →](./llamaindex_comprehensive_guide/#1-in
 
 ## Revision history
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-04-21 | 0.14.20 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| April 3, 2026 | 0.14.20 | llama-agents stabilisation; streaming; LlamaHub growth. |
-| November 2025 | 0.14.8 | Initial documented version. |
+| Date | Framework version (installed) | Summary of changes | Reviewer |
+|------|-------------------------------|--------------------|----------|
+| 2026-05-18 | llama-index-core 0.14.22 | Version bumped 0.14.21 → 0.14.22; version card date updated April → May 2026; "What's new" updated; comprehensive guide header updated; revision history entry added. Core symbols verified against installed `llama-index-core==0.14.22` (`.routine-envs/check-0518-py`). | Claude routine |
+| 2026-04-21 | llama-index-core 0.14.20 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
+| April 3, 2026 | llama-index-core 0.14.20 | llama-agents stabilisation; streaming; LlamaHub growth. | — |
+| November 2025 | llama-index-core 0.14.8 | Initial documented version. | — |
 
 **Note:** TypeScript implementation lives at [LlamaIndex (TypeScript)](/llamaindex-guide/typescript/).

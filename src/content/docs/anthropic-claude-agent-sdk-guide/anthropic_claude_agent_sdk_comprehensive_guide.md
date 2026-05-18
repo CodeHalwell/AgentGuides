@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.1.81 | Updated: May 12, 2026
+Latest: 0.2.82 | Updated: May 18, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -2926,6 +2926,7 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.2.82 | May 18, 2026 | Minor series bump 0.1.x → 0.2.x; `Latest:` header and date updated. All existing 0.1.x symbols verified present plus 0.2.x session management APIs (`fork_session`, `list_sessions`, `get_session_info`, `get_session_messages`, `get_subagent_messages`, `import_session_to_store`, `list_subagents`, `delete_session`, `rename_session`, `tag_session`, `InMemorySessionStore`) and `tool`/`create_sdk_mcp_server` confirmed. Verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0518-py`); no DeprecationWarnings. | Claude routine |
 | 0.1.81 | May 12, 2026 | Patch release; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.81` (`.routine-envs/check-0512-py`); `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` all PASS with `-W error::DeprecationWarning`. |
 | 0.1.80 | May 9, 2026 | Patch releases 0.1.74–0.1.80; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.80` (`.routine-envs/check-0509-py`); all symbols PASS. |
 | 0.1.73 | May 5, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.73` (`.routine-envs/check-0505`); `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` imports verified with `-W error::DeprecationWarning` — all PASS. |

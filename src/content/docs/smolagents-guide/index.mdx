@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.24.0** · January 2026 · Python 3.10+
+    **v1.25.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Learning, prototyping, simple automation, code-first workflows.
@@ -67,11 +67,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./smolagents_production_guide/" />
 </CardGrid>
 
-## What's new in v1.24.0 (January 2026)
+## What's new in v1.25.0 (May 2026)
 
-- Expanded model provider coverage (Anthropic, Gemini, Ollama improvements).
-- Tool call performance optimisations.
-- Multi-agent orchestration patterns stabilised.
+- **v1.25.0 (May 18)** — Minor release. New `WasmExecutor` code execution backend (Deno/WASM sandbox — `from smolagents import WasmExecutor`; requires `deno` on `PATH`). Core symbols (`CodeAgent`, `ToolCallingAgent`, `tool`, `Tool`, `InferenceClientModel`, `LiteLLMModel`, `DuckDuckGoSearchTool`, `WikipediaSearchTool`, `VisitWebpageTool`, `MultiStepAgent`) verified against installed `smolagents==1.25.0` (`.routine-envs/check-0518-py`); no `DeprecationWarning` emissions.
+- **v1.24.0 (January 2026)** — Expanded model provider coverage; tool call performance optimisations; multi-agent orchestration patterns stabilised.
 
 ## Install, minimal example
 
@@ -94,8 +93,9 @@ Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#intr
 
 ## Revision history
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-04-21 | 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| January 16, 2026 | 1.24.0 | Expanded model providers; tool call perf; multi-agent patterns. |
-| November 2025 | 1.23.0 | Initial documented version. |
+| Date | Framework version (installed) | Summary of changes | Reviewer |
+|------|-------------------------------|--------------------|----------|
+| 2026-05-18 | smolagents 1.25.0 | Version bumped 1.24.0 → 1.25.0; version card date updated January → May 2026; "What's new" updated noting `WasmExecutor`; comprehensive guide header updated; revision history entry added. Core symbols verified against installed `smolagents==1.25.0` (`.routine-envs/check-0518-py`); no `DeprecationWarning` emissions. | Claude routine |
+| 2026-04-21 | smolagents 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
+| January 16, 2026 | smolagents 1.24.0 | Expanded model providers; tool call perf; multi-agent patterns. | — |
+| November 2025 | smolagents 1.23.0 | Initial documented version. | — |
