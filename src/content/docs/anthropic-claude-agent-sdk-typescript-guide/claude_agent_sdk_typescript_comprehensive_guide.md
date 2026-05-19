@@ -4,7 +4,7 @@ description: "The Claude Agent SDK is the official TypeScript library for buildi
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-Latest: 0.2.141 | Updated: May 14, 2026
+Latest: 0.3.144 | Updated: May 19, 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -3264,6 +3264,7 @@ The comprehensive guide continues with detailed sections on each topic with exte
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.3.144 | May 19, 2026 | Major minor-version bump 0.2.141 → 0.3.144. Three `unstable_v2_*` preview exports removed; package now exports 25 stable symbols. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.3.144` (`.routine-envs/check-0519-node`). | Claude routine |
 | 0.2.141 | May 14, 2026 | Patch release; stability and dependency updates. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.2.141` (`.routine-envs/check-0514-node`): 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants. |
 | 0.2.140 | May 13, 2026 | Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.140` (`.routine-envs/check-0513-node`). |
 | 0.2.139 | May 12, 2026 | Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.139` (`.routine-envs/check-0512-node`). |
