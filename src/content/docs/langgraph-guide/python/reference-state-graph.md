@@ -10,7 +10,7 @@ sidebar:
 
 # StateGraph — API reference
 
-Verified against **`langgraph==1.1.10`** (modules: `langgraph.graph.state`, `langgraph.types`).
+Verified against **`langgraph==1.2.0`** (modules: `langgraph.graph.state`, `langgraph.types`).
 
 `StateGraph` is the primary graph builder. You declare a state schema, add nodes and edges, then call `.compile()` to get a `CompiledStateGraph` that implements the LangChain `Runnable` protocol (`invoke` / `stream` / `ainvoke` / `astream`).
 
@@ -127,6 +127,7 @@ All overloads accept the same keyword options:
 | `input_schema` | `type` | Node receives a narrower shape. Channels outside this schema are not visible. |
 | `retry_policy` | `RetryPolicy \| Sequence[RetryPolicy]` | Controls retries on exceptions. First matching policy in a sequence wins. |
 | `cache_policy` | `CachePolicy` | Cache the node's output by input hash. Requires a `cache=` backend on `.compile()`. |
+| `timeout` | `float \| timedelta \| TimeoutPolicy \| None` | Per-attempt timeout. A plain `float`/`timedelta` is the wall-clock limit; `TimeoutPolicy` adds idle-timeout and heartbeat support. |
 | `destinations` | `dict[str, str] \| tuple[str, ...]` | Visualization hint for edgeless nodes that return `Command(goto=...)`. Does **not** affect execution. |
 
 A node's callable signature can be any of:

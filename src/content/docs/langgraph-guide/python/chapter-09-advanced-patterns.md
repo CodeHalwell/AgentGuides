@@ -1,6 +1,6 @@
 ---
 title: "Chapter 9 — Advanced Patterns"
-description: "ReAct, Tree-of-Thoughts, self-reflection, structured output, node caching, deferred nodes, Command tool, templates, and the Functional API."
+description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, and the Functional API — source-verified patterns for LangGraph 1.2."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,9 @@ sidebar:
 
 # Chapter 9 — Advanced Patterns
 
-**What you'll learn:** the patterns you reach for when simple graphs aren't enough. Reasoning-action loops (ReAct), multi-path exploration (Tree-of-Thoughts), self-critique (Reflection), validation loops (Structured output), plus v1 features — node caching, deferred nodes, the Command tool for edgeless flows, templates, and the declarative Functional API.
+**What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send`, plus the Functional API `@entrypoint`/`@task`.
+
+Verified against **`langgraph==1.2.0`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`).
 
 **Time:** ~40 minutes. Most of this is reference — skim for patterns you need.
 
@@ -380,176 +382,469 @@ if result["validation_passed"]:
     print(f"Findings: {output.key_findings}")
 ```
 
-### Pattern 5: Caching and Memoization
+### Pattern 5: Node caching with `CachePolicy` and `InMemoryCache`
 
+`CachePolicy` memoizes a node's output by its input hash. The first call executes the node; subsequent calls with the same input skip it and return the cached result. Wire a `BaseCache` backend to `compile(cache=...)`.
 
 ```python
-from functools import lru_cache
-from langgraph.store.memory import InMemoryStore
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import CachePolicy
 
-class CacheState(TypedDict):
-    query: str
-    result: str
-    cache_hit: bool
 
-# Simple LRU cache for expensive operations
-@lru_cache(maxsize=128)
-def expensive_operation(query: str) -> str:
-    """Simulate expensive operation."""
-    import time
-    time.sleep(1)
-    return f"Result for {query}"
+class EmbedState(TypedDict):
+    text: str
+    embedding: list[float]
 
-async def cached_operation_node(
-    state: CacheState,
-    store: Annotated[InMemoryStore, InjectedStore]
-) -> dict:
-    """Check cache before executing."""
-    
-    query = state["query"]
-    namespace = ("cache", "results")
-    
-    # Check cache
-    cached = await store.aget(namespace, query)
-    
-    if cached:
-        return {
-            "result": cached.value,
-            "cache_hit": True
-        }
-    
-    # Execute and cache
-    result = expensive_operation(query)
-    
-    await store.aput(
-        namespace,
-        query,
-        {"result": result, "timestamp": datetime.now().isoformat()}
-    )
-    
-    return {
-        "result": result,
-        "cache_hit": False
-    }
 
-# Build with caching
-builder = StateGraph(CacheState)
-builder.add_node("process", cached_operation_node)
+def embed_text(state: EmbedState) -> dict:
+    """Expensive embedding — cached after first call for the same input."""
+    print(f"[embed] computing embedding for: {state['text'][:30]}...")
+    # Simulate embedding (replace with a real model call)
+    return {"embedding": [len(state["text"]) * 0.01, 0.5, 0.3]}
 
-caching_graph = builder.compile(store=InMemoryStore())
 
-# Usage
-config = {"configurable": {"thread_id": "cache-test"}}
+cache = InMemoryCache()
 
-# First call - hits expensive operation
-result = caching_graph.invoke({"query": "expensive"}, config=config)
-print("Cache hit:", result["cache_hit"])  # False
+builder = StateGraph(EmbedState)
+builder.add_node(
+    "embed",
+    embed_text,
+    cache_policy=CachePolicy(ttl=3600),   # cache for 1 hour
+)
+builder.add_edge(START, "embed")
+builder.add_edge("embed", END)
 
-# Second call - uses cache
-result = caching_graph.invoke({"query": "expensive"}, config=config)
-print("Cache hit:", result["cache_hit"])  # True
+graph = builder.compile(
+    cache=cache,
+    checkpointer=InMemorySaver(),
+)
+
+cfg1 = {"configurable": {"thread_id": "t1"}}
+cfg2 = {"configurable": {"thread_id": "t2"}}
+
+# First call: executes `embed_text` and stores the result in `cache`
+result1 = graph.invoke({"text": "Hello world", "embedding": []}, cfg1)
+print(result1["embedding"])   # computed
+
+# Second call with identical text (different thread): hits the cache, no print
+result2 = graph.invoke({"text": "Hello world", "embedding": []}, cfg2)
+print(result2["embedding"])   # same value, from cache
 ```
 
+**Custom `key_func`** — override the cache key when you need a deterministic, human-readable key:
 
+```python
+from langgraph.types import CachePolicy
 
+def text_key(state: EmbedState) -> str:
+    return state["text"].strip().lower()
+
+builder.add_node("embed", embed_text, cache_policy=CachePolicy(key_func=text_key, ttl=600))
+```
+
+**Clearing the cache** — call `cache.clear()` to wipe all entries, or `cache.clear(namespaces=[...])` for targeted eviction.
 
 ---
 
-## Further built-in features
+### Pattern 6: `RetryPolicy` — custom predicates and layered strategies
 
-Below this point, earlier drafts documented several "v1.0.3+ features" that do not exist in the installed `langgraph==1.1.10` package. The following were removed after verifying against the installed library:
+`RetryPolicy` is a `NamedTuple` applied per node (or per `@task`). Beyond simple exception types, you can pass a callable that returns `True` to trigger a retry.
 
-- **Node Caching** — `langgraph.cache.cache_node`, `SemanticCache`, `CachePolicy` are not real. For caching today, use LangGraph's long-term `Store` (see [Chapter 5 — Memory & persistence](/langgraph-guide/python/chapter-05-memory/)) or wrap expensive tool calls with Python's own `functools.lru_cache` / a Redis client (the "Caching and Memoization" pattern above is the real approach).
-- **Deferred Nodes** — `@deferred(wait_for=[...])` and `langgraph.graph.deferred` do not exist. Fan-in is already native: an edge from multiple sources into the same target waits for all upstream nodes to complete before that target runs (see [Chapter 3 — Parallel Worker Pattern](/langgraph-guide/python/chapter-03-multi-agent/#example-2-parallel-worker-pattern)).
-- **Tools with State Updates** — `@tool(updates_state=True)` accepting a `state` parameter and returning `StateUpdate` is not a real API. To let a tool update graph state, wrap the tool in a node that reads state, calls the tool, and returns the `state` update dict as normal.
-- **Command Tool for edgeless flows** — `command_tool` / `CommandRouter` do not exist. The real way to let the agent control routing from a tool call is to use `langgraph.types.Command` as a tool return value; the graph routes based on the `goto` field.
-- **LangGraph Templates CLI** — `langgraph template list|create|init|publish` is not real. The actual command is `langgraph new --template NAME` (run `langgraph --help` for the full CLI). A curated template gallery lives at <https://github.com/langchain-ai/langgraph/tree/main/examples>.
+```python
+import httpx
+from langgraph.types import RetryPolicy
+from langgraph.graph import StateGraph, START, END
+from typing_extensions import TypedDict
 
-## Functional API (LangGraph 1.0)
 
-A simpler Python-native way to build workflows with automatic parallelization:
+class FetchState(TypedDict):
+    url: str
+    body: str
 
+
+# ── Predicate-based retry ────────────────────────────────────────────────────
+def should_retry(exc: Exception) -> bool:
+    """Retry 5xx and network errors, but not 4xx client errors."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    if isinstance(exc, httpx.TransportError):
+        return True
+    return False
+
+
+def fetch_node(state: FetchState) -> dict:
+    resp = httpx.get(state["url"], timeout=10)
+    resp.raise_for_status()
+    return {"body": resp.text[:200]}
+
+
+# ── Layered retry sequence ───────────────────────────────────────────────────
+# First policy handles transient HTTP errors with fast retries.
+# Second policy catches anything else with a slower, longer-lived strategy.
+fast_retry = RetryPolicy(
+    max_attempts=3,
+    initial_interval=0.5,
+    backoff_factor=2.0,
+    retry_on=should_retry,
+)
+slow_retry = RetryPolicy(
+    max_attempts=5,
+    initial_interval=2.0,
+    backoff_factor=1.5,
+    max_interval=30.0,
+    retry_on=Exception,      # fallback: any exception
+)
+
+builder = StateGraph(FetchState)
+builder.add_node(
+    "fetch",
+    fetch_node,
+    retry_policy=[fast_retry, slow_retry],   # first matching policy wins
+)
+builder.add_edge(START, "fetch")
+builder.add_edge("fetch", END)
+
+graph = builder.compile()
+```
+
+Key `RetryPolicy` fields (all have defaults):
+
+| Field | Default | Effect |
+|---|---|---|
+| `max_attempts` | `3` | Total attempts including first |
+| `initial_interval` | `0.5` | Seconds before first retry |
+| `backoff_factor` | `2.0` | Multiplier per retry |
+| `max_interval` | `128.0` | Cap on interval seconds |
+| `jitter` | `True` | Random noise added to interval |
+| `retry_on` | transient HTTP/network | Exception type(s) or `(exc) -> bool` |
+
+---
+
+### Pattern 7: `TimeoutPolicy` — wall-clock and idle timeouts with heartbeat
+
+`TimeoutPolicy` applies to async nodes and `@task`s (sync tasks cannot be cancelled in-process). Set `run_timeout` for a hard wall-clock cap, `idle_timeout` for a progress-based cap, and call `runtime.heartbeat()` to refresh the idle timer from inside slow work.
+
+```python
+import asyncio
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import Runtime
+from langgraph.types import TimeoutPolicy
+
+
+class ScrapeState(TypedDict):
+    urls: list[str]
+    results: list[str]
+
+
+async def slow_scrape(state: ScrapeState, runtime: Runtime) -> dict:
+    """Scrapes several URLs; heartbeat refreshes the idle timer between pages."""
+    collected = []
+    for url in state["urls"]:
+        await asyncio.sleep(1)          # simulate network I/O
+        collected.append(f"content:{url}")
+        runtime.heartbeat()             # refresh idle_timeout after each page
+    return {"results": collected}
+
+
+builder = StateGraph(ScrapeState)
+builder.add_node(
+    "scrape",
+    slow_scrape,
+    # Hard cap: whole node cannot run longer than 30 seconds total.
+    # Idle cap: if no heartbeat is received within 5 seconds, cancel.
+    # refresh_on="heartbeat" means only explicit heartbeat() calls reset the idle timer.
+    timeout=TimeoutPolicy(
+        run_timeout=30.0,
+        idle_timeout=5.0,
+        refresh_on="heartbeat",
+    ),
+)
+builder.add_edge(START, "scrape")
+builder.add_edge("scrape", END)
+
+graph = builder.compile()
+```
+
+`refresh_on` values:
+
+| Value | What resets `idle_timeout` |
+|---|---|
+| `"auto"` (default) | LangGraph progress signals **and** `runtime.heartbeat()` |
+| `"heartbeat"` | Only explicit `runtime.heartbeat()` calls |
+
+When the timeout fires, `NodeTimeoutError` is raised inside the task. If a `retry_policy` is also set, the retry machinery decides whether to retry.
+
+---
+
+### Pattern 8: `Runtime[Context]` — type-safe run-scoped data
+
+`Runtime` bundles per-run context (user ID, tenant ID, feature flags) separate from graph state. Declare a `context_schema` on `StateGraph`, then inject `Runtime[Ctx]` into any node.
+
+```python
+from dataclasses import dataclass
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import Runtime, ExecutionInfo
+from langgraph.store.memory import InMemoryStore
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+@dataclass
+class RequestContext:
+    user_id: str
+    tenant_id: str
+    is_premium: bool = False
+
+
+class QueryState(TypedDict):
+    question: str
+    answer: str
+    attempt: int
+
+
+def answer_node(state: QueryState, runtime: Runtime[RequestContext]) -> dict:
+    ctx = runtime.context                         # type: RequestContext
+
+    # Use context for access control
+    model = "claude-opus" if ctx.is_premium else "claude-haiku"
+
+    # Use store for long-term memory keyed by user
+    if runtime.store:
+        history = runtime.store.search(
+            ("history", ctx.user_id),
+            query=state["question"],
+            limit=3,
+        )
+        prior = " | ".join(h.value.get("answer", "") for h in history)
+    else:
+        prior = ""
+
+    answer = f"[{model}] Answer for {ctx.user_id}: {state['question']} (prior: {prior})"
+
+    # Write this answer to long-term memory
+    if runtime.store:
+        runtime.store.put(
+            ("history", ctx.user_id),
+            f"q-{len(state['question'])}",
+            {"question": state["question"], "answer": answer},
+        )
+
+    # ExecutionInfo gives checkpoint/run metadata
+    exec_info: ExecutionInfo | None = runtime.execution_info
+    if exec_info:
+        print(f"attempt={exec_info.node_attempt}, thread={exec_info.thread_id}")
+
+    return {"answer": answer}
+
+
+store = InMemoryStore()
+
+builder = StateGraph(QueryState, context_schema=RequestContext)
+builder.add_node("answer", answer_node)
+builder.add_edge(START, "answer")
+builder.add_edge("answer", END)
+
+graph = builder.compile(checkpointer=InMemorySaver(), store=store)
+
+# Pass context at invoke time — not part of state
+result = graph.invoke(
+    {"question": "What is LangGraph?", "answer": "", "attempt": 0},
+    {"configurable": {"thread_id": "session-1"}},
+    context=RequestContext(user_id="alice", tenant_id="acme", is_premium=True),
+)
+print(result["answer"])
+```
+
+`Runtime` fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `context` | `ContextT` | What you passed as `context=` at invoke time |
+| `store` | `BaseStore \| None` | What you passed to `compile(store=...)` |
+| `stream_writer` | `(Any) -> None` | Write to `stream_mode="custom"` |
+| `heartbeat` | `() -> None` | Refresh `TimeoutPolicy(idle_timeout=...)` |
+| `previous` | `Any` | Functional API only: last return value for this thread |
+| `execution_info` | `ExecutionInfo \| None` | `checkpoint_id`, `thread_id`, `run_id`, `node_attempt` |
+| `server_info` | `ServerInfo \| None` | LangGraph Platform only |
+
+---
+
+### Pattern 9: Map-reduce fan-out with `Send`
+
+`Send` dispatches a named node with a custom state snapshot — each item in a list gets its own parallel execution. A reducer on the downstream channel collects all results.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+
+
+class Pipeline(TypedDict):
+    items: list[str]
+    scores: Annotated[list[float], operator.add]   # reducer accumulates results
+
+
+class WorkerInput(TypedDict):
+    item: str
+
+
+def dispatch(state: Pipeline) -> list[Send]:
+    # add_conditional_edges accepts a path function that returns list[Send],
+    # not just string node names — this is what enables map-reduce fan-out.
+    return [Send("score_item", WorkerInput(item=i)) for i in state["items"]]
+
+
+def score_item(state: WorkerInput) -> dict:
+    """Runs in parallel for every item sent by dispatch."""
+    return {"scores": [len(state["item"]) / 10.0]}
+
+
+def summarize(state: Pipeline) -> dict:
+    avg = sum(state["scores"]) / len(state["scores"]) if state["scores"] else 0.0
+    return {"items": [f"avg_score={avg:.2f}"]}
+
+
+builder = StateGraph(Pipeline)
+builder.add_node("score_item", score_item)
+builder.add_node("summarize", summarize)
+
+# Conditional edge from START fans out to N parallel score_item runs
+builder.add_conditional_edges(START, dispatch)
+# All score_item tasks drain before summarize starts (barrier edge)
+builder.add_edge("score_item", "summarize")
+builder.add_edge("summarize", END)
+
+graph = builder.compile()
+result = graph.invoke({"items": ["hello", "hi", "hey there"], "scores": []})
+print(result["scores"])   # [0.5, 0.2, 0.9] (order may vary)
+print(result["items"])    # ['avg_score=0.53']
+```
+
+---
+
+## Functional API (`@entrypoint` / `@task`)
+
+The Functional API is the imperative alternative to `StateGraph`. The result is still a `Pregel` graph with the same `invoke`/`stream`/`get_state` surface.
+
+### Basic parallel fan-out
 
 ```python
 from langgraph.func import entrypoint, task
-from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import InMemorySaver
-from typing import Optional
 
-# Define parallelizable tasks
-@task
-def fetch_user_data(user_id: str) -> dict:
-    """Get user info."""
-    return {"user_id": user_id, "name": "Alice"}
 
 @task
-def fetch_orders(user_id: str) -> list[dict]:
-    """Get user orders."""
-    return [{"id": "1", "total": 99.99}]
+def fetch_page(url: str) -> str:
+    return f"content:{url}"     # replace with real I/O
+
 
 @task
-async def generate_recommendations(user_data: dict, orders: list) -> list[str]:
-    """Generate recommendations (can be async)."""
-    return ["Product A", "Product B"]
+def summarize_page(content: str) -> str:
+    return f"summary:{content[:20]}"
 
-# Define entrypoint with automatic parallelization
+
 @entrypoint(checkpointer=InMemorySaver())
-def build_dashboard(user_id: str, *, previous: Optional[dict] = None) -> dict:
-    """
-    Build dashboard with parallel data fetching.
-    
-    Args:
-        user_id: User to fetch data for
-        previous: Return value from last invocation (enables state)
-    
-    Returns:
-        Complete dashboard data
-    """
-    
-    # Launch tasks in parallel - immediately get futures
-    user_future = fetch_user_data(user_id)
-    orders_future = fetch_orders(user_id)
-    
-    # Block and wait for results
-    user_data = user_future.result()
-    orders = orders_future.result()
-    
-    # Now generate recommendations using results
-    recs_future = generate_recommendations(user_data, orders)
-    recommendations = recs_future.result()
-    
-    # Can interrupt for human approval
-    approved = interrupt({
-        "recommendations": recommendations,
-        "question": "Approve these recommendations?"
-    })
-    
-    return {
-        "user": user_data,
-        "orders": orders,
-        "recommendations": recommendations if approved else [],
-        "status": "approved" if approved else "rejected"
-    }
+def pipeline(urls: list[str]) -> list[str]:
+    # All fetches launch in parallel; .result() blocks until done
+    pages = [fetch_page(u) for u in urls]
+    summaries = [summarize_page(p.result()) for p in pages]
+    return [s.result() for s in summaries]
 
-# Execute
-config = {"configurable": {"thread_id": "user-session-1"}}
 
-# Initial run - interrupts for approval
-for result in build_dashboard.stream("user-123", config):
-    print(result)
+cfg = {"configurable": {"thread_id": "run-1"}}
+print(pipeline.invoke(["a.html", "b.html"], cfg))
+# ['summary:content:a.html', 'summary:content:b.html']
+```
 
-# Resume after human approval
-for result in build_dashboard.stream(Command(resume=True), config):
-    print(result)
+### `entrypoint.final` — return one value, save another
 
-# With previous state for stateful workflows
+Use `entrypoint.final` when the value you want to return to the caller differs from what you want the checkpointer to remember for `previous`.
+
+```python
+from typing import Any
+from langgraph.func import entrypoint
+from langgraph.checkpoint.memory import InMemorySaver
+
+
 @entrypoint(checkpointer=InMemorySaver())
-def counter(increment: int, *, previous: Optional[int] = None) -> str:
-    """Accumulate counter."""
-    current = (previous or 0) + increment
-    return f"Counter: {current}"
+def accumulator(n: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+    total = (previous or 0) + n
+    # Return `total` to the caller; save `total` for the next call's `previous`.
+    return entrypoint.final(value=total, save=total)
 
-config = {"configurable": {"thread_id": "counter"}}
-counter.invoke(5, config)    # "Counter: 5"
-counter.invoke(3, config)    # "Counter: 8" (5+3)
+
+cfg = {"configurable": {"thread_id": "acc"}}
+print(accumulator.invoke(5, cfg))   # 5
+print(accumulator.invoke(3, cfg))   # 8
+print(accumulator.invoke(2, cfg))   # 10
+```
+
+### Tasks with `RetryPolicy` and `CachePolicy`
+
+`@task` accepts the same `retry_policy` and `cache_policy` kwargs as `StateGraph.add_node`. Pass a `BaseCache` to `@entrypoint(cache=...)`.
+
+```python
+import httpx
+from langgraph.func import entrypoint, task
+from langgraph.cache.memory import InMemoryCache
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import RetryPolicy, CachePolicy
+
+
+@task(
+    retry_policy=RetryPolicy(max_attempts=4, retry_on=httpx.TransportError),
+    cache_policy=CachePolicy(ttl=300),
+)
+async def fetch(url: str) -> str:
+    async with httpx.AsyncClient() as c:
+        r = await c.get(url, timeout=10)
+        r.raise_for_status()
+        return r.text[:500]
+
+
+cache = InMemoryCache()
+
+
+@entrypoint(checkpointer=InMemorySaver(), cache=cache)
+async def crawl(urls: list[str]) -> list[str]:
+    futures = [fetch(u) for u in urls]
+    return [f.result() for f in futures]
+```
+
+### Resuming after `interrupt` in a task workflow
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt, Command
+
+
+@task
+def draft_content(topic: str) -> str:
+    return f"Draft about {topic}"
+
+
+@entrypoint(checkpointer=InMemorySaver())
+def review_flow(topic: str) -> dict:
+    draft = draft_content(topic).result()   # cached on resume — not re-run
+    edit = interrupt({"question": "Edit this draft?", "draft": draft})
+    return {"draft": draft, "edit": edit}
+
+
+cfg = {"configurable": {"thread_id": "review-1"}}
+
+# First pass: pauses at interrupt
+for ev in review_flow.stream("climate change", cfg):
+    print(ev)
+
+# Resume with the human's edit
+for ev in review_flow.stream(Command(resume="Make it shorter"), cfg):
+    print(ev)
+# {'review_flow': {'draft': '...', 'edit': 'Make it shorter'}}
 ```
