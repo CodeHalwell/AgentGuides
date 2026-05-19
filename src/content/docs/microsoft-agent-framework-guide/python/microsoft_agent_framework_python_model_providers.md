@@ -413,17 +413,202 @@ The fields `ChatOptions` defines — every first-party client accepts at least t
 
 ### Forcing a specific tool with `ToolMode`
 
-`tool_choice` accepts either the shorthand literal strings or a `ToolMode` dict for when you want to pin the model to one specific function:
+`tool_choice` accepts either the shorthand literal strings or a `ToolMode` TypedDict for fine-grained control over when and which tools the model may call. `ToolMode` has three optional keys:
+
+| Key | Type | When to use |
+|---|---|---|
+| `mode` | `"auto"` \| `"required"` \| `"none"` | Required. `"auto"` lets the model decide; `"required"` forces at least one tool call; `"none"` disables all tools. |
+| `required_function_name` | `str` | Only valid with `mode="required"`. Forces the model to call exactly this tool. |
+| `allowed_tools` | `list[str]` | Valid with `"auto"` or `"required"`. Restricts which tools the model can see for this call. |
+
+#### Force any tool — `mode="required"`
+
+Use when you want to guarantee the model calls at least one tool (not just returns a text response):
 
 ```python
-from agent_framework import ChatOptions, ToolMode
+import asyncio
+from typing import Annotated
+from agent_framework import Agent, ChatOptions, ToolMode, tool
+from agent_framework.openai import OpenAIChatClient
 
-pin_to_search: ChatOptions = {
-    "tool_choice": ToolMode(mode="required", required_function_name="search_products"),
-    "allow_multiple_tool_calls": False,
-}
 
-await agent.run("Find red sneakers under $100", options=pin_to_search)
+@tool
+def get_weather(location: Annotated[str, "City name"]) -> str:
+    """Return current weather for a city."""
+    return f"The weather in {location} is 22°C."
+
+
+@tool
+def search_web(query: Annotated[str, "Search query"]) -> str:
+    """Search the web for up-to-date information."""
+    return f"Results for {query}: ..."
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research assistant.",
+    tools=[get_weather, search_web],
+)
+
+
+async def main() -> None:
+    # Model MUST call a tool — useful when the pipeline expects a structured tool result
+    response = await agent.run(
+        "What's the weather in Amsterdam?",
+        options=ChatOptions(tool_choice="required"),
+    )
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+#### Pin to one specific tool — `required_function_name`
+
+Use when you know exactly which tool should run. The model fills in the arguments:
+
+```python
+import asyncio
+from agent_framework import Agent, ChatOptions, ToolMode, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def lookup_customer(customer_id: str) -> str:
+    """Look up a customer by ID."""
+    return f"Customer {customer_id}: Alice Smith"
+
+
+@tool
+def cancel_subscription(customer_id: str, reason: str) -> str:
+    """Cancel a customer's subscription."""
+    return f"Subscription for {customer_id} cancelled: {reason}"
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a billing assistant.",
+    tools=[lookup_customer, cancel_subscription],
+)
+
+
+async def main() -> None:
+    # Force lookup_customer — the model must call this tool first regardless of what it thinks
+    response = await agent.run(
+        "Customer c-4821 wants to cancel.",
+        options=ChatOptions(
+            tool_choice=ToolMode(mode="required", required_function_name="lookup_customer")
+        ),
+    )
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+#### Restrict visible tools — `allowed_tools`
+
+Use when only a subset of the agent's tools is relevant for a particular turn. The model can only see and call the listed tools:
+
+```python
+import asyncio
+from agent_framework import Agent, ChatOptions, ToolMode, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def search_products(query: str) -> str:
+    """Search the product catalog."""
+    return f"Found 12 results for {query}"
+
+
+@tool
+def add_to_cart(product_id: str, qty: int) -> str:
+    """Add a product to the shopping cart."""
+    return f"Added {qty}x {product_id} to cart"
+
+
+@tool
+def checkout(cart_id: str) -> str:
+    """Complete the checkout flow."""
+    return f"Order placed for cart {cart_id}"
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a shopping assistant.",
+    tools=[search_products, add_to_cart, checkout],
+)
+
+
+async def main() -> None:
+    # Discovery phase — only search is allowed
+    await agent.run(
+        "Find red sneakers under $100.",
+        options=ChatOptions(
+            tool_choice=ToolMode(mode="auto", allowed_tools=["search_products"])
+        ),
+    )
+
+    # Add-to-cart phase — search is still available but checkout is blocked
+    await agent.run(
+        "Add product SKU-4821 to my cart.",
+        options=ChatOptions(
+            tool_choice=ToolMode(mode="required", allowed_tools=["add_to_cart"])
+        ),
+    )
+
+    # Checkout phase — only checkout is visible
+    await agent.run(
+        "Place the order.",
+        options=ChatOptions(
+            tool_choice=ToolMode(mode="required", allowed_tools=["checkout"])
+        ),
+    )
+
+
+asyncio.run(main())
+```
+
+#### Disable tools entirely — `mode="none"`
+
+Use when you want a plain text response without any tool calls — for example a final summary step after all research is done:
+
+```python
+import asyncio
+from agent_framework import Agent, ChatOptions, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def search_web(query: str) -> str:
+    """Search the web."""
+    return f"Results for {query}: ..."
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research assistant.",
+    tools=[search_web],
+)
+
+
+async def main() -> None:
+    session = agent.create_session()
+
+    # Research phase — tools enabled
+    await agent.run("Research the history of quantum computing.", session=session)
+
+    # Summary phase — force plain text, no tool calls
+    summary = await agent.run(
+        "Now give me a concise two-paragraph summary of what you found.",
+        session=session,
+        options=ChatOptions(tool_choice="none"),
+    )
+    print(summary.text)
+
+
+asyncio.run(main())
 ```
 
 `mode="none"` disables tools entirely for one call (useful when you want a pure summary of the conversation without further tool-use); `mode="required"` without `required_function_name` forces the model to pick *some* tool.

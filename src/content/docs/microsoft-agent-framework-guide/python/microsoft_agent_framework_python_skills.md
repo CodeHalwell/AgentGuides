@@ -694,6 +694,104 @@ class ConfigDrivenSkill(ClassSkill):
         return result
 ```
 
+### Packaging `ClassSkill` as a shared library
+
+`ClassSkill` is ideal for distributing reusable skill types across teams or open-sourcing them. Because the class is self-contained — constructor, instructions, resources, and scripts all in one place — a shared library can export a `ClassSkill` subclass and callers instantiate it with their own configuration:
+
+```python
+# my_skills_library/github_skill.py
+"""Distributable GitHub skill — install via pip install my-skills-library."""
+import json
+from agent_framework import ClassSkill, SkillFrontmatter
+
+
+class GitHubSkill(ClassSkill):
+    """Skill that gives an agent read access to a GitHub repository.
+
+    Usage:
+        from my_skills_library import GitHubSkill
+        skill = GitHubSkill(token="ghp_…", owner="acme", repo="platform")
+        agent = Agent(…, context_providers=[SkillsProvider(skill)])
+    """
+
+    def __init__(self, *, token: str, owner: str, repo: str) -> None:
+        super().__init__(
+            frontmatter=SkillFrontmatter(
+                name="github",
+                description=f"Read-only access to {owner}/{repo} on GitHub.",
+            )
+        )
+        self._token = token
+        self._owner = owner
+        self._repo = repo
+
+    @property
+    def instructions(self) -> str:
+        return (
+            f"You can read the GitHub repository {self._owner}/{self._repo}.\n"
+            "Use read_skill_resource('github', 'readme') to see the README.\n"
+            "Use run_skill_script('github', 'list-issues') to list open issues.\n"
+            "Never write to the repository."
+        )
+
+    @ClassSkill.resource(description="README.md content.")
+    async def readme(self) -> str:
+        import httpx
+        url = f"https://api.github.com/repos/{self._owner}/{self._repo}/readme"
+        headers = {"Authorization": f"Bearer {self._token}", "Accept": "application/vnd.github.v3.raw"}
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, headers=headers)
+            r.raise_for_status()
+            return r.text
+
+    @ClassSkill.script(name="list-issues", description="List open issues as JSON.")
+    async def list_issues(self, state: str = "open", limit: int = 20) -> str:
+        import httpx
+        url = f"https://api.github.com/repos/{self._owner}/{self._repo}/issues"
+        params = {"state": state, "per_page": limit}
+        headers = {"Authorization": f"Bearer {self._token}"}
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url, headers=headers, params=params)
+            r.raise_for_status()
+            issues = r.json()
+        return json.dumps([{"id": i["number"], "title": i["title"]} for i in issues])
+```
+
+Callers in another service or team:
+
+```python
+import asyncio
+from agent_framework import Agent, SkillsProvider
+from agent_framework.openai import OpenAIChatClient
+from my_skills_library import GitHubSkill   # import the packaged skill type
+
+
+async def main() -> None:
+    skill = GitHubSkill(
+        token="ghp_…",
+        owner="my-org",
+        repo="backend-api",
+    )
+
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are an engineering assistant.",
+        context_providers=[SkillsProvider(skill)],
+    )
+
+    r = await agent.run("Are there any open bugs about the auth module?")
+    print(r.text)
+
+
+asyncio.run(main())
+```
+
+Key distribution properties of `ClassSkill`:
+- **Zero-dependency surface**: callers only need `agent-framework-core` and your library package.
+- **Per-instance config**: each caller can connect to a different repo, endpoint, or secret without any shared global state.
+- **Testability**: instantiate the skill in tests, call resource/script methods directly (they're just async methods), and assert on return values without running an agent.
+- **IDE discoverability**: docstrings on the class and its constructor travel with the package — type checkers and IDEs surface them at the call site.
+
 ## `SkillsProvider` reference
 
 ```python

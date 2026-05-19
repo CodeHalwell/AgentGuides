@@ -835,3 +835,252 @@ def explain_compaction(messages):
 ```
 
 Wire this into a debug `AgentMiddleware` that runs after compaction to see exactly what the model received vs. what was kept on disk.
+
+## Low-level compaction utilities
+
+`agent_framework` exports three utility functions that the strategies use internally. You can call them directly when building custom strategies, debug tooling, or middleware that inspects conversation state.
+
+### `annotate_message_groups` — assign group IDs and kinds
+
+Group annotation is the prerequisite for all compaction strategies. Each message gets stamped with a `_group` dict that carries `id`, `kind`, `index`, `has_reasoning`, and (optionally) `token_count`. The strategies then read those annotations instead of re-parsing the conversation on every call.
+
+```python
+import asyncio
+from agent_framework import (
+    Agent,
+    Content,
+    Message,
+    annotate_message_groups,
+    GROUP_ANNOTATION_KEY,
+    GROUP_ID_KEY,
+    GROUP_KIND_KEY,
+    GROUP_INDEX_KEY,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+def show_groups(messages: list[Message]) -> None:
+    """Print the group annotation of each message."""
+    for msg in messages:
+        group = msg.additional_properties.get(GROUP_ANNOTATION_KEY) or {}
+        kind = group.get(GROUP_KIND_KEY, "?")
+        index = group.get(GROUP_INDEX_KEY, "?")
+        snippet = (msg.text or "")[:60]
+        print(f"  [{index:>3}] {kind:<20} {snippet!r}")
+
+
+# Build a small synthetic conversation
+conversation = [
+    Message(role="system",    contents=[Content.from_text("You are an assistant.")]),
+    Message(role="user",      contents=[Content.from_text("What's 2+2?")]),
+    Message(role="assistant", contents=[Content.from_text("4")]),
+    Message(role="user",      contents=[Content.from_text("And 3+3?")]),
+    Message(role="assistant", contents=[Content.from_text("6")]),
+]
+
+group_ids = annotate_message_groups(conversation)
+print(f"Group IDs: {group_ids}")    # ['g0', 'g1', 'g2', 'g3', 'g4'] or similar
+show_groups(conversation)
+```
+
+`annotate_message_groups` is **incremental** — it reuses existing annotations and only re-annotates the suffix that contains new messages. When you append a new turn, call it with `from_index=len(existing)` to avoid redundant work:
+
+```python
+new_msg = Message(role="user", contents=[Content.from_text("What about 4+4?")])
+conversation.append(new_msg)
+
+# Only annotate the last message — skip the already-annotated prefix
+annotate_message_groups(conversation, from_index=len(conversation) - 1)
+```
+
+Pass `force_reannotate=True` to re-stamp the whole list (e.g. after splicing in a summary message that shifts group indices):
+
+```python
+annotate_message_groups(conversation, force_reannotate=True)
+```
+
+#### With a tokenizer for token-count annotations
+
+Pair with `CharacterEstimatorTokenizer` to also stamp token counts per message — enables `TokenBudgetComposedStrategy` and `included_token_count`:
+
+```python
+from agent_framework import annotate_message_groups, CharacterEstimatorTokenizer, Message, Content
+
+tokenizer = CharacterEstimatorTokenizer()   # 4 chars ≈ 1 token (fast heuristic)
+
+messages = [
+    Message(role="user",      contents=[Content.from_text("Explain quantum entanglement.")]),
+    Message(role="assistant", contents=[Content.from_text("Quantum entanglement is a phenomenon...")]),
+]
+
+group_ids = annotate_message_groups(messages, tokenizer=tokenizer)
+# Each message now has a token_count annotation that TokenBudgetComposedStrategy reads
+```
+
+### `included_messages` — filter to non-excluded messages
+
+After a strategy runs and marks groups as excluded, `included_messages` returns only the messages the model will actually see. Use it to verify what a strategy did without sending anything to the API:
+
+```python
+import asyncio
+from agent_framework import (
+    Content,
+    Message,
+    SlidingWindowStrategy,
+    annotate_message_groups,
+    apply_compaction,
+    included_messages,
+)
+
+
+async def main() -> None:
+    messages = [
+        Message(role="user",      contents=[Content.from_text(f"Question {i}")]),
+        Message(role="assistant", contents=[Content.from_text(f"Answer {i}")])
+        for i in range(10)
+    ]
+    # Flatten the list comprehension (above produces nested lists)
+    flat: list[Message] = []
+    for i in range(10):
+        flat.append(Message(role="user",      contents=[Content.from_text(f"Q{i}")]))
+        flat.append(Message(role="assistant", contents=[Content.from_text(f"A{i}")]))
+
+    annotate_message_groups(flat)
+    strategy = SlidingWindowStrategy(keep_last_groups=4)
+    await apply_compaction(flat, strategy=strategy)
+
+    visible = included_messages(flat)
+    print(f"Total: {len(flat)}  Visible to model: {len(visible)}")
+    for m in visible:
+        print(f"  {m.role}: {m.text}")
+
+
+asyncio.run(main())
+```
+
+### `included_token_count` — measure context size after compaction
+
+Combine with `CharacterEstimatorTokenizer` to compute the approximate token spend the model will see after compaction:
+
+```python
+import asyncio
+from agent_framework import (
+    CharacterEstimatorTokenizer,
+    Content,
+    Message,
+    SlidingWindowStrategy,
+    annotate_message_groups,
+    apply_compaction,
+    included_token_count,
+)
+
+
+async def main() -> None:
+    tokenizer = CharacterEstimatorTokenizer()
+
+    messages: list[Message] = []
+    for i in range(20):
+        messages.append(Message(role="user",      contents=[Content.from_text(f"Tell me about topic {i}.")]))
+        messages.append(Message(role="assistant", contents=[Content.from_text(f"Topic {i} is about ...")]))
+
+    # Annotate with token counts before compaction
+    annotate_message_groups(messages, tokenizer=tokenizer)
+    before = included_token_count(messages)
+
+    # Compact to the last 6 groups
+    await apply_compaction(messages, strategy=SlidingWindowStrategy(keep_last_groups=6))
+
+    after = included_token_count(messages)
+    print(f"Before compaction: ~{before} tokens")
+    print(f"After compaction:  ~{after} tokens")
+    print(f"Saved:             ~{before - after} tokens ({100 * (before - after) / before:.0f}%)")
+
+
+asyncio.run(main())
+```
+
+`included_token_count` only sums messages that are **not** excluded. If a message lacks a token-count annotation (because `annotate_message_groups` was called without a tokenizer), it contributes zero — so always pass a tokenizer when you care about accurate counts.
+
+### Custom strategy using the low-level utilities
+
+The utilities compose cleanly when you need behaviour the built-in strategies don't offer. Here's a strategy that keeps the system prompt plus the `N` most recent groups that together stay under a token budget:
+
+```python
+import asyncio
+from agent_framework import (
+    EXCLUDED_KEY,
+    GROUP_ANNOTATION_KEY,
+    GROUP_INDEX_KEY,
+    CharacterEstimatorTokenizer,
+    CompactionStrategy,
+    Content,
+    Message,
+    annotate_message_groups,
+    apply_compaction,
+    included_token_count,
+)
+
+
+class BudgetWindowStrategy:
+    """Keep the system prompt and the most-recent groups within a token budget."""
+
+    def __init__(self, token_budget: int) -> None:
+        self._budget = token_budget
+        self._tokenizer = CharacterEstimatorTokenizer()
+
+    async def __call__(self, messages: list[Message]) -> bool:
+        # Ensure all messages are annotated with token counts
+        annotate_message_groups(messages, tokenizer=self._tokenizer)
+
+        # Collect non-system groups in reverse order (newest first)
+        system_msgs = [m for m in messages if m.role == "system"]
+        non_system = [m for m in messages if m.role != "system"]
+
+        # Estimate system token spend
+        system_tokens = sum(
+            self._tokenizer.count_tokens((m.text or "")) for m in system_msgs
+        )
+        remaining_budget = self._budget - system_tokens
+
+        # Walk non-system messages newest-to-oldest; include until budget runs out
+        keep_indices: set[int] = set()
+        running_total = 0
+        for msg in reversed(non_system):
+            group = msg.additional_properties.get(GROUP_ANNOTATION_KEY) or {}
+            idx = group.get(GROUP_INDEX_KEY)
+            tok = self._tokenizer.count_tokens(msg.text or "")
+            if running_total + tok <= remaining_budget:
+                running_total += tok
+                if idx is not None:
+                    keep_indices.add(idx)
+            else:
+                break
+
+        # Exclude non-system messages whose group index is not in keep_indices
+        changed = False
+        for msg in non_system:
+            group = msg.additional_properties.get(GROUP_ANNOTATION_KEY) or {}
+            idx = group.get(GROUP_INDEX_KEY)
+            should_exclude = idx is not None and idx not in keep_indices
+            current = msg.additional_properties.get(EXCLUDED_KEY, False)
+            if should_exclude != current:
+                msg.additional_properties[EXCLUDED_KEY] = should_exclude
+                changed = True
+
+        return changed
+
+
+async def main() -> None:
+    messages: list[Message] = []
+    messages.append(Message(role="system", contents=[Content.from_text("You are an assistant.")]))
+    for i in range(15):
+        messages.append(Message(role="user",      contents=[Content.from_text(f"Message {i}: " + "word " * 20)]))
+        messages.append(Message(role="assistant", contents=[Content.from_text(f"Response {i}: " + "word " * 30)]))
+
+    strategy = BudgetWindowStrategy(token_budget=200)
+    await apply_compaction(messages, strategy=strategy)
+    print(f"Visible: {included_token_count(messages)} tokens in {len([m for m in messages if not m.additional_properties.get(EXCLUDED_KEY)])} messages")
+
+
+asyncio.run(main())
+```
