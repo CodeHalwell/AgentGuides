@@ -170,7 +170,7 @@ pipeline = Workflow(
 )
 ```
 
-`NodeTimeoutError` is raised when a node exceeds its `timeout`. It IS retried (unless excluded via `exceptions`), so set a timeout shorter than `max_delay * max_attempts` if you want the workflow to eventually fail fast.
+`NodeTimeoutError` is raised when a node exceeds its `timeout`. It IS retried (only when `exceptions` is `None` or includes `NodeTimeoutError`), so set a timeout shorter than `max_delay * max_attempts` if you want the workflow to eventually fail fast.
 
 Signatures recognised by `FunctionNode`:
 - `node_input` — the incoming value (the predecessor's output, or the user's `new_message` for START successors).
@@ -328,7 +328,7 @@ Combine with `ResumabilityConfig(is_resumable=True)` on the `App` so state is pe
 ```python
 from google.adk.workflow import node, RetryConfig
 
-@node(retry_config=RetryConfig(max_attempts=3, backoff_base=2.0), timeout=30.0)
+@node(retry_config=RetryConfig(max_attempts=3, backoff_factor=2.0), timeout=30.0)
 async def flaky(q: str, ctx): ...
 ```
 

@@ -132,7 +132,7 @@ async def start_report_job(project_id: str, tool_context: ToolContext) -> dict:
 
 report_tool = LongRunningFunctionTool(func=start_report_job)
 
-# Companion poll tool (a plain FunctionTool — the model calls this later)
+# Companion poll tool — plain callable, auto-wrapped by ADK when passed to tools=
 async def check_report_status(tool_context: ToolContext) -> dict:
     """Check the status of the previously submitted report job."""
     job_id = tool_context.state.get("report_job_id")

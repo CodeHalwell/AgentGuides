@@ -159,17 +159,17 @@ async for event in runner.run_async(..., run_config=cfg):
 # ── Strategy 2: final-only (no streaming effect) ────────────────────────────
 async for event in runner.run_async(..., run_config=cfg):
     if not event.partial and event.is_final_response() and event.content:
-        print("".join(p.text or "" for p in event.content.parts))
+        print("".join(p.text or "" for p in event.content.parts or []))
 
 # ── Strategy 3: track what was already streamed ─────────────────────────────
 streamed = ""
 async for event in runner.run_async(..., run_config=cfg):
     if event.partial and event.content:
-        chunk = "".join(p.text or "" for p in event.content.parts)
+        chunk = "".join(p.text or "" for p in event.content.parts or [])
         print(chunk, end="", flush=True)
         streamed += chunk
     elif not event.partial and event.content:
-        final = "".join(p.text or "" for p in event.content.parts)
+        final = "".join(p.text or "" for p in event.content.parts or [])
         if final != streamed:
             print(final)   # only if the final has content we didn't stream yet
 ```

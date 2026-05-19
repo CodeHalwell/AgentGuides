@@ -1,6 +1,6 @@
 ---
 title: "Google ADK - Practical Recipes and Examples"
-description: "Version: 2.0 Focus: Real-world implementations and use cases"
+description: "Version: 2.0.0 Focus: Real-world implementations and use cases"
 framework: google-adk
 language: python
 ---
@@ -1222,8 +1222,11 @@ import httpx
     ),
     timeout=30.0,
 )
-async def fetch_data(url: str, ctx) -> dict:
+async def fetch_data(node_input: dict) -> dict:
     """Fetch JSON data from a URL with automatic retry on transient errors."""
+    url = node_input.get("url") if isinstance(node_input, dict) else str(node_input)
+    if not url:
+        return {"error": "No URL provided", "data": {}}
     async with httpx.AsyncClient(timeout=25.0) as client:
         response = await client.get(url)
         response.raise_for_status()
@@ -1239,12 +1242,13 @@ async def fetch_data(url: str, ctx) -> dict:
     ),
     timeout=20.0,
 )
-async def enrich_data(raw: dict, ctx) -> dict:
+async def enrich_data(raw: dict) -> dict:
     """Enrich the fetched data with additional metadata."""
     data = raw.get("data", {})
-    # Simulate enrichment — e.g. geocoding, currency conversion, etc.
+    # Guard: jsonplaceholder-style endpoints return a list, not a mapping
+    base = data if isinstance(data, dict) else {"items": data}
     enriched = {
-        **data,
+        **base,
         "source_url": raw.get("url"),
         "record_count": len(data) if isinstance(data, list) else 1,
         "enriched": True,
@@ -1253,7 +1257,7 @@ async def enrich_data(raw: dict, ctx) -> dict:
 
 
 @node(timeout=10.0)
-async def summarise(enriched: dict, ctx) -> str:
+async def summarise(enriched: dict) -> str:
     """Format the enriched data as a human-readable summary."""
     count = enriched.get("record_count", "unknown")
     source = enriched.get("source_url", "unknown source")
@@ -1264,12 +1268,9 @@ async def summarise(enriched: dict, ctx) -> str:
 # Wire nodes into a Workflow (replaces deprecated SequentialAgent)
 # ---------------------------------------------------------------------------
 
-pipeline = (
-    Workflow(name="resilient_data_pipeline")
-    .add_node(fetch_data)
-    .add_node(enrich_data, depends_on=[fetch_data])
-    .add_node(summarise, depends_on=[enrich_data])
-    .set_entry(START >> fetch_data)
+pipeline = Workflow(
+    name="resilient_data_pipeline",
+    edges=[(START, fetch_data, enrich_data, summarise)],
 )
 
 # ---------------------------------------------------------------------------

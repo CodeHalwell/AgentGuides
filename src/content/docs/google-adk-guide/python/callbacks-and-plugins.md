@@ -155,8 +155,6 @@ class AuditPlugin(BasePlugin):
     async def on_event_callback(
         self, *, invocation_context: InvocationContext, event: Event
     ) -> Optional[Event]:
-        # Tag every event with audit metadata via custom_metadata
-        # (event is mutable before being persisted)
         return None  # let the original event through
 
     async def after_run_callback(self, *, invocation_context: InvocationContext) -> None:
