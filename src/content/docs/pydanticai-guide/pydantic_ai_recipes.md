@@ -1,12 +1,12 @@
 ---
 title: "Pydantic AI: Recipes & Real-World Examples"
-description: "Version: 1.0.0 Purpose: Practical, production-tested code examples for common scenarios"
+description: "Version: 1.98.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, and XML prompt enrichment."
 framework: pydanticai
 ---
 
 # Pydantic AI: Recipes & Real-World Examples
 
-**Version:** 1.0.0  
+**Version:** 1.98.0 (May 2026)
 **Purpose:** Practical, production-tested code examples for common scenarios
 
 ---
@@ -720,6 +720,253 @@ result = asyncio.run(
 
 ---
 
-(Continue with 10+ more production-ready recipes covering various patterns)
+## Recipe 7: Research Agent with `common_tools` (DuckDuckGo + web fetch)
+
+```python
+"""
+Research agent that searches the web then fetches and summarises the top result.
+Requires: pip install "pydantic-ai-slim[duckduckgo,web-fetch]"
+"""
+
+import asyncio
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
+class ResearchSummary(BaseModel):
+    topic: str
+    key_findings: list[str] = Field(..., min_length=2, description='At least 2 bullet findings')
+    sources_consulted: list[str] = Field(..., description='URLs fetched during research')
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+research_agent = Agent(
+    'openai:gpt-4o',
+    output_type=ResearchSummary,
+    tools=[
+        duckduckgo_search_tool(max_results=3),
+        web_fetch_tool(max_content_length=4000, timeout=15),
+    ],
+    instructions=(
+        'You are a research assistant. '
+        '1. Use duckduckgo_search to find relevant URLs for the topic. '
+        '2. Use web_fetch on the top 1-2 results to read the actual content. '
+        '3. Synthesise findings into the structured output.'
+    ),
+)
+
+async def research(topic: str) -> ResearchSummary:
+    result = await research_agent.run(f'Research: {topic}')
+    return result.output
+
+if __name__ == '__main__':
+    summary = asyncio.run(research('PydanticAI latest features 2026'))
+    print(f'Topic: {summary.topic}')
+    for finding in summary.key_findings:
+        print(f'  • {finding}')
+    print(f'Sources: {summary.sources_consulted}')
+    print(f'Confidence: {summary.confidence:.0%}')
+```
+
+---
+
+## Recipe 8: Concurrent batch processing with `ConcurrencyLimiter`
+
+```python
+"""
+Process a large batch of items in parallel while capping model concurrency.
+Useful when you have many tasks but want to avoid hitting rate limits.
+"""
+
+import asyncio
+from pydantic import BaseModel
+from pydantic_ai import Agent, ConcurrencyLimiter, limit_model_concurrency
+from pydantic_ai.exceptions import ConcurrencyLimitExceeded
+
+class ItemAnalysis(BaseModel):
+    item_id: str
+    category: str
+    sentiment: str  # positive | negative | neutral
+    score: float
+
+# Shared limiter: max 5 parallel model calls, queue up to 15 more
+shared_limiter = ConcurrencyLimiter(max_running=5, max_queued=15, name='batch-pool')
+model = limit_model_concurrency('openai:gpt-4o', limiter=shared_limiter)
+agent = Agent(model, output_type=ItemAnalysis)
+
+async def analyse_item(item_id: str, text: str) -> ItemAnalysis | None:
+    try:
+        result = await agent.run(
+            f'Analyse this customer feedback (item_id={item_id}): {text}'
+        )
+        return result.output
+    except ConcurrencyLimitExceeded:
+        print(f'[{item_id}] Dropped — queue full')
+        return None
+
+async def process_batch(items: list[dict]) -> list[ItemAnalysis]:
+    tasks = [analyse_item(item['id'], item['text']) for item in items]
+    results = await asyncio.gather(*tasks)
+    return [r for r in results if r is not None]
+
+async def main():
+    items = [
+        {'id': f'item-{i}', 'text': f'Sample feedback number {i}. Great product!'}
+        for i in range(30)
+    ]
+    analyses = await process_batch(items)
+    positives = [a for a in analyses if a.sentiment == 'positive']
+    print(f'Processed {len(analyses)}/30 items, {len(positives)} positive')
+    print(f'Pool status — running: {shared_limiter.running_count}, waiting: {shared_limiter.waiting_count}')
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+---
+
+## Recipe 9: Node-level inspection with `AgentRun.iter()`
+
+```python
+"""
+Use agent.iter() to record every graph node, measure per-step latency,
+and inspect tool call arguments before they execute.
+"""
+
+import asyncio
+import time
+from pydantic_ai import Agent, RunContext
+from pydantic_graph import End
+from pydantic_ai.run import AgentRun
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+def get_temperature(city: str) -> float:
+    """Return the current temperature for a city (simulated)."""
+    return 22.0
+
+async def run_with_inspection(prompt: str) -> dict:
+    """Run the agent and collect execution telemetry."""
+    telemetry = {
+        'nodes': [],
+        'step_times_ms': [],
+        'run_id': None,
+        'output': None,
+    }
+
+    async with agent.iter(prompt) as run:
+        telemetry['run_id'] = run.run_id
+        node = run.next_node
+
+        while not isinstance(node, End):
+            node_name = type(node).__name__
+            t0 = time.monotonic()
+
+            # Inspect the node before it executes
+            if hasattr(node, 'request'):
+                telemetry['nodes'].append({'type': node_name, 'has_request': True})
+            else:
+                telemetry['nodes'].append({'type': node_name})
+
+            node = await run.next(node)
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            telemetry['step_times_ms'].append(round(elapsed_ms, 1))
+
+        telemetry['output'] = run.result.output
+        telemetry['total_messages'] = len(run.all_messages())
+
+    return telemetry
+
+async def main():
+    telemetry = await run_with_inspection('What is the temperature in London?')
+    print('run_id:', telemetry['run_id'])
+    for i, (node, ms) in enumerate(zip(telemetry['nodes'], telemetry['step_times_ms'])):
+        print(f'  step {i+1}: {node["type"]} — {ms} ms')
+    print('output:', telemetry['output'])
+    print('messages:', telemetry['total_messages'])
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+---
+
+## Recipe 10: Prompt enrichment with `format_as_xml`
+
+```python
+"""
+Use format_as_xml to inject structured context (product catalogue, user profile)
+into the system prompt so the model can reason over it without JSON parsing issues.
+"""
+
+import asyncio
+from dataclasses import dataclass, field
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext, format_as_xml
+
+@dataclass
+class Product:
+    id: str
+    name: str
+    price: float
+    category: str
+    in_stock: bool
+
+@dataclass
+class ShoppingContext:
+    user_name: str
+    budget: float
+    products: list[Product] = field(default_factory=list)
+
+class Recommendation(BaseModel):
+    recommended_products: list[str]   # product IDs
+    reasoning: str
+    total_cost: float
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=ShoppingContext,
+    output_type=Recommendation,
+)
+
+@agent.system_prompt
+async def inject_catalogue(ctx: RunContext[ShoppingContext]) -> str:
+    catalogue_xml = format_as_xml(
+        ctx.deps.products,
+        root_tag='catalogue',
+        item_tag='product',
+    )
+    return (
+        f'You are a shopping assistant for {ctx.deps.user_name}. '
+        f'Their budget is ${ctx.deps.budget:.2f}.\n\n'
+        f'Available products:\n{catalogue_xml}\n\n'
+        'Recommend products within the budget and explain your choices.'
+    )
+
+async def main():
+    context = ShoppingContext(
+        user_name='Alice',
+        budget=50.0,
+        products=[
+            Product('p1', 'Python Book', 35.0, 'books', True),
+            Product('p2', 'Keyboard', 85.0, 'electronics', True),
+            Product('p3', 'USB Hub', 25.0, 'electronics', True),
+            Product('p4', 'Mouse Pad', 12.0, 'accessories', True),
+        ],
+    )
+
+    result = await agent.run(
+        'What should I buy today?',
+        deps=context,
+    )
+    rec = result.output
+    print('Recommended:', rec.recommended_products)
+    print('Total cost:', rec.total_cost)
+    print('Reasoning:', rec.reasoning)
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
 
 

@@ -1660,6 +1660,7 @@ This comprehensive guide continues with:
 - `pydantic_ai_production_guide.md` - Deployment, scaling, architecture patterns
 - `pydantic_ai_recipes.md` - Real-world code examples and patterns
 - `pydantic_ai_diagrams.md` - Architecture and flow diagrams
+- `pydantic_ai_class_deep_dives.md` - Source-verified deep dives: AgentRun.iter(), AgentRunResult, ConcurrencyLimiter, Direct API, capture_run_messages, format_as_xml, common_tools, ExternalToolset, FilteredToolset, FunctionToolset+instructions
 
 ---
 
