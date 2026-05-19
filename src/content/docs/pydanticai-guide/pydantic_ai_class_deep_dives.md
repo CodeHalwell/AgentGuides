@@ -159,7 +159,7 @@ async def main():
     print('run_id:', result.run_id)
     print('conversation_id:', result.conversation_id)
 
-    # Usage (accessed as a property, not a method call)
+    # result.usage is a read property in v1.98+ — calling result.usage() emits DeprecationWarning
     print('usage:', result.usage)                   # RunUsage(...)
     print('timestamp:', result.timestamp)           # datetime
 
@@ -220,7 +220,7 @@ agent = Agent('openai:gpt-4o')
 async def main():
     result = await agent.run(
         'Tell me about Python.',
-        run_kwargs={'metadata': {'user_id': 42, 'source': 'web'}},
+        metadata={'user_id': 42, 'source': 'web'},
     )
     # Metadata is available on the result
     print(result.metadata)   # {'user_id': 42, 'source': 'web'}
@@ -944,9 +944,8 @@ async def main():
         output = await execute_tool(call.tool_name, call.args)
         results[call.tool_call_id] = ToolReturn(content=output)
 
-    # 5. Resume — feed results back with the full message history
+    # 5. Resume — feed results back with the full message history (no new user prompt)
     result2 = await agent.run(
-        '',
         message_history=result1.all_messages(),
         deferred_tool_results=DeferredToolResults(calls=results),
     )
@@ -995,7 +994,6 @@ async def run_with_external_tools(prompt: str) -> str:
             tool_returns[call.tool_call_id] = ToolReturn(content=db_result)
 
         result = await agent.run(
-            '',
             message_history=history,
             deferred_tool_results=DeferredToolResults(calls=tool_returns),
         )
