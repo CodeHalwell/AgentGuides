@@ -7,7 +7,7 @@ sidebar:
   order: 70
 ---
 
-Verified against google-adk==2.0.0b1 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`).
+Verified against google-adk==2.0.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`).
 
 ADK supports both **Model Context Protocol** (Anthropic's tool-server protocol) and **Agent-to-Agent** (Google's cross-framework agent-handoff protocol). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
 
@@ -69,6 +69,7 @@ toolset = McpToolset(
     use_mcp_resources=False,          # adds `load_mcp_resource` tool when True
     sampling_callback=None,
     sampling_capabilities=None,
+    credential_key=None,              # key for storing/loading this credential in credential service
 )
 ```
 
@@ -78,6 +79,7 @@ All args are keyword-only (see `mcp_toolset.py:97-160`). Key behaviours:
 - **Auth** — `auth_scheme` + `auth_credential` drive ADK's auth flow; exchanged tokens are injected as `Authorization` headers on each MCP request (`mcp_toolset.py:206-245`).
 - **Progress** — `progress_callback` can be a single `ProgressFnT(progress, total, message)` or a factory that returns per-tool callbacks.
 - **Resources** — set `use_mcp_resources=True` to expose MCP resources via a `load_mcp_resource` tool that the model can call.
+- **Credential key** — `credential_key` is a user-specified string used to load and save this toolset's credential in a credential service. When two toolsets share the same `credential_key`, they share the same exchanged token, avoiding duplicate OAuth flows.
 
 ## Sampling (reverse-MCP)
 

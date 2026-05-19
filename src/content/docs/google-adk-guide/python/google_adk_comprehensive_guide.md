@@ -5,11 +5,11 @@ framework: google-adk
 language: python
 ---
 
-Latest: 1.33.0 | Updated: May 9, 2026
+Latest: 2.0.0 | Updated: May 19, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** May 9, 2026  
+**Last Updated:** May 19, 2026  
 **Framework:** Google Agent Development Kit (ADK)  
 **Target Audience:** Beginner to Advanced Developers
 
@@ -273,9 +273,10 @@ researcher = LlmAgent(
     3. Synthesise information into comprehensive summaries
     4. Cite all sources accurately""",
     tools=[google_search, url_context],
-    temperature=0.7,
-    top_p=0.95,
-    top_k=40
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0.7,
+        top_p=0.95,
+    ),
 )
 
 # Define sub-agents for hierarchical structure
@@ -306,7 +307,7 @@ coordinator = LlmAgent(
 
 ```python
 from google.adk import Runner, Agent
-from google.adk.sessions import InMemorySessionService, FirestoreSessionService
+from google.adk.sessions import InMemorySessionService, DatabaseSessionService
 from google.genai import types
 import asyncio
 
@@ -317,14 +318,13 @@ async_runner = Runner(
     session_service=InMemorySessionService()
 )
 
-# Create runner with Firestore for production
+# Create runner with DatabaseSessionService for production (SQLite, Postgres, etc.)
 async def create_production_runner():
     runner = Runner(
         app_name="research_app_prod",
         agent=search_agent,
-        session_service=FirestoreSessionService(
-            project_id="your-project-id",
-            collection_name="agent_sessions"
+        session_service=DatabaseSessionService(
+            db_url="postgresql+asyncpg://user:pass@localhost/adk"
         )
     )
     return runner
@@ -367,7 +367,7 @@ ADK supports multiple Gemini models with different capabilities and costs:
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ModelConfig
+from google.genai import types
 
 # Configure with Flash model for speed
 fast_agent = Agent(
@@ -375,12 +375,11 @@ fast_agent = Agent(
     model="gemini-2.5-flash",
     description="Provides quick responses",
     instruction="Respond concisely and quickly",
-    model_config=ModelConfig(
+    generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
         top_p=0.95,
-        top_k=40,
-        max_output_tokens=1024
-    )
+        max_output_tokens=1024,
+    ),
 )
 
 # Configure with Pro model for complex reasoning
@@ -389,13 +388,11 @@ reasoner = Agent(
     model="gemini-2.5-pro",
     description="Handles complex reasoning tasks",
     instruction="Provide detailed, step-by-step reasoning",
-    model_config=ModelConfig(
-        temperature=0.3,  # Lower temperature for consistency
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0.3,
         top_p=0.9,
-        top_k=20,
         max_output_tokens=4096,
-        candidate_count=3  # Multiple candidates for diversity
-    )
+    ),
 )
 
 # Configure with safety settings
@@ -403,19 +400,19 @@ safe_agent = Agent(
     name="safe_responder",
     model="gemini-2.5-flash",
     instruction="Provide helpful information safely",
-    model_config=ModelConfig(
+    generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
         safety_settings=[
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_LOW_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            }
-        ]
-    )
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=types.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            ),
+        ],
+    ),
 )
 ```
 
@@ -541,7 +538,8 @@ web_agent = LlmAgent(
 #### Agent with Custom Configuration
 
 ```python
-from google.adk.agents import LlmAgent, ModelConfig
+from google.adk.agents import LlmAgent
+from google.genai import types
 
 # Fully configured agent
 configured_agent = LlmAgent(
@@ -554,13 +552,11 @@ configured_agent = LlmAgent(
     3. Suggest actionable insights
     4. Present findings clearly""",
     tools=[],
-    model_config=ModelConfig(
+    generate_content_config=types.GenerateContentConfig(
         temperature=0.3,
         max_output_tokens=2048,
-        top_p=0.9
+        top_p=0.9,
     ),
-    max_iterations=10,
-    max_total_tokens=8192
 )
 ```
 
@@ -570,7 +566,7 @@ configured_agent = LlmAgent(
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ModelConfig
+from google.genai import types
 
 # Comprehensive configuration
 agent = Agent(
@@ -591,18 +587,11 @@ agent = Agent(
     tools=[],  # Tools will be added separately
     
     # Model behaviour
-    model_config=ModelConfig(
+    generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
         top_p=0.95,
-        top_k=40,
         max_output_tokens=2048,
-        candidate_count=1
     ),
-    
-    # Execution constraints
-    max_iterations=5,
-    max_total_tokens=4096,
-    timeout_seconds=30
 )
 ```
 
@@ -1556,10 +1545,10 @@ calendar_agent = Agent(
 
 ```python
 from google.adk import Agent
-from google.adk.tools.bigquery_toolset import BigQueryToolset
+from google.adk.integrations.bigquery import BigQueryToolset
 
-# Initialise BigQuery tools
-bq_tools = BigQueryToolset(project_id="my-gcp-project")
+# Initialise BigQuery toolset (no project_id arg — uses ADC credentials)
+bq_tools = BigQueryToolset()
 
 # Create analytics agent
 analytics_agent = Agent(
@@ -1572,7 +1561,7 @@ analytics_agent = Agent(
     2. Execute queries to get results
     3. Analyse and interpret results
     4. Provide actionable insights""",
-    tools=bq_tools.get_tools()
+    tools=[bq_tools],
 )
 
 # The agent can:
@@ -2003,7 +1992,7 @@ class Organization(BaseModel):
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ModelConfig
+from google.genai import types
 from pydantic import BaseModel
 
 class AnalysisResult(BaseModel):
@@ -2013,14 +2002,15 @@ class AnalysisResult(BaseModel):
     sentiment: str
     confidence: float
 
+# output_schema enforces structured JSON output (disables tool use)
 json_agent = Agent(
     name="json_analyst",
     model="gemini-2.5-flash",
     instruction="Analyse text and return JSON-formatted results",
-    model_config=ModelConfig(
-        response_format="json_object",
-        max_output_tokens=2048
-    )
+    output_schema=AnalysisResult,
+    generate_content_config=types.GenerateContentConfig(
+        max_output_tokens=2048,
+    ),
 )
 ```
 
@@ -2727,16 +2717,14 @@ async def manage_conversation_history():
 #### Persistent Conversation Storage
 
 ```python
-from google.adk.sessions import FirestoreSessionService
-from google.cloud import firestore
+from google.adk.sessions import DatabaseSessionService
 
 async def setup_persistent_storage():
     """Set up persistent conversation storage."""
     
-    # Initialise Firestore session service
-    session_service = FirestoreSessionService(
-        project_id="my-gcp-project",
-        collection_name="agent_conversations"
+    # DatabaseSessionService supports SQLite, Postgres, MySQL, Spanner
+    session_service = DatabaseSessionService(
+        db_url="postgresql+asyncpg://user:pass@localhost/adk"
     )
     
     # Create session (automatically persisted)
@@ -2749,8 +2737,7 @@ async def setup_persistent_storage():
         }
     )
     
-    # Session data is automatically saved to Firestore
-    # Can be retrieved later even after restart
+    # Session data is persisted to the DB and survives restarts
     retrieved = await session_service.get_session(
         app_name="persistent_app",
         user_id="user456",
@@ -2817,7 +2804,6 @@ cached_agent = Agent(
 
 ```python
 from google.cloud import firestore
-from google.adk.sessions import FirestoreSessionService
 from typing import Dict, List
 
 class FirestoreMemoryService:
@@ -3269,22 +3255,18 @@ conversational_agent = Agent(
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ModelConfig
-
-# Configuration for efficient context usage
-efficient_config = ModelConfig(
-    temperature=0.7,
-    top_p=0.95,
-    max_output_tokens=1024,  # Reasonable limit
-    stop_sequences=["END", "###"]  # Early stopping
-)
+from google.genai import types
 
 efficient_agent = Agent(
     name="efficient_agent",
     model="gemini-2.5-flash",  # Flash for efficiency
     instruction="Provide concise, direct answers",
-    model_config=efficient_config,
-    max_total_tokens=4096
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0.7,
+        top_p=0.95,
+        max_output_tokens=1024,
+        stop_sequences=["END", "###"],
+    ),
 )
 ```
 
@@ -3336,7 +3318,7 @@ async def inject_runtime_context():
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ModelConfig
+from google.genai import types
 import vertexai
 
 # Initialise Vertex AI
@@ -3348,11 +3330,11 @@ vertex_agent = Agent(
     model="gemini-2.5-flash",  # Available through Vertex AI
     description="Agent using Vertex AI models",
     instruction="Process user requests with Vertex AI",
-    model_config=ModelConfig(
+    generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
         top_p=0.95,
-        max_output_tokens=2048
-    )
+        max_output_tokens=2048,
+    ),
 )
 ```
 
@@ -3451,7 +3433,7 @@ gcloud run deploy ${SERVICE_NAME} \
 ```python
 # main.py - Cloud Function
 from google.adk import Agent, Runner
-from google.adk.sessions import FirestoreSessionService
+from google.adk.sessions import DatabaseSessionService
 from google.genai import types
 import json
 
@@ -3461,7 +3443,7 @@ agent = Agent(
     instruction="Process requests in serverless environment"
 )
 
-session_service = FirestoreSessionService(project_id="my-gcp-project")
+session_service = DatabaseSessionService(db_url="postgresql+asyncpg://user:pass@/adk?host=/cloudsql/project:region:instance")
 
 async def agent_request(request):
     """Handle Cloud Function request."""
@@ -3504,7 +3486,6 @@ async def agent_request(request):
 
 ```python
 from google.cloud import firestore
-from google.adk.sessions import FirestoreSessionService
 
 class AgentStateManager:
     """Manage agent state in Firestore."""
@@ -3906,36 +3887,34 @@ cached_agent = Agent(
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ModelConfig
-
-safety_config = ModelConfig(
-    temperature=0.5,
-    top_p=0.9,
-    safety_settings=[
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH",
-            "threshold": "BLOCK_LOW_AND_ABOVE"
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-        }
-    ]
-)
+from google.genai import types
 
 safe_agent = Agent(
     name="safe_assistant",
     model="gemini-2.5-flash",
     instruction="Respond helpfully while maintaining safety",
-    model_config=safety_config
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0.5,
+        top_p=0.9,
+        safety_settings=[
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=types.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            ),
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            ),
+        ],
+    ),
 )
 ```
 
@@ -4133,7 +4112,8 @@ result = await agent.run(
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.33.0 | May 9, 2026 | Minor stable release. Version confirmed against installed `google-adk 1.33.0` (`.routine-envs/check-0509-py`); `google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.tools.FunctionTool` verified with `-W error::DeprecationWarning` — all PASS. |
+| 2.0.0 | May 19, 2026 | **Stable major release.** `SequentialAgent`, `ParallelAgent`, `LoopAgent` are officially deprecated in favour of `Workflow`. `ToolContext` is now an alias for `Context` (`agents/context.py`). `LongRunningFunctionTool` moved to `tools/long_running_tool.py`. `McpToolset` gained `credential_key` parameter for shared credential service namespacing. `RunConfig` adds `ToolThreadPoolConfig` for live-mode tool concurrency, `custom_metadata` merged into every event, and `get_session_config` for selective session event loading. Plugins gained `before_run_callback`, `on_event_callback`, `after_run_callback`, and `close` lifecycle hooks. `GlobalInstructionPlugin` replaces the deprecated `LlmAgent.global_instruction` field. `SaveFilesAsArtifactsPlugin` replaces the deprecated `RunConfig.save_input_blobs_as_artifacts`. `Workflow.max_concurrency` limits graph-scheduled parallel nodes. |
+| 1.33.0 | May 9, 2026 | Minor stable release. Version confirmed against installed `google-adk 1.33.0`; `google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.tools.FunctionTool` verified with `-W error::DeprecationWarning` — all PASS. |
 | 1.32.0 | May 1, 2026 | Stable patch release. Version confirmed against installed `google-adk 1.32.0` (`.routine-envs/check-googadk-0501`); `google.adk.agents.Agent` import verified with `-W error::DeprecationWarning`. |
 | 1.31.1 | April 2026 | Patch release; stability improvements. |
 | 1.31.0 | April 17, 2026 | Overhauled Web UI: live chat interface, session display names, structured execution traces, Graph View canvas, event filtering (by message/tool/error type), computer-use visualisation; memory bank event ingestion; Vertex AI Agent Engine Sandbox for computer use; Firestore database support; session ID tracking in LLM responses; user-agent headers for Parameter Manager and Secret Manager clients; minimum MCP version raised to 1.24.0; `FunctionDeclaration` JSON schema fallback improved; BigQuery plugin fixes (data transfers, metadata); console URL path corrections after Agent Engine deployment; event callback timing fix (plugin modifications now persist correctly) |

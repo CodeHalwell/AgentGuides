@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.0.0b1 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`).
+Verified against google-adk==2.0.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`).
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -111,17 +111,38 @@ Bool or predicate. When the callable returns truthy, the tool returns `{"error":
 
 ## LongRunningFunctionTool
 
+`LongRunningFunctionTool` is a subclass of `FunctionTool` that sets `is_long_running = True` and appends a note to the tool description instructing the model **not to call the tool again if it has already returned a pending/intermediate status** (verified in `tools/long_running_tool.py`).
+
 ```python
 from google.adk.tools import LongRunningFunctionTool
+from google.adk.tools.tool_context import ToolContext
 
-async def kick_off_build(project: str) -> dict:
-    job_id = await build_service.start(project)
-    return {"status": "pending", "job_id": job_id}
+async def start_report_job(project_id: str, tool_context: ToolContext) -> dict:
+    """Launch a long-running report generation job.
 
-tool = LongRunningFunctionTool(func=kick_off_build)
+    Args:
+      project_id: The GCP project to generate the report for.
+    Returns:
+      A dict with `status` ("pending" or "done") and optionally `job_id` or `result`.
+    """
+    job_id = await report_service.submit(project_id)
+    # Persist the job id so a follow-up poll tool can check it
+    tool_context.state["report_job_id"] = job_id
+    return {"status": "pending", "job_id": job_id, "message": "Report queued — check back in ~30 s"}
+
+report_tool = LongRunningFunctionTool(func=start_report_job)
+
+# Companion poll tool — plain callable, auto-wrapped by ADK when passed to tools=
+async def check_report_status(tool_context: ToolContext) -> dict:
+    """Check the status of the previously submitted report job."""
+    job_id = tool_context.state.get("report_job_id")
+    if not job_id:
+        return {"error": "No job in progress"}
+    result = await report_service.get_status(job_id)
+    return result   # {"status": "done", "url": "gs://..."} or {"status": "pending"}
 ```
 
-The model is instructed not to call the tool again while its response is still pending — the framework surfaces intermediate status via `tool_context.request_confirmation` or an explicit status poll.
+The key contract: the function **returns immediately** with a `{"status": "pending", ...}` dict. ADK delivers that response to the model, which then waits for the user to poll or for the next invocation to arrive. Do not block inside the function — that freezes the event loop.
 
 ## AgentTool
 
@@ -228,7 +249,7 @@ Connection params:
 | `SseConnectionParams(url, headers, timeout, sse_read_timeout, httpx_client_factory)` | Remote SSE | same |
 | `StreamableHTTPConnectionParams(url, headers, timeout, sse_read_timeout, terminate_on_close, ...)` | Streamable HTTP | same |
 
-`tool_filter` accepts a list of tool names or a `ToolPredicate` callable. `McpToolset` also supports `auth_scheme` / `auth_credential` for OAuth-gated servers, `require_confirmation=` (bool or predicate), `progress_callback=`, and `use_mcp_resources=True` to expose MCP resources via a `load_mcp_resource` tool.
+`tool_filter` accepts a list of tool names or a `ToolPredicate` callable. `McpToolset` also supports `auth_scheme` / `auth_credential` for OAuth-gated servers, `require_confirmation=` (bool or predicate), `progress_callback=`, `use_mcp_resources=True` to expose MCP resources via a `load_mcp_resource` tool, and `credential_key` to namespace credential storage in a shared credential service.
 
 ## OpenAPI tools
 

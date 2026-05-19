@@ -7,7 +7,7 @@ sidebar:
   order: 40
 ---
 
-Verified against google-adk==2.0.0b1 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`).
+Verified against google-adk==2.0.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`).
 
 Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py:41-71`).
 
@@ -102,7 +102,135 @@ class BudgetPlugin(BasePlugin):
         return None
 ```
 
-Plugins can implement any subset of the 11 hooks below (`plugins/base_plugin.py`):
+### Full lifecycle example
+
+A plugin that uses the full hook surface to log every invocation with timing and block a disallowed tool (`drop_table`). Derived from the `BasePlugin` source in `plugins/base_plugin.py`:
+
+```python
+import asyncio
+import logging
+import time
+from typing import Any, Optional
+
+from google.adk.agents import BaseAgent
+from google.adk.agents.callback_context import CallbackContext
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events.event import Event
+from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
+from google.adk.plugins import BasePlugin
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
+from google.genai import types
+
+logger = logging.getLogger(__name__)
+
+BLOCKED_TOOLS = {"drop_table", "delete_database", "wipe_storage"}
+
+class AuditPlugin(BasePlugin):
+    """Logs invocations and blocks dangerous tools."""
+
+    def __init__(self):
+        super().__init__(name="audit")
+        self._start_times: dict[str, float] = {}
+        self._lock = asyncio.Lock()
+
+    # ── Invocation lifecycle ─────────────────────────────────────────────────
+
+    async def on_user_message_callback(
+        self, *, invocation_context: InvocationContext, user_message: types.Content
+    ) -> Optional[types.Content]:
+        text = "".join(p.text or "" for p in (user_message.parts or []))
+        logger.info("[audit] user(%s) → %s", invocation_context.session.id, text[:120])
+        return None  # proceed normally
+
+    async def before_run_callback(
+        self, *, invocation_context: InvocationContext
+    ) -> Optional[types.Content]:
+        iid = invocation_context.invocation_id
+        async with self._lock:
+            self._start_times[iid] = time.monotonic()
+        return None
+
+    async def on_event_callback(
+        self, *, invocation_context: InvocationContext, event: Event
+    ) -> Optional[Event]:
+        return None  # let the original event through
+
+    async def after_run_callback(self, *, invocation_context: InvocationContext) -> None:
+        iid = invocation_context.invocation_id
+        async with self._lock:
+            elapsed = time.monotonic() - self._start_times.pop(iid, time.monotonic())
+        logger.info("[audit] invocation %s finished in %.2fs", iid, elapsed)
+
+    async def close(self) -> None:
+        logger.info("[audit] plugin closed — flushing logs")
+
+    # ── Tool policy ──────────────────────────────────────────────────────────
+
+    async def before_tool_callback(
+        self,
+        *,
+        tool: BaseTool,
+        tool_args: dict[str, Any],
+        tool_context: ToolContext,
+    ) -> Optional[dict]:
+        if tool.name in BLOCKED_TOOLS:
+            logger.warning("[audit] BLOCKED tool call: %s(%s)", tool.name, tool_args)
+            return {"error": f"Tool '{tool.name}' is blocked by policy."}
+        logger.info("[audit] tool call: %s(%s)", tool.name, tool_args)
+        return None
+
+    async def after_tool_callback(
+        self,
+        *,
+        tool: BaseTool,
+        tool_args: dict[str, Any],
+        tool_context: ToolContext,
+        result: dict,
+    ) -> Optional[dict]:
+        logger.info("[audit] tool result: %s → %s", tool.name, str(result)[:200])
+        return None
+
+    async def on_tool_error_callback(
+        self,
+        *,
+        tool: BaseTool,
+        tool_args: dict[str, Any],
+        tool_context: ToolContext,
+        error: Exception,
+    ) -> Optional[dict]:
+        logger.error("[audit] tool error: %s → %s: %s", tool.name, type(error).__name__, error)
+        return None  # re-raise by returning None
+
+    # ── Model monitoring ─────────────────────────────────────────────────────
+
+    async def after_model_callback(
+        self, *, callback_context: CallbackContext, llm_response: LlmResponse
+    ) -> Optional[LlmResponse]:
+        if llm_response.usage_metadata:
+            logger.info(
+                "[audit] tokens — in: %d, out: %d",
+                llm_response.usage_metadata.prompt_token_count or 0,
+                llm_response.usage_metadata.candidates_token_count or 0,
+            )
+        return None
+
+
+# Register on App
+from google.adk.apps import App
+from google.adk.plugins import LoggingPlugin
+
+app = App(
+    name="my_app",
+    root_agent=my_agent,
+    plugins=[AuditPlugin(), LoggingPlugin()],  # AuditPlugin runs first
+)
+```
+
+`BasePlugin` methods default to `pass` (returning `None`). Only implement the hooks you need.
+
+Plugins can implement any subset of the hooks below (`plugins/base_plugin.py`):
 
 | Hook | Fires |
 |---|---|

@@ -8,7 +8,7 @@ language: python
 # Google ADK Advanced (Python)
 
 
-Latest: 2.0.0b1 | Updated: April 2026
+Latest: 2.0.0 | Updated: May 2026
 Upstream: https://github.com/google/adk-python | https://google.github.io/adk-docs/get-started/python/
 
 ## Patterns

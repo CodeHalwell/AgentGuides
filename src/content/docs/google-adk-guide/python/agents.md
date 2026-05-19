@@ -7,7 +7,7 @@ sidebar:
   order: 20
 ---
 
-Verified against google-adk==2.0.0b1 (`google/adk/agents/`).
+Verified against google-adk==2.0.0 (`google/adk/agents/`).
 
 ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`) and three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent`). As of 2.x the three shell agents are `@deprecated` in favour of `Workflow` — see the [workflows page](./workflows/). They still work but new projects should compose with `Workflow`.
 
@@ -97,9 +97,47 @@ agent = LlmAgent(
 | `before_tool_callback` / `after_tool_callback` / `on_tool_error_callback` | fn or list | `None` | Same |
 | `before_agent_callback` / `after_agent_callback` | fn or list | `None` | Inherited from `BaseAgent` |
 
+### `generate_content_config` — temperature, safety, thinking
+
+All generation parameters (temperature, top-p, max tokens, safety settings, thinking mode) live inside `types.GenerateContentConfig`. Do **not** pass them as top-level fields on `LlmAgent` — they are not accepted there.
+
+```python
+from google.adk.agents import LlmAgent
+from google.genai import types
+
+agent = LlmAgent(
+    name="precise_analyst",
+    model="gemini-2.5-pro",
+    instruction="Analyse the data carefully.",
+    generate_content_config=types.GenerateContentConfig(
+        temperature=0.2,          # lower = more deterministic
+        max_output_tokens=4096,
+        top_p=0.95,
+        safety_settings=[
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=types.HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            )
+        ],
+    ),
+)
+
+# Gemini 2.5 thinking mode
+thinking_agent = LlmAgent(
+    name="thoughtful",
+    model="gemini-2.5-pro",
+    generate_content_config=types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(
+            include_thoughts=True,
+            thinking_budget=8192,
+        )
+    ),
+)
+```
+
 ### Model resolution
 
-A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("gemini-2.5-pro")` changes the class-level default used when `model=""` and no ancestor sets it.
+A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("gemini-2.5-pro")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-2.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
 
 ```python
 from google.adk.models import Gemini, LiteLlm
@@ -109,6 +147,9 @@ agent = LlmAgent(name="voice", model=Gemini(model="gemini-2.5-pro"))
 
 # OpenAI via LiteLlm (requires `pip install google-adk[extensions]`)
 agent = LlmAgent(name="gpt", model=LiteLlm(model="openai/gpt-4o"))
+
+# Change the class-level default for all agents in the process
+LlmAgent.set_default_model("gemini-2.5-pro")
 ```
 
 ### Dynamic instructions

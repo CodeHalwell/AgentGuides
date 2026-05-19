@@ -7,7 +7,7 @@ sidebar:
   order: 50
 ---
 
-Verified against google-adk==2.0.0b1 (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`).
+Verified against google-adk==2.0.0 (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`).
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 
@@ -133,6 +133,60 @@ cfg = RunConfig(
     max_llm_calls=50,
     get_session_config=GetSessionConfig(num_recent_events=20),
 )
+```
+
+### SSE streaming — event filtering
+
+`StreamingMode.SSE` yields both **partial** (streaming chunks) and **final** events. Without care you display the text twice. Three strategies from `run_config.py`:
+
+```python
+from google.adk.agents.run_config import RunConfig, StreamingMode
+
+cfg = RunConfig(streaming_mode=StreamingMode.SSE)
+
+# ── Strategy 1: typewriter effect (show partials, skip final text) ──────────
+async for event in runner.run_async(..., run_config=cfg):
+    if event.partial and event.content:
+        parts = event.content.parts or []
+        has_text = any(p.text for p in parts)
+        has_fc   = any(p.function_call for p in parts)
+        if has_text and not has_fc:
+            print("".join(p.text or "" for p in parts), end="", flush=True)
+    elif not event.partial and event.get_function_calls():
+        for fc in event.get_function_calls():
+            print(f"\n[tool] {fc.name}({fc.args})")
+
+# ── Strategy 2: final-only (no streaming effect) ────────────────────────────
+async for event in runner.run_async(..., run_config=cfg):
+    if not event.partial and event.is_final_response() and event.content:
+        print("".join(p.text or "" for p in event.content.parts or []))
+
+# ── Strategy 3: track what was already streamed ─────────────────────────────
+streamed = ""
+async for event in runner.run_async(..., run_config=cfg):
+    if event.partial and event.content:
+        chunk = "".join(p.text or "" for p in event.content.parts or [])
+        print(chunk, end="", flush=True)
+        streamed += chunk
+    elif not event.partial and event.content:
+        final = "".join(p.text or "" for p in event.content.parts or [])
+        if final != streamed:
+            print(final)   # only if the final has content we didn't stream yet
+```
+
+### `ToolThreadPoolConfig` — live mode concurrency
+
+In live mode (`run_live`) tools run in the event loop by default. Set `tool_thread_pool_config` to run them in a thread pool, keeping the loop responsive to audio/video interrupts:
+
+```python
+from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
+
+cfg = RunConfig(
+    tool_thread_pool_config=ToolThreadPoolConfig(max_workers=8),
+    save_live_blob=True,   # persist audio/video frames to artifact service
+)
+# Note: thread pool helps with blocking I/O (network, DB, file); it does NOT
+# provide parallelism for pure-Python CPU work (GIL still applies).
 ```
 
 ## Session services

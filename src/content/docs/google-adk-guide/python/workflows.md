@@ -7,7 +7,7 @@ sidebar:
   order: 25
 ---
 
-Verified against google-adk==2.0.0b1 (`google/adk/workflow/`).
+Verified against google-adk==2.0.0 (`google/adk/workflow/`).
 
 `Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
 
@@ -127,6 +127,50 @@ async def fetch(node_input: str, ctx) -> dict:
 )
 async def safe_fetch(node_input: str, ctx): ...
 ```
+
+### `RetryConfig` fields
+
+`RetryConfig` lives in `google.adk.workflow` and implements exponential backoff with jitter. All fields are optional — omitting them uses the stated defaults:
+
+| Field | Default | Description |
+|---|---|---|
+| `max_attempts` | `5` | Total attempts including the first. Set to `0` or `1` for no retries. |
+| `initial_delay` | `1.0` s | Delay before the first retry. |
+| `max_delay` | `60.0` s | Cap on inter-retry delay. |
+| `backoff_factor` | `2.0` | Multiplier applied after each failure. |
+| `jitter` | `1.0` | Randomness injected into delay (`0.0` = no jitter). |
+| `exceptions` | `None` | List of exception class names or classes to retry on. `None` = retry on any exception. |
+
+```python
+from google.adk.workflow import RetryConfig, node, Workflow, START
+
+# Retry only on network-related errors, up to 4 attempts with exponential backoff
+@node(
+    retry_config=RetryConfig(
+        max_attempts=4,
+        initial_delay=0.5,
+        max_delay=30.0,
+        backoff_factor=2.0,
+        jitter=0.5,
+        exceptions=["httpx.TimeoutException", "httpx.ConnectError", "ConnectionError"],
+    ),
+    timeout=15.0,         # NodeTimeoutError if the node takes > 15s
+    rerun_on_resume=True,
+)
+async def resilient_fetch(url: str, ctx) -> dict:
+    import httpx
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=10.0)
+        resp.raise_for_status()
+        return resp.json()
+
+pipeline = Workflow(
+    name="fetch_pipeline",
+    edges=[(START, resilient_fetch)],
+)
+```
+
+`NodeTimeoutError` is raised when a node exceeds its `timeout`. It IS retried (only when `exceptions` is `None` or includes `NodeTimeoutError`), so set a timeout shorter than `max_delay * max_attempts` if you want the workflow to eventually fail fast.
 
 Signatures recognised by `FunctionNode`:
 - `node_input` — the incoming value (the predecessor's output, or the user's `new_message` for START successors).
@@ -284,7 +328,7 @@ Combine with `ResumabilityConfig(is_resumable=True)` on the `App` so state is pe
 ```python
 from google.adk.workflow import node, RetryConfig
 
-@node(retry_config=RetryConfig(max_attempts=3, backoff_base=2.0), timeout=30.0)
+@node(retry_config=RetryConfig(max_attempts=3, backoff_factor=2.0), timeout=30.0)
 async def flaky(q: str, ctx): ...
 ```
 
