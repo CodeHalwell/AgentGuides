@@ -457,7 +457,7 @@ async def multi_turn():
         history.append(response)
         print(f'User: {user_input}')
         for part in response.parts:
-            if hasattr(part, 'content'):
+            if isinstance(part, TextPart):
                 print(f'Assistant: {part.content}')
         print()
 
