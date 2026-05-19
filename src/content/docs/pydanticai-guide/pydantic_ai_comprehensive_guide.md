@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.96.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.98.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.96.0 | Updated: May 14, 2026
+Latest: 1.98.0 | Updated: May 19, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.96.0 (May 2026)  
+**Version:** 1.98.0 (May 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -1930,8 +1930,18 @@ asyncio.run(main())
 `pydantic_ai.ag_ui` provides an [AG UI Protocol](https://docs.ag-ui.com) adapter so any
 PydanticAI agent can be served as a standards-compliant AG UI endpoint.
 
+> **Deprecation (v1.98.x):** The `pydantic_ai.ag_ui` module is deprecated and will be removed in
+> pydantic-ai 2.0. Importing from it emits `PydanticAIDeprecationWarning`. For new code, use:
+> ```python
+> from pydantic_ai.ui.ag_ui import AGUIAdapter
+> from pydantic_ai.ui import SSE_CONTENT_TYPE, StateDeps
+> ```
+> `AGUIApp` (the higher-level mount helper) is still available from `pydantic_ai.ag_ui` for backward
+> compatibility; call `AGUIAdapter.dispatch_request()` directly in new code.
+> See [the migration docs](https://ai.pydantic.dev/ui/ag-ui/#migrating-from-deprecated-apis).
+
 ```python
-# Installed: pydantic-ai==1.86.1
+# Installed: pydantic-ai==1.86.1 — still works; emits PydanticAIDeprecationWarning in 1.98.x
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import AGUIApp
 
@@ -2148,6 +2158,7 @@ Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed uncha
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 1.98.0 | May 19, 2026 | Two minor releases (1.97.0, 1.98.0). `pydantic_ai.ag_ui` module deprecated in 1.98.x — emits `PydanticAIDeprecationWarning`; new canonical path is `pydantic_ai.ui.ag_ui.AGUIAdapter`. AG UI section in this guide updated with deprecation note and migration path. New `pydantic_ai.common_tools` module (DuckDuckGo, Exa, Tavily, WebFetch, ImageGeneration providers); requires optional extras. All core guide symbols verified against installed `pydantic-ai 1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on standard imports. | Claude routine |
 | 1.96.0 | May 14, 2026 | Minor release; new concurrency management API: `ConcurrencyLimiter(max_running, max_queued=None)` and `limit_model_concurrency(model, limiter)`. All guide-referenced symbols verified against installed `pydantic-ai 1.96.0` (`.routine-envs/check-0514-py`); no `DeprecationWarning` emissions. |
 | 1.95.0 | May 13, 2026 | Minor release; all guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai 1.95.0` (`.routine-envs/check-0513-py`); no warnings. Additional exports `AgentRunResultEvent`, `AgentEventStream` confirmed in installed source. |
 | 1.94.0 | May 12, 2026 | Minor release; new top-level exports: `AgentRun`, `AgentRunResult`, `StreamedRunResultSync`. All guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai 1.94.0` (`.routine-envs/check-0512-py`); no warnings. |

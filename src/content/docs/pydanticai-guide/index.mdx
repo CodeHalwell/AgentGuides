@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.96.0** · May 2026 · Python 3.10+
+    **v1.98.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -98,9 +98,11 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.96.0 (May 2026)
+## What's new in v1.98.0 (May 2026)
 
-- **v1.96.0 (May 14)** — Minor release. New concurrency management API: `ConcurrencyLimiter(max_running, max_queued=None)` and `limit_model_concurrency(model, limiter)` — wraps any `Model` with a concurrency gate to cap parallel model requests. All guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `AgentRunResultEvent`, `AgentEventStream`) verified against installed `pydantic-ai==1.96.0` (`.routine-envs/check-0514-py`); no `DeprecationWarning` emissions.
+- **v1.98.0 (May 2026)** — Minor release. `pydantic_ai.ag_ui` module deprecated — emits `PydanticAIDeprecationWarning` on import. Replace `from pydantic_ai.ag_ui import AGUIAdapter` with `from pydantic_ai.ui.ag_ui import AGUIAdapter`; `SSE_CONTENT_TYPE` and `StateDeps` move to `from pydantic_ai.ui import ...`. `AGUIApp` remains available from `pydantic_ai.ag_ui` until 2.0 but should not be used in new code. New `pydantic_ai.common_tools` module with provider-specific tool collections (DuckDuckGo, Exa, Tavily, WebFetch, ImageGeneration); each collection requires the matching optional extra (e.g. `pip install "pydantic-ai[duckduckgo]"`). All core guide symbols verified against installed `pydantic-ai==1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on imports.
+- **v1.97.0 (May 2026)** — Minor release; maintenance and dependency updates.
+- **v1.96.0 (May 14)** — Minor release. New concurrency management API: `ConcurrencyLimiter(max_running, max_queued=None)` and `limit_model_concurrency(model, limiter)` — wraps any `Model` with a concurrency gate to cap parallel model requests. All guide-referenced symbols verified against installed `pydantic-ai==1.96.0` (`.routine-envs/check-0514-py`); no `DeprecationWarning` emissions.
 - **v1.95.0 (May 13)** — Minor release; additional top-level exports confirmed: `AgentRunResultEvent`, `AgentEventStream`.
 - **v1.94.0 (May 12)** — Minor release; new top-level exports added: `AgentRun`, `AgentRunResult`, `StreamedRunResultSync` (synchronous counterpart to `StreamedRunResult` for CLI/notebook use). All existing guide symbols confirmed present in installed `pydantic-ai==1.94.0` (`.routine-envs/check-0512-py`); no `DeprecationWarning` emissions.
 - **v1.93.0 (May 9)** — `TestModel` removed from the `pydantic_ai` top-level namespace; use `from pydantic_ai.models.test import TestModel` (guides already use this path). New top-level symbols: `AgentSpec`, `UploadedFile`, `WebSearchUserLocation`, `DeferredLoadingToolset`.
@@ -139,6 +141,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-19 | pydantic-ai 1.98.0 | Version bumped 1.96.0 → 1.98.0; "What's new" updated with `pydantic_ai.ag_ui` deprecation and new `common_tools` module; comprehensive guide updated with ag_ui deprecation note; revision history entries added. All core guide symbols verified against installed `pydantic-ai==1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on imports. | Claude routine |
 | 2026-05-14 | pydantic-ai 1.96.0 | Version bumped 1.95.0 → 1.96.0; "What's new" updated with concurrency management API (`ConcurrencyLimiter`, `limit_model_concurrency`); comprehensive guide header updated; revision history entry added. All guide-referenced symbols verified against installed `pydantic-ai==1.96.0` (`.routine-envs/check-0514-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-13 | pydantic-ai 1.95.0 | Version bumped 1.94.0 → 1.95.0; "What's new" updated; comprehensive guide header updated; revision history entry added. All guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.95.0` (`.routine-envs/check-0513-py`); no warnings. Additional exports `AgentRunResultEvent`, `AgentEventStream` confirmed. | Claude routine |
 | 2026-05-12 | pydantic-ai 1.94.0 | Version bumped 1.93.0 → 1.94.0; "What's new" updated; comprehensive guide header updated; revision history entry added. New exports `AgentRun`, `AgentRunResult`, `StreamedRunResultSync` confirmed present in installed 1.94.0 (`.routine-envs/check-0512-py`). All guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning`; no warnings. | Claude routine |

@@ -4,7 +4,7 @@ description: "From Beginner to Expert – The Complete Reference for Building AI
 framework: smolagents
 ---
 
-Latest: 1.24.0 | Updated: April 2026
+Latest: 1.25.0 | Updated: May 2026
 # 🤗 SmolAgents: Comprehensive Technical Guide
 
 **From Beginner to Expert – The Complete Reference for Building AI Agents That Think in Code**
@@ -2444,6 +2444,7 @@ result = agent.run("Analyse the dataset [1, 2, 3, 4, 5, 100]")
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.25.0 | 2026-05-19 | Version bumped 1.24.0 → 1.25.0. `InferenceClientModel` default model updated to `Qwen/Qwen3-Next-80B-A3B-Thinking`. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.25.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 1.24.0 | 2026-04-27 | `HfApiModel` removed (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents. Guide corrections (2026-04-27): clarified that `HfApiModel` is fully removed (raises `ImportError`), not deprecated with a shim; removed invalid `max_retries` argument from `InferenceClientModel` example (not a constructor parameter); added missing `import os` to code block. Verified against installed smolagents 1.24.0. |
 | 1.23.0 | November 2025 | Previous documented version |
 

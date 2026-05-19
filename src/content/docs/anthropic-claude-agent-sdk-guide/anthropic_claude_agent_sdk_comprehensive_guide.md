@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.1.81 | Updated: May 12, 2026
+Latest: 0.2.82 | Updated: May 19, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -141,7 +141,7 @@ source venv/bin/activate
 pip install --upgrade pip
 
 # Install Claude Agent SDK
-pip install claude-agent-sdk==0.1.60  # Latest stable release
+pip install claude-agent-sdk  # Latest stable release (0.2.82)
 
 # Install recommended dependencies
 pip install python-dotenv pydantic aiohttp
@@ -2926,6 +2926,7 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.2.82 | May 19, 2026 | Major minor-version bump 0.1.81 → 0.2.82. Expanded API surface: sandbox types (`SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations`), task lifecycle types (`TaskBudget`, `TaskNotificationMessage`, `TaskUsage`), `EffortLevel`, `DeferredToolUse`, `SdkBeta`, `SdkPluginConfig`, store-backed session helpers, `project_key_for_directory`. Stale `pip install` version pin corrected. All core symbols verified against installed 0.2.82 (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 0.1.81 | May 12, 2026 | Patch release; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.81` (`.routine-envs/check-0512-py`); `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` all PASS with `-W error::DeprecationWarning`. |
 | 0.1.80 | May 9, 2026 | Patch releases 0.1.74–0.1.80; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.80` (`.routine-envs/check-0509-py`); all symbols PASS. |
 | 0.1.73 | May 5, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.73` (`.routine-envs/check-0505`); `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` imports verified with `-W error::DeprecationWarning` — all PASS. |
