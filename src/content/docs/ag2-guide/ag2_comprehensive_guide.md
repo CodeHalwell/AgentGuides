@@ -1,14 +1,14 @@
 ---
 title: "AG2 (AutoGen) Comprehensive Guide"
-description: "Version: 0.12.3 Last Updated: May 2026 Focus: Modern AutoGen (AG2) Framework"
+description: "Version: 0.13.0 Last Updated: May 2026 Focus: Modern AutoGen (AG2) Framework"
 framework: ag2
 ---
 
-Latest: 0.12.3 | Updated: May 9, 2026
+Latest: 0.13.0 | Updated: May 20, 2026
 # AG2 (AutoGen) Comprehensive Guide
 
-**Version:** 0.12.3
-**Last Updated:** May 9, 2026
+**Version:** 0.13.0
+**Last Updated:** May 20, 2026
 **Focus:** Modern AutoGen (AG2) Framework
 
 ## Overview
@@ -179,6 +179,7 @@ result = await agent.a_run("What are the latest developments in quantum computin
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.13.0 | May 20, 2026 | Minor release. Swarm API refactored: `SwarmAgent` and `initiate_swarm_chat` removed from top-level `autogen` namespace — use `from autogen.agentchat.contrib.swarm_agent import SwarmAgent, initiate_swarm_chat`. New top-level functional API: `run_swarm(initial_agent, messages, agents, ...)`, `a_run_swarm(...)`, `a_initiate_swarm_chat(...)`. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `LLMConfig`) verified against installed `ag2==0.13.0` (`.routine-envs/check-0520-ag2`) with `-W error::DeprecationWarning`; all PASS. |
 | 0.12.3 | May 9, 2026 | Patch release; stability improvements. Version confirmed against installed `ag2 0.12.3` (`.routine-envs/check-0509-py`); `autogen.ConversableAgent`, `GroupChat`, `GroupChatManager`, `AssistantAgent`, `UserProxyAgent` all present. Note: `jsonschema.RefResolver` DeprecationWarning emitted on import is an upstream issue in ag2's `jsonschema` dependency — does not affect documented API behaviour. |
 | 0.12.2 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `ag2 0.12.2` (`.routine-envs/check-ag2-0501`); `autogen.ConversableAgent` import verified with `-W error::DeprecationWarning`. |
 | 0.12.1 | April 25, 2026 | Patch release; stability improvements. Version confirmed against installed `ag2 0.12.1` (`.routine-envs/ag2-py-0425`); `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `ConversableAgent` imports verified. |

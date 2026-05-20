@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.3.144** · May 2026 · Node 18+
+    **v0.3.145** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack Claude apps, Node streaming servers, MCP-rich workflows.
@@ -70,8 +70,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./claude_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.3.144 (May 2026)
+## What's new in v0.3.145 (May 2026)
 
+- **v0.3.145 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.144. All exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.145` (`.routine-envs/check-0520-node`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
 - **v0.3.144 (May 2026)** — Major minor-version bump (0.2 → 0.3). Three `unstable_v2_*` preview exports (`unstable_v2_createSession`, `unstable_v2_prompt`, `unstable_v2_resumeSession`) that were present in 0.2.x have been removed; the package now exports 25 stable symbols. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.3.144` (`.routine-envs/check-0519-node`): `query`, `tool`, `createSdkMcpServer`, session helpers (`forkSession`, `listSessions`, `getSessionInfo`, `getSessionMessages`, `InMemorySessionStore`, `renameSession`, `tagSession`, `deleteSession`, `importSessionToStore`, `listSubagents`, `getSubagentMessages`), error types (`AbortError`, `DirectConnectError`), transport (`DirectConnectTransport`, `parseDirectConnectUrl`), constants (`EXIT_REASONS`, `HOOK_EVENTS`, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`), and utilities (`resolveSettings`, `startup`, `filterEscalatingDefaultMode`, `foldSessionSummary`) all confirmed present. If your code referenced any `unstable_v2_*` export, remove or replace it.
 - **v0.2.141 (May 14)** — Final 0.2.x release; stability and dependency updates. 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, and the three `unstable_v2_*` preview exports (now removed in 0.3.x).
 - **v0.2.140 (May 13)** — Patch release; stability and dependency updates.
@@ -117,6 +118,7 @@ Ready? **[Start Zero → Hero Step 1 →](./claude_agent_sdk_typescript_comprehe
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-20 | @anthropic-ai/claude-agent-sdk 0.3.145 | Patch release bump 0.3.144 → 0.3.145; "What's new" heading updated to v0.3.145; v0.3.145 bullet added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.145` (`.routine-envs/check-0520-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. | Claude routine |
 | 2026-05-19 | @anthropic-ai/claude-agent-sdk 0.3.144 | Major version bump 0.2.141 → 0.3.144; "What's new" updated; comprehensive guide header updated; revision history entry added. Three `unstable_v2_*` exports removed from public API. Full 25-export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.3.144` (`.routine-envs/check-0519-node`). | Claude routine |
 | 2026-05-14 | @anthropic-ai/claude-agent-sdk 0.2.141 | Version bumped 0.2.140 → 0.2.141; "What's new" updated; comprehensive guide header updated; revision history entry added. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.2.141` (`.routine-envs/check-0514-node`): 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants. | Claude routine |
 | 2026-05-13 | @anthropic-ai/claude-agent-sdk 0.2.140 | Version bumped 0.2.139 → 0.2.140; "What's new" updated; comprehensive guide header updated; revision history entry added. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.140` (`.routine-envs/check-0513-node`). | Claude routine |
