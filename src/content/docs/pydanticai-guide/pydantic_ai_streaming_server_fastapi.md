@@ -200,7 +200,7 @@ async def chat(req: ChatRequest):
             message_history=history,
         ) as stream:
             async for chunk in stream.stream_text(delta=True):
-                yield f'data: {chunk}\n\n'
+                yield f'data: {json.dumps({"text": chunk})}\n\n'
 
             # Persist updated history after the stream is fully consumed
             await stream.get_output()
@@ -454,5 +454,5 @@ spec:
 - `StreamedRunResult.get_output()` — `pydantic_ai/result.py`
 - `StreamedRunResult.usage()` — `pydantic_ai/result.py`
 - `ModelMessagesTypeAdapter` — `pydantic_ai/messages.py`
-- `Agent.to_ag_ui()` — `pydantic_ai/ag_ui`
+- `Agent.to_ag_ui()` — `pydantic_ai/agent` (mounts a `pydantic_ai.ui.ag_ui` ASGI app)
 - `UsageLimits`, `UsageLimitExceeded` — `pydantic_ai/usage.py`

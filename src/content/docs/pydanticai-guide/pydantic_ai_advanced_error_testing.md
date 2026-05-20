@@ -470,16 +470,18 @@ from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 
 @pytest.fixture
-def deterministic_agent(my_agent: Agent):
-    with my_agent.override(model=TestModel(seed=42)):
-        yield my_agent
+def deterministic_agent():
+    agent = Agent('openai:gpt-4o', system_prompt='Be helpful.')
+    with agent.override(model=TestModel(seed=42)):
+        yield agent
 
 @pytest.fixture
-def failing_agent(my_agent: Agent):
+def failing_agent():
+    agent = Agent('openai:gpt-4o')
     def always_empty(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart('')])
-    with my_agent.override(model=FunctionModel(always_empty)):
-        yield my_agent
+    with agent.override(model=FunctionModel(always_empty)):
+        yield agent
 ```
 
 ---
