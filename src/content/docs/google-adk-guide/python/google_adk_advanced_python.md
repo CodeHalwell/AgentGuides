@@ -350,10 +350,13 @@ async def call_external_api(endpoint: str, tool_context: ToolContext) -> dict:
     Returns:
       A dict with the API response data.
     """
-    cred = tool_context.get_auth_response(
-        AuthConfig(auth_scheme=APIKeyScheme(name="X-Api-Key"))
-    )
-    api_key = cred.api_key.value if cred else None
+    auth_config = AuthConfig(auth_scheme=APIKeyScheme(name="X-Api-Key"))
+    cred = tool_context.get_auth_response(auth_config)
+    if cred is None:
+        # First call — trigger the credential collection flow
+        tool_context.request_credential(auth_config)
+        return {"status": "auth_required"}
+    api_key = cred.api_key.value
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"https://analytics.example.com{endpoint}",
@@ -534,7 +537,7 @@ session = await runner.session_service.get_session(
 )
 call_id = session.state.get("approval_call_id")
 
-await runner.run_async(
+async for event in runner.run_async(
     user_id="u1",
     session_id="s1",
     new_message=types.Content(
@@ -549,7 +552,9 @@ await runner.run_async(
             )
         ],
     ),
-)
+):
+    if event.is_final_response() and event.content:
+        print("Agent:", "".join(p.text or "" for p in event.content.parts or []))
 ```
 
 ## Deployment — Cloud Run (FastAPI)
