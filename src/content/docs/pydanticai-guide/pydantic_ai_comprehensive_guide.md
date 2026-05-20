@@ -1534,8 +1534,8 @@ They are passed via the `builtin_tools` parameter on `Agent`. All are importable
 > **Deprecation (v1.85.0):** `UrlContextTool` is deprecated — use `WebFetchTool` instead.
 
 ```python
-# Installed: pydantic-ai==1.85.1
-# Verified against installed package — run with uv pip install pydantic-ai==1.85.1
+# Installed: pydantic-ai==1.99.0
+# Verified against installed package — run with uv pip install pydantic-ai==1.99.0
 from pydantic_ai import Agent, WebSearchTool, WebFetchTool, CodeExecutionTool
 
 agent = Agent(
@@ -1863,7 +1863,7 @@ result = await agent.run('Reason through this complex multi-step problem...')
 interface as the agent model layer.
 
 ```python
-# Installed: pydantic-ai==1.85.1
+# Installed: pydantic-ai==1.99.0
 import asyncio
 
 from pydantic_ai import Embedder
@@ -1891,7 +1891,7 @@ human approval before execution. The agent raises `ApprovalRequired` if a tool i
 and the `approval_required_func` returns `True`.
 
 ```python
-# Installed: pydantic-ai==1.85.1
+# Installed: pydantic-ai==1.99.0
 # Verified against installed package.
 import asyncio
 

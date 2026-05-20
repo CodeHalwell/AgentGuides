@@ -7,9 +7,9 @@ language: python
 
 # PydanticAI: Class Deep Dives
 
-Verified against **pydantic-ai==1.98.0** — each section links to the source module inspected.
+Verified against **pydantic-ai==1.99.0** — each section links to the source module inspected.
 
-This guide covers ten classes/utilities from the installed source that get light treatment elsewhere. Every example is derived directly from the `__init__`, docstrings, and behaviour seen in the installed package.
+This guide covers twelve classes/utilities from the installed source that get light treatment elsewhere. Every example is derived directly from the `__init__`, docstrings, and behaviour seen in the installed package.
 
 ---
 
@@ -1285,8 +1285,240 @@ print(result.output)
 
 ---
 
+## 11. `UsageLimits` — budget controls for every run
+
+Source: `pydantic_ai/usage.py` — `UsageLimits`
+
+`UsageLimits` is a dataclass you pass as `usage_limits=` to any `run*` call. PydanticAI checks the budgets **before each request** (request count) and **after each response** (token counts). When a limit fires, `UsageLimitExceeded` (a subclass of `AgentRunError`) is raised immediately.
+
+### Fields at a glance
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `request_limit` | `50` | Max number of model round-trips per run |
+| `tool_calls_limit` | `None` | Max successful tool executions |
+| `input_tokens_limit` | `None` | Max prompt tokens per run |
+| `output_tokens_limit` | `None` | Max generated tokens per run |
+| `total_tokens_limit` | `None` | Combined input + output cap |
+| `count_tokens_before_request` | `False` | Pre-check tokens before sending (requires provider support: Anthropic, Google, Bedrock, OpenAI Responses) |
+
+### Minimal example
+
+```python
+from pydantic_ai import Agent, UsageLimits
+from pydantic_ai.exceptions import UsageLimitExceeded
+
+agent = Agent('openai:gpt-4o')
+
+try:
+    result = agent.run_sync(
+        'Write a 10 000-word essay.',
+        usage_limits=UsageLimits(output_tokens_limit=200, request_limit=2),
+    )
+except UsageLimitExceeded as e:
+    print('Budget hit:', e)
+```
+
+### Tracking usage after a run
+
+```python
+from pydantic_ai import Agent, RunUsage
+
+agent = Agent('openai:gpt-4o')
+result = agent.run_sync('Hello')
+
+usage: RunUsage = result.usage()
+print(
+    f'requests={usage.requests} '
+    f'input={usage.input_tokens} '
+    f'output={usage.output_tokens} '
+    f'total={usage.total_tokens}'
+)
+```
+
+### Accumulating usage across many runs
+
+Pass a single `RunUsage` instance into every `run*` call. PydanticAI increments it in place, so you get a running total across an entire session.
+
+```python
+from pydantic_ai import Agent, RunUsage
+
+agent = Agent('openai:gpt-4o')
+shared = RunUsage()
+
+for prompt in ['One', 'Two', 'Three']:
+    agent.run_sync(prompt, usage=shared)
+
+print('Grand total:', shared.total_tokens)
+```
+
+### Pre-checking tokens before the request
+
+When `count_tokens_before_request=True`, PydanticAI calls the model's token-counting API before sending the actual request. This enforces `input_tokens_limit` *before* the model even sees the prompt — useful when prompt construction is expensive.
+
+```python
+from pydantic_ai import Agent, UsageLimits
+
+agent = Agent('anthropic:claude-sonnet-4-6')
+
+result = agent.run_sync(
+    'Summarise this document...',
+    usage_limits=UsageLimits(
+        input_tokens_limit=4_000,
+        count_tokens_before_request=True,   # Anthropic / Google / Bedrock only
+    ),
+)
+```
+
+### Combining all limits for a strict production budget
+
+```python
+from pydantic_ai import Agent, UsageLimits
+
+agent = Agent('openai:gpt-4o')
+
+STRICT = UsageLimits(
+    request_limit=5,
+    tool_calls_limit=10,
+    input_tokens_limit=8_000,
+    output_tokens_limit=2_000,
+    total_tokens_limit=10_000,
+)
+
+result = agent.run_sync('Research and summarise quantum computing.', usage_limits=STRICT)
+```
+
+---
+
+## 12. `ConcurrencyLimiter` — control parallel agent runs
+
+Source: `pydantic_ai/concurrency.py` — `ConcurrencyLimiter`
+
+`ConcurrencyLimiter` wraps an `anyio.CapacityLimiter` and adds observability (span tracing) and a configurable queue depth. Pass it to `Agent(max_concurrency=...)` to cap how many runs execute simultaneously.
+
+### Constructor
+
+```python
+from pydantic_ai import ConcurrencyLimiter
+
+limiter = ConcurrencyLimiter(
+    max_running=5,           # max simultaneous in-flight runs
+    max_queued=20,           # max tasks allowed to queue (None = unlimited)
+    name='my-agent-pool',   # appears in OpenTelemetry spans
+)
+```
+
+### Properties
+
+| Property | Description |
+|----------|-------------|
+| `running_count` | Number of runs currently executing |
+| `waiting_count` | Number of runs blocked in the queue |
+| `available_count` | Free slots (= `max_running - running_count`) |
+| `name` | Name used for observability spans |
+
+### Minimal example
+
+```python
+import asyncio
+from pydantic_ai import Agent, ConcurrencyLimiter
+
+limiter = ConcurrencyLimiter(max_running=3, name='batch')
+agent = Agent('openai:gpt-4o', max_concurrency=limiter)
+
+async def main():
+    prompts = [f'Tell me about topic {i}' for i in range(10)]
+    results = await asyncio.gather(*[agent.run(p) for p in prompts])
+    for r in results:
+        print(r.output[:80])
+
+asyncio.run(main())
+```
+
+### Rejecting tasks when the queue is full
+
+When `max_queued` is set and the queue depth is exceeded, `ConcurrencyLimitExceeded` is raised immediately — the task is never queued.
+
+```python
+import asyncio
+from pydantic_ai import Agent, ConcurrencyLimiter
+from pydantic_ai.exceptions import ConcurrencyLimitExceeded
+
+limiter = ConcurrencyLimiter(max_running=2, max_queued=3)
+agent = Agent('openai:gpt-4o', max_concurrency=limiter)
+
+async def main():
+    tasks = [agent.run(f'Task {i}') for i in range(10)]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    accepted = [r for r in results if not isinstance(r, ConcurrencyLimitExceeded)]
+    rejected = [r for r in results if isinstance(r, ConcurrencyLimitExceeded)]
+    print(f'Accepted: {len(accepted)}, Rejected (queue full): {len(rejected)}')
+
+asyncio.run(main())
+```
+
+### Creating from a `ConcurrencyLimit` config object
+
+`ConcurrencyLimit` is a Pydantic-serialisable config; `ConcurrencyLimiter.from_limit()` builds the runtime limiter from it.
+
+```python
+from pydantic_ai import ConcurrencyLimiter
+from pydantic_ai.concurrency import ConcurrencyLimit
+
+config = ConcurrencyLimit(max_running=5, max_queued=50)
+limiter = ConcurrencyLimiter.from_limit(config, name='production-pool')
+```
+
+### Sharing a limiter across multiple agents
+
+One limiter can enforce a shared budget across several agents — useful when all agents compete for the same LLM API rate limit.
+
+```python
+from pydantic_ai import Agent, ConcurrencyLimiter
+
+shared = ConcurrencyLimiter(max_running=10, name='shared-api-budget')
+
+research_agent = Agent('openai:gpt-4o', max_concurrency=shared)
+summary_agent  = Agent('openai:gpt-4o', max_concurrency=shared)
+qa_agent       = Agent('openai:gpt-4o', max_concurrency=shared)
+```
+
+### Observing limiter metrics
+
+```python
+import asyncio
+from pydantic_ai import Agent, ConcurrencyLimiter
+
+limiter = ConcurrencyLimiter(max_running=4, name='monitored')
+agent = Agent('openai:gpt-4o', max_concurrency=limiter)
+
+async def main():
+    tasks = [agent.run(f'Q {i}') for i in range(8)]
+
+    async def monitor():
+        while True:
+            await asyncio.sleep(0.2)
+            print(
+                f'running={limiter.running_count} '
+                f'waiting={limiter.waiting_count} '
+                f'available={limiter.available_count}'
+            )
+
+    monitor_task = asyncio.create_task(monitor())
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        monitor_task.cancel()
+
+asyncio.run(main())
+```
+
+---
+
 ## Revision history
 
 | Date | Version | Notes |
 |------|---------|-------|
+| 2026-05-20 | 1.99.0 | Added `UsageLimits` (§11) and `ConcurrencyLimiter` (§12) deep-dives; bumped verified version to 1.99.0. |
 | 2026-05-19 | 1.98.0 | Initial deep-dives guide — 10 classes sourced from installed pydantic-ai 1.98.0. All imports verified. |
