@@ -1505,7 +1505,11 @@ async def main():
                 f'available={limiter.available_count}'
             )
 
-    await asyncio.gather(asyncio.create_task(monitor()), *tasks)
+    monitor_task = asyncio.create_task(monitor())
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        monitor_task.cancel()
 
 asyncio.run(main())
 ```

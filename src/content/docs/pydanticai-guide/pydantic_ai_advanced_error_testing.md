@@ -203,14 +203,19 @@ print('Grand total tokens:', shared_usage.total_tokens)
 `UserError` means you (the developer) passed invalid arguments. It is raised at agent construction or at the start of a run, never mid-stream.
 
 ```python
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import UserError
 
 try:
-    # Mixing tool output types incorrectly
     agent = Agent('openai:gpt-4o', output_type=int)
-    # UserError can also surface from bad run() arguments:
-    agent.run_sync('hi', output_type=int)   # overriding output_type with an output_validator set raises UserError
+
+    @agent.output_validator
+    def validate_int(ctx: RunContext[None], out: int) -> int:
+        return out
+
+    # Overriding output_type when an output_validator is already registered
+    # raises UserError because the validator's type would no longer match.
+    agent.run_sync('hi', output_type=str)
 except UserError as e:
     print('Developer error:', e)
 ```
@@ -258,7 +263,7 @@ import pytest
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.function import FunctionModel, AgentInfo
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.test import TestModel
 
 class Price(BaseModel):
@@ -340,7 +345,7 @@ agent = Agent('openai:gpt-4o', output_type=Strict, retries=1)
 
 def test_messages_on_failure():
     with capture_run_messages() as messages:
-        with pytest.raises((UnexpectedModelBehavior, Exception)):
+        with pytest.raises(UnexpectedModelBehavior):
             with agent.override(model=TestModel(custom_output_text='not json')):
                 agent.run_sync('go')
 

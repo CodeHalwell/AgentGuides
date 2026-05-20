@@ -262,7 +262,6 @@ For [AG UI](https://github.com/ag-ui-protocol/ag-ui)-compatible frontends (Verce
 ```python
 from fastapi import FastAPI
 from pydantic_ai import Agent
-from pydantic_ai.ag_ui import AgentAdapter  # pydantic_ai.ag_ui module
 
 app = FastAPI()
 agent = Agent('openai:gpt-4o')
@@ -372,7 +371,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8000
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### `requirements.txt`
