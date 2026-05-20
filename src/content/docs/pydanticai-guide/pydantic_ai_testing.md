@@ -7,7 +7,7 @@ language: python
 
 # Testing Agents
 
-Verified against **pydantic-ai==1.85.1** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==1.99.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI ships two model implementations built for tests: `TestModel` (auto-generates tool calls + a response from JSON schema) and `FunctionModel` (you write the response-generating function). Combined with `agent.override(...)` and `capture_run_messages`, you can unit-test agents hermetically — no network, no API keys, deterministic.
 

@@ -7,7 +7,7 @@ language: python
 
 # Toolsets
 
-Verified against **pydantic-ai==1.85.1** — source module: `pydantic_ai.toolsets`.
+Verified against **pydantic-ai==1.99.0** — source module: `pydantic_ai.toolsets`.
 
 A *toolset* is a reusable, named collection of tools with a shared policy (retries, timeout, metadata, instructions). PydanticAI ships 10+ toolset wrappers that let you filter, rename, combine, gate, or lazy-load tools without rewriting the functions. They're the supported way to attach non-code tool sources — MCP servers, remote APIs, human approval — to an agent.
 

@@ -7,7 +7,7 @@ language: python
 
 # Output Types & Validators
 
-Verified against **pydantic-ai==1.85.1** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==1.99.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
 
 The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. PydanticAI ships five "marker" wrappers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — plus a plain type / union shortcut. The right one depends on what the model natively supports.
 

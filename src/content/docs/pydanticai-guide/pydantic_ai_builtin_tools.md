@@ -7,7 +7,7 @@ language: python
 
 # Built-in Tools
 
-Verified against **pydantic-ai==1.85.1** — source module: `pydantic_ai.builtin_tools`.
+Verified against **pydantic-ai==1.99.0** — source module: `pydantic_ai.builtin_tools`.
 
 Built-in tools are provider-native — they execute inside the LLM provider's infrastructure, not in your Python process. You opt in via `builtin_tools=[...]` on `Agent`; PydanticAI forwards a typed config to the provider and streams the results back as `BuiltinToolCallPart` / `BuiltinToolReturnPart`.
 
