@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
-description: "Verified feature set in agent-framework-core 1.4.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
+description: "Verified feature set in agent-framework-core 1.5.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
 framework: microsoft-agent-framework
 language: python
 ---

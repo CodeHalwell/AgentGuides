@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Python - Recipes and Code Patterns"
-description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.4.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, and workflow checkpointing."
+description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.5.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, and workflow checkpointing."
 framework: microsoft-agent-framework
 language: python
 ---
