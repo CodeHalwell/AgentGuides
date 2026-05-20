@@ -43,9 +43,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="8 · Memory & artifacts" href="./memory-and-artifacts/" description="Long-term memory + file storage · 20 min" />
   <LinkCard title="9 · MCP & A2A" href="./mcp-and-a2a/" description="Tool servers + agent handoff · 20 min" />
   <LinkCard title="10 · Structured output" href="./google_adk_comprehensive_guide/#structured-output" description="Pydantic validation · 15 min" />
-  <LinkCard title="11 · Advanced Python" href="./google_adk_advanced_python/" description="Complex patterns, customisation · 30 min" />
-  <LinkCard title="12 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
-  <LinkCard title="13 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+  <LinkCard title="11 · Advanced Python" href="./google_adk_advanced_python/" description="Planners, custom tools, auth, deployment · 30 min" />
+  <LinkCard title="12 · Evaluation" href="./evaluation/" description="AgentEvaluator, EvalCase, EvalSet, metrics · 25 min" />
+  <LinkCard title="13 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
+  <LinkCard title="14 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -60,6 +61,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="MCP & A2A" href="./mcp-and-a2a/" />
   <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
   <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
+  <LinkCard title="Evaluation" href="./evaluation/" />
 </CardGrid>
 
 ## Reference
@@ -67,13 +69,14 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <LinkCard title="Agents" href="./agents/" description="LlmAgent, Parallel, Loop, Sequential (deprecated)." />
   <LinkCard title="Workflows" href="./workflows/" description="Workflow, @node, Edge, JoinNode." />
-  <LinkCard title="Tools" href="./tools/" description="FunctionTool, AgentTool, Gemini built-ins, MCP." />
+  <LinkCard title="Tools" href="./tools/" description="FunctionTool, AgentTool, BaseTool, BaseToolset, MCP." />
   <LinkCard title="Callbacks & plugins" href="./callbacks-and-plugins/" description="All 11 plugin hooks + agent callbacks." />
   <LinkCard title="Runner & sessions" href="./runner-and-sessions/" description="Runner, App, session services, RunConfig." />
   <LinkCard title="Memory & artifacts" href="./memory-and-artifacts/" description="MemoryService + ArtifactService implementations." />
   <LinkCard title="MCP & A2A" href="./mcp-and-a2a/" description="McpToolset, RemoteA2aAgent, to_a2a()." />
+  <LinkCard title="Evaluation" href="./evaluation/" description="AgentEvaluator, EvalCase, EvalSet, PrebuiltMetrics." />
   <LinkCard title="Comprehensive guide" href="./google_adk_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
+  <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" description="Planners, custom tools, auth, deployment." />
   <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
   <LinkCard title="Recipes" href="./google_adk_recipes/" />
   <LinkCard title="Diagrams" href="./google_adk_diagrams/" />
@@ -123,7 +126,11 @@ Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#intr
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+<<<<<<< HEAD
 | 2026-05-20 | google-adk 2.0.0 | GA stable release. Install command updated `pip install google-adk --pre` → `pip install google-adk`; version card updated `v2.0.0b1` → `v2.0.0`; Aside tip updated to note stable status; "What's new in v2.0.0 GA" section added. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; `Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService` all PASS. | Claude routine |
+=======
+| 2026-05-20 | google-adk 2.0.0 | Added Evaluation page (AgentEvaluator, EvalCase, EvalSet, PrebuiltMetrics, rubric eval, custom metrics, pytest integration). Rewrote Advanced Python page (BuiltInPlanner, PlanReActPlanner, custom BasePlanner, BaseTool, BaseToolset, authenticated tools, HITL, Cloud Run deploy, OTEL). Expanded Tools page with BaseTool, BaseToolset, and ToolContext API sections. Updated index navigation. | Claude routine |
+>>>>>>> 19e5320 (docs(google-adk): add evaluation guide and expand advanced + tools pages)
 | 2026-04-22 | google-adk 2.0.0b1 | Added 7 topic pages: Agents, Workflows, Tools, Callbacks & Plugins, Runner & Sessions, Memory & Artifacts, MCP & A2A. Verified against installed source. Fixed errata in Advanced Python quickstart. Index rewired with new Zero → Hero and Reference grid. | Claude routine |
 | 2026-04-21 | google-adk 1.31.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
 | April 17, 2026 | google-adk 1.31.0 | A2A; MCP; expanded tools; Workload Identity. | — |

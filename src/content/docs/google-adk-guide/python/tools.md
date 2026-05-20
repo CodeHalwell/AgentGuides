@@ -265,6 +265,185 @@ tools = registry.get_tools()
 
 Each operation becomes a `BaseTool` whose parameters are the path/query/body fields of the operation.
 
+## Custom `BaseTool`
+
+Subclass `BaseTool` when you need full control over the tool schema or must modify the `LlmRequest` before it is sent. `FunctionTool` is sufficient for 95 % of use cases.
+
+```python
+from typing import Any, Optional
+from google.genai import types
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
+from google.adk.models.llm_request import LlmRequest
+
+class SqlLookupTool(BaseTool):
+    """Run a parameterised read-only SQL query."""
+
+    def __init__(self, db_pool):
+        super().__init__(
+            name="sql_lookup",
+            description="Execute a read-only SQL query against the analytics database.",
+        )
+        self._db = db_pool
+
+    def _get_declaration(self) -> types.FunctionDeclaration:
+        return types.FunctionDeclaration(
+            name=self.name,
+            description=self.description,
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "query": types.Schema(
+                        type=types.Type.STRING,
+                        description="A read-only SQL SELECT statement.",
+                    ),
+                },
+                required=["query"],
+            ),
+        )
+
+    async def run_async(
+        self, *, args: dict[str, Any], tool_context: ToolContext
+    ) -> dict:
+        query = args.get("query", "").strip()
+        if not query.upper().startswith("SELECT"):
+            return {"error": "Only SELECT statements are allowed."}
+        rows = await self._db.fetch(query)
+        tool_context.state["last_query"] = query
+        return {"rows": [dict(r) for r in rows], "count": len(rows)}
+```
+
+Key overrides (`tools/base_tool.py`):
+
+| Method | When to override |
+|---|---|
+| `_get_declaration()` | To define the function schema shown to the model |
+| `run_async(*, args, tool_context)` | The actual execution; return a JSON-serialisable dict |
+| `process_llm_request(*, tool_context, llm_request)` | To inject the tool into the request in a non-standard way (e.g. as a built-in Gemini tool block) |
+
+Do **not** override `process_llm_request` unless you also suppress `_get_declaration` (return `None`). The default implementation calls `llm_request.append_tools([self])` which relies on `_get_declaration`.
+
+## Custom `BaseToolset`
+
+`BaseToolset` provides a **dynamic** list of tools — useful when available tools differ by user, tenant, or context. Implement `get_tools`.
+
+```python
+from typing import Optional
+from google.adk.tools.base_toolset import BaseToolset, ToolPredicate
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.function_tool import FunctionTool
+from google.adk.agents.readonly_context import ReadonlyContext
+
+
+class RoleBasedToolset(BaseToolset):
+    """Expose different tools based on the role stored in session state."""
+
+    def __init__(self):
+        super().__init__()
+
+    async def get_tools(
+        self, readonly_context: Optional[ReadonlyContext] = None
+    ) -> list[BaseTool]:
+        role = "guest"
+        if readonly_context:
+            role = readonly_context.state.get("user_role", "guest")
+
+        tools: list[BaseTool] = [FunctionTool(func=self._read_data)]
+        if role in ("editor", "admin"):
+            tools.append(FunctionTool(func=self._write_data))
+        if role == "admin":
+            tools.append(FunctionTool(func=self._delete_data))
+        return tools
+
+    async def _read_data(self, key: str) -> dict:
+        """Read a value from the shared data store.
+
+        Args:
+          key: The key to read.
+        Returns:
+          A dict with the value.
+        """
+        return {"value": data_store.get(key)}
+
+    async def _write_data(self, key: str, value: str) -> dict:
+        """Write a value to the shared data store.
+
+        Args:
+          key: The key to write.
+          value: The value to write.
+        Returns:
+          A dict with `ok: true`.
+        """
+        data_store[key] = value
+        return {"ok": True}
+
+    async def _delete_data(self, key: str) -> dict:
+        """Delete a key from the shared data store.
+
+        Args:
+          key: The key to delete.
+        Returns:
+          A dict with `deleted: true`.
+        """
+        data_store.pop(key, None)
+        return {"deleted": True}
+
+    async def close(self) -> None:
+        pass  # release DB connections, etc.
+
+
+agent = LlmAgent(
+    name="data_agent",
+    model="gemini-2.5-flash",
+    tools=[RoleBasedToolset()],
+)
+```
+
+`BaseToolset` notes:
+- `get_tools_with_prefix` is `@final` — override only `get_tools`.
+- Results are **cached per invocation ID** to avoid redundant calls. Set `self._use_invocation_cache = False` in `__init__` to disable caching for toolsets whose tool list changes mid-turn.
+- Pass a `ToolPredicate` or list of tool names to the `tool_filter` constructor arg to filter exposed tools without touching `get_tools`.
+- `tool_name_prefix` prefixes every returned tool name, preventing collisions when the same toolset class is registered multiple times.
+
+## `ToolContext` API
+
+`ToolContext` is the same object as `Context` and `CallbackContext` — they are all aliases in ADK 2.x. Key members available inside tools:
+
+| Attribute / Method | Purpose |
+|---|---|
+| `tool_context.state["key"]` | Read/write session state (supports `app:`, `user:`, `temp:` prefixes) |
+| `tool_context.function_call_id` | The unique ID of the current function call — needed when sending a `FunctionResponse` back manually |
+| `tool_context.actions.skip_summarization` | Set to `True` to suppress the model from narrating the tool result |
+| `tool_context.actions.transfer_to_agent` | Programmatically transfer control to another agent by setting its name |
+| `await tool_context.save_artifact(filename, part)` | Persist a file to the artifact service; returns the version int |
+| `await tool_context.load_artifact(filename, version=None)` | Retrieve a saved artifact |
+| `tool_context.list_artifacts()` | List filenames in scope |
+| `tool_context.request_credential(auth_config)` | Pause the tool and trigger an OAuth / API-key flow |
+| `tool_context.get_auth_response(auth_config)` | Retrieve the exchanged credential on the follow-up turn |
+
+```python
+from google.adk.tools import FunctionTool
+from google.adk.tools.tool_context import ToolContext
+
+async def export_report(format: str, tool_context: ToolContext) -> dict:
+    """Export the current analysis as a file.
+
+    Args:
+      format: File format — 'pdf' or 'csv'.
+    Returns:
+      A dict with `filename` and `version`.
+    """
+    data = generate_report(format)
+    from google.genai import types as gtypes
+    mime = "application/pdf" if format == "pdf" else "text/csv"
+    part = gtypes.Part(inline_data=gtypes.Blob(mime_type=mime, data=data))
+    version = await tool_context.save_artifact(filename=f"report.{format}", artifact=part)
+
+    # Tell the model not to paraphrase the file listing
+    tool_context.actions.skip_summarization = True
+    return {"filename": f"report.{format}", "version": version}
+```
+
 ## Agent transfer
 
 `transfer_to_agent` and `TransferToAgentTool` are injected automatically by ADK when the LLM agent has `sub_agents`. You rarely construct them yourself, but you can inspect them for logging.
