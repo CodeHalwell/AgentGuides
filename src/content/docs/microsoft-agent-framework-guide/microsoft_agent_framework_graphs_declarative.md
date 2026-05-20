@@ -23,12 +23,12 @@ pip install agent-framework
 
 The workflow types are exported from the top-level `agent_framework` package.
 
-### Primitives (verified against `agent-framework-core==1.3.0`)
+### Primitives (verified against `agent-framework-core==1.5.0`)
 
 | Class / function | Purpose |
 |---|---|
 | `Workflow` | Compiled, runnable workflow. |
-| `WorkflowBuilder(start_executor=..., name=..., description=..., max_iterations=100, checkpoint_storage=None, output_executors=None)` | Fluent builder that returns a `Workflow` from `.build()`. |
+| `WorkflowBuilder(start_executor=..., name=..., description=..., max_iterations=100, checkpoint_storage=None, output_from=None, intermediate_output_from=None)` | Fluent builder that returns a `Workflow` from `.build()`. |
 | `Executor(id, ...)` | Base class for workflow nodes. Subclass or use `FunctionExecutor` to wrap a plain function. |
 | `FunctionExecutor(func, id=None, *, input=None, output=None, workflow_output=None)` | Wraps a sync or async Python callable. |
 | `WorkflowAgent(workflow, *, id, name, description, context_providers, ...)` | Exposes a compiled `Workflow` as an `Agent` — so workflows can be used interchangeably with single agents. |
@@ -48,9 +48,13 @@ WorkflowBuilder(
     *,
     start_executor: Executor | SupportsAgentRun,
     checkpoint_storage: CheckpointStorage | None = None,
-    output_executors: list[Executor | SupportsAgentRun] | None = None,
+    output_from: list[Executor | SupportsAgentRun] | Literal["all"] | None = None,
+    intermediate_output_from: list[Executor | SupportsAgentRun] | Literal["all", "all_other"] | None = None,
+    output_executors: list[Executor | SupportsAgentRun] | None = None,  # deprecated alias for output_from
 )
 ```
+
+> **`output_executors` is deprecated** in 1.5.0. Replace with `output_from=`. The old parameter still works but emits a deprecation warning.
 
 Builder methods (all return `Self` for chaining):
 
@@ -185,11 +189,19 @@ workflow = (
 
 The `condition` callable receives the output value of the source executor and must return `bool`.
 
-### Collecting outputs from specific nodes — `output_executors`
+### Controlling workflow outputs — `output_from` and `intermediate_output_from`
 
-`result.get_outputs()` collects only values explicitly emitted via `ctx.yield_output()` — plain function return values are **not** captured. Pass `output_executors=` to further restrict which nodes' `yield_output` calls are included, useful when only some branches should contribute to the final result:
+`result.get_outputs()` collects only values explicitly emitted via `ctx.yield_output()` — plain function return values are **not** captured. In 1.5.0 two new parameters give you fine-grained control over which nodes contribute to the result:
+
+| Parameter | Type | Effect |
+|---|---|---|
+| `output_from` | `list[Executor]` \| `"all"` \| `None` | Which executors' `yield_output` calls become `type='output'` events in `get_outputs()` |
+| `intermediate_output_from` | `list[Executor]` \| `"all"` \| `"all_other"` \| `None` | Which executors' `yield_output` calls become `type='intermediate'` events |
+
+When **both are omitted**, every `yield_output` produces a `type='output'` event (backwards-compatible behaviour, deprecation warning emitted).
 
 ```python
+import asyncio
 from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowContext
 
 
@@ -198,17 +210,15 @@ def split(query: str) -> dict:
 
 
 async def web_search(payload: dict, ctx: WorkflowContext[str, str]) -> None:
-    result = f"web: {payload['query']}"
-    await ctx.yield_output(result)   # emitted into get_outputs()
+    await ctx.yield_output(f"web: {payload['query']}")
 
 
 async def db_lookup(payload: dict, ctx: WorkflowContext[str, str]) -> None:
-    result = f"db: {payload['query']}"
-    await ctx.yield_output(result)   # emitted into get_outputs()
+    await ctx.yield_output(f"db: {payload['query']}")
 
 
-async def audit_log(payload: dict, ctx: WorkflowContext) -> None:
-    print(f"Audit: {payload['query']}")   # side-effect only — no yield_output call
+async def audit_log(payload: dict, ctx: WorkflowContext[str, str]) -> None:
+    await ctx.yield_output(f"audit: {payload['query']}")  # side-effect / observability
 
 
 splitter = FunctionExecutor(split,      id="split")
@@ -216,21 +226,44 @@ web      = FunctionExecutor(web_search, id="web")
 db       = FunctionExecutor(db_lookup,  id="db")
 audit    = FunctionExecutor(audit_log,  id="audit")
 
-# output_executors filters which yield_output calls reach get_outputs();
-# the audit node calls no yield_output so it would be excluded regardless
+# Only web and db contribute final outputs; audit is demoted to intermediate
 workflow = (
     WorkflowBuilder(
         start_executor=splitter,
-        output_executors=[web, db],
+        output_from=[web, db],                # type='output'
+        intermediate_output_from=[audit],     # type='intermediate'
     )
     .add_fan_out_edges(splitter, [web, db, audit])
     .build()
 )
 
-import asyncio
-result  = asyncio.run(workflow.run("latest AI news"))
-outputs = result.get_outputs()   # ['web: latest AI news', 'db: latest AI news']
+result = asyncio.run(workflow.run("latest AI news"))
+outputs       = result.get_outputs()               # ['web: ...', 'db: ...']
+intermediates = [e for e in result.events if e.type == "intermediate"]
+print(outputs)       # ['web: latest AI news', 'db: latest AI news']
+print(len(intermediates))  # 1  (the audit event)
 ```
+
+**`"all"` shorthand** — select every executor that calls `yield_output`:
+
+```python
+workflow = WorkflowBuilder(
+    start_executor=splitter,
+    output_from="all",   # every yield_output → type='output'
+).add_fan_out_edges(splitter, [web, db, audit]).build()
+```
+
+**`"all_other"` shorthand** — `output_from=[web]` keeps only web as final output; everything else becomes intermediate:
+
+```python
+workflow = WorkflowBuilder(
+    start_executor=splitter,
+    output_from=[web],
+    intermediate_output_from="all_other",  # db and audit → type='intermediate'
+).add_fan_out_edges(splitter, [web, db, audit]).build()
+```
+
+> **Migrating from `output_executors`:** Replace `output_executors=[a, b]` with `output_from=[a, b]`. Behaviour is identical; the old parameter still works but emits a deprecation warning.
 
 ### Checkpointing and resume
 

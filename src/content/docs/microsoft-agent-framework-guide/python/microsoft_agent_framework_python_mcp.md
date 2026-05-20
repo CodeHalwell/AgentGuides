@@ -17,7 +17,7 @@ Model Context Protocol (MCP) servers are first-class tool sources in `agent-fram
 
 All three are async context managers that connect lazily, discover tools and prompts from the server, and register them as `FunctionTool` instances on the agent.
 
-Verified against `agent-framework-core==1.4.0` and `mcp==1.27`.
+Verified against `agent-framework-core==1.5.0` and `mcp==1.27`.
 
 ## Install
 

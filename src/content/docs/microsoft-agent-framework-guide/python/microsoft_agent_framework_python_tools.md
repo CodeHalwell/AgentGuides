@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
-description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.4.0."
+description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.5.0."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -11,7 +11,7 @@ Tools are how agents call back into your code. Agent Framework offers two ways t
 
 This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
 
-Verified against `agent-framework-core==1.4.0` (`agent_framework._tools`).
+Verified against `agent-framework-core==1.5.0` (`agent_framework._tools`).
 
 ## Minimal `@tool`
 
@@ -335,17 +335,17 @@ agent = Agent(client=client, instructions="You are a research assistant.")
 await agent.run("Research the order pipeline")
 ```
 
-All `FunctionInvocationConfiguration` keys (all optional):
+All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework-core==1.5.0`):
 
-| Key | Effect | Default |
-|---|---|---|
-| `enabled` | Master switch for the tool loop | `True` |
-| `max_iterations` | Max LLM roundtrips per request | `100` |
-| `max_function_calls` | Max total tool executions per request | `None` (unlimited) |
-| `max_consecutive_errors_per_request` | Halt after N consecutive tool errors | framework default |
-| `terminate_on_unknown_calls` | Raise if model calls an unregistered tool | `False` |
-| `include_detailed_errors` | Include stack traces in tool error messages sent to model | `False` |
-| `additional_tools` | Extra tools available but not advertised to the model | `[]` |
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `enabled` | `bool` | `True` | Master switch for the tool loop; set `False` to disable all tool calling |
+| `max_iterations` | `int` | `40` | Max LLM roundtrips per request before the loop is aborted |
+| `max_function_calls` | `int \| None` | `None` | Max total tool executions per request (best-effort — see note) |
+| `max_consecutive_errors_per_request` | `int` | `3` | Halt after N consecutive tool errors to prevent runaway loops |
+| `terminate_on_unknown_calls` | `bool` | `False` | Raise `ToolException` if the model calls an unregistered tool |
+| `include_detailed_errors` | `bool` | `False` | Include stack traces in tool error messages sent back to the model |
+| `additional_tools` | `Sequence[FunctionTool]` | `[]` | Extra tools executed when called but **not** advertised in the model's schema |
 
 `max_function_calls` is a **best-effort** limit — it's checked *after* each batch of parallel calls completes. A single iteration that emits 20 parallel calls will run all 20 even if the limit is 10; the next iteration then bails out. Combine with `max_iterations` to bound worst-case wall time.
 
@@ -432,6 +432,102 @@ fetcher = FunctionTool(
 )
 
 agent = Agent(client=OpenAIChatClient(), tools=[fetcher])
+```
+
+### Full constructor reference
+
+All parameters accepted by `FunctionTool.__init__` (and equivalently by `@tool(...)`):
+
+```python
+FunctionTool(
+    name: str,                              # tool name sent to the model
+    description: str,                       # tool description in the schema
+    func: Callable | None = None,           # None → declaration-only (model sees tool; no auto-invoke)
+    *,
+    input_model: type[BaseModel] | dict | None = None,  # override inferred Pydantic schema
+    approval_mode: Literal["always_require", "never_require"] = "never_require",
+    max_invocations: int | None = None,     # raise ToolException after N successful calls
+    max_invocation_exceptions: int | None = None,  # raise ToolException after N errors
+    additional_properties: dict | None = None,     # custom metadata attached to the FunctionTool object
+    kind: str = "function",                 # free-form classification label; use "readonly", "mutating", etc.
+)
+```
+
+| Parameter | Notes |
+|---|---|
+| `func=None` | Declaration-only tool — model emits the call, but the framework does not auto-invoke it. Use for client-side UI actions or when you want to intercept the call in middleware. |
+| `input_model=` | Pass a `BaseModel` subclass or a JSON schema dict. When omitted the schema is inferred from `func`'s type annotations. Required when `func` is `None`. |
+| `approval_mode="always_require"` | Every invocation raises `UserInputRequiredException` before executing — the caller must confirm via `agent.run(responses=...)`. |
+| `max_invocations=N` | The tool raises `ToolException` once it has been called successfully N times in the lifetime of this `FunctionTool` instance. Useful for rate-limiting expensive external calls. |
+| `max_invocation_exceptions=N` | Raises `ToolException` after N exceptions from the underlying callable, preventing runaway retry loops. |
+| `additional_properties=` | Free-form dict attached to `function.additional_properties` in middleware — useful for tagging tools with cost, tier, or routing metadata without modifying the schema. |
+
+Example — declaration-only tool with a custom schema:
+
+```python
+from agent_framework import Agent, FunctionTool
+from agent_framework.openai import OpenAIChatClient
+
+
+# The agent proposes a payment; your application intercepts and renders a confirmation UI.
+confirm_payment = FunctionTool(
+    name="confirm_payment",
+    description="Request the user to confirm a payment before it is processed.",
+    func=None,   # declaration-only — framework will NOT auto-invoke this
+    input_model={
+        "type": "object",
+        "properties": {
+            "amount":   {"type": "number",  "description": "Amount in USD"},
+            "merchant": {"type": "string",  "description": "Merchant name"},
+            "note":     {"type": "string",  "description": "Optional note for the user"},
+        },
+        "required": ["amount", "merchant"],
+    },
+    additional_properties={"ui_action": "payment_confirm"},   # read in middleware
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a payment assistant. Use confirm_payment before processing any transaction.",
+    tools=[confirm_payment],
+)
+```
+
+Example — tagged tool with middleware cost policy:
+
+```python
+from agent_framework import Agent, FunctionTool, function_middleware, FunctionInvocationContext
+from agent_framework.openai import OpenAIChatClient
+
+
+def make_api_tool(name: str, cost_tier: str) -> FunctionTool:
+    async def call(**kwargs) -> str:
+        return f"Called {name} with {kwargs}"
+
+    return FunctionTool(
+        name=name,
+        description=f"Calls the {name} API",
+        func=call,
+        additional_properties={"cost_tier": cost_tier},
+    )
+
+
+@function_middleware
+async def cost_gate(ctx: FunctionInvocationContext, next):
+    tier = ctx.function.additional_properties.get("cost_tier", "free")
+    if tier == "expensive" and not ctx.session:
+        raise PermissionError(f"Tool {ctx.function.name!r} requires an authenticated session.")
+    return await next(ctx)
+
+
+cheap_tool     = make_api_tool("summarise", cost_tier="free")
+expensive_tool = make_api_tool("deep_analysis", cost_tier="expensive")
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    tools=[cheap_tool, expensive_tool],
+    middleware=[cost_gate],
+)
 ```
 
 ### Generating tools from a spec

@@ -1,13 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — HARNESS Providers"
-description: "TodoProvider, AgentModeProvider, and their combination — experimental context providers that give agents self-managed task lists and mode-switching. Verified against agent-framework-core 1.4.0."
+description: "TodoProvider, AgentModeProvider, MemoryContextProvider — experimental context providers giving agents self-managed task lists, mode-switching, and long-term memory. Verified against agent-framework-core 1.5.0."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # HARNESS Providers — Python
 
-> **Experimental.** `TodoProvider`, `AgentModeProvider`, and their backing stores and helpers are marked `ExperimentalFeature.HARNESS` in 1.4.0. The APIs are functional but may change between minor releases. Import warnings appear on first use.
+> **Experimental.** `TodoProvider`, `AgentModeProvider`, `MemoryContextProvider`, and their backing stores are marked `ExperimentalFeature.HARNESS` in 1.5.0. The APIs are functional but may change between minor releases. Import warnings appear on first use.
 
 HARNESS providers are a family of `ContextProvider` implementations that give agents durable, session-scoped capabilities beyond conversation history:
 
@@ -640,6 +640,318 @@ class RedisTodoStore(TodoStore):
 
 ---
 
+## `MemoryContextProvider` — durable long-term memory
+
+`MemoryContextProvider` gives agents cross-session recall. It automatically extracts durable facts from transcripts after each session and injects the most relevant topics at the start of future sessions — the agent accumulates knowledge without keeping entire conversation histories in the context window.
+
+It is a `HistoryProvider` (subtype of `ContextProvider`) and handles both history persistence and memory extraction in a single provider.
+
+### How it works
+
+1. **Injection** — at `before_run`, the provider loads `MEMORY.md` (a keyword-indexed pointer list) and selects the most relevant topic files based on the current conversation. It prepends those as context along with a configurable number of recent turns.
+2. **Extraction** — at `after_run`, the provider saves the new turn to a transcript file. When the extraction threshold is met an LLM summarises new durable facts into topic files and updates the index.
+3. **Consolidation** — periodically (default: every 24 hours, after at least 5 sessions) a consolidation pass merges stale or duplicate topic files to keep the index compact.
+
+### Quickstart
+
+`MemoryFileStore` partitions memory by owner. Set `session.state[owner_state_key]` before the first `run()` call.
+
+```python
+import asyncio
+from datetime import timedelta
+from agent_framework import Agent, MemoryContextProvider, MemoryFileStore
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+
+store = MemoryFileStore(
+    base_path="./memory",
+    owner_state_key="user_id",   # session.state["user_id"] partitions per user
+)
+
+memory = MemoryContextProvider(
+    store=store,
+    recent_turns=2,               # inject the 2 most recent conversation turns
+    selection_limit=3,            # load at most 3 topic files per session
+    max_extractions=5,            # extract at most 5 facts per session
+    consolidation_interval=timedelta(hours=24),
+    consolidation_min_sessions=5,
+)
+
+agent = Agent(
+    client=client,
+    instructions="You are a personal assistant with long-term memory.",
+    context_providers=[memory],
+)
+
+
+async def main() -> None:
+    # Session 1 — agent learns a preference
+    s1 = agent.create_session(session_id="user-42-s1")
+    s1.state["user_id"] = "user-42"       # required — drives per-user file partitioning
+    await agent.run("I prefer concise bullet-point answers.", session=s1)
+
+    # Session 2 — preference is recalled from the topic store
+    s2 = agent.create_session(session_id="user-42-s2")
+    s2.state["user_id"] = "user-42"
+    r = await agent.run("Summarise the benefits of asyncio.", session=s2)
+    print(r.text)   # likely uses bullet points — remembered from session 1
+
+
+asyncio.run(main())
+```
+
+### Multi-user isolation
+
+Every distinct `owner_state_key` value gets its own subtree under `base_path`. Two users share a single `agent` and `store` instance with no cross-contamination:
+
+```python
+async def handle_request(user_id: str, message: str) -> str:
+    session = agent.create_session()
+    session.state["user_id"] = user_id    # → ./memory/<user_id>/memory/MEMORY.md
+    return (await agent.run(message, session=session)).text
+```
+
+### Using a cheaper model for consolidation
+
+The consolidation pass summarises and merges topics with an LLM call. Pass `consolidation_client=` to use a faster or cheaper model for that background task without affecting the main agent's model:
+
+```python
+from agent_framework.openai import OpenAIChatClient
+
+main_client   = OpenAIChatClient(model="gpt-4o")
+cheap_client  = OpenAIChatClient(model="gpt-4o-mini")
+
+memory = MemoryContextProvider(
+    store=store,
+    consolidation_client=cheap_client,  # only used during topic consolidation
+)
+
+agent = Agent(client=main_client, context_providers=[memory])
+```
+
+### Filtering transcripts before save — `history_message_filter`
+
+Pass a `history_message_filter` callback to redact or drop messages before they are written to the transcript store. The callback receives each `Message` and returns either a modified copy or `None` to drop the message entirely:
+
+```python
+from agent_framework import Message, MemoryContextProvider, MemoryFileStore
+import re
+
+PII_PATTERN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")   # crude SSN pattern
+
+def redact_pii(message: Message) -> Message | None:
+    """Return message with SSNs redacted, or None to drop the message."""
+    new_contents = []
+    for content in message.contents:
+        if isinstance(content, str):
+            new_contents.append(PII_PATTERN.sub("[REDACTED]", content))
+        else:
+            new_contents.append(content)
+    from dataclasses import replace
+    return replace(message, contents=new_contents)
+
+memory = MemoryContextProvider(
+    store=MemoryFileStore(base_path="./memory", owner_state_key="user_id"),
+    history_message_filter=redact_pii,
+)
+```
+
+### Injecting recent turns alongside durable memory
+
+`recent_turns` injects the most recent N turns from the transcript (not just the current session) as additional context. This gives the agent short-term coherence across sessions without blowing up the context window:
+
+```python
+memory = MemoryContextProvider(
+    store=store,
+    recent_turns=3,            # inject the 3 most recent turns
+    load_tool_turns=False,     # skip tool-call turns in the recency window
+)
+```
+
+Set `load_tool_turns=False` when tool-call rounds are noisy and you only want the user/assistant exchanges.
+
+### Inspecting and managing memory files directly
+
+`MemoryFileStore` methods are synchronous — call them from application code (dashboards, admin scripts) without running the agent:
+
+```python
+from agent_framework import AgentSession, MemoryFileStore
+
+store = MemoryFileStore(base_path="./memory", owner_state_key="user_id")
+
+session = AgentSession(session_id="admin-view")
+session.state["user_id"] = "user-42"
+
+# List all topic records for a user
+topics = store.list_topics(session, source_id="memory")
+for t in topics:
+    print(t.topic, "—", t.summary[:60])
+
+# Fetch a specific topic
+record = store.get_topic(session, source_id="memory", topic="preferences")
+print(record.to_markdown())
+
+# Delete a stale topic
+store.delete_topic(session, source_id="memory", topic="old-project-x")
+
+# Rebuild the MEMORY.md index after manual edits
+store.rebuild_index(session, source_id="memory")
+```
+
+### Custom `MemoryStore` backend
+
+Subclass `MemoryStore` to back memory in any storage system — a database, blob storage, or vector DB. All abstract methods are **synchronous** (the provider wraps them in `asyncio.to_thread` internally):
+
+```python
+from agent_framework import AgentSession, MemoryFileStore, MemoryIndexEntry, MemoryStore, MemoryTopicRecord
+from typing import Any
+from collections.abc import Mapping
+from pathlib import Path
+
+
+class InMemoryMemoryStore(MemoryStore):
+    """Ephemeral in-memory backend — useful for tests."""
+
+    def __init__(self, owner_state_key: str) -> None:
+        self._owner_state_key = owner_state_key
+        self._topics: dict[str, dict[str, MemoryTopicRecord]] = {}  # owner → topic → record
+        self._state: dict[str, dict[str, Any]] = {}
+
+    def get_owner_id(self, session: AgentSession) -> str | None:
+        return session.state.get(self._owner_state_key)
+
+    def _owner(self, session: AgentSession) -> str:
+        oid = self.get_owner_id(session)
+        if oid is None:
+            raise RuntimeError(f"session.state[{self._owner_state_key!r}] must be set")
+        return str(oid)
+
+    def export_provider_state(self, session: AgentSession) -> dict[str, Any]:
+        return {}
+
+    def import_provider_state(self, session: AgentSession, *, state: Mapping[str, Any]) -> None:
+        pass
+
+    def list_topics(self, session: AgentSession, *, source_id: str) -> list[MemoryTopicRecord]:
+        return list(self._topics.get(self._owner(session), {}).values())
+
+    def get_topic(self, session: AgentSession, *, source_id: str, topic: str) -> MemoryTopicRecord:
+        owner_topics = self._topics.get(self._owner(session), {})
+        if topic not in owner_topics:
+            raise KeyError(f"Topic {topic!r} not found")
+        return owner_topics[topic]
+
+    def write_topic(self, session: AgentSession, record: MemoryTopicRecord, *, source_id: str) -> None:
+        self._topics.setdefault(self._owner(session), {})[record.topic] = record
+
+    def delete_topic(self, session: AgentSession, *, source_id: str, topic: str) -> None:
+        self._topics.get(self._owner(session), {}).pop(topic, None)
+
+    def rebuild_index(self, session: AgentSession, *, source_id: str, line_limit: int = 200, line_length: int = 150) -> list[MemoryIndexEntry]:
+        return []  # index is implicit in list_topics for this backend
+
+    def get_index_text(self, session: AgentSession, *, source_id: str, line_limit: int = 200, line_length: int = 150, index_entries=None) -> str:
+        topics = self.list_topics(session, source_id=source_id)
+        return "\n".join(f"- {t.topic}: {t.summary[:80]}" for t in topics)
+
+    def read_state(self, session: AgentSession, *, source_id: str) -> dict[str, Any]:
+        return self._state.get(self._owner(session), {})
+
+    def write_state(self, session: AgentSession, state: Mapping[str, Any], *, source_id: str) -> None:
+        self._state[self._owner(session)] = dict(state)
+
+    def get_transcripts_directory(self, session: AgentSession, *, source_id: str) -> Path:
+        raise NotImplementedError("In-memory store does not support transcript directories")
+
+    def search_transcripts(
+        self,
+        session: AgentSession,
+        *,
+        source_id: str,
+        query: str,
+        session_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        return []
+
+
+# Wire up like MemoryFileStore
+memory = MemoryContextProvider(store=InMemoryMemoryStore(owner_state_key="user_id"))
+agent = Agent(client=client, context_providers=[memory])
+```
+
+### Tools injected into the agent
+
+`MemoryContextProvider` injects 6 tools that the agent can call at any time to manage its own memory. Your application code does not need to wire these up — the provider handles it automatically:
+
+| Tool name | Purpose |
+|---|---|
+| `list_memory_topics()` | List all known topic names and their summaries |
+| `read_memory_topic(topic)` | Retrieve the full content of one topic file |
+| `write_memory(topic, memory)` | Add or update a fact in a specific topic |
+| `delete_memory_topic(topic)` | Remove a topic file entirely |
+| `search_memory_transcripts(query, session_id, limit)` | Full-text search over saved session transcripts |
+| `consolidate_memories()` | Manually trigger a consolidation pass now |
+
+The agent calls these autonomously — for example, searching transcripts before answering a question about past decisions, or explicitly writing a memory when the user says "remember this for next time." No prompt engineering beyond the default `context_prompt` is needed to activate them.
+
+### `MemoryContextProvider` constructor reference
+
+```python
+MemoryContextProvider(
+    recent_turns: int = 0,               # inject last N turns from transcript into context
+    load_tool_turns: bool = True,        # include tool-call turns in the recency window
+    *,
+    store: MemoryStore,                  # required — MemoryFileStore or custom
+    source_id: str = "memory",           # partition key; change when stacking multiple providers
+    context_prompt: str | None = None,   # override "## Memory\n..." header
+    index_line_limit: int = 200,         # max pointer lines in MEMORY.md
+    index_line_length: int = 150,        # max chars per pointer line
+    selection_limit: int = 3,            # max topic files loaded per session
+    max_extractions: int = 5,            # max memory items extracted per session
+    consolidation_interval: timedelta = timedelta(hours=24),
+    consolidation_min_sessions: int = 5, # require N sessions before consolidation runs
+    extraction_prompt: str | None = None,        # override LLM extraction prompt
+    consolidation_prompt: str | None = None,     # override LLM consolidation prompt
+    consolidation_client: SupportsChatGetResponse | None = None,  # cheaper model for consolidation
+    history_message_filter: Callable[[Message], Message | None] | None = None,
+    history_dumps: Callable | None = None,   # custom JSON serialiser for transcripts
+    history_loads: Callable | None = None,   # custom JSON deserialiser
+)
+```
+
+### `MemoryFileStore` directory layout
+
+```
+base_path/
+  <owner_id>/
+    memory/
+      MEMORY.md           ← keyword-indexed topic pointer list
+      topics/
+        preferences.md    ← one file per extracted topic
+        coding-style.md
+      transcripts/
+        <session_id>.jsonl  ← conversation transcript per session
+      state.json          ← maintenance state (last extraction, consolidation timestamps)
+```
+
+Customise directory names at construction time:
+
+```python
+store = MemoryFileStore(
+    base_path="./data",
+    owner_state_key="tenant_id",
+    kind="agent-memory",                # → ./data/<tenant_id>/agent-memory/
+    index_file_name="index.md",
+    topics_directory_name="knowledge",
+    transcripts_directory_name="logs",
+    state_file_name="meta.json",
+)
+```
+
+---
+
 ## Quick-reference table
 
 | Class / helper | Import | Notes |
@@ -652,5 +964,11 @@ class RedisTodoStore(TodoStore):
 | `AgentModeProvider` | `agent_framework` | `ContextProvider`; injects `get_mode`/`set_mode` + instructions |
 | `get_agent_mode` | `agent_framework` | Read current mode from `AgentSession.state` |
 | `set_agent_mode` | `agent_framework` | Write mode externally; triggers notification on next `run()` |
+| `MemoryContextProvider` | `agent_framework` | `HistoryProvider`; long-term memory via extraction + injection |
+| `MemoryFileStore` | `agent_framework` | File-backed memory store; `owner_state_key` for multi-user |
+| `MemoryStore` | `agent_framework` | Abstract base — subclass for custom backends |
+| `MemoryIndexEntry` | `agent_framework` | One line in `MEMORY.md`; `topic`, `slug`, `summary`, `updated_at` |
+| `MemoryTopicRecord` | `agent_framework` | One topic file; `topic`, `memories` list, `summary`, `updated_at` |
 | `DEFAULT_TODO_SOURCE_ID` | `agent_framework` | `"todo"` — the default `source_id` for `TodoProvider` |
 | `DEFAULT_MODE_SOURCE_ID` | `agent_framework` | `"agent_mode"` — the default `source_id` for `AgentModeProvider` |
+| `DEFAULT_MEMORY_SOURCE_ID` | `agent_framework` | `"memory"` — the default `source_id` for `MemoryContextProvider` |

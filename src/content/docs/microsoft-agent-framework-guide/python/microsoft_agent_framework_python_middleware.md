@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Middleware"
-description: "Agent, chat, and function middleware in agent-framework-core 1.4.0 — real signatures, short-circuit patterns, telemetry, retries, and redaction."
+description: "Agent, chat, and function middleware in agent-framework-core 1.5.0 — real signatures, short-circuit patterns, telemetry, retries, and redaction."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -15,7 +15,7 @@ Middleware is how you intercept agent runs without subclassing `Agent`. Three le
 | **Chat** | A single model request inside the tool loop | `ChatContext` | Per-call observability, prompt caching, token accounting, response rewriting |
 | **Function** | A single tool invocation | `FunctionInvocationContext` | Argument validation, PII redaction, approval gates, per-tool telemetry |
 
-All three ship in `agent_framework`; imports below are stable in `agent-framework-core==1.4.0`.
+All three ship in `agent_framework`; imports below are stable in `agent-framework-core==1.5.0`.
 
 ## The `call_next` contract
 

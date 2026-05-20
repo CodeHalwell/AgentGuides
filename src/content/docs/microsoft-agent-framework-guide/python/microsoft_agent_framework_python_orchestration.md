@@ -100,7 +100,7 @@ Dispatches the same input to every participant in parallel and aggregates the re
 from agent_framework_orchestrations import ConcurrentBuilder
 
 workflow = ConcurrentBuilder(participants=[researcher, analyst, writer]).build()
-result = await workflow.run("Summarise agent-framework 1.4.0")
+result = await workflow.run("Summarise agent-framework 1.5.0")
 ```
 
 Custom aggregator (sync or async, returning a value or `None`):

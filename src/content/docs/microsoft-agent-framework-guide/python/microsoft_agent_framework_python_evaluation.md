@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Evaluation"
-description: "Quality gates for agents and workflows: evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator decorator, keyword_check and tool_call helpers — all from agent-framework-core 1.4.0."
+description: "Quality gates for agents and workflows: evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator decorator, keyword_check and tool_call helpers — all from agent-framework-core 1.5.0."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -11,7 +11,7 @@ language: python
 
 Everything is in-process by default — no Azure AI Foundry / Microsoft Foundry dependency required. Plug a cloud evaluator in alongside `LocalEvaluator` when you want LLM-judge / risk / groundedness checks.
 
-Verified against `agent-framework-core==1.4.0` (`agent_framework._evaluation`). This module is marked `experimental` — API may evolve.
+Verified against `agent-framework-core==1.5.0` (`agent_framework._evaluation`). This module is marked `experimental` — API may evolve.
 
 ## The three building blocks
 
