@@ -76,6 +76,96 @@ Rules:
 
 Deprecated kwarg: `retry=` (renamed to `retry_policy=` in v0.5 — still works with a warning).
 
+### `task.clear_cache()` / `task.aclear_cache()`
+
+When a task has a `cache_policy`, its results are keyed by the input hash. Use `clear_cache` to invalidate stale entries without rebuilding the whole graph:
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.types import CachePolicy
+from langgraph.cache.memory import InMemoryCache
+
+cache = InMemoryCache()
+
+
+@task(cache_policy=CachePolicy(ttl=3600))
+def embed(text: str) -> list[float]:
+    return call_embedding_api(text)
+
+
+# Inside a maintenance routine:
+embed.clear_cache(cache)          # sync — wipes all cached results for `embed`
+await embed.aclear_cache(cache)   # async variant
+```
+
+`clear_cache` only clears results for the decorated task, not the whole cache. It is a no-op if `cache_policy=None`.
+
+### `timeout` on `@task` — `TimeoutPolicy`
+
+The `timeout=` parameter accepts a plain `float` (seconds), `timedelta`, or a `TimeoutPolicy` object. Only async tasks support timeouts — sync tasks raise `ValueError` at decoration time.
+
+```python
+import asyncio
+from datetime import timedelta
+from langgraph.func import entrypoint, task
+from langgraph.types import TimeoutPolicy, RetryPolicy
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+@task(
+    timeout=TimeoutPolicy(
+        idle_timeout=15.0,      # abort if silent for 15 s
+        refresh_on="heartbeat", # only runtime.heartbeat() resets the clock
+    ),
+    retry_policy=RetryPolicy(max_attempts=3),
+)
+async def scrape(url: str) -> str:
+    async with aiohttp.ClientSession() as sess:
+        async with sess.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+            return await r.text()
+
+
+@entrypoint(checkpointer=InMemorySaver())
+async def crawl_pipeline(urls: list[str]) -> list[str]:
+    futures = [scrape(u) for u in urls]
+    return [f.result() for f in futures]
+```
+
+`TimeoutPolicy` fields:
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `run_timeout` | `float \| timedelta \| None` | `None` | Hard wall-clock cap. Never refreshed. |
+| `idle_timeout` | `float \| timedelta \| None` | `None` | Max time between progress signals. |
+| `refresh_on` | `"auto" \| "heartbeat"` | `"auto"` | What resets the idle clock. |
+
+### `runtime.heartbeat()` inside a task
+
+When `idle_timeout` is set and `refresh_on="heartbeat"`, call `runtime.heartbeat()` from inside the task to prove it is still making progress. Access the `Runtime` via the `@entrypoint`'s injectable `runtime` parameter — tasks themselves do not receive `runtime` directly, but you can thread it through:
+
+```python
+from langgraph.runtime import Runtime
+from langgraph.func import entrypoint, task
+from langgraph.types import TimeoutPolicy
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+@task(timeout=TimeoutPolicy(idle_timeout=30.0, refresh_on="heartbeat"))
+async def long_task(items: list[str], heartbeat_fn) -> list[str]:
+    results = []
+    for item in items:
+        results.append(await process(item))
+        heartbeat_fn()   # reset idle clock after each item
+    return results
+
+
+@entrypoint(checkpointer=InMemorySaver())
+async def pipeline(inp: dict, runtime: Runtime) -> dict:
+    # Pass runtime.heartbeat as a callback so the task can signal progress
+    future = long_task(inp["items"], runtime.heartbeat)
+    return {"results": future.result()}
+```
+
 ## `@entrypoint`
 
 ```python
@@ -290,6 +380,80 @@ def remember(inp: dict, runtime: Runtime) -> dict:
     return {"saved": True}
 ```
 
+### 6. Cached task with manual cache invalidation
+
+Cache expensive computations across runs; flush stale entries with `clear_cache`:
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.types import CachePolicy
+from langgraph.cache.memory import InMemoryCache
+from langgraph.checkpoint.memory import InMemorySaver
+
+cache = InMemoryCache()
+
+
+@task(cache_policy=CachePolicy(ttl=3600))
+def embed_document(text: str) -> list[float]:
+    return slow_embedding_api(text)
+
+
+@entrypoint(checkpointer=InMemorySaver(), cache=cache)
+def index_pipeline(docs: list[str]) -> list[list[float]]:
+    futures = [embed_document(d) for d in docs]
+    return [f.result() for f in futures]
+
+
+cfg = {"configurable": {"thread_id": "idx-1"}}
+index_pipeline.invoke(["hello", "world"], cfg)     # computes embeddings
+index_pipeline.invoke(["hello", "world"], cfg)     # served from cache
+
+# Invalidate after model upgrade:
+embed_document.clear_cache(cache)
+index_pipeline.invoke(["hello", "world"], cfg)     # recomputes
+```
+
+### 7. Parallel tasks with per-task timeout and retry
+
+```python
+import asyncio
+import httpx
+from langgraph.func import entrypoint, task
+from langgraph.types import TimeoutPolicy, RetryPolicy
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+@task(
+    timeout=TimeoutPolicy(run_timeout=10.0),
+    retry_policy=RetryPolicy(
+        max_attempts=3,
+        retry_on=(httpx.TransportError, httpx.HTTPStatusError),
+        backoff_factor=2.0,
+    ),
+)
+async def fetch_url(url: str) -> str:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        return r.text
+
+
+@entrypoint(checkpointer=InMemorySaver())
+async def crawl(urls: list[str]) -> list[str]:
+    futures = [fetch_url(u) for u in urls]
+    results = []
+    for f in futures:
+        try:
+            results.append(f.result())
+        except Exception as e:
+            results.append(f"ERROR: {e}")
+    return results
+
+
+cfg = {"configurable": {"thread_id": "crawl-1"}}
+await crawl.ainvoke(["https://example.com", "https://httpbin.org/get"], cfg)
+```
+
 ## Gotchas
 
 - **Tasks are futures, not values.** A very common bug: `return tasks` instead of `return [t.result() for t in tasks]`. The future object serializes fine but the caller can't use it outside the graph.
@@ -304,6 +468,7 @@ def remember(inp: dict, runtime: Runtime) -> dict:
 
 | Version | Change |
 |---|---|
+| 1.2 | `timeout=` parameter added to `@task` and `@entrypoint` (async only). `TimeoutPolicy` dataclass introduced. `task.clear_cache()` / `task.aclear_cache()` added. |
 | 1.0 | Functional API graduates out of experimental; `@entrypoint` / `@task` live in `langgraph.func`. |
 | 0.6 | `config_schema=` on `@entrypoint` deprecated in favor of `context_schema=`. |
 | 0.5 | `retry=` kwarg on `@task` / `@entrypoint` renamed to `retry_policy=`. |

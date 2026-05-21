@@ -284,14 +284,45 @@ hits = store.search(
 )
 ```
 
-### 3. Batched write on session end
+### 3. Batched mixed operations in one round-trip
+
+The `batch()` / `abatch()` methods execute any combination of `GetOp`, `PutOp`, `SearchOp`, and `ListNamespacesOp` in a single call. Use it when you need to atomically read and write, or simply avoid multiple network round-trips:
 
 ```python
-from langgraph.store.base import PutOp
+from langgraph.store.base import GetOp, PutOp, SearchOp, ListNamespacesOp
 
-store.batch([
-    PutOp(("mem", user_id), f"m{i}", v, index=None, ttl=None)
-    for i, v in enumerate(new_memories)
+results = store.batch([
+    # Write three facts
+    PutOp(("mem", user_id), "hobby", {"text": "cycling"}, index=None, ttl=None),
+    PutOp(("mem", user_id), "city",  {"text": "Berlin"},  index=None, ttl=None),
+    # Read one fact in the same call
+    GetOp(("mem", user_id), "name"),
+    # Semantic search
+    SearchOp(
+        ("mem", user_id),
+        query="favorite sport",
+        filter=None,
+        limit=3,
+        offset=0,
+    ),
+    # List all namespaces under "mem"
+    ListNamespacesOp(prefix=("mem",), max_depth=2, limit=10, offset=0),
+])
+# results is a list aligned with the ops:
+#   results[0] = None   (PutOp returns None)
+#   results[1] = None
+#   results[2] = Item(...)  or None
+#   results[3] = list[SearchItem]
+#   results[4] = list[tuple[str, ...]]
+put_hobby, put_city, get_name, search_results, namespaces = results
+```
+
+Use `abatch` in async contexts:
+
+```python
+results = await store.abatch([
+    PutOp(("cache",), "key", {"data": payload}),
+    GetOp(("cache",), "key"),
 ])
 ```
 
