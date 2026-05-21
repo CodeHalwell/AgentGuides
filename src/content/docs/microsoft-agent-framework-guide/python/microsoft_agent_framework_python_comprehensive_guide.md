@@ -241,6 +241,91 @@ async def run_chat_agent() -> None:
         print(f"Assistant: {response.text}")
 ```
 
+#### `Agent.__init__` parameter reference
+
+All parameters except `client` are optional keyword arguments.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `client` | `SupportsChatGetResponse` | — | **Required.** Chat client (`OpenAIChatClient`, `FoundryChatClient`, etc.). |
+| `instructions` | `str \| None` | `None` | System prompt prepended to every conversation. |
+| `id` | `str \| None` | `None` | Stable identifier for this agent instance. Used in workflow graphs and telemetry. Auto-generated if omitted. |
+| `name` | `str \| None` | `None` | Human-readable name surfaced in multi-agent event streams (`update.author_name`). |
+| `description` | `str \| None` | `None` | Short description shown to an orchestrating LLM (e.g. in `HandoffBuilder`) to help it decide when to route to this agent. |
+| `tools` | `Sequence[tool] \| None` | `None` | Default tools available on every run. Can be overridden per-call via `agent.run(..., tools=...)`. |
+| `default_options` | `ChatOptions \| None` | `None` | Default model options (`model`, `temperature`, `max_tokens`, etc.) applied to every call. Per-call `options=` overrides these at the field level. |
+| `context_providers` | `Sequence[ContextProvider] \| None` | `None` | Ordered list of `ContextProvider` instances (history, memory, skills, …). Providers run `before_run` / `after_run` hooks and can inject messages. |
+| `middleware` | `Sequence[MiddlewareTypes] \| None` | `None` | Ordered middleware chain for the agent run. Only applicable to `Agent` (skipped by `RawAgent`). |
+| `compaction_strategy` | `CompactionStrategy \| None` | `None` | Default history compaction strategy. Applied on every run before the LLM call; can be overridden per-call. |
+| `tokenizer` | `TokenizerProtocol \| None` | `None` | Tokenizer used by compaction strategies to count tokens. Falls back to a fast estimate if `None`. |
+| `require_per_service_call_history_persistence` | `bool` | `False` | When `True`, history is persisted after **every** inner LLM call (including tool-call round trips), not just at end-of-turn. Useful when a long chain of tool calls must survive a crash mid-turn. |
+| `additional_properties` | `MutableMapping[str, Any] \| None` | `None` | Arbitrary key-value bag attached to the agent instance. Middleware and context providers can read these values via `agent.additional_properties`. |
+
+**Full constructor example:**
+
+```python
+import asyncio
+from agent_framework import Agent, SlidingWindowStrategy
+from agent_framework.openai import OpenAIChatClient
+from tiktoken import encoding_for_model
+
+agent = Agent(
+    client=OpenAIChatClient(model="gpt-4o"),
+    instructions="You are a senior code reviewer.",
+    id="code-reviewer-1",
+    name="CodeReviewer",
+    description="Reviews code diffs and flags issues.",
+    tools=[search_codebase, run_tests],
+    default_options={"temperature": 0.2, "max_tokens": 2048},
+    compaction_strategy=SlidingWindowStrategy(keep_last_groups=20),
+    tokenizer=encoding_for_model("gpt-4o"),
+    require_per_service_call_history_persistence=True,
+    additional_properties={"team": "platform", "tier": "internal"},
+)
+```
+
+#### `Agent.run()` parameter reference
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `messages` | `str \| list[Message] \| None` | `None` | Input message(s). A plain string is treated as a user message. |
+| `stream` | `bool` | `False` | Return a `ResponseStream` for token-by-token output instead of an awaitable. |
+| `session` | `AgentSession \| None` | `None` | Session carrying conversation history. Omit for stateless single-turn calls. |
+| `tools` | `Sequence[tool] \| None` | `None` | Per-call tool list. **Replaces** (not extends) the agent's default `tools`. |
+| `options` | `ChatOptions \| None` | `None` | Per-call model options (`model`, `temperature`, `max_tokens`, `response_format`, …). Merged on top of `default_options`. |
+| `compaction_strategy` | `CompactionStrategy \| None` | `None` | Per-call override for the agent's default compaction strategy. |
+| `tokenizer` | `TokenizerProtocol \| None` | `None` | Per-call tokenizer override used by the compaction strategy. |
+| `function_invocation_kwargs` | `Mapping[str, Any] \| None` | `None` | Extra kwargs forwarded to every tool/resource/script callable that accepts `**kwargs`. Useful for injecting request-scoped data (tenant ID, auth token, trace ID) without globals. |
+| `client_kwargs` | `Mapping[str, Any] \| None` | `None` | Extra kwargs forwarded directly to the underlying chat client call. Use for provider-specific params not exposed by `ChatOptions`. |
+
+**Per-call override example:**
+
+```python
+import asyncio
+from agent_framework import Agent, TruncationStrategy
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(model="gpt-4o"),
+    instructions="You are a helpful assistant.",
+    tools=[search_docs],
+    default_options={"temperature": 0.7},
+)
+
+async def main():
+    # Override model and temperature for a single classification call
+    label = await agent.run(
+        "Classify the sentiment: 'The product is amazing!'",
+        options={"model": "gpt-4o-mini", "temperature": 0.0},
+        tools=[],                          # no tools needed for classification
+        compaction_strategy=TruncationStrategy(keep_last_groups=5),
+        function_invocation_kwargs={"tenant_id": "acme", "user_id": "u-42"},
+    )
+    print(label.text)
+
+asyncio.run(main())
+```
+
 ### Agent Lifecycle
 
 The chat client owns the underlying HTTP session and credentials; when the client supports it, use `async with` to close those resources deterministically. Agents themselves are cheap to construct — you typically build one per role and reuse it across requests. Sessions are per-conversation and hold `ChatHistoryProvider` state (in-memory by default); create a new session per user or request.
@@ -1077,9 +1162,9 @@ asyncio.run(main())
 workflow = WorkflowBuilder(start_executor=parser).add_chain([parser, enricher, writer]).build()
 ```
 
-### Filtering which executors yield outputs — `output_executors`
+### Filtering which executors yield outputs — `output_from` / `intermediate_output_from`
 
-By default, every executor that calls `ctx.yield_output(...)` contributes to `WorkflowRunResult.get_outputs()`. In a fan-out / fan-in graph that's noisy — you typically only care about the final aggregator. Pass `output_executors=[...]` to the builder to filter:
+By default, every executor that calls `ctx.yield_output(...)` contributes to `WorkflowRunResult.get_outputs()`. In a fan-out / fan-in graph that's noisy — you typically only care about the final aggregator. Use `output_from=` on the builder to filter:
 
 ```python
 from agent_framework import WorkflowBuilder
@@ -1088,7 +1173,7 @@ workflow = (
     WorkflowBuilder(
         start_executor=parser,
         name="research-pipeline",
-        output_executors=[final_writer],   # only this executor's yields surface
+        output_from=[final_writer],          # only this executor's yields surface in get_outputs()
     )
     .add_fan_out_edges(parser, [worker_a, worker_b, worker_c])
     .add_fan_in_edges([worker_a, worker_b, worker_c], final_writer)
@@ -1096,10 +1181,32 @@ workflow = (
 )
 
 result = await workflow.run("seed text")
-print(result.get_outputs())                # contains only final_writer's output
+print(result.get_outputs())                  # contains only final_writer's output
 ```
 
-Outputs from upstream executors still flow through the graph (they're consumed by the next handler), they just aren't surfaced through the run result. This is the cheapest way to keep `result.get_outputs()` deterministic when many nodes can yield.
+Use `intermediate_output_from=` when you want some intermediate nodes visible separately from the primary outputs — for example, to surface per-worker results alongside the aggregator's final answer:
+
+```python
+workflow = (
+    WorkflowBuilder(
+        start_executor=parser,
+        name="research-pipeline",
+        output_from=[final_writer],
+        intermediate_output_from=[worker_a, worker_b, worker_c],  # also visible, labelled intermediate
+    )
+    .add_fan_out_edges(parser, [worker_a, worker_b, worker_c])
+    .add_fan_in_edges([worker_a, worker_b, worker_c], final_writer)
+    .build()
+)
+
+result = await workflow.run("seed text")
+primary = result.get_outputs()              # final_writer's output only
+intermediates = result.get_intermediate_outputs()  # worker_a/b/c outputs
+```
+
+Outputs from unfiltered executors still flow through the graph (consumed by the next handler) — they simply aren't surfaced via the run result. This keeps `result.get_outputs()` deterministic when many nodes can yield.
+
+> **Deprecated:** The old `output_executors=[...]` parameter still works in 1.5.0 but is superseded by `output_from=`. Prefer `output_from=` in new code.
 
 ### Conditional edges — gate a single connection
 
