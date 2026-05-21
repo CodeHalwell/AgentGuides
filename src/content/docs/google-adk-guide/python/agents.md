@@ -261,6 +261,70 @@ loop = LoopAgent(name="refine", sub_agents=[critic], max_iterations=5)
 
 Exit conditions: `max_iterations` reached, or any event with `actions.escalate=True`. `max_iterations=None` means loop until an escalate.
 
+## LangGraphAgent
+
+`LangGraphAgent` bridges an existing LangGraph compiled graph into ADK's agent system. Install `langgraph` and `langchain-core` first (`pip install langgraph langchain-core`). Verified in `agents/langgraph_agent.py`.
+
+```python
+import asyncio
+from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import AIMessage
+from google.adk.agents import LangGraphAgent
+from google.adk.runners import InMemoryRunner
+
+# --- Build a minimal LangGraph ------------------------------------------------
+def chatbot(state: MessagesState):
+    # Replace this with your actual LLM call (e.g. ChatGoogleGenerativeAI)
+    last = state["messages"][-1].content
+    return {"messages": [AIMessage(content=f"Echo: {last}")]}
+
+builder = StateGraph(MessagesState)
+builder.add_node("chatbot", chatbot)
+builder.add_edge(START, "chatbot")
+builder.add_edge("chatbot", END)
+
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+
+# --- Wrap as an ADK agent ------------------------------------------------------
+agent = LangGraphAgent(
+    name="echo_bot",
+    graph=graph,
+    instruction="You are a helpful assistant.",   # prepended as SystemMessage if graph is empty
+)
+
+async def main():
+    runner = InMemoryRunner(agent=agent, app_name="demo")
+    session = await runner.session_service.create_session(
+        app_name="demo", user_id="u1", session_id="s1"
+    )
+    events = await runner.run_debug("hello", user_id="u1", session_id="s1")
+    print(events[-1].content.parts[0].text)   # "Echo: hello"
+
+asyncio.run(main())
+```
+
+**How it works (from `agents/langgraph_agent.py`):**
+
+- When `graph.checkpointer` is set the agent passes only the latest user messages — the graph owns its own memory via the checkpointer, keyed by `ctx.session.id` as the LangGraph `thread_id`.
+- When there is no checkpointer, the agent passes the full conversation (user ↔ this agent only) as `HumanMessage` / `AIMessage` so the graph has context.
+- The `instruction` is prepended as a `SystemMessage` only when the graph has no prior messages yet (initial turn).
+- `LangGraphAgent` emits a single `Event` per invocation — it does **not** stream partial responses.
+
+**Constructor fields:**
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `name` | `str` | required | Agent name |
+| `graph` | `CompiledGraph` | required | The compiled LangGraph graph |
+| `instruction` | `str` | `""` | System instruction injected on first turn |
+
+**Gotchas:**
+- `sub_agents=` is **not supported** on `LangGraphAgent` — it does not participate in ADK's agent-transfer routing.
+- If you need ADK tools inside the graph, call `FunctionTool.run_async` from your LangGraph nodes directly; `LangGraphAgent` itself holds no `tools=` list.
+- Multi-turn with a checkpointer requires that the runner's session id is stable across calls (it is, by default).
+
 ## Migration to `Workflow`
 
 The deprecated shells map to `Workflow` like this (full details in the [workflows page](./workflows/)):
@@ -300,6 +364,59 @@ agent = LlmAgent(
 )
 ```
 `PlanReActPlanner` is also available for a textual plan-then-act flow (`planners/plan_re_act_planner.py`).
+
+### PlanReActPlanner (no thinking-model required)
+
+`PlanReActPlanner` works with **any** Gemini model — it does not require `thinking_config` support. Instead it injects a structured prompt that instructs the model to emit planning, reasoning, action, and final-answer blocks using XML-style tags. The planner strips all content except function calls and the final answer from what is sent back to the user.
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.planners import PlanReActPlanner
+from google.adk.tools import google_search
+
+agent = LlmAgent(
+    name="planner_agent",
+    model="gemini-2.5-flash",
+    instruction="Answer research questions with web search.",
+    planner=PlanReActPlanner(),
+    tools=[google_search],
+)
+```
+
+**What the model produces internally** (never shown to the user as-is):
+
+```
+/*PLANNING*/
+1. Use google_search to find the current CEO of Anthropic.
+2. Return the name in the final answer.
+/*REASONING*/
+Executing step 1.
+/*ACTION*/
+<function_call>google_search(query="Anthropic CEO 2025")</function_call>
+/*REASONING*/
+Found: Dario Amodei is CEO.
+/*FINAL_ANSWER*/
+The CEO of Anthropic is Dario Amodei.
+```
+
+**Tag semantics (from `planners/plan_re_act_planner.py`):**
+
+| Tag | Purpose | Shown to user |
+|---|---|---|
+| `/*PLANNING*/` | Initial plan in natural language | No — marked as `thought=True` |
+| `/*REPLANNING*/` | Revised plan when initial plan fails | No — marked as `thought=True` |
+| `/*REASONING*/` | Inline reasoning between tool calls | No — marked as `thought=True` |
+| `/*ACTION*/` | Function call block | The function call is executed |
+| `/*FINAL_ANSWER*/` | The response visible to the user | Yes |
+
+**When to use `PlanReActPlanner` vs `BuiltInPlanner`:**
+
+| Planner | Requires thinking model | Latency | Reasoning visible in traces |
+|---|---|---|---|
+| `BuiltInPlanner(thinking_config=...)` | Yes (Gemini 2.5 Pro/Flash) | Lower (native) | Yes (thought parts) |
+| `PlanReActPlanner()` | No | Higher (extra tokens) | Yes (thought parts) |
+
+Use `PlanReActPlanner` when you need structured planning on a non-thinking model, or when you want the plan/reasoning explicitly captured for debugging.
 
 ### 4 — Reflection loop
 `LoopAgent` (or the `Workflow` equivalent) with a single reflective `LlmAgent` that rewrites `state['draft']` each turn and escalates when satisfied. Use `include_contents="none"` on the reflective agent to avoid feeding the full history back each iteration.
