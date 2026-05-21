@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.2.82** · May 2026 · Python 3.10+
+    **v0.2.83** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Claude-exclusive apps, Computer Use, MCP-heavy workflows, durable sessions.
@@ -74,8 +74,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" />
 </CardGrid>
 
-## What's new in v0.2.82 (May 2026)
+## What's new in v0.2.83 (May 2026)
 
+- **v0.2.83 (May 2026)** — Patch release. No API changes; same export surface as 0.2.82. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`, `SdkBeta`, `SdkMcpTool`, `SdkPluginConfig`, `create_sdk_mcp_server`, `delete_session_via_store`, `fork_session_via_store`, `get_session_info`, `get_session_messages`, `list_sessions`, `project_key_for_directory`) verified against installed `claude-agent-sdk==0.2.83` (`.routine-envs/check-0521-py`); no `DeprecationWarning` emissions.
 - **v0.2.82 (May 2026)** — Major minor-version bump (0.1 → 0.2). Significantly expanded API surface including `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` for sandbox configuration; `TaskBudget`, `TaskNotificationMessage`, `TaskNotificationStatus`, `TaskProgressMessage`, `TaskStartedMessage`, `TaskUsage` for task lifecycle tracking; `EffortLevel` for configurable effort modes; `DeferredToolUse` for deferred tool execution patterns; `SdkBeta`, `SdkMcpTool`, `SdkPluginConfig` for plugin and MCP configuration; store-backed variants of all session management functions (`delete_session_via_store`, `fork_session_via_store`, etc.); `project_key_for_directory` utility. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`) verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions.
 - **v0.1.81 (May 12)** — Final 0.1.x release; stability and dependency updates.
 - **v0.1.73 (May 5)** — Patch release; stability improvements.
@@ -135,6 +136,7 @@ Ready? **[Start Zero → Hero Step 1 →](./anthropic_claude_agent_sdk_comprehen
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-21 | claude-agent-sdk 0.2.83 | Version bumped 0.2.82 → 0.2.83; "What's new" heading updated to v0.2.83; v0.2.83 bullet added; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.83` (`.routine-envs/check-0521-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-19 | claude-agent-sdk 0.2.82 | Major version bump 0.1.81 → 0.2.82; "What's new" updated with expanded API surface; comprehensive guide updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-12 | claude-agent-sdk 0.1.81 | Version bumped 0.1.80 → 0.1.81; "What's new" updated; revision history entry added. `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` verified against installed 0.1.81 (`.routine-envs/check-0512-py`); no DeprecationWarnings. | Claude routine |
 | 2026-05-09 | claude-agent-sdk 0.1.80 | Version bumped 0.1.73 → 0.1.80 (seven patch releases: 0.1.74–0.1.80); "What's new" updated; revision history entry added. All symbols verified against installed 0.1.80 (`.routine-envs/check-0509-py`); no DeprecationWarnings. | Claude routine |

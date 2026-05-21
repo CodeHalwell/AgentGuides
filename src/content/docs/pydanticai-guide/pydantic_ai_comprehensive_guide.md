@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.99.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.100.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.99.0 | Updated: May 20, 2026
+Latest: 1.100.0 | Updated: May 21, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.99.0 (May 2026)  
+**Version:** 1.100.0 (May 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -2159,6 +2159,7 @@ Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed uncha
 
 | Version | Date | Changes | Reviewer |
 |---------|------|----------|----------|
+| 1.100.0 | May 21, 2026 | Version milestone release (1.99.x → 1.100.x); `Latest:` and `**Version:**` headers updated; revision history entry added. New dependency: `griffelib>=2.0`. All core guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `limit_model_concurrency`, `AGUIAdapter`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.100.0` (`.routine-envs/check-0521-pydantic`); all PASS. | Claude routine |
 | 1.99.0 | May 20, 2026 | Version bumped 1.98.0 → 1.99.0; `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `limit_model_concurrency`, `ConcurrencyLimiter`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.99.0` (`.routine-envs/check-0520-pydantic`); all PASS. | Claude routine |
 | 1.98.0 | May 19, 2026 | Two minor releases (1.97.0, 1.98.0). `pydantic_ai.ag_ui` module deprecated in 1.98.x — emits `PydanticAIDeprecationWarning`; new canonical path is `pydantic_ai.ui.ag_ui.AGUIAdapter`. AG UI section in this guide updated with deprecation note and migration path. New `pydantic_ai.common_tools` module (DuckDuckGo, Exa, Tavily, WebFetch, ImageGeneration providers); requires optional extras. All core guide symbols verified against installed `pydantic-ai 1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on standard imports. | Claude routine |
 | 1.96.0 | May 14, 2026 | Minor release; new concurrency management API: `ConcurrencyLimiter(max_running, max_queued=None)` and `limit_model_concurrency(model, limiter)`. All guide-referenced symbols verified against installed `pydantic-ai 1.96.0` (`.routine-envs/check-0514-py`); no `DeprecationWarning` emissions. |
