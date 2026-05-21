@@ -78,6 +78,79 @@ Both read and mutate **session state**. State keys with reserved prefixes behave
 | `user:` | All sessions of that user | yes |
 | `temp:` | Current invocation only | no (stripped before commit) |
 
+### `ReadonlyContext` — for instruction providers and toolsets
+
+`ReadonlyContext` is the lightest context variant. It is passed to:
+- Dynamic instruction providers (`instruction=callable` on `LlmAgent`)
+- `BaseToolset.get_tools(readonly_context=...)`
+
+It exposes only reads — no `actions`, no mutation of state.
+
+```python
+from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.agents import LlmAgent
+from google.adk.tools.base_toolset import BaseToolset
+
+# --- Dynamic instruction from session state -----------------------------------
+async def personalised_instruction(ctx: ReadonlyContext) -> str:
+    name = ctx.state.get("user:display_name", "there")
+    lang = ctx.state.get("user:lang", "en")
+    return (
+        f"Hello {name}! Always respond in language '{lang}'. "
+        f"Invocation: {ctx.invocation_id[:8]}."
+    )
+
+agent = LlmAgent(
+    name="greeter",
+    model="gemini-2.5-flash",
+    instruction=personalised_instruction,  # called every turn
+)
+
+# --- Role-gated toolset -------------------------------------------------------
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.function_tool import FunctionTool
+from typing import Optional
+
+class RoleGatedToolset(BaseToolset):
+    async def get_tools(
+        self, readonly_context: Optional[ReadonlyContext] = None
+    ) -> list[BaseTool]:
+        role = "guest"
+        if readonly_context:
+            role = readonly_context.state.get("user:role", "guest")
+        tools: list[BaseTool] = [FunctionTool(func=self._read)]
+        if role in ("editor", "admin"):
+            tools.append(FunctionTool(func=self._write))
+        return tools
+
+    async def _read(self, key: str) -> str:
+        """Read a shared key."""
+        return _store.get(key, "")
+
+    async def _write(self, key: str, value: str) -> dict:
+        """Write a shared key."""
+        _store[key] = value
+        return {"ok": True}
+
+    async def close(self) -> None:
+        pass
+
+_store: dict = {}
+```
+
+**Available on `ReadonlyContext`:**
+
+| Member | Type | Purpose |
+|---|---|---|
+| `ctx.state` | `MappingProxyType` | Read-only session state snapshot |
+| `ctx.user_content` | `types.Content \| None` | The original user message for this turn |
+| `ctx.invocation_id` | `str` | ID of the current invocation |
+| `ctx.agent_name` | `str` | Name of the currently running agent |
+| `ctx.user_id` | `str` | Current user ID |
+| `ctx.session` | `Session` | Full session object (read-only use) |
+| `ctx.run_config` | `RunConfig \| None` | Per-run config |
+| `ctx.get_credential(key)` | `AuthCredential \| None` | Retrieve a resolved credential by key |
+
 ## Runner-wide plugins
 
 Subclass `BasePlugin` and register via `App(plugins=[...])`.
@@ -284,6 +357,61 @@ Intercepts inline-data parts in user messages and persists them to the artifact 
 - `BigQueryAgentAnalyticsPlugin` — exports agent analytics to BigQuery (experimental).
 - `ContextFilterPlugin` — trims session events sent to the model based on size/token budgets.
 - `MultimodalToolResultsPlugin` — handles tool responses that contain multimodal parts.
+
+## Terminating an invocation from a callback
+
+Any callback that has access to `invocation_context` (plugins, agent callbacks) can set `invocation_context.end_invocation = True` to abort the current invocation after the running step completes. This is the correct way to perform hard termination — as opposed to returning a canned `LlmResponse` which only skips the current LLM call.
+
+```python
+from typing import Any, Optional
+from google.adk.plugins import BasePlugin
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
+from google.adk.agents.callback_context import CallbackContext
+from google.genai import types
+
+MAX_CONTEXT_CHARS = 200_000   # approx 50 k tokens
+
+class ContextGuardPlugin(BasePlugin):
+    """Terminates the invocation if the context grows too large."""
+
+    def __init__(self):
+        super().__init__(name="context_guard")
+
+    async def before_model_callback(
+        self,
+        *,
+        callback_context: CallbackContext,
+        llm_request: LlmRequest,
+    ) -> Optional[LlmResponse]:
+        # Estimate total context size
+        total_chars = sum(
+            len(p.text or "")
+            for c in (llm_request.contents or [])
+            for p in (c.parts or [])
+        )
+        if total_chars > MAX_CONTEXT_CHARS:
+            # Signal the runner to stop after this event
+            callback_context._invocation_context.end_invocation = True
+            # Return a canned reply so the user sees a message
+            return LlmResponse(
+                content=types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            text="Context too large. Please start a new session."
+                        )
+                    ],
+                )
+            )
+        return None
+```
+
+**Important:**
+- Setting `end_invocation = True` causes the runner to stop dispatching new agent/model/tool calls. The current event is still yielded to the caller.
+- If you also return a non-`None` value from the callback, that value is used as the LLM response — so the user sees a message rather than an abrupt stop.
+- This is distinct from `RunConfig.max_llm_calls` (which raises `LlmCallsLimitExceededError`) — `end_invocation` terminates cleanly with an optional reply.
 
 ## Order of execution
 

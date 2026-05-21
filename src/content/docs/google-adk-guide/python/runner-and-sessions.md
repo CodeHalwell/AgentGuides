@@ -229,6 +229,47 @@ Access via `ctx.state` in callbacks and tools. State is a `dict`-like object wit
 
 Declare a Pydantic schema on the `Workflow` (`state_schema=`) to validate mutations at runtime. Reserved prefixes bypass validation.
 
+## Context caching (`ContextCacheConfig`, experimental)
+
+`ContextCacheConfig` enables Gemini's server-side context caching for all `LlmAgent`s in an `App`. When active, ADK caches the system instruction + static tools prefix in Gemini's cache after the first call and reuses it for up to `cache_intervals` subsequent invocations. Cached tokens are billed at a reduced rate.
+
+```python
+from google.adk.apps import App
+from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.runners import Runner
+from google.adk.sessions import DatabaseSessionService
+
+app = App(
+    name="cached_app",
+    root_agent=my_agent,
+    context_cache_config=ContextCacheConfig(
+        cache_intervals=20,     # reuse the same cache for up to 20 invocations
+        ttl_seconds=3600,       # 1-hour TTL on the cache entry
+        min_tokens=1000,        # only cache requests with >= 1000 estimated tokens
+    ),
+)
+
+runner = Runner(
+    app=app,
+    session_service=DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db"),
+)
+```
+
+**Fields (from `agents/context_cache_config.py`):**
+
+| Field | Default | Constraints | Purpose |
+|---|---|---|---|
+| `cache_intervals` | `10` | 1–100 | Max invocations before the cache is refreshed |
+| `ttl_seconds` | `1800` (30 min) | > 0 | How long the cache entry lives in Gemini |
+| `min_tokens` | `0` | ≥ 0 | Minimum estimated request tokens to bother caching |
+
+**When to use:**
+- Long system instructions (> 1 k tokens) that rarely change
+- Large tool schemas registered on the agent
+- High-frequency, short user messages (chat, Q&A)
+
+> **Experimental**: `ContextCacheConfig` requires `@experimental(FeatureName.AGENT_CONFIG)`. It is only compatible with Gemini models that support context caching (check the Gemini docs for supported model versions).
+
 ## `run_async` return semantics
 
 `run_async` yields `Event` objects one at a time. Each event carries:
@@ -242,6 +283,106 @@ Declare a Pydantic schema on the `Workflow` (`state_schema=`) to validate mutati
 
 Non-partial events are persisted via `session_service.append_event` before being yielded.
 
+## `Event` and `EventActions` deep-dive
+
+`Event` (defined in `events/event.py`) extends `LlmResponse` and is the single unit of communication between agents, tools, and the runner.
+
+### Key fields
+
+| Field | Type | Purpose |
+|---|---|---|
+| `id` | `str` | Unique event ID (auto-generated UUID) |
+| `invocation_id` | `str` | Groups all events from one `run_async` call |
+| `author` | `str` | `"user"` or the agent name |
+| `content` | `types.Content \| None` | The message content (parts with text, function calls, etc.) |
+| `actions` | `EventActions` | Side-effects — state delta, routing, auth requests, etc. |
+| `partial` | `bool` | `True` for SSE streaming chunks; `False` for the final aggregated event |
+| `timestamp` | `float` | Unix seconds when the event was created |
+| `long_running_tool_ids` | `set[str] \| None` | IDs of long-running function calls (pauses the invocation) |
+| `branch` | `str \| None` | Dot-separated agent hierarchy (e.g. `"triage.billing"`) |
+| `node_info` | `NodeInfo` | Workflow node metadata (`path`, `run_id`, `name`) |
+| `output` | `Any \| None` | Structured output from a workflow node |
+| `usage_metadata` | `UsageMetadata \| None` | Token counts (prompt, candidates, total) |
+
+### Useful methods
+
+```python
+# Is this the agent's final reply for this turn?
+if event.is_final_response():
+    text = "".join(p.text or "" for p in (event.content.parts or []))
+    print(text)
+
+# Extract tool calls
+for fc in event.get_function_calls():
+    print(f"Tool: {fc.name}({fc.args})")
+
+# Extract tool responses
+for fr in event.get_function_responses():
+    print(f"Result for {fr.name}: {fr.response}")
+
+# Convenience alias: event.message ↔ event.content
+text_parts = [p.text for p in (event.message.parts or []) if p.text]
+```
+
+`is_final_response()` returns `True` when:
+- No function calls or responses are present, AND
+- The event is not partial (`partial=False`), AND
+- There is no trailing code execution result, OR
+- `actions.skip_summarization` is set (long-running tool response pattern)
+
+### `EventActions` fields
+
+`EventActions` (`events/event_actions.py`) carries the side-effects of an event:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `state_delta` | `dict[str, Any]` | State keys/values to merge into the session on commit |
+| `artifact_delta` | `dict[str, int]` | Filename → version; auto-populated by `save_artifact` |
+| `transfer_to_agent` | `str \| None` | Route control to this agent name after this event |
+| `escalate` | `bool \| None` | Exit a loop — used by `LoopAgent` / workflow loop nodes |
+| `skip_summarization` | `bool \| None` | Suppress the LLM from paraphrasing the tool result |
+| `requested_auth_configs` | `dict[str, AuthConfig]` | Pending OAuth flows, keyed by function-call ID |
+| `requested_tool_confirmations` | `dict[str, ToolConfirmation]` | Pending HITL confirmations |
+| `compaction` | `EventCompaction \| None` | Sliding-window compaction metadata |
+| `end_of_agent` | `bool \| None` | Marks that the originating agent has finished its run |
+| `route` | `str \| bool \| int \| list \| None` | Workflow routing value |
+| `render_ui_widgets` | `list[UiWidget] \| None` | Rich UI widgets for ADK Web UI hosts |
+| `rewind_before_invocation_id` | `str \| None` | Rewind anchor (set by `runner.rewind_async`) |
+
+### Emitting custom events from tools
+
+Tools that want to influence routing or state without being the final response can construct and return structured dicts — the runner converts them. For more control, a `@node` in a `Workflow` can `yield Event(state={"key": "val"})` or `yield Event(route="billing")`:
+
+```python
+from google.adk.events.event import Event
+from google.adk.workflow import node
+
+@node(rerun_on_resume=True)
+async def classify_and_route(user_msg: str, ctx):
+    intent = "billing" if "invoice" in user_msg.lower() else "support"
+    # Emit a state update alongside the routing decision
+    yield Event(
+        state={"last_intent": intent},
+        route=intent,
+    )
+```
+
+### `NodeInfo` — workflow event metadata
+
+Events emitted inside a `Workflow` carry a `node_info` field:
+
+```python
+for event in events:
+    if event.node_info.path:
+        print(f"Node: {event.node_info.name}, run_id: {event.node_info.run_id}")
+```
+
+| Property | Purpose |
+|---|---|
+| `node_info.path` | Full slash-separated path, e.g. `"my_wf/classify@1/billing@1"` |
+| `node_info.name` | Just the node name without `@run_id`, e.g. `"billing"` |
+| `node_info.run_id` | Execution ID of this run (useful when a node runs multiple times in a loop) |
+
 ## Artifact service
 
 Runners accept an optional `artifact_service=`. When configured, tools can call `tool_context.save_artifact("report.pdf", part)` and `load_artifact(...)`. Available services (`artifacts/__init__.py`):
@@ -253,6 +394,66 @@ Runners accept an optional `artifact_service=`. When configured, tools can call 
 | `GcsArtifactService(bucket_name=...)` | Google Cloud Storage |
 
 See [memory-and-artifacts](./memory-and-artifacts/) for detailed semantics and versioning.
+
+## `InvocationContext` — invocation lifecycle
+
+Each call to `runner.run_async` creates one `InvocationContext`. Callbacks and plugins receive it via `invocation_context` kwargs. Key fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `invocation_id` | `str` | Unique per `run_async` call; prefix `"e-"` + UUID |
+| `session` | `Session` | The live session object |
+| `user_content` | `types.Content \| None` | The original user message (readonly) |
+| `run_config` | `RunConfig \| None` | Per-run config |
+| `end_invocation` | `bool` | Set to `True` to abort the current invocation early |
+| `agent` | `BaseAgent \| BaseNode \| None` | The currently-executing agent |
+
+### Early termination with `end_invocation`
+
+Set `invocation_context.end_invocation = True` inside any callback to stop the invocation after the current step. Useful for hard budget/safety gates:
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.plugins import BasePlugin
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+
+class SafetyPlugin(BasePlugin):
+    """Terminates the invocation if a forbidden phrase is detected."""
+
+    def __init__(self, forbidden: set[str]):
+        super().__init__(name="safety")
+        self._forbidden = forbidden
+
+    async def before_model_callback(self, *, callback_context, llm_request):
+        from google.genai import types
+
+        # Inspect the last user message
+        user_text = ""
+        if callback_context.user_content and callback_context.user_content.parts:
+            user_text = " ".join(
+                p.text or "" for p in callback_context.user_content.parts
+            ).lower()
+
+        if any(f in user_text for f in self._forbidden):
+            # Abort the whole invocation, not just skip this model call
+            callback_context._invocation_context.end_invocation = True
+            return types.Content.__class__  # won't be reached; invocation stops
+        return None
+```
+
+### `LlmCallsLimitExceededError`
+
+When `RunConfig.max_llm_calls` is exceeded, the runner raises `LlmCallsLimitExceededError`. Catch it at the call site if you want graceful handling:
+
+```python
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+
+try:
+    async for event in runner.run_async(user_id=..., session_id=..., new_message=...):
+        process(event)
+except LlmCallsLimitExceededError as exc:
+    print(f"Budget exceeded: {exc}")
+```
 
 ## Patterns
 

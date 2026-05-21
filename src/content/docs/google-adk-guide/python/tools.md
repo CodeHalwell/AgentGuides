@@ -413,25 +413,44 @@ agent = LlmAgent(
 - Pass a `ToolPredicate` or list of tool names to the `tool_filter` constructor arg to filter exposed tools without touching `get_tools`.
 - `tool_name_prefix` prefixes every returned tool name, preventing collisions when the same toolset class is registered multiple times.
 
-## `ToolContext` API
+## `ToolContext` (and `Context`) API
 
-`ToolContext` is the same object as `Context` and `CallbackContext` — they are all aliases in ADK 2.x. Key members available inside tools:
+`ToolContext` is an alias for `Context` (`tools/tool_context.py:ToolContext = Context`). Both callbacks and tools receive the same object — the type name differs only by convention. `Context` extends `ReadonlyContext` (which itself wraps `InvocationContext`).
 
-| Attribute / Method | Purpose |
-|---|---|
-| `tool_context.state["key"]` | Read/write session state (supports `app:`, `user:`, `temp:` prefixes) |
-| `tool_context.function_call_id` | The unique ID of the current function call — needed when sending a `FunctionResponse` back manually |
-| `tool_context.actions.skip_summarization` | Set to `True` to suppress the model from narrating the tool result |
-| `tool_context.actions.transfer_to_agent` | Programmatically transfer control to another agent by setting its name |
-| `await tool_context.save_artifact(filename=..., artifact=part)` | Persist a file to the artifact service; returns the version int |
-| `await tool_context.load_artifact(filename, version=None)` | Retrieve a saved artifact |
-| `tool_context.list_artifacts()` | List filenames in scope |
-| `tool_context.request_credential(auth_config)` | Pause the tool and trigger an OAuth / API-key flow |
-| `tool_context.get_auth_response(auth_config)` | Retrieve the exchanged credential on the follow-up turn |
+### State
+
+```python
+# Session-scoped (default)
+tool_context.state["key"] = "value"
+
+# App-scoped (all sessions for this app)
+tool_context.state["app:flag"] = True
+
+# User-scoped (all sessions for this user)
+tool_context.state["user:lang"] = "en"
+
+# Temp (current invocation only — not persisted)
+tool_context.state["temp:scratch"] = [1, 2, 3]
+```
+
+### `actions` — event steering
+
+`tool_context.actions` is an `EventActions` object. Setting fields here modifies the emitted event:
+
+| Field | Type | Effect |
+|---|---|---|
+| `skip_summarization` | `bool` | Suppress the model from narrating the tool result |
+| `transfer_to_agent` | `str` | Programmatically route control to another agent |
+| `escalate` | `bool` | Exit a `LoopAgent` / workflow loop |
+| `state_delta` | `dict` | Merged into session state when the event is appended |
+| `artifact_delta` | `dict[str, int]` | Filename → version map, recorded automatically by `save_artifact` |
+
+### Artifacts
 
 ```python
 from google.adk.tools import FunctionTool
 from google.adk.tools.tool_context import ToolContext
+from google.genai import types as gtypes
 
 async def export_report(format: str, tool_context: ToolContext) -> dict:
     """Export the current analysis as a file.
@@ -442,15 +461,242 @@ async def export_report(format: str, tool_context: ToolContext) -> dict:
       A dict with `filename` and `version`.
     """
     data = generate_report(format)
-    from google.genai import types as gtypes
     mime = "application/pdf" if format == "pdf" else "text/csv"
     part = gtypes.Part(inline_data=gtypes.Blob(mime_type=mime, data=data))
-    version = await tool_context.save_artifact(filename=f"report.{format}", artifact=part)
 
-    # Tell the model not to paraphrase the file listing
+    # save_artifact returns the 0-based version int
+    version = await tool_context.save_artifact(
+        filename=f"report.{format}",
+        artifact=part,
+        custom_metadata={"generated_by": "export_report"},
+    )
     tool_context.actions.skip_summarization = True
     return {"filename": f"report.{format}", "version": version}
+
+# Load it back
+async def read_report(format: str, tool_context: ToolContext) -> dict:
+    """Read a previously saved report.
+
+    Args:
+      format: 'pdf' or 'csv'.
+    Returns:
+      A dict with metadata.
+    """
+    part = await tool_context.load_artifact(f"report.{format}")
+    if part is None:
+        return {"error": "no report found"}
+    meta = await tool_context.get_artifact_version(f"report.{format}")
+    return {"version": meta.version, "uri": meta.canonical_uri}
+
+# List all artifacts in this session
+async def list_reports(tool_context: ToolContext) -> list[str]:
+    """List all saved report filenames."""
+    return await tool_context.list_artifacts()
 ```
+
+### Memory (from tools)
+
+All three memory methods require a `memory_service` to be configured on the `Runner`.
+
+```python
+from google.adk.memory.memory_entry import MemoryEntry
+
+async def remember_preference(pref: str, tool_context: ToolContext) -> dict:
+    """Explicitly store a user preference in long-term memory.
+
+    Args:
+      pref: The preference to remember (e.g. 'prefers metric units').
+    Returns:
+      A dict with `ok: true`.
+    """
+    await tool_context.add_memory(
+        memories=[MemoryEntry(content=pref)],
+    )
+    return {"ok": True}
+
+async def recall(query: str, tool_context: ToolContext) -> dict:
+    """Search long-term memory for relevant past information.
+
+    Args:
+      query: Search query.
+    Returns:
+      A dict with `results` list.
+    """
+    response = await tool_context.search_memory(query)
+    return {"results": [m.content for m in response.memories]}
+
+# End-of-turn: commit entire session to memory (usually done in after_agent_callback)
+async def flush_to_memory(tool_context: ToolContext) -> dict:
+    """Commit this session's conversation to long-term memory."""
+    await tool_context.add_session_to_memory()
+    return {"flushed": True}
+```
+
+`add_events_to_memory` is also available — pass a list of `Event` objects if you only want to store specific turns rather than the whole session.
+
+### Credentials (OAuth / API-key flows)
+
+```python
+from google.adk.auth.auth_tool import AuthConfig
+from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
+
+GOOGLE_OAUTH_CONFIG = AuthConfig(
+    auth_scheme=OpenIdConnectWithConfig(
+        authorization_endpoint="https://accounts.google.com/o/oauth2/auth",
+        token_endpoint="https://oauth2.googleapis.com/token",
+        scopes=["https://www.googleapis.com/auth/calendar.readonly"],
+    ),
+    raw_auth_credential=None,  # filled in after the OAuth flow
+)
+
+async def list_calendar_events(tool_context: ToolContext) -> dict:
+    """List upcoming calendar events."""
+    cred = tool_context.get_auth_response(GOOGLE_OAUTH_CONFIG)
+    if cred is None:
+        # Pause the tool and request the OAuth flow
+        tool_context.request_credential(GOOGLE_OAUTH_CONFIG)
+        return {"status": "auth_required"}
+    # Use cred.oauth2.access_token to call the Calendar API
+    ...
+    return {"events": [...]}
+```
+
+`request_credential` sets `actions.requested_auth_configs` on the current event. The framework pauses execution; when the user completes OAuth the runner resumes. On the next turn `get_auth_response` returns the exchanged token.
+
+Use `save_credential` / `load_credential` in **callback** contexts where `function_call_id` is not available.
+
+### Confirmation (HITL gate)
+
+```python
+async def wipe_database(scope: str, tool_context: ToolContext) -> dict:
+    """Wipe a database scope.
+
+    Args:
+      scope: Target scope ('staging' or 'production').
+    Returns:
+      A dict with the operation outcome.
+    """
+    confirmed = tool_context.tool_confirmation
+    if confirmed is None:
+        # Ask for confirmation on first call
+        tool_context.request_confirmation(
+            hint=f"Confirm wiping '{scope}' database? Reply 'yes' to proceed.",
+            payload={"scope": scope},
+        )
+        return {"status": "awaiting_confirmation"}
+    # Second call arrives with tool_context.tool_confirmation set
+    if confirmed.payload.get("scope") == scope:
+        _do_wipe(scope)
+        return {"wiped": True, "scope": scope}
+    return {"error": "scope mismatch"}
+```
+
+### Workflow-specific properties
+
+These are only meaningful when the tool/callback runs inside a `Workflow` node (not a plain `LlmAgent`):
+
+| Property | Type | Purpose |
+|---|---|---|
+| `tool_context.route` | `str \| bool \| int \| list` | Set routing value for conditional workflow edges |
+| `tool_context.output` | `Any` | Set the node's output value directly |
+| `tool_context.attempt_count` | `int` | 1-based retry attempt counter (1 = first run) |
+| `tool_context.resume_inputs` | `dict[str, Any]` | Input values returned from HITL interrupts, keyed by interrupt ID |
+| `tool_context.node_path` | `str` | Full path of the current node in the workflow graph |
+| `tool_context.run_id` | `str` | Execution ID of the current node run |
+
+### ReadonlyContext
+
+`ReadonlyContext` is a read-only view of the session context, passed to:
+- Dynamic instruction providers (`instruction=my_fn` on `LlmAgent`)
+- `BaseToolset.get_tools(readonly_context=...)`
+
+```python
+from google.adk.agents.readonly_context import ReadonlyContext
+
+async def dynamic_instruction(ctx: ReadonlyContext) -> str:
+    lang = ctx.state.get("user:preferred_language", "en")
+    return f"Always respond in language code '{lang}'."
+
+agent = LlmAgent(
+    name="localised",
+    model="gemini-2.5-flash",
+    instruction=dynamic_instruction,
+)
+```
+
+Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `state` (read-only `MappingProxyType`), `session`, `user_id`, `run_config`, `get_credential(key)`.
+
+## SkillToolset (experimental)
+
+`SkillToolset` is an experimental feature that adds a skills system to an `LlmAgent`. A "skill" is a folder containing a `SKILL.md` instruction file (with optional `references/`, `assets/`, `scripts/` subfolders). The toolset dynamically exposes tools for the model to discover, load, and execute those skills.
+
+```python
+from google.adk.tools.skill_toolset import SkillToolset
+from google.adk.skills import Skill, SkillFrontmatter
+from google.adk.agents import LlmAgent
+
+# Build a skill from content in memory
+python_skill = Skill(
+    name="python_helper",
+    frontmatter=SkillFrontmatter(
+        name="python_helper",
+        description="Helps write and explain Python code.",
+        version="1.0.0",
+    ),
+    instructions="""
+# Python Helper
+
+Use this skill when the user asks for help with Python.
+
+## Steps
+1. Understand the user's Python question.
+2. Provide a concise, working code example.
+3. Explain each line briefly.
+""",
+)
+
+toolset = SkillToolset(skills=[python_skill])
+
+agent = LlmAgent(
+    name="coder",
+    model="gemini-2.5-flash",
+    instruction="You are a coding assistant with access to skills.",
+    tools=[toolset],
+)
+```
+
+**Tools the model receives:**
+
+| Tool name | Purpose |
+|---|---|
+| `list_skills` | Lists all registered skills with names and descriptions |
+| `load_skill(skill_name)` | Reads the full `SKILL.md` for a given skill |
+| `load_skill_resource(skill_name, file_path)` | Reads a file from `references/`, `assets/`, or `scripts/` |
+| `run_skill_script(skill_name, script_path, ...)` | Runs a script from `scripts/` (requires `code_executor`) |
+| `search_skills(query)` | Semantic search (requires `registry=`) |
+
+**Constructor args:**
+
+| Arg | Type | Default | Purpose |
+|---|---|---|---|
+| `skills` | `list[Skill]` | `[]` | Statically-defined skills |
+| `registry` | `SkillRegistry \| None` | `None` | Dynamic skill registry (enables `search_skills`) |
+| `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for `run_skill_script` |
+| `script_timeout` | `int` | `300` | Shell-script timeout in seconds |
+| `additional_tools` | `list[ToolUnion] \| None` | `None` | Extra tools unlocked when a skill is activated |
+
+**Loading from disk:**
+
+```python
+from google.adk.skills import Skill
+import pathlib
+
+skill_dir = pathlib.Path("my_skills/python_helper")
+skill = Skill.from_directory(skill_dir)   # reads SKILL.md + subfolders
+toolset = SkillToolset(skills=[skill])
+```
+
+> **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress the warning with `GOOGLE_ADK_IGNORE_WARNINGS=skill_toolset`.
 
 ## Agent transfer
 
