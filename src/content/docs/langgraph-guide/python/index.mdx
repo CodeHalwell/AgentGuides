@@ -74,6 +74,7 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="ReAct pattern" href="/langgraph-guide/python/chapter-09-advanced-patterns/#pattern-1-react-reasoning--acting" />
   <LinkCard title="Functional API" href="/langgraph-guide/python/reference-functional-api/" />
   <LinkCard title="Command / Send" href="/langgraph-guide/python/reference-command-and-send/" />
+  <LinkCard title="IsLastStep / RemainingSteps" href="/langgraph-guide/python/reference-managed-values/" />
   <LinkCard title="Stream modes (v1 / v2)" href="/langgraph-guide/python/reference-streaming-modes/" />
   <LinkCard title="StateGraph API" href="/langgraph-guide/python/reference-state-graph/" />
   <LinkCard title="Checkpointers matrix" href="/langgraph-guide/python/reference-checkpointers/" />
@@ -90,7 +91,7 @@ Every page below is introspected against the installed `langgraph==1.2.0` /
 older blog post or docs page, the source wins.
 
 <CardGrid>
-  <LinkCard title="StateGraph API reference" href="/langgraph-guide/python/reference-state-graph/" description="Constructor, add_node (all 4 overloads), add_edge, add_conditional_edges, add_sequence, compile, Runtime, retry/cache/defer/destinations." />
+  <LinkCard title="StateGraph API reference" href="/langgraph-guide/python/reference-state-graph/" description="Constructor, add_node (all 4 overloads), add_edge, add_conditional_edges, add_sequence, compile, Runtime, RetryPolicy, CachePolicy, TimeoutPolicy, RunControl, ExecutionInfo." />
   <LinkCard title="Checkpointers reference" href="/langgraph-guide/python/reference-checkpointers/" description="Feature matrix for InMemorySaver, Sqlite, AsyncSqlite, Postgres, AsyncPostgres, ShallowPostgres — plus durability modes and connection strings." />
   <LinkCard title="Store (long-term memory) reference" href="/langgraph-guide/python/reference-store/" description="BaseStore, InMemoryStore, namespaces, IndexConfig (vector search), TTLConfig, InjectedStore for tools." />
   <LinkCard title="Functional API reference" href="/langgraph-guide/python/reference-functional-api/" description="@entrypoint, @task, entrypoint.final, previous, injecting Runtime, feature matrix vs StateGraph." />
@@ -98,6 +99,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="Streaming modes reference" href="/langgraph-guide/python/reference-streaming-modes/" description="All seven stream_mode values, v1 vs v2 typing, StreamPart discriminated union, GraphOutput, subgraphs=True." />
   <LinkCard title="Prebuilt nodes reference" href="/langgraph-guide/python/reference-prebuilt-nodes/" description="ToolNode (all constructor params, wrap_tool_call, handle_tool_errors), InjectedState, InjectedStore, ToolRuntime, ToolCallRequest, tools_condition." />
   <LinkCard title="Channels reference" href="/langgraph-guide/python/reference-channels/" description="LastValue, BinaryOperatorAggregate, Topic, EphemeralValue, NamedBarrierValue, AnyValue — concurrent-write semantics, Annotated[] shorthands, fan-in patterns." />
+  <LinkCard title="Managed values reference" href="/langgraph-guide/python/reference-managed-values/" description="IsLastStep and RemainingSteps — read-only state fields injected by the Pregel executor for recursion-limit detection and graceful truncation." />
 </CardGrid>
 
 <CardGrid>
@@ -113,6 +115,12 @@ older blog post or docs page, the source wins.
 
 ## What's new in v1.2.x (May 2026)
 
+- **`TimeoutPolicy` dataclass** (`langgraph.types`) — fine-grained per-node/per-task timeout control with `run_timeout` (hard cap), `idle_timeout` (progress-based cap), and `refresh_on` (`"auto"` or `"heartbeat"`). Replaces the single `timeout=float` kwarg with a richer API.
+- **`Runtime.heartbeat()`** — call from inside a long-running async node or task to reset an idle timeout. No-op outside an active idle-timed attempt.
+- **`RunControl` + cooperative draining** — `runtime.control`, `runtime.drain_requested`, `runtime.drain_reason` let external code signal a graph run to exit gracefully without cancelling it abruptly.
+- **`ExecutionInfo` extended** — new fields `checkpoint_ns` (subgraph namespace) and `task_id` (Pregel task ID) for richer per-node observability. `patch(**overrides)` helper for testing.
+- **`RemainingSteps` managed value** (`langgraph.managed.is_last_step`) — companion to `IsLastStep`; gives the integer count of steps remaining before the recursion limit.
+- **`task.clear_cache()` / `task.aclear_cache()`** — invalidate cached results for a specific `@task` without flushing the whole `BaseCache`.
 - **`ToolRuntime` dataclass** (new in v1.2.0, `langgraph.prebuilt`) — passed to tools at execution time; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, and `execution_info`. Allows tools to inspect the current graph state and write to the stream mid-execution.
 - **`ToolCallTransformer` abstract class** (new in v1.2.0, `langgraph.prebuilt`) — base class for interceptors that transform tool call arguments before execution.
 - **`langgraph-checkpoint` 4.1.0** — minor checkpoint interface improvements; backward-compatible with all existing `MemorySaver`, `SqliteSaver`, `PostgresSaver` usage.

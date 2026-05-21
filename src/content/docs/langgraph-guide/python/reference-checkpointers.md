@@ -228,6 +228,50 @@ graph.update_state(cfg, {"count": 42})            # uses saver.put + saver.put_w
 await graph.adelete_thread(thread_id)             # routes to the checkpointer
 ```
 
+### Thread lifecycle management: `delete_thread` / `adelete_thread`
+
+Every checkpoint, write, and blob for a thread is permanently removed when you call `delete_thread`. Use this for GDPR right-to-erasure flows, session cleanup, or bounded-memory test teardown.
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+from typing_extensions import TypedDict
+
+
+class S(TypedDict):
+    count: int
+
+
+builder = StateGraph(S).add_node("bump", lambda s: {"count": s["count"] + 1})
+builder.add_edge(START, "bump").add_edge("bump", END)
+
+saver = InMemorySaver()
+graph = builder.compile(checkpointer=saver)
+
+cfg = {"configurable": {"thread_id": "user-42"}}
+graph.invoke({"count": 0}, cfg)
+graph.invoke({"count": 0}, cfg)    # count == 2 after two calls
+
+# Full GDPR erasure for user-42
+saver.delete_thread("user-42")
+# or via the graph:  graph.delete_thread("user-42")
+
+# The thread no longer exists — next invoke starts fresh
+graph.invoke({"count": 0}, cfg)    # count == 1 again
+```
+
+Async variant:
+
+```python
+await saver.adelete_thread("user-42")
+# or:
+await graph.adelete_thread("user-42")
+```
+
+`InMemorySaver.delete_thread` removes entries from all three internal dicts (`storage`, `writes`, `blobs`) in a single call. `PostgresSaver` / `AsyncPostgresSaver` issue `DELETE` statements targeting all three backing tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`) for the given thread ID.
+
+> **Deleting a thread is permanent.** There is no soft-delete or recycle bin — the data is gone immediately. Call `get_state_history` to archive thread content before deletion if you need an audit trail.
+
 ## Serializers
 
 Default: `JsonPlusSerializer` from `langgraph.checkpoint.serde.jsonplus` — handles Pydantic models, dataclasses, `datetime`, `uuid`, `Decimal`, LangChain `BaseMessage`, and plain JSON.
@@ -325,6 +369,54 @@ graph.invoke({"messages": msgs}, cfg)
 ```
 
 For cross-thread (long-term) memory, pair with a `Store` — see the [Store reference](./reference-store/).
+
+### 6. Listing all threads for a user (audit / GDPR)
+
+`saver.list(config=None)` iterates **all** checkpoints across all threads. Filter by metadata or walk the `storage` dict (for `InMemorySaver`) to enumerate threads for a given user prefix:
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+
+saver = InMemorySaver()
+
+def list_user_threads(saver: InMemorySaver, user_prefix: str) -> list[str]:
+    return [
+        tid for tid in saver.storage
+        if tid.startswith(user_prefix)
+    ]
+
+def purge_user(saver: InMemorySaver, user_id: str) -> int:
+    threads = list_user_threads(saver, f"user:{user_id}:")
+    for tid in threads:
+        saver.delete_thread(tid)
+    return len(threads)
+
+# Example:
+cfg = {"configurable": {"thread_id": "user:alice:conv:1"}}
+graph.invoke({"messages": [HumanMessage("hi")]}, cfg)
+
+purge_user(saver, "alice")   # removes all threads for alice
+```
+
+For `PostgresSaver`, query `SELECT DISTINCT thread_id FROM checkpoints WHERE thread_id LIKE 'user:alice:%'` and then call `saver.delete_thread(tid)` for each row.
+
+### 7. `filter=` on `list()` — metadata-scoped history
+
+Use `filter` to restrict `list()` to checkpoints from a specific source or step range:
+
+```python
+# Only checkpoints written after a graph invocation (source='loop' or source='update')
+checkpoints = list(
+    saver.list(cfg, filter={"source": "loop"}, limit=5)
+)
+
+# Checkpoints at a specific step:
+checkpoints = list(
+    saver.list(cfg, filter={"step": 2})
+)
+```
+
+`filter` is a dict of `CheckpointMetadata` key/value pairs. All pairs must match (AND semantics).
 
 ## Gotchas
 

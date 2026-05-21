@@ -175,6 +175,66 @@ graph = builder.compile(cache=InMemoryCache())
 
 `key_func` defaults to pickle-hashing the input. Pass a custom `(input) -> str | bytes` for deterministic cache keys.
 
+### `TimeoutPolicy`
+
+`TimeoutPolicy` (from `langgraph.types`) controls per-attempt cancellation for **async** nodes. A plain `float` or `timedelta` on the `timeout=` kwarg is a shorthand for `TimeoutPolicy(run_timeout=...)`.
+
+```python
+from datetime import timedelta
+from langgraph.types import TimeoutPolicy
+
+@dataclass(**_DC_KWARGS)
+class TimeoutPolicy:
+    run_timeout:  float | timedelta | None = None   # hard wall-clock cap
+    idle_timeout: float | timedelta | None = None   # max time between progress signals
+    refresh_on:   Literal["auto", "heartbeat"] = "auto"
+```
+
+**`run_timeout`** — hard cap for a single attempt. Never refreshed, even by heartbeats.
+
+**`idle_timeout`** — cap on how long the attempt may sit without a progress signal. Progress signals under `"auto"` mode include:
+- Any LangChain callback event inside the node or its descendants.
+- Explicit `runtime.heartbeat()` calls.
+- Stream writer writes.
+
+Under `"heartbeat"` mode, **only** `runtime.heartbeat()` resets the clock.
+
+When the timeout fires, `NodeTimeoutError` is raised. The node's `retry_policy` (if set) then decides whether to retry.
+
+```python
+from langgraph.types import TimeoutPolicy, RetryPolicy
+
+# Hard cap: abort after 30 seconds regardless of progress
+builder.add_node(
+    "llm_call",
+    llm_node,
+    timeout=30.0,   # same as TimeoutPolicy(run_timeout=30.0)
+)
+
+# Idle cap: reset on every LLM callback token, abort if silent for 10 s
+builder.add_node(
+    "streaming_llm",
+    streaming_node,
+    timeout=TimeoutPolicy(idle_timeout=10.0),
+)
+
+# Explicit heartbeat mode: node must call runtime.heartbeat() every 60 s
+async def long_download(state: State, runtime: Runtime) -> dict:
+    for chunk in download_chunks(state["url"]):
+        runtime.heartbeat()          # prevents idle-timeout eviction
+        process(chunk)
+    return {"done": True}
+
+builder.add_node(
+    "download",
+    long_download,
+    timeout=TimeoutPolicy(idle_timeout=60.0, refresh_on="heartbeat"),
+    retry_policy=RetryPolicy(max_attempts=3),
+)
+```
+
+> **Sync nodes are not supported.** `timeout=` on a sync node raises `ValueError` at compile time. Use `asyncio.to_thread` or wrap the node in an async wrapper if you need timeouts on CPU-bound code.
+
 ## `add_edge`
 
 ```python
@@ -298,14 +358,103 @@ graph.invoke({...}, context=Ctx(user_id="alice"))
 
 Runtime fields:
 
-- `context: ContextT` — what you passed in `context=`.
-- `store: BaseStore | None` — what you passed to `compile(store=...)`.
-- `stream_writer: (Any) -> None` — writes to `stream_mode="custom"`.
-- `previous: Any` — functional API only, the last return value for this thread.
-- `execution_info: ExecutionInfo | None` — `checkpoint_id`, `thread_id`, `run_id`, `node_attempt`, `node_first_attempt_time`.
-- `server_info: ServerInfo | None` — set by LangGraph Platform only.
+| Field | Type | Description |
+|---|---|---|
+| `context` | `ContextT` | What you passed in `context=`. |
+| `store` | `BaseStore \| None` | What you passed to `compile(store=...)`. |
+| `stream_writer` | `(Any) -> None` | Writes a value to `stream_mode="custom"`. |
+| `heartbeat` | `() -> None` | Signals progress to reset an idle timeout (see `TimeoutPolicy`). No-op outside an idle-timed attempt. |
+| `previous` | `Any` | Functional API only — the last saved return value for this thread. |
+| `execution_info` | `ExecutionInfo \| None` | Read-only metadata for the current node run (see below). |
+| `server_info` | `ServerInfo \| None` | Set by LangGraph Platform only; `None` when running open-source. |
+| `control` | `RunControl \| None` | Run-scoped cooperative draining handle (see below). |
 
 To get the config instead, add `config: RunnableConfig` as a parameter or call `get_config()` from `langgraph.config`.
+
+### `ExecutionInfo`
+
+```python
+from langgraph.runtime import ExecutionInfo
+```
+
+`runtime.execution_info` is a frozen dataclass with read-only per-run metadata. It is populated after task preparation, so it is `None` only in very early lifecycle hooks.
+
+| Field | Type | Description |
+|---|---|---|
+| `checkpoint_id` | `str` | The ULID-style checkpoint ID written by this step. |
+| `checkpoint_ns` | `str` | The checkpoint namespace (empty string for root; `"parent:task_id"` for subgraphs). |
+| `task_id` | `str` | The Pregel task ID for the current node invocation. |
+| `thread_id` | `str \| None` | The thread ID from `config["configurable"]["thread_id"]`. `None` when no checkpointer. |
+| `run_id` | `str \| None` | The LangSmith run ID, if `run_id` was set in `RunnableConfig`. |
+| `node_attempt` | `int` | Current attempt number (1-indexed). Increments on each retry. |
+| `node_first_attempt_time` | `float \| None` | Unix timestamp for when the first attempt of this node started. |
+
+```python
+from langgraph.runtime import Runtime
+
+def audit_node(state: State, runtime: Runtime) -> dict:
+    info = runtime.execution_info
+    if info:
+        print(f"thread={info.thread_id} ns={info.checkpoint_ns} attempt={info.node_attempt}")
+    return {}
+```
+
+`execution_info` also has a `patch(**overrides)` helper that returns a new `ExecutionInfo` with selected fields replaced. You will not normally need this outside testing.
+
+### `Runtime.heartbeat()` — resetting idle timeouts
+
+When a node is registered with `timeout=TimeoutPolicy(idle_timeout=..., refresh_on="heartbeat")`, the idle clock only resets on explicit `runtime.heartbeat()` calls. This is useful for long-running loops that do not naturally emit LangChain callback events.
+
+```python
+import asyncio
+from langgraph.runtime import Runtime
+from langgraph.types import TimeoutPolicy
+
+async def batch_processor(state: State, runtime: Runtime) -> dict:
+    results = []
+    for i, item in enumerate(state["items"]):
+        result = await process_item(item)
+        results.append(result)
+        # Signal that we're still alive — prevents idle-timeout eviction
+        runtime.heartbeat()
+    return {"results": results}
+
+builder.add_node(
+    "batch",
+    batch_processor,
+    timeout=TimeoutPolicy(idle_timeout=30.0, refresh_on="heartbeat"),
+)
+```
+
+Outside an idle-timed attempt (e.g., when `timeout=None` or the node is sync), `runtime.heartbeat()` is a no-op.
+
+### `RunControl` — cooperative draining
+
+`runtime.control` is a `RunControl` instance that lets external code signal a graceful shutdown to a running node. The node cooperates by checking `runtime.drain_requested` and returning early when set.
+
+```python
+from langgraph.runtime import Runtime, RunControl
+
+async def interruptible_worker(state: State, runtime: Runtime) -> dict:
+    results = []
+    for item in state["items"]:
+        if runtime.drain_requested:
+            # Graceful shutdown: save progress and exit early
+            return {"results": results, "partial": True, "reason": runtime.drain_reason}
+        result = await process(item)
+        results.append(result)
+    return {"results": results, "partial": False}
+```
+
+`RunControl` is populated automatically by the Pregel executor — you never create one yourself. Key properties:
+
+| Property / Method | Description |
+|---|---|
+| `drain_requested: bool` | `True` after `request_drain()` has been called. |
+| `drain_reason: str \| None` | The string passed to `request_drain()` (e.g. `"shutdown"`). |
+| `request_drain(reason="shutdown")` | Called externally to signal the node to exit. |
+
+The `runtime.drain_requested` and `runtime.drain_reason` convenience properties forward to `runtime.control` (or return `False` / `None` if `control` is `None`).
 
 ## State schema: TypedDict vs Pydantic vs dataclass
 
@@ -389,6 +538,72 @@ builder.add_node("classify", classify, input_schema=QueryOnly)
 
 The node cannot read unrelated channels and stays cheap to trace.
 
+### 6. Async node with idle timeout + heartbeat
+
+For nodes that stream from an LLM or process long lists, use `idle_timeout` so stalled attempts are cancelled before the hard wall-clock cap fires:
+
+```python
+import asyncio
+from langgraph.types import TimeoutPolicy, RetryPolicy
+from langgraph.runtime import Runtime
+from typing_extensions import TypedDict
+
+
+class BatchState(TypedDict):
+    items: list[str]
+    results: list[str]
+
+
+async def process_batch(state: BatchState, runtime: Runtime) -> dict:
+    results = []
+    for item in state["items"]:
+        # Expensive per-item work
+        result = await asyncio.to_thread(expensive_cpu_work, item)
+        results.append(result)
+        # Reset the idle clock after each item
+        runtime.heartbeat()
+    return {"results": results}
+
+
+builder.add_node(
+    "process",
+    process_batch,
+    # Abort if no progress for 20 s; retry up to 3 times
+    timeout=TimeoutPolicy(idle_timeout=20.0, refresh_on="heartbeat"),
+    retry_policy=RetryPolicy(max_attempts=3, retry_on=asyncio.TimeoutError),
+)
+```
+
+### 7. Reading `ExecutionInfo` for per-node tracing
+
+Correlate a node's LangSmith run with your own observability system using `execution_info`:
+
+```python
+import logging
+from langgraph.runtime import Runtime
+from typing_extensions import TypedDict
+
+logger = logging.getLogger(__name__)
+
+
+class State(TypedDict):
+    query: str
+    answer: str
+
+
+def traced_node(state: State, runtime: Runtime) -> dict:
+    info = runtime.execution_info
+    span_attrs = {
+        "thread_id": info.thread_id if info else None,
+        "checkpoint_id": info.checkpoint_id if info else None,
+        "attempt": info.node_attempt if info else 1,
+    }
+    logger.info("node start", extra=span_attrs)
+    answer = call_llm(state["query"])
+    logger.info("node done", extra={**span_attrs, "tokens": len(answer)})
+    return {"answer": answer}
+```
+
 ## Gotchas
 
 - **Two writes, no reducer, one super-step → `InvalidUpdateError`.** Either add a reducer or stagger the writes with edges.
@@ -398,11 +613,16 @@ The node cannot read unrelated channels and stays cheap to trace.
 - **`create_react_agent`** in `langgraph.prebuilt` is deprecated in v1.0 — migrate to `langchain.agents.create_agent`. The signature here still works; the deprecation is runtime-warning level.
 - **Root graphs cannot have `checkpointer=True`.** That value is only for subgraphs inheriting from the parent.
 - **`destinations=` does not route** — it only labels edges in the rendered diagram for nodes that return `Command(goto=...)`.
+- **`TimeoutPolicy` only works on async nodes.** Setting `timeout=` on a synchronous node raises `ValueError` at node registration. Convert the node to `async` or wrap it with `asyncio.to_thread`.
+- **`runtime.heartbeat()` is a no-op without `refresh_on="heartbeat"`.** Under `refresh_on="auto"` (default), progress is detected automatically from callbacks and stream writes; calling `heartbeat()` is still valid but redundant.
+- **`runtime.execution_info` is `None` briefly during startup.** Don't access it in lifecycle hooks that run before task preparation.
+- **`RunControl` is populated automatically.** You cannot construct or inject your own `RunControl` — it is owned by the executor and forwarded through `Runtime.control`.
 
 ## Breaking changes
 
 | Version | Change |
 |---|---|
+| 1.2 | `TimeoutPolicy` dataclass introduced with `run_timeout`, `idle_timeout`, `refresh_on`. `Runtime.heartbeat()` added. `RunControl` and cooperative draining added (`runtime.control`, `runtime.drain_requested`, `runtime.drain_reason`). `ExecutionInfo` extended with `checkpoint_ns` and `task_id` fields. |
 | 1.1 | `invoke()`/`stream()` coerce input dicts into the declared state schema for Pydantic/dataclass. V2 stream mode emits typed `StreamPart` dicts. Python 3.9 dropped. |
 | 1.0 | `AgentState`, `AgentStatePydantic`, `create_react_agent` deprecated in favor of `langchain.agents.create_agent`. `ns`, `when`, `resumable`, `interrupt_id` removed from `Interrupt` (in v0.6). |
 | 0.6 | `config_schema` on `StateGraph` deprecated; use `context_schema`. `Runtime[Ctx]` replaces ad-hoc `config["configurable"]` usage for run context. |
