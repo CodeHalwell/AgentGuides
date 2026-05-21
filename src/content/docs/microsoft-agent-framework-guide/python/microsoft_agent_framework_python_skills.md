@@ -792,6 +792,52 @@ Key distribution properties of `ClassSkill`:
 - **Testability**: instantiate the skill in tests, call resource/script methods directly (they're just async methods), and assert on return values without running an agent.
 - **IDE discoverability**: docstrings on the class and its constructor travel with the package — type checkers and IDEs surface them at the call site.
 
+## `SkillFrontmatter` reference
+
+`SkillFrontmatter` carries the metadata that identifies a skill and constrains how it is advertised. Validation runs at construction time and raises `ValueError` on the first violated rule.
+
+| Field | Type | Required | Constraints |
+|---|---|---|---|
+| `name` | `str` | Yes | Lowercase letters, digits, and hyphens only. Max 64 characters. No leading, trailing, or consecutive hyphens. Must match `^[a-z0-9]+(-[a-z0-9]+)*$`. |
+| `description` | `str` | Yes | Max 1024 characters. |
+| `license` | `str \| None` | No | SPDX licence identifier (e.g. `"MIT"`, `"Apache-2.0"`). |
+| `compatibility` | `str \| None` | No | Max 500 characters. Documents framework/version requirements. |
+| `allowed_tools` | `str \| None` | No | Space-delimited list of pre-approved tool names the skill may call. Used by `require_script_approval=True` to allow specific tools without gating. |
+| `metadata` | `dict[str, str] \| None` | No | Arbitrary string key-value pairs. Surfaced to `FilteringSkillsSource` predicates and custom runners. |
+
+```python
+from agent_framework import SkillFrontmatter
+
+# Minimal — name and description only
+frontmatter = SkillFrontmatter(
+    name="db-ops",
+    description="Query and describe the production PostgreSQL database.",
+)
+
+# Full — all optional fields
+frontmatter = SkillFrontmatter(
+    name="contract-reviewer",
+    description="Review SaaS contracts for non-standard clauses (max 1024 chars).",
+    license="MIT",
+    compatibility="agent-framework>=1.3.0",
+    allowed_tools="search_clauses fetch_precedents",  # space-separated
+    metadata={"domain": "legal", "tier": "premium"},
+)
+```
+
+**Name validation examples:**
+
+```python
+from agent_framework import SkillFrontmatter
+
+SkillFrontmatter(name="db-ops", description="…")       # OK
+SkillFrontmatter(name="my-cool-skill", description="…")  # OK — hyphens between words
+# SkillFrontmatter(name="DB_Ops", description="…")      # ValueError — uppercase / underscore
+# SkillFrontmatter(name="-db-ops", description="…")     # ValueError — leading hyphen
+# SkillFrontmatter(name="db--ops", description="…")     # ValueError — consecutive hyphens
+# SkillFrontmatter(name="a" * 65, description="…")      # ValueError — exceeds 64 chars
+```
+
 ## `SkillsProvider` reference
 
 ```python

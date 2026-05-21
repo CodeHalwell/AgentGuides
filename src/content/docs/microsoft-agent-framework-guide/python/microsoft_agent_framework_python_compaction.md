@@ -248,6 +248,78 @@ prints:
 
 The summary message carries `summary_of_message_ids` and `summary_of_group_ids` annotations linking back to the originals, so an audit-trail UI can offer a "show original tool calls" affordance without any extra bookkeeping.
 
+### `SelectiveToolCallCompactionStrategy` vs `ToolResultCompactionStrategy` — side-by-side
+
+Both strategies target tool-call groups, but their outputs differ significantly. Use this comparison to pick the right one:
+
+| | `SelectiveToolCallCompactionStrategy` | `ToolResultCompactionStrategy` |
+|---|---|---|
+| What happens to old groups | **Excluded entirely** — removed from the LLM's view | **Replaced with a one-line summary** — kept as a readable trace |
+| Token savings | Higher — old groups contribute zero tokens | Moderate — each old group becomes ~15–30 tokens |
+| Provenance | Lost for excluded groups (no trace in context) | Preserved as `[Tool results: fn: result]` summaries |
+| When to use | High-frequency polling / status checks; provenance doesn't matter | You want audit-trail context without paying full token cost |
+
+```python
+import asyncio
+from agent_framework import (
+    Content,
+    Message,
+    SelectiveToolCallCompactionStrategy,
+    ToolResultCompactionStrategy,
+    apply_compaction,
+)
+
+messages = [
+    Message(role="user", contents=[Content.from_text("Check stock for SKU-101")]),
+    Message(role="assistant", contents=[
+        Content.from_function_call("c1", "check_stock", arguments={"sku": "SKU-101"}),
+    ]),
+    Message(role="tool", contents=[Content.from_function_result("c1", result="42 units")]),
+    Message(role="user", contents=[Content.from_text("And SKU-202?")]),
+    Message(role="assistant", contents=[
+        Content.from_function_call("c2", "check_stock", arguments={"sku": "SKU-202"}),
+    ]),
+    Message(role="tool", contents=[Content.from_function_result("c2", result="0 units")]),
+]
+
+# Strategy A — SelectiveToolCallCompactionStrategy: older group silently dropped
+selective = asyncio.run(apply_compaction(
+    messages,
+    strategy=SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=1),
+))
+print("--- SelectiveToolCallCompactionStrategy ---")
+for m in selective:
+    print(f"[{m.role:9}] {m.text or ', '.join(c.type for c in m.contents)}")
+
+# Strategy B — ToolResultCompactionStrategy: older group replaced by a summary
+result_compact = asyncio.run(apply_compaction(
+    messages,
+    strategy=ToolResultCompactionStrategy(keep_last_tool_call_groups=1),
+))
+print("\n--- ToolResultCompactionStrategy ---")
+for m in result_compact:
+    print(f"[{m.role:9}] {m.text or ', '.join(c.type for c in m.contents)}")
+```
+
+Expected output:
+
+```text
+--- SelectiveToolCallCompactionStrategy ---
+[user     ] Check stock for SKU-101
+[user     ] And SKU-202?
+[assistant] function_call
+[tool     ] function_result
+
+--- ToolResultCompactionStrategy ---
+[user     ] Check stock for SKU-101
+[assistant] [Tool results: check_stock: 42 units]
+[user     ] And SKU-202?
+[assistant] function_call
+[tool     ] function_result
+```
+
+Choose `SelectiveToolCallCompactionStrategy` when you're trimming polling noise and the exact historical results are irrelevant. Choose `ToolResultCompactionStrategy` when the results matter for reasoning but the full JSON blobs are too expensive — the model can see `check_stock: 42 units` in a summary and factor it into its answer.
+
 ## LLM summarisation
 
 Uses a chat client to summarise older history into a single assistant message:
