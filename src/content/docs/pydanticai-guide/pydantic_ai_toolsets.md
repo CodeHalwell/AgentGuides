@@ -215,10 +215,80 @@ if isinstance(result.output, DeferredToolRequests):
 
 When all external calls complete you feed results back with `DeferredToolResults(calls={tool_call_id: ToolReturn(...)})`.
 
-### `IncludeReturnSchemasToolset` & `SetMetadataToolset`
+### `IncludeReturnSchemasToolset` — inject return schemas
 
-- `IncludeReturnSchemasToolset(wrapped)` — forces every tool's return schema into the sent definition. Useful for models that infer structure from return types (some OpenAI / Google configurations).
-- `SetMetadataToolset(wrapped, metadata={'team': 'search'})` — bulk-tags tools for filtering later.
+Forces every tool's return schema into the definition sent to the model. Useful for providers that use return type hints to guide structured tool usage:
+
+```python
+from pydantic_ai import Agent, IncludeReturnSchemasToolset, FunctionToolset
+from pydantic_ai.tools import RunContext
+from pydantic import BaseModel
+
+class Product(BaseModel):
+    id: int
+    name: str
+    price: float
+
+tools = FunctionToolset[None]()
+
+@tools.tool_plain
+def get_product(product_id: int) -> Product:
+    """Retrieve a product by ID."""
+    return Product(id=product_id, name='Widget', price=9.99)
+
+# OpenAI and Google models can use the Product schema as a hint
+agent = Agent('openai:gpt-4o', toolsets=[IncludeReturnSchemasToolset(tools)])
+```
+
+### `SetMetadataToolset` — bulk-tag tools
+
+Merges a metadata dictionary onto every tool in the wrapped toolset. Combine with `FilteredToolset` to create dynamic access control:
+
+```python
+from pydantic_ai import (
+    Agent, FunctionToolset, SetMetadataToolset, FilteredToolset, CombinedToolset
+)
+from dataclasses import dataclass
+
+@dataclass
+class UserDeps:
+    role: str   # 'admin' | 'reader'
+
+# Two toolsets, tagged with their access level
+read_tools  = FunctionToolset[UserDeps]()
+write_tools = FunctionToolset[UserDeps]()
+
+@read_tools.tool_plain
+def list_records() -> list[str]:
+    return ['record_1', 'record_2']
+
+@write_tools.tool_plain
+def delete_record(record_id: str) -> str:
+    return f'Deleted {record_id}'
+
+# Tag all write tools as requiring admin access
+tagged_write = SetMetadataToolset(write_tools, metadata={'requires_role': 'admin'})
+
+# Filter based on user's role at runtime
+def role_filter(ctx, tool_def) -> bool:
+    required = tool_def.metadata and tool_def.metadata.get('requires_role')
+    if required is None:
+        return True
+    return ctx.deps.role == required
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=UserDeps,
+    toolsets=[
+        read_tools,
+        FilteredToolset(tagged_write, filter_func=role_filter),
+    ],
+)
+
+# Admin sees all tools; reader only sees read tools
+result_admin  = agent.run_sync('Delete record_1', deps=UserDeps(role='admin'))
+result_reader = agent.run_sync('Delete record_1', deps=UserDeps(role='reader'))
+```
 
 ## Instructions that follow a toolset
 
@@ -245,6 +315,130 @@ parent = Agent('openai:gpt-5.2', toolsets=[sub.toolset])
 ```
 
 Every `Agent` exposes a `.toolset` (an internal `FunctionToolset`) for reuse.
+
+## Building custom toolsets with `WrapperToolset` and `AbstractToolset`
+
+### `WrapperToolset` — decorate an existing toolset
+
+`WrapperToolset` wraps another toolset and delegates all calls. Override `get_tools` or `call_tool` to add cross-cutting behaviour without rebuilding from scratch:
+
+```python
+from dataclasses import dataclass
+from typing import Any
+from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai.toolsets.wrapper import WrapperToolset
+from pydantic_ai.tools import RunContext, ToolDefinition
+from pydantic_ai.toolsets.abstract import ToolsetTool
+import time
+
+@dataclass
+class TimedToolset(WrapperToolset):
+    """A toolset that logs execution time for every tool call."""
+
+    async def call_tool(
+        self,
+        name: str,
+        tool_args: dict[str, Any],
+        ctx: RunContext,
+        tool: ToolsetTool,
+    ) -> Any:
+        t0 = time.perf_counter()
+        try:
+            result = await super().call_tool(name, tool_args, ctx, tool)
+            elapsed = time.perf_counter() - t0
+            print(f'[{name}] completed in {elapsed:.3f}s → {result!r}')
+            return result
+        except Exception as e:
+            elapsed = time.perf_counter() - t0
+            print(f'[{name}] failed in {elapsed:.3f}s: {e}')
+            raise
+
+# Wrap any existing toolset
+base_tools = FunctionToolset[None]()
+
+@base_tools.tool_plain
+def slow_operation(n: int) -> int:
+    import time; time.sleep(0.1)
+    return n * 2
+
+agent = Agent('openai:gpt-4o', toolsets=[TimedToolset(wrapped=base_tools)])
+```
+
+### `AbstractToolset` — build from scratch
+
+Implement `AbstractToolset` when you need full control over tool definitions and execution — for example, wrapping a database schema or a remote API registry:
+
+```python
+from abc import ABC
+from dataclasses import dataclass
+from typing import Any
+import json
+from pydantic_core import SchemaValidator, core_schema
+from pydantic_ai.toolsets.abstract import AbstractToolset, ToolsetTool
+from pydantic_ai.tools import RunContext, ToolDefinition
+
+@dataclass
+class DatabaseToolset(AbstractToolset):
+    """Dynamically exposes SQL tables as tools at runtime."""
+
+    db_url: str
+    _tables: dict[str, dict] | None = None
+
+    @property
+    def id(self) -> str | None:
+        return f'db:{self.db_url}'
+
+    async def __aenter__(self):
+        # Connect to DB and introspect schema
+        self._tables = await self._introspect_schema()
+        return self
+
+    async def __aexit__(self, *args):
+        self._tables = None
+
+    async def _introspect_schema(self) -> dict[str, dict]:
+        # Returns {'users': {'id': 'int', 'name': 'str'}, ...}
+        return {'users': {'id': 'integer', 'name': 'text'}}
+
+    async def get_tools(self, ctx: RunContext) -> dict[str, ToolsetTool]:
+        tables = self._tables or {}
+        result = {}
+        for table, columns in tables.items():
+            props = {col: {'type': 'string', 'description': f'{dtype} column'} for col, dtype in columns.items()}
+            tool_def = ToolDefinition(
+                name=f'query_{table}',
+                description=f'Query the {table} table.',
+                parameters_json_schema={
+                    'type': 'object',
+                    'properties': {'filter': {'type': 'string', 'description': 'SQL WHERE clause'}},
+                    'required': [],
+                },
+            )
+            validator = SchemaValidator(core_schema.dict_schema())
+            result[tool_def.name] = ToolsetTool(
+                toolset=self,
+                tool_def=tool_def,
+                max_retries=1,
+                args_validator=validator,
+            )
+        return result
+
+    async def call_tool(
+        self,
+        name: str,
+        tool_args: dict[str, Any],
+        ctx: RunContext,
+        tool: ToolsetTool,
+    ) -> Any:
+        table = name.removeprefix('query_')
+        where = tool_args.get('filter', '1=1')
+        # Execute: SELECT * FROM {table} WHERE {where}
+        return [{'id': 1, 'name': 'Alice'}]   # placeholder
+
+agent = Agent('openai:gpt-4o', toolsets=[DatabaseToolset(db_url='postgresql://...')])
+async with agent:
+    result = await agent.run('List all users')
+```
 
 ## Dynamic toolsets — `@agent.toolset`
 

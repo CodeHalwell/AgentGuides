@@ -868,6 +868,156 @@ async def run_with_middleware(query: str, user_id: str):
 
 ---
 
+## Advanced Pattern: `AgentRun` — granular iteration with `agent.iter()`
+
+`agent.iter()` returns an `AgentRun` async context manager. Iterate node-by-node with `async for` or drive manually with `.next()` for fine-grained control, early termination, or node-level observability.
+
+### Basic node-by-node iteration
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai._agent_graph import ModelRequestNode, CallToolsNode, UserPromptNode
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    nodes_visited = []
+
+    async with agent.iter('What is the capital of France?') as run:
+        async for node in run:
+            nodes_visited.append(type(node).__name__)
+
+    print(nodes_visited)
+    # ['UserPromptNode', 'ModelRequestNode', 'CallToolsNode']
+    print(run.result.output)
+    # 'The capital of France is Paris.'
+
+asyncio.run(main())
+```
+
+### Manual `.next()` driving for early exit
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai._agent_graph import CallToolsNode
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+async def run_with_budget(prompt: str, max_steps: int = 10):
+    async with agent.iter(prompt) as run:
+        node = await run.next(None)   # first step
+        for _ in range(max_steps):
+            if isinstance(node, End):
+                break
+            if isinstance(node, CallToolsNode):
+                # Peek at what tools the model called before executing
+                for part in node.model_response.parts:
+                    if hasattr(part, 'tool_name'):
+                        print(f'  → calling tool: {part.tool_name}')
+            node = await run.next(node)
+        else:
+            print('WARNING: max steps reached — run may be incomplete')
+    return run.result
+
+asyncio.run(run_with_budget('Search for recent AI papers and summarise three of them.'))
+```
+
+### Streaming node events to a client
+
+Forward agent progress to a WebSocket in real-time:
+
+```python
+import asyncio
+import json
+from pydantic_ai import Agent
+from pydantic_ai._agent_graph import ModelRequestNode, CallToolsNode
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+async def stream_to_websocket(ws, prompt: str):
+    async with agent.iter(prompt) as run:
+        async for node in run:
+            if isinstance(node, ModelRequestNode):
+                await ws.send(json.dumps({'event': 'thinking'}))
+            elif isinstance(node, CallToolsNode):
+                tool_names = [
+                    p.tool_name for p in node.model_response.parts
+                    if hasattr(p, 'tool_name')
+                ]
+                await ws.send(json.dumps({'event': 'tool_calls', 'tools': tool_names}))
+            elif isinstance(node, End):
+                await ws.send(json.dumps({'event': 'done', 'output': run.result.output}))
+```
+
+### Capturing per-node timings
+
+```python
+import asyncio
+import time
+from pydantic_ai import Agent
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+async def timed_run(prompt: str):
+    timings = []
+    async with agent.iter(prompt) as run:
+        async for node in run:
+            t0 = time.perf_counter()
+            step_name = type(node).__name__
+            # Yield to let the node run (it runs as part of iteration)
+            timings.append((step_name, time.perf_counter() - t0))
+
+    for name, elapsed in timings:
+        print(f'{name}: {elapsed:.3f}s')
+    return run.result
+
+asyncio.run(timed_run('What is the speed of light?'))
+```
+
+### Resuming from a specific node (graph-level control)
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai._agent_graph import ModelRequestNode
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+async def run_with_model_override(prompt: str):
+    """Override model parameters on a specific request node before execution."""
+    async with agent.iter(prompt) as run:
+        node = await run.next(None)
+        while not isinstance(node, End):
+            if isinstance(node, ModelRequestNode):
+                # Inspect before calling the model — could log, trace, or modify
+                print(f'About to make model request with {len(node.request.parts)} parts')
+            node = await run.next(node)
+    return run.result
+
+asyncio.run(run_with_model_override('Generate a haiku about Python.'))
+```
+
+### `AgentRun` properties
+
+```python
+async with agent.iter('prompt') as run:
+    async for node in run:
+        pass
+
+run.result           # AgentRunResult — available after the loop completes
+run.usage()          # RunUsage — total tokens across all steps
+run.all_messages()   # list[ModelMessage] — full conversation
+```
+
+---
+
 (Advanced patterns continue with more sophisticated techniques...)
 
 These patterns demonstrate expert-level usage of Pydantic AI for complex, production-grade applications.
