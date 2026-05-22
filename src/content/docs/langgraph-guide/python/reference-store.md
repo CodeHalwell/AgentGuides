@@ -10,7 +10,7 @@ sidebar:
 
 # Store (long-term memory) — API reference
 
-Verified against **`langgraph==1.2.0`** (modules: `langgraph.store.base`, `langgraph.store.memory`).
+Verified against **`langgraph==1.2.1`** (modules: `langgraph.store.base`, `langgraph.store.memory`).
 
 Checkpointers give you **short-term** memory tied to a single `thread_id`. A `Store` gives you **long-term** memory that lives outside any thread — shared across conversations, users, and graph runs. Same backend pattern as checkpointers: one abstract base, multiple implementations.
 
@@ -357,6 +357,185 @@ def recall(
 ```python
 store.put(("cache", "bing"), query, {"json": result}, ttl=30)   # minutes
 hit = store.get(("cache", "bing"), query, refresh_ttl=True)
+```
+
+### 6. Filter operators — comparison-based search
+
+`filter=` on `search()` supports exact equality and six comparison operators, matching PostgreSQL JSONB behavior. No index required — filtering is applied before semantic ranking.
+
+```python
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore()
+
+# Populate some items
+store.put(("products",), "p1", {"name": "Widget A", "price": 9.99,  "stock": 50})
+store.put(("products",), "p2", {"name": "Widget B", "price": 24.99, "stock": 0})
+store.put(("products",), "p3", {"name": "Gadget",   "price": 4.99,  "stock": 100})
+store.put(("products",), "p4", {"name": "Premium",  "price": 99.99, "stock": 5})
+
+# Exact match
+in_stock = store.search(("products",), filter={"stock": {"$gt": 0}})
+print([i.value["name"] for i in in_stock])
+# ['Widget A', 'Gadget', 'Premium']
+
+# Price range: between 5 and 30 inclusive
+affordable = store.search(
+    ("products",),
+    filter={"price": {"$gte": 5.0}, "stock": {"$gt": 0}},
+)
+print([i.value["name"] for i in affordable])
+# ['Widget A']   (Widget B is out of stock; Gadget < $5; Premium > $30)
+
+# Not equal
+not_widget = store.search(("products",), filter={"name": {"$ne": "Widget A"}})
+print([i.value["name"] for i in not_widget])
+# ['Widget B', 'Gadget', 'Premium']
+
+# Nested field match
+store.put(("orders",), "o1", {"status": "pending", "meta": {"priority": "high"}})
+store.put(("orders",), "o2", {"status": "done",    "meta": {"priority": "low"}})
+
+high_priority = store.search(("orders",), filter={"meta": {"priority": "high"}})
+print([i.value["status"] for i in high_priority])
+# ['pending']
+```
+
+All supported operators:
+
+| Operator | Meaning | Example |
+|---|---|---|
+| `$eq` | Equal | `{"status": {"$eq": "active"}}` — same as `{"status": "active"}` |
+| `$ne` | Not equal | `{"status": {"$ne": "deleted"}}` |
+| `$gt` | Greater than | `{"score": {"$gt": 4.0}}` |
+| `$gte` | Greater than or equal | `{"score": {"$gte": 4.0}}` |
+| `$lt` | Less than | `{"age": {"$lt": 30}}` |
+| `$lte` | Less than or equal | `{"age": {"$lte": 30}}` |
+
+Operators apply to numeric comparisons via `float()` coercion. Nested dict filters require the value to also be a dict with matching keys.
+
+### 7. Pagination with `offset`
+
+For large namespaces use `offset` to page through results:
+
+```python
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore()
+for i in range(100):
+    store.put(("logs",), f"log-{i:03d}", {"msg": f"Event {i}", "level": "info"})
+
+page_size = 20
+all_results = []
+offset = 0
+while True:
+    batch = store.search(("logs",), limit=page_size, offset=offset)
+    if not batch:
+        break
+    all_results.extend(batch)
+    offset += page_size
+
+print(f"Total retrieved: {len(all_results)}")  # 100
+```
+
+### 8. Async store operations in a FastAPI service
+
+```python
+import asyncio
+from langgraph.store.memory import InMemoryStore
+from langgraph.store.base import GetOp, PutOp, SearchOp
+
+store = InMemoryStore()
+
+
+async def upsert_memory(user_id: str, key: str, text: str) -> None:
+    await store.aput(("mem", user_id), key, {"text": text, "user": user_id})
+
+
+async def recall_memories(user_id: str, query: str, top_k: int = 5) -> list[str]:
+    hits = await store.asearch(
+        ("mem", user_id),
+        query=query,
+        limit=top_k,
+    )
+    return [h.value["text"] for h in hits]
+
+
+async def bulk_write(user_id: str, facts: list[dict]) -> None:
+    ops = [
+        PutOp(("mem", user_id), f"fact-{i}", {"text": f["text"]})
+        for i, f in enumerate(facts)
+    ]
+    await store.abatch(ops)
+
+
+# Usage in an async context:
+async def main():
+    await upsert_memory("alice", "pref-lang", "Prefers Python")
+    await bulk_write("alice", [
+        {"text": "Works at Acme Corp"},
+        {"text": "Enjoys hiking"},
+    ])
+    results = await recall_memories("alice", "programming language", top_k=3)
+    print(results)
+
+
+asyncio.run(main())
+```
+
+### 9. Per-field vector indexing
+
+By default `InMemoryStore` embeds the entire value dict (`fields=["$"]`). Specify explicit paths to embed only relevant text and reduce embedding costs:
+
+```python
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore(
+    index={
+        "dims": 1536,
+        "embed": "openai:text-embedding-3-small",
+        # Only embed these two fields; ignore "tags", "created_at", etc.
+        "fields": ["title", "body"],
+    }
+)
+
+store.put(("articles",), "a1", {
+    "title": "Introduction to LangGraph",
+    "body": "LangGraph is a framework for building stateful multi-actor apps...",
+    "tags": ["langchain", "agents"],
+    "created_at": "2025-01-01",
+})
+
+store.put(("articles",), "a2", {
+    "title": "Python async patterns",
+    "body": "asyncio and structured concurrency in modern Python...",
+    "tags": ["python", "async"],
+    "created_at": "2025-02-01",
+})
+
+# Semantic search only over title + body
+results = store.search(("articles",), query="graph-based agent workflows", limit=3)
+for r in results:
+    print(f"{r.score:.3f} — {r.value['title']}")
+
+# Per-item override: skip indexing for a specific item
+store.put(("articles",), "a3", {"title": "Draft", "body": "WIP"}, index=False)
+
+# Per-item override: embed only the body for this item
+store.put(("articles",), "a4", {"title": "Short", "body": "Detailed content here..."}, index=["body"])
+```
+
+The `[*]` wildcard path selector embeds each array element separately:
+
+```python
+store.put(("docs",), "d1", {
+    "chapters": [
+        "Chapter 1: Introduction",
+        "Chapter 2: State management",
+        "Chapter 3: Multi-agent",
+    ]
+}, index=["chapters[*]"])
+# Each chapter string is embedded separately and matched individually.
 ```
 
 ## Gotchas

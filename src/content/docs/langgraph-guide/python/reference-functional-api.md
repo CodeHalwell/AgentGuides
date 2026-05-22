@@ -10,7 +10,7 @@ sidebar:
 
 # Functional API — API reference
 
-Verified against **`langgraph==1.2.0`** (module: `langgraph.func`).
+Verified against **`langgraph==1.2.1`** (module: `langgraph.func`).
 
 The Functional API lets you author a graph as a plain Python function instead of explicitly building a `StateGraph`. The result is still a `Pregel` object with the same `invoke` / `stream` / `get_state` / `update_state` surface — so you get checkpointing, interrupts, streaming, and time travel for free.
 

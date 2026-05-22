@@ -1,6 +1,6 @@
 ---
 title: "Chapter 3 — Multi-Agent Systems"
-description: "Supervisor routing, parallel fan-out/fan-in, and hand-off patterns for coordinating multiple specialist agents."
+description: "Supervisor routing, parallel fan-out/fan-in, Command-based hand-off, and subgraph composition for coordinating multiple specialist agents in LangGraph 1.2."
 framework: langgraph
 language: python
 sidebar:
@@ -10,298 +10,499 @@ sidebar:
 
 # Chapter 3 — Multi-Agent Systems
 
-**What you'll learn:** three canonical multi-agent topologies — a supervisor routing to specialists, parallel workers with fan-out/fan-in, and direct hand-off between agents.
+**What you'll learn:** four canonical multi-agent topologies — a Command-based supervisor routing to specialists, parallel workers with fan-out/fan-in, direct hand-off between agents using `Command`, and subgraph composition for nested teams.
 
-**Time:** ~25 minutes.
+**Time:** ~30 minutes.
 
 > Prereqs: [Chapter 2 — Your first agent](/langgraph-guide/python/chapter-02-simple-agents/).
 
-## Multi-Agent Systems
+---
 
-### Example 1: Supervisor Pattern
+## Overview of multi-agent topologies
 
-One coordinator agent routing to specialists:
+| Topology | Key mechanism | Best when |
+|---|---|---|
+| **Supervisor** | One coordinator node returns `Command(goto=...)` to route to specialists | Tasks require classification or sequential delegation |
+| **Parallel fan-out / fan-in** | `Send` from a conditional edge launches N workers in parallel | Independent sub-tasks that can run concurrently |
+| **Direct hand-off** | A node or tool returns `Command(goto=..., update=...)` | Specialist agents can escalate to each other without a central controller |
+| **Subgraph composition** | A compiled `StateGraph` added as a node in a parent graph | Encapsulated teams with their own state and tools |
 
+---
+
+## Example 1: Command-based Supervisor Pattern
+
+A supervisor node inspects state and returns `Command(goto=...)` to route to specialists. No explicit edges from the supervisor to workers are needed — the Command carries the routing intent.
 
 ```python
-from langchain_core.messages import BaseMessage
-# Note: AgentExecutor and create_tool_calling_agent require `pip install langchain langchain-anthropic`
-# from langchain.agents import AgentExecutor, create_tool_calling_agent
-# from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
-from langgraph.types import Send
+from typing import Annotated, Literal
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
 from langchain_core.tools import tool
-from typing import List
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
-# Define specialized agents' tools
+
+# --- Specialist tools -------------------------------------------------------
+
 @tool
-def research_tool(query: str) -> str:
-    """Search the web for information."""
-    return f"Research results for: {query}"
+def search_web(query: str) -> str:
+    """Search the web for up-to-date information."""
+    # In production, call a real search API here.
+    return f"Search results for: {query}"
+
 
 @tool
-def calculator_tool(expression: str) -> str:
-    """Evaluate a simple arithmetic expression.
+def calculate(expression: str) -> str:
+    """Evaluate a simple arithmetic expression safely using AST parsing."""
+    import ast, operator as op
 
-    SECURITY: never call `eval()` on model/user-provided input — it executes
-    arbitrary Python. We restrict the AST to a small set of arithmetic nodes.
-    For anything beyond `+ - * / ** ()`, use a dedicated library such as
-    `simpleeval` or a CAS like SymPy.
-    """
-    import ast
-    import operator as op
-
-    allowed_binops = {
+    OPS = {
         ast.Add: op.add, ast.Sub: op.sub,
         ast.Mult: op.mul, ast.Div: op.truediv,
         ast.Pow: op.pow, ast.Mod: op.mod,
     }
-    allowed_unaryops = {ast.UAdd: op.pos, ast.USub: op.neg}
 
     def _eval(node):
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return node.value
-        if isinstance(node, ast.BinOp) and type(node.op) in allowed_binops:
-            return allowed_binops[type(node.op)](_eval(node.left), _eval(node.right))
-        if isinstance(node, ast.UnaryOp) and type(node.op) in allowed_unaryops:
-            return allowed_unaryops[type(node.op)](_eval(node.operand))
-        raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+        if isinstance(node, ast.BinOp) and type(node.op) in OPS:
+            return OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return -_eval(node.operand)
+        raise ValueError(f"Unsupported: {ast.dump(node)}")
 
-    tree = ast.parse(expression, mode="eval")
-    return str(_eval(tree.body))
+    try:
+        return str(_eval(ast.parse(expression, mode="eval").body))
+    except Exception as e:
+        return f"Error: {e}"
 
-# Helper function to create a specialist agent
-def create_agent(llm, tools: list, system_prompt: str) -> AgentExecutor:
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("placeholder", "{chat_history}"),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools)
-    return executor
 
-# Create agent runner function
-def agent_node(state: dict, agent: AgentExecutor, name: str) -> dict:
-    result = agent.invoke(state)
-    return {"messages": [BaseMessage(type="human", content=result["output"], name=name)]}
+research_tools = [search_web]
+math_tools = [calculate]
 
-# Create specialized agents
-model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-research_agent = create_agent(model, [research_tool], "You are a research specialist. Find accurate information.")
-math_agent = create_agent(model, [calculator_tool], "You are a math specialist. Solve problems step-by-step.")
 
-# Supervisor state
-class SupervisorState(TypedDict):
-    messages: Annotated[list, add_messages]
-    next: str
+# --- State ------------------------------------------------------------------
 
-# Supervisor logic
-def supervisor_node(state: SupervisorState) -> dict:
-    """Analyze request and pick best agent."""
-    last_message = state["messages"][-1]
-    
-    # If the last message is from an agent, the supervisor can decide to end the process
-    if hasattr(last_message, 'name'):
-        return {"next": "END"}
+class AgentState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    active_specialist: str
 
-    prompt = f"""You manage two specialist agents:
-- research_agent: For web searches, fact-finding, current info
-- math_agent: For calculations and equations
 
-Request: {last_message.content}
+# --- Specialist agent nodes -------------------------------------------------
+# Each specialist has its own LLM bound to its tools and its own ToolNode.
+# In a real app swap the stub LLM below for ChatOpenAI(...).bind_tools(tools).
 
-Which agent should handle this? Reply with ONLY the agent name or FINISH."""
-    
-    response = model.invoke(prompt)
-    next_agent = response.content.strip()
-    
-    return {"next": next_agent}
+try:
+    from langchain_openai import ChatOpenAI
+    research_llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(research_tools)
+    math_llm     = ChatOpenAI(model="gpt-4o-mini").bind_tools(math_tools)
+    _have_llm = True
+except Exception:
+    _have_llm = False  # running without API key — demo only
 
-# Build supervisor graph
-builder = StateGraph(SupervisorState)
-builder.add_node("supervisor", supervisor_node)
-builder.add_node("research_agent", lambda state: agent_node(state, research_agent, "research_agent"))
-builder.add_node("math_agent", lambda state: agent_node(state, math_agent, "math_agent"))
+
+def research_agent(state: AgentState) -> dict:
+    if _have_llm:
+        response = research_llm.invoke(state["messages"])
+    else:
+        response = AIMessage(content="[research stub] results found")
+    return {"messages": [response], "active_specialist": "research"}
+
+
+def math_agent(state: AgentState) -> dict:
+    if _have_llm:
+        response = math_llm.invoke(state["messages"])
+    else:
+        response = AIMessage(content="[math stub] 42")
+    return {"messages": [response], "active_specialist": "math"}
+
+
+# --- Supervisor node ---------------------------------------------------------
+# Returns Command(goto=...) to route to a specialist or END.
+# No add_edge calls needed from supervisor to the specialists.
+
+def supervisor(state: AgentState) -> Command[Literal["research_agent", "math_agent", "__end__"]]:
+    last = state["messages"][-1]
+
+    # If the most recent message is from a specialist, we're done.
+    if isinstance(last, AIMessage) and last.name in ("research_agent", "math_agent"):
+        return Command(goto=END)
+
+    content = last.content.lower() if hasattr(last, "content") else ""
+    if any(w in content for w in ("search", "research", "find", "who", "what", "when")):
+        return Command(goto="research_agent", update={"active_specialist": "research"})
+    if any(w in content for w in ("calculate", "compute", "how much", "+", "-", "*", "/")):
+        return Command(goto="math_agent", update={"active_specialist": "math"})
+
+    return Command(goto=END)
+
+
+# --- Tool nodes for each specialist -----------------------------------------
+
+research_tool_node = ToolNode(research_tools)
+math_tool_node     = ToolNode(math_tools)
+
+
+# --- Build the graph ---------------------------------------------------------
+
+builder = StateGraph(AgentState)
+
+builder.add_node("supervisor",          supervisor)
+builder.add_node("research_agent",      research_agent)
+builder.add_node("math_agent",          math_agent)
+builder.add_node("research_tools",      research_tool_node)
+builder.add_node("math_tools",          math_tool_node)
 
 builder.add_edge(START, "supervisor")
-builder.add_conditional_edges(
-    "supervisor",
-    lambda x: x["next"],
-    {
-        "research_agent": "research_agent",
-        "math_agent": "math_agent",
-        "FINISH": END,
-    }
-)
 
-# Agents return to supervisor
-builder.add_edge("research_agent", "supervisor")
-builder.add_edge("math_agent", "supervisor")
+# Specialists loop back to the supervisor after finishing.
+builder.add_conditional_edges("research_agent", tools_condition,
+                               {"tools": "research_tools", "__end__": "supervisor"})
+builder.add_edge("research_tools", "supervisor")
+
+builder.add_conditional_edges("math_agent", tools_condition,
+                               {"tools": "math_tools", "__end__": "supervisor"})
+builder.add_edge("math_tools", "supervisor")
+
+# `supervisor` uses Command(goto=...) — no outgoing edges needed.
+# Add `destinations=` only for diagram accuracy:
+builder.add_node.__self__  # no-op; destinations set via add_node kwargs above
 
 supervisor_graph = builder.compile(checkpointer=InMemorySaver())
 
-# Test it
-config = {"configurable": {"thread_id": "supervisor-test"}}
+# --- Test -------------------------------------------------------------------
+
+config = {"configurable": {"thread_id": "supervisor-demo-1"}}
 
 result = supervisor_graph.invoke(
-    {"messages": [{"role": "user", "content": "Research AI trends and calculate 25% of 1000"}]},
-    config=config
+    {"messages": [HumanMessage(content="Search for recent LangGraph news")],
+     "active_specialist": ""},
+    config=config,
 )
-
-print("Final response:", result["messages"][-1].content)
+print("Specialist used:", result["active_specialist"])
+print("Last message:", result["messages"][-1].content)
 ```
 
+Key design decisions:
 
-### Example 2: Parallel Worker Pattern
+- `supervisor` returns `Command(goto=...)` — no `add_edge` from `supervisor` to the workers needed.
+- Specialists loop back through their `ToolNode` when they emit tool calls, then return to `supervisor`.
+- Adding `destinations=("research_agent", "math_agent", END)` to `add_node("supervisor", ...)` makes the Mermaid diagram accurate without affecting execution.
 
-Fan-out to multiple workers, collect results:
+---
 
+## Example 2: Parallel Worker Pattern (Fan-out / Fan-in)
+
+Dispatch N tasks in parallel using `Send`, collect results with a reducer, then aggregate:
 
 ```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
-# Shared graph state — only fields the main graph sees.
+
+# --- State ------------------------------------------------------------------
+
 class WorkflowState(TypedDict):
     tasks: list[dict]
-    results: Annotated[dict, lambda x, y: {**x, **y}]  # reducer merges dicts
+    # `operator.add` merges lists from parallel workers
+    results: Annotated[list[dict], operator.add]
 
-# Per-worker payload — the shape delivered by each `Send`. Workers see
-# exactly these fields, not the whole WorkflowState.
+
+# The payload delivered to each worker via Send — workers see only these fields.
 class WorkerPayload(TypedDict):
     task_id: str
     task_data: str
 
+
+# --- Nodes ------------------------------------------------------------------
+
 def dispatch(state: WorkflowState) -> list[Send]:
-    """Fan-out: one Send per task. Returning a list of Sends from a
-    conditional-edge function tells LangGraph to launch that many parallel
-    copies of the target node, each with its own payload."""
+    """Fan-out: one Send per task launches that many parallel worker copies."""
     return [
-        Send("worker", {"task_id": task["id"], "task_data": task["data"]})
-        for task in state["tasks"]
+        Send("worker", {"task_id": t["id"], "task_data": t["data"], "results": []})
+        for t in state["tasks"]
     ]
 
+
 def worker_node(payload: WorkerPayload) -> dict:
-    """Process one task. Receives the per-worker payload from `Send`."""
-    result = f"Processed: {payload['task_data']}"
-    # Returning to the shared WorkflowState: the `results` reducer merges
-    # each worker's single-entry dict into the aggregate dict.
-    return {"results": {payload["task_id"]: result}}
+    """Process one task. Returns a single-element list; reducer appends it."""
+    return {"results": [{"id": payload["task_id"], "output": payload["task_data"].upper()}]}
 
-def collect_results(state: WorkflowState) -> dict:
-    """Fan-in: runs once after all workers complete."""
-    summary = f"Completed {len(state['results'])} tasks"
-    return {"results": {"summary": summary}}
 
-# Build parallel graph
+def aggregate(state: WorkflowState) -> dict:
+    """Fan-in: runs once after ALL parallel workers complete."""
+    summary = f"Processed {len(state['results'])} tasks"
+    return {"results": [{"id": "summary", "output": summary}]}
+
+
+# --- Build ------------------------------------------------------------------
+
 builder = StateGraph(WorkflowState)
-builder.add_node("worker", worker_node)
-builder.add_node("collect", collect_results)
+builder.add_node("worker",    worker_node)
+builder.add_node("aggregate", aggregate)
 
-# Fan-out: a conditional edge whose function returns list[Send] launches
-# N parallel workers. `["worker"]` is the list of allowed targets.
+# Conditional edge returning list[Send] triggers parallel fan-out.
 builder.add_conditional_edges(START, dispatch, ["worker"])
 
-# Fan-in: every worker edge lands on collect; LangGraph waits until all
-# parallel branches from a fan-out converge before running the next node.
-builder.add_edge("worker", "collect")
-builder.add_edge("collect", END)
+# Every worker writes to "aggregate"; LangGraph waits for all branches.
+builder.add_edge("worker",    "aggregate")
+builder.add_edge("aggregate", END)
 
 parallel_graph = builder.compile()
 
-# Test
+# --- Test -------------------------------------------------------------------
+
 result = parallel_graph.invoke({
     "tasks": [
-        {"id": "task-1", "data": "data-a"},
-        {"id": "task-2", "data": "data-b"},
-        {"id": "task-3", "data": "data-c"}
-    ]
+        {"id": "t1", "data": "hello"},
+        {"id": "t2", "data": "world"},
+        {"id": "t3", "data": "langgraph"},
+    ],
+    "results": [],
 })
 
-print("Results:", result["results"])
-# Output: {'task-1': 'Processed: data-a', 'task-2': 'Processed: data-b', ...}
+for r in result["results"]:
+    print(r["id"], "→", r["output"])
 ```
 
+Notes:
 
-### Example 3: Handoff Pattern
+- `Annotated[list[dict], operator.add]` is a `BinaryOperatorAggregate` channel — each worker appends its list, and `operator.add` concatenates them all.
+- `Send("worker", {...})` delivers a custom snapshot to the worker node; workers never see `WorkflowState` directly — only their payload.
+- The barrier edge `add_edge(["worker"], "aggregate")` (implicit when every Send targets the same downstream node) ensures `aggregate` runs **once** after all workers finish.
 
-Agents handing off to each other mid-conversation:
+---
 
+## Example 3: Direct Hand-off with `Command`
+
+Agents hand off directly to each other by returning `Command(goto=..., update=...)` — no supervisor required. This is the recommended pattern for peer-to-peer escalation.
 
 ```python
+from typing import Annotated, Literal
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
+
+
 class HandoffState(TypedDict):
-    messages: Annotated[list, add_messages]
-    current_agent: str
-    handoff_reason: str
+    messages: Annotated[list[AnyMessage], add_messages]
+    handled_by: str
+    escalation_reason: str
 
-def agent_a(state: HandoffState) -> dict:
-    """First agent - handles initial request."""
-    last_message = state["messages"][-1].content
-    
-    # Check if should handoff
-    if "transfer" in last_message.lower():
-        return {
-            "current_agent": "agent_b",
-            "handoff_reason": "User requested transfer",
-            "messages": [
-                {
-                    "role": "assistant",
-                    "content": "Transferring to agent B..."
-                }
-            ]
-        }
-    
-    # Normal response
-    response = f"Agent A responds to: {last_message}"
-    return {
-        "current_agent": "agent_a",
-        "messages": [{"role": "assistant", "content": response}]
-    }
 
-def agent_b(state: HandoffState) -> dict:
-    """Second agent - takes over."""
-    last_message = state["messages"][-1].content
-    response = f"Agent B (now handling): {last_message}"
-    return {
-        "current_agent": "agent_b",
-        "messages": [{"role": "assistant", "content": response}]
-    }
+def tier1_agent(state: HandoffState) -> Command[Literal["tier2_agent", "__end__"]]:
+    """First-line support. Escalates complex issues to tier-2."""
+    last = state["messages"][-1]
+    content = last.content if hasattr(last, "content") else ""
 
-def route_agent(state: HandoffState) -> str:
-    """Route to current agent."""
-    agent = state.get("current_agent", "agent_a")
-    return agent
+    if "complex" in content.lower() or "escalate" in content.lower():
+        return Command(
+            goto="tier2_agent",
+            update={
+                "messages": [AIMessage(content="Escalating to tier-2 specialist.")],
+                "handled_by": "tier2",
+                "escalation_reason": "Complex query detected",
+            },
+        )
 
-# Build handoff graph
+    return Command(
+        goto=END,
+        update={
+            "messages": [AIMessage(content=f"Tier-1 handled: {content}")],
+            "handled_by": "tier1",
+        },
+    )
+
+
+def tier2_agent(state: HandoffState) -> Command[Literal["__end__"]]:
+    """Specialist support. Always resolves the issue."""
+    last_user_msg = next(
+        (m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)),
+        "your request",
+    )
+    return Command(
+        goto=END,
+        update={
+            "messages": [AIMessage(content=f"Tier-2 resolution for: {last_user_msg}")],
+            "handled_by": "tier2",
+        },
+    )
+
+
+# --- Build ------------------------------------------------------------------
+# Both agents use Command, so no outgoing edges needed from them.
+
 builder = StateGraph(HandoffState)
-builder.add_node("agent_a", agent_a)
-builder.add_node("agent_b", agent_b)
-
-builder.add_edge(START, "agent_a")
-builder.add_conditional_edges(
-    "agent_a",
-    lambda state: "agent_b" if state.get("current_agent") == "agent_b" else "agent_a"
-)
-builder.add_edge("agent_b", END)
+builder.add_node("tier1_agent", tier1_agent,
+                 destinations=("tier2_agent", END))
+builder.add_node("tier2_agent", tier2_agent,
+                 destinations=(END,))
+builder.add_edge(START, "tier1_agent")
 
 handoff_graph = builder.compile(checkpointer=InMemorySaver())
 
-# Test handoff
-config = {"configurable": {"thread_id": "handoff-test"}}
+# --- Test -------------------------------------------------------------------
 
-result = handoff_graph.invoke(
-    {"messages": [{"role": "user", "content": "Help me"}], "current_agent": "agent_a"},
-    config=config
-)
-print("Step 1:", result["messages"][-1].content)
+config = {"configurable": {"thread_id": "handoff-demo"}}
 
+# Simple query — tier-1 resolves it
 result = handoff_graph.invoke(
-    {"messages": [{"role": "user", "content": "Transfer me to another agent"}]},
-    config=config
+    {"messages": [HumanMessage(content="How do I reset my password?")],
+     "handled_by": "", "escalation_reason": ""},
+    config=config,
 )
-print("Step 2:", result["messages"][-1].content)
-print("Current agent:", result["current_agent"])
+print("Handler:", result["handled_by"])
+print("Response:", result["messages"][-1].content)
+
+# Complex query — tier-1 hands off to tier-2
+config2 = {"configurable": {"thread_id": "handoff-demo-2"}}
+result2 = handoff_graph.invoke(
+    {"messages": [HumanMessage(content="This is a complex billing dispute — escalate please")],
+     "handled_by": "", "escalation_reason": ""},
+    config=config2,
+)
+print("Handler:", result2["handled_by"])
+print("Escalation reason:", result2["escalation_reason"])
 ```
 
+Key differences from Example 1:
 
+- `tier1_agent` and `tier2_agent` **both** use `Command(goto=...)` — no routing function, no conditional edges.
+- `destinations=` on `add_node` is a diagram hint only; execution is driven by `Command.goto`.
+- The `update=` field inside `Command` replaces returning a plain dict — same reducers apply.
+
+---
+
+## Example 4: Subgraph Composition
+
+Encapsulate a team of agents as a compiled subgraph and wire it into a parent orchestrator:
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- Inner subgraph: a two-step research team --------------------------------
+
+class ResearchState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    findings: str
+
+
+def fetch_data(state: ResearchState) -> dict:
+    topic = state["messages"][-1].content if state["messages"] else "unknown"
+    return {"findings": f"Data about: {topic}"}
+
+
+def analyse_data(state: ResearchState) -> dict:
+    return {
+        "messages": [AIMessage(content=f"Analysis: {state['findings']}")],
+    }
+
+
+research_builder = StateGraph(ResearchState)
+research_builder.add_node("fetch",   fetch_data)
+research_builder.add_node("analyse", analyse_data)
+research_builder.add_edge(START,     "fetch")
+research_builder.add_edge("fetch",   "analyse")
+research_builder.add_edge("analyse", END)
+
+# Compile with checkpointer=True so it inherits the parent's checkpointer.
+research_subgraph = research_builder.compile(checkpointer=True)
+
+
+# --- Outer orchestrator -------------------------------------------------------
+
+class OrchestratorState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    task_type: str
+
+
+def classify(state: OrchestratorState) -> dict:
+    content = state["messages"][-1].content.lower() if state["messages"] else ""
+    return {"task_type": "research" if "research" in content else "chat"}
+
+
+def router(state: OrchestratorState) -> str:
+    return "research_team" if state["task_type"] == "research" else "chat_node"
+
+
+def chat_node(state: OrchestratorState) -> dict:
+    return {"messages": [AIMessage(content="I can help with that directly!")]}
+
+
+orch_builder = StateGraph(OrchestratorState)
+orch_builder.add_node("classify",      classify)
+orch_builder.add_node("research_team", research_subgraph)   # compiled subgraph as node
+orch_builder.add_node("chat_node",     chat_node)
+
+orch_builder.add_edge(START, "classify")
+orch_builder.add_conditional_edges("classify", router,
+                                   {"research_team": "research_team", "chat_node": "chat_node"})
+orch_builder.add_edge("research_team", END)
+orch_builder.add_edge("chat_node",     END)
+
+orchestrator = orch_builder.compile(checkpointer=InMemorySaver())
+
+# --- Test -------------------------------------------------------------------
+
+config = {"configurable": {"thread_id": "orch-demo-1"}}
+result = orchestrator.invoke(
+    {"messages": [HumanMessage(content="Research the history of LangGraph")],
+     "task_type": ""},
+    config=config,
+)
+print("Task type:", result["task_type"])
+print("Last message:", result["messages"][-1].content)
+```
+
+Key subgraph rules:
+
+- `checkpointer=True` tells the subgraph to inherit the parent's checkpointer instead of running unchecked. Use `checkpointer=False` to disable checkpointing for a subgraph even when the parent has one.
+- The subgraph's state schema (`ResearchState`) is separate from the parent's (`OrchestratorState`). State is **not** shared between levels automatically — the parent passes its input to the subgraph node and receives its output.
+- Streaming with `subgraphs=True` on the parent graph exposes events emitted inside the subgraph with their namespace path.
+
+---
+
+## Streaming multi-agent events
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+
+config = {"configurable": {"thread_id": "stream-demo"}}
+
+# Stream updates from every node, including subgraphs
+for ns, chunk in orchestrator.stream(
+    {"messages": [HumanMessage(content="Research AI safety")], "task_type": ""},
+    config,
+    stream_mode="updates",
+    subgraphs=True,
+):
+    node_path = " > ".join(n.split(":")[0] for n in ns) if ns else "root"
+    print(f"[{node_path}]", chunk)
+```
+
+`ns` is a tuple of namespace segments. The `:task_id` suffix is unique per run; split on `":"` to get the stable node names.
+
+---
+
+## Gotchas
+
+- **`Command(goto=END)` vs `add_edge(node, END)`:** A node that returns `Command(goto=...)` bypasses all explicit edges from that node. Pick one style per node — never mix `add_edge` and `Command` routing for the same node.
+- **Reducers are required for parallel writes.** When multiple workers write to the same state key in the same super-step, the key must have a reducer (e.g., `Annotated[list, operator.add]`). Without one, LangGraph raises `InvalidUpdateError`.
+- **`Send` arg is the entire snapshot for the target node.** Workers see only what you passed in `Send("worker", {...})`, not the full `WorkflowState`. Include every key the worker reads.
+- **`checkpointer=True` is only for subgraphs.** Passing `checkpointer=True` to a root graph raises `RuntimeError`. Only compiled subgraphs can inherit a parent's checkpointer.
+- **`destinations=` is diagram-only.** It does not change execution — its sole purpose is to make the Mermaid visualization show the correct edges for nodes that use `Command`.

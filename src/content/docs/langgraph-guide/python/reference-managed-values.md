@@ -10,7 +10,7 @@ sidebar:
 
 # Managed values — `IsLastStep` & `RemainingSteps`
 
-Verified against **`langgraph==1.2.0`** (module: `langgraph.managed.is_last_step`).
+Verified against **`langgraph==1.2.1`** (module: `langgraph.managed.is_last_step`).
 
 **Managed values** are special state-field annotations that LangGraph fills in automatically from the Pregel executor's scratchpad. They are declared in the state schema like any other field, but the graph — not node code — writes them at each step.
 
