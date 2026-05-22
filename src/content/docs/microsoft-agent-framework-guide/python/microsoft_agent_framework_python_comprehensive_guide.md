@@ -1,20 +1,20 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.5.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, and observability."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.6.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, and observability."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest verified release: 1.5.0 | Python 3.10+
+Latest verified release: 1.6.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version:** 1.5.0 (`agent-framework` and `agent-framework-core`)
+**Framework Version:** 1.6.0 (`agent-framework` and `agent-framework-core`)
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.5.0`).**
+> **API reference (verified against `agent-framework-core==1.6.0`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
@@ -2401,6 +2401,7 @@ asyncio.run(main())
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.6.0 | May 22, 2026 | Core bumped 1.5.0 → 1.6.0; `Latest verified release`, `**Framework Version:**`, API reference header, and description frontmatter updated. All 23 core symbols verified against installed `agent-framework-core==1.6.0` (`.routine-envs/check-0522-ms-agent`); 242 public symbols confirmed; no deprecations detected. Note: opentelemetry `importlib.metadata` DeprecationWarning at import (Python 3.11 compat issue) is an upstream opentelemetry bug — suppressed with `warnings.filterwarnings('ignore')` for verification purposes. | Claude routine |
 | 1.4.0 | May 15, 2026 | Core bumped 1.3.0 → 1.4.0. Added `SecureAgentConfig` (`ExperimentalFeature.FIDES`) section covering information-flow control, label tracking, policy enforcement, and audit logging. Added `InMemorySkillsSource`, `DelegatingSkillsSource`, `FunctionExecutor`/`@executor`, and `WorkflowViz` to the relevant reference pages. Version strings updated throughout; verified against installed `agent-framework==1.4.0`. |
 | 1.3.0 | May 9, 2026 | Core bumped 1.2.2 → 1.3.0. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. `MemoryStore` and `SkillResource` now emit `ExperimentalWarning` on import. Version strings updated throughout; `Agent` and `FoundryChatClient` verified against installed `agent-framework==1.3.0` (`.routine-envs/check-0509-py`). |
 | 1.2.2 | May 2026 | Guide verified against `agent-framework-core==1.2.2`; skills, functional workflows, and `Agent.as_tool()` added. |
