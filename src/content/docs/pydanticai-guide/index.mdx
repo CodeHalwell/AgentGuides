@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.99.0** · May 2026 · Python 3.10+
+    **v1.101.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -101,8 +101,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.99.0 (May 2026)
+## What's new in v1.101.0 (May 2026)
 
+- **v1.101.0 (May 2026)** — Minor release. Maintenance and dependency updates. All core guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `limit_model_concurrency`, `ConcurrencyLimiter`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.101.0` (`.routine-envs/check-0522-pydantic`); all PASS. 178 top-level exports confirmed; API surface unchanged from 1.99.0.
+- **v1.100.0 (May 2026)** — Minor release. Maintenance and dependency updates.
 - **v1.99.0 (May 2026)** — Minor release. Library source verified against installed package; class deep-dives guide expanded with `UsageLimits` (§11) and `ConcurrencyLimiter` (§12) deep-dives including all constructor arguments, runtime properties, and multi-agent sharing patterns. `pydantic_ai_advanced_error_testing.md` rewritten with comprehensive coverage of `ModelRetry`, `UnexpectedModelBehavior`, `UsageLimitExceeded`, `ConcurrencyLimitExceeded`, `UserError`, and testing error paths via `FunctionModel`/`capture_run_messages`. `pydantic_ai_streaming_server_fastapi.md` rewritten using the actual pydantic-ai streaming APIs (`run_stream`, `run_stream_events`, AG UI adapter). All `Verified against` headers across all deep-dive pages updated to 1.99.0. All core guide symbols verified against installed `pydantic-ai==1.99.0` (`.routine-envs/check-0520-pydantic`); no `DeprecationWarning` emissions on any non-`ag_ui` imports.
 - **v1.98.0 (May 2026)** — Minor release. `pydantic_ai.ag_ui` module deprecated — emits `PydanticAIDeprecationWarning` on import. Replace `from pydantic_ai.ag_ui import AGUIAdapter` with `from pydantic_ai.ui.ag_ui import AGUIAdapter`; `SSE_CONTENT_TYPE` and `StateDeps` move to `from pydantic_ai.ui import ...`. `AGUIApp` remains available from `pydantic_ai.ag_ui` until 2.0 but should not be used in new code. New `pydantic_ai.common_tools` module with provider-specific tool collections (DuckDuckGo, Exa, Tavily, WebFetch, ImageGeneration); each collection requires the matching optional extra (e.g. `pip install "pydantic-ai[duckduckgo]"`). All core guide symbols verified against installed `pydantic-ai==1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on imports.
 - **v1.97.0 (May 2026)** — Minor release; maintenance and dependency updates.
@@ -145,6 +147,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-22 | pydantic-ai 1.101.0 | Version bumped 1.99.0 → 1.101.0 (two minor releases: 1.100.0, 1.101.0); "What's new" heading updated to v1.101.0; v1.100.0 and v1.101.0 bullets added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.101.0` (`.routine-envs/check-0522-pydantic`); all PASS. 178 top-level exports confirmed. | Claude routine |
 | 2026-05-20 | pydantic-ai 1.99.0 | Version bumped 1.98.0 → 1.99.0; "What's new" heading updated to v1.99.0; v1.99.0 bullet added. All core guide symbols verified against installed `pydantic-ai==1.99.0` (`.routine-envs/check-0520-pydantic`) with `-W error::DeprecationWarning`; all PASS. | Claude routine |
 | 2026-05-20 | pydantic-ai 1.99.0 | Library installed and source inspected directly. Twelve classes deep-dived from source: `Agent`, `RunContext`, `UsageLimits`, `ConcurrencyLimiter`, `FunctionToolset`, `AgentRunResult`, `ToolDefinition`, `ModelRetry`, `TestModel`, `FunctionModel` (all ten inspected at source), plus `UsageLimits` (§11) and `ConcurrencyLimiter` (§12) added as full deep-dive sections to the class deep-dives guide. `pydantic_ai_advanced_error_testing.md` fully rewritten (was 32 lines stub). `pydantic_ai_streaming_server_fastapi.md` fully rewritten with correct pydantic-ai streaming APIs. All `Verified against` headers updated to 1.99.0. | Claude |
 | 2026-05-19 | pydantic-ai 1.98.0 | Version bumped 1.96.0 → 1.98.0; "What's new" updated with `pydantic_ai.ag_ui` deprecation and new `common_tools` module; comprehensive guide updated with ag_ui deprecation note; revision history entries added. All core guide symbols verified against installed `pydantic-ai==1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on imports. | Claude routine |
