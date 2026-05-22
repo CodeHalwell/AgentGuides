@@ -1,12 +1,12 @@
 ---
 title: "Pydantic AI: Recipes & Real-World Examples"
-description: "Version: 1.99.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, and XML prompt enrichment."
+description: "Version: 1.101.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, and XML prompt enrichment."
 framework: pydanticai
 ---
 
 # Pydantic AI: Recipes & Real-World Examples
 
-**Version:** 1.99.0 (May 2026)
+**Version:** 1.101.0 (May 2026)
 **Purpose:** Practical, production-tested code examples for common scenarios
 
 ---

@@ -1,30 +1,56 @@
 ---
-title: "PydanticAI: Built-in Tools"
+title: "PydanticAI: Built-in / Native Tools"
 description: "Provider-native tools — WebSearchTool, WebFetchTool, CodeExecutionTool, ImageGenerationTool, FileSearchTool, MemoryTool, MCPServerTool, XSearchTool — and which providers support each."
 framework: pydanticai
 language: python
 ---
 
-# Built-in Tools
+# Built-in / Native Tools
 
-Verified against **pydantic-ai==1.99.0** — source module: `pydantic_ai.builtin_tools`.
+Verified against **pydantic-ai==1.101.0** — source module: `pydantic_ai.native_tools`.
 
-Built-in tools are provider-native — they execute inside the LLM provider's infrastructure, not in your Python process. You opt in via `builtin_tools=[...]` on `Agent`; PydanticAI forwards a typed config to the provider and streams the results back as `BuiltinToolCallPart` / `BuiltinToolReturnPart`.
+Native tools execute inside the LLM provider's infrastructure, not in your Python process. PydanticAI forwards a typed config to the provider and streams the results back as `NativeToolCallPart` / `NativeToolReturnPart`.
+
+## Migration note — `builtin_tools` → `capabilities`
+
+`Agent(builtin_tools=[...])` is **deprecated** in 1.101.0. The new API uses `capabilities=[...]` with provider-adaptive capability classes that fall back gracefully when a provider doesn't support the native feature:
+
+```python
+# OLD (deprecated — still works, emits PydanticAIDeprecationWarning)
+from pydantic_ai import Agent, WebSearchTool
+agent = Agent('anthropic:claude-sonnet-4-6', builtin_tools=[WebSearchTool(max_uses=3)])
+
+# NEW — preferred
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[WebSearch(max_uses=3)])
+```
+
+For raw, provider-specific tool objects (no fallback logic), use `NativeTool`:
+
+```python
+from pydantic_ai import Agent, WebSearchTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    capabilities=[NativeTool(WebSearchTool(max_uses=3))],
+)
+```
 
 ## Minimal runnable example
 
 ```python
-from pydantic_ai import Agent, WebSearchTool
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
 
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
-    builtin_tools=[WebSearchTool(max_uses=3)],
+    capabilities=[WebSearch(max_uses=3)],
 )
 result = agent.run_sync('What happened in AI news this week? Cite sources.')
 print(result.output)
 ```
-
-The `builtin_tools=` list is validated at agent construction against each model's `Model.supported_builtin_tools()`, so unsupported combinations fail fast.
 
 ## The catalogue
 
@@ -44,21 +70,41 @@ All are exported from `pydantic_ai` directly (also at `pydantic_ai.builtin_tools
 
 A tool listed as GA may still have provider-specific constraints (e.g. `blocked_domains` is Anthropic-only on `WebSearchTool`). Each class's docstring catalogs the per-provider support for every argument.
 
-## `WebSearchTool`
+## `WebSearchTool` / `WebSearch` capability
+
+Use the `WebSearch` capability for provider-adaptive search. Pass `WebSearchTool` args directly as keyword arguments:
 
 ```python
-from pydantic_ai import Agent, WebSearchTool, WebSearchUserLocation
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+from pydantic_ai.native_tools import WebSearchUserLocation
 
 agent = Agent(
-    'openai-responses:gpt-5.2',   # OpenAI Responses API required
-    builtin_tools=[
-        WebSearchTool(
-            search_context_size='high',
-            max_uses=5,
-            allowed_domains=['docs.python.org', 'peps.python.org'],
-            user_location=WebSearchUserLocation(country='US', city='San Francisco'),
-        ),
-    ],
+    'openai-responses:gpt-5.2',   # OpenAI Responses API
+    capabilities=[WebSearch(
+        search_context_size='high',
+        max_uses=5,
+        allowed_domains=['docs.python.org', 'peps.python.org'],
+        user_location=WebSearchUserLocation(country='US', city='San Francisco'),
+    )],
+)
+```
+
+Or use `NativeTool(WebSearchTool(...))` directly to skip the fallback logic:
+
+```python
+from pydantic_ai import Agent, WebSearchTool
+from pydantic_ai.capabilities import NativeTool
+from pydantic_ai.native_tools import WebSearchUserLocation
+
+agent = Agent(
+    'openai-responses:gpt-5.2',
+    capabilities=[NativeTool(WebSearchTool(
+        search_context_size='high',
+        max_uses=5,
+        allowed_domains=['docs.python.org', 'peps.python.org'],
+        user_location=WebSearchUserLocation(country='US', city='San Francisco'),
+    ))],
 )
 ```
 
@@ -78,10 +124,11 @@ Anthropic forbids both `blocked_domains` and `allowed_domains` at the same time.
 
 ```python
 from pydantic_ai import Agent, WebFetchTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
-    builtin_tools=[WebFetchTool(max_uses=3, enable_citations=True)],
+    capabilities=[NativeTool(WebFetchTool(max_uses=3, enable_citations=True))],
 )
 ```
 
@@ -98,10 +145,11 @@ Fields:
 
 ```python
 from pydantic_ai import Agent, CodeExecutionTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
-    builtin_tools=[CodeExecutionTool()],
+    capabilities=[NativeTool(CodeExecutionTool())],
 )
 result = agent.run_sync('Compute the 50th Fibonacci number.')
 ```
@@ -112,14 +160,15 @@ Runs in the provider's sandbox (Anthropic's container, OpenAI's Python interpret
 
 ```python
 from pydantic_ai import Agent, ImageGenerationTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'openai-responses:gpt-5.2',
-    builtin_tools=[ImageGenerationTool(
+    capabilities=[NativeTool(ImageGenerationTool(
         size='1024x1024',
         quality='high',
         output_format='png',
-    )],
+    ))],
 )
 result = agent.run_sync('Generate a cover image for a book about Paris.')
 ```
@@ -144,10 +193,11 @@ Generated images arrive as `FilePart`s in the response, then as `BinaryImage` in
 
 ```python
 from pydantic_ai import Agent, FileSearchTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'openai-responses:gpt-5.2',
-    builtin_tools=[FileSearchTool(file_store_ids=['vs_abc123', 'vs_xyz789'])],
+    capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_abc123', 'vs_xyz789']))],
 )
 ```
 
@@ -163,10 +213,11 @@ Anthropic-only. Enables persistent memory across runs managed by Anthropic's inf
 
 ```python
 from pydantic_ai import Agent, MemoryTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
-    builtin_tools=[MemoryTool()],
+    capabilities=[NativeTool(MemoryTool())],
 )
 ```
 
@@ -176,16 +227,17 @@ Built-in tool that asks the provider to call out to a remote MCP server. Differe
 
 ```python
 from pydantic_ai import Agent, MCPServerTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'openai-responses:gpt-5.2',
-    builtin_tools=[MCPServerTool(
+    capabilities=[NativeTool(MCPServerTool(
         id='docs-mcp',
         url='https://mcp.example.com/docs',
         authorization_token='Bearer ...',
         allowed_tools=['search', 'fetch'],
         headers={'x-org': 'acme'},
-    )],
+    ))],
 )
 ```
 
@@ -201,14 +253,15 @@ Use this when you want the provider to handle the MCP round-trip (lower latency,
 ```python
 from datetime import datetime
 from pydantic_ai import Agent, XSearchTool
+from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
     'xai:grok-3-latest',
-    builtin_tools=[XSearchTool(
+    capabilities=[NativeTool(XSearchTool(
         allowed_x_handles=['pydantic'],
         from_date=datetime(2026, 1, 1),
         include_output=True,
-    )],
+    ))],
 )
 ```
 
@@ -219,27 +272,28 @@ Fields (with validation in `__post_init__`):
 - `enable_image_understanding`, `enable_video_understanding`
 - `include_output` — emit raw search results as `BuiltinToolReturnPart` (otherwise the model only uses them internally).
 
-## Inspecting built-in tool traffic
+## Inspecting native tool traffic
 
-Built-in tool calls appear as `BuiltinToolCallPart` and `BuiltinToolReturnPart` in the message history, distinct from `ToolCallPart` / `ToolReturnPart` (which are for your function tools). Streaming events fire as `BuiltinToolCallEvent` / `BuiltinToolResultEvent`.
+Native tool calls appear as `NativeToolCallPart` and `NativeToolReturnPart` in the message history, distinct from `ToolCallPart` / `ToolReturnPart` (which are for your function tools). Streaming events fire as `NativeToolCallEvent` / `NativeToolResultEvent`.
 
 ```python
-from pydantic_ai.messages import BuiltinToolCallPart
+from pydantic_ai.messages import NativeToolCallPart
 
 for m in result.all_messages():
     for p in m.parts:
-        if isinstance(p, BuiltinToolCallPart):
+        if isinstance(p, NativeToolCallPart):
             print(p.tool_name, p.args_as_json_str())
 ```
 
-## Mixing built-in and function tools
+## Mixing native and function tools
 
 ```python
-from pydantic_ai import Agent, WebSearchTool, RunContext
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import WebSearch
 
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
-    builtin_tools=[WebSearchTool(max_uses=2)],
+    capabilities=[WebSearch(max_uses=2)],
 )
 
 @agent.tool
@@ -247,14 +301,15 @@ def internal_lookup(ctx: RunContext[None], sku: str) -> dict:
     return db.get(sku)
 ```
 
-The model sees both flavours. Built-in tool calls don't consume your function-tool retry budget.
+The model sees both flavours. Native tool calls don't consume your function-tool retry budget.
 
 ## Gotchas
 
+- **`builtin_tools=` is deprecated.** Migrate to `capabilities=[NativeTool(...)]` or the provider-adaptive wrappers (`WebSearch`, `WebFetch`, `ImageGeneration`, `MCP`).
 - **`UrlContextTool` is deprecated.** Swap to `WebFetchTool`; the serialised `kind='url_context'` still deserialises via the deprecated subclass for backward-compat.
-- **`defer_model_check=False`** (default) validates the built-in tool list against the model at construction. If you swap models via `agent.override(model=...)` to one that doesn't support the tools, you'll hit `UserError` at run time — overriding isn't auto-filtered.
+- **`defer_model_check=False`** (default) validates the native tool list against the model at construction. If you swap models via `agent.override(model=...)` to one that doesn't support the tools, you'll hit `UserError` at run time.
 - **Field support varies by provider** even on "supported" tools. The docstrings list per-field support; unsupported fields are silently ignored by some providers and raise on others.
-- **Built-in tool usage is counted against provider quotas, not PydanticAI's `tool_calls_limit`**. Use `max_uses` where available.
+- **Native tool usage is counted against provider quotas, not PydanticAI's `tool_calls_limit`**. Use `max_uses` where available.
 - **`MCPServerTool` vs. `pydantic_ai.mcp`**: the former is the provider's remote MCP client; the latter is a local MCP client. Don't register the same server twice under both — you'd get duplicate tools.
 
 ## Patterns
@@ -262,36 +317,47 @@ The model sees both flavours. Built-in tool calls don't consume your function-to
 ### 1. Research agent with web search + fetch
 
 ```python
-agent = Agent('anthropic:claude-sonnet-4-6', builtin_tools=[
-    WebSearchTool(max_uses=5),
-    WebFetchTool(max_uses=10, enable_citations=True),
+from pydantic_ai import Agent, WebFetchTool
+from pydantic_ai.capabilities import WebSearch, NativeTool
+
+agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[
+    WebSearch(max_uses=5),
+    NativeTool(WebFetchTool(max_uses=10, enable_citations=True)),
 ])
 ```
 
 ### 2. Constrain searches to a domain
 
 ```python
-WebSearchTool(allowed_domains=['docs.company.com'])
+from pydantic_ai.capabilities import WebSearch
+
+WebSearch(allowed_domains=['docs.company.com'])
 ```
 
 ### 3. Code-runner with a structured output contract
 
 ```python
 from pydantic import BaseModel
+from pydantic_ai import Agent, CodeExecutionTool
+from pydantic_ai.capabilities import NativeTool
+
 class CalcResult(BaseModel):
     answer: float
     reasoning: str
 
 agent = Agent('openai-responses:gpt-5.2',
               output_type=CalcResult,
-              builtin_tools=[CodeExecutionTool()])
+              capabilities=[NativeTool(CodeExecutionTool())])
 ```
 
 ### 4. RAG via `FileSearchTool` + fallback to local embeddings
 
 ```python
+from pydantic_ai import Agent, FileSearchTool
+from pydantic_ai.capabilities import NativeTool
+
 agent = Agent('openai-responses:gpt-5.2',
-              builtin_tools=[FileSearchTool(file_store_ids=['vs_prod'])])
+              capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_prod']))])
 
 @agent.tool
 async def fallback_search(ctx, query: str) -> list[str]:
@@ -303,11 +369,11 @@ async def fallback_search(ctx, query: str) -> list[str]:
 
 ```python
 async for event in agent.run_stream_events(prompt):
-    from pydantic_ai.messages import BuiltinToolCallEvent, BuiltinToolResultEvent
-    if isinstance(event, BuiltinToolCallEvent):
-        print(f'[builtin call] {event.part.tool_name}({event.part.args_as_json_str()})')
-    if isinstance(event, BuiltinToolResultEvent):
-        print(f'[builtin result] {event.result.content[:200]}')
+    from pydantic_ai.messages import NativeToolCallEvent, NativeToolResultEvent
+    if isinstance(event, NativeToolCallEvent):
+        print(f'[native call] {event.part.tool_name}({event.part.args_as_json_str()})')
+    if isinstance(event, NativeToolResultEvent):
+        print(f'[native result] {event.result.content[:200]}')
 ```
 
 ## Reference

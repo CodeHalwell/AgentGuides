@@ -7,7 +7,7 @@ language: python
 
 # Advanced Error Handling & Testing
 
-Verified against **pydantic-ai==1.99.0** — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==1.101.0** — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI exposes a small, predictable exception hierarchy. Understanding each exception type — when it is raised, how to catch it, and how to test that your agent handles it correctly — is essential for production-grade agents.
 
