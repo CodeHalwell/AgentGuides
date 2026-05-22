@@ -10,7 +10,7 @@ sidebar:
 
 # Command, Send & control flow — API reference
 
-Verified against **`langgraph==1.2.0`** (module: `langgraph.types`).
+Verified against **`langgraph==1.2.1`** (module: `langgraph.types`).
 
 LangGraph's control flow primitives live in `langgraph.types`:
 

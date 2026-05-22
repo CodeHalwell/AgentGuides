@@ -1,6 +1,6 @@
 ---
 title: "ToolNode, InjectedState, InjectedStore, ToolRuntime — API reference"
-description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, and ToolCallRequest interceptor — with source-verified signatures for langgraph==1.2.0."
+description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, and ToolCallRequest interceptor — with source-verified signatures for langgraph==1.2.1."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # ToolNode, InjectedState, InjectedStore, ToolRuntime — API reference
 
-Verified against **`langgraph==1.2.0`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`).
+Verified against **`langgraph==1.2.1`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`).
 
 `ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, and `ToolCallRequest` — let tools read graph state, access the long-term store, stream partial output, and intercept calls before execution.
 
@@ -612,6 +612,126 @@ def power(base: int, exponent: int) -> int:
 
 
 tool_node = ToolNode([power], wrap_tool_call=audit_wrapper)
+```
+
+### 7. Tool-based access control with `wrap_tool_call`
+
+Block tool execution entirely based on runtime state, returning a `ToolMessage` with an error instead of calling the tool:
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.tools import tool
+from langchain_core.messages import AnyMessage, AIMessage, ToolMessage
+from langgraph.graph import StateGraph, START
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt.tool_node import ToolNode, ToolCallRequest
+from langgraph.prebuilt import tools_condition
+
+
+class AppState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    user_role: str   # "admin" or "user"
+
+
+@tool
+def delete_record(record_id: str) -> str:
+    """Delete a record from the database."""
+    return f"Deleted record {record_id}"
+
+
+@tool
+def read_record(record_id: str) -> str:
+    """Read a record from the database."""
+    return f"Record {record_id}: data..."
+
+
+def make_authz_wrapper(state_key: str = "user_role", required_role: str = "admin"):
+    """Factory for an authorization wrapper that checks a state field."""
+
+    def authz_wrapper(request: ToolCallRequest, execute):
+        tool_name = request.tool_call["name"]
+        role = request.state.get(state_key, "user") if isinstance(request.state, dict) else "user"
+
+        # Only allow admin operations for privileged tools
+        if tool_name == "delete_record" and role != required_role:
+            return ToolMessage(
+                content=f"Access denied: {tool_name} requires role '{required_role}' (you have '{role}')",
+                tool_call_id=request.tool_call["id"],
+            )
+        return execute(request)
+
+    return authz_wrapper
+
+
+tools = [delete_record, read_record]
+tool_node = ToolNode(tools, wrap_tool_call=make_authz_wrapper())
+```
+
+### 8. Dynamic tool list using `ToolRuntime.tools`
+
+Access the list of all tools registered with the `ToolNode` from inside a tool:
+
+```python
+from langchain_core.tools import tool
+from langgraph.prebuilt.tool_node import ToolRuntime, ToolNode
+
+
+@tool
+def list_available_tools(runtime: ToolRuntime) -> list[str]:
+    """Return the names of all tools the agent can use."""
+    return [t.name for t in runtime.tools]
+
+
+@tool
+def get_tool_description(tool_name: str, runtime: ToolRuntime) -> str:
+    """Get the description of a specific tool by name."""
+    for t in runtime.tools:
+        if t.name == tool_name:
+            return t.description or "(no description)"
+    return f"Tool '{tool_name}' not found"
+
+
+tool_node = ToolNode([list_available_tools, get_tool_description])
+```
+
+### 9. Async `awrap_tool_call` — non-blocking wrapper
+
+When your graph runs in async mode and the wrapper itself does async work (e.g., an auth check against a remote service), use `awrap_tool_call`:
+
+```python
+import asyncio
+from langchain_core.tools import tool
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolNode, ToolCallRequest
+
+
+async def async_authz_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
+    """Async wrapper: check authorization over the network before executing."""
+    tool_name = request.tool_call["name"]
+
+    # Simulate an async permission check (e.g., fetch from an auth service)
+    await asyncio.sleep(0)   # replace with: allowed = await authz_service.check(tool_name)
+    allowed = True
+
+    if not allowed:
+        return ToolMessage(
+            content=f"Permission denied for {tool_name}",
+            tool_call_id=request.tool_call["id"],
+        )
+    return await execute(request)   # execute is also async here
+
+
+@tool
+async def async_fetch(url: str) -> str:
+    """Fetch a URL asynchronously."""
+    return f"Content from {url}"
+
+
+tool_node = ToolNode(
+    [async_fetch],
+    awrap_tool_call=async_authz_wrapper,   # used when graph runs in async mode
+)
 ```
 
 ## Gotchas
