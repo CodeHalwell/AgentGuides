@@ -5,16 +5,16 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-Latest verified release: 1.5.0 | Python 3.10+
+Latest verified release: 1.6.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version:** 1.5.0 (`agent-framework` and `agent-framework-core`)
+**Framework Version:** 1.6.0 (`agent-framework` and `agent-framework-core`)
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.5.0`).**
+> **API reference (verified against `agent-framework-core==1.6.0`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).

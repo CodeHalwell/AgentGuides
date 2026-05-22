@@ -11,7 +11,7 @@ Tools are how agents call back into your code. Agent Framework offers two ways t
 
 This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
 
-Verified against `agent-framework-core==1.5.0` (`agent_framework._tools`).
+Verified against `agent-framework-core==1.6.0` (`agent_framework._tools`).
 
 ## Minimal `@tool`
 
