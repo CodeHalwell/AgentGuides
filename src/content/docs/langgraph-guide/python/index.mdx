@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.2.1** · May 12, 2026 · Python 3.10 – 3.14
+    **v1.2.1** · May 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -127,7 +127,12 @@ older blog post or docs page, the source wins.
 - **`ToolCallTransformer` abstract class** (new in v1.2.0, `langgraph.prebuilt`) — base class for interceptors that transform tool call arguments before execution.
 - **`langgraph-checkpoint` 4.1.0** — minor checkpoint interface improvements; backward-compatible with all existing `MemorySaver`, `SqliteSaver`, `PostgresSaver` usage.
 - **`langgraph-prebuilt` 1.1.0** — ships `ToolRuntime` and `ToolCallTransformer`; all prior prebuilt symbols (`create_react_agent`, `ToolNode`, `ValidationNode`, `InjectedState`, `InjectedStore`) unchanged.
+<<<<<<< HEAD
 - All core graph symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.1` (`.routine-envs/check-0512-py`).
+=======
+- **v1.2.1 (May 2026)** — Patch release; stability and dependency updates. All core graph symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.1` (`.routine-envs/check-0522-langgraph`); all PASS.
+- **v1.2.0 (May 12)** — All core graph symbols verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`).
+>>>>>>> origin/main
 - **Prior (v1.1.x):** Type-safe streaming v2 API (`version="v2"` on `astream()`/`ainvoke()`); Pydantic/dataclass coercion; Python 3.10 – 3.14 support; time-travel fixes.
 
 <Aside type="caution" title="Verified against installed library">
@@ -192,7 +197,12 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+<<<<<<< HEAD
 | 2026-05-12 | 1.2.0 | Minor release; version card and all version references updated 1.1.10 → 1.2.0; `langgraph-checkpoint` updated 4.0.3 → 4.1.0; `langgraph-prebuilt` updated to 1.1.0. "What's new" section updated with `ToolRuntime` and `ToolCallTransformer` additions. All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.1` (`.routine-envs/check-0512-py`). | Claude routine |
+=======
+| 2026-05-22 | 1.2.1 | Patch release; version card updated 1.2.0 → 1.2.1; v1.2.1 bullet added to "What's new". All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.1` (`.routine-envs/check-0522-langgraph`); all PASS. | Claude routine |
+| 2026-05-12 | 1.2.0 | Minor release; version card and all version references updated 1.1.10 → 1.2.0; `langgraph-checkpoint` updated 4.0.3 → 4.1.0; `langgraph-prebuilt` updated to 1.1.0. "What's new" section updated with `ToolRuntime` and `ToolCallTransformer` additions. All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`). | Claude routine |
+>>>>>>> origin/main
 | 2026-04-28 | 1.1.10 | Patch release; version card and reference pages updated 1.1.9 → 1.1.10; `langgraph-checkpoint` updated 4.0.2 → 4.0.3. All key symbols verified against installed 1.1.10 (`.routine-envs/main-py-0428`). | Claude routine |
 | 2026-04-22 | 1.1.9 | Added six source-verified reference pages: [StateGraph](./reference-state-graph/), [Checkpointers](./reference-checkpointers/), [Store](./reference-store/), [Functional API](./reference-functional-api/), [Command / Send](./reference-command-and-send/), [Streaming modes](./reference-streaming-modes/). Corrected stale guidance: `create_react_agent` deprecated in v1.0; `from_conn_string` is a context manager; `ShallowPostgresSaver` deprecated. |
 | 2026-04-21 | 1.1.8 | Index redesigned into Zero → Hero chaptered tutorial + Jump-to-topic grid; duplicated sections removed. |

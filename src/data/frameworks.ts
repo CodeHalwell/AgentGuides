@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.99.0',
+    version: 'v1.101.0',
   },
   {
     id: 'openai-agents',
@@ -92,7 +92,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'conditional-routing'],
-    version: 'v1.2.0',
+    version: 'v1.2.1',
   },
   {
     id: 'langgraph-ts',
@@ -157,7 +157,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'v1.4.0',
+    version: 'v1.6.0',
   },
   {
     id: 'google-adk',
@@ -179,7 +179,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.2.82',
+    version: 'v0.2.85',
   },
   {
     id: 'claude-sdk-ts',
@@ -190,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.3.145',
+    version: 'v0.3.148',
   },
   {
     id: 'mistral',

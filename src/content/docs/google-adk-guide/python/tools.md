@@ -253,17 +253,284 @@ Connection params:
 
 ## OpenAPI tools
 
-`APIHubToolset` and `ApiRegistry` generate tools from OpenAPI specs:
+### `OpenAPIToolset`
+
+`OpenAPIToolset` parses an OpenAPI 3.x spec and generates one `RestApiTool` per operation. Each tool's name comes from the operation's `operationId` (snake-cased and truncated to 60 characters).
 
 ```python
-from google.adk.tools import ApiRegistry
+import yaml
+from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+from google.adk.agents import LlmAgent
 
-registry = ApiRegistry()
-registry.register_openapi_spec(spec_path="./petstore.yaml", base_url="https://petstore.example")
-tools = registry.get_tools()
+# --- From a YAML spec string ---------------------------------------------------
+with open("petstore.yaml") as f:
+    spec_yaml = f.read()
+
+toolset = OpenAPIToolset(
+    spec_str=spec_yaml,
+    spec_str_type="yaml",           # or "json"
+    tool_name_prefix="petstore_",   # avoids collisions when using multiple specs
+)
+
+# --- From a pre-parsed dict ----------------------------------------------------
+with open("petstore.yaml") as f:
+    spec_dict = yaml.safe_load(f)
+
+toolset = OpenAPIToolset(spec_dict=spec_dict)
+
+# --- Use all tools from the spec -----------------------------------------------
+agent = LlmAgent(
+    name="petstore_agent",
+    model="gemini-2.5-flash",
+    instruction="Help the user browse and manage the Petstore catalogue.",
+    tools=[toolset],
+)
+
+# --- Use only a specific operation ---------------------------------------------
+list_pets_tool = toolset.get_tool("list_pets")   # by operationId (snake_case)
+agent2 = LlmAgent(
+    name="lister",
+    model="gemini-2.5-flash",
+    tools=[list_pets_tool],
+)
 ```
 
-Each operation becomes a `BaseTool` whose parameters are the path/query/body fields of the operation.
+**Constructor args** (`tools/openapi_tool/openapi_spec_parser/openapi_toolset.py`):
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `spec_dict` | `None` | Pre-parsed spec dictionary |
+| `spec_str` | `None` | Raw spec string (use when `spec_dict` is `None`) |
+| `spec_str_type` | `"json"` | `"json"` or `"yaml"` |
+| `auth_scheme` | `None` | Applied to every generated tool |
+| `auth_credential` | `None` | Applied to every generated tool |
+| `credential_key` | `None` | Shared credential cache key for all tools |
+| `tool_filter` | `None` | List of operationIds or `ToolPredicate` |
+| `tool_name_prefix` | `None` | Prepended to every tool name |
+| `ssl_verify` | `None` | `True` / `False` / path to CA bundle / `ssl.SSLContext` |
+| `header_provider` | `None` | `(ReadonlyContext) -> dict[str, str]` — dynamic per-request headers |
+| `preserve_property_names` | `False` | Keep camelCase names instead of converting to snake_case |
+
+### Adding auth to an OpenAPI toolset
+
+Use the `auth_helpers` module to create scheme/credential pairs without building the Pydantic objects manually:
+
+```python
+from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+from google.adk.tools.openapi_tool.auth.auth_helpers import (
+    token_to_scheme_credential,
+    service_account_scheme_credential,
+    openid_url_to_scheme_credential,
+    service_account_dict_to_scheme_credential,
+)
+from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
+
+# ── API key in a header ────────────────────────────────────────────────────────
+scheme, cred = token_to_scheme_credential(
+    token_type="apikey",
+    location="header",
+    name="X-API-Key",
+    credential_value="my-secret-api-key",
+)
+toolset = OpenAPIToolset(spec_dict=spec, auth_scheme=scheme, auth_credential=cred)
+
+# ── Bearer token (OAuth2 token already obtained) ───────────────────────────────
+scheme, cred = token_to_scheme_credential(
+    token_type="oauth2Token",
+    location="header",
+    name="Authorization",
+    credential_value="ya29.access_token...",
+)
+
+# ── Google Service Account (JSON key file) ─────────────────────────────────────
+import json
+with open("service_account.json") as f:
+    sa_dict = json.load(f)
+
+scheme, cred = service_account_dict_to_scheme_credential(
+    config=sa_dict,
+    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+)
+toolset = OpenAPIToolset(spec_dict=spec, auth_scheme=scheme, auth_credential=cred)
+
+# ── OpenID Connect via discovery URL ──────────────────────────────────────────
+scheme, cred = openid_url_to_scheme_credential(
+    openid_url="https://accounts.google.com/.well-known/openid-configuration",
+    scopes=["openid", "email", "profile"],
+    credential_dict={
+        "client_id": "YOUR_CLIENT_ID",
+        "client_secret": "YOUR_CLIENT_SECRET",
+        "redirect_uri": "http://localhost:8080/callback",
+    },
+)
+```
+
+### Dynamic headers per request
+
+```python
+from google.adk.agents.readonly_context import ReadonlyContext
+
+def add_tenant_header(ctx: ReadonlyContext) -> dict[str, str]:
+    return {
+        "X-Tenant-ID": ctx.state.get("tenant_id", "default"),
+        "X-Correlation-ID": ctx.invocation_id[:16],
+    }
+
+toolset = OpenAPIToolset(
+    spec_dict=spec,
+    header_provider=add_tenant_header,
+)
+```
+
+### SSL certificate pinning (enterprise proxy)
+
+```python
+import ssl
+
+# Trust a custom CA bundle (e.g. corporate TLS-intercepting proxy)
+toolset = OpenAPIToolset(
+    spec_dict=spec,
+    ssl_verify="/etc/ssl/corp-ca-bundle.pem",  # path to PEM CA file
+)
+
+# Or pass an ssl.SSLContext for full control
+ctx = ssl.create_default_context()
+ctx.load_verify_locations("/etc/ssl/corp-ca.pem")
+toolset = OpenAPIToolset(spec_dict=spec, ssl_verify=ctx)
+```
+
+### `APIHubToolset`
+
+`APIHubToolset` fetches specs from Google Cloud API Hub and wraps them as `OpenAPIToolset` instances. Requires `google-adk[extensions]`.
+
+```python
+from google.adk.tools import APIHubToolset
+
+toolset = APIHubToolset(
+    apihub_resource_name=(
+        "projects/my-project/locations/us-central1"
+        "/apis/petstore-api/versions/v1/specs/openapi"
+    ),
+    auth_scheme=scheme,
+    auth_credential=cred,
+)
+agent = LlmAgent(name="hub_agent", tools=[toolset])
+```
+
+## `ApplicationIntegrationToolset`
+
+`ApplicationIntegrationToolset` generates tools from a Google Cloud Application Integration workflow or an Integration Connector resource. It automatically calls the integration's trigger or the connector's entity/action APIs.
+
+```python
+from google.adk.tools.application_integration_tool.application_integration_toolset import (
+    ApplicationIntegrationToolset,
+)
+from google.adk.agents import LlmAgent
+
+# ── Trigger an API-triggered integration ──────────────────────────────────────
+integration_toolset = ApplicationIntegrationToolset(
+    project="my-gcp-project",
+    location="us-central1",
+    integration="order-processor",           # integration name
+    triggers=["api_trigger/process_order"],  # trigger IDs
+    tool_name_prefix="order_",
+    tool_instructions="Use these tools to manage order processing workflows.",
+)
+
+agent = LlmAgent(
+    name="order_agent",
+    model="gemini-2.5-flash",
+    instruction="Help users track and process orders.",
+    tools=[integration_toolset],
+)
+```
+
+```python
+# ── Use an Integration Connector (Salesforce, ServiceNow, etc.) ───────────────
+connector_toolset = ApplicationIntegrationToolset(
+    project="my-gcp-project",
+    location="us-central1",
+    connection="salesforce-prod",            # connector name in Integration Connectors
+    entity_operations={
+        "Account": ["LIST", "GET", "CREATE"],
+        "Opportunity": ["LIST", "GET"],
+    },
+    actions=["QueryRecords"],
+    tool_name_prefix="sf_",
+)
+```
+
+**Constructor args:**
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `project` | required | GCP project ID |
+| `location` | required | GCP region |
+| `integration` | `None` | Integration name (for API-triggered flows) |
+| `triggers` | `None` | Trigger IDs within the integration |
+| `connection` | `None` | Connector name (for connector-based flows) |
+| `entity_operations` | `None` | `{entity_id: ["LIST","GET","CREATE",...]}` — `[]` means all ops |
+| `actions` | `None` | Connector action names to expose |
+| `tool_name_prefix` | `""` | Prepended to generated tool names |
+| `tool_instructions` | `""` | Appended to each tool description |
+| `service_account_json` | `None` | Service account JSON string (falls back to ADC when `None`) |
+| `auth_scheme` | `None` | Override auth scheme |
+| `auth_credential` | `None` | Override auth credential |
+| `tool_filter` | `None` | Filter generated tools |
+
+> Exactly one of (`integration` + `triggers`) or (`connection` + one of `entity_operations`/`actions`) must be provided.
+
+## `ToolboxToolset`
+
+`ToolboxToolset` connects to a running [MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox-sdk-python) server and exposes its registered tools as ADK tools. It requires `pip install google-adk[toolbox]`.
+
+```python
+from google.adk.tools.toolbox_toolset import ToolboxToolset
+from google.adk.agents import LlmAgent
+
+# ── Connect to a local toolbox server ─────────────────────────────────────────
+toolset = ToolboxToolset(
+    server_url="http://127.0.0.1:5000",
+    toolset_name="my-db-toolset",       # expose only this named toolset
+    bound_params={
+        "user_id": lambda: "current_user",   # bind param from a callable
+        "max_rows": 100,                      # or a static value
+    },
+)
+
+agent = LlmAgent(
+    name="db_agent",
+    model="gemini-2.5-flash",
+    instruction="Answer database questions using the available tools.",
+    tools=[toolset],
+)
+```
+
+```python
+# ── Load specific tools by name ───────────────────────────────────────────────
+toolset = ToolboxToolset(
+    server_url="http://toolbox.internal:5000",
+    tool_names=["search_products", "get_order"],   # load only these tools
+    auth_token_getters={
+        "google-auth": lambda: _get_google_id_token(),  # for OIDC-gated toolboxes
+    },
+    additional_headers={"X-Tenant": "acme"},
+)
+```
+
+**Constructor args:**
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `server_url` | required | URL of the running toolbox server |
+| `toolset_name` | `None` | Load all tools from this named toolset |
+| `tool_names` | `None` | Load only these specific tools |
+| `auth_token_getters` | `None` | `{service_name: () -> str}` for per-service auth |
+| `bound_params` | `None` | `{param: value_or_callable}` — pre-bound SQL/tool params |
+| `credentials` | `None` | `CredentialConfig` from `toolbox_adk` |
+| `additional_headers` | `None` | Static headers for every toolbox request |
+
+> When both `toolset_name` and `tool_names` are omitted, **all** registered tools are loaded.
 
 ## Custom `BaseTool`
 
