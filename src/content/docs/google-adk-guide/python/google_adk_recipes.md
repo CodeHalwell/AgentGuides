@@ -1427,4 +1427,250 @@ agent = LlmAgent(
 
 ---
 
+## OpenAPI Agent
+
+An agent that talks to an external REST API described by an OpenAPI spec, with
+API-key authentication and per-request tenant headers.
+
+```python
+import asyncio
+import yaml
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+from google.adk.tools.openapi_tool.auth.auth_helpers import token_to_scheme_credential
+from google.adk.agents.readonly_context import ReadonlyContext
+
+# ── Example: Petstore-style spec ──────────────────────────────────────────────
+PETSTORE_SPEC = """
+openapi: "3.0.0"
+info:
+  title: Petstore
+  version: "1.0"
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A list of pets
+  /pets/{petId}:
+    get:
+      operationId: showPetById
+      summary: Get a pet by ID
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A single pet
+"""
+
+# ── Auth: API key in header ────────────────────────────────────────────────────
+scheme, cred = token_to_scheme_credential(
+    token_type="apikey",
+    location="header",
+    name="X-API-Key",
+    credential_value="my-secret-api-key",
+)
+
+# ── Dynamic per-request headers (e.g. correlation ID) ─────────────────────────
+def add_correlation_header(ctx: ReadonlyContext) -> dict[str, str]:
+    return {"X-Correlation-ID": ctx.invocation_id[:16]}
+
+toolset = OpenAPIToolset(
+    spec_str=PETSTORE_SPEC,
+    spec_str_type="yaml",
+    auth_scheme=scheme,
+    auth_credential=cred,
+    header_provider=add_correlation_header,
+    tool_name_prefix="petstore_",
+    # ssl_verify="/etc/ssl/corp-ca.pem"  # uncomment for corporate TLS proxies
+)
+
+agent = LlmAgent(
+    name="petstore_agent",
+    model="gemini-2.5-flash",
+    instruction="Help the user look up and manage pets in the store.",
+    tools=[toolset],
+)
+
+async def main():
+    runner = InMemoryRunner(agent=agent, app_name="petstore")
+    events = await runner.run_debug("List all the pets available.", user_id="u1", session_id="s1")
+    print(events[-1].content.parts[0].text)
+
+asyncio.run(main())
+```
+
+---
+
+## Observability with Cloud Trace
+
+Wire up Google Cloud Trace before your first runner invocation so every agent,
+model, and tool call is captured as a span.
+
+```python
+import asyncio
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.runners import Runner
+from google.adk.sessions import DatabaseSessionService
+from google.adk.telemetry.google_cloud import get_gcp_exporters
+from google.adk.telemetry.setup import maybe_set_otel_providers
+from google.genai import types
+
+# Prerequisite: pip install opentelemetry-exporter-gcp-trace
+
+agent = LlmAgent(
+    name="traced_agent",
+    model="gemini-2.5-flash",
+    instruction="Answer questions and use tools as needed.",
+)
+
+app_container = App(name="traced_app", root_agent=agent)
+runner: Runner | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global runner
+    # Wire Cloud Trace BEFORE creating the runner
+    maybe_set_otel_providers([get_gcp_exporters(enable_cloud_tracing=True)])
+
+    runner = Runner(
+        app=app_container,
+        session_service=DatabaseSessionService(db_url=os.environ["SESSION_DB_URL"]),
+    )
+    yield
+    await runner.close()
+
+
+web_app = FastAPI(lifespan=lifespan)
+
+
+@web_app.post("/chat/{session_id}")
+async def chat(session_id: str, body: dict):
+    user_id = body.get("user_id", "anon")
+    text = body.get("message", "")
+
+    svc = runner.session_service
+    if not await svc.get_session(app_name="traced_app", user_id=user_id, session_id=session_id):
+        await svc.create_session(app_name="traced_app", user_id=user_id, session_id=session_id)
+
+    reply = ""
+    async for event in runner.run_async(
+        user_id=user_id,
+        session_id=session_id,
+        new_message=types.Content(role="user", parts=[types.Part(text=text)]),
+    ):
+        if event.is_final_response() and event.content:
+            reply = "".join(p.text or "" for p in event.content.parts or [])
+    return {"reply": reply}
+```
+
+Every `run_async` call emits an `adk.invocation` root span with child spans for each agent, model call, and tool. Spans are visible in the Google Cloud Trace console under your project.
+
+---
+
+## Multi-Model Agent System
+
+Each agent uses a different model selected for cost and capability:
+
+```python
+import asyncio
+import os
+from google.adk.agents import LlmAgent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.runners import InMemoryRunner
+from google.adk.tools import google_search
+
+# Requires: pip install google-adk[extensions]
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+# Fast Gemini Flash for routing
+triage = LlmAgent(
+    name="triage",
+    model="gemini-2.5-flash",
+    instruction=(
+        "Classify the user's question as exactly one of: "
+        "'research', 'code', or 'billing'. Reply with only the label."
+    ),
+)
+
+# Claude for deep research (high-quality reasoning)
+researcher = LlmAgent(
+    name="researcher",
+    model=LiteLlm(model="anthropic/claude-opus-4-5"),
+    description="Answers research questions with citations.",
+    instruction="Research the question thoroughly and cite at least two sources.",
+    tools=[google_search],
+)
+
+# GPT-4o for code (strong at coding tasks)
+coder = LlmAgent(
+    name="coder",
+    model=LiteLlm(model="openai/gpt-4o"),
+    description="Writes and explains code.",
+    instruction="Provide a working Python example and explain each step.",
+)
+
+# Cheap GPT-4o-mini for billing lookups (simple task, cost-sensitive)
+billing = LlmAgent(
+    name="billing",
+    model=LiteLlm(model="openai/gpt-4o-mini"),
+    description="Handles billing and account enquiries.",
+    instruction="Answer billing questions concisely.",
+)
+
+root = LlmAgent(
+    name="router",
+    model="gemini-2.5-flash",
+    instruction=(
+        "Route the user to the right specialist. "
+        "For research questions use `researcher`. "
+        "For code questions use `coder`. "
+        "For billing questions use `billing`."
+    ),
+    sub_agents=[researcher, coder, billing],
+)
+
+
+async def main():
+    runner = InMemoryRunner(agent=root, app_name="multi_model")
+    await runner.session_service.create_session(
+        app_name="multi_model", user_id="u1", session_id="s1"
+    )
+
+    questions = [
+        "How does RAFT consensus work?",
+        "Write a Python function to check if a string is a palindrome.",
+        "What's included in the Pro plan?",
+    ]
+
+    for q in questions:
+        events = await runner.run_debug(q, user_id="u1", session_id="s1")
+        print(f"Q: {q}")
+        print(f"A: {events[-1].content.parts[0].text}\n")
+
+
+asyncio.run(main())
+```
+
+---
+
 *These recipes provide practical starting points for common ADK use cases. Adapt and extend them for your specific requirements.*

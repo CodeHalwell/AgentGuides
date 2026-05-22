@@ -71,7 +71,7 @@ python3 -m venv adk_env
 source adk_env/bin/activate  # On Windows: adk_env\Scripts\activate
 
 # Install the ADK package
-pip install google-adk>=1.30.0
+pip install google-adk>=2.0.0
 
 # Verify installation
 python -c "import google.adk; print('ADK installed successfully')"
@@ -4010,7 +4010,7 @@ class CodeReviewAgent(SpecialisedAgent):
 
 ---
 
-## Graph-Based Agent Workflows (v1.25.0+)
+## Graph-Based Agent Workflows (available since v1.25.0; use `Workflow` in 2.x)
 
 `GraphAgent` enables stateful, graph-based multi-agent orchestration with visual tooling:
 

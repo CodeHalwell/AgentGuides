@@ -924,46 +924,72 @@ async def monitored_agent_call(agent, query: str):
 
 ### Distributed Tracing
 
+Use the ADK-native `maybe_set_otel_providers` / `get_gcp_exporters` API. Call it once at app startup, before creating any `Runner`:
+
 ```python
-from google.cloud import trace_v2
-from opentelemetry import trace, metrics
+# Prerequisite: pip install opentelemetry-exporter-gcp-trace
+from google.adk.telemetry.google_cloud import get_gcp_exporters
+from google.adk.telemetry.setup import maybe_set_otel_providers
+
+def setup_distributed_tracing():
+    """Wire Cloud Trace, Cloud Monitoring, and Cloud Logging for ADK."""
+    maybe_set_otel_providers([
+        get_gcp_exporters(
+            enable_cloud_tracing=True,
+            enable_cloud_metrics=True,
+            enable_cloud_logging=True,
+        )
+    ])
+
+# Call this once at startup — before the first Runner is constructed
+setup_distributed_tracing()
+```
+
+`maybe_set_otel_providers` sets up `TracerProvider`, `MeterProvider`, and `LoggerProvider` in one call and will **not** override providers that were already set externally (useful when embedding ADK in a larger OTel-instrumented service).
+
+For OTLP-compatible backends (Jaeger, Grafana Tempo, Honeycomb, etc.):
+
+```python
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from google.adk.telemetry.setup import OTelHooks, maybe_set_otel_providers
+
+maybe_set_otel_providers([
+    OTelHooks(
+        span_processors=[
+            BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
+        ]
+    )
+])
+```
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` in the environment and call `maybe_set_otel_providers([])` to let the SDK auto-configure from env vars.
+
+```python
+# Legacy manual approach (still works, but the ADK-native API above is preferred)
+from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.gcp_trace import CloudTraceExporter
 
-def setup_distributed_tracing(project_id: str):
-    """Set up distributed tracing for ADK."""
-    
-    # Create tracer provider
+def setup_distributed_tracing_legacy(project_id: str):
     tracer_provider = TracerProvider()
-    
-    # Add Cloud Trace exporter
-    cloud_trace_exporter = CloudTraceExporter(project_id=project_id)
     tracer_provider.add_span_processor(
-        BatchSpanProcessor(cloud_trace_exporter)
+        BatchSpanProcessor(CloudTraceExporter(project_id=project_id))
     )
-    
-    # Set as global tracer provider
-    trace.set_tracer_provider(tracer_provider)
-    
-    return trace.get_tracer(__name__)
+    otel_trace.set_tracer_provider(tracer_provider)
+    return otel_trace.get_tracer(__name__)
 
-# Usage
-tracer = setup_distributed_tracing("production-project")
+tracer = setup_distributed_tracing_legacy("production-project")
 
 async def traced_agent_call(agent, query: str):
-    """Execute agent with tracing."""
-    
     with tracer.start_as_current_span("agent_call") as span:
         span.set_attribute("agent.name", agent.name)
         span.set_attribute("query", query)
-        
         try:
-            # Call agent
             response = "result"
             span.set_attribute("status", "success")
             return response
-        
         except Exception as e:
             span.set_attribute("status", "error")
             span.set_attribute("error.type", type(e).__name__)

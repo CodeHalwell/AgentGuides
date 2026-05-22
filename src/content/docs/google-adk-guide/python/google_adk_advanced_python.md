@@ -656,33 +656,193 @@ gcloud run deploy adk-assistant \
 
 ## Observability — OpenTelemetry
 
-ADK emits OpenTelemetry traces via `google.adk.telemetry`. Export to Cloud Trace:
+ADK emits OpenTelemetry traces, metrics, and logs via `google.adk.telemetry`. Every `run_async` call creates a root span named `adk.invocation`; tool calls and agent-to-agent transfers create child spans.
+
+### Using the ADK-native `maybe_set_otel_providers`
+
+The recommended way to wire exporters is `maybe_set_otel_providers` from `google.adk.telemetry.setup`. It accepts `OTelHooks` bundles — dataclasses that carry span processors, metric readers, and log processors — and respects providers that were already set (it will not override an existing provider).
 
 ```python
-from opentelemetry import trace
-from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
-provider = TracerProvider()
-provider.add_span_processor(
-    BatchSpanProcessor(CloudTraceSpanExporter())
-)
-trace.set_tracer_provider(provider)
-```
+from google.adk.telemetry.setup import OTelHooks, maybe_set_otel_providers
 
-Or export to any OTLP-compatible backend (Jaeger, Tempo, etc.):
-
-```python
+# ── OTLP collector (Jaeger, Tempo, Grafana, etc.) ─────────────────────────────
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 
-provider.add_span_processor(
-    BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
+hooks = OTelHooks(
+    span_processors=[BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))],
+    metric_readers=[PeriodicExportingMetricReader(OTLPMetricExporter(endpoint="http://otel-collector:4317"))],
+    log_record_processors=[BatchLogRecordProcessor(OTLPLogExporter(endpoint="http://otel-collector:4317"))],
+)
+
+maybe_set_otel_providers([hooks])
+```
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` in the environment and `maybe_set_otel_providers([])` will pick it up automatically via the standard OTel SDK env var — no exporter objects needed.
+
+### Google Cloud Trace, Monitoring, and Logging
+
+```python
+from google.adk.telemetry.google_cloud import get_gcp_exporters
+from google.adk.telemetry.setup import maybe_set_otel_providers
+
+gcp_hooks = get_gcp_exporters(
+    enable_cloud_tracing=True,
+    enable_cloud_metrics=True,
+    enable_cloud_logging=True,
+    # google_auth=(credentials, project_id)  # optional; defaults to google.auth.default()
+)
+
+maybe_set_otel_providers([gcp_hooks])
+```
+
+`get_gcp_exporters` wires Cloud Trace, Cloud Monitoring, and Cloud Logging via the standard GCP OTel exporters. Install them first:
+
+```bash
+pip install opentelemetry-exporter-gcp-trace opentelemetry-exporter-gcp-monitoring opentelemetry-exporter-gcp-logging
+```
+
+### Wiring telemetry in a FastAPI app
+
+Call `maybe_set_otel_providers` inside `lifespan` so it runs before the first ADK invocation:
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from google.adk.telemetry.google_cloud import get_gcp_exporters
+from google.adk.telemetry.setup import maybe_set_otel_providers
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    maybe_set_otel_providers([get_gcp_exporters(enable_cloud_tracing=True)])
+    yield
+
+web_app = FastAPI(lifespan=lifespan)
+```
+
+**What ADK instruments** (span names emitted by `google.adk.telemetry`):
+
+| Span | Key attributes |
+|---|---|
+| `adk.invocation` | `invocation_id`, `session_id`, `user_id`, `app_name` |
+| `adk.agent.<name>` | `agent_name`, `agent_class` |
+| `adk.tool.<name>` | `tool_name`, `tool_type` |
+| `adk.model.<model>` | `model`, `prompt_tokens`, `output_tokens` |
+
+## Alternative model providers
+
+### LiteLlm — any OpenAI-compatible endpoint
+
+`LiteLlm` routes through [LiteLLM](https://github.com/BerriAI/litellm), giving access to OpenAI, Anthropic, Cohere, Together.ai, Ollama, and hundreds of other providers. Requires `pip install google-adk[extensions]`.
+
+```python
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.agents import LlmAgent
+import os
+
+# ── OpenAI GPT-4o ─────────────────────────────────────────────────────────────
+os.environ["OPENAI_API_KEY"] = "sk-..."
+
+agent = LlmAgent(
+    name="gpt_agent",
+    model=LiteLlm(model="openai/gpt-4o"),
+    instruction="You are a helpful assistant.",
+)
+
+# ── Anthropic Claude (via LiteLLM) ─────────────────────────────────────────────
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+
+agent = LlmAgent(
+    name="claude_litellm",
+    model=LiteLlm(model="anthropic/claude-opus-4-5"),
+    instruction="You are a thoughtful assistant.",
+)
+
+# ── Azure OpenAI ──────────────────────────────────────────────────────────────
+os.environ["AZURE_API_KEY"] = "..."
+os.environ["AZURE_API_BASE"] = "https://my-resource.openai.azure.com"
+os.environ["AZURE_API_VERSION"] = "2024-02-01"
+
+agent = LlmAgent(
+    name="azure_agent",
+    model=LiteLlm(model="azure/gpt-4o"),
+    instruction="Answer questions concisely.",
+)
+
+# ── Local Ollama ───────────────────────────────────────────────────────────────
+agent = LlmAgent(
+    name="local_agent",
+    model=LiteLlm(model="ollama/llama3.2", api_base="http://localhost:11434"),
+    instruction="Run locally.",
 )
 ```
 
-Every `run_async` call creates a root span named `adk.invocation`; tool calls and agent-to-agent transfers create child spans.
+`LiteLlm` constructor args: `model` (LiteLLM model string), `api_base` (custom endpoint), plus any LiteLLM kwarg (`temperature`, `timeout`, `num_retries`, etc.).
+
+### Anthropic Claude via `AnthropicLlm` (direct)
+
+`AnthropicLlm` is a direct Anthropic SDK integration (no LiteLLM proxy). Requires `pip install google-adk[extensions]`.
+
+```python
+from google.adk.models.anthropic_llm import Claude
+from google.adk.agents import LlmAgent
+import os
+
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+
+agent = LlmAgent(
+    name="claude_direct",
+    model=Claude(model="claude-opus-4-5"),   # or "claude-sonnet-4-6" / "claude-haiku-4-5-20251001"
+    instruction="You are a helpful assistant.",
+)
+```
+
+The `"claude-"` prefix is registered in `LLMRegistry`, so a bare string also works:
+
+```python
+agent = LlmAgent(name="a", model="claude-opus-4-5")
+```
+
+### Mixing models in a multi-agent system
+
+Each agent can use a different model — route expensive reasoning to a powerful model and simple triage to a cheap one:
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.models.anthropic_llm import Claude
+
+triage = LlmAgent(
+    name="triage",
+    model="gemini-2.5-flash",                 # fast and cheap
+    instruction="Classify the request as 'technical' or 'billing'.",
+)
+
+technical = LlmAgent(
+    name="technical",
+    model=Claude(model="claude-opus-4-5"),    # deep reasoning
+    description="Handles complex technical questions.",
+    instruction="Provide a detailed technical answer with code examples.",
+)
+
+billing = LlmAgent(
+    name="billing",
+    model=LiteLlm(model="openai/gpt-4o-mini"),   # cost-optimised
+    description="Handles billing enquiries.",
+    instruction="Look up the user's account and answer billing questions.",
+)
+
+root = LlmAgent(
+    name="router",
+    model="gemini-2.5-flash",
+    instruction="Route requests to the right specialist.",
+    sub_agents=[technical, billing],
+)
 
 ## Security best practices
 
