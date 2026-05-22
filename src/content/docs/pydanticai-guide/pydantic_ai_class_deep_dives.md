@@ -1,13 +1,13 @@
 ---
 title: "PydanticAI: Class Deep Dives"
-description: "Source-verified deep dives into AgentRun, AgentRunResult, ConcurrencyLimiter, the Direct API, capture_run_messages, format_as_xml, common_tools, ExternalToolset, FilteredToolset, and FunctionToolset with instructions."
+description: "Source-verified deep dives into AgentRun, AgentRunResult, ConcurrencyLimiter, the Direct API, capture_run_messages, Tool advanced params, ModelSettings, Hooks, Thinking, WebSearch, UsageLimits, and more."
 framework: pydanticai
 language: python
 ---
 
 # PydanticAI: Class Deep Dives
 
-Verified against **pydantic-ai==1.99.0** — each section links to the source module inspected.
+Verified against **pydantic-ai==1.101.0** — each section links to the source module inspected.
 
 This guide covers twelve classes/utilities from the installed source that get light treatment elsewhere. Every example is derived directly from the `__init__`, docstrings, and behaviour seen in the installed package.
 
@@ -1516,9 +1516,697 @@ asyncio.run(main())
 
 ---
 
+## 13. `Tool` — advanced constructor parameters
+
+Source: `pydantic_ai/tools.py` — `Tool[AgentDepsT]`
+
+`@agent.tool` and `@agent.tool_plain` are convenient but reach for `Tool(fn, ...)` directly when you need the full parameter surface.
+
+### Full constructor reference
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `function` | callable | required | The Python function to expose |
+| `takes_ctx` | `bool \| None` | auto-detect | `True` means first arg is `RunContext` |
+| `max_retries` | `int \| None` | None (inherit) | Retry budget for this tool; overrides agent-level default |
+| `name` | `str \| None` | function name | Name sent to the model |
+| `description` | `str \| None` | from docstring | Description sent to the model |
+| `prepare` | `ToolPrepareFunc \| None` | None | Hook called every step to mutate or suppress the tool definition |
+| `args_validator` | `ArgsValidatorFunc \| None` | None | Called after arg validation, before execution; raise `ModelRetry` to reject |
+| `docstring_format` | `DocstringFormat` | `'auto'` | `'google'`, `'numpy'`, `'sphinx'`, `'auto'` |
+| `require_parameter_descriptions` | `bool` | `False` | Raise at registration if any parameter lacks a description |
+| `strict` | `bool \| None` | None | OpenAI/Anthropic strict JSON schema mode |
+| `sequential` | `bool` | `False` | Prevent this tool from running in parallel with others |
+| `requires_approval` | `bool` | `False` | Raise `ApprovalRequired` before execution — HITL gate |
+| `metadata` | `dict \| None` | None | Arbitrary tags for filtering and toolset rules |
+| `timeout` | `float \| None` | None | Seconds before a `ModelRetry` is sent back automatically |
+
+### `args_validator` — validate arguments before execution
+
+`ArgsValidatorFunc` receives the same typed parameters as the tool itself (with `RunContext` first when `takes_ctx=True`). Raise `ModelRetry` to reject.
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext, Tool
+from pydantic_ai.exceptions import ModelRetry
+
+def validate_age(ctx: RunContext[None], age: int) -> None:
+    if age < 0 or age > 150:
+        raise ModelRetry(f'Age {age} is not plausible. Please provide a real age.')
+
+def get_birth_year(ctx: RunContext[None], age: int) -> int:
+    return 2026 - age
+
+agent = Agent(
+    'openai:gpt-4o',
+    tools=[Tool(get_birth_year, args_validator=validate_age)],
+)
+
+result = agent.run_sync('What year was someone born if they are 30 years old?')
+print(result.output)
+```
+
+### `prepare` — conditional and dynamic tool definitions
+
+`prepare` is called before each model request. Return `None` to hide the tool from this step, or a modified `ToolDefinition` to change its schema on the fly.
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext, Tool
+from pydantic_ai.tools import ToolDefinition
+
+@dataclass
+class Deps:
+    is_admin: bool
+
+async def admin_delete(ctx: RunContext[Deps], item_id: str) -> str:
+    return f'Deleted {item_id}'
+
+async def only_for_admins(
+    ctx: RunContext[Deps], tool_def: ToolDefinition
+) -> ToolDefinition | None:
+    return tool_def if ctx.deps.is_admin else None
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=Deps,
+    tools=[Tool(admin_delete, prepare=only_for_admins)],
+)
+
+async def main():
+    # Non-admin: tool hidden from the model
+    result = await agent.run('Delete item 42', deps=Deps(is_admin=False))
+    print('non-admin:', result.output)
+
+    # Admin: tool visible
+    result = await agent.run('Delete item 42', deps=Deps(is_admin=True))
+    print('admin:', result.output)
+
+asyncio.run(main())
+```
+
+### `requires_approval` — human-in-the-loop gate
+
+When `requires_approval=True`, calling the tool raises `ApprovalRequired`. The run terminates with a `DeferredToolRequests` output so your code can inspect the pending call, show it to a human, then resume.
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext, Tool
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
+
+def send_email(ctx: RunContext[None], to: str, subject: str, body: str) -> str:
+    return f'Email sent to {to}: {subject}'
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[str, DeferredToolRequests],
+    tools=[Tool(send_email, requires_approval=True)],
+)
+
+async def main():
+    result = await agent.run('Send a welcome email to alice@example.com')
+
+    if isinstance(result.output, DeferredToolRequests):
+        print('Pending approvals:')
+        for call in result.output.approvals:
+            print(f'  {call.tool_name}({call.args_as_dict()})')
+
+        # User approves all calls
+        approvals = {call.tool_call_id: ToolApproved() for call in result.output.approvals}
+        result2 = await agent.run(
+            'continue',
+            message_history=result.all_messages(),
+            deferred_tool_results=DeferredToolResults(approvals=approvals),
+        )
+        print('Final:', result2.output)
+    else:
+        print(result.output)
+
+asyncio.run(main())
+```
+
+### `sequential` — enforce serial execution
+
+When the model calls multiple tools in one step, PydanticAI normally runs them in parallel. Mark a tool `sequential=True` to force it to run alone (never concurrently with other tools that step).
+
+```python
+from pydantic_ai import Agent, RunContext, Tool
+
+def write_file(ctx: RunContext[None], path: str, content: str) -> str:
+    # Must not run concurrently with other file writes
+    return f'Written {len(content)} bytes to {path}'
+
+agent = Agent(
+    'openai:gpt-4o',
+    tools=[Tool(write_file, sequential=True)],
+)
+```
+
+### `timeout` — kill slow tools automatically
+
+```python
+import asyncio
+import time
+from pydantic_ai import Agent, RunContext, Tool
+
+def slow_operation(ctx: RunContext[None], n: int) -> str:
+    time.sleep(n)   # simulate slow work
+    return f'Done after {n}s'
+
+agent = Agent(
+    'openai:gpt-4o',
+    # If slow_operation takes longer than 5 seconds, the model receives a retry prompt
+    tools=[Tool(slow_operation, timeout=5.0)],
+)
+```
+
+### `metadata` — tagging for filtering
+
+```python
+from pydantic_ai import Agent, RunContext, Tool, FilteredToolset, FunctionToolset
+
+def search_docs(ctx: RunContext[None], query: str) -> str:
+    return f'Results for {query}'
+
+def delete_record(ctx: RunContext[None], record_id: str) -> str:
+    return f'Deleted {record_id}'
+
+# Tag tools with a 'scope' so FilteredToolset can gate them
+tools = FunctionToolset([
+    Tool(search_docs, metadata={'scope': 'read'}),
+    Tool(delete_record, metadata={'scope': 'write'}),
+])
+
+def read_only(ctx, tool_def):
+    return tool_def.metadata.get('scope') != 'write'
+
+agent = Agent('openai:gpt-4o', toolsets=[FilteredToolset(tools, filter_func=read_only)])
+```
+
+---
+
+## 14. `ModelSettings` — complete field reference
+
+Source: `pydantic_ai/settings.py` — `ModelSettings` (TypedDict)
+
+`ModelSettings` is a `TypedDict` (all keys optional) that controls how the model generates a response. Pass it to `Agent(model_settings=...)` for a global default or `agent.run(..., model_settings=...)` to override per call. Run-level settings are **merged on top** of agent-level settings.
+
+### All fields
+
+```python
+from pydantic_ai import ModelSettings
+
+settings: ModelSettings = {
+    # --- Generation control ---
+    'max_tokens': 1024,           # Hard stop on output token count
+    'temperature': 0.7,           # 0.0 = deterministic, higher = creative
+    'top_p': 0.9,                 # Nucleus sampling probability mass
+    'top_k': 40,                  # Top-K vocabulary restriction (Gemini/Anthropic/Cohere)
+    'seed': 42,                   # Reproducibility seed (OpenAI/Groq/Cohere/Mistral/Gemini)
+    'stop_sequences': ['END'],    # Generation stops when any of these appear
+
+    # --- Token biasing ---
+    'presence_penalty': 0.2,      # Penalise tokens that have appeared at all
+    'frequency_penalty': 0.3,     # Penalise tokens proportional to how often they appeared
+    'logit_bias': {'1234': -100}, # Force/ban specific token IDs (OpenAI/Groq)
+
+    # --- Thinking / reasoning ---
+    'thinking': 'medium',         # 'minimal'|'low'|'medium'|'high'|'xhigh'|True|False
+
+    # --- Tool use ---
+    'parallel_tool_calls': True,  # Allow parallel tool execution (OpenAI/Groq/Anthropic)
+    'tool_choice': 'auto',        # 'auto'|'none'|'required'|list[str]|ToolOrOutput
+
+    # --- Latency / cost tier ---
+    'service_tier': 'default',    # 'auto'|'default'|'flex'|'priority'
+
+    # --- Network ---
+    'timeout': 30.0,              # Request timeout in seconds (or httpx.Timeout)
+    'extra_headers': {'X-Org': 'acme'},  # Extra HTTP headers
+
+    # --- Provider-specific escape hatch ---
+    'extra_body': {'best_of': 3}, # Forwarded verbatim in the JSON body
+}
+```
+
+### Thinking levels across providers
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+# Anthropic: maps to extended-thinking budget tokens
+claude_agent = Agent('anthropic:claude-opus-4-7', model_settings={'thinking': 'high'})
+
+# OpenAI: maps to reasoning_effort
+o1_agent = Agent('openai:o1', model_settings={'thinking': 'xhigh'})
+
+# Google: enables thinking mode on Gemini 2.5+
+gemini_agent = Agent('google:gemini-2.5-pro', model_settings={'thinking': 'medium'})
+
+async def main():
+    r = await claude_agent.run('Solve: what is the sum of angles in a pentagon?')
+    print(r.output)
+
+asyncio.run(main())
+```
+
+### `tool_choice` — `ToolOrOutput` for selective tool control
+
+`'required'` or `list[str]` force every model step to call a tool, preventing final output. Use `ToolOrOutput` to specify which *function* tools are available while still allowing structured output:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.settings import ToolOrOutput
+
+agent = Agent(
+    'openai:gpt-4o',
+    model_settings={
+        # On the first step only offer 'search'; the model can still return a final answer
+        'tool_choice': ToolOrOutput(function_tools=['search']),
+    },
+)
+```
+
+### Dynamic `model_settings` via capability
+
+For per-step changes (e.g. force a tool on step 1 only), return a callable from a capability rather than a static dict:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.settings import ModelSettings, ToolOrOutput
+from pydantic_ai.tools import RunContext
+from dataclasses import dataclass
+
+@dataclass
+class ForcedFirstToolCall(AbstractCapability):
+    tool_name: str
+
+    def get_model_settings(self):
+        def settings(ctx: RunContext) -> ModelSettings:
+            if ctx.run_step == 0:
+                return {'tool_choice': ToolOrOutput(function_tools=[self.tool_name])}
+            return {}
+        return settings
+
+agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[ForcedFirstToolCall('search')],
+)
+```
+
+### `service_tier` — cost/latency trade-offs
+
+```python
+from pydantic_ai import Agent
+
+# Lowest-cost batch processing (OpenAI flex / Bedrock flex)
+batch_agent = Agent('openai:gpt-4o', model_settings={'service_tier': 'flex'})
+
+# Lowest-latency production path (OpenAI priority)
+realtime_agent = Agent('openai:gpt-4o', model_settings={'service_tier': 'priority'})
+```
+
+### Merging settings at run-time
+
+```python
+from pydantic_ai import Agent, ModelSettings
+
+agent = Agent('openai:gpt-4o', model_settings={'temperature': 0.3, 'max_tokens': 500})
+
+# Override just temperature for this specific call; max_tokens inherits from agent-level
+result = agent.run_sync('Write a haiku.', model_settings={'temperature': 0.9})
+```
+
+---
+
+## 15. `Hooks` capability — decorator-based lifecycle hooks
+
+Source: `pydantic_ai/capabilities/hooks.py` — `Hooks[AgentDepsT]`
+
+`Hooks` is the ergonomic alternative to subclassing `AbstractCapability`. Register functions through the `hooks.on` namespace; each attribute corresponds to a lifecycle event.
+
+### Available hook names
+
+| Hook | When it fires | Can modify |
+|------|--------------|-----------|
+| `before_run` | Before the agent run starts | — |
+| `after_run` | After the agent run completes | `AgentRunResult` |
+| `wrap_run` | Wraps the entire run | `AgentRunResult` |
+| `on_run_error` | On any exception in the run | can return a result instead |
+| `before_node_run` | Before each graph node | `AgentNode` |
+| `after_node_run` | After each graph node | `NodeResult` |
+| `wrap_node_run` | Wraps each node execution | `NodeResult` |
+| `on_node_run_error` | On node execution error | can return a result |
+| `before_model_request` | Before each model API call | `ModelRequestContext` |
+| `after_model_request` | After each model API call | `ModelResponse` |
+| `wrap_model_request` | Wraps each model API call | `ModelResponse` |
+| `before_tool_validate` | Before tool arg validation | `RawToolArgs` |
+| `after_tool_validate` | After tool arg validation | `ValidatedToolArgs` |
+| `wrap_tool_validate` | Wraps tool arg validation | `ValidatedToolArgs` |
+| `before_tool_execute` | Before tool function runs | `ValidatedToolArgs` |
+| `after_tool_execute` | After tool function runs | tool return value |
+| `wrap_tool_execute` | Wraps tool execution | tool return value |
+
+### Decorator style
+
+```python
+import asyncio
+import time
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def log_request(ctx, request_context):
+    print(f'[step {ctx.run_step}] sending to {ctx.model.model_name}')
+    return request_context
+
+@hooks.on.after_model_request
+async def log_response(ctx, *, request_context, response):
+    print(f'[step {ctx.run_step}] got response: {len(response.parts)} parts')
+    return response
+
+@hooks.on.before_run
+def record_start(ctx):
+    ctx.metadata = ctx.metadata or {}
+    ctx.metadata['start_time'] = time.monotonic()
+
+@hooks.on.after_run
+def record_duration(ctx, *, result):
+    start = (ctx.metadata or {}).get('start_time', time.monotonic())
+    print(f'Run took {time.monotonic() - start:.3f}s')
+    return result
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+
+async def main():
+    result = await agent.run('What is 1+1?')
+    print(result.output)
+
+asyncio.run(main())
+```
+
+### Constructor-kwarg style
+
+Pass functions directly as keyword arguments matching the hook names:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+
+def log_req(ctx, request_context):
+    print(f'Request at step {ctx.run_step}')
+    return request_context
+
+agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[Hooks(before_model_request=log_req)],
+)
+```
+
+### Tool-specific hooks with `tools=` filter
+
+`before_tool_execute`, `after_tool_execute`, and `wrap_tool_execute` accept an optional `tools=` argument to restrict the hook to specific tools. The filter can be `'all'`, a list of names, a metadata dict, or a callable.
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Hooks
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+def search(query: str) -> str:
+    return f'Results for: {query}'
+
+@agent.tool_plain
+def send_email(to: str, subject: str) -> str:
+    return f'Sent to {to}'
+
+hooks = Hooks()
+
+# Hook fires only when 'send_email' is called
+@hooks.on.before_tool_execute(tools=['send_email'])
+def audit_email(ctx, *, validated_args):
+    print(f'AUDIT: send_email called with {validated_args}')
+    return validated_args
+
+# Hook fires for all tools
+@hooks.on.after_tool_execute
+def log_tool_result(ctx, *, validated_args, result):
+    print(f'Tool {ctx.tool_name} -> {result!r}')
+    return result
+
+agent_with_hooks = Agent('openai:gpt-4o', capabilities=[hooks])
+```
+
+### `wrap_run` — full run middleware
+
+```python
+import asyncio
+import logging
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+
+log = logging.getLogger(__name__)
+hooks = Hooks()
+
+@hooks.on.wrap_run
+async def add_error_logging(ctx, *, handler):
+    try:
+        result = await handler()
+        log.info('Run completed: run_id=%s usage=%s', result.run_id, result.usage)
+        return result
+    except Exception as e:
+        log.error('Run failed: run_id=%s error=%s', ctx.run_id, e)
+        raise
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+```
+
+### Hook timeouts
+
+Register a hook with a timeout to prevent slow callbacks from blocking the run:
+
+```python
+from pydantic_ai.capabilities import Hooks
+
+hooks = Hooks()
+
+@hooks.on.before_model_request(timeout=2.0)
+async def slow_lookup(ctx, request_context):
+    # If this takes > 2s, HookTimeoutError is raised
+    await some_remote_cache_lookup(ctx)
+    return request_context
+```
+
+---
+
+## 16. `Thinking` capability — cross-provider reasoning control
+
+Source: `pydantic_ai/capabilities/thinking.py` — `Thinking`
+
+`Thinking` is a one-field dataclass that enables and configures model reasoning/thinking via the unified `ModelSettings.thinking` field. It's a thin wrapper that's easier to pass around than a raw `model_settings` dict.
+
+### Constructor
+
+```python
+from pydantic_ai.capabilities import Thinking
+
+# Default: enable with provider's default effort
+thinking_on  = Thinking()             # effort=True
+thinking_off = Thinking(effort=False) # disable
+thinking_low  = Thinking(effort='low')
+thinking_high = Thinking(effort='high')
+thinking_max  = Thinking(effort='xhigh')  # 'xhigh' maps to 'high' on providers without it
+```
+
+### Attaching to an agent
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
+
+# Enable medium-effort thinking for every run
+agent = Agent(
+    'anthropic:claude-opus-4-7',
+    capabilities=[Thinking(effort='medium')],
+)
+result = agent.run_sync('Is P=NP? Show your reasoning.')
+print(result.output)
+```
+
+### Per-run override
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
+
+agent = Agent('openai:o3')
+
+# Low effort for fast responses
+result_fast = agent.run_sync('What is 2+2?', capabilities=[Thinking(effort='low')])
+
+# Max effort for hard problems
+result_deep = agent.run_sync(
+    'Prove the Riemann hypothesis.',
+    capabilities=[Thinking(effort='xhigh')],
+)
+```
+
+### Provider mapping
+
+| `effort` | Anthropic | OpenAI | Google Gemini |
+|---------|-----------|--------|---------------|
+| `True` | default budget | default effort | default |
+| `False` | thinking off | thinking off | thinking off |
+| `'minimal'` | 1 024 budget tokens | `'low'` (no minimal) | minimal |
+| `'low'` | 2 048 budget tokens | `'low'` | low |
+| `'medium'` | 8 192 budget tokens | `'medium'` | medium |
+| `'high'` | 16 384 budget tokens | `'high'` | high |
+| `'xhigh'` | max budget | `'high'` (no xhigh) | highest |
+
+### Combining with other capabilities
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking, Hooks
+
+hooks = Hooks()
+
+@hooks.on.after_run
+def log_thinking_tokens(ctx, *, result):
+    print(f'Output tokens: {result.usage.output_tokens}')
+    return result
+
+agent = Agent(
+    'anthropic:claude-opus-4-7',
+    capabilities=[Thinking(effort='high'), hooks],
+)
+```
+
+---
+
+## 17. `WebSearch` capability — native + local fallback
+
+Source: `pydantic_ai/capabilities/web_search.py` — `WebSearch[AgentDepsT]`
+
+`WebSearch` uses the model's native web search when available, falling back to a local DuckDuckGo tool when it isn't. This makes it portable across providers without changing agent code.
+
+### Constructor
+
+```python
+from pydantic_ai.capabilities import WebSearch
+
+ws = WebSearch(
+    native=True,                       # Use provider's native search (default)
+    local=True,                        # Fallback to DuckDuckGo if native not supported
+    search_context_size='medium',      # 'low'|'medium'|'high' — how much context to retrieve
+    user_location=None,                # WebSearchUserLocation for localised results
+    blocked_domains=['spam.com'],      # Exclude specific domains
+    allowed_domains=['docs.python.org'],  # Restrict to specific domains
+    max_uses=5,                        # Limit searches per run
+)
+```
+
+### Basic usage — cross-provider web search
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    capabilities=[WebSearch()],
+    system_prompt='You are a research assistant. Always cite your sources.',
+)
+
+async def main():
+    result = await agent.run('What are the most significant AI releases in the past month?')
+    print(result.output)
+
+asyncio.run(main())
+```
+
+### Domain-scoped search
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+
+docs_agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[WebSearch(allowed_domains=['docs.pydantic.dev', 'docs.python.org'])],
+    system_prompt='Answer only using official Python and Pydantic documentation.',
+)
+
+result = docs_agent.run_sync('How do I use Pydantic field validators?')
+print(result.output)
+```
+
+### Localised results
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+from pydantic_ai.native_tools import WebSearchUserLocation
+
+uk_agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[WebSearch(
+        user_location=WebSearchUserLocation(country='GB', city='London'),
+        search_context_size='high',
+    )],
+)
+
+result = uk_agent.run_sync('What are the current UK interest rates?')
+print(result.output)
+```
+
+### Explicit local-only mode
+
+Force DuckDuckGo (no native fallback) by passing `native=False`. Requires `pip install "pydantic-ai-slim[duckduckgo]"`:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+
+# Always use DuckDuckGo regardless of model capabilities
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    capabilities=[WebSearch(native=False, local='duckduckgo')],
+)
+
+result = agent.run_sync('Search for recent Python releases.')
+print(result.output)
+```
+
+### Disable fallback
+
+If the model doesn't support native search and you don't want a local fallback, pass `local=False`. The agent will raise a `UserError` at run time if the model can't handle web search:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+
+# Native only — fail fast if model doesn't support it
+agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[WebSearch(native=True, local=False)],
+)
+```
+
+---
+
 ## Revision history
 
 | Date | Version | Notes |
 |------|---------|-------|
+| 2026-05-22 | 1.101.0 | Added `Tool` advanced params (§13), `ModelSettings` complete reference (§14), `Hooks` capability (§15), `Thinking` capability (§16), `WebSearch` capability (§17); bumped verified version to 1.101.0. |
 | 2026-05-20 | 1.99.0 | Added `UsageLimits` (§11) and `ConcurrencyLimiter` (§12) deep-dives; bumped verified version to 1.99.0. |
 | 2026-05-19 | 1.98.0 | Initial deep-dives guide — 10 classes sourced from installed pydantic-ai 1.98.0. All imports verified. |

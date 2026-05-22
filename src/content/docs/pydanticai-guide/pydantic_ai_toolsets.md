@@ -7,7 +7,7 @@ language: python
 
 # Toolsets
 
-Verified against **pydantic-ai==1.99.0** — source module: `pydantic_ai.toolsets`.
+Verified against **pydantic-ai==1.101.0** — source module: `pydantic_ai.toolsets`.
 
 A *toolset* is a reusable, named collection of tools with a shared policy (retries, timeout, metadata, instructions). PydanticAI ships 10+ toolset wrappers that let you filter, rename, combine, gate, or lazy-load tools without rewriting the functions. They're the supported way to attach non-code tool sources — MCP servers, remote APIs, human approval — to an agent.
 
@@ -312,6 +312,166 @@ result = agent.run_sync(prompt)
 if isinstance(result.output, DeferredToolRequests):
     for call in result.output.calls:
         queue.push({'id': call.tool_call_id, 'name': call.tool_name, 'args': call.args})
+```
+
+### 6. Full-featured multi-source toolset with approval and scoping
+
+This end-to-end example shows `CombinedToolset`, `PrefixedToolset`, `FilteredToolset`, and `ApprovalRequiredToolset` working together for a multi-tenant CRUD agent.
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent
+from pydantic_ai import FunctionToolset, CombinedToolset, PrefixedToolset, FilteredToolset, ApprovalRequiredToolset
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied, RunContext
+
+@dataclass
+class UserDeps:
+    user_id: str
+    is_admin: bool
+    tenant_id: str
+
+# --- Read tools ---
+read_tools = FunctionToolset[UserDeps](metadata={'scope': 'read'})
+
+@read_tools.tool
+def list_records(ctx: RunContext[UserDeps], limit: int = 10) -> list[str]:
+    """List records for the current tenant."""
+    return [f'record-{ctx.deps.tenant_id}-{i}' for i in range(limit)]
+
+@read_tools.tool
+def get_record(ctx: RunContext[UserDeps], record_id: str) -> dict:
+    """Fetch a single record."""
+    return {'id': record_id, 'tenant': ctx.deps.tenant_id}
+
+# --- Write tools (require admin approval) ---
+write_tools = FunctionToolset[UserDeps](metadata={'scope': 'write'})
+
+@write_tools.tool
+def delete_record(ctx: RunContext[UserDeps], record_id: str) -> str:
+    """Permanently delete a record."""
+    return f'Deleted {record_id}'
+
+@write_tools.tool
+def bulk_update(ctx: RunContext[UserDeps], field: str, value: str) -> str:
+    """Update a field on all records for this tenant."""
+    return f'Updated {field}={value} on all records'
+
+# Gate write operations behind human approval
+gated_write_tools = ApprovalRequiredToolset(write_tools)
+
+# Prefix both toolsets to avoid name collisions
+combined = CombinedToolset([
+    PrefixedToolset(read_tools, prefix='read_'),
+    PrefixedToolset(gated_write_tools, prefix='write_'),
+])
+
+# Filter: non-admins only see read tools
+def admin_filter(ctx: RunContext[UserDeps], tool_def) -> bool:
+    if tool_def.name.startswith('write_') and not ctx.deps.is_admin:
+        return False
+    return True
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=UserDeps,
+    output_type=[str, DeferredToolRequests],
+    toolsets=[FilteredToolset(combined, filter_func=admin_filter)],
+)
+
+async def main():
+    admin = UserDeps(user_id='u1', is_admin=True, tenant_id='acme')
+    result = await agent.run('Delete record r-42 and list remaining records.', deps=admin)
+
+    if isinstance(result.output, DeferredToolRequests):
+        print('Awaiting approval for:')
+        for call in result.output.approvals:
+            print(f'  {call.tool_name}({call.args_as_dict()})')
+
+        # Admin approves deletions
+        approvals = {c.tool_call_id: ToolApproved() for c in result.output.approvals}
+        final = await agent.run(
+            'continue',
+            deps=admin,
+            message_history=result.all_messages(),
+            deferred_tool_results=DeferredToolResults(approvals=approvals),
+        )
+        print(final.output)
+    else:
+        print(result.output)
+
+asyncio.run(main())
+```
+
+### 7. `FunctionToolset` with `instructions` and per-toolset timeout
+
+```python
+import asyncio
+from pydantic_ai import Agent, FunctionToolset, RunContext
+
+db_tools = FunctionToolset[None](
+    timeout=5.0,   # Any tool taking >5s gets a ModelRetry prompt
+    instructions=(
+        'When querying the database, always filter by active=True unless '
+        'the user explicitly asks for inactive records.'
+    ),
+)
+
+@db_tools.tool_plain
+def query_users(filter_active: bool = True) -> list[str]:
+    """Query users from the database."""
+    import time; time.sleep(0.1)  # simulate DB latency
+    return ['alice', 'bob'] if filter_active else ['alice', 'bob', 'charlie_inactive']
+
+@db_tools.tool_plain
+def count_records(table: str) -> int:
+    """Count rows in a database table."""
+    return {'users': 2, 'orders': 15}.get(table, 0)
+
+agent = Agent('openai:gpt-4o', toolsets=[db_tools])
+result = agent.run_sync('How many users are there and who are they?')
+print(result.output)
+```
+
+### 8. `FilteredToolset` with async predicate
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, FilteredToolset, RunContext
+
+@dataclass
+class RequestDeps:
+    user_token: str
+
+def search_web(ctx: RunContext[RequestDeps], query: str) -> str:
+    return f'Results for: {query}'
+
+def send_notification(ctx: RunContext[RequestDeps], message: str) -> str:
+    return f'Notification sent: {message}'
+
+all_tools = FunctionToolset[RequestDeps]([search_web, send_notification])
+
+async def permission_check(ctx: RunContext[RequestDeps], tool_def) -> bool:
+    """Async filter — could call an auth service."""
+    if tool_def.name == 'send_notification':
+        # Simulate checking permissions via an API
+        await asyncio.sleep(0.01)
+        return ctx.deps.user_token.startswith('premium-')
+    return True
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=RequestDeps,
+    toolsets=[FilteredToolset(all_tools, filter_func=permission_check)],
+)
+
+async def main():
+    free_user = RequestDeps(user_token='free-abc')
+    result = await agent.run('Search for Python news and notify the team.', deps=free_user)
+    print(result.output)  # Can search but not notify
+
+asyncio.run(main())
 ```
 
 ## Reference
