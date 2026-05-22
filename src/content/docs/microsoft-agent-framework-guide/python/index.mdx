@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python)"
-description: "Unified Python agent SDK — core stable at 1.5.0, foundry and openai providers stable at 1.5.0 (May 2026)."
+description: "Unified Python agent SDK — core stable at 1.6.0, foundry and openai providers stable at 1.6.0 (May 2026)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    Core **1.5.0** stable · `agent-framework-foundry` and `agent-framework-openai` now **1.5.0 stable** · May 2026 · Python 3.10 – 3.13
+    Core **1.6.0** stable · `agent-framework-foundry` and `agent-framework-openai` now **1.6.0 stable** · May 2026 · Python 3.10 – 3.13
   </Card>
   <Card title="Best for" icon="puzzle">
     Azure-native agents, multi-agent orchestration via `WorkflowBuilder`, cross-framework A2A, declarative YAML agents.
@@ -112,7 +112,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
 
 ## What's shipped (May 2026 introspection)
 
-- **Stable core APIs** — `agent-framework-core 1.5.0`. `agent-framework-foundry` and `agent-framework-openai` promoted to **1.5.0 stable** in this release.
+- **Stable core APIs** — `agent-framework-core 1.6.0`. `agent-framework-foundry` and `agent-framework-openai` updated to **1.6.0** in this release. All 23 core symbols (`Agent`, `BaseAgent`, `RawAgent`, `AgentContext`, `AgentSession`, `Runner`, `FunctionTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `WorkflowBuilder`, `FunctionalWorkflow`, `RunContext`, `CheckpointStorage`, `FileCheckpointStorage`, `MemoryContextProvider`, `MemoryStore`, `SkillsProvider`, `InlineSkill`, `FileSkill`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`) verified against installed `agent-framework-core==1.6.0` (`.routine-envs/check-0522-ms-agent`); all PASS. 242 total public symbols.
 - **First-party chat clients** — `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, plus Bedrock / Ollama in the `1.0.0b` provider line.
 - **Skills (experimental)** — `MemoryStore`, `SkillResource`, `InlineSkillResource`, `ClassSkill`, `InlineSkill`, `FileSkill` now emit `ExperimentalWarning` on import — do not depend on these APIs in production yet.
 - **Middleware** — `@chat_middleware` / `@agent_middleware` / `@function_middleware` decorators and base classes; pass `middleware=[...]` (must be a list in 2026 releases).
@@ -159,6 +159,7 @@ Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-22 | 1.0.9 | Version bumped 1.5.0 → 1.6.0; version card, description frontmatter, and "What's shipped" section updated to 1.6.0. All 23 core symbols verified against installed `agent-framework-core==1.6.0` (`.routine-envs/check-0522-ms-agent`); 242 public symbols confirmed; no API regressions. `frameworks.ts` updated `v1.4.0` → `v1.6.0`. Note: `DeprecationWarning` from opentelemetry internal `importlib.metadata` dict interface (Python 3.11 compat) persists — upstream opentelemetry bug, not an agent-framework issue. |
 | 2026-05-20 | 1.0.8 | Bumped all version references to `agent-framework-core==1.5.0`. Added `output_from`/`intermediate_output_from` documentation to `WorkflowBuilder` (replaces deprecated `output_executors`). Added full `MemoryContextProvider` section to HARNESS Providers guide including injected tools, `consolidation_client`, `history_message_filter`, and custom `MemoryStore` backend examples. Added `RunContext.set_state` key restriction (`_` prefix raises `ValueError`) to Functional Workflows guide. Added combined `checkpoint_id + responses` HITL resume pattern. Added `include_status_events` explanation. Fixed `FunctionInvocationConfiguration` defaults (`max_iterations=40`, `max_consecutive_errors_per_request=3`). Added full `FunctionTool` constructor reference table with `declaration_only`, `additional_properties`, and middleware cost-tagging examples. |
 | 2026-05-17 | 1.0.7 | Bumped all version references to `agent-framework-core==1.4.0`. Added `get_run_context()` code example to Functional Workflows guide (accessing RunContext from nested utility functions). Added `annotate_message_groups` low-level helper documentation to Compaction guide. Re-verified all API surfaces against installed `agent-framework-core==1.4.0` source. |
 | 2026-05-09 | 1.0.6 | Bumped all guides to `agent-framework-core==1.3.0`. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. Rewrote Skills guide with breaking API changes: `InlineSkill` replaces `Skill`, `SkillsProvider(source)` positional arg replaces `skills=`/`skill_paths=`, `SkillsProvider.from_paths()` for file-based skills. Added `AggregatingSkillsSource`, `FilteringSkillsSource`, `DeduplicatingSkillsSource` coverage. Added `RawAgent` to comprehensive guide. Added `MemoryStore`/`MemoryContextProvider` long-term memory section. Fixed `FunctionInvocationConfiguration` usage (client-level only, not `agent.run()` parameter). Added `WorkflowBuilder.add_chain()` and `add_multi_selection_edge_group()` detail. |
