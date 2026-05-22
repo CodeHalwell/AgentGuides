@@ -80,27 +80,84 @@ Arguments (`output.py:76`):
 
 ## `NativeOutput` — provider-native JSON schema
 
+Uses the provider's own structured-output mechanism (e.g. OpenAI's `response_format=json_schema`). This guarantees the model cannot deviate from the schema and avoids the extra tool-call round-trip of `ToolOutput`.
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, NativeOutput
+
+class Fruit(BaseModel):
+    name: str
+    color: str
+
+class Vehicle(BaseModel):
+    name: str
+    wheels: int
+
+# Single type — returns Fruit directly
+agent_single = Agent('openai:gpt-4o', output_type=NativeOutput(Fruit))
+result = agent_single.run_sync('What is a banana?')
+print(repr(result.output))
+# Fruit(name='banana', color='yellow')
+
+# Multiple types — provider builds a tagged union
+agent_union = Agent(
+    'openai:gpt-4o',
+    output_type=NativeOutput(
+        [Fruit, Vehicle],
+        name='fruit_or_vehicle',
+        description='Return a fruit or a vehicle.',
+    ),
+)
+result = agent_union.run_sync('What is a Ford Explorer?')
+print(repr(result.output))
+# Vehicle(name='Ford Explorer', wheels=4)
+```
+
+### `NativeOutput` with `strict=True`
+
+OpenAI's strict mode rejects schemas that include `anyOf` without a discriminator. Use a `Literal` discriminator field when strict is required:
+
+```python
+from typing import Literal
+from pydantic import BaseModel
+from pydantic_ai import Agent, NativeOutput
+
+class FruitResult(BaseModel):
+    kind: Literal['fruit'] = 'fruit'
+    name: str
+    color: str
+
+class VehicleResult(BaseModel):
+    kind: Literal['vehicle'] = 'vehicle'
+    name: str
+    wheels: int
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=NativeOutput([FruitResult, VehicleResult], strict=True),
+)
+```
+
+### `NativeOutput` without schema injection (`template=False`)
+
+When your model profile already injects a JSON schema into the system prompt, pass `template=False` to avoid duplication:
+
 ```python
 from pydantic_ai import Agent, NativeOutput
 
 agent = Agent(
-    'openai:gpt-5.2',
-    output_type=NativeOutput(
-        [Fruit, Vehicle],
-        name='Fruit or vehicle',
-        description='Return a fruit or vehicle.',
-    ),
+    'ollama:llama3.2',
+    output_type=NativeOutput(Vehicle, template=False),
 )
-result = agent.run_sync('What is a Ford Explorer?')
-print(repr(result.output))
-#> Vehicle(name='Ford Explorer', wheels=4)
 ```
 
 Arguments (`output.py:141`):
 
 - `outputs` — a type or sequence of types. A list produces a tagged union.
-- `name`, `description`, `strict`, `template`.
-- `template` — overrides the schema-injection template used if the profile still requires it. Pass `False` to skip the schema prompt entirely.
+- `name`, `description` — override the schema name and description sent to the model.
+- `strict` — forwarded to providers supporting strict JSON schema (OpenAI).
+- `template` — overrides the schema-injection template; pass `False` to skip.
 
 Availability by provider (verified in `models/<provider>.py`): OpenAI, Google, Anthropic (via tool adapter), Mistral, Groq. Older/local providers usually fall through to `PromptedOutput`.
 
