@@ -65,19 +65,21 @@ print(result["events"])  # ['node_a ran', 'node_b ran']
 | `EphemeralValue` | `langgraph.channels.ephemeral_value` | `Annotated[T, EphemeralValue(T)]` |
 | `NamedBarrierValue` | `langgraph.channels.named_barrier_value` | `Annotated[None, NamedBarrierValue(str, names={...})]` |
 | `AnyValue` | `langgraph.channels.any_value` | `Annotated[T, AnyValue(T)]` |
+| `UntrackedValue` | `langgraph.channels.untracked_value` | `Annotated[T, UntrackedValue(T)]` |
 
-All six are also accessible via `langgraph.channels.__init__` (top-level re-export).
+All seven are also accessible via `langgraph.channels` (top-level re-export).
 
 ## Channel comparison
 
-| Channel | Concurrent writes | Cleared after step | Use case |
-|---|---|---|---|
-| `LastValue` | Error — at most one write per super-step | No | Normal scalar/message state |
-| `BinaryOperatorAggregate` | Allowed — applied in arrival order | No | Running counters, message lists |
-| `Topic` | Allowed — all collected into a list | Yes (`accumulate=False`) | Fan-in event buffers |
-| `EphemeralValue` | Error (`guard=True`) or last wins (`guard=False`) | Yes — cleared if not written to | One-step trigger signals |
-| `NamedBarrierValue` | Required — must see every named write | After consumed | N-source fan-in barriers |
-| `AnyValue` | Allowed — takes the last value | No | Parallel-safe shared flags |
+| Channel | Concurrent writes | Cleared after step | Checkpointed | Use case |
+|---|---|---|---|---|
+| `LastValue` | Error — at most one write per super-step | No | ✅ Yes | Normal scalar/message state |
+| `BinaryOperatorAggregate` | Allowed — applied in arrival order | No | ✅ Yes | Running counters, message lists |
+| `Topic` | Allowed — all collected into a list | Yes (`accumulate=False`) | ✅ Yes | Fan-in event buffers |
+| `EphemeralValue` | Error (`guard=True`) or last wins (`guard=False`) | Yes — cleared if not written to | ✅ Yes | One-step trigger signals |
+| `NamedBarrierValue` | Required — must see every named write | After consumed | ✅ Yes | N-source fan-in barriers |
+| `AnyValue` | Allowed — takes the last value | No | ✅ Yes | Parallel-safe shared flags |
+| `UntrackedValue` | Error (`guard=True`) or last wins (`guard=False`) | No | ❌ No | Computed values, secrets, large blobs |
 
 ---
 
@@ -678,6 +680,101 @@ print(graph.invoke({"dry_run": True, "result_a": "", "result_b": ""}))
 
 ---
 
+## `UntrackedValue`
+
+```python
+from langgraph.channels.untracked_value import UntrackedValue
+# also re-exported from:
+from langgraph.channels import UntrackedValue
+```
+
+Like `LastValue`, but **never written to checkpoints**. Use it for large, derived, or ephemeral values that you want visible to nodes during a run but don't need to persist between invocations.
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.channels import UntrackedValue
+
+
+class State(TypedDict):
+    query: str
+    # embedding is computed each run; no need to persist it in checkpoints
+    embedding: Annotated[list[float] | None, UntrackedValue(list)]
+```
+
+Full constructor signature:
+
+```python
+UntrackedValue(typ: Any, guard: bool = True)
+```
+
+- `guard=True` (default) — raises `InvalidUpdateError` if two nodes write to the channel in the same super-step. Identical to `LastValue` semantics.
+- `guard=False` — silently takes the last write; no error on concurrent writes.
+
+**Behaviour at a glance:**
+
+| Property | `LastValue` | `UntrackedValue` |
+|---|---|---|
+| Concurrent writes | Error | Error (`guard=True`) or last wins (`guard=False`) |
+| Stored in checkpoint | ✅ Yes | ❌ No |
+| Survives across `invoke` calls | ✅ Yes | ❌ No — cleared on resume |
+| Good for | Persistent scalar state | Large computed / sensitive values |
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.channels import UntrackedValue
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+class S(TypedDict):
+    text: str
+    # embedding is computed at runtime but never checkpointed
+    embedding: Annotated[list[float] | None, UntrackedValue(list)]
+    label: str
+
+
+def embed(state: S) -> dict:
+    """Compute a toy embedding from the text — not persisted."""
+    vec = [len(state["text"]) / 100.0, hash(state["text"]) % 1000 / 1000.0]
+    return {"embedding": vec}
+
+
+def classify(state: S) -> dict:
+    """Classify based on the embedding — embedding is still available this run."""
+    vec = state["embedding"]
+    label = "long" if vec and vec[0] > 0.5 else "short"
+    return {"label": label}
+
+
+builder = StateGraph(S)
+builder.add_node("embed", embed)
+builder.add_node("classify", classify)
+builder.add_edge(START, "embed")
+builder.add_edge("embed", "classify")
+builder.add_edge("classify", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "t1"}}
+
+result = graph.invoke({"text": "A fairly long sentence that exceeds fifty characters", "embedding": None, "label": ""}, cfg)
+print(result["label"])       # "long"
+print(result["embedding"])   # [0.52, 0.xxx]  — present in the final return value
+
+# The embedding is NOT in the checkpointed state:
+snap = graph.get_state(cfg)
+print(snap.values.get("embedding"))   # None — not persisted
+```
+
+**When to use `UntrackedValue`:**
+
+- Embeddings, token counts, or other computed properties derived purely from other state.
+- Sensitive values (API keys, credentials) that you want available to nodes during a run without persisting them to disk.
+- Large binary blobs that would bloat the checkpoint without adding time-travel value.
+
+---
+
 ## Gotchas
 
 - **`LastValue` raises on concurrent writes.** Two parallel nodes writing to the same `LastValue` key in the same super-step will crash the graph. Add a reducer or use `AnyValue` / `Topic` instead.
@@ -689,6 +786,8 @@ print(graph.invoke({"dry_run": True, "result_a": "", "result_b": ""}))
 - **Channel types are internal implementation details.** You should not store `BaseChannel` instances in state values — they are graph-level constructs, not user-visible state. Your state dict holds the channel's value, not the channel object.
 - **`AnyValue` is non-deterministic when writers differ.** If two nodes concurrently write different values, the result depends on task execution order. Use it only when you can guarantee all writers produce the same value.
 - **`BinaryOperatorAggregate` initial value is the zero of the type.** For `int` that's `0`, for `list` that's `[]`, for `str` that's `""`. There is no way to set a non-zero default in the channel itself — set the initial value in your `invoke` call instead.
+- **`UntrackedValue` fields will be `None` (or their zero value) after resuming from a checkpoint.** Because the channel is never persisted, any resume or replay will start with the field unset. Always handle `None` defensively.
+- **`UntrackedValue` still appears in the `invoke`/`stream` return value** — only checkpointing is skipped. The value is computed and available within the run, just not stored for the next one.
 
 ---
 
@@ -696,6 +795,7 @@ print(graph.invoke({"dry_run": True, "result_a": "", "result_b": ""}))
 
 | Version | Change |
 |---|---|
+| 1.2 | `UntrackedValue` added — same semantics as `LastValue` but never written to checkpoints. Use for computed or sensitive fields you don't want persisted. |
 | 1.0 | `Topic`, `EphemeralValue`, `NamedBarrierValue`, `AnyValue` moved from `langgraph.channels` to their own submodules but remain re-exported at `langgraph.channels`. Existing imports unaffected. |
 | 0.6 | `DeltaChannel` added (beta) — a write-efficient channel that stores only deltas and reconstructs state by replaying ancestor writes. Not covered here; see the beta warning in source. |
 | 0.2 | `BinaryOperatorAggregate` introduced; `add_messages` became the canonical reducer for message lists. |
