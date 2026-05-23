@@ -1,13 +1,13 @@
 ---
 title: "Google ADK - Practical Recipes and Examples"
-description: "Version: 2.0.0 Focus: Real-world implementations and use cases"
+description: "Version: 2.1.0 Focus: Real-world implementations and use cases"
 framework: google-adk
 language: python
 ---
 
 # Google ADK - Practical Recipes and Examples
 
-**Version:** Verified against google-adk==2.0.0  
+**Version:** Verified against google-adk==2.1.0  
 **Focus:** Real-world implementations and use cases
 
 ---
