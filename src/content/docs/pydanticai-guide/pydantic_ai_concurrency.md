@@ -7,7 +7,7 @@ language: python
 
 # Concurrency Limiting
 
-Verified against **pydantic-ai==1.100.0** — source module: `pydantic_ai.concurrency`.
+Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.concurrency`.
 
 `ConcurrencyLimiter` caps the number of simultaneous model API calls without any external dependencies. When the cap is reached, additional callers queue and wait. Optionally set `max_queued` to reject requests once the queue depth exceeds a threshold.
 
@@ -255,13 +255,87 @@ async def status_reporter():
         await asyncio.sleep(1.0)
 ```
 
+## `normalize_to_limiter` — utility for library authors
+
+`normalize_to_limiter` converts any `AnyConcurrencyLimit` value into a concrete `AbstractConcurrencyLimiter` instance (or `None`). Use it in custom model wrappers or toolsets that accept user-provided concurrency config:
+
+```python
+from pydantic_ai.concurrency import (
+    normalize_to_limiter,
+    AnyConcurrencyLimit,
+    ConcurrencyLimit,
+    ConcurrencyLimiter,
+)
+
+def setup_limiter(config: AnyConcurrencyLimit, name: str) -> None:
+    limiter = normalize_to_limiter(config, name=name)
+    if limiter is None:
+        print('No concurrency limiting configured')
+    else:
+        print(f'Limiter: {type(limiter).__name__}, max_running={limiter.max_running}')
+
+setup_limiter(None, 'test')                              # No limiting
+setup_limiter(5, 'test')                                 # Creates ConcurrencyLimiter(5)
+setup_limiter(ConcurrencyLimit(5, max_queued=20), 'test') # Creates ConcurrencyLimiter(5, max_queued=20)
+setup_limiter(ConcurrencyLimiter(10), 'test')            # Returns as-is
+```
+
+## `get_concurrency_context` — async context manager wrapper
+
+`get_concurrency_context` returns an async context manager that acquires and releases the limiter. Passing `None` returns a no-op manager. This is the internal primitive used by PydanticAI's agent graph — useful when building custom runners:
+
+```python
+import asyncio
+from pydantic_ai.concurrency import (
+    ConcurrencyLimiter,
+    get_concurrency_context,
+    normalize_to_limiter,
+    AnyConcurrencyLimit,
+)
+
+async def run_with_limit(work, limit: AnyConcurrencyLimit = None):
+    """Run an async callable under an optional concurrency limit."""
+    limiter = normalize_to_limiter(limit, name='custom-runner')
+    async with get_concurrency_context(limiter, source='custom-runner'):
+        return await work()
+
+async def main():
+    limiter = ConcurrencyLimiter(max_running=3)
+
+    tasks = [
+        run_with_limit(lambda: asyncio.sleep(0.1), limit=limiter)
+        for _ in range(10)
+    ]
+    await asyncio.gather(*tasks)
+    print('All tasks completed with concurrency ≤ 3')
+
+asyncio.run(main())
+```
+
+## How OTel spans are created
+
+When a task must **wait** (no free slots), `ConcurrencyLimiter.acquire()` creates an OpenTelemetry span automatically:
+
+- **Span name**: `"waiting for <limiter-name-or-source> concurrency"`
+- **Attributes**: `source`, `waiting_count`, `max_running`, `limiter_name` (if set), `max_queued` (if set)
+
+This appears in your distributed trace waterfall as a latency contributor — you can see how long tasks spend waiting for a slot without any extra instrumentation code.
+
+```python
+from pydantic_ai.concurrency import ConcurrencyLimiter
+
+# Name appears in the OTel span and in ConcurrencyLimitExceeded error messages
+limiter = ConcurrencyLimiter(max_running=5, name='openai-gpt4o-pool')
+```
+
 ## Reference
 
 | Symbol | Module | Notes |
 |---|---|---|
-| `ConcurrencyLimiter` | `pydantic_ai.concurrency` | Main limiter class |
-| `ConcurrencyLimit` | `pydantic_ai.concurrency` | Config dataclass |
-| `AbstractConcurrencyLimiter` | `pydantic_ai.concurrency` | ABC for custom limiters |
-| `AnyConcurrencyLimit` | `pydantic_ai.concurrency` | Type alias |
-| `ConcurrencyLimitExceeded` | `pydantic_ai.exceptions` | Raised when queue is full |
-| `normalize_to_limiter` | `pydantic_ai.concurrency` | Normalise config → limiter |
+| `ConcurrencyLimiter` | `pydantic_ai.concurrency` | Main limiter class with OTel observability |
+| `ConcurrencyLimit` | `pydantic_ai.concurrency` | Serialisable config dataclass |
+| `AbstractConcurrencyLimiter` | `pydantic_ai.concurrency` | ABC for custom (e.g. Redis-backed) limiters |
+| `AnyConcurrencyLimit` | `pydantic_ai.concurrency` | Type alias: `int \| ConcurrencyLimit \| AbstractConcurrencyLimiter \| None` |
+| `normalize_to_limiter` | `pydantic_ai.concurrency` | Normalise any `AnyConcurrencyLimit` → limiter instance or `None` |
+| `get_concurrency_context` | `pydantic_ai.concurrency` | Async context manager wrapping acquire/release |
+| `ConcurrencyLimitExceeded` | `pydantic_ai.exceptions` | Raised when queue depth exceeds `max_queued` |

@@ -1,13 +1,13 @@
 ---
 title: "PydanticAI: Streaming Output & Events"
-description: "run_stream, AgentStream, iter, stream_text, stream_output, run_stream_events, event_stream_handler, partial validation, and debounce."
+description: "run_stream, AgentStream, iter, stream_text, stream_output, stream_response, run_stream_events, event_stream_handler, partial validation, cancel, drain, and debounce."
 framework: pydanticai
 language: python
 ---
 
 # Streaming
 
-Verified against **pydantic-ai==1.101.0** — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
+Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
 
 PydanticAI streams at three levels:
 
@@ -241,6 +241,105 @@ async with agent.run_stream(q) as s:
 ```
 
 Do not `break` out of `run_stream` and then try to reuse the stream — close the context and call `run_stream` again.
+
+## `stream_response()` — raw `ModelResponse` snapshots
+
+Use `stream_response()` when you need low-level access to every model part as it arrives, including `ThinkingPart`, tool call deltas, and file parts:
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.messages import ThinkingPart, TextPart, ToolCallPart
+
+agent = Agent('anthropic:claude-opus-4-7', model_settings={'thinking': 'low'})
+
+async def main():
+    async with agent.run_stream('Is 17 a prime number? Show your reasoning.') as stream:
+        async for response in stream.stream_response(debounce_by=0.05):
+            for part in response.parts:
+                if isinstance(part, ThinkingPart) and part.thinking:
+                    print(f'[thinking] {part.thinking[:80]}...')
+                elif isinstance(part, TextPart) and part.content:
+                    print(f'[answer] {part.content}', end='')
+
+asyncio.run(main())
+```
+
+## `cancel()` and `drain()` — stream lifecycle control
+
+**`cancel()`** stops token generation and closes the upstream connection. Call it inside the `async with` block when you want to abort mid-stream:
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.run_stream('Count from 1 to 10000, each on a new line.') as stream:
+        count = 0
+        async for chunk in stream.stream_text(delta=True):
+            print(chunk, end='', flush=True)
+            count += chunk.count('\n')
+            if count >= 20:
+                await stream.cancel()
+                break
+        print(f'\n[stopped after ~{count} lines | cancelled={stream.cancelled}]')
+
+asyncio.run(main())
+```
+
+**`drain()`** consumes the remaining stream silently. Use it when you've already extracted what you need but must cleanly close the context:
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def peek_and_discard(prompt: str, peek_chars: int = 50) -> str:
+    """Stream the first N characters, then discard the rest."""
+    async with agent.run_stream(prompt) as stream:
+        preview = ''
+        async for chunk in stream.stream_text(delta=True):
+            preview += chunk
+            if len(preview) >= peek_chars:
+                break
+        await stream.drain()   # cleanly finish without reading more
+        return preview[:peek_chars]
+
+async def main():
+    preview = await peek_and_discard('Write a long essay on Python.', 50)
+    print(f'Preview: {preview!r}')
+
+asyncio.run(main())
+```
+
+## Accessing usage and identity after streaming
+
+Properties available after the stream completes (after `get_output()` or after draining):
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.run_stream('Tell me something interesting.') as stream:
+        async for _ in stream.stream_text(delta=True):
+            pass
+        final = await stream.get_output()
+
+        print('run_id:', stream.run_id)
+        print('conversation_id:', stream.conversation_id)
+        print('metadata:', stream.metadata)
+        print('cancelled:', stream.cancelled)
+        print('total tokens:', stream.usage.total_tokens)
+        print('requests:', stream.usage.requests)
+
+asyncio.run(main())
+```
 
 ## Gotchas
 

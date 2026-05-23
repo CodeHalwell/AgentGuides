@@ -7,7 +7,7 @@ language: python
 
 # Hooks — Lifecycle Callbacks
 
-Verified against **pydantic-ai==1.100.0** — source module: `pydantic_ai.capabilities.hooks`.
+Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.capabilities.hooks`.
 
 The `Hooks` class gives you a decorator-first API for intercepting every phase of an agent run without subclassing `AbstractCapability`. Register a function once with `@hooks.on.<event>` and it fires automatically during runs that include this capability.
 
@@ -71,7 +71,7 @@ def before(ctx: RunContext) -> None:
 
 @hooks.on.after_run
 async def after(ctx: RunContext, *, result: AgentRunResult) -> AgentRunResult:
-    print(f'[after_run] tokens used: {result.usage().total_tokens}')
+    print(f'[after_run] tokens used: {result.usage.total_tokens}')  # .usage is a property in 1.102.0
     return result  # must return the result
 
 @hooks.on.run_error
@@ -321,9 +321,112 @@ obs_hooks, metrics = make_observability_hooks()
 agent = Agent('openai:gpt-4o', capabilities=[obs_hooks])
 ```
 
+## `handle_deferred_tool_calls` — intercept deferred tool batches
+
+Fires whenever the agent produces a `DeferredToolRequests` (i.e. some tool called `CallDeferred` or `ApprovalRequired`). Use it for logging, queuing, or automatically resolving deferrals in tests:
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import CallDeferred
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults
+from pydantic_ai.messages import ToolReturn
+
+hooks = Hooks()
+
+@hooks.on.handle_deferred_tool_calls
+async def log_and_auto_resolve(ctx, *, deferred: DeferredToolRequests):
+    """Log every deferred call and automatically resolve them with a placeholder."""
+    print(f'[deferred] {len(deferred.calls)} call(s) deferred this step')
+    for call in deferred.calls:
+        print(f'  → {call.tool_name}({call.args})')
+    # Return resolved results to continue the run automatically
+    return DeferredToolResults(calls={
+        call.tool_call_id: ToolReturn(content=f'Auto-resolved: {call.tool_name}')
+        for call in deferred.calls
+    })
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[str, DeferredToolRequests],
+    capabilities=[hooks],
+)
+
+@agent.tool_plain
+def slow_job(task: str) -> str:
+    raise CallDeferred(metadata={'task': task})
+
+async def main():
+    # With the hook, deferred calls are auto-resolved — no manual loop needed
+    result = await agent.run('Run slow_job for task "data-export".')
+    print(result.output)
+
+asyncio.run(main())
+```
+
+## `on_run_error` — recover from run failures
+
+`on_run_error` fires when an exception escapes the run. It can either re-raise the original error or return a fallback `AgentRunResult`:
+
+```python
+import asyncio
+import logging
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.run import AgentRunResult
+from pydantic_ai.exceptions import UsageLimitExceeded
+
+log = logging.getLogger(__name__)
+hooks = Hooks()
+
+@hooks.on.on_run_error
+async def handle_error(ctx: RunContext, *, error: BaseException) -> AgentRunResult:
+    if isinstance(error, UsageLimitExceeded):
+        # Return a graceful fallback instead of crashing
+        log.warning('Usage limit exceeded for run %s', ctx.run_id)
+        raise error  # re-raise so caller can handle it
+    log.error('Unexpected run failure', exc_info=error)
+    raise error  # always re-raise unknown errors
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+```
+
+## Complete hook lifecycle diagram
+
+```
+agent.run(prompt)
+│
+├─ before_run
+│   │
+│   └─ [loop per model step]
+│       ├─ before_node_run
+│       ├─ wrap_node_run(handler)
+│       │   ├─ before_model_request  ← modify messages before sending
+│       │   ├─ wrap_model_request(handler)
+│       │   │   └─ [model API call]
+│       │   ├─ after_model_request   ← inspect/modify response
+│       │   │
+│       │   └─ [for each tool call in response]
+│       │       ├─ before_tool_validate  ← inspect raw args JSON
+│       │       ├─ wrap_tool_validate(handler)
+│       │       ├─ after_tool_validate   ← inspect validated typed args
+│       │       │
+│       │       ├─ before_tool_execute  ← last chance to skip/modify
+│       │       ├─ wrap_tool_execute(handler)
+│       │       │   └─ [tool function runs]
+│       │       └─ after_tool_execute   ← inspect/modify result
+│       │
+│       └─ after_node_run
+│
+├─ after_run (or on_run_error on failure)
+└─ AgentRunResult returned
+```
+
 ## Reference
 
 - `Hooks` class — `capabilities/hooks.py`
 - `HookTimeoutError` — raised when `timeout=` is exceeded
 - `AbstractCapability` — base class for custom capabilities (`capabilities/abstract.py`)
 - Hook function protocols (type annotations) — all `*HookFunc` classes in `capabilities/hooks.py`
+- `handle_deferred_tool_calls` hook — `capabilities/deferred_tool_handler.py`
