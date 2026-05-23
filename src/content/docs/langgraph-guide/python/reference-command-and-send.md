@@ -285,6 +285,205 @@ graph.stream(initial, cfg)                              # emits __interrupt__
 graph.invoke(Command(resume="yes"), cfg)                # continues into "execute"
 ```
 
+### 6. `Send` with a per-task timeout
+
+Pass a `timeout=` to `Send` to cap how long an individual parallel task may run. A plain `float` is a hard wall-clock limit (`run_timeout`); pass a `TimeoutPolicy` for idle-based cancellation.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send, TimeoutPolicy, RetryPolicy
+
+class Scrape(TypedDict):
+    urls: list[str]
+    results: Annotated[list[str], operator.add]
+
+
+def scrape_page(state: dict) -> dict:
+    """Scrape one URL — runs per-Send with its own timeout."""
+    url = state["url"]
+    # ... real HTTP fetch here ...
+    return {"results": [f"content:{url}"]}
+
+
+def dispatch(state: Scrape) -> list[Send]:
+    return [
+        Send(
+            "scrape_page",
+            {"url": url, "results": []},
+            # Each individual task gets 10 s wall-clock; retry up to 2 extra times
+            timeout=10.0,
+        )
+        for url in state["urls"]
+    ]
+
+
+builder = StateGraph(Scrape)
+builder.add_node(
+    "scrape_page",
+    scrape_page,
+    retry_policy=RetryPolicy(max_attempts=3, retry_on=TimeoutError),
+)
+builder.add_conditional_edges(START, dispatch)
+builder.add_edge("scrape_page", END)
+
+graph = builder.compile()
+result = graph.invoke({"urls": ["https://a.com", "https://b.com"], "results": []})
+print(result["results"])
+```
+
+### 7. Complete multi-agent handoff with `Command.PARENT`
+
+A supervisor graph runs two specialised subgraphs. Each subgraph can escalate back to the supervisor using `Command(graph=Command.PARENT, goto="supervisor")`.
+
+```python
+import operator
+from typing import Annotated, Literal
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# ── Shared state used by both the parent and subgraphs ──────────────────────
+
+class SharedState(TypedDict):
+    task: str
+    output: str
+    escalated: bool
+
+
+# ── Subgraph A: researcher ──────────────────────────────────────────────────
+
+def researcher_node(state: SharedState) -> Command[Literal["__end__"]]:
+    # Simulate research; escalate if topic is too complex
+    if "complex" in state["task"]:
+        return Command(
+            graph=Command.PARENT,   # send to the parent supervisor
+            goto="supervisor",
+            update={"escalated": True, "output": "Research: escalated — topic too complex"},
+        )
+    return Command(
+        update={"output": f"Research done: {state['task']}"},
+        goto=END,
+    )
+
+
+researcher = (
+    StateGraph(SharedState)
+    .add_node("researcher_node", researcher_node, destinations=["__end__"])
+    .add_edge(START, "researcher_node")
+    .compile()
+)
+
+
+# ── Subgraph B: writer ──────────────────────────────────────────────────────
+
+def writer_node(state: SharedState) -> dict:
+    return {"output": f"Draft written for: {state['task']}"}
+
+
+writer = (
+    StateGraph(SharedState)
+    .add_node("writer_node", writer_node)
+    .add_edge(START, "writer_node")
+    .add_edge("writer_node", END)
+    .compile()
+)
+
+
+# ── Parent supervisor ───────────────────────────────────────────────────────
+
+class SupervisorState(SharedState):
+    phase: str
+
+
+def supervisor(state: SupervisorState) -> Command[Literal["researcher", "writer", "__end__"]]:
+    if state.get("escalated"):
+        # Researcher escalated — handle manually and finish
+        return Command(
+            update={"output": "Supervisor resolved escalation.", "phase": "done"},
+            goto=END,
+        )
+    if state["phase"] == "start":
+        return Command(update={"phase": "research"}, goto="researcher")
+    if state["phase"] == "research":
+        return Command(update={"phase": "write"}, goto="writer")
+    return Command(goto=END)
+
+
+parent = StateGraph(SupervisorState)
+parent.add_node("supervisor", supervisor, destinations=["researcher", "writer", "__end__"])
+parent.add_node("researcher", researcher)
+parent.add_node("writer", writer)
+parent.add_edge(START, "supervisor")
+
+graph = parent.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "multi-1"}}
+
+# Normal task
+result = graph.invoke({"task": "Write about LangGraph", "output": "", "escalated": False, "phase": "start"}, cfg)
+print(result["output"])   # "Draft written for: Write about LangGraph"
+
+# Complex task triggers escalation from researcher → parent supervisor
+cfg2 = {"configurable": {"thread_id": "multi-2"}}
+result2 = graph.invoke({"task": "complex quantum theory", "output": "", "escalated": False, "phase": "start"}, cfg2)
+print(result2["output"])   # "Supervisor resolved escalation."
+```
+
+### 8. Fan-out then fan-in with `Send` and a barrier edge
+
+`Send` from a conditional edge fans out to N parallel tasks. A barrier edge (`add_edge(["source1", "source2"], "target")`) waits for all of them before running the aggregation node.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+
+
+class Pipeline(TypedDict):
+    documents: list[str]
+    scores: Annotated[list[dict], operator.add]   # accumulates results from all workers
+
+
+def score_document(state: dict) -> dict:
+    """Score one document — runs once per Send."""
+    doc = state["document"]
+    score = len(doc) / 100.0   # replace with a real scoring call
+    return {"scores": [{"doc": doc[:30], "score": score}]}
+
+
+def aggregate(state: Pipeline) -> dict:
+    avg = sum(s["score"] for s in state["scores"]) / len(state["scores"])
+    best = max(state["scores"], key=lambda s: s["score"])
+    print(f"Scored {len(state['scores'])} documents. avg={avg:.2f}, best={best['doc']!r}")
+    return {}
+
+
+builder = StateGraph(Pipeline)
+builder.add_node("score_document", score_document)
+builder.add_node("aggregate", aggregate)
+
+# Fan out: one Send per document, all run in parallel
+builder.add_conditional_edges(
+    START,
+    lambda s: [Send("score_document", {"document": d, "scores": []}) for d in s["documents"]],
+)
+# Fan in: barrier waits for all score_document tasks
+builder.add_edge("score_document", "aggregate")
+builder.add_edge("aggregate", END)
+
+graph = builder.compile()
+graph.invoke({
+    "documents": ["Short doc", "A much longer document with more content", "Medium length document here"],
+    "scores": [],
+})
+```
+
 ## Gotchas
 
 - **`Command(goto="name")` bypasses explicit edges.** A node that returns a Command will follow the command's goto even if you called `add_edge("node", "next")`. Pick one style per node.

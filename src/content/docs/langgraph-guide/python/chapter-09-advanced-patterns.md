@@ -1,6 +1,6 @@
 ---
 title: "Chapter 9 — Advanced Patterns"
-description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, and the Functional API — source-verified patterns for LangGraph 1.2."
+description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, and the Functional API — source-verified patterns for LangGraph 1.2.1."
 framework: langgraph
 language: python
 sidebar:
@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send`, plus the Functional API `@entrypoint`/`@task`.
 
-Verified against **`langgraph==1.2.0`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`).
+Verified against **`langgraph==1.2.1`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`).
 
 **Time:** ~40 minutes. Most of this is reference — skim for patterns you need.
 
@@ -20,52 +20,113 @@ Verified against **`langgraph==1.2.0`** (modules: `langgraph.types`, `langgraph.
 
 ## Advanced Patterns
 
-### Pattern 1: ReAct (Reasoning + Acting)
+### Pattern 1: ReAct (Reasoning + Acting) with native LangGraph
 
-The Reflection-Action pattern for autonomous agents, now built with modern LangChain components.
+Build a ReAct-style agent entirely in LangGraph using `ToolNode`, `tools_condition`, and `MessagesState`. No external agent executor needed.
 
 ```python
-# Note: AgentExecutor and create_tool_calling_agent require `pip install langchain langchain-anthropic`
-# from langchain.agents import AgentExecutor, create_tool_calling_agent
-# from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
 from langchain_core.tools import tool
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, ToolMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages, MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.checkpoint.memory import InMemorySaver
 
-# Define tools
+
+# ── Tools ────────────────────────────────────────────────────────────────────
+
 @tool
 def search_web(query: str) -> str:
-    """Search the web."""
-    return f"Results for {query}..."
+    """Search the web for information about a topic."""
+    # Replace with a real search API in production
+    return f"Search results for '{query}': Found 3 relevant articles."
+
 
 @tool
 def calculator(expression: str) -> str:
-    """Calculate expression."""
-    return str(eval(expression))
+    """Evaluate a mathematical expression safely.
+
+    Args:
+        expression: A simple arithmetic expression like '3.7 * 13_960_000 * 0.15'
+    """
+    import ast, operator as op
+    # Minimal safe eval for arithmetic only
+    allowed = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+               ast.Div: op.truediv, ast.Pow: op.pow, ast.USub: op.neg}
+    def _eval(node):
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.BinOp):
+            return allowed[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp):
+            return allowed[type(node.op)](_eval(node.operand))
+        raise ValueError(f"Unsupported expression: {expression}")
+    try:
+        tree = ast.parse(expression, mode="eval")
+        result = _eval(tree.body)
+        return str(result)
+    except Exception as e:
+        return f"Error: {e}"
+
 
 tools = [search_web, calculator]
 
-# Create the ReAct agent
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", "You are a helpful research assistant. Think before acting."),
-        ("placeholder", "{chat_history}"),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ]
-)
-agent = create_tool_calling_agent(llm, tools, prompt)
-react_agent = AgentExecutor(agent=agent, tools=tools, verbose=True)
+# ── LLM (bind tools so it knows how to call them) ───────────────────────────
+
+# Swap ChatAnthropic / ChatOpenAI / any chat model
+from langchain_anthropic import ChatAnthropic   # pip install langchain-anthropic
+
+llm = ChatAnthropic(model="claude-opus-4-7").bind_tools(tools)
 
 
-# Use it - the AgentExecutor automatically handles the ReAct loop
-result = react_agent.invoke({
-    "input": "Research population of Tokyo and calculate 15% of that",
-    "chat_history": []
-})
+# ── Graph nodes ──────────────────────────────────────────────────────────────
 
-print(result["output"])
+def agent(state: MessagesState) -> dict:
+    """Call the LLM. It decides whether to use tools or finish."""
+    response = llm.invoke(state["messages"])
+    return {"messages": [response]}
+
+
+# ── Build the ReAct graph ────────────────────────────────────────────────────
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", agent)
+builder.add_node("tools", ToolNode(tools))
+
+builder.add_edge(START, "agent")
+# tools_condition routes to "tools" if the last message has tool_calls, else END
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")   # after tool execution, return to the agent
+
+graph = builder.compile(checkpointer=InMemorySaver())
+
+# ── Run ──────────────────────────────────────────────────────────────────────
+
+config = {"configurable": {"thread_id": "react-1"}}
+
+for event in graph.stream(
+    {"messages": [HumanMessage("What is 15% of Tokyo's population? Search for the population first, then calculate.")]},
+    config,
+    stream_mode="updates",
+):
+    for node, updates in event.items():
+        print(f"── {node} ──")
+        for msg in updates.get("messages", []):
+            print(f"  {type(msg).__name__}: {msg.content[:120] if msg.content else '(tool call)'}")
 ```
+
+**How it works:**
+
+1. `agent` calls the LLM, which emits either an `AIMessage` with `tool_calls` or a plain text reply.
+2. `tools_condition` inspects the last message: if it has tool calls, go to `"tools"`; otherwise go to `END`.
+3. `ToolNode` executes all pending tool calls in parallel and returns `ToolMessage` results.
+4. Execution loops back to `agent`, which sees the tool results and decides the next action.
+5. When the LLM is satisfied, it returns a plain `AIMessage` and the graph exits.
+
+The checkpointer persists the full message history per `thread_id`, enabling multi-turn conversations across `invoke` / `stream` calls.
 
 ### Pattern 2: Tree-of-Thoughts
 

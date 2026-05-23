@@ -604,6 +604,195 @@ def traced_node(state: State, runtime: Runtime) -> dict:
     return {"answer": answer}
 ```
 
+### 8. Pydantic state schema
+
+`StateGraph` accepts a Pydantic `BaseModel` as its state schema. Since v1.1, `invoke()` coerces dict inputs to the model before nodes run, so nodes receive a typed instance.
+
+```python
+import operator
+from typing import Annotated
+from pydantic import BaseModel, Field
+from langgraph.graph import StateGraph, START, END
+
+
+class DocState(BaseModel):
+    text: str = ""
+    word_count: int = 0
+    tags: Annotated[list[str], operator.add] = Field(default_factory=list)
+
+
+def count_words(state: DocState) -> dict:
+    # `state` is a real DocState instance — full type safety + validation
+    count = len(state.text.split())
+    return {"word_count": count}
+
+
+def tag_document(state: DocState) -> dict:
+    tag = "long" if state.word_count > 50 else "short"
+    return {"tags": [tag]}   # operator.add appends to existing list
+
+
+builder = StateGraph(DocState)
+builder.add_node("count", count_words)
+builder.add_node("tag", tag_document)
+builder.add_edge(START, "count")
+builder.add_edge("count", "tag")
+builder.add_edge("tag", END)
+
+graph = builder.compile()
+
+# Dict input is coerced to DocState before nodes run
+result = graph.invoke({"text": "LangGraph builds stateful multi-actor apps with LLMs."})
+print(result)  # {'text': '...', 'word_count': 8, 'tags': ['short']}
+```
+
+### 9. Narrowing I/O with `input_schema` and `output_schema`
+
+`input_schema` restricts what callers must pass; `output_schema` restricts what the graph returns. Internal channels that are not in `output_schema` are stripped from the final result.
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+
+class FullState(TypedDict):
+    raw_text: str
+    cleaned_text: str
+    word_count: int
+    _internal_flag: bool   # should never be visible externally
+
+
+class UserInput(TypedDict):
+    raw_text: str          # callers only need to provide raw text
+
+
+class UserOutput(TypedDict):
+    cleaned_text: str      # callers only see the cleaned result
+    word_count: int
+
+
+def clean(state: FullState) -> dict:
+    return {
+        "cleaned_text": state["raw_text"].strip().lower(),
+        "_internal_flag": True,
+    }
+
+
+def count(state: FullState) -> dict:
+    return {"word_count": len(state["cleaned_text"].split())}
+
+
+builder = StateGraph(FullState, input_schema=UserInput, output_schema=UserOutput)
+builder.add_node("clean", clean)
+builder.add_node("count", count)
+builder.add_edge(START, "clean")
+builder.add_edge("clean", "count")
+builder.add_edge("count", END)
+
+graph = builder.compile()
+
+# Caller provides only UserInput fields
+result = graph.invoke({"raw_text": "  Hello World  "})
+print(result)   # {'cleaned_text': 'hello world', 'word_count': 2}
+# '_internal_flag' is NOT present — stripped by output_schema
+```
+
+### 10. Chaining nodes with `add_sequence`
+
+`add_sequence` wires a list of nodes sequentially: node[0] → node[1] → … → node[n]. It uses each callable's `__name__` as the node name; pass `(name, fn)` tuples for explicit names.
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+
+class Pipeline(TypedDict):
+    text: str
+    tokens: list[str]
+    normalized: list[str]
+    result: str
+
+
+def tokenize(state: Pipeline) -> dict:
+    return {"tokens": state["text"].split()}
+
+
+def normalize(state: Pipeline) -> dict:
+    return {"normalized": [t.lower() for t in state["tokens"]]}
+
+
+def join_result(state: Pipeline) -> dict:
+    return {"result": " ".join(state["normalized"])}
+
+
+builder = StateGraph(Pipeline)
+builder.add_edge(START, "tokenize")
+# add_sequence registers the three nodes and connects them in order
+builder.add_sequence([tokenize, normalize, join_result])
+builder.add_edge("join_result", END)
+
+graph = builder.compile()
+print(graph.invoke({"text": "Hello World from LangGraph", "tokens": [], "normalized": [], "result": ""}))
+# {'text': 'Hello World from LangGraph', 'tokens': [...], 'normalized': [...], 'result': 'hello world from langgraph'}
+```
+
+You can also mix plain callables and `(name, fn)` tuples:
+
+```python
+builder.add_sequence([
+    ("load", load_fn),          # explicit name
+    transform_fn,               # uses transform_fn.__name__
+    ("save", save_fn),          # explicit name
+])
+```
+
+### 11. Streaming custom events with `StreamWriter`
+
+Nodes can push arbitrary values to `stream_mode="custom"` by declaring a `writer: StreamWriter` parameter:
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import StreamWriter
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+class State(TypedDict):
+    items: list[str]
+    processed: list[str]
+
+
+def batch_process(state: State, writer: StreamWriter) -> dict:
+    """Process items one at a time, streaming progress to the caller."""
+    results = []
+    for i, item in enumerate(state["items"]):
+        # Emit a progress event — only visible with stream_mode="custom"
+        writer({"progress": i + 1, "total": len(state["items"]), "item": item})
+        results.append(item.upper())
+    return {"processed": results}
+
+
+builder = StateGraph(State)
+builder.add_node("process", batch_process)
+builder.add_edge(START, "process")
+builder.add_edge("process", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "stream-1"}}
+
+# Receive both state updates and custom events
+for mode, data in graph.stream(
+    {"items": ["a", "b", "c"], "processed": []},
+    cfg,
+    stream_mode=["updates", "custom"],
+):
+    print(f"{mode}: {data}")
+# custom: {'progress': 1, 'total': 3, 'item': 'a'}
+# custom: {'progress': 2, 'total': 3, 'item': 'b'}
+# custom: {'progress': 3, 'total': 3, 'item': 'c'}
+# updates: {'process': {'processed': ['A', 'B', 'C']}}
+```
+
 ## Gotchas
 
 - **Two writes, no reducer, one super-step → `InvalidUpdateError`.** Either add a reducer or stagger the writes with edges.

@@ -454,6 +454,157 @@ cfg = {"configurable": {"thread_id": "crawl-1"}}
 await crawl.ainvoke(["https://example.com", "https://httpbin.org/get"], cfg)
 ```
 
+### 8. Named `@task` with a custom `key_func` for the cache
+
+Override the cache key when the default pickle-hash is too broad or too narrow:
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.types import CachePolicy
+from langgraph.cache.memory import InMemoryCache
+from langgraph.checkpoint.memory import InMemorySaver
+
+cache = InMemoryCache()
+
+
+def url_key(url: str) -> str:
+    """Canonical cache key: strip protocol and trailing slash."""
+    return url.removeprefix("https://").removeprefix("http://").rstrip("/")
+
+
+@task(
+    name="fetch",   # override the function name shown in traces
+    cache_policy=CachePolicy(key_func=url_key, ttl=600),
+)
+def fetch_page(url: str) -> str:
+    print(f"[network] fetching {url}")
+    return f"content:{url}"
+
+
+@entrypoint(checkpointer=InMemorySaver(), cache=cache)
+def pipeline(urls: list[str]) -> list[str]:
+    futures = [fetch_page(u) for u in urls]
+    return [f.result() for f in futures]
+
+
+cfg = {"configurable": {"thread_id": "cache-1"}}
+pipeline.invoke(["https://example.com/", "http://example.com"], cfg)
+# [network] fetching https://example.com/  — only one fetch; both URLs share the key
+```
+
+### 9. Typed `context_schema` on `@entrypoint`
+
+Use `context_schema=` to pass typed, read-only run context (user ID, feature flags, DB connections) without putting it in the serializable input:
+
+```python
+from dataclasses import dataclass
+from typing import Optional
+from langgraph.func import entrypoint, task
+from langgraph.runtime import Runtime
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
+
+
+@dataclass
+class UserCtx:
+    user_id: str
+    is_premium: bool = False
+
+
+store = InMemoryStore()
+
+
+@task
+def load_history(user_id: str) -> list[str]:
+    """Load previous queries for this user from the store."""
+    items = store.search(("history", user_id))
+    return [i.value["query"] for i in items]
+
+
+@entrypoint(
+    checkpointer=InMemorySaver(),
+    store=store,
+    context_schema=UserCtx,
+)
+def answer(query: str, runtime: Runtime[UserCtx]) -> dict:
+    ctx = runtime.context
+    history = load_history(ctx.user_id).result()
+    model = "claude-opus-4-7" if ctx.is_premium else "claude-haiku-4-5"
+
+    response = f"[{model}] Answering '{query}' (history: {history})"
+
+    # Save to cross-thread store
+    if runtime.store:
+        runtime.store.put(
+            ("history", ctx.user_id),
+            f"q-{len(query)}",
+            {"query": query},
+        )
+
+    return {"response": response, "user_id": ctx.user_id}
+
+
+cfg = {"configurable": {"thread_id": "session-42"}}
+
+# context= is passed at call time — not serialized into the checkpoint
+result = answer.invoke(
+    "What is LangGraph?",
+    cfg,
+    context=UserCtx(user_id="alice", is_premium=True),
+)
+print(result["response"])
+```
+
+### 10. Entrypoint calling a compiled `StateGraph` as a task
+
+Both Functional API and `StateGraph` compile to `Pregel`. You can use a compiled `StateGraph` inside a `@task`:
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from typing_extensions import TypedDict
+
+
+# ── A compiled StateGraph sub-pipeline ──────────────────────────────────────
+
+class CleanState(TypedDict):
+    raw: str
+    clean: str
+
+
+def strip_node(state: CleanState) -> dict:
+    return {"clean": state["raw"].strip().lower()}
+
+
+cleaner = (
+    StateGraph(CleanState)
+    .add_node("strip", strip_node)
+    .add_edge(START, "strip")
+    .add_edge("strip", END)
+    .compile()
+)
+
+
+# ── Wrap the StateGraph as a @task ──────────────────────────────────────────
+
+@task
+def clean_text(text: str) -> str:
+    result = cleaner.invoke({"raw": text, "clean": ""})
+    return result["clean"]
+
+
+@entrypoint(checkpointer=InMemorySaver())
+def process_batch(texts: list[str]) -> list[str]:
+    futures = [clean_text(t) for t in texts]
+    return [f.result() for f in futures]
+
+
+cfg = {"configurable": {"thread_id": "batch-1"}}
+result = process_batch.invoke(["  Hello World  ", "  LangGraph  "], cfg)
+print(result)  # ['hello world', 'langgraph']
+```
+
 ## Gotchas
 
 - **Tasks are futures, not values.** A very common bug: `return tasks` instead of `return [t.result() for t in tasks]`. The future object serializes fine but the caller can't use it outside the graph.
@@ -463,6 +614,8 @@ await crawl.ainvoke(["https://example.com", "https://httpbin.org/get"], cfg)
 - **`previous` is only available with a checkpointer.** Without one it defaults to `None` and does not update.
 - **Don't `await` a sync task.** A `@task` on a sync function returns `SyncAsyncFuture`; call `.result()`.
 - **Serializable I/O.** `JsonPlusSerializer` handles most dataclasses, Pydantic models, `datetime`, `UUID`, and LangChain messages. Avoid live connections, file handles, and locks in task outputs.
+- **`context_schema=` data is NOT checkpointed.** Context is injected fresh at each `invoke`/`stream` call. The same `context=` must be passed on every call that resumes from an interrupt.
+- **Calling a task outside an entrypoint raises `RuntimeError`.** Tasks are only valid inside `@entrypoint`-decorated functions or other graph nodes. Do not call them from test code, scripts, or top-level module scope without an active entrypoint.
 
 ## Breaking changes
 

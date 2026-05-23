@@ -279,11 +279,31 @@ Default: `JsonPlusSerializer` from `langgraph.checkpoint.serde.jsonplus` — han
 For confidentiality at rest, wrap it with `EncryptedSerializer`:
 
 ```python
-from cryptography.fernet import Fernet
+# pip install pycryptodome
+import os
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.memory import InMemorySaver
 
-encrypted = EncryptedSerializer.from_pycryptodome_aes(key=Fernet.generate_key())
-saver = PostgresSaver(conn, serde=encrypted)
+# AES-128 key: must be exactly 16, 24, or 32 bytes
+key = os.urandom(16)
+
+encrypted_serde = EncryptedSerializer.from_pycryptodome_aes(key=key)
+saver = InMemorySaver(serde=encrypted_serde)
+
+# All data stored in the checkpointer is AES-EAX encrypted.
+# PostgresSaver and SqliteSaver also accept serde=:
+# saver = PostgresSaver(conn, serde=encrypted_serde)
+```
+
+Alternatively, set `LANGGRAPH_AES_KEY` in your environment (16, 24, or 32 character string) and omit the `key=` argument:
+
+```bash
+export LANGGRAPH_AES_KEY="your-16-char-key"
+```
+
+```python
+# key is read from LANGGRAPH_AES_KEY automatically
+encrypted_serde = EncryptedSerializer.from_pycryptodome_aes()
 ```
 
 All savers accept `serde=...` in their constructor. `InMemorySaver` accepts it too, via kwarg only.
