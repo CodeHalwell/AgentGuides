@@ -1,15 +1,15 @@
 ---
 title: "PydanticAI: Class Deep Dives"
-description: "Source-verified deep dives into AgentRun, AgentRunResult, ConcurrencyLimiter, the Direct API, capture_run_messages, Tool advanced params, ModelSettings, Hooks, Thinking, WebSearch, UsageLimits, and more."
+description: "Source-verified deep dives into AgentRun, AgentRunResult, ConcurrencyLimiter, the Direct API, capture_run_messages, Tool advanced params, ModelSettings, Hooks, Thinking, WebSearch, UsageLimits, ToolDefinition, FunctionModel streaming, RunUsage, AgentStream, and exception flow classes."
 framework: pydanticai
 language: python
 ---
 
 # PydanticAI: Class Deep Dives
 
-Verified against **pydantic-ai==1.101.0** — each section links to the source module inspected.
+Verified against **pydantic-ai==1.102.0** — each section links to the source module inspected.
 
-This guide covers twelve classes/utilities from the installed source that get light treatment elsewhere. Every example is derived directly from the `__init__`, docstrings, and behaviour seen in the installed package.
+This guide covers classes and utilities from the installed source that get light treatment elsewhere. Every example is derived directly from the `__init__`, docstrings, and behaviour seen in the installed package.
 
 ---
 
@@ -2203,10 +2203,982 @@ agent = Agent(
 
 ---
 
+## 18. `ToolDefinition` — complete field reference
+
+Source: `pydantic_ai/tools.py` — `ToolDefinition` dataclass
+
+`ToolDefinition` is the schema object sent to the model for each tool. You normally don't construct it directly — PydanticAI builds one from your `Tool` — but you read and mutate it in `prepare` functions, toolset wrappers, and `PrepareTools` capabilities. Understanding every field lets you tune exactly what the model sees.
+
+### All fields at a glance
+
+```python
+from pydantic_ai.tools import ToolDefinition
+
+td = ToolDefinition(
+    name='search_docs',
+    description='Search the documentation for a term.',
+    parameters_json_schema={
+        'type': 'object',
+        'properties': {'query': {'type': 'string', 'description': 'Search query'}},
+        'required': ['query'],
+    },
+    # --- optional fields ---
+    strict=None,          # None=auto, True=strict JSON schema (OpenAI/Anthropic)
+    sequential=False,     # True = must not run concurrently with other tools
+    timeout=30.0,         # Seconds before a ModelRetry is issued; None = no limit
+    metadata={'scope': 'read', 'category': 'docs'},  # Not sent to model — used for filtering
+    defer_loading=False,  # True = hidden from model until surfaced by tool search
+    kind='function',      # 'function'|'output'|'external'|'unapproved'
+    return_schema=None,   # JSON schema of the return type (sent when include_return_schema=True)
+    include_return_schema=None,  # Whether to include return_schema on the wire
+    unless_native=None,   # Drop this tool when the named native tool is supported
+    with_native=None,     # Keep this tool on wire when the named native tool is supported
+    tool_kind=None,       # Discriminator for typed call/return shapes (e.g. 'tool-search')
+)
+```
+
+### `unless_native` — local fallback for native tools
+
+Use `unless_native` to register a Python fallback for a model's native built-in capability. The tool stays in the request on models that don't natively support the named tool; it's silently dropped on models that do.
+
+```python
+from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai.tools import ToolDefinition, Tool
+
+def local_web_search(query: str) -> list[str]:
+    """Fallback web search using local DuckDuckGo."""
+    return [f'Result for {query}']
+
+# This tool will be dropped from the wire when the model natively supports 'web_search'
+# (e.g. OpenAI gpt-4o with the native WebSearch capability), but included for models
+# that don't (e.g. Anthropic without native search).
+tools = FunctionToolset([
+    Tool(local_web_search, function_schema=None)   # Tool(...) picks up unless_native via ToolDefinition
+])
+```
+
+### `defer_loading` — lazy tool discovery
+
+`defer_loading=True` hides the tool from the model by default. When combined with the `ToolSearch` capability or `DeferredLoadingToolset`, the model must first search for the tool before using it. This reduces context window usage for large tool libraries.
+
+```python
+from pydantic_ai import Agent, FunctionToolset, Tool
+
+# Imagine a library of 200 tools
+large_library = FunctionToolset([
+    Tool(fn, defer_loading=True)   # Each tool is hidden until searched
+    for fn in all_my_functions
+])
+agent = Agent('openai:gpt-4o', toolsets=[large_library])
+```
+
+### `metadata` — tags for runtime filtering
+
+`metadata` is a plain `dict` that is **never sent to the model** but is available in `FilteredToolset`, `SetMetadataToolset`, `ToolSelector`, and `ToolPrepareFunc` predicates for dynamic access control.
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, FilteredToolset, RunContext, Tool
+from pydantic_ai.tools import ToolDefinition
+
+@dataclass
+class UserDeps:
+    role: str
+
+ts = FunctionToolset[UserDeps]()
+
+@ts.tool_plain
+def read_orders() -> list[str]:
+    """List all orders."""
+    return ['order-1', 'order-2']
+
+@ts.tool_plain
+def cancel_order(order_id: str) -> str:
+    """Cancel a specific order."""
+    return f'Cancelled {order_id}'
+
+# Attach metadata after the fact (or use Tool(..., metadata=...) at construction time)
+def tag_cancel_as_write(ctx: RunContext[UserDeps], tool_def: ToolDefinition) -> ToolDefinition | None:
+    if tool_def.name == 'cancel_order':
+        from dataclasses import replace
+        return replace(tool_def, metadata={'scope': 'write'})
+    return tool_def
+
+# Only show 'write' tools to admins
+def scope_filter(ctx: RunContext[UserDeps], tool_def: ToolDefinition) -> bool:
+    if (tool_def.metadata or {}).get('scope') == 'write':
+        return ctx.deps.role == 'admin'
+    return True
+
+agent = Agent('openai:gpt-4o', deps_type=UserDeps, toolsets=[
+    FilteredToolset(ts, filter_func=scope_filter)
+])
+```
+
+### `return_schema` — teach models what tools return
+
+When `include_return_schema=True` is set (or via `IncludeReturnSchemasToolset` / `IncludeToolReturnSchemas` capability), PydanticAI injects the `return_schema` JSON object into the tool definition. On Google Gemini this is a structured field; on other providers it's embedded in the description text.
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, FunctionToolset, Tool
+from pydantic_ai.toolsets import IncludeReturnSchemasToolset
+
+class SearchResult(BaseModel):
+    url: str
+    title: str
+    snippet: str
+    relevance_score: float
+
+def search(query: str) -> list[SearchResult]:
+    """Search for documentation."""
+    return []
+
+ts = FunctionToolset([Tool(search)])
+agent = Agent('google:gemini-2.5-pro', toolsets=[IncludeReturnSchemasToolset(ts)])
+# Google Gemini receives the SearchResult schema as a structured response_schema hint
+```
+
+### `render_signature` — generate LLM-friendly signatures
+
+`ToolDefinition.render_signature()` formats the tool as a function signature string — useful when constructing system prompts or documentation:
+
+```python
+from pydantic_ai.tools import ToolDefinition
+
+td = ToolDefinition(
+    name='get_weather',
+    description='Fetch current weather for a city.',
+    parameters_json_schema={
+        'type': 'object',
+        'properties': {
+            'city': {'type': 'string', 'description': 'City name'},
+            'units': {'type': 'string', 'enum': ['celsius', 'fahrenheit']},
+        },
+        'required': ['city'],
+    },
+    return_schema={'type': 'object', 'properties': {'temp': {'type': 'number'}}},
+)
+
+# Render as a docstring-style function signature
+print(td.render_signature('...'))
+```
+
+---
+
+## 19. Exception flow classes — controlling agent execution
+
+Source: `pydantic_ai/exceptions.py`
+
+PydanticAI uses several exceptions not just for errors but as **control signals** to influence agent graph execution. Understanding them lets you implement retries, approvals, skip patterns, and graceful degradation.
+
+### `ModelRetry` — ask the model to try again
+
+Raise `ModelRetry` from a **tool function**, **output validator**, or any **capability hook** to send the model a retry prompt. The model receives your message and generates a new response.
+
+```python
+import asyncio
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext, ModelRetry
+
+class DateResponse(BaseModel):
+    year: int
+    month: int
+    day: int
+
+agent = Agent('openai:gpt-4o', output_type=DateResponse)
+
+@agent.output_validator
+async def validate_date(ctx: RunContext[None], result: DateResponse) -> DateResponse:
+    import datetime
+    try:
+        datetime.date(result.year, result.month, result.day)
+    except ValueError as e:
+        raise ModelRetry(f'Invalid date: {e}. Please provide a valid calendar date.')
+    return result
+
+@agent.tool_plain
+def parse_date_string(text: str) -> str:
+    """Parse a date string and validate its components."""
+    parts = text.split('-')
+    if len(parts) != 3:
+        raise ModelRetry(
+            f'Expected YYYY-MM-DD format, got {text!r}. Please try again with the correct format.'
+        )
+    return f'Parsed: year={parts[0]}, month={parts[1]}, day={parts[2]}'
+
+result = agent.run_sync('What date is "2026-13-45"?')  # Invalid month/day
+print(result.output)
+```
+
+### `CallDeferred` — suspend a tool call for later
+
+Raise `CallDeferred` in a tool function to suspend execution. The tool call is added to a `DeferredToolRequests` collection; your code can later resume the run with `DeferredToolResults`.
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import CallDeferred
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults
+from pydantic_ai.messages import ToolReturn
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[str, DeferredToolRequests],
+)
+
+@agent.tool_plain
+def slow_background_job(task_id: str) -> str:
+    """Enqueue a long-running background job."""
+    # Instead of blocking, defer this call — the result arrives later
+    raise CallDeferred(metadata={'task_id': task_id, 'queued_at': '2026-05-23T10:00:00Z'})
+
+async def main():
+    result1 = await agent.run('Run background job task-99 and tell me when it finishes.')
+
+    if isinstance(result1.output, DeferredToolRequests):
+        print('Deferred calls:')
+        for call in result1.output.calls:
+            meta = call.metadata or {}
+            print(f'  {call.tool_name}({call.args}) — task_id={meta.get("task_id")}')
+
+        # Simulate the job completing asynchronously
+        await asyncio.sleep(1)
+        job_output = 'Background job task-99 completed successfully in 0.9s'
+
+        # Resume with the result
+        result2 = await agent.run(
+            message_history=result1.all_messages(),
+            deferred_tool_results=DeferredToolResults(calls={
+                result1.output.calls[0].tool_call_id: ToolReturn(content=job_output)
+            }),
+        )
+        print('Final:', result2.output)
+
+asyncio.run(main())
+```
+
+### `ApprovalRequired` — human-in-the-loop gate
+
+`ApprovalRequired` is semantically identical to `CallDeferred` but signals that a **human must approve** the action before it runs. Use `ToolApproved()` / `ToolDenied(message=...)` to resolve.
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import ApprovalRequired
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
+from pydantic_ai.messages import ToolReturn
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[str, DeferredToolRequests],
+)
+
+@agent.tool_plain
+def delete_database(db_name: str) -> str:
+    """Permanently drop a database."""
+    # Always require approval before destructive operations
+    raise ApprovalRequired(metadata={'db_name': db_name, 'severity': 'critical'})
+
+@agent.tool_plain  # No approval needed for reads
+def list_databases() -> list[str]:
+    """List available databases."""
+    return ['users', 'orders', 'archive']
+
+async def main():
+    result = await agent.run('List databases and then delete the archive database.')
+
+    while isinstance(result.output, DeferredToolRequests):
+        print('Approval required for:')
+        for call in result.output.approvals:
+            meta = call.metadata or {}
+            db = meta.get('db_name', '?')
+            severity = meta.get('severity', 'normal')
+            print(f'  [{severity.upper()}] {call.tool_name}(db_name={db!r})')
+
+        # Simulate human review — approve only non-critical ops
+        approvals: dict[str, ToolApproved | ToolDenied] = {}
+        for call in result.output.approvals:
+            severity = (call.metadata or {}).get('severity', 'normal')
+            if severity == 'critical':
+                approvals[call.tool_call_id] = ToolDenied(message='Destructive operation rejected by security policy.')
+            else:
+                approvals[call.tool_call_id] = ToolApproved()
+
+        result = await agent.run(
+            message_history=result.all_messages(),
+            deferred_tool_results=DeferredToolResults(approvals=approvals),
+        )
+
+    print('Final answer:', result.output)
+
+asyncio.run(main())
+```
+
+### `SkipModelRequest` — short-circuit the model call
+
+Raise `SkipModelRequest(response)` inside a `before_model_request` or `wrap_model_request` hook to bypass the model entirely and return a cached or synthetic `ModelResponse`.
+
+```python
+import asyncio
+import json
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipModelRequest
+from pydantic_ai.messages import ModelResponse, TextPart
+
+# Simple in-memory response cache
+_cache: dict[str, ModelResponse] = {}
+
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def use_cache(ctx, request_context):
+    # Build a cache key from the last user message
+    messages = request_context.messages
+    last_user = next(
+        (p.content for m in reversed(messages)
+         for p in m.parts if hasattr(p, 'content') and isinstance(p.content, str)),
+        None,
+    )
+    if last_user and last_user in _cache:
+        print(f'[cache HIT] {last_user!r}')
+        raise SkipModelRequest(_cache[last_user])
+    return request_context
+
+@hooks.on.after_model_request
+async def populate_cache(ctx, *, request_context, response):
+    messages = request_context.messages
+    last_user = next(
+        (p.content for m in reversed(messages)
+         for p in m.parts if hasattr(p, 'content') and isinstance(p.content, str)),
+        None,
+    )
+    if last_user:
+        _cache[last_user] = response
+    return response
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+
+async def main():
+    r1 = await agent.run('What is 2+2?')
+    print('First call:', r1.output)
+
+    r2 = await agent.run('What is 2+2?')   # Served from cache
+    print('Second call (cached):', r2.output)
+
+asyncio.run(main())
+```
+
+### `SkipToolExecution` — return a result without calling the function
+
+Raise `SkipToolExecution(result)` inside a `before_tool_execute` or `wrap_tool_execute` hook to bypass the tool function and use your provided result instead.
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipToolExecution
+
+# Per-run cache keyed by (tool_name, frozen_args)
+_tool_cache: dict[tuple, str] = {}
+
+hooks = Hooks()
+
+@hooks.on.before_tool_execute
+async def cache_tool_calls(ctx, *, call, tool_def, args):
+    cache_key = (tool_def.name, frozenset(args.items()))
+    if cache_key in _tool_cache:
+        cached = _tool_cache[cache_key]
+        print(f'[tool cache HIT] {tool_def.name}({args}) → {cached!r}')
+        raise SkipToolExecution(cached)
+    return args
+
+@hooks.on.after_tool_execute
+async def store_tool_result(ctx, *, call, tool_def, args, result):
+    cache_key = (tool_def.name, frozenset(args.items()))
+    if isinstance(result, str):
+        _tool_cache[cache_key] = result
+    return result
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+
+@agent.tool_plain
+def get_exchange_rate(from_currency: str, to_currency: str) -> str:
+    """Get live exchange rate between two currencies."""
+    # Expensive HTTP call that we want to cache
+    return f'1 {from_currency} = 1.23 {to_currency}'
+
+async def main():
+    r1 = await agent.run('What is USD to EUR exchange rate?')
+    r2 = await agent.run('Convert USD to EUR again.')   # Served from cache
+    print(r1.output)
+    print(r2.output)
+
+asyncio.run(main())
+```
+
+### `SkipToolValidation` — bypass Pydantic schema validation
+
+Raise `SkipToolValidation(validated_args)` inside a `before_tool_validate` or `wrap_tool_validate` hook to skip Pydantic schema validation and use a custom-validated args dict directly.
+
+```python
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipToolValidation
+
+hooks = Hooks()
+
+@hooks.on.before_tool_validate
+async def coerce_legacy_args(ctx, *, call, tool_def, args):
+    """Silently coerce old-format args before Pydantic validation."""
+    if tool_def.name == 'search' and isinstance(args.get('q'), str):
+        # Rename legacy 'q' → 'query' for backwards compat with old clients
+        coerced = {**args, 'query': args.pop('q')}
+        raise SkipToolValidation(validated_args=coerced)
+    return args
+```
+
+### `UsageLimitExceeded` and `ConcurrencyLimitExceeded`
+
+These are raised automatically by the framework — catch them at the call site to implement fallback logic:
+
+```python
+import asyncio
+from pydantic_ai import Agent, UsageLimits
+from pydantic_ai.exceptions import UsageLimitExceeded, ConcurrencyLimitExceeded
+
+agent = Agent('openai:gpt-4o')
+
+async def safe_run(prompt: str, budget: UsageLimits) -> str | None:
+    try:
+        result = await agent.run(prompt, usage_limits=budget)
+        return result.output
+    except UsageLimitExceeded as e:
+        print(f'Budget exceeded: {e}')
+        return None
+    except ConcurrencyLimitExceeded as e:
+        print(f'Too many concurrent requests: {e}')
+        return None   # Return 429-equivalent to caller
+
+async def main():
+    tight = UsageLimits(request_limit=1, output_tokens_limit=50)
+    result = await safe_run('Write a 500-word essay on Python.', tight)
+    print(result or '(budget hit — no result)')
+
+asyncio.run(main())
+```
+
+---
+
+## 20. `FunctionModel` — custom model for testing and pipelines
+
+Source: `pydantic_ai/models/function.py` — `FunctionModel`
+
+`FunctionModel` lets you replace a real LLM with a Python function. This is the foundation for deterministic integration tests, offline CI pipelines, custom LLM proxy layers, and multi-step protocol simulation.
+
+### Basic non-streaming function
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+def my_model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    """A model function that always echoes the last user message."""
+    last_content = ''
+    for msg in reversed(messages):
+        for part in msg.parts:
+            if hasattr(part, 'content') and isinstance(part.content, str):
+                last_content = part.content
+                break
+        if last_content:
+            break
+    return ModelResponse(parts=[TextPart(content=f'Echo: {last_content}')])
+
+agent = Agent(FunctionModel(my_model))
+result = agent.run_sync('Hello, world!')
+assert result.output == 'Echo: Hello, world!'
+```
+
+### `AgentInfo` — inspecting what the agent offers the model
+
+`AgentInfo` is passed as the second argument. It exposes everything the agent decided to send at this step:
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+agent = Agent('test')  # placeholder model — will be overridden
+
+@agent.tool_plain
+def add(x: int, y: int) -> int:
+    """Add two numbers."""
+    return x + y
+
+@agent.tool_plain
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+
+call_count = 0
+
+def inspect_model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    global call_count
+    call_count += 1
+
+    print(f'Step {call_count}:')
+    print(f'  function_tools: {[t.name for t in info.function_tools]}')
+    print(f'  output_tools: {[t.name for t in info.output_tools]}')
+    print(f'  allow_text_output: {info.allow_text_output}')
+    print(f'  instructions: {info.instructions!r}')
+    print(f'  model_settings: {info.model_settings}')
+
+    # On first call, emit a tool call; on second, return text
+    tool_calls = [
+        p for m in messages for p in m.parts
+        if getattr(p, 'part_kind', None) == 'tool-call'
+    ]
+    if not tool_calls:
+        return ModelResponse(parts=[
+            ToolCallPart(tool_name='add', args={'x': 3, 'y': 4})
+        ])
+    return ModelResponse(parts=[TextPart(content='The answer is 7')])
+
+with agent.override(model=FunctionModel(inspect_model)):
+    result = agent.run_sync('What is 3 + 4?')
+    print('Output:', result.output)
+```
+
+### Streaming `FunctionModel`
+
+Pass `stream_function=` to simulate streaming responses. The stream function is an **async generator** that yields `str` (text deltas), `DeltaToolCalls`, or `DeltaThinkingCalls`:
+
+```python
+import asyncio
+from collections.abc import AsyncIterator
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel, DeltaToolCalls
+
+async def stream_words(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str]:
+    """Yield response word-by-word to simulate streaming."""
+    response = 'The capital of France is Paris.'
+    for word in response.split():
+        yield word + ' '
+
+agent = Agent(FunctionModel(stream_function=stream_words))
+
+async def main():
+    async with agent.run_stream('What is the capital of France?') as stream:
+        async for chunk in stream.stream_text(delta=True):
+            print(chunk, end='', flush=True)
+        print()
+        final = await stream.get_output()
+        print('Final:', final)
+
+asyncio.run(main())
+```
+
+### Simulating multi-step tool calling with `FunctionModel`
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+def multi_step_script(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    """
+    Step 0: Call 'search' tool.
+    Step 1: Call 'summarise' tool with search result.
+    Step 2: Return final text answer.
+    """
+    responses = [
+        p for m in messages for p in m.parts
+        if getattr(p, 'kind', None) == 'response' or getattr(p, 'part_kind', None) == 'text'
+    ]
+    tool_returns = [
+        p for m in messages for p in m.parts
+        if getattr(p, 'part_kind', None) == 'tool-return'
+    ]
+
+    step = len([m for m in messages if hasattr(m, 'parts') and
+                any(getattr(p, 'part_kind', None) == 'tool-call' for p in m.parts)])
+
+    if step == 0:
+        return ModelResponse(parts=[ToolCallPart(tool_name='search', args={'query': 'Python history'})])
+    elif step == 1:
+        return ModelResponse(parts=[ToolCallPart(tool_name='summarise', args={'text': 'found docs'})])
+    else:
+        return ModelResponse(parts=[TextPart(content='Python was created by Guido van Rossum in 1991.')])
+
+agent = Agent(FunctionModel(multi_step_script))
+
+@agent.tool_plain
+def search(query: str) -> str:
+    """Search for information."""
+    return f'Documentation about: {query}'
+
+@agent.tool_plain
+def summarise(text: str) -> str:
+    """Summarise a piece of text."""
+    return f'Summary: {text[:50]}'
+
+async def main():
+    result = await agent.run('Tell me about Python.')
+    print(result.output)
+    print(f'Steps taken: {result.usage.requests}')
+
+asyncio.run(main())
+```
+
+### `FunctionModel` with a custom model profile
+
+By default `FunctionModel` sets `supports_json_schema_output=True` and `supports_json_object_output=True`. Pass `profile=` to override:
+
+```python
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.messages import ModelResponse, TextPart
+
+def my_func(messages, info):
+    return ModelResponse(parts=[TextPart(content='ok')])
+
+# Simulate a model that only supports prompted output
+model = FunctionModel(
+    my_func,
+    profile=ModelProfile(
+        supports_json_schema_output=False,
+        supports_json_object_output=False,
+        default_structured_output_mode='prompted',
+    ),
+)
+```
+
+---
+
+## 21. `RunUsage` and `RequestUsage` — token tracking
+
+Source: `pydantic_ai/usage.py`
+
+`RunUsage` accumulates token usage across the entire agent run (multiple requests). `RequestUsage` tracks a single model API call. Both inherit from `UsageBase` and share the same field structure.
+
+### `RunUsage` fields
+
+```python
+from pydantic_ai import RunUsage
+
+usage = RunUsage(
+    requests=3,            # How many model requests were made
+    tool_calls=5,          # How many tool calls were executed
+    input_tokens=1200,     # Total input/prompt tokens
+    output_tokens=480,     # Total output/completion tokens
+    cache_write_tokens=400, # Tokens written to prompt cache
+    cache_read_tokens=800,  # Tokens read from prompt cache
+    input_audio_tokens=0,
+    cache_audio_read_tokens=0,
+    output_audio_tokens=0,
+    details={},            # Provider-specific extras
+)
+
+print(usage.total_tokens)     # 1680  (input + output)
+print(repr(usage))            # RunUsage(requests=3, tool_calls=5, ...)
+```
+
+### Reading usage from a result
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+result = agent.run_sync('Write a haiku about Python.')
+u = result.usage   # RunUsage — property, not a method call (no `()` needed in 1.102.0)
+
+print(f'Requests: {u.requests}')
+print(f'Tool calls: {u.tool_calls}')
+print(f'Input tokens: {u.input_tokens}')
+print(f'Output tokens: {u.output_tokens}')
+print(f'Total tokens: {u.total_tokens}')
+print(f'Cache writes: {u.cache_write_tokens}')
+print(f'Cache reads: {u.cache_read_tokens}')
+```
+
+### Accumulating usage across multiple runs
+
+Pass a single `RunUsage` as `usage=` to accumulate across calls. PydanticAI calls `usage.incr()` after each run:
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunUsage
+
+agent = Agent('openai:gpt-4o')
+
+async def process_batch(prompts: list[str]) -> RunUsage:
+    total = RunUsage()
+    for prompt in prompts:
+        await agent.run(prompt, usage=total)
+    return total
+
+async def main():
+    prompts = [f'What is {i} + {i}?' for i in range(5)]
+    total = await process_batch(prompts)
+    print(f'Batch: {total.requests} requests, {total.total_tokens} tokens')
+
+asyncio.run(main())
+```
+
+### Adding usage together
+
+`RunUsage` and `RequestUsage` both implement `__add__` for combining:
+
+```python
+from pydantic_ai import Agent, RunUsage
+
+agent = Agent('openai:gpt-4o')
+
+r1 = agent.run_sync('Hello')
+r2 = agent.run_sync('World')
+
+combined: RunUsage = r1.usage + r2.usage
+print(f'Combined: {combined.total_tokens} tokens across {combined.requests} requests')
+```
+
+### `RequestUsage.incr()` — low-level accumulation
+
+When building custom model wrappers, call `incr()` to add one request's usage into a running total:
+
+```python
+from pydantic_ai.usage import RequestUsage, RunUsage
+
+run = RunUsage()
+
+# After each API call, increment run-level totals
+req1 = RequestUsage(input_tokens=500, output_tokens=200, cache_read_tokens=100)
+req2 = RequestUsage(input_tokens=300, output_tokens=150)
+
+run.requests += 1
+run.incr(req1)
+run.requests += 1
+run.incr(req2)
+
+print(run)  # RunUsage(requests=2, input_tokens=800, output_tokens=350, cache_read_tokens=100)
+```
+
+### `opentelemetry_attributes()` — emit standard OTel metrics
+
+Both `RequestUsage` and `RunUsage` expose a method that returns a dict of OpenTelemetry-standard attributes:
+
+```python
+from pydantic_ai.usage import RequestUsage
+
+usage = RequestUsage(
+    input_tokens=1000,
+    output_tokens=300,
+    cache_write_tokens=500,
+    cache_read_tokens=800,
+)
+
+attrs = usage.opentelemetry_attributes()
+# {
+#   'gen_ai.usage.input_tokens': 1000,
+#   'gen_ai.usage.output_tokens': 300,
+#   'gen_ai.usage.cache_creation.input_tokens': 500,
+#   'gen_ai.usage.cache_read.input_tokens': 800,
+# }
+print(attrs)
+```
+
+---
+
+## 22. `AgentStream` — low-level streaming interface
+
+Source: `pydantic_ai/result.py` — `AgentStream[AgentDepsT, OutputDataT]`
+
+`AgentStream` is the object returned when you use `agent.run_stream(...)`. You generally interact with it through `StreamedRunResult`'s helper methods, but understanding `AgentStream` directly lets you build advanced streaming pipelines.
+
+### `stream_output()` — validated structured output
+
+Yields the output type progressively as the model generates it. Uses Pydantic's partial validator to decode incomplete JSON:
+
+```python
+import asyncio
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+class Report(BaseModel):
+    title: str
+    sections: list[str]
+    word_count: int
+
+agent = Agent('openai:gpt-4o', output_type=Report)
+
+async def main():
+    async with agent.run_stream('Write a report on Python 3.13 features.') as stream:
+        # Yields Report with progressively-filled fields (partial validation)
+        last_partial: Report | None = None
+        async for partial in stream.stream_output(debounce_by=0.1):
+            last_partial = partial
+            # Update UI with current partial state
+            print(f'Title so far: {partial.title!r}  Sections: {len(partial.sections)}')
+
+        # Always call get_output() for the fully-validated final result
+        final = await stream.get_output()
+        print('Final:', final)
+
+asyncio.run(main())
+```
+
+### `stream_text()` — plain text streaming
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.run_stream('Explain list comprehensions in Python.') as stream:
+        # delta=True: each chunk is a small new token or word
+        print('Streaming (delta=True):')
+        async for chunk in stream.stream_text(delta=True):
+            print(chunk, end='', flush=True)
+        print()
+
+        # delta=False (default): cumulative text grows with each yield
+        # (Cannot use both delta=True and delta=False on the same stream — this is for illustration)
+
+    # Get usage after streaming completes
+    async with agent.run_stream('Summarise the above.') as stream:
+        async for _ in stream.stream_text(delta=True):
+            pass
+        final = await stream.get_output()
+        print(f'Tokens used: {stream.usage.total_tokens}')
+
+asyncio.run(main())
+```
+
+### `stream_response()` — raw `ModelResponse` snapshots
+
+Yields `ModelResponse` objects as the stream progresses. `state='incomplete'` during streaming, `state='complete'` on the final snapshot. Use this when you need access to `ThinkingPart`, tool call parts, and other model-level details:
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.messages import ThinkingPart, TextPart, ToolCallPart
+
+agent = Agent('anthropic:claude-opus-4-7', model_settings={'thinking': 'medium'})
+
+async def main():
+    async with agent.run_stream('What is 17 × 23?') as stream:
+        async for response in stream.stream_response(debounce_by=0.05):
+            for part in response.parts:
+                if isinstance(part, ThinkingPart):
+                    print(f'[thinking] {part.thinking[:60]}...')
+                elif isinstance(part, TextPart) and part.content:
+                    print(f'[text] {part.content!r}')
+                elif isinstance(part, ToolCallPart):
+                    print(f'[tool] {part.tool_name}({part.args})')
+
+asyncio.run(main())
+```
+
+### `cancel()` — stop token generation
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.run_stream('Count from 1 to 1000, one number per line.') as stream:
+        lines_seen = 0
+        async for chunk in stream.stream_text(delta=True):
+            print(chunk, end='', flush=True)
+            lines_seen += chunk.count('\n')
+            if lines_seen >= 10:
+                await stream.cancel()   # Stops the underlying request
+                break
+        print(f'\n[Cancelled after ~{lines_seen} lines]')
+        print(f'Was cancelled: {stream.cancelled}')
+
+asyncio.run(main())
+```
+
+### `drain()` — consume the remainder without processing
+
+After early cancellation or when you only want the final result, `drain()` discards the rest of the stream without processing:
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.run_stream('What is the capital of France?') as stream:
+        # Collect first few tokens to show "thinking..." indicator
+        first_chunk = ''
+        async for chunk in stream.stream_text(delta=True):
+            first_chunk += chunk
+            if len(first_chunk) > 20:
+                break
+
+        # Drain the remaining stream silently (no output processing)
+        await stream.drain()
+        # Still access the full output via get_output()
+        final = await stream.get_output()
+        print('Final:', final)
+
+asyncio.run(main())
+```
+
+### Key properties on `AgentStream`
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | Unique identifier for this run |
+| `conversation_id` | `str` | Conversation-level ID shared across turns |
+| `metadata` | `dict \| None` | Metadata passed at run construction |
+| `cancelled` | `bool` | Whether `cancel()` has been called |
+| `usage` | `RunUsage` | Accumulated token usage (available after stream drains) |
+
+### FastAPI SSE with `AgentStream`
+
+```python
+import asyncio
+import json
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic_ai import Agent
+
+app = FastAPI()
+agent = Agent('openai:gpt-4o')
+
+@app.get('/stream')
+async def stream_endpoint(prompt: str):
+    async def event_stream():
+        async with agent.run_stream(prompt) as stream:
+            async for chunk in stream.stream_text(delta=True):
+                # Server-Sent Events format
+                yield f'data: {json.dumps({"chunk": chunk})}\n\n'
+            final = await stream.get_output()
+            yield f'data: {json.dumps({"done": True, "output": final})}\n\n'
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
+```
+
+---
+
 ## Revision history
 
 | Date | Version | Notes |
 |------|---------|-------|
+| 2026-05-23 | 1.102.0 | Added `ToolDefinition` complete reference (§18), exception flow classes (§19), `FunctionModel` streaming (§20), `RunUsage`/`RequestUsage` (§21), `AgentStream` (§22); bumped verified version to 1.102.0. |
 | 2026-05-22 | 1.101.0 | Added `Tool` advanced params (§13), `ModelSettings` complete reference (§14), `Hooks` capability (§15), `Thinking` capability (§16), `WebSearch` capability (§17); bumped verified version to 1.101.0. |
 | 2026-05-20 | 1.99.0 | Added `UsageLimits` (§11) and `ConcurrencyLimiter` (§12) deep-dives; bumped verified version to 1.99.0. |
 | 2026-05-19 | 1.98.0 | Initial deep-dives guide — 10 classes sourced from installed pydantic-ai 1.98.0. All imports verified. |

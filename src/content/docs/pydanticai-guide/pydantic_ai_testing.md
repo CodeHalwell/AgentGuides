@@ -7,7 +7,7 @@ language: python
 
 # Testing Agents
 
-Verified against **pydantic-ai==1.101.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI ships two model implementations built for tests: `TestModel` (auto-generates tool calls + a response from JSON schema) and `FunctionModel` (you write the response-generating function). Combined with `agent.override(...)` and `capture_run_messages`, you can unit-test agents hermetically — no network, no API keys, deterministic.
 
@@ -126,7 +126,39 @@ def first_tool_then_answer(messages, info):
 
 ### Streaming `FunctionModel`
 
-Pass `stream_function=` as well (either alone or with `function=`). The stream function is an async generator yielding `DeltaToolCall`s or strings — see `models/function.py` for the exact signature if you need true streaming tests.
+Pass `stream_function=` (either alone or alongside `function=`). The stream function is an **async generator** that yields `str` chunks (text deltas), `DeltaToolCalls`, or `DeltaThinkingCalls`. Yielding a `str` produces a text delta; `DeltaToolCalls` simulates a streaming tool call:
+
+```python
+import asyncio
+from collections.abc import AsyncIterator
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+# A simple stream function that yields a sentence word-by-word
+async def stream_word_by_word(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str]:
+    sentence = 'The answer is forty-two.'
+    for word in sentence.split():
+        yield word + ' '
+
+agent = Agent(FunctionModel(stream_function=stream_word_by_word))
+
+async def test_streaming():
+    chunks = []
+    async with agent.run_stream('What is the answer?') as stream:
+        async for chunk in stream.stream_text(delta=True):
+            chunks.append(chunk)
+        final = await stream.get_output()
+
+    assert final == 'The answer is forty-two. '
+    assert len(chunks) > 1   # Multiple streamed chunks received
+
+asyncio.run(test_streaming())
+```
+
+For streaming tool calls, yield a `DeltaToolCalls` dict — see `models/function.py` for the exact type signature.
 
 ## `Agent.override(...)` — swap parts per run/test
 
@@ -284,10 +316,99 @@ with agent.override(deps=fake_db, model=TestModel()):
 - **Async tests**: prefer `await agent.run(...)` inside `async def test_*` — don't mix `run_sync` and a running event loop.
 - **`include_return_schema`**: `TestModel` does _not_ honour tool return schemas unless the agent is set to include them; see `IncludeReturnSchemasToolset`.
 
+## Testing `AgentInfo` — assert what the agent offers the model
+
+`AgentInfo` is passed to your `FunctionModel` function. Inspect it to write whitebox assertions about tool registration, output modes, and model settings:
+
+```python
+from dataclasses import dataclass
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+class WeatherReport(BaseModel):
+    city: str
+    temperature_c: float
+    conditions: str
+
+@dataclass
+class Deps:
+    api_key: str
+
+agent = Agent('test', output_type=WeatherReport, deps_type=Deps)
+
+@agent.tool
+def get_weather(ctx: RunContext[Deps], city: str) -> str:
+    return f'Current weather in {city}: 22°C, sunny'
+
+captured_info: AgentInfo | None = None
+
+def capture_model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    global captured_info
+    captured_info = info
+    # Return a valid WeatherReport-like tool output
+    return ModelResponse(parts=[TextPart(content='{"city":"London","temperature_c":22.0,"conditions":"sunny"}')])
+
+def test_agent_offers_correct_tools():
+    with agent.override(model=FunctionModel(capture_model)):
+        agent.run_sync('What is the weather in London?', deps=Deps(api_key='key'))
+
+    assert captured_info is not None
+    tool_names = {t.name for t in captured_info.function_tools}
+    assert 'get_weather' in tool_names
+
+    # Verify output tools are configured
+    assert len(captured_info.output_tools) > 0   # WeatherReport output tool
+
+    # Verify allow_text_output behaviour
+    assert captured_info.allow_text_output is False  # Structured output only
+
+test_agent_offers_correct_tools()
+print('All assertions passed.')
+```
+
+## Testing structured output with `TestModel`
+
+Use `custom_output_args` to inject specific structured output and verify your output validators:
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+
+class Invoice(BaseModel):
+    amount: float
+    currency: str
+    description: str
+
+agent = Agent('test', output_type=Invoice)
+
+@agent.output_validator
+async def validate_currency(ctx, invoice: Invoice) -> Invoice:
+    if invoice.currency not in ('USD', 'EUR', 'GBP'):
+        from pydantic_ai import ModelRetry
+        raise ModelRetry(f'Unknown currency: {invoice.currency!r}. Use USD, EUR, or GBP.')
+    return invoice
+
+def test_valid_invoice():
+    tm = TestModel(custom_output_args={
+        'amount': 99.99,
+        'currency': 'USD',
+        'description': 'Monthly subscription',
+    })
+    with agent.override(model=tm):
+        result = agent.run_sync('Generate an invoice.')
+    assert result.output.amount == 99.99
+    assert result.output.currency == 'USD'
+
+test_valid_invoice()
+```
+
 ## Reference
 
 - `TestModel` — `models/test.py:60`
-- `FunctionModel`, `AgentInfo`, `DeltaToolCall` — `models/function.py`
+- `FunctionModel`, `AgentInfo`, `DeltaToolCalls` — `models/function.py`
 - `Agent.override(...)` — `agent/__init__.py:1639`
 - `capture_run_messages()` — `_agent_graph.py:1791`
 - `ModelMessagesTypeAdapter` — `messages.py:2034`
