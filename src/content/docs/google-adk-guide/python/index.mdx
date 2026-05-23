@@ -27,7 +27,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  New? Follow Zero → Hero. Already familiar? Jump to a topic — every page is verified against the installed `google-adk==2.1.0` source. Note: v2.0.0 is the latest stable GA release; `--pre` is no longer required.
+  New? Follow Zero → Hero. Already familiar? Jump to a topic — every page is verified against the installed `google-adk==2.1.0` source. Note: `--pre` is no longer required; install with `pip install google-adk`.
 </Aside>
 
 ## Zero → Hero
@@ -47,6 +47,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="12 · Evaluation" href="./evaluation/" description="AgentEvaluator, EvalCase, EvalSet, metrics · 25 min" />
   <LinkCard title="13 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
   <LinkCard title="14 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+  <LinkCard title="15 · Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified class deep dives · 40 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -62,6 +63,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
   <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
   <LinkCard title="Evaluation" href="./evaluation/" />
+  <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" />
 </CardGrid>
 
 ## Reference
@@ -70,7 +72,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Agents" href="./agents/" description="LlmAgent, Parallel, Loop, Sequential (deprecated)." />
   <LinkCard title="Workflows" href="./workflows/" description="Workflow, @node, Edge, JoinNode." />
   <LinkCard title="Tools" href="./tools/" description="FunctionTool, AgentTool, BaseTool, BaseToolset, MCP." />
-  <LinkCard title="Callbacks & plugins" href="./callbacks-and-plugins/" description="All 11 plugin hooks + agent callbacks." />
+  <LinkCard title="Callbacks & plugins" href="./callbacks-and-plugins/" description="All 13 plugin hooks + agent callbacks." />
   <LinkCard title="Runner & sessions" href="./runner-and-sessions/" description="Runner, App, session services, RunConfig." />
   <LinkCard title="Memory & artifacts" href="./memory-and-artifacts/" description="MemoryService + ArtifactService implementations." />
   <LinkCard title="MCP & A2A" href="./mcp-and-a2a/" description="McpToolset, RemoteA2aAgent, to_a2a()." />
@@ -81,11 +83,23 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Recipes" href="./google_adk_recipes/" />
   <LinkCard title="Diagrams" href="./google_adk_diagrams/" />
   <LinkCard title="Production guide" href="./google_adk_production_guide/" />
+  <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified deep dives: LlmAgent, RunConfig, Context, BasePlugin, App, Workflow, BaseNode, FunctionTool, RetryConfig, BaseTool." />
 </CardGrid>
 
 ## What's new in v2.1.0 (May 2026)
 
-- **v2.1.0 (May 2026) — Minor release.** Maintenance and dependency updates. Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed; API surface unchanged from 2.0.0.
+- **v2.1.0 (May 2026) — minor feature release.** Install with `pip install google-adk`. New in this release:
+  - **`RunConfig.tool_thread_pool_config`** (`ToolThreadPoolConfig`) — offloads tool execution to a thread pool in live/bidirectional sessions so blocking I/O doesn't freeze the event loop.
+  - **`RunConfig.context_window_compression`** — Gemini-side sliding-window context compression (`types.ContextWindowCompressionConfig`).
+  - **`RunConfig.get_session_config`** — limits which events are loaded from the session store on each invocation; combine with `EventsCompactionConfig` for efficient large sessions.
+  - **`RunConfig.enable_affective_dialog`**, **`proactivity`**, **`session_resumption`** — new live-mode controls.
+  - **`BaseNode.state_schema`** / **`input_schema`** / **`output_schema`** — first-class fields on `BaseNode` (previously only surfaced on `Workflow`).
+  - **`Context.add_memory(memories=[...])`** — add explicit `MemoryEntry` items directly (alongside the existing `add_session_to_memory()`).
+  - **`BasePlugin.on_model_error_callback`** — formally documented as a first-class hook.
+  - Core symbols (`Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService`, `Workflow`, `BaseNode`, `RunConfig`) verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed.
+
+## What's new in v2.0.0 GA (May 2026)
+
 - **v2.0.0 (May 2026) — GA stable release.** `google-adk 2.0.0` is now the latest stable release on PyPI; `pip install google-adk --pre` is no longer needed. Install with `pip install google-adk`. All guide content and verified snippets continue to apply unchanged. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS.
 
 ## What's new in v2.0 beta (April 2026)
@@ -127,7 +141,7 @@ Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#intr
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
-| 2026-05-23 | google-adk 2.1.0 | Minor release; version card bumped `v2.0.0` → `v2.1.0`; Aside tip updated; "What's new in v2.1.0" section added. Core symbols (`Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService`) verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed; API surface unchanged from 2.0.0. | Claude routine |
+| 2026-05-23 | google-adk 2.1.0 | Version bump to 2.1.0; added Class deep dives page (10 source-verified deep dives: LlmAgent, RunConfig/StreamingMode/ToolThreadPoolConfig, Context/ToolContext, BasePlugin, App/EventsCompactionConfig/ResumabilityConfig, Workflow, BaseNode/Node, FunctionTool, RetryConfig, BaseTool); updated "What's new" section with 2.1.0 features; index version card, Aside, and deep dives navigation updated. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`); all PASS. | Claude |
 | 2026-05-20 | google-adk 2.0.0 | GA stable release. Install command updated `pip install google-adk --pre` → `pip install google-adk`; version card updated `v2.0.0b1` → `v2.0.0`; Aside tip updated to note stable status; "What's new in v2.0.0 GA" section added. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; `Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService` all PASS. | Claude routine |
 | 2026-05-20 | google-adk 2.0.0 | Added Evaluation page (AgentEvaluator, EvalCase, EvalSet, PrebuiltMetrics, rubric eval, custom metrics, pytest integration). Rewrote Advanced Python page (BuiltInPlanner, PlanReActPlanner, custom BasePlanner, BaseTool, BaseToolset, authenticated tools, HITL, Cloud Run deploy, OTEL). Expanded Tools page with BaseTool, BaseToolset, and ToolContext API sections. Updated index navigation. | Claude routine |
 | 2026-04-22 | google-adk 2.0.0b1 | Added 7 topic pages: Agents, Workflows, Tools, Callbacks & Plugins, Runner & Sessions, Memory & Artifacts, MCP & A2A. Verified against installed source. Fixed errata in Advanced Python quickstart. Index rewired with new Zero → Hero and Reference grid. | Claude routine |

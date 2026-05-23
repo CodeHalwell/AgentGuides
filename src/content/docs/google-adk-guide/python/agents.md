@@ -7,7 +7,7 @@ sidebar:
   order: 20
 ---
 
-Verified against google-adk==2.0.0 (`google/adk/agents/`).
+Verified against google-adk==2.1.0 (`google/adk/agents/`).
 
 ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`) and three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent`). As of 2.x the three shell agents are `@deprecated` in favour of `Workflow` — see the [workflows page](./workflows/). They still work but new projects should compose with `Workflow`.
 
