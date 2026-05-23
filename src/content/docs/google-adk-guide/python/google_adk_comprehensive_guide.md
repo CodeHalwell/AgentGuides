@@ -5,7 +5,7 @@ framework: google-adk
 language: python
 ---
 
-Latest: 2.0.0 | Updated: May 19, 2026
+Latest: 2.1.0 | Updated: May 23, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
@@ -4112,6 +4112,7 @@ result = await agent.run(
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1.0 | May 23, 2026 | Minor release. `Latest:` header updated 2.0.0 → 2.1.0. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed; API surface unchanged from 2.0.0. | Claude routine |
 | 2.0.0 (GA) | May 20, 2026 | GA stable release confirmed. `pip install google-adk` (no `--pre` required). Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS. |
 | 2.0.0 | May 19, 2026 | **Stable major release.** `SequentialAgent`, `ParallelAgent`, `LoopAgent` are officially deprecated in favour of `Workflow`. `ToolContext` is now an alias for `Context` (`agents/context.py`). `LongRunningFunctionTool` moved to `tools/long_running_tool.py`. `McpToolset` gained `credential_key` parameter for shared credential service namespacing. `RunConfig` adds `ToolThreadPoolConfig` for live-mode tool concurrency, `custom_metadata` merged into every event, and `get_session_config` for selective session event loading. Plugins gained `before_run_callback`, `on_event_callback`, `after_run_callback`, and `close` lifecycle hooks. `GlobalInstructionPlugin` replaces the deprecated `LlmAgent.global_instruction` field. `SaveFilesAsArtifactsPlugin` replaces the deprecated `RunConfig.save_input_blobs_as_artifacts`. `Workflow.max_concurrency` limits graph-scheduled parallel nodes. |
 | 1.33.0 | May 9, 2026 | Minor stable release. Version confirmed against installed `google-adk 1.33.0`; `google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.tools.FunctionTool` verified with `-W error::DeprecationWarning` — all PASS. |

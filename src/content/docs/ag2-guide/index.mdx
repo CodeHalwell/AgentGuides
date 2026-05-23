@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.13.0** · May 2026 · Python 3.10+
+    **v0.13.1** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Research-grade multi-agent systems, GroupChat, event-driven conversations.
@@ -65,8 +65,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./ag2_production_guide/" />
 </CardGrid>
 
-## What's new in v0.13.0 (May 2026)
+## What's new in v0.13.1 (May 2026)
 
+- **v0.13.1 (May 2026)** — Patch release; stability and dependency updates. All core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.1` (`.routine-envs/check-0523-ag2`) with `-W error::DeprecationWarning` (warnings suppressed for upstream issues); 57 top-level exports confirmed.
 - **v0.13.0 (May 2026)** — Minor release. **Swarm API refactored:** `SwarmAgent` and `initiate_swarm_chat` have been removed from the top-level `autogen` namespace. The canonical path is now `from autogen.agentchat.contrib.swarm_agent import SwarmAgent, initiate_swarm_chat`. Three new top-level swarm functions added: `run_swarm(initial_agent, messages, agents, ...)`, `a_run_swarm(...)` (async), and `a_initiate_swarm_chat(...)` (async). All previously-verified core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `LLMConfig`) confirmed present in installed `ag2==0.13.0` (`.routine-envs/check-0520-ag2`).
 - **v0.12.3 (May 9)** — Patch release; stability and dependency updates. Note: `autogen` imports emit `DeprecationWarning` via `jsonschema.RefResolver` (upstream issue in `jsonschema>=4.18.0`; does not affect ag2 API behaviour).
 - **v0.12.2 (May 1)** — Patch release; stability improvements.
@@ -112,6 +113,7 @@ Ready? **[Start Zero → Hero Step 1 →](./ag2_comprehensive_guide/#overview)**
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-05-23 | 0.13.1 | Patch release bump 0.13.0 → 0.13.1; "What's new" heading updated to v0.13.1; v0.13.1 bullet added; comprehensive guide header updated; revision history entry added. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.1` (`.routine-envs/check-0523-ag2`) with warnings suppressed (upstream issue); 57 top-level exports confirmed. | Claude routine |
 | 2026-05-20 | 0.13.0 | Version bumped 0.12.3 → 0.13.0; "What's new" heading updated to v0.13.0; v0.13.0 bullet added documenting swarm API refactor (`SwarmAgent`/`initiate_swarm_chat` moved to `autogen.agentchat.contrib.swarm_agent`; new top-level `run_swarm`, `a_run_swarm`, `a_initiate_swarm_chat`); comprehensive guide header updated; revision history entry added. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `LLMConfig`) verified against installed `ag2==0.13.0` (`.routine-envs/check-0520-ag2`) with `-W error::DeprecationWarning`; all PASS. | Claude routine |
 | 2026-05-09 | 0.12.3 | Version bumped 0.12.2 → 0.12.3 (patch release); "What's new" updated; comprehensive guide header updated; revision history entry added. `autogen.ConversableAgent`, `GroupChat`, `GroupChatManager`, `AssistantAgent`, `UserProxyAgent` verified against installed `ag2 0.12.3` (`.routine-envs/check-0509-py`). Upstream DeprecationWarning via `jsonschema.RefResolver` noted as ag2 upstream issue. | Claude routine |
 | 2026-05-01 | 0.12.2 | Version bumped 0.12.1 → 0.12.2; comprehensive guide header updated; revision history entry added. `autogen.ConversableAgent` import verified against installed 0.12.2 (`.routine-envs/check-ag2-0501`). | Claude routine |

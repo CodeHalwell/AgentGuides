@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.11.4** · May 2026 · Node 18+
+    **v0.11.5** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack agents, HITL-approved workflows, browser-side tools.
@@ -69,8 +69,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./openai_agents_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.11.4 (May 2026)
+## What's new in v0.11.5 (May 2026)
 
+- **v0.11.5 (May 2026)** — Patch; stability and dependency updates. 161 exports confirmed; all key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`, `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`) confirmed present in `@openai/agents@0.11.5` (`.routine-envs/check-0523-node`).
 - **v0.11.4 (May 12)** — Patch; stability improvements. All key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`, `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`) confirmed present in `@openai/agents@0.11.4` (`.routine-envs/check-0512-node`).
 - **v0.11.3 (May 11)** — Patch; stability improvements.
 - **v0.11.2 (May 10)** — Patch; stability improvements.
@@ -101,6 +102,7 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_typescript_compreh
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-05-23 | 0.11.5 | Patch release bump 0.11.4 → 0.11.5; "What's new" heading updated to v0.11.5; v0.11.5 bullet added; comprehensive guide header updated; revision history entry added. Key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`) confirmed in installed `@openai/agents@0.11.5` (`.routine-envs/check-0523-node`); 161 total exports confirmed. | Claude routine |
 | 2026-05-12 | 0.11.4 | Version bumped 0.11.3 → 0.11.4; "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`, `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`) confirmed in installed `@openai/agents@0.11.4` (`.routine-envs/check-0512-node`). | Claude routine |
 | 2026-05-11 | 0.11.3 | Version bumped 0.11.1 → 0.11.3 (two patch releases: 0.11.2, 0.11.3); "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols confirmed in installed `@openai/agents@0.11.3` (`.routine-envs/check-0511-node`). | Claude routine |
 | 2026-05-09 | 0.11.1 | Version bumped 0.8.5 → 0.11.1 (multiple minor and patch releases); "What's new" updated; comprehensive guide header updated. New symbols confirmed in installed `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`): `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `RuntimeEventEmitter`, `applySessionHistoryMutations`, `MCPServerStreamableHttp`. Revision history entry added. | Claude routine |

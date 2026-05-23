@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.0.0** · May 2026 · Python 3.10+
+    **v2.1.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     GCP-native workloads, Gemini-first agents, Vertex AI Agent Engine.
@@ -27,7 +27,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  New? Follow Zero → Hero. Already familiar? Jump to a topic — every page is verified against the installed `google-adk==2.0.0` source. Note: v2.0.0 is now the stable GA release; `--pre` is no longer required.
+  New? Follow Zero → Hero. Already familiar? Jump to a topic — every page is verified against the installed `google-adk==2.1.0` source. Note: v2.0.0 is the latest stable GA release; `--pre` is no longer required.
 </Aside>
 
 ## Zero → Hero
@@ -83,9 +83,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./google_adk_production_guide/" />
 </CardGrid>
 
-## What's new in v2.0.0 GA (May 2026)
+## What's new in v2.1.0 (May 2026)
 
-- **v2.0.0 (May 2026) — GA stable release.** `google-adk 2.0.0` is now the latest stable release on PyPI; `pip install google-adk --pre` is no longer needed. Install with `pip install google-adk`. All guide content and verified snippets continue to apply unchanged. Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS.
+- **v2.1.0 (May 2026) — Minor release.** Maintenance and dependency updates. Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed; API surface unchanged from 2.0.0.
+- **v2.0.0 (May 2026) — GA stable release.** `google-adk 2.0.0` is now the latest stable release on PyPI; `pip install google-adk --pre` is no longer needed. Install with `pip install google-adk`. All guide content and verified snippets continue to apply unchanged. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS.
 
 ## What's new in v2.0 beta (April 2026)
 
@@ -126,6 +127,7 @@ Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#intr
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-23 | google-adk 2.1.0 | Minor release; version card bumped `v2.0.0` → `v2.1.0`; Aside tip updated; "What's new in v2.1.0" section added. Core symbols (`Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService`) verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed; API surface unchanged from 2.0.0. | Claude routine |
 | 2026-05-20 | google-adk 2.0.0 | GA stable release. Install command updated `pip install google-adk --pre` → `pip install google-adk`; version card updated `v2.0.0b1` → `v2.0.0`; Aside tip updated to note stable status; "What's new in v2.0.0 GA" section added. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; `Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService` all PASS. | Claude routine |
 | 2026-05-20 | google-adk 2.0.0 | Added Evaluation page (AgentEvaluator, EvalCase, EvalSet, PrebuiltMetrics, rubric eval, custom metrics, pytest integration). Rewrote Advanced Python page (BuiltInPlanner, PlanReActPlanner, custom BasePlanner, BaseTool, BaseToolset, authenticated tools, HITL, Cloud Run deploy, OTEL). Expanded Tools page with BaseTool, BaseToolset, and ToolContext API sections. Updated index navigation. | Claude routine |
 | 2026-04-22 | google-adk 2.0.0b1 | Added 7 topic pages: Agents, Workflows, Tools, Callbacks & Plugins, Runner & Sessions, Memory & Artifacts, MCP & A2A. Verified against installed source. Fixed errata in Advanced Python quickstart. Index rewired with new Zero → Hero and Reference grid. | Claude routine |
