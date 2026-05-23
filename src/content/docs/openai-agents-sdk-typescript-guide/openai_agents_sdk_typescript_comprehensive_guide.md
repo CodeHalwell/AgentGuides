@@ -4,7 +4,7 @@ description: "Version: 1.0 Last Updated: May 2026 Language: TypeScript Framework
 framework: openai-agents-sdk-typescript
 ---
 
-Latest: 0.11.4 | Updated: May 12, 2026
+Latest: 0.11.5 | Updated: May 23, 2026
 # OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
 
 **Version:** 1.0  
@@ -2523,6 +2523,7 @@ await session.send({ type: 'input_audio_buffer.append', audio: recordedPcm });
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.11.5 | May 23, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 0.11.4 → 0.11.5. Key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`) confirmed in `@openai/agents@0.11.5` (`.routine-envs/check-0523-node`); 161 total exports confirmed. | Claude routine |
 | 0.11.4 | May 12, 2026 | Patch release; stability improvements. All symbols confirmed in `@openai/agents@0.11.4` (`.routine-envs/check-0512-node`): `Agent`, `Runner`, `run`, `handoff`, `tool`, `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`. |
 | 0.11.3 | May 11, 2026 | Two patch releases (0.11.2, 0.11.3); stability improvements. All symbols confirmed in `@openai/agents@0.11.3` (`.routine-envs/check-0511-node`). |
 | 0.11.1 | May 9, 2026 | Version bumped 0.8.5 → 0.11.1 across multiple minor releases. New: `shellTool`/`toolSearchTool`/`applyPatchTool` built-in tools, `retryPolicies` for configurable retry, `MemorySession`/`OpenAIConversationsSession`/`OpenAIResponsesCompactionSession` session types, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`, `applyDiff`. All symbols confirmed in `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`). Header and revision history updated. |

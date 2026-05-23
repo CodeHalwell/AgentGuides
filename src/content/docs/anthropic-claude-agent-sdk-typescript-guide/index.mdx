@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.3.148** · May 2026 · Node 18+
+    **v0.3.150** · May 2026 · Node 18+
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack Claude apps, Node streaming servers, MCP-rich workflows.
@@ -70,8 +70,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="./claude_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.3.148 (May 2026)
+## What's new in v0.3.150 (May 2026)
 
+- **v0.3.150 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.148. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.150` (`.routine-envs/check-0523-node`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
+- **v0.3.149 (May 2026)** — Patch release; stability and dependency updates.
 - **v0.3.148 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.145. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.148` (`.routine-envs/check-0522-node`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
 - **v0.3.147 (May 2026)** — Patch release; stability and dependency updates.
 - **v0.3.146 (May 2026)** — Patch release; stability and dependency updates.
@@ -121,6 +123,7 @@ Ready? **[Start Zero → Hero Step 1 →](./claude_agent_sdk_typescript_comprehe
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-23 | @anthropic-ai/claude-agent-sdk 0.3.150 | Patch releases 0.3.149–0.3.150; "What's new" heading updated to v0.3.150; two patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.150` (`.routine-envs/check-0523-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
 | 2026-05-22 | @anthropic-ai/claude-agent-sdk 0.3.148 | Patch releases 0.3.146–0.3.148; "What's new" heading updated to v0.3.148; three patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.148` (`.routine-envs/check-0522-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
 | 2026-05-20 | @anthropic-ai/claude-agent-sdk 0.3.145 | Patch release bump 0.3.144 → 0.3.145; "What's new" heading updated to v0.3.145; v0.3.145 bullet added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.145` (`.routine-envs/check-0520-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. | Claude routine |
 | 2026-05-19 | @anthropic-ai/claude-agent-sdk 0.3.144 | Major version bump 0.2.141 → 0.3.144; "What's new" updated; comprehensive guide header updated; revision history entry added. Three `unstable_v2_*` exports removed from public API. Full 25-export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.3.144` (`.routine-envs/check-0519-node`). | Claude routine |
