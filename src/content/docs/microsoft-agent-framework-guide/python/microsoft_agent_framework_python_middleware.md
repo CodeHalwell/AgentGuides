@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Middleware"
-description: "Agent, chat, and function middleware in agent-framework-core 1.5.0 — real signatures, short-circuit patterns, telemetry, retries, and redaction."
+description: "Agent, chat, and function middleware in agent-framework-core 1.6.0 — real signatures, short-circuit patterns, telemetry, retries, and redaction."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -879,4 +879,4 @@ print(final.value)  # parsed Address instance, lazily validated
 - `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
 - `AggregateContextProvider` removed — compose providers directly.
 
-The `context_providers` parameter on `Agent` is still **plural** in 1.4.0, contrary to earlier drafts of this guide.
+The `context_providers` parameter on `Agent` is still **plural** in 1.6.0, contrary to earlier drafts of this guide.

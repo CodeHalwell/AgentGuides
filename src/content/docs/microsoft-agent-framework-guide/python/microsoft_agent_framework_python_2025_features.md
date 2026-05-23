@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
-description: "Verified feature set in agent-framework-core 1.5.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
+description: "Verified feature set in agent-framework-core 1.6.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of May 2026."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -13,25 +13,37 @@ language: python
 > - [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/)
 > - [A2A Protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/)
 
-## Package status (April 2026)
+## Package status (May 2026)
 
 | Package | Version | Status |
 |---|---|---|
-| `agent-framework-core` | 1.4.0 | Stable |
-| `agent-framework-foundry` | 1.4.0 | Stable |
-| `agent-framework-openai` | 1.4.0 | Stable |
-| `agent-framework-a2a` | 1.0.0b260514 | Beta |
-| `agent-framework-declarative` | 1.0.0b260514 | Beta |
-| `agent-framework-copilotstudio` | 1.0.0b260514 | Beta |
-| `agent-framework-mem0` | 1.0.0b260514 | Beta |
-| `agent-framework-anthropic` | 1.0.0b260514 | Beta |
-| `agent-framework-bedrock` | 1.0.0b260514 | Beta |
-| `agent-framework-azurefunctions` | 1.0.0b260514 | Beta |
-| `agent-framework-durabletask` | 1.0.0b260514 | Beta |
-| `agent-framework-orchestrations` | 1.0.0b260514 | Beta |
-| `agent-framework-redis` | 1.0.0b260514 | Beta |
+| `agent-framework` | 1.6.0 | Stable (meta package) |
+| `agent-framework-core` | 1.6.0 | Stable |
+| `agent-framework-foundry` | 1.6.0 | Stable |
+| `agent-framework-openai` | 1.6.0 | Stable |
+| `agent-framework-orchestrations` | 1.0.0rc2 | RC |
+| `agent-framework-ag-ui` | 1.0.0rc3 | RC |
+| `agent-framework-a2a` | 1.0.0b260521 | Beta |
+| `agent-framework-anthropic` | 1.0.0b260521 | Beta |
+| `agent-framework-azure-ai-search` | 1.0.0b260521 | Beta |
+| `agent-framework-azure-cosmos` | 1.0.0b260521 | Beta |
+| `agent-framework-azurefunctions` | 1.0.0b260521 | Beta |
+| `agent-framework-bedrock` | 1.0.0b260521 | Beta |
+| `agent-framework-chatkit` | 1.0.0b260521 | Beta |
+| `agent-framework-claude` | 1.0.0b260521 | Beta |
+| `agent-framework-copilotstudio` | 1.0.0b260521 | Beta |
+| `agent-framework-declarative` | 1.0.0b260521 | Beta |
+| `agent-framework-devui` | 1.0.0b260521 | Beta |
+| `agent-framework-durabletask` | 1.0.0b260521 | Beta |
+| `agent-framework-foundry-local` | 1.0.0b260521 | Beta |
+| `agent-framework-github-copilot` | 1.0.0b260521 | Beta |
+| `agent-framework-hyperlight` | 1.0.0b260521 | Beta |
+| `agent-framework-mem0` | 1.0.0b260521 | Beta |
+| `agent-framework-ollama` | 1.0.0b260521 | Beta |
+| `agent-framework-purview` | 1.0.0b260521 | Beta |
+| `agent-framework-redis` | 1.0.0b260521 | Beta |
 
-The `agent-framework` meta package (1.4.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
+The `agent-framework` meta package (1.6.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
 
 ## Agent2Agent (A2A) protocol
 

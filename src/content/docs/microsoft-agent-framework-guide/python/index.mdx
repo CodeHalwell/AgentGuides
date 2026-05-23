@@ -59,7 +59,8 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="16 · Declarative agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" description="YAML/JSON config, Pydantic validation · 15 min" />
   <LinkCard title="17 · A2A protocol" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#agent2agent-a2a-protocol---python" description="Interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK · 20 min" />
   <LinkCard title="18 · Production" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, scaling, security, DR · 30 min" />
-  <LinkCard title="19 · Class deep dives" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Agent, RawAgent, FunctionTool, WorkflowBuilder, RunContext, InlineSkill, MCPStdioTool — source-verified at 1.6.0 · 30 min" />
+  <LinkCard title="19 · Class deep dives Vol. 1" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Agent, RawAgent, FunctionTool, WorkflowBuilder, RunContext, InlineSkill, MCPStdioTool — source-verified at 1.6.0 · 30 min" />
+  <LinkCard title="20 · Class deep dives Vol. 2" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_2/" description="AgentMiddleware, SummarizationStrategy, TokenBudgetComposedStrategy, CompactionProvider, LocalEvaluator, FileHistoryProvider, SkillsProvider, TodoProvider, AgentModeProvider, FileCheckpointStorage — source-verified at 1.6.0 · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -85,7 +86,8 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Declarative YAML agents" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#declarative-agents-with-python" />
   <LinkCard title="Content safety" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#content-safety---python" />
   <LinkCard title="Async best practices" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/#async-best-practices" />
-  <LinkCard title="Class deep dives (10 classes, source-verified)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" />
+  <LinkCard title="Class deep dives Vol. 1 (10 classes, source-verified)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" />
+  <LinkCard title="Class deep dives Vol. 2 (10 more classes, source-verified)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_2/" />
 </CardGrid>
 
 ## Reference
@@ -110,7 +112,8 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Recipes" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/" description="Copy-paste code for common scenarios." />
   <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_diagrams/" description="System architecture, lifecycle, orchestration." />
   <LinkCard title="Production guide" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, Kubernetes, CI/CD, compliance." />
-  <LinkCard title="Class deep dives" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Agent, RawAgent, FunctionTool, WorkflowBuilder, RunContext, InlineSkill, MCPStdioTool — 10 classes from source." />
+  <LinkCard title="Class deep dives Vol. 1" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Agent, RawAgent, FunctionTool, WorkflowBuilder, RunContext, InlineSkill, MCPStdioTool — 10 classes from source." />
+  <LinkCard title="Class deep dives Vol. 2" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_2/" description="AgentMiddleware, SummarizationStrategy, TokenBudgetComposedStrategy, CompactionProvider, LocalEvaluator, FileHistoryProvider, SkillsProvider, TodoProvider, AgentModeProvider, FileCheckpointStorage — 10 classes from source." />
 </CardGrid>
 
 ## What's shipped (May 2026 introspection)
@@ -129,8 +132,8 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   - `middleware=` now requires a list — no longer accepts a single instance.
   - `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
   - `AggregateContextProvider` removed — compose `ContextProvider` instances directly.
-  - `context_providers` stays **plural** in `agent-framework-core==1.5.0` (verified against source). An earlier draft of this guide incorrectly said it was renamed to singular.
-  - `output_executors=` in `WorkflowBuilder` is **deprecated** in 1.5.0 — replace with `output_from=`. The old parameter still works but emits a warning.
+  - `context_providers` stays **plural** in `agent-framework-core==1.6.0` (verified against source). An earlier draft of this guide incorrectly said it was renamed to singular.
+  - `output_executors=` in `WorkflowBuilder` is **deprecated** in 1.6.0 — replace with `output_from=`. The old parameter still works but emits a warning.
   - Migrating from standalone Semantic Kernel or AutoGen? See the [official guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/) — ~2–4 hours for a typical app.
 </Aside>
 
@@ -162,6 +165,7 @@ Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-23 | 1.1.0 | Added Class Deep Dives Vol. 2 page covering 10 new source-verified classes (AgentMiddleware, SummarizationStrategy, TokenBudgetComposedStrategy, CompactionProvider, LocalEvaluator, FileHistoryProvider, SkillsProvider, TodoProvider, AgentModeProvider, FileCheckpointStorage). Updated package version table in 2025-features page from 1.4.0 to 1.6.0 (stable) and 1.0.0b260521 (beta packages). Updated all stale `1.5.0` version references in tools, middleware, evaluation, harness, and HITL docs to `1.6.0`. |
 | 2026-05-22 | 1.0.9 | Version bumped 1.5.0 → 1.6.0; version card, description frontmatter, and "What's shipped" section updated to 1.6.0. All 23 core symbols verified against installed `agent-framework-core==1.6.0` (`.routine-envs/check-0522-ms-agent`); 242 public symbols confirmed; no API regressions. `frameworks.ts` updated `v1.4.0` → `v1.6.0`. Note: `DeprecationWarning` from opentelemetry internal `importlib.metadata` dict interface (Python 3.11 compat) persists — upstream opentelemetry bug, not an agent-framework issue. |
 | 2026-05-20 | 1.0.8 | Bumped all version references to `agent-framework-core==1.5.0`. Added `output_from`/`intermediate_output_from` documentation to `WorkflowBuilder` (replaces deprecated `output_executors`). Added full `MemoryContextProvider` section to HARNESS Providers guide including injected tools, `consolidation_client`, `history_message_filter`, and custom `MemoryStore` backend examples. Added `RunContext.set_state` key restriction (`_` prefix raises `ValueError`) to Functional Workflows guide. Added combined `checkpoint_id + responses` HITL resume pattern. Added `include_status_events` explanation. Fixed `FunctionInvocationConfiguration` defaults (`max_iterations=40`, `max_consecutive_errors_per_request=3`). Added full `FunctionTool` constructor reference table with `declaration_only`, `additional_properties`, and middleware cost-tagging examples. |
 | 2026-05-17 | 1.0.7 | Bumped all version references to `agent-framework-core==1.4.0`. Added `get_run_context()` code example to Functional Workflows guide (accessing RunContext from nested utility functions). Added `annotate_message_groups` low-level helper documentation to Compaction guide. Re-verified all API surfaces against installed `agent-framework-core==1.4.0` source. |

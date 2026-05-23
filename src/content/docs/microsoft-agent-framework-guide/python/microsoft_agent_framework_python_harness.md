@@ -1,13 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — HARNESS Providers"
-description: "TodoProvider, AgentModeProvider, MemoryContextProvider — experimental context providers giving agents self-managed task lists, mode-switching, and long-term memory. Verified against agent-framework-core 1.5.0."
+description: "TodoProvider, AgentModeProvider, MemoryContextProvider — experimental context providers giving agents self-managed task lists, mode-switching, and long-term memory. Verified against agent-framework-core 1.6.0."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # HARNESS Providers — Python
 
-> **Experimental.** `TodoProvider`, `AgentModeProvider`, `MemoryContextProvider`, and their backing stores are marked `ExperimentalFeature.HARNESS` in 1.5.0. The APIs are functional but may change between minor releases. Import warnings appear on first use.
+> **Experimental.** `TodoProvider`, `AgentModeProvider`, `MemoryContextProvider`, and their backing stores are marked `ExperimentalFeature.HARNESS` in 1.6.0. The APIs are functional but may change between minor releases. Import warnings appear on first use.
 
 HARNESS providers are a family of `ContextProvider` implementations that give agents durable, session-scoped capabilities beyond conversation history:
 
