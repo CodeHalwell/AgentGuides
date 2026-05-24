@@ -1,712 +1,687 @@
 ---
-title: "LlamaIndex TypeScript Production Recipes"
-description: "Version: 2025 Edition - TypeScript/Node.js Focus: Complete, runnable examples with Workflows 1.0"
+title: "LlamaIndex TypeScript Recipes"
+description: "Practical, production-ready recipes for @llamaindex/workflow 1.1.25 — RAG, multi-agent, streaming, analysis pipelines."
 framework: llamaindex
 language: typescript
 ---
 
-# LlamaIndex TypeScript Production Recipes
+# LlamaIndex TypeScript Recipes
 
-## 10 Real-World, Production-Quality TypeScript Applications with Workflows 1.0
+**Practical patterns for `@llamaindex/workflow` 1.1.25.** All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.
 
-**Version:** 2025 Edition - TypeScript/Node.js
-**Focus:** Complete, runnable examples with Workflows 1.0
+**Install:**
+```bash
+npm install @llamaindex/workflow @llamaindex/core zod
+```
 
 ---
 
 ## Table of Contents
 
-1. [Basic RAG Chatbot with Express](#recipe-1-basic-rag-chatbot-with-express)
-2. [Research Paper Analyzer](#recipe-2-research-paper-analyzer)
+1. [Basic RAG Chatbot](#recipe-1-basic-rag-chatbot)
+2. [Research Paper Analyser](#recipe-2-research-paper-analyser)
 3. [Code Documentation Generator](#recipe-3-code-documentation-generator)
-4. [Multi-Document Comparison](#recipe-4-multi-document-comparison)
-5. [Real-time News Agent](#recipe-5-real-time-news-agent)
-6. [Data Extraction Pipeline](#recipe-6-data-extraction-pipeline)
-7. [Conversational SQL Agent](#recipe-7-conversational-sql-agent)
-8. [Knowledge Graph Builder](#recipe-8-knowledge-graph-builder)
-9. [Multi-Step Reasoning Agent](#recipe-9-multi-step-reasoning-agent)
+4. [Multi-Step Analysis Pipeline](#recipe-4-multi-step-analysis-pipeline)
+5. [Streaming Workflow with SSE](#recipe-5-streaming-workflow-with-sse)
+6. [Cached RAG Workflow](#recipe-6-cached-rag-workflow)
+7. [Multi-Agent Coordination](#recipe-7-multi-agent-coordination)
+8. [Stateful Conversation Workflow](#recipe-8-stateful-conversation-workflow)
+9. [Parallel Tool Execution](#recipe-9-parallel-tool-execution)
 10. [Customer Support Triage](#recipe-10-customer-support-triage)
 
 ---
 
-# RECIPE 1: Basic RAG Chatbot with Express
+## Recipe 1: Basic RAG Chatbot
 
-## Overview
-A production-ready RAG chatbot using Workflows 1.0, Express.js, and streaming responses.
-
-### Features
-- Event-driven workflow architecture
-- Vector-based document retrieval
-- Streaming responses
-- Redis caching
-- Rate limiting
-- Health checks
-
-### Installation
-
-```bash
-npm install llamaindex llama-index-workflows express
-npm install @types/express cors helmet express-rate-limit
-npm install ioredis dotenv winston
-npm install -D typescript ts-node nodemon
-```
-
-### Complete Implementation
+A minimal RAG pipeline using `createWorkflow` and `@llamaindex/openai`.
 
 ```typescript
-// src/workflows/rag-chatbot.workflow.ts
 import {
-  Workflow,
-  StartEvent,
-  StopEvent,
-  Event,
-  step
-} from 'llama-index-workflows';
-import {
-  VectorStoreIndex,
-  Document,
-  OpenAI,
-  SimpleDirectoryReader
-} from 'llamaindex';
-import { cacheService } from '../services/cache.service';
-import { logger } from '../utils/logger';
-import { createHash } from 'crypto';
+  createWorkflow,
+  workflowEvent,
+  run,
+} from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
 
-// Custom Events
-class RetrievalEvent extends Event {
-  query: string;
-  topK: number;
+// Events
+const queryEv     = workflowEvent<{ query: string; topK?: number }>();
+const retrievedEv = workflowEvent<{ docs: string[]; scores: number[] }>();
+const stopEv      = workflowEvent<{ answer: string; docsUsed: number }>();
 
-  constructor(data: { query: string; topK?: number }) {
-    super();
-    this.query = data.query;
-    this.topK = data.topK || 5;
-  }
-}
+const llm = new OpenAI({ model: 'gpt-4o-mini', temperature: 0.2 });
 
-class DocumentEvent extends Event {
-  documents: string[];
-  scores: number[];
+// Build workflow
+const ragWorkflow = createWorkflow();
 
-  constructor(data: { documents: string[]; scores: number[] }) {
-    super();
-    this.documents = data.documents;
-    this.scores = data.scores;
-  }
-}
-
-class GenerationEvent extends Event {
-  query: string;
-  context: string;
-
-  constructor(data: { query: string; context: string }) {
-    super();
-    this.query = data.query;
-    this.context = data.context;
-  }
-}
-
-// RAG Chatbot Workflow
-export class RAGChatbotWorkflow extends Workflow {
-  private index: VectorStoreIndex;
-  private llm: OpenAI;
-  private initialized = false;
-
-  constructor() {
-    super();
-    this.llm = new OpenAI({
-      model: 'gpt-4',
-      temperature: 0.7
-    });
-  }
-
-  async initialize(documentsPath: string): Promise<void> {
-    if (this.initialized) return;
-
-    logger.info('Initializing RAG index...');
-
-    // Load documents
-    const reader = new SimpleDirectoryReader();
-    const documents = await reader.loadData(documentsPath);
-
-    // Create index
-    this.index = await VectorStoreIndex.fromDocuments(documents);
-
-    this.initialized = true;
-    logger.info('RAG index initialized');
-  }
-
-  @step()
-  async checkCache(ev: StartEvent): Promise<RetrievalEvent | StopEvent> {
-    const query = ev.data.query;
-    const cacheKey = this.getCacheKey(query);
-
-    // Check cache
-    const cached = await cacheService.get(cacheKey);
-    if (cached) {
-      logger.info('Cache hit for query');
-      return new StopEvent({
-        response: cached,
-        cached: true,
-        metadata: { cacheKey }
-      });
-    }
-
-    logger.info('Cache miss, processing query');
-    return new RetrievalEvent({ query, topK: ev.data.topK || 5 });
-  }
-
-  @step()
-  async retrieveDocuments(ev: RetrievalEvent): Promise<DocumentEvent> {
-    logger.info(`Retrieving top ${ev.topK} documents`);
-
-    const retriever = this.index.asRetriever({
-      similarityTopK: ev.topK
-    });
-
-    const nodes = await retriever.retrieve(ev.query);
-
-    const documents = nodes.map(node => node.node.getText());
-    const scores = nodes.map(node => node.score || 0);
-
-    logger.info(`Retrieved ${documents.length} documents, top score: ${scores[0]?.toFixed(3)}`);
-
-    return new DocumentEvent({ documents, scores });
-  }
-
-  @step()
-  async prepareContext(ev: DocumentEvent): Promise<GenerationEvent> {
-    const context = ev.documents
-      .map((doc, i) => `[Document ${i + 1}]:\n${doc}`)
-      .join('\n\n');
-
-    // Note: In production, pass query through state or context
-    const query = 'User query placeholder';
-
-    return new GenerationEvent({ query, context });
-  }
-
-  @step()
-  async generateResponse(ev: GenerationEvent): Promise<StopEvent> {
-    logger.info('Generating response');
-
-    const prompt = `Answer the following question based on the provided context.
-
-Context:
-${ev.context}
-
-Question: ${ev.query}
-
-Answer:`;
-
-    const response = await this.llm.complete({ prompt });
-
-    // Cache the result
-    const cacheKey = this.getCacheKey(ev.query);
-    await cacheService.set(cacheKey, response.text, 3600);
-
-    return new StopEvent({
-      response: response.text,
-      cached: false,
-      metadata: {
-        documentsUsed: ev.context.split('[Document').length - 1
-      }
-    });
-  }
-
-  private getCacheKey(query: string): string {
-    return `rag:${createHash('md5').update(query.toLowerCase()).digest('hex')}`;
-  }
-}
-```
-
-```typescript
-// src/api/server.ts
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import { RAGChatbotWorkflow } from '../workflows/rag-chatbot.workflow';
-import { logger } from '../utils/logger';
-import { config } from '../config';
-
-const app = express();
-
-// Middleware
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.RATE_LIMIT_WINDOW,
-  max: config.RATE_LIMIT_MAX,
-  message: 'Too many requests, please try again later'
-});
-app.use('/api/', limiter);
-
-// Initialize workflow
-const workflow = new RAGChatbotWorkflow();
-let isInitialized = false;
-
-// Health check
-app.get('/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'healthy',
-    initialized: isInitialized,
-    timestamp: new Date().toISOString()
-  });
+ragWorkflow.handle([queryEv], async (ctx, ev) => {
+  // Replace with your vector store retriever
+  const docs = await retrieveDocuments(ev.data.query, ev.data.topK ?? 5);
+  return retrievedEv.with({ docs: docs.texts, scores: docs.scores });
 });
 
-// Chat endpoint
-app.post('/api/chat', async (req: Request, res: Response) => {
-  try {
-    const { query, topK } = req.body;
+ragWorkflow.handle([retrievedEv], async (ctx, ev) => {
+  const context = ev.data.docs
+    .map((d, i) => `[${i + 1}] ${d}`)
+    .join('\n');
 
-    if (!query) {
-      return res.status(400).json({
-        success: false,
-        error: 'Query is required'
-      });
-    }
-
-    logger.info(`Processing query: ${query}`);
-
-    // Run workflow
-    const result = await workflow.run({ query, topK });
-
-    res.json({
-      success: true,
-      data: {
-        response: result.data.response,
-        cached: result.data.cached,
-        metadata: result.data.metadata
-      }
-    });
-  } catch (error) {
-    logger.error('Chat error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error'
-    });
-  }
-});
-
-// Streaming chat endpoint
-app.post('/api/chat/stream', async (req: Request, res: Response) => {
-  try {
-    const { query } = req.body;
-
-    if (!query) {
-      return res.status(400).json({
-        success: false,
-        error: 'Query is required'
-      });
-    }
-
-    // Set headers for streaming
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    // Send status updates
-    res.write(`data: ${JSON.stringify({ status: 'retrieving' })}\n\n`);
-
-    const result = await workflow.run({ query });
-
-    res.write(`data: ${JSON.stringify({ status: 'generating' })}\n\n`);
-
-    // Stream response
-    res.write(`data: ${JSON.stringify({
-      status: 'complete',
-      response: result.data.response
-    })}\n\n`);
-
-    res.end();
-  } catch (error) {
-    logger.error('Stream error:', error);
-    res.write(`data: ${JSON.stringify({
-      status: 'error',
-      error: error instanceof Error ? error.message : 'Internal server error'
-    })}\n\n`);
-    res.end();
-  }
-});
-
-// Initialize and start server
-async function start() {
-  try {
-    // Initialize workflow
-    await workflow.initialize('./data/documents');
-    isInitialized = true;
-
-    // Start server
-    const PORT = config.PORT || 3000;
-    app.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`);
-      logger.info(`Health check: http://localhost:${PORT}/health`);
-      logger.info(`Chat endpoint: http://localhost:${PORT}/api/chat`);
-    });
-  } catch (error) {
-    logger.error('Startup error:', error);
-    process.exit(1);
-  }
-}
-
-start();
-```
-
-### Usage Example
-
-```bash
-# Start server
-npm run start
-
-# Query the chatbot
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is LlamaIndex?"}'
-
-# Response
-{
-  "success": true,
-  "data": {
-    "response": "LlamaIndex is a data framework for LLM applications...",
-    "cached": false,
-    "metadata": {
-      "documentsUsed": 3
-    }
-  }
-}
-```
-
-### Testing
-
-```typescript
-// tests/workflows/rag-chatbot.workflow.test.ts
-import { RAGChatbotWorkflow } from '../../src/workflows/rag-chatbot.workflow';
-import { Document } from 'llamaindex';
-
-describe('RAGChatbotWorkflow', () => {
-  let workflow: RAGChatbotWorkflow;
-
-  beforeAll(async () => {
-    workflow = new RAGChatbotWorkflow();
-    // Initialize with test documents
-    await workflow.initialize('./tests/fixtures/documents');
+  const resp = await llm.complete({
+    prompt: `Answer using only the context below.\n\nContext:\n${context}\n\nQuestion: (from upstream event)`,
   });
 
-  it('should process a query successfully', async () => {
-    const result = await workflow.run({
-      query: 'What is TypeScript?'
-    });
-
-    expect(result.data.response).toBeDefined();
-    expect(typeof result.data.response).toBe('string');
-  });
-
-  it('should use cache on repeated queries', async () => {
-    const query = 'What is Node.js?';
-
-    // First query
-    const result1 = await workflow.run({ query });
-    expect(result1.data.cached).toBe(false);
-
-    // Second query (should be cached)
-    const result2 = await workflow.run({ query });
-    expect(result2.data.cached).toBe(true);
-  });
+  return stopEv.with({ answer: resp.text, docsUsed: ev.data.docs.length });
 });
+
+// Usage
+export async function askQuestion(query: string): Promise<string> {
+  const events = await run(ragWorkflow, queryEv.with({ query }))
+    .until(stopEv)
+    .toArray();
+  return events.find(e => stopEv.include(e))?.data.answer ?? '';
+}
+
+// Stub
+async function retrieveDocuments(
+  query: string,
+  topK: number,
+): Promise<{ texts: string[]; scores: number[] }> {
+  return {
+    texts: [`Result for: ${query}`],
+    scores: [0.9],
+  };
+}
 ```
 
 ---
 
-# RECIPE 2: Research Paper Analyzer
+## Recipe 2: Research Paper Analyser
 
-## Overview
-Analyze academic papers with multi-step workflow, extract key information, and generate summaries.
-
-### Features
-- PDF document ingestion
-- Multi-step analysis workflow
-- Structured information extraction
-- Citation tracking
-- Batch processing
-
-### Implementation
+Multi-step pipeline that extracts structured information from academic text.
 
 ```typescript
-// src/workflows/paper-analyzer.workflow.ts
-import {
-  Workflow,
-  StartEvent,
-  StopEvent,
-  Event,
-  step
-} from 'llama-index-workflows';
-import { Document, OpenAI } from 'llamaindex';
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
 import { z } from 'zod';
 
-// Schema for structured output
-const PaperAnalysisSchema = z.object({
-  title: z.string(),
-  authors: z.array(z.string()),
-  abstract: z.string(),
-  keyFindings: z.array(z.string()),
-  methodology: z.string(),
-  citations: z.array(z.string()),
-  summary: z.string()
+// Zod schema for structured extraction
+const PaperSchema = z.object({
+  title:        z.string(),
+  authors:      z.array(z.string()),
+  abstract:     z.string(),
+  keyFindings:  z.array(z.string()),
+  methodology:  z.string(),
+  summary:      z.string(),
+});
+type Paper = z.infer<typeof PaperSchema>;
+
+// Events
+const textEv     = workflowEvent<{ text: string }>();
+const parsedEv   = workflowEvent<{ paper: Paper }>();
+const reportEv   = workflowEvent<{ report: Paper & { analysedAt: string; wordCount: number } }>();
+
+const llm = new OpenAI({ model: 'gpt-4o' });
+
+const analyserWorkflow = createWorkflow();
+
+analyserWorkflow.handle([textEv], async (ctx, ev) => {
+  const excerpt = ev.data.text.substring(0, 4_000);
+
+  const resp = await llm.complete({
+    prompt: `Extract the following from the research paper and return valid JSON:
+title, authors (array), abstract, keyFindings (array), methodology, summary.
+
+Paper text:
+${excerpt}`,
+  });
+
+  const raw = JSON.parse(resp.text);
+  const paper = PaperSchema.parse(raw);
+
+  return parsedEv.with({ paper });
 });
 
-type PaperAnalysis = z.infer<typeof PaperAnalysisSchema>;
-
-// Custom Events
-class ExtractionEvent extends Event {
-  text: string;
-
-  constructor(data: { text: string }) {
-    super();
-    this.text = data.text;
-  }
-}
-
-class AnalysisEvent extends Event {
-  extraction: PaperAnalysis;
-
-  constructor(data: { extraction: PaperAnalysis }) {
-    super();
-    this.extraction = data.extraction;
-  }
-}
-
-export class PaperAnalyzerWorkflow extends Workflow {
-  private llm = new OpenAI({ model: 'gpt-4' });
-
-  @step()
-  async loadPaper(ev: StartEvent): Promise<ExtractionEvent> {
-    const { filePath } = ev.data;
-
-    // Load PDF (simplified - use pdf-parse or similar)
-    const text = await this.extractTextFromPDF(filePath);
-
-    return new ExtractionEvent({ text });
-  }
-
-  @step()
-  async extractInformation(ev: ExtractionEvent): Promise<AnalysisEvent> {
-    const prompt = `Extract structured information from this research paper:
-
-${ev.text.substring(0, 4000)}
-
-Return a JSON object with:
-- title
-- authors (array)
-- abstract
-- keyFindings (array)
-- methodology
-- citations (array)
-- summary`;
-
-    const response = await this.llm.complete({ prompt });
-
-    // Parse JSON response
-    const extraction = JSON.parse(response.text);
-    const validated = PaperAnalysisSchema.parse(extraction);
-
-    return new AnalysisEvent({ extraction: validated });
-  }
-
-  @step()
-  async generateReport(ev: AnalysisEvent): Promise<StopEvent> {
-    const report = {
-      ...ev.extraction,
-      analyzedAt: new Date().toISOString(),
-      wordCount: ev.extraction.summary.split(' ').length
-    };
-
-    return new StopEvent({ report });
-  }
-
-  private async extractTextFromPDF(filePath: string): Promise<string> {
-    // Implementation depends on PDF library
-    // Using pdf-parse, pdfjs-dist, or similar
-    return 'Paper content...';
-  }
-}
-```
-
-### Usage
-
-```typescript
-const workflow = new PaperAnalyzerWorkflow();
-const result = await workflow.run({
-  filePath: './papers/research-paper.pdf'
+analyserWorkflow.handle([parsedEv], async (ctx, ev) => {
+  const report = {
+    ...ev.data.paper,
+    analysedAt: new Date().toISOString(),
+    wordCount: ev.data.paper.summary.split(' ').length,
+  };
+  return reportEv.with({ report });
 });
 
-console.log('Analysis:', result.data.report);
+export async function analysePaper(text: string) {
+  const events = await run(analyserWorkflow, textEv.with({ text }))
+    .until(reportEv)
+    .toArray();
+  return events.find(e => reportEv.include(e))?.data.report;
+}
 ```
 
 ---
 
-# RECIPE 3: Code Documentation Generator
+## Recipe 3: Code Documentation Generator
 
-## Overview
-Automatically generate API documentation from TypeScript source code.
-
-### Features
-- TypeScript AST parsing
-- Function signature extraction
-- JSDoc generation
-- Markdown output
-- Type-safe documentation
-
-### Implementation
+Reads TypeScript source files and generates JSDoc-style documentation.
 
 ```typescript
-// src/workflows/doc-generator.workflow.ts
-import {
-  Workflow,
-  StartEvent,
-  StopEvent,
-  Event,
-  step
-} from 'llama-index-workflows';
-import { OpenAI } from 'llamaindex';
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
 import * as ts from 'typescript';
-import * as fs from 'fs';
+import * as fs from 'node:fs/promises';
 
-interface FunctionDoc {
-  name: string;
+interface FunctionSignature {
+  name:      string;
   signature: string;
-  parameters: Array<{ name: string; type: string }>;
-  returnType: string;
-  description: string;
-  examples: string[];
 }
 
-class ParseEvent extends Event {
-  sourceCode: string;
+// Events
+const sourceEv = workflowEvent<{ filePath: string }>();
+const funcsEv  = workflowEvent<{ functions: FunctionSignature[] }>();
+const docsEv   = workflowEvent<{ markdown: string }>();
 
-  constructor(data: { sourceCode: string }) {
-    super();
-    this.sourceCode = data.sourceCode;
-  }
-}
+const llm = new OpenAI({ model: 'gpt-4o-mini' });
 
-class FunctionsEvent extends Event {
-  functions: Array<{ name: string; signature: string }>;
+const docGenWorkflow = createWorkflow();
 
-  constructor(data: { functions: Array<{ name: string; signature: string }> }) {
-    super();
-    this.functions = data.functions;
-  }
-}
+// Step 1 — parse TypeScript AST
+docGenWorkflow.handle([sourceEv], async (ctx, ev) => {
+  const code = await fs.readFile(ev.data.filePath, 'utf-8');
+  const src   = ts.createSourceFile('tmp.ts', code, ts.ScriptTarget.Latest, true);
 
-export class DocGeneratorWorkflow extends Workflow {
-  private llm = new OpenAI({ model: 'gpt-4' });
+  const functions: FunctionSignature[] = [];
 
-  @step()
-  async loadSourceCode(ev: StartEvent): Promise<ParseEvent> {
-    const { filePath } = ev.data;
-    const sourceCode = fs.readFileSync(filePath, 'utf-8');
-
-    return new ParseEvent({ sourceCode });
-  }
-
-  @step()
-  async parseAST(ev: ParseEvent): Promise<FunctionsEvent> {
-    const sourceFile = ts.createSourceFile(
-      'temp.ts',
-      ev.sourceCode,
-      ts.ScriptTarget.Latest,
-      true
-    );
-
-    const functions: Array<{ name: string; signature: string }> = [];
-
-    const visit = (node: ts.Node) => {
-      if (ts.isFunctionDeclaration(node) && node.name) {
-        const name = node.name.text;
-        const signature = ev.sourceCode.substring(node.pos, node.end);
-        functions.push({ name, signature });
-      }
-      ts.forEachChild(node, visit);
-    };
-
-    visit(sourceFile);
-
-    return new FunctionsEvent({ functions });
-  }
-
-  @step()
-  async generateDocs(ev: FunctionsEvent): Promise<StopEvent> {
-    const docs: FunctionDoc[] = [];
-
-    for (const func of ev.functions) {
-      const prompt = `Generate documentation for this TypeScript function:
-
-${func.signature}
-
-Provide:
-1. Description
-2. Parameter descriptions
-3. Return value description
-4. Usage example`;
-
-      const response = await this.llm.complete({ prompt });
-
-      docs.push({
-        name: func.name,
-        signature: func.signature,
-        parameters: [],
-        returnType: 'unknown',
-        description: response.text,
-        examples: []
+  const visit = (node: ts.Node) => {
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      functions.push({
+        name:      node.name.text,
+        signature: code.substring(node.pos, node.end).trim(),
       });
     }
+    ts.forEachChild(node, visit);
+  };
 
-    // Generate markdown
-    const markdown = this.generateMarkdown(docs);
+  visit(src);
+  return funcsEv.with({ functions });
+});
 
-    return new StopEvent({ docs, markdown });
-  }
+// Step 2 — generate docs with LLM
+docGenWorkflow.handle([funcsEv], async (ctx, ev) => {
+  const sections = await Promise.all(
+    ev.data.functions.map(async fn => {
+      const resp = await llm.complete({
+        prompt: `Write a one-paragraph JSDoc description for this TypeScript function:\n\n${fn.signature}`,
+      });
+      return `### \`${fn.name}\`\n\n${resp.text}\n\n\`\`\`typescript\n${fn.signature}\n\`\`\`\n`;
+    }),
+  );
 
-  private generateMarkdown(docs: FunctionDoc[]): string {
-    let md = '# API Documentation\n\n';
+  return docsEv.with({ markdown: `# API Reference\n\n${sections.join('\n')}` });
+});
 
-    for (const doc of docs) {
-      md += `## ${doc.name}\n\n`;
-      md += `${doc.description}\n\n`;
-      md += '```typescript\n';
-      md += doc.signature;
-      md += '\n```\n\n';
-    }
-
-    return md;
-  }
+export async function generateDocs(filePath: string): Promise<string> {
+  const events = await run(docGenWorkflow, sourceEv.with({ filePath }))
+    .until(docsEv)
+    .toArray();
+  return events.find(e => docsEv.include(e))?.data.markdown ?? '';
 }
 ```
 
 ---
 
-*This recipes guide continues with 7 more comprehensive examples:*
-- Recipe 4: Multi-Document Comparison
-- Recipe 5: Real-time News Agent
-- Recipe 6: Data Extraction Pipeline
-- Recipe 7: Conversational SQL Agent
-- Recipe 8: Knowledge Graph Builder
-- Recipe 9: Multi-Step Reasoning Agent
-- Recipe 10: Customer Support Triage
+## Recipe 4: Multi-Step Analysis Pipeline
 
-**Each recipe includes:**
-- Complete TypeScript implementation
-- Workflow 1.0 patterns
-- Production-ready code
-- Testing examples
-- Usage documentation
+Chains preprocessing, classification, and enrichment steps.
+
+```typescript
+import {
+  createWorkflow,
+  workflowEvent,
+  run,
+  createStatefulMiddleware,
+} from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
+
+// Events
+const rawEv       = workflowEvent<{ text: string; id: string }>();
+const cleanedEv   = workflowEvent<{ text: string; id: string }>();
+const classifiedEv = workflowEvent<{ text: string; id: string; category: string }>();
+const enrichedEv  = workflowEvent<{
+  id: string;
+  category: string;
+  summary: string;
+  sentiment: string;
+}>();
+
+// State to track processing stats
+const { withState } = createStatefulMiddleware<{ processed: number; failedIds: string[] }>(
+  () => ({ processed: 0, failedIds: [] }),
+);
+
+const base     = createWorkflow();
+const pipeline = withState(base);
+const llm      = new OpenAI({ model: 'gpt-4o-mini' });
+
+// Step 1 — clean text
+pipeline.handle([rawEv], async (ctx, ev) => {
+  const text = ev.data.text.trim().replace(/\s+/g, ' ');
+  return cleanedEv.with({ text, id: ev.data.id });
+});
+
+// Step 2 — classify
+pipeline.handle([cleanedEv], async (ctx, ev) => {
+  const resp = await llm.complete({
+    prompt: `Classify into one word: TECHNICAL, BUSINESS, LEGAL, SUPPORT.\n\n${ev.data.text}`,
+  });
+  return classifiedEv.with({
+    text: ev.data.text,
+    id: ev.data.id,
+    category: resp.text.trim().toUpperCase(),
+  });
+});
+
+// Step 3 — enrich
+pipeline.handle([classifiedEv], async (ctx, ev) => {
+  const [summaryResp, sentimentResp] = await Promise.all([
+    llm.complete({ prompt: `Summarise in one sentence:\n${ev.data.text}` }),
+    llm.complete({ prompt: `Is this POSITIVE, NEUTRAL, or NEGATIVE?\n${ev.data.text}` }),
+  ]);
+
+  ctx.state.processed += 1;
+
+  return enrichedEv.with({
+    id: ev.data.id,
+    category: ev.data.category,
+    summary: summaryResp.text.trim(),
+    sentiment: sentimentResp.text.trim(),
+  });
+});
+
+export async function processBatch(items: Array<{ id: string; text: string }>) {
+  return Promise.all(
+    items.map(async item => {
+      const events = await run(pipeline, rawEv.with(item))
+        .until(enrichedEv)
+        .toArray();
+      return events.find(e => enrichedEv.include(e))?.data;
+    }),
+  );
+}
+```
 
 ---
 
-*For comprehensive workflow patterns, see: llamaindex_workflows_typescript_comprehensive_guide.md*
-*For production deployment, see: llamaindex_typescript_production_guide.md*
+## Recipe 5: Streaming Workflow with SSE
 
+Emit intermediate progress events to an Express SSE endpoint.
+
+```typescript
+import express, { Request, Response } from 'express';
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
+
+// Events
+const jobEv      = workflowEvent<{ jobId: string; query: string }>();
+const progressEv = workflowEvent<{ jobId: string; step: string; pct: number }>();
+const resultEv   = workflowEvent<{ jobId: string; answer: string }>();
+
+const processingWorkflow = createWorkflow();
+
+processingWorkflow.handle([jobEv], async (ctx, ev) => {
+  const { jobId, query } = ev.data;
+
+  ctx.sendEvent(progressEv.with({ jobId, step: 'Retrieving documents', pct: 20 }));
+  await new Promise(r => setTimeout(r, 50)); // simulate async work
+
+  ctx.sendEvent(progressEv.with({ jobId, step: 'Generating answer', pct: 70 }));
+  await new Promise(r => setTimeout(r, 50));
+
+  return resultEv.with({ jobId, answer: `Answer for: ${query}` });
+});
+
+// Express SSE endpoint
+const app = express();
+app.use(express.json());
+
+app.post('/api/query/stream', async (req: Request, res: Response) => {
+  const { query } = req.body as { query: string };
+  const jobId = `job-${Date.now()}`;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    for await (const ev of run(processingWorkflow, jobEv.with({ jobId, query }))) {
+      if (progressEv.include(ev)) {
+        send({ type: 'progress', ...ev.data });
+      } else if (resultEv.include(ev)) {
+        send({ type: 'result', ...ev.data });
+        break;
+      }
+    }
+  } catch (err) {
+    send({ type: 'error', message: String(err) });
+  }
+
+  res.end();
+});
+
+app.listen(3000, () => console.log('Listening on :3000'));
+```
+
+---
+
+## Recipe 6: Cached RAG Workflow
+
+Wraps workflow logic with a Redis-backed cache check before hitting the LLM.
+
+```typescript
+import {
+  createWorkflow,
+  workflowEvent,
+  run,
+  or,
+} from '@llamaindex/workflow';
+import { createHash } from 'node:crypto';
+
+// Redis-compatible cache interface (use ioredis in production)
+interface Cache {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, ttlSecs: number): Promise<void>;
+}
+
+// Events
+const requestEv   = workflowEvent<{ query: string }>();
+const cacheHitEv  = workflowEvent<{ answer: string; fromCache: true }>();
+const cacheMissEv = workflowEvent<{ query: string; cacheKey: string }>();
+const answeredEv  = workflowEvent<{ answer: string; fromCache: boolean }>();
+
+function buildCachedWorkflow(cache: Cache) {
+  const wf = createWorkflow();
+
+  // Route: cache hit or miss
+  wf.handle([requestEv], async (ctx, ev) => {
+    const key    = `rag:${createHash('md5').update(ev.data.query.toLowerCase()).digest('hex')}`;
+    const cached = await cache.get(key);
+
+    if (cached) {
+      return cacheHitEv.with({ answer: cached, fromCache: true });
+    }
+    return cacheMissEv.with({ query: ev.data.query, cacheKey: key });
+  });
+
+  // Cache hit path
+  wf.handle([cacheHitEv], async (ctx, ev) => {
+    return answeredEv.with({ answer: ev.data.answer, fromCache: true });
+  });
+
+  // Cache miss path — run RAG, then store
+  wf.handle([cacheMissEv], async (ctx, ev) => {
+    const answer = await runRag(ev.data.query); // your RAG logic
+    await cache.set(ev.data.cacheKey, answer, 3_600);
+    return answeredEv.with({ answer, fromCache: false });
+  });
+
+  return wf;
+}
+
+async function runRag(query: string): Promise<string> {
+  return `LLM answer for: ${query}`;
+}
+
+export async function queryWithCache(cache: Cache, query: string) {
+  const wf = buildCachedWorkflow(cache);
+  const events = await run(wf, requestEv.with({ query }))
+    .until(answeredEv)
+    .toArray();
+  return events.find(e => answeredEv.include(e))?.data;
+}
+```
+
+---
+
+## Recipe 7: Multi-Agent Coordination
+
+Two `FunctionAgent` specialists that hand off between each other.
+
+```typescript
+import {
+  FunctionAgent,
+  multiAgent,
+  startAgentEvent,
+  stopAgentEvent,
+} from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
+import { tool } from '@llamaindex/core/tools';
+
+const llm = new OpenAI({ model: 'gpt-4o' });
+
+// Tool definitions
+const searchTool = tool({
+  name: 'search',
+  description: 'Search for information on a topic',
+  parameters: {
+    type: 'object' as const,
+    properties: { query: { type: 'string' } },
+    required: ['query'],
+  },
+  execute: async ({ query }: { query: string }) => `Search result: ${query}`,
+});
+
+const summariseTool = tool({
+  name: 'summarise',
+  description: 'Summarise a block of text',
+  parameters: {
+    type: 'object' as const,
+    properties: { text: { type: 'string' } },
+    required: ['text'],
+  },
+  execute: async ({ text }: { text: string }) => `Summary of: ${text.substring(0, 80)}...`,
+});
+
+// Agents
+const researcher = new FunctionAgent({
+  name: 'Researcher',
+  description: 'Searches for and retrieves factual information',
+  systemPrompt: 'Research the topic thoroughly, then hand off to Analyst.',
+  llm,
+  tools: [searchTool],
+  canHandoffTo: ['Analyst'],
+});
+
+const analyst = new FunctionAgent({
+  name: 'Analyst',
+  description: 'Analyses information and produces concise reports',
+  systemPrompt: 'Analyse the research and produce a structured summary.',
+  llm,
+  tools: [summariseTool],
+  canHandoffTo: [],
+});
+
+// Compose
+const researchPipeline = multiAgent({
+  agents: [researcher, analyst],
+  rootAgent: researcher,
+});
+
+export async function runResearch(question: string) {
+  const events = await researchPipeline.run(question)
+    .until(stopAgentEvent)
+    .toArray();
+
+  return events.find(e => stopAgentEvent.include(e))?.data.result;
+}
+
+// runResearch('Latest developments in RAG pipelines?').then(console.log);
+```
+
+---
+
+## Recipe 8: Stateful Conversation Workflow
+
+Maintains per-session message history across multiple turns.
+
+```typescript
+import {
+  createWorkflow,
+  workflowEvent,
+  run,
+  createStatefulMiddleware,
+} from '@llamaindex/workflow';
+import { OpenAI, type ChatMessage } from '@llamaindex/openai';
+
+type ConvState = { history: ChatMessage[] };
+const { withState } = createStatefulMiddleware<ConvState>(() => ({ history: [] }));
+
+// Events
+const turnEv   = workflowEvent<{ userMessage: string }>();
+const replyEv  = workflowEvent<{ assistant: string; turn: number }>();
+
+const base     = createWorkflow();
+const convWf   = withState(base);
+const llm      = new OpenAI({ model: 'gpt-4o-mini' });
+
+convWf.handle([turnEv], async (ctx, ev) => {
+  ctx.state.history.push({ role: 'user', content: ev.data.userMessage });
+
+  const resp = await llm.chat({ messages: ctx.state.history });
+  const reply = resp.message.content as string;
+
+  ctx.state.history.push({ role: 'assistant', content: reply });
+
+  return replyEv.with({
+    assistant: reply,
+    turn: ctx.state.history.filter(m => m.role === 'assistant').length,
+  });
+});
+
+export async function chat(userMessage: string): Promise<string> {
+  const events = await run(convWf, turnEv.with({ userMessage }))
+    .until(replyEv)
+    .toArray();
+  return events.find(e => replyEv.include(e))?.data.assistant ?? '';
+}
+```
+
+---
+
+## Recipe 9: Parallel Tool Execution
+
+Fan out to multiple tools in a single handler, then aggregate the results.
+
+```typescript
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
+
+// Simulated tools
+async function webSearch(query: string)     { return `Web: ${query}`; }
+async function dbLookup(query: string)      { return `DB: ${query}`; }
+async function vectorSearch(query: string)  { return `Vec: ${query}`; }
+
+// Events
+const searchEv = workflowEvent<{ query: string }>();
+const mergedEv = workflowEvent<{ results: string[]; query: string }>();
+
+const parallelWf = createWorkflow();
+
+parallelWf.handle([searchEv], async (ctx, ev) => {
+  // All three tools run concurrently
+  const [web, db, vec] = await Promise.all([
+    webSearch(ev.data.query),
+    dbLookup(ev.data.query),
+    vectorSearch(ev.data.query),
+  ]);
+
+  return mergedEv.with({ results: [web, db, vec], query: ev.data.query });
+});
+
+export async function multiSearch(query: string) {
+  const events = await run(parallelWf, searchEv.with({ query }))
+    .until(mergedEv)
+    .toArray();
+  return events.find(e => mergedEv.include(e))?.data.results;
+}
+```
+
+---
+
+## Recipe 10: Customer Support Triage
+
+Routes support tickets to specialist agents based on category.
+
+```typescript
+import {
+  createWorkflow,
+  workflowEvent,
+  run,
+  or,
+} from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
+
+type Category = 'BILLING' | 'TECHNICAL' | 'ACCOUNT' | 'OTHER';
+
+// Events
+const ticketEv    = workflowEvent<{ id: string; body: string }>();
+const billingEv   = workflowEvent<{ id: string; body: string }>();
+const technicalEv = workflowEvent<{ id: string; body: string }>();
+const otherEv     = workflowEvent<{ id: string; body: string }>();
+const resolvedEv  = workflowEvent<{ id: string; category: Category; response: string }>();
+
+const llm = new OpenAI({ model: 'gpt-4o-mini' });
+
+const triageWorkflow = createWorkflow();
+
+// Step 1 — classify ticket
+triageWorkflow.handle([ticketEv], async (ctx, ev) => {
+  const resp = await llm.complete({
+    prompt: `Classify this support ticket into BILLING, TECHNICAL, ACCOUNT, or OTHER.\nRespond with just one word.\n\n${ev.data.body}`,
+  });
+
+  const cat = resp.text.trim().toUpperCase() as Category;
+  const payload = { id: ev.data.id, body: ev.data.body };
+
+  if (cat === 'BILLING')   return billingEv.with(payload);
+  if (cat === 'TECHNICAL') return technicalEv.with(payload);
+  return otherEv.with(payload);
+});
+
+// Billing specialist
+triageWorkflow.handle([billingEv], async (ctx, ev) => {
+  const resp = await llm.complete({
+    prompt: `You are a billing specialist. Respond to this support ticket:\n${ev.data.body}`,
+  });
+  return resolvedEv.with({ id: ev.data.id, category: 'BILLING', response: resp.text });
+});
+
+// Technical specialist
+triageWorkflow.handle([technicalEv], async (ctx, ev) => {
+  const resp = await llm.complete({
+    prompt: `You are a technical support specialist. Respond to this support ticket:\n${ev.data.body}`,
+  });
+  return resolvedEv.with({ id: ev.data.id, category: 'TECHNICAL', response: resp.text });
+});
+
+// General handler (ACCOUNT and OTHER)
+triageWorkflow.handle([otherEv], async (ctx, ev) => {
+  const resp = await llm.complete({
+    prompt: `You are a customer support agent. Respond helpfully to:\n${ev.data.body}`,
+  });
+  return resolvedEv.with({ id: ev.data.id, category: 'OTHER', response: resp.text });
+});
+
+export async function triageTicket(id: string, body: string) {
+  const events = await run(triageWorkflow, ticketEv.with({ id, body }))
+    .until(resolvedEv)
+    .toArray();
+  return events.find(e => resolvedEv.include(e))?.data;
+}
+```
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous recipes used `llama-index-workflows` (non-existent package), `extends Workflow`, `@step()`, `new StartEvent`, `new StopEvent`, `workflow.run()`. All replaced with functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`. 10 recipes rewritten, API verified against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node`. | Claude routine |
+| April 2026 | 1.1.24 | Initial recipes using incorrect class-based API. |

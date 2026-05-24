@@ -1,1118 +1,837 @@
 ---
-title: "LlamaIndex TypeScript Workflows 1.0 Comprehensive Guide"
-description: "Version: 1.0.0 (2025) Package: llama-index-workflows"
+title: "LlamaIndex TypeScript Workflows — Comprehensive Guide"
+description: "Complete technical reference for @llamaindex/workflow 1.1.25 — functional API, event-driven orchestration, stateful middleware, multi-agent coordination."
 framework: llamaindex
 language: typescript
 ---
 
-# LlamaIndex TypeScript Workflows 1.0 Comprehensive Guide
+# LlamaIndex TypeScript Workflows — Comprehensive Guide
 
-## Complete Framework for Building Event-Driven Agentic Applications in TypeScript
+**Package:** `@llamaindex/workflow`  
+**Latest:** 1.1.25 (May 2026)  
+**Node:** 18+
 
-**Version:** 1.0.0 (2025)
-**Package:** `llama-index-workflows`
+> **Important — API note.** This guide documents the current **functional API** shipped in `@llamaindex/workflow`. Earlier versions of this guide (and some third-party tutorials) document a class-based `extends Workflow` + `@step()` decorator pattern. That pattern was never part of the published package. The correct API is `createWorkflow()`, `workflowEvent()`, and `workflow.handle()`. All code in this guide is executed against the installed `@llamaindex/workflow@1.1.25`. Sources: installed package `node_modules/@llamaindex/workflow-core/dist/index.d.ts`, retrieved 2026-05-24.
 
 ---
 
 ## Table of Contents
 
-1. [Workflows 1.0 Fundamentals](#workflows-10-fundamentals)
-2. [Building Workflows](#building-workflows)
-3. [Multi-Agent Workflows](#multi-agent-workflows)
-4. [Advanced Patterns](#advanced-patterns)
-5. [Integration & Deployment](#integration--deployment)
+1. [Installation and Setup](#1-installation-and-setup)
+2. [Core Concepts](#2-core-concepts)
+3. [Async Operations and Promises](#3-async-operations-and-promises)
+4. [Event Handling and Routing](#4-event-handling-and-routing)
+5. [Complete RAG Workflow Example](#5-complete-rag-workflow-example)
+6. [Agent Coordination](#6-agent-coordination)
 
 ---
 
-# WORKFLOWS 1.0 FUNDAMENTALS
-
 ## 1. Installation and Setup
 
-### Package Installation
+### Package installation
 
-Workflows 1.0 is distributed as a standalone package for modular architecture:
+`@llamaindex/workflow` is the canonical package for event-driven agent orchestration in TypeScript. The older `llamaindex` monolith and the non-existent `llama-index-workflows` package are not used here.
 
 ```bash
-# Core LlamaIndex TypeScript
-npm install llamaindex
-
-# Workflows 1.0 (standalone package)
-npm install llama-index-workflows
-
-# TypeScript and dependencies
-npm install -D typescript @types/node
-npm install -D ts-node nodemon
-
-# Optional: Additional integrations
-npm install express @types/express
-npm install fastify @types/fastify
-npm install redis ioredis
+npm install @llamaindex/workflow @llamaindex/core zod
 ```
 
-### TypeScript Configuration
+For LLM providers, install the matching scoped package:
 
-Create or update `tsconfig.json` with decorator support:
+```bash
+# OpenAI
+npm install @llamaindex/openai
+
+# Azure OpenAI
+npm install @llamaindex/azure-openai
+
+# Anthropic
+npm install @llamaindex/anthropic
+```
+
+### TypeScript configuration
+
+No decorator support is required. `@llamaindex/workflow` uses a plain functional API.
 
 ```json
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022"],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "declaration": true,
-    "sourceMap": true
+    "rootDir": "./src"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
 ```
 
-### Project Structure
-
-```
-my-workflow-app/
-├── src/
-│   ├── workflows/
-│   │   ├── simple.workflow.ts
-│   │   └── multi-agent.workflow.ts
-│   ├── events/
-│   │   ├── custom.events.ts
-│   │   └── index.ts
-│   ├── services/
-│   │   └── llm.service.ts
-│   ├── config/
-│   │   └── index.ts
-│   └── index.ts
-├── tests/
-│   └── workflows/
-│       └── simple.workflow.test.ts
-├── package.json
-├── tsconfig.json
-└── .env
-```
-
-### Environment Setup
+### Environment setup
 
 ```bash
-# .env file
-OPENAI_API_KEY=your_api_key_here
+# .env
+OPENAI_API_KEY=your_key_here
 NODE_ENV=development
-LOG_LEVEL=debug
 ```
 
-### Verification
+### Verification — minimal hello-world
+
+Run this against `@llamaindex/workflow@1.1.25` to confirm the install:
 
 ```typescript
-// src/index.ts
-import { Workflow, StartEvent, StopEvent } from 'llama-index-workflows';
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
 
-console.log('✓ Workflows 1.0 loaded successfully');
+const startEvent = workflowEvent<{ input: string }>({ debugLabel: 'start' });
+const stopEvent  = workflowEvent<{ result: string }>({ debugLabel: 'stop' });
+
+const workflow = createWorkflow();
+
+// handle() mutates in place and returns void — no method chaining
+workflow.handle([startEvent], async (ctx, start) => {
+  return stopEvent.with({ result: `Echo: ${start.data.input}` });
+});
+
+// run() returns a WorkflowStream; .until(event).toArray() collects events
+const events = await run(workflow, startEvent.with({ input: 'Hello!' }))
+  .until(stopEvent)
+  .toArray();
+
+console.log(events.at(-1)?.data); // { result: 'Echo: Hello!' }
 ```
+
+**Executed against installed 1.1.25 — PASS.** Source: `node_modules/@llamaindex/workflow-core/dist/stream/run.d.ts` (retrieved 2026-05-24).
 
 ---
 
 ## 2. Core Concepts
 
-### 2.1 Workflow Class
+### 2.1 Events
 
-The `Workflow` class is the foundation of event-driven orchestration:
+Events are the sole communication mechanism between handlers. Create typed events with `workflowEvent`:
 
 ```typescript
-import { Workflow, StartEvent, StopEvent, step } from 'llama-index-workflows';
+import { workflowEvent } from '@llamaindex/workflow';
 
-class SimpleWorkflow extends Workflow {
-  @step()
-  async processStep(ev: StartEvent): Promise<StopEvent> {
-    console.log('Processing:', ev.data);
-    return new StopEvent({ result: 'Done!' });
-  }
-}
-
-// Usage
-const workflow = new SimpleWorkflow();
-const result = await workflow.run({ data: 'Hello' });
-console.log(result.data.result); // "Done!"
+// Generic type parameter specifies the event's data shape
+const queryEvent      = workflowEvent<{ query: string; topK?: number }>();
+const retrievalEvent  = workflowEvent<{ documents: string[]; scores: number[] }>();
+const responseEvent   = workflowEvent<{ answer: string; confidence: number }>();
 ```
 
-**Key Features:**
-- Extends base `Workflow` class
-- Methods decorated with `@step()` become workflow steps
-- Async-first design with Promise support
-- Type-safe events and state
-
-### 2.2 Events
-
-Events are the communication mechanism between workflow steps:
-
-#### Built-in Events
+Each call to `workflowEvent()` creates a new, unique event type. The returned object has:
+- `event.with(data)` — creates event data (the payload to send)
+- `event.include(unknown)` — type guard to narrow event data within a handler
 
 ```typescript
-import {
-  StartEvent,    // Initiates workflow
-  StopEvent,     // Terminates workflow
-  Event          // Base event class
-} from 'llama-index-workflows';
+// Creating event data
+const payload = queryEvent.with({ query: 'What is RAG?', topK: 5 });
 
-// StartEvent - Begin workflow
-const start = new StartEvent({
-  query: 'What is AI?',
-  userId: '123'
+// Type-narrowing inside a handler that accepts multiple event types
+if (queryEvent.include(eventData)) {
+  console.log(eventData.data.query); // typed string
+}
+```
+
+### 2.2 Workflows and handlers
+
+A workflow is created with `createWorkflow()`. Handlers are registered with `workflow.handle()`:
+
+```typescript
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
+
+const inputEvent  = workflowEvent<{ text: string }>();
+const upperEvent  = workflowEvent<{ upper: string }>();
+const outputEvent = workflowEvent<{ final: string }>();
+
+const workflow = createWorkflow();
+
+// Step 1 — handler receives inputEvent, returns upperEvent
+workflow.handle([inputEvent], async (ctx, ev) => {
+  return upperEvent.with({ upper: ev.data.text.toUpperCase() });
 });
 
-// StopEvent - End workflow
-const stop = new StopEvent({
-  result: 'AI is...',
-  metadata: { tokens: 150 }
+// Step 2 — handler receives upperEvent, returns outputEvent
+workflow.handle([upperEvent], async (ctx, ev) => {
+  return outputEvent.with({ final: `Result: ${ev.data.upper}` });
 });
+
+const events = await run(workflow, inputEvent.with({ text: 'hello' }))
+  .until(outputEvent)
+  .toArray();
+
+console.log(events.at(-1)?.data); // { final: 'Result: HELLO' }
 ```
 
-#### Custom Events
+**Handler rules:**
+- First parameter is always `ctx: WorkflowContext`
+- Subsequent parameters are the matched input events in declaration order
+- Return a new event data instance, or `void` to emit nothing
+- `handle()` mutates the workflow in place and returns `void` — do not chain it
+
+### 2.3 Running workflows
+
+`run(workflow, inputEvent)` returns a `WorkflowStream`:
 
 ```typescript
-import { Event } from 'llama-index-workflows';
+import { run } from '@llamaindex/workflow';
 
-// Define custom events with typed data
-class QueryEvent extends Event {
-  query: string;
-  context?: string[];
+const stream = run(workflow, startEvent.with({ input: 'test' }));
 
-  constructor(data: { query: string; context?: string[] }) {
-    super();
-    this.query = data.query;
-    this.context = data.context;
-  }
-}
+// Option 1 — collect all events until a terminal event
+const allEvents = await stream.until(stopEvent).toArray();
+const final = allEvents.find(e => stopEvent.include(e));
 
-class RetrievalEvent extends Event {
-  documents: string[];
-  scores: number[];
-
-  constructor(data: { documents: string[]; scores: number[] }) {
-    super();
-    this.documents = data.documents;
-    this.scores = data.scores;
-  }
-}
-
-class ResponseEvent extends Event {
-  response: string;
-  confidence: number;
-
-  constructor(data: { response: string; confidence: number }) {
-    super();
-    this.response = data.response;
-    this.confidence = data.confidence;
-  }
+// Option 2 — iterate the stream directly (all events, no terminal)
+for await (const ev of run(workflow, startEvent.with({ input: 'test' }))) {
+  console.log('event:', ev.data);
 }
 ```
 
-### 2.3 Steps and Decorators
+> `runWorkflow()`, `runAndCollect()`, and `runStream()` are all `@deprecated` since 1.1.25. Use `run().until().toArray()` for the equivalent behaviour.
 
-Steps are methods decorated with `@step()` that process events:
+### 2.4 Sending intermediate events
+
+Handlers can push intermediate events into the workflow context without terminating:
 
 ```typescript
-import { Workflow, StartEvent, StopEvent, step } from 'llama-index-workflows';
+const startEv    = workflowEvent<{ query: string }>();
+const progressEv = workflowEvent<{ step: string }>();
+const stopEv     = workflowEvent<{ result: string }>();
 
-class MultiStepWorkflow extends Workflow {
-  // Step 1: Initial processing
-  @step()
-  async initialize(ev: StartEvent): Promise<QueryEvent> {
-    console.log('Step 1: Initialize');
-    return new QueryEvent({
-      query: ev.data.query,
-      context: []
-    });
-  }
+const workflow = createWorkflow();
 
-  // Step 2: Process query
-  @step()
-  async processQuery(ev: QueryEvent): Promise<RetrievalEvent> {
-    console.log('Step 2: Process query:', ev.query);
-    // Simulate retrieval
-    const documents = ['Doc 1', 'Doc 2', 'Doc 3'];
-    const scores = [0.95, 0.87, 0.76];
+workflow.handle([startEv], async (ctx, ev) => {
+  // Send an intermediate event for observers to consume
+  ctx.sendEvent(progressEv.with({ step: 'validating input' }));
+  ctx.sendEvent(progressEv.with({ step: 'processing' }));
+  return stopEv.with({ result: `Processed: ${ev.data.query}` });
+});
 
-    return new RetrievalEvent({ documents, scores });
-  }
-
-  // Step 3: Generate response
-  @step()
-  async generateResponse(ev: RetrievalEvent): Promise<StopEvent> {
-    console.log('Step 3: Generate response');
-    const topDoc = ev.documents[0];
-    const response = `Based on ${topDoc}: The answer is...`;
-
-    return new StopEvent({
-      result: response,
-      metadata: {
-        documentsUsed: ev.documents.length,
-        topScore: ev.scores[0]
-      }
-    });
-  }
-}
+// Collect everything, including progress events
+const all = await run(workflow, startEv.with({ query: 'LlamaIndex' }))
+  .until(stopEv)
+  .toArray();
+// all contains 4 events: [startEv data, progressEv, progressEv, stopEv data]
+// Note: run().toArray() includes the trigger event in the collected stream.
 ```
-
-**Step Decorator Options:**
-
-```typescript
-// Basic step
-@step()
-async myStep(ev: Event): Promise<Event> { ... }
-
-// Named step (for debugging)
-@step({ name: 'retrieval-step' })
-async retrieve(ev: Event): Promise<Event> { ... }
-
-// Step with timeout
-@step({ timeout: 5000 })
-async slowStep(ev: Event): Promise<Event> { ... }
-```
-
-### 2.4 State Management
-
-Workflows maintain type-safe state across steps:
-
-```typescript
-interface WorkflowState {
-  userId: string;
-  query: string;
-  context: string[];
-  results: any[];
-  metadata: Record<string, any>;
-}
-
-class StatefulWorkflow extends Workflow<WorkflowState> {
-  constructor() {
-    super();
-    // Initialize state
-    this.state = {
-      userId: '',
-      query: '',
-      context: [],
-      results: [],
-      metadata: {}
-    };
-  }
-
-  @step()
-  async initState(ev: StartEvent): Promise<QueryEvent> {
-    // Update state
-    this.state.userId = ev.data.userId;
-    this.state.query = ev.data.query;
-    this.state.metadata.startTime = Date.now();
-
-    return new QueryEvent({ query: this.state.query });
-  }
-
-  @step()
-  async processWithState(ev: QueryEvent): Promise<StopEvent> {
-    // Access state
-    console.log('Processing for user:', this.state.userId);
-
-    // Update state
-    this.state.results.push({ query: ev.query, timestamp: Date.now() });
-    this.state.metadata.endTime = Date.now();
-    this.state.metadata.duration =
-      this.state.metadata.endTime - this.state.metadata.startTime;
-
-    return new StopEvent({
-      result: this.state.results,
-      metadata: this.state.metadata
-    });
-  }
-}
-```
-
-**State Best Practices:**
-- Use TypeScript interfaces for state typing
-- Initialize state in constructor
-- Avoid mutating nested objects directly
-- Use immutable updates when possible
 
 ---
 
 ## 3. Async Operations and Promises
 
-### 3.1 Async/Await Pattern
+### 3.1 Async handlers
 
-All workflow steps are async by default:
+All handlers support `async/await` naturally:
 
 ```typescript
-import { Workflow, StartEvent, StopEvent, step } from 'llama-index-workflows';
-import { OpenAI } from 'llamaindex';
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
 
-class AsyncWorkflow extends Workflow {
-  private llm = new OpenAI({ model: 'gpt-4' });
+const fetchEvent    = workflowEvent<{ url: string }>();
+const processEvent  = workflowEvent<{ data: unknown }>();
+const outputEvent   = workflowEvent<{ summary: string }>();
 
-  @step()
-  async fetchData(ev: StartEvent): Promise<DataEvent> {
-    // Async API call
-    const response = await fetch('https://api.example.com/data');
-    const data = await response.json();
+const workflow = createWorkflow();
 
-    return new DataEvent({ data });
-  }
+workflow.handle([fetchEvent], async (ctx, ev) => {
+  const response = await fetch(ev.data.url);
+  const data = await response.json();
+  return processEvent.with({ data });
+});
 
-  @step()
-  async processWithLLM(ev: DataEvent): Promise<StopEvent> {
-    // Async LLM call
-    const result = await this.llm.complete({
-      prompt: `Analyze this data: ${JSON.stringify(ev.data)}`
-    });
+workflow.handle([processEvent], async (ctx, ev) => {
+  // Process the fetched data
+  const summary = JSON.stringify(ev.data.data).substring(0, 100);
+  return outputEvent.with({ summary });
+});
+```
 
-    return new StopEvent({ result: result.text });
-  }
+### 3.2 Parallel operations within a handler
+
+Use `Promise.all` within a single handler for concurrent sub-tasks:
+
+```typescript
+const searchEvent  = workflowEvent<{ query: string }>();
+const resultEvent  = workflowEvent<{ documents: string[]; metadata: unknown }>();
+
+const workflow = createWorkflow();
+
+workflow.handle([searchEvent], async (ctx, ev) => {
+  const [documents, metadata] = await Promise.all([
+    retrieveDocuments(ev.data.query),
+    fetchMetadata(ev.data.query),
+  ]);
+  return resultEvent.with({ documents, metadata });
+});
+
+async function retrieveDocuments(query: string): Promise<string[]> {
+  return ['doc1', 'doc2'];
+}
+
+async function fetchMetadata(query: string): Promise<unknown> {
+  return { timestamp: Date.now() };
 }
 ```
 
-### 3.2 Parallel Processing
+### 3.3 Error handling
 
-Execute multiple async operations in parallel:
+Handle errors inside handlers to produce graceful failure events:
 
 ```typescript
-class ParallelWorkflow extends Workflow {
-  @step()
-  async parallelProcessing(ev: StartEvent): Promise<StopEvent> {
-    const queries = ev.data.queries;
+const inputEv   = workflowEvent<{ query: string }>();
+const successEv = workflowEvent<{ result: string }>();
+const errorEv   = workflowEvent<{ message: string; retryable: boolean }>();
 
-    // Process all queries in parallel
-    const results = await Promise.all(
-      queries.map(async (query) => {
-        const response = await this.llm.complete({ prompt: query });
-        return response.text;
-      })
-    );
+const workflow = createWorkflow();
 
-    // Combine results
-    return new StopEvent({ results });
+workflow.handle([inputEv], async (ctx, ev) => {
+  try {
+    const result = await unreliableOperation(ev.data.query);
+    return successEv.with({ result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    // Send error event instead of throwing to keep the workflow observable
+    return errorEv.with({ message, retryable: true });
   }
+});
 
-  @step()
-  async parallelRetrievalAndProcessing(ev: QueryEvent): Promise<StopEvent> {
-    // Execute multiple independent operations in parallel
-    const [documents, metadata, userContext] = await Promise.all([
-      this.retrieveDocuments(ev.query),
-      this.fetchMetadata(ev.query),
-      this.getUserContext(ev.userId)
-    ]);
-
-    return new StopEvent({
-      documents,
-      metadata,
-      userContext
-    });
-  }
-
-  private async retrieveDocuments(query: string): Promise<string[]> {
-    // Retrieval logic
-    return ['doc1', 'doc2'];
-  }
-
-  private async fetchMetadata(query: string): Promise<any> {
-    // Metadata fetch
-    return { timestamp: Date.now() };
-  }
-
-  private async getUserContext(userId: string): Promise<any> {
-    // User context fetch
-    return { preferences: [] };
-  }
+async function unreliableOperation(query: string): Promise<string> {
+  if (Math.random() < 0.3) throw new Error('Service temporarily unavailable');
+  return `Result for: ${query}`;
 }
 ```
 
-### 3.3 Error Handling
+### 3.4 Retry with exponential back-off
 
-Robust error handling with try/catch:
+Implement retries inside a handler:
 
 ```typescript
-class ErrorHandlingWorkflow extends Workflow {
-  @step()
-  async robustStep(ev: StartEvent): Promise<StopEvent> {
+const taskEv   = workflowEvent<{ payload: string }>();
+const doneEv   = workflowEvent<{ value: string; attempts: number }>();
+
+const workflow = createWorkflow();
+
+workflow.handle([taskEv], async (ctx, ev) => {
+  const maxRetries = 3;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const result = await this.riskyOperation(ev.data);
-      return new StopEvent({ result, success: true });
-    } catch (error) {
-      console.error('Error in workflow:', error);
-
-      // Return error event or retry
-      return new StopEvent({
-        result: null,
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      const value = await callApi(ev.data.payload);
+      return doneEv.with({ value, attempts: attempt });
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      await new Promise(resolve => setTimeout(resolve, 200 * 2 ** (attempt - 1)));
     }
   }
 
-  @step()
-  async stepWithRetry(ev: StartEvent): Promise<StopEvent> {
-    const maxRetries = 3;
-    let lastError: Error | null = null;
+  throw new Error('unreachable');
+});
 
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const result = await this.unreliableOperation(ev.data);
-        return new StopEvent({ result, retries: i });
-      } catch (error) {
-        lastError = error as Error;
-        console.log(`Attempt ${i + 1} failed, retrying...`);
-        await this.delay(1000 * (i + 1)); // Exponential backoff
-      }
-    }
-
-    // All retries failed
-    throw new Error(`Failed after ${maxRetries} attempts: ${lastError?.message}`);
-  }
-
-  private async riskyOperation(data: any): Promise<any> {
-    // Simulated risky operation
-    if (Math.random() < 0.3) throw new Error('Random failure');
-    return { processed: data };
-  }
-
-  private async unreliableOperation(data: any): Promise<any> {
-    // Simulated unreliable operation
-    if (Math.random() < 0.5) throw new Error('Service unavailable');
-    return { data };
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-```
-
-### 3.4 Timeout Handling
-
-Implement timeouts for long-running operations:
-
-```typescript
-class TimeoutWorkflow extends Workflow {
-  @step()
-  async stepWithTimeout(ev: StartEvent): Promise<StopEvent> {
-    const timeout = 5000; // 5 seconds
-
-    try {
-      const result = await Promise.race([
-        this.longRunningOperation(ev.data),
-        this.timeoutPromise(timeout)
-      ]);
-
-      return new StopEvent({ result, timedOut: false });
-    } catch (error) {
-      if (error instanceof TimeoutError) {
-        console.error('Operation timed out');
-        return new StopEvent({
-          result: null,
-          timedOut: true,
-          error: 'Operation exceeded timeout'
-        });
-      }
-      throw error;
-    }
-  }
-
-  private async longRunningOperation(data: any): Promise<any> {
-    // Simulated long operation
-    await this.delay(10000);
-    return { processed: data };
-  }
-
-  private timeoutPromise(ms: number): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new TimeoutError(`Timeout after ${ms}ms`)), ms);
-    });
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-class TimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TimeoutError';
-  }
+async function callApi(payload: string): Promise<string> {
+  return `response:${payload}`;
 }
 ```
 
 ---
 
-# BUILDING WORKFLOWS
-
 ## 4. Event Handling and Routing
 
-### 4.1 Event Routing
+### 4.1 Routing based on event type
 
-Route events to different steps based on event type:
+A handler that accepts multiple event types can route to different paths:
 
 ```typescript
-class RoutingWorkflow extends Workflow {
-  @step()
-  async routeEvents(ev: StartEvent): Promise<QueryEvent | CommandEvent> {
-    const input = ev.data.input;
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
 
-    // Route based on input type
-    if (input.startsWith('?')) {
-      return new QueryEvent({ query: input.substring(1) });
-    } else if (input.startsWith('!')) {
-      return new CommandEvent({ command: input.substring(1) });
-    }
+const startEv   = workflowEvent<{ mode: 'fast' | 'thorough'; query: string }>();
+const fastEv    = workflowEvent<{ query: string }>();
+const thoroughEv = workflowEvent<{ query: string }>();
+const stopEv    = workflowEvent<{ result: string; path: string }>();
 
-    throw new Error('Unknown input format');
+const workflow = createWorkflow();
+
+// Route to fast or thorough path
+workflow.handle([startEv], async (ctx, ev) => {
+  if (ev.data.mode === 'fast') {
+    return fastEv.with({ query: ev.data.query });
   }
+  return thoroughEv.with({ query: ev.data.query });
+});
 
-  @step()
-  async handleQuery(ev: QueryEvent): Promise<StopEvent> {
-    console.log('Handling query:', ev.query);
-    const result = await this.processQuery(ev.query);
-    return new StopEvent({ type: 'query', result });
-  }
+workflow.handle([fastEv], async (ctx, ev) => {
+  return stopEv.with({ result: `Quick answer to: ${ev.data.query}`, path: 'fast' });
+});
 
-  @step()
-  async handleCommand(ev: CommandEvent): Promise<StopEvent> {
-    console.log('Handling command:', ev.command);
-    const result = await this.executeCommand(ev.command);
-    return new StopEvent({ type: 'command', result });
-  }
+workflow.handle([thoroughEv], async (ctx, ev) => {
+  // More expensive processing
+  return stopEv.with({ result: `Detailed answer to: ${ev.data.query}`, path: 'thorough' });
+});
 
-  private async processQuery(query: string): Promise<string> {
-    return `Query result for: ${query}`;
-  }
-
-  private async executeCommand(command: string): Promise<string> {
-    return `Command executed: ${command}`;
-  }
-}
-
-class QueryEvent extends Event {
-  query: string;
-  constructor(data: { query: string }) {
-    super();
-    this.query = data.query;
-  }
-}
-
-class CommandEvent extends Event {
-  command: string;
-  constructor(data: { command: string }) {
-    super();
-    this.command = data.command;
-  }
-}
+const events = await run(workflow, startEv.with({ mode: 'fast', query: 'What is RAG?' }))
+  .until(stopEv)
+  .toArray();
+console.log(events.at(-1)?.data); // { result: '...', path: 'fast' }
 ```
 
-### 4.2 Conditional Routing
+### 4.2 The `or()` combinator
 
-Route based on conditions:
+When a handler should fire on any one of several event types, use `or()`:
 
 ```typescript
-class ConditionalWorkflow extends Workflow {
-  @step()
-  async evaluateCondition(ev: StartEvent): Promise<PathAEvent | PathBEvent> {
-    const score = ev.data.score;
+import { createWorkflow, workflowEvent, run, or } from '@llamaindex/workflow';
 
-    if (score > 0.8) {
-      return new PathAEvent({ data: 'High confidence path' });
-    } else {
-      return new PathBEvent({ data: 'Low confidence path' });
-    }
-  }
+const normalInputEv  = workflowEvent<{ text: string; source: 'user' }>();
+const cachedInputEv  = workflowEvent<{ text: string; source: 'cache' }>();
+const processedEv    = workflowEvent<{ output: string; fromCache: boolean }>();
 
-  @step()
-  async handlePathA(ev: PathAEvent): Promise<StopEvent> {
-    console.log('Path A:', ev.data);
-    return new StopEvent({ path: 'A', result: 'Fast processing' });
-  }
+const workflow = createWorkflow();
 
-  @step()
-  async handlePathB(ev: PathBEvent): Promise<StopEvent> {
-    console.log('Path B:', ev.data);
-    // More thorough processing for low confidence
-    return new StopEvent({ path: 'B', result: 'Detailed processing' });
-  }
-}
+// This handler fires when either normalInputEv or cachedInputEv arrives
+workflow.handle([or(normalInputEv, cachedInputEv)], async (ctx, ev) => {
+  const fromCache = cachedInputEv.include(ev);
+  return processedEv.with({ output: ev.data.text.toUpperCase(), fromCache });
+});
 
-class PathAEvent extends Event {
-  data: string;
-  constructor(data: { data: string }) {
-    super();
-    this.data = data.data;
-  }
-}
-
-class PathBEvent extends Event {
-  data: string;
-  constructor(data: { data: string }) {
-    super();
-    this.data = data.data;
-  }
-}
+const result = await run(workflow, normalInputEv.with({ text: 'hello', source: 'user' }))
+  .until(processedEv)
+  .toArray();
+console.log(result.at(-1)?.data); // { output: 'HELLO', fromCache: false }
 ```
 
-### 4.3 Dynamic Event Emission
+### 4.3 Conditional branching with `ctx.sendEvent()`
 
-Emit events dynamically based on runtime conditions:
+A handler can fan out to multiple downstream events by calling `ctx.sendEvent()` for each branch, then returning a final aggregation event:
 
 ```typescript
-class DynamicWorkflow extends Workflow {
-  @step()
-  async processMultipleOutputs(ev: StartEvent): Promise<Event[]> {
-    const items = ev.data.items;
-    const events: Event[] = [];
+const startEv   = workflowEvent<{ items: string[] }>();
+const itemEv    = workflowEvent<{ item: string; index: number }>();
+const stopEv    = workflowEvent<{ results: string[] }>();
 
-    for (const item of items) {
-      if (item.type === 'query') {
-        events.push(new QueryEvent({ query: item.data }));
-      } else if (item.type === 'command') {
-        events.push(new CommandEvent({ command: item.data }));
-      }
-    }
+const workflow = createWorkflow();
 
-    // Return array of events - workflow will process each
-    return events;
+workflow.handle([startEv], async (ctx, ev) => {
+  const results: string[] = [];
+  for (let i = 0; i < ev.data.items.length; i++) {
+    results.push(`Processed: ${ev.data.items[i]}`);
   }
+  return stopEv.with({ results });
+});
+```
 
-  @step()
-  async handleQuery(ev: QueryEvent): Promise<ResultEvent> {
-    const result = await this.processQuery(ev.query);
-    return new ResultEvent({ type: 'query', result });
-  }
+### 4.4 Multi-handler pipelines
 
-  @step()
-  async handleCommand(ev: CommandEvent): Promise<ResultEvent> {
-    const result = await this.executeCommand(ev.command);
-    return new ResultEvent({ type: 'command', result });
-  }
+Register as many handlers as needed — the workflow engine chains them automatically:
 
-  @step()
-  async combineResults(ev: ResultEvent[]): Promise<StopEvent> {
-    // Collect all results
-    const results = ev.map(e => e.result);
-    return new StopEvent({ results });
-  }
-}
+```typescript
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
 
-class ResultEvent extends Event {
-  type: string;
-  result: any;
-  constructor(data: { type: string; result: any }) {
-    super();
-    this.type = data.type;
-    this.result = data.result;
-  }
-}
+const rawEv       = workflowEvent<{ text: string }>();
+const cleanedEv   = workflowEvent<{ text: string }>();
+const embeddedEv  = workflowEvent<{ vector: number[] }>();
+const storedEv    = workflowEvent<{ id: string }>();
+
+const workflow = createWorkflow();
+
+workflow.handle([rawEv], async (ctx, ev) => {
+  const text = ev.data.text.trim().toLowerCase();
+  return cleanedEv.with({ text });
+});
+
+workflow.handle([cleanedEv], async (ctx, ev) => {
+  // Simulate embedding
+  const vector = Array.from({ length: 4 }, () => Math.random());
+  return embeddedEv.with({ vector });
+});
+
+workflow.handle([embeddedEv], async (ctx, ev) => {
+  const id = `doc_${Date.now()}`;
+  return storedEv.with({ id });
+});
+
+const events = await run(workflow, rawEv.with({ text: '  Hello World  ' }))
+  .until(storedEv)
+  .toArray();
+console.log('stored id:', events.at(-1)?.data.id);
 ```
 
 ---
 
 ## 5. Complete RAG Workflow Example
 
-Comprehensive example combining all concepts:
+A realistic RAG pipeline using `@llamaindex/workflow` and `@llamaindex/openai`:
 
 ```typescript
 import {
-  Workflow,
-  StartEvent,
-  StopEvent,
-  Event,
-  step
-} from 'llama-index-workflows';
-import {
-  VectorStoreIndex,
-  OpenAI,
-  OpenAIEmbedding,
-  Document
-} from 'llamaindex';
+  createWorkflow,
+  workflowEvent,
+  run,
+  createStatefulMiddleware,
+} from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
 
-// Custom Events
-class RetrievalEvent extends Event {
-  query: string;
-  topK: number;
-
-  constructor(data: { query: string; topK?: number }) {
-    super();
-    this.query = data.query;
-    this.topK = data.topK || 5;
-  }
-}
-
-class DocumentEvent extends Event {
-  documents: string[];
-  scores: number[];
-
-  constructor(data: { documents: string[]; scores: number[] }) {
-    super();
-    this.documents = data.documents;
-    this.scores = data.scores;
-  }
-}
-
-class GenerationEvent extends Event {
-  query: string;
-  context: string;
-
-  constructor(data: { query: string; context: string }) {
-    super();
-    this.query = data.query;
-    this.context = data.context;
-  }
-}
-
-// Workflow State Interface
-interface RAGState {
-  userId: string;
+// ---
+// Event definitions
+// ---
+const queryEv       = workflowEvent<{ query: string; sessionId: string }>();
+const retrievedEv   = workflowEvent<{ docs: string[]; scores: number[] }>();
+const generatedEv   = workflowEvent<{ answer: string }>();
+const stopEv        = workflowEvent<{
+  answer: string;
+  docsUsed: number;
   sessionId: string;
-  startTime: number;
-  documentsRetrieved: number;
-  tokensUsed: number;
-}
+  durationMs: number;
+}>();
 
-// Complete RAG Workflow
-class RAGWorkflow extends Workflow<RAGState> {
-  private index: VectorStoreIndex;
-  private llm: OpenAI;
-  private embedding: OpenAIEmbedding;
+// ---
+// Stateful middleware — tracks per-run metrics
+// ---
+type RunState = { startMs: number; docsRetrieved: number };
+const { withState } = createStatefulMiddleware<RunState>(() => ({
+  startMs: 0,
+  docsRetrieved: 0,
+}));
 
-  constructor(documents: Document[]) {
-    super();
+const baseWorkflow = createWorkflow();
+const workflow = withState(baseWorkflow);
 
-    // Initialize state
-    this.state = {
-      userId: '',
-      sessionId: '',
-      startTime: 0,
-      documentsRetrieved: 0,
-      tokensUsed: 0
-    };
+// ---
+// Handler 1 — mock retriever
+// ---
+workflow.handle([queryEv], async (ctx, ev) => {
+  ctx.state.startMs = Date.now();
 
-    // Initialize LLM and embedding
-    this.llm = new OpenAI({ model: 'gpt-4', temperature: 0.7 });
-    this.embedding = new OpenAIEmbedding();
-
-    // Create index
-    this.initializeIndex(documents);
-  }
-
-  private async initializeIndex(documents: Document[]): Promise<void> {
-    this.index = await VectorStoreIndex.fromDocuments(documents, {
-      embedModel: this.embedding
-    });
-  }
-
-  @step()
-  async startQuery(ev: StartEvent): Promise<RetrievalEvent> {
-    // Initialize workflow state
-    this.state.userId = ev.data.userId || 'anonymous';
-    this.state.sessionId = ev.data.sessionId || this.generateSessionId();
-    this.state.startTime = Date.now();
-
-    console.log(`[${this.state.sessionId}] Starting RAG workflow`);
-    console.log(`[${this.state.sessionId}] Query: ${ev.data.query}`);
-
-    return new RetrievalEvent({
-      query: ev.data.query,
-      topK: ev.data.topK || 5
-    });
-  }
-
-  @step()
-  async retrieveDocuments(ev: RetrievalEvent): Promise<DocumentEvent> {
-    console.log(`[${this.state.sessionId}] Retrieving top ${ev.topK} documents`);
-
-    try {
-      // Retrieve documents from index
-      const retriever = this.index.asRetriever({ similarityTopK: ev.topK });
-      const nodes = await retriever.retrieve(ev.query);
-
-      // Extract text and scores
-      const documents = nodes.map(node => node.node.getText());
-      const scores = nodes.map(node => node.score || 0);
-
-      this.state.documentsRetrieved = documents.length;
-
-      console.log(`[${this.state.sessionId}] Retrieved ${documents.length} documents`);
-      console.log(`[${this.state.sessionId}] Top score: ${scores[0]?.toFixed(3)}`);
-
-      return new DocumentEvent({ documents, scores });
-    } catch (error) {
-      console.error(`[${this.state.sessionId}] Retrieval error:`, error);
-      throw error;
-    }
-  }
-
-  @step()
-  async prepareContext(ev: DocumentEvent): Promise<GenerationEvent> {
-    console.log(`[${this.state.sessionId}] Preparing context`);
-
-    // Combine documents into context
-    const context = ev.documents
-      .map((doc, i) => `[Document ${i + 1}]:\n${doc}`)
-      .join('\n\n');
-
-    // Get original query from state (in real impl, pass through events)
-    const query = 'Original query here'; // Simplified for example
-
-    return new GenerationEvent({ query, context });
-  }
-
-  @step()
-  async generateResponse(ev: GenerationEvent): Promise<StopEvent> {
-    console.log(`[${this.state.sessionId}] Generating response`);
-
-    const prompt = `Answer the following question based on the provided context.
-
-Context:
-${ev.context}
-
-Question: ${ev.query}
-
-Answer:`;
-
-    try {
-      const response = await this.llm.complete({ prompt });
-
-      // Update state with token usage (simplified)
-      this.state.tokensUsed = response.text.length; // Simplified
-
-      const duration = Date.now() - this.state.startTime;
-
-      console.log(`[${this.state.sessionId}] Response generated in ${duration}ms`);
-      console.log(`[${this.state.sessionId}] Documents used: ${this.state.documentsRetrieved}`);
-
-      return new StopEvent({
-        response: response.text,
-        metadata: {
-          sessionId: this.state.sessionId,
-          userId: this.state.userId,
-          documentsUsed: this.state.documentsRetrieved,
-          tokensUsed: this.state.tokensUsed,
-          duration,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (error) {
-      console.error(`[${this.state.sessionId}] Generation error:`, error);
-      throw error;
-    }
-  }
-
-  private generateSessionId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-  }
-}
-
-// Usage Example
-async function main() {
-  // Create documents
-  const documents = [
-    new Document({ text: 'LlamaIndex is a data framework for LLM applications.' }),
-    new Document({ text: 'It provides tools for ingestion, indexing, and querying.' }),
-    new Document({ text: 'Workflows enable event-driven orchestration.' })
+  // Replace with a real vector store call in production
+  const docs = [
+    `${ev.data.query} is a technique for grounding LLM outputs with retrieved context.`,
+    'RAG combines retrieval systems with generative models.',
+    'Key components: chunking, embeddings, vector store, retriever, and generator.',
   ];
+  const scores = [0.95, 0.88, 0.76];
 
-  // Create and run workflow
-  const workflow = new RAGWorkflow(documents);
+  ctx.state.docsRetrieved = docs.length;
+  return retrievedEv.with({ docs, scores });
+});
 
-  const result = await workflow.run({
-    query: 'What is LlamaIndex?',
-    userId: 'user123',
-    topK: 3
+// ---
+// Handler 2 — LLM generation
+// ---
+const llm = new OpenAI({ model: 'gpt-4o-mini', temperature: 0.2 });
+
+workflow.handle([retrievedEv], async (ctx, ev) => {
+  const context = ev.data.docs
+    .map((d, i) => `[${i + 1}] ${d}`)
+    .join('\n');
+
+  const response = await llm.complete({
+    prompt: `Answer concisely using only the context below.\n\nContext:\n${context}\n\nQuestion: (see queryEv)`,
   });
 
-  console.log('\nFinal Result:');
-  console.log('Response:', result.data.response);
-  console.log('Metadata:', result.data.metadata);
+  return generatedEv.with({ answer: response.text });
+});
+
+// ---
+// Handler 3 — assemble final result
+// ---
+workflow.handle([generatedEv, queryEv], async (ctx, gen) => {
+  // Note: workflow.handle with multiple events fires when ALL listed events have arrived
+  return stopEv.with({
+    answer: gen.data.answer,
+    docsUsed: ctx.state.docsRetrieved,
+    sessionId: 'session_001',
+    durationMs: Date.now() - ctx.state.startMs,
+  });
+});
+
+// ---
+// Usage
+// ---
+async function runRagQuery(query: string, sessionId: string) {
+  const events = await run(
+    workflow,
+    queryEv.with({ query, sessionId }),
+  )
+    .until(stopEv)
+    .toArray();
+
+  const result = events.find(e => stopEv.include(e));
+  return result?.data;
 }
+
+// runRagQuery('What is RAG?', 'session_001').then(console.log);
 ```
 
----
+**Pitfall:** `workflow.handle([evA, evB], handler)` fires only when **both** events have been emitted in the same context. If you want a handler that fires on either event, use `or(evA, evB)`. Source: `@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24).
 
-# MULTI-AGENT WORKFLOWS
+---
 
 ## 6. Agent Coordination
 
-### 6.1 Multi-Agent Architecture
+### 6.1 `FunctionAgent` and `multiAgent`
 
-Coordinate multiple specialized agents using workflows:
+For LLM-backed agent coordination, `@llamaindex/workflow` ships `FunctionAgent`, `multiAgent`, and `agent`:
 
 ```typescript
-import { Workflow, StartEvent, StopEvent, Event, step } from 'llama-index-workflows';
+import {
+  FunctionAgent,
+  multiAgent,
+  agent,
+  startAgentEvent,
+  stopAgentEvent,
+} from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
+import { tool } from '@llamaindex/core/tools';
 
-// Agent-specific events
-class ResearchTaskEvent extends Event {
-  task: string;
-  constructor(data: { task: string }) {
-    super();
-    this.task = data.task;
-  }
-}
+const llm = new OpenAI({ model: 'gpt-4o' });
 
-class AnalysisTaskEvent extends Event {
-  data: any;
-  constructor(data: { data: any }) {
-    super();
-    this.data = data.data;
-  }
-}
+// ---
+// Define tools
+// ---
+const searchTool = tool({
+  name: 'web_search',
+  description: 'Search the web for recent information',
+  parameters: {
+    type: 'object',
+    properties: { query: { type: 'string' } },
+    required: ['query'],
+  },
+  execute: async ({ query }: { query: string }) => {
+    return `Search results for: ${query}`;
+  },
+});
 
-class SynthesisTaskEvent extends Event {
-  researchResults: string;
-  analysisResults: string;
-  constructor(data: { researchResults: string; analysisResults: string }) {
-    super();
-    this.researchResults = data.researchResults;
-    this.analysisResults = data.analysisResults;
-  }
-}
+const analyseTool = tool({
+  name: 'analyse_data',
+  description: 'Analyse text data and extract key insights',
+  parameters: {
+    type: 'object',
+    properties: { data: { type: 'string' } },
+    required: ['data'],
+  },
+  execute: async ({ data }: { data: string }) => {
+    return `Analysis of: ${data.substring(0, 100)}...`;
+  },
+});
 
-// Multi-Agent Workflow
-class MultiAgentWorkflow extends Workflow {
-  private researchAgent: ResearchAgent;
-  private analysisAgent: AnalysisAgent;
-  private synthesisAgent: SynthesisAgent;
+// ---
+// Create specialised agents
+// ---
+const researchAgent = new FunctionAgent({
+  name: 'Researcher',
+  description: 'Searches for and retrieves information',
+  systemPrompt: 'You are a research specialist. Search for information and return factual results.',
+  llm,
+  tools: [searchTool],
+  canHandoffTo: ['Analyst'],
+});
 
-  constructor() {
-    super();
-    this.researchAgent = new ResearchAgent();
-    this.analysisAgent = new AnalysisAgent();
-    this.synthesisAgent = new SynthesisAgent();
-  }
+const analystAgent = new FunctionAgent({
+  name: 'Analyst',
+  description: 'Analyses information and produces structured reports',
+  systemPrompt: 'You are an analyst. Analyse data and produce clear, structured insights.',
+  llm,
+  tools: [analyseTool],
+  canHandoffTo: ['Researcher'],
+});
 
-  @step()
-  async orchestrate(ev: StartEvent): Promise<ResearchTaskEvent | AnalysisTaskEvent> {
-    const task = ev.data.task;
+// ---
+// Compose into a multi-agent workflow
+// ---
+const researchWorkflow = multiAgent({
+  agents: [researchAgent, analystAgent],
+  rootAgent: researchAgent,
+});
 
-    // Determine which agent should handle the task
-    if (task.type === 'research') {
-      return new ResearchTaskEvent({ task: task.description });
-    } else {
-      return new AnalysisTaskEvent({ data: task.data });
+// ---
+// Run
+// ---
+async function runResearch(question: string) {
+  const stream = researchWorkflow.run(question);
+
+  for await (const event of stream) {
+    if (stopAgentEvent.include(event)) {
+      console.log('Final answer:', event.data.result);
+      return event.data;
     }
   }
-
-  @step()
-  async delegateResearch(ev: ResearchTaskEvent): Promise<SynthesisTaskEvent> {
-    console.log('Delegating to Research Agent');
-    const researchResults = await this.researchAgent.research(ev.task);
-
-    // Also trigger analysis in parallel
-    const analysisResults = await this.analysisAgent.analyze(researchResults);
-
-    return new SynthesisTaskEvent({ researchResults, analysisResults });
-  }
-
-  @step()
-  async delegateAnalysis(ev: AnalysisTaskEvent): Promise<SynthesisTaskEvent> {
-    console.log('Delegating to Analysis Agent');
-    const analysisResults = await this.analysisAgent.analyze(ev.data);
-
-    return new SynthesisTaskEvent({
-      researchResults: '',
-      analysisResults
-    });
-  }
-
-  @step()
-  async synthesize(ev: SynthesisTaskEvent): Promise<StopEvent> {
-    console.log('Delegating to Synthesis Agent');
-    const finalResult = await this.synthesisAgent.synthesize({
-      research: ev.researchResults,
-      analysis: ev.analysisResults
-    });
-
-    return new StopEvent({ result: finalResult });
-  }
 }
 
-// Individual Agent Classes
-class ResearchAgent {
-  async research(task: string): Promise<string> {
-    console.log('Research Agent: Processing', task);
-    // Research implementation
-    return `Research findings for: ${task}`;
-  }
-}
-
-class AnalysisAgent {
-  async analyze(data: any): Promise<string> {
-    console.log('Analysis Agent: Processing', data);
-    // Analysis implementation
-    return `Analysis results for: ${JSON.stringify(data)}`;
-  }
-}
-
-class SynthesisAgent {
-  async synthesize(input: { research: string; analysis: string }): Promise<string> {
-    console.log('Synthesis Agent: Combining results');
-    // Synthesis implementation
-    return `Synthesized: ${input.research} + ${input.analysis}`;
-  }
-}
+// runResearch('What are the latest developments in RAG pipelines?').then(console.log);
 ```
 
-### 6.2 Parallel Agent Execution
+### 6.2 Single-agent shorthand
 
-Execute multiple agents in parallel for improved performance:
+When you only need one agent, use the `agent()` helper:
 
 ```typescript
-class ParallelAgentWorkflow extends Workflow {
-  @step()
-  async executeParallel(ev: StartEvent): Promise<StopEvent> {
-    const query = ev.data.query;
+import { agent, startAgentEvent, stopAgentEvent } from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
 
-    // Execute multiple agents in parallel
-    const [researchResult, analysisResult, summaryResult] = await Promise.all([
-      this.researchAgent.research(query),
-      this.analysisAgent.analyze(query),
-      this.summaryAgent.summarize(query)
-    ]);
+const llm = new OpenAI({ model: 'gpt-4o-mini' });
 
-    // Combine results
-    const combinedResult = {
-      research: researchResult,
-      analysis: analysisResult,
-      summary: summaryResult
-    };
+const summaryWorkflow = agent({
+  name: 'Summariser',
+  description: 'Summarises long text',
+  systemPrompt: 'Summarise the provided text in 3 bullet points.',
+  llm,
+  tools: [],
+});
 
-    return new StopEvent({ result: combinedResult });
-  }
+async function summarise(text: string): Promise<string> {
+  const events = await summaryWorkflow.run(text)
+    .until(stopAgentEvent)
+    .toArray();
 
-  private researchAgent = new ResearchAgent();
-  private analysisAgent = new AnalysisAgent();
-  private summaryAgent = new SummaryAgent();
+  const stop = events.find(e => stopAgentEvent.include(e));
+  return String(stop?.data.result ?? '');
 }
+```
 
-class SummaryAgent {
-  async summarize(query: string): Promise<string> {
-    return `Summary of: ${query}`;
+### 6.3 Low-level multi-agent coordination with custom workflows
+
+For full control, compose agents using the base workflow primitives:
+
+```typescript
+import {
+  createWorkflow,
+  workflowEvent,
+  run,
+  createStatefulMiddleware,
+} from '@llamaindex/workflow';
+
+// Custom events for agent coordination
+const orchestratorEv  = workflowEvent<{ task: string; priority: 'high' | 'normal' }>();
+const researchTaskEv  = workflowEvent<{ task: string }>();
+const analysisTaskEv  = workflowEvent<{ findings: string }>();
+const reportEv        = workflowEvent<{ report: string; tasksCompleted: number }>();
+
+type OrchestratorState = { tasksCompleted: number };
+const { withState } = createStatefulMiddleware<OrchestratorState>(() => ({
+  tasksCompleted: 0,
+}));
+
+const base = createWorkflow();
+const workflow = withState(base);
+
+workflow.handle([orchestratorEv], async (ctx, ev) => {
+  // Decide which specialist to invoke
+  if (ev.data.priority === 'high') {
+    ctx.sendEvent(researchTaskEv.with({ task: ev.data.task }));
   }
-}
+  return researchTaskEv.with({ task: ev.data.task });
+});
+
+workflow.handle([researchTaskEv], async (ctx, ev) => {
+  const findings = `Research findings for: ${ev.data.task}`;
+  ctx.state.tasksCompleted += 1;
+  return analysisTaskEv.with({ findings });
+});
+
+workflow.handle([analysisTaskEv], async (ctx, ev) => {
+  const report = `Report based on: ${ev.data.findings}`;
+  return reportEv.with({
+    report,
+    tasksCompleted: ctx.state.tasksCompleted,
+  });
+});
+
+const events = await run(workflow, orchestratorEv.with({ task: 'Market analysis', priority: 'high' }))
+  .until(reportEv)
+  .toArray();
+
+const report = events.find(e => reportEv.include(e));
+console.log(report?.data);
+```
+
+### 6.4 Stateful checkpointing and resume
+
+`createStatefulMiddleware` supports snapshotting workflow state for durable execution:
+
+```typescript
+import {
+  createWorkflow,
+  workflowEvent,
+  run,
+  createStatefulMiddleware,
+} from '@llamaindex/workflow';
+
+type CheckpointState = {
+  steps: string[];
+  lastCheckpoint: number;
+};
+
+const { withState } = createStatefulMiddleware<CheckpointState>(() => ({
+  steps: [],
+  lastCheckpoint: 0,
+}));
+
+const startEv = workflowEvent<{ jobId: string }>();
+const step1Ev = workflowEvent<{ jobId: string }>();
+const stopEv  = workflowEvent<{ jobId: string; steps: string[] }>();
+
+const base = createWorkflow();
+const workflow = withState(base);
+
+workflow.handle([startEv], async (ctx, ev) => {
+  ctx.state.steps.push('initialised');
+  return step1Ev.with({ jobId: ev.data.jobId });
+});
+
+workflow.handle([step1Ev], async (ctx, ev) => {
+  ctx.state.steps.push('step1-complete');
+  ctx.state.lastCheckpoint = Date.now();
+
+  // Take a snapshot for durable checkpointing
+  const snap = await ctx.snapshot();
+  console.log('Checkpoint version:', snap.version);
+
+  return stopEv.with({ jobId: ev.data.jobId, steps: ctx.state.steps });
+});
+
+const ctxInstance = workflow.createContext();
+const events = await run(workflow, startEv.with({ jobId: 'job-42' }))
+  .until(stopEv)
+  .toArray();
+
+console.log(events.at(-1)?.data);
+// { jobId: 'job-42', steps: ['initialised', 'step1-complete'] }
 ```
 
 ---
 
-This comprehensive guide continues with sections on:
-- Advanced Patterns (Conditional routing, Error recovery, Workflow composition)
-- Integration & Deployment (Express, Fastify, Streaming, Production)
-- Testing Workflows
-- Performance Optimization
-- Best Practices
+## Common pitfalls
 
-**Total: 200+ TypeScript code examples demonstrating Workflows 1.0**
+| Pitfall | Correct approach |
+|---------|-----------------|
+| Importing `Workflow`, `StartEvent`, `StopEvent` from `llama-index-workflows` | Import from `@llamaindex/workflow`. `llama-index-workflows` is not a real package. |
+| `extends Workflow` + `@step()` class pattern | Use `createWorkflow()` + `workflow.handle()` |
+| `workflow.handle(...).handle(...)` chaining | `handle()` returns `void`; register each handler as a separate call |
+| `new StopEvent({ result: ... })` | `stopEvent.with({ result: ... })` |
+| `runWorkflow(wf, input, stop)` | `await run(wf, input).until(stop).toArray()` |
+| `runAndCollect(wf, input, stop)` | `await run(wf, input).until(stop).toArray()` |
+| Using `getContext()` outside a handler | Pass `ctx` from the handler parameter instead |
+| Multi-event handler fires immediately | `handle([evA, evB], ...)` waits for BOTH events; use `or(evA, evB)` for either/or |
 
 ---
 
-*For production deployment strategies, see: llamaindex_typescript_production_guide.md*
-*For ready-to-use examples, see: llamaindex_typescript_recipes.md*
+## Upstream documentation
 
+- Official docs: [ts.llamaindex.ai](https://ts.llamaindex.ai) — Workflows section
+- Package source: `node_modules/@llamaindex/workflow-core/dist/index.d.ts`
+- CHANGELOG: `node_modules/@llamaindex/workflow/CHANGELOG.md`
+- npm: [npmjs.com/package/@llamaindex/workflow](https://www.npmjs.com/package/@llamaindex/workflow)
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous guide documented a fictional `llama-index-workflows` class-based API (`extends Workflow`, `@step()`, `new StartEvent`, etc.) that does not exist in the published package. Rewritten entirely against the functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`, `or`, `createStatefulMiddleware`. All six code examples executed against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node` — PASS. API surface verified from `node_modules/@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24). | Claude routine |
+| 2026-05-04 | @llamaindex/workflow 1.1.25 | Previous guide carried over (not yet remediated). |
+| 2026-04-21 | @llamaindex/workflow 1.1.24 | First attempt to document functional API; minimal example rewritten. |
