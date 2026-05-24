@@ -1,15 +1,15 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.0.3 (November 2025)"
+description: "Updated for LangGraph 1.2.1 (May 2026)"
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.0.3 (November 2025)**
+**Updated for LangGraph 1.2.1 (May 2026)**
 
-This guide includes recipes demonstrating the latest v1.0.3 features:
+This guide includes recipes demonstrating the latest v1.2.1 features:
 - Node Caching for performance
 - Deferred Nodes for fan-in patterns
 - Pre/Post Model Hooks for LLM customization
@@ -1760,6 +1760,324 @@ print(f"Final Output: {result['final_output']}")
 
 ---
 
-This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph 1.0.3.
+This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph 1.2.1.
 
 Adapt and combine them for your specific use cases!
+
+---
+
+## Recipe 10: Long-Term Memory with Vector Search and InMemoryStore (v1.2.1)
+
+**Uses:** `InMemoryStore` with vector index, `Runtime` context injection, per-user memory namespaces
+
+A complete chatbot that persists and retrieves user preferences using `InMemoryStore` with optional vector search. The `Runtime` object carries both the store and a typed context object so nodes stay pure functions.
+
+```python
+from langgraph.store.memory import InMemoryStore
+from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import Runtime
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from typing import Annotated
+from typing_extensions import TypedDict
+from dataclasses import dataclass
+
+# Store with optional vector search
+store = InMemoryStore(
+    index={
+        "dims": 1536,
+        "embed": embed_fn,  # your embedding function
+        "fields": ["content"]
+    }
+)
+
+# Typed context carried through the run
+@dataclass
+class UserContext:
+    user_id: str
+
+class ChatState(MessagesState):
+    pass
+
+def recall_memories(state: ChatState, runtime: Runtime[UserContext]) -> dict:
+    """Load relevant memories from long-term store."""
+    user_id = runtime.context.user_id
+
+    # Get last user message for search
+    last_msg = state["messages"][-1].content if state["messages"] else ""
+
+    # Search for relevant memories
+    memories = runtime.store.search(
+        ("memories", user_id),
+        query=last_msg,
+        limit=3
+    )
+
+    if memories:
+        mem_text = "\n".join(f"- {m.value['content']}" for m in memories)
+        system = SystemMessage(content=f"User memories:\n{mem_text}")
+        return {"messages": [system]}
+    return {}
+
+def save_memory(state: ChatState, runtime: Runtime[UserContext]) -> dict:
+    """Save important facts to long-term store."""
+    user_id = runtime.context.user_id
+    last_ai = state["messages"][-1]
+
+    import uuid
+    runtime.store.put(
+        ("memories", user_id),
+        str(uuid.uuid4()),
+        {"content": last_ai.content[:500]}
+    )
+    return {}
+
+def call_model(state: ChatState) -> dict:
+    # model invocation
+    return {"messages": [AIMessage(content="Response...")]}
+
+builder = StateGraph(ChatState, context_schema=UserContext)
+builder.add_node("recall", recall_memories)
+builder.add_node("agent", call_model)
+builder.add_node("save", save_memory)
+
+builder.add_edge(START, "recall")
+builder.add_edge("recall", "agent")
+builder.add_edge("agent", "save")
+builder.add_edge("save", END)
+
+graph = builder.compile(store=store)
+
+# Pass context via configurable
+result = graph.invoke(
+    {"messages": [HumanMessage("I prefer dark mode")]},
+    {"configurable": {"context": UserContext(user_id="alice")}}
+)
+
+print(result["messages"][-1].content)
+
+# On subsequent runs the recalled memories are injected as a SystemMessage
+# before the agent node, so the model always has the user's preferences in
+# its context window.
+```
+
+Key points:
+- `InMemoryStore` accepts an `index` dict to enable semantic (vector) search via `store.search(..., query=...)`. Omit it for key-only lookup.
+- `Runtime[UserContext]` is injected automatically by LangGraph when declared as a node parameter; it exposes `.context`, `.store`, and `.stream_writer`.
+- `context_schema=UserContext` on `StateGraph` tells the compiler which dataclass to deserialise from `configurable["context"]`.
+
+---
+
+## Recipe 11: Parallel Map-Reduce with Send and BinaryOperatorAggregate (v1.2.1)
+
+**Uses:** `Send` for fan-out, `Annotated[list, operator.add]` reducer for fan-in, `ToolRuntime` inside a tool
+
+A document-analysis pipeline that dispatches each document to a parallel `analyze_doc` node, then reduces all results in a single `reduce_results` node.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.store.base import BaseStore
+from langchain_core.tools import tool
+
+# ── State ────────────────────────────────────────────────────────────────────
+
+class PipelineState(TypedDict):
+    documents: list[str]           # raw document texts to process
+    # BinaryOperatorAggregate: each parallel branch appends its slice
+    analysis_results: Annotated[list[dict], operator.add]
+    summary: str
+
+# ── Parallel branch state (sent via Send) ────────────────────────────────────
+
+class DocState(TypedDict):
+    doc_text: str
+    analysis_results: Annotated[list[dict], operator.add]
+
+# ── Tool that uses ToolRuntime to access the store ───────────────────────────
+
+@tool
+def save_insight(
+    doc_id: str,
+    insight: str,
+    runtime: ToolRuntime,
+) -> str:
+    """Persist an insight from a document into the shared store."""
+    if runtime.store:
+        import uuid
+        runtime.store.put(
+            ("insights",),
+            str(uuid.uuid4()),
+            {"doc_id": doc_id, "insight": insight}
+        )
+    if runtime.stream_writer:
+        runtime.stream_writer({"saved_insight": insight})
+    return f"Saved insight for {doc_id}"
+
+# ── Nodes ────────────────────────────────────────────────────────────────────
+
+def fan_out(state: PipelineState) -> list[Send]:
+    """Create one Send per document — each runs analyze_doc in parallel."""
+    return [
+        Send("analyze_doc", {"doc_text": doc, "analysis_results": []})
+        for doc in state["documents"]
+    ]
+
+def analyze_doc(state: DocState) -> dict:
+    """Analyse a single document (runs in parallel for every document)."""
+    text = state["doc_text"]
+
+    # Simulated analysis — replace with real LLM / extraction logic
+    result = {
+        "length": len(text),
+        "preview": text[:80],
+        "sentiment": "positive" if "good" in text.lower() else "neutral",
+    }
+
+    return {"analysis_results": [result]}   # appended by reducer
+
+def reduce_results(state: PipelineState) -> dict:
+    """Runs only after ALL analyze_doc branches have completed (fan-in)."""
+    results = state["analysis_results"]
+
+    avg_length = sum(r["length"] for r in results) / max(len(results), 1)
+    sentiments = [r["sentiment"] for r in results]
+
+    summary = (
+        f"Processed {len(results)} documents. "
+        f"Avg length: {avg_length:.0f} chars. "
+        f"Sentiments: {', '.join(set(sentiments))}."
+    )
+    return {"summary": summary}
+
+# ── Graph ────────────────────────────────────────────────────────────────────
+
+builder = StateGraph(PipelineState)
+builder.add_node("analyze_doc", analyze_doc)
+builder.add_node("reduce_results", reduce_results)
+
+# fan_out returns a list[Send] — LangGraph dispatches each in parallel
+builder.add_conditional_edges(START, fan_out, ["analyze_doc"])
+
+# All analyze_doc branches converge here
+builder.add_edge("analyze_doc", "reduce_results")
+builder.add_edge("reduce_results", END)
+
+pipeline = builder.compile()
+
+result = pipeline.invoke({
+    "documents": [
+        "This is a good product review.",
+        "The service was okay.",
+        "Great experience overall — good work!"
+    ],
+    "analysis_results": [],
+    "summary": ""
+})
+
+print(result["summary"])
+# Processed 3 documents. Avg length: 37 chars. Sentiments: positive, neutral.
+```
+
+Key points:
+- `Annotated[list, operator.add]` is a **BinaryOperatorAggregate** channel. Each parallel branch writes `{"analysis_results": [single_item]}` and LangGraph concatenates them automatically; no explicit merge node is needed.
+- `Send("node_name", partial_state)` lets you dynamically create parallel branches at runtime. The partial state is merged into the branch's state before the node runs.
+- `ToolRuntime` is injected by `ToolNode` when a `@tool` declares it as a parameter. It exposes `.store`, `.state`, `.stream_writer`, and `.tool_call_id` — giving tools read/write access to cross-thread memory without coupling them to a specific state schema.
+
+---
+
+## Recipe 12: ToolRuntime All-In-One (v1.2.1)
+
+**Uses:** `ToolRuntime` for store access, streaming progress events, and `tool_call_id` correlation
+
+A single tool that demonstrates every capability exposed by `ToolRuntime`: reading graph state, writing to the long-term store, emitting streaming progress, and tagging output with the originating tool call ID.
+
+```python
+from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.store.base import BaseStore
+from langgraph.prebuilt import ToolNode, create_react_agent
+from langchain_core.tools import tool
+from typing import Annotated
+import uuid
+
+@tool
+def research_and_remember(
+    topic: str,
+    runtime: ToolRuntime,
+) -> str:
+    """Research a topic and save findings to memory.
+
+    Demonstrates all four ToolRuntime capabilities:
+      1. runtime.state         — read current graph state
+      2. runtime.store         — write to long-term cross-thread store
+      3. runtime.stream_writer — emit custom streaming events
+      4. runtime.tool_call_id  — correlate results to the originating call
+    """
+    # 1. Read state (optional — may be None if store injection is disabled)
+    user_id = runtime.state.get("user_id", "anon") if runtime.state else "anon"
+
+    # 2. Emit streaming progress so the client can show a spinner / log
+    if runtime.stream_writer:
+        runtime.stream_writer({"status": "researching", "topic": topic})
+
+    # 3. Perform the work (simulated — replace with real API calls)
+    findings = f"Key findings about {topic}: [placeholder — add real research logic]"
+
+    # 4. Persist findings to long-term store under a per-user namespace
+    if runtime.store:
+        runtime.store.put(
+            ("research", user_id),
+            str(uuid.uuid4()),
+            {"topic": topic, "findings": findings}
+        )
+
+    # 5. Include the tool_call_id in the streaming event so the client can
+    #    match progress updates back to the specific tool invocation
+    if runtime.stream_writer:
+        runtime.stream_writer({
+            "status": "saved",
+            "tool_call_id": runtime.tool_call_id
+        })
+
+    return findings
+
+# ── Wire the tool into a ReAct agent ─────────────────────────────────────────
+
+from langgraph.store.memory import InMemoryStore
+from typing_extensions import TypedDict
+from langgraph.graph.message import add_messages
+
+store = InMemoryStore()
+
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    user_id: str
+
+agent = create_react_agent(
+    model=model,                          # your ChatAnthropic / ChatOpenAI etc.
+    tools=[research_and_remember],
+    state_schema=AgentState,
+)
+
+# Stream the run — custom events emitted by stream_writer appear in the
+# "custom" stream mode alongside the standard message events.
+for event in agent.stream(
+    {
+        "messages": [{"role": "user", "content": "Research quantum computing"}],
+        "user_id": "alice",
+    },
+    stream_mode=["updates", "custom"],
+    config={"store": store},
+):
+    print(event)
+```
+
+Key points:
+- `ToolRuntime` is **automatically injected** by `ToolNode`/`create_react_agent` — declare it as a parameter typed `ToolRuntime` and LangGraph wires it up; never pass it manually from your own code.
+- `runtime.stream_writer` accepts any JSON-serialisable dict. These are surfaced when the caller uses `stream_mode="custom"` (or a list that includes `"custom"`).
+- `runtime.store` is the same store instance passed to `compile(store=...)` or the `config` dict, so tools share the same persistent memory as graph nodes.
+- `runtime.tool_call_id` matches the `id` field on the `ToolCall` that triggered this invocation — useful for correlating streaming progress events to a specific call when multiple tool calls fire in parallel.

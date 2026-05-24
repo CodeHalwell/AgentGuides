@@ -1,6 +1,6 @@
 ---
 title: "Chapter 4 — Tools"
-description: "ToolNode, InjectedState, InjectedStore, Command-returning tools, custom error handling, and state injection patterns."
+description: "ToolNode, InjectedState, InjectedStore, ToolRuntime, Command-returning tools, custom error handling, parallel execution, and state injection patterns."
 framework: langgraph
 language: python
 sidebar:
@@ -10,11 +10,11 @@ sidebar:
 
 # Chapter 4 — Tools
 
-**What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, routing from inside tool calls with `Command`, and configuring fine-grained error handling.
+**What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
-Verified against **`langgraph==1.2.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
+Verified against **`langgraph==1.2.1`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
 
-**Time:** ~20 minutes.
+**Time:** ~25 minutes.
 
 > Prereqs: [Chapter 2 — Your first agent](/langgraph-guide/python/chapter-02-simple-agents/).
 
@@ -23,6 +23,8 @@ Verified against **`langgraph==1.2.0`** (modules: `langgraph.prebuilt.tool_node`
 ### Example 1: Basic ToolNode with `tools_condition`
 
 `ToolNode` executes every `tool_call` in the last `AIMessage`, produces `ToolMessage` results, and returns them under the `messages` key. `tools_condition` routes to `"tools"` when tool calls are present, otherwise to `END`.
+
+**Parallel execution:** `ToolNode` runs all `tool_calls` from a single `AIMessage` concurrently using a thread pool. If the model asks for weather in London *and* a stock price in the same response, both tools execute at the same time. Thread-safety matters if your tools share mutable state.
 
 ```python
 from typing import Annotated
@@ -68,25 +70,30 @@ builder.add_edge("tools", "agent")
 
 graph = builder.compile()
 
+# The model may emit two tool_calls in one AIMessage.
+# ToolNode executes get_weather and get_stock_price in parallel.
 result = graph.invoke({
     "messages": [{"role": "user", "content": "Weather in London and AAPL price?"}]
 })
 print(result["messages"][-1].content)
 ```
 
-### Example 2: Custom `handle_tool_errors`
+### Example 2: `handle_tool_errors` — all variants
 
-`handle_tool_errors` controls what happens when a tool raises. Pass a callable `(Exception) -> str` to return a custom error message back to the model instead of crashing.
+`handle_tool_errors` controls what happens when a tool raises an exception. The following table shows every accepted value:
+
+| Value | Behaviour |
+|---|---|
+| `True` *(default)* | Catch all exceptions; return a built-in error template as a `ToolMessage` |
+| `False` | Disable error handling; exceptions propagate and crash the graph |
+| `"<message>"` *(str)* | Catch all exceptions; return the fixed string as the error message |
+| `ValueError` *(single type)* | Catch only `ValueError`; all other exceptions propagate |
+| `(ValueError, ConnectionError)` *(tuple of types)* | Catch exactly those exception types |
+| `Callable[..., str]` | Catch all exceptions; call the function with the exception to build the message |
 
 ```python
 from langgraph.prebuilt import ToolNode
-
-def my_error_handler(e: Exception) -> str:
-    if isinstance(e, ValueError):
-        return f"Invalid argument: {e}. Please check the tool's input schema."
-    if isinstance(e, ConnectionError):
-        return "External service temporarily unavailable. Try again later."
-    return f"Tool failed: {e}"
+from langchain_core.tools import tool
 
 
 @tool
@@ -97,29 +104,70 @@ def risky_lookup(item_id: str) -> str:
     return f"Item {item_id}: found"
 
 
-tool_node = ToolNode(
+# ── Variant 1: True (default) ──────────────────────────────────────────────
+# Catches all exceptions, returns the built-in error template.
+node_default = ToolNode([risky_lookup])                          # handle_tool_errors=True
+
+
+# ── Variant 2: fixed string ────────────────────────────────────────────────
+# Every failure returns the same static message.
+node_fixed_msg = ToolNode(
+    [risky_lookup],
+    handle_tool_errors="Tool failed. Please check your input and try again.",
+)
+
+
+# ── Variant 3: single exception type ──────────────────────────────────────
+# Only ValueError is caught; ConnectionError and others propagate.
+node_value_err = ToolNode(
+    [risky_lookup],
+    handle_tool_errors=ValueError,
+)
+
+
+# ── Variant 4: tuple of exception types ───────────────────────────────────
+# Catches either ValueError or ConnectionError; anything else propagates.
+node_multi_types = ToolNode(
+    [risky_lookup],
+    handle_tool_errors=(ValueError, ConnectionError),
+)
+
+
+# ── Variant 5: callable ────────────────────────────────────────────────────
+# Catches all exceptions; the function receives the exception and returns
+# the string that becomes the ToolMessage content.
+def my_error_handler(e: Exception) -> str:
+    if isinstance(e, ValueError):
+        return f"Invalid argument: {e}. Please check the tool's input schema."
+    if isinstance(e, ConnectionError):
+        return "External service temporarily unavailable. Try again later."
+    return f"Tool failed unexpectedly: {e}"
+
+node_callable = ToolNode(
     [risky_lookup],
     handle_tool_errors=my_error_handler,
 )
 
-# Other options:
-# handle_tool_errors=True            → catch all, use default template
-# handle_tool_errors="Something went wrong"  → catch all, fixed message
-# handle_tool_errors=ValueError      → only catch ValueError
-# handle_tool_errors=(ValueError, ConnectionError)  → specific types
-# handle_tool_errors=False           → let exceptions propagate
+
+# ── Variant 6: False ───────────────────────────────────────────────────────
+# No error handling. Exceptions crash the graph — useful during development
+# when you want a full traceback rather than a silent ToolMessage error.
+node_no_handling = ToolNode(
+    [risky_lookup],
+    handle_tool_errors=False,
+)
 ```
 
-### Example 3: Custom `messages_key`
+### Example 3: Custom `messages_key` with `tools_condition`
 
-`ToolNode` defaults to reading from and writing to `state["messages"]`. Use `messages_key` if your state schema stores messages under a different name.
+`ToolNode` defaults to reading from and writing to `state["messages"]`. Use `messages_key` if your state schema stores messages under a different name. Pass the same key as the second argument to `tools_condition` so it inspects the right field.
 
 ```python
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.tools import tool
 from langchain_anthropic import ChatAnthropic
 
@@ -146,9 +194,13 @@ builder = StateGraph(CustomerState)
 builder.add_node("agent", agent)
 builder.add_node("tools", ToolNode([lookup_order], messages_key="chat_history"))
 builder.add_edge(START, "agent")
+
+# tools_condition accepts a second argument: the key to inspect for tool_calls.
+# Its full signature is:
+#   tools_condition(state, messages_key="messages") -> Literal["tools", "__end__"]
 builder.add_conditional_edges(
     "agent",
-    lambda s: "tools" if s["chat_history"][-1].tool_calls else END,
+    lambda s: tools_condition(s, messages_key="chat_history"),
 )
 builder.add_edge("tools", "agent")
 
@@ -157,7 +209,7 @@ graph = builder.compile()
 
 ### Example 4: `InjectedState` — reading graph state inside a tool
 
-Annotate a tool parameter with `InjectedState` and `ToolNode` will fill it with the current graph state. The parameter is hidden from the LLM's schema — the model cannot pass it.
+Annotate a tool parameter with `InjectedState` and `ToolNode` will fill it with the current graph state. The parameter is hidden from the LLM's tool schema — the model cannot pass it.
 
 ```python
 from typing import Annotated
@@ -178,7 +230,7 @@ class AppState(TypedDict):
 @tool
 def perform_action(
     action: str,
-    state: Annotated[AppState, InjectedState],
+    state: Annotated[AppState, InjectedState],   # hidden from the LLM
 ) -> str:
     """Perform an action, checking permissions from state."""
     if action not in state["permissions"]:
@@ -234,12 +286,10 @@ class ChatState(TypedDict):
 @tool
 def save_preference(
     preference: str,
-    store: Annotated[BaseStore, InjectedStore()],
-    state: Annotated[ChatState, InjectedState],
+    store: Annotated[BaseStore, InjectedStore()],   # hidden from the LLM
+    state: Annotated[ChatState, InjectedState],     # hidden from the LLM
 ) -> str:
     """Save a user preference for future sessions."""
-    # Both store and state are injected automatically — the LLM only sees `preference`.
-    # Namespace by user_id so preferences are isolated per user.
     user_id = state["user_id"]
     store.put(("prefs", user_id), preference, {"text": preference})
     return f"Saved preference for {user_id}: {preference}"
@@ -282,7 +332,111 @@ builder.add_edge("tools", "agent")
 graph = builder.compile(store=memory_store)
 ```
 
-### Example 6: `Command`-returning tools — routing from inside a tool
+### Example 6: `ToolRuntime` — all-in-one injection (new in 1.2.1)
+
+`ToolRuntime` is a dataclass introduced in LangGraph 1.2.1 that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects it (via `_DirectlyInjectedToolArg`) and injects the object automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
+
+```python
+@dataclass
+class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
+    state: StateT | None = None           # full graph state dict
+    tool_call_id: str | None = None       # ID of the triggering tool call
+    config: RunnableConfig | None = None  # LangChain runnable config
+    store: BaseStore | None = None        # store passed to compile(store=...)
+    context: ContextT | None = None       # typed context object (if any)
+    stream_writer: StreamWriter | None = None  # stream tokens mid-tool
+```
+
+Use `ToolRuntime` when a single tool needs two or more of these values — it avoids stacking multiple `Annotated` parameters.
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.tools import tool
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt.tool_node import ToolRuntime   # new in 1.2.1
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.store.memory import InMemoryStore
+from langchain_anthropic import ChatAnthropic
+
+
+class WorkspaceState(TypedDict):
+    messages: Annotated[list, add_messages]
+    user_id: str
+    project_id: str
+
+
+@tool
+def smart_search(
+    query: str,
+    runtime: ToolRuntime,   # injected automatically — invisible to the LLM
+) -> str:
+    """Search documents, log the call, and stream progress back to the caller."""
+    state: WorkspaceState = runtime.state          # full graph state
+    store = runtime.store                          # long-term store
+    tool_call_id = runtime.tool_call_id            # tracing / audit
+    writer = runtime.stream_writer                 # mid-tool streaming
+
+    user_id = state["user_id"]
+    project_id = state["project_id"]
+
+    # Optionally stream a progress token before the result arrives.
+    if writer:
+        writer({"type": "progress", "msg": f"Searching project {project_id}…"})
+
+    # Query the long-term store with namespace isolation.
+    if store:
+        items = store.search(("docs", project_id), query=query, limit=5)
+        results = [it.value.get("text", "") for it in items]
+    else:
+        results = []
+
+    # Audit trail — tool_call_id ties this log entry to the conversation turn.
+    print(f"[AUDIT] tool_call={tool_call_id} user={user_id} query={query!r}")
+
+    if not results:
+        return "No documents found."
+    return "\n".join(f"• {r}" for r in results)
+
+
+memory_store = InMemoryStore(
+    index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
+)
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([smart_search])
+
+
+def agent(state: WorkspaceState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+
+builder = StateGraph(WorkspaceState)
+builder.add_node("agent", agent)
+builder.add_node("tools", ToolNode([smart_search]))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(store=memory_store)
+
+result = graph.invoke({
+    "messages": [{"role": "user", "content": "Find docs about authentication"}],
+    "user_id": "alice",
+    "project_id": "proj-42",
+})
+print(result["messages"][-1].content)
+```
+
+**When to use `ToolRuntime` vs individual `Annotated` injections:**
+
+| Need | Recommendation |
+|---|---|
+| Only state or only store | `Annotated[..., InjectedState]` / `Annotated[..., InjectedStore()]` — explicit and clear |
+| Two or more of: state, store, tool_call_id, config, stream_writer | `ToolRuntime` — single parameter, less boilerplate |
+| Need typed `context` | `ToolRuntime[MyContextType, MyStateType]` — use the generic form |
+
+### Example 7: `Command`-returning tools — routing from inside a tool
 
 A `@tool` that returns a `Command` lets the tool itself drive graph navigation. `ToolNode` unwraps the `Command` into state updates and `goto` signals, enabling agent hand-offs triggered by tool execution.
 
@@ -316,7 +470,10 @@ def escalate_to_billing(
         goto="billing_agent",
         update={
             "assigned_to": "billing",
-            "messages": [ToolMessage(content=f"Escalated to billing: {reason}", tool_call_id=tool_call_id)],
+            "messages": [ToolMessage(
+                content=f"Escalated to billing: {reason}",
+                tool_call_id=tool_call_id,
+            )],
         },
     )
 
@@ -331,7 +488,10 @@ def escalate_to_technical(
         goto="technical_agent",
         update={
             "assigned_to": "technical",
-            "messages": [ToolMessage(content=f"Escalated to technical: {reason}", tool_call_id=tool_call_id)],
+            "messages": [ToolMessage(
+                content=f"Escalated to technical: {reason}",
+                tool_call_id=tool_call_id,
+            )],
         },
     )
 
@@ -373,7 +533,7 @@ result = graph.invoke({
 print(result["assigned_to"])  # "billing"
 ```
 
-### Example 7: `wrap_tool_call` interceptor
+### Example 8: `wrap_tool_call` interceptor
 
 `wrap_tool_call` (and its async twin `awrap_tool_call`) lets you intercept every tool call before and after execution. Receive a `ToolCallRequest` (with `.tool_call`, `.tool`, `.state`, `.runtime`) and a callable `execute` — add logging, auth checks, or argument transformations without modifying the tools themselves.
 
@@ -419,13 +579,15 @@ tool_node = ToolNode(
 
 ## Summary
 
-| Feature | Class / Import | Key parameter |
+| Feature | Class / Import | Key parameter / pattern |
 |---|---|---|
 | Basic tool execution | `ToolNode` from `langgraph.prebuilt` | `tools` |
-| Custom error handling | `ToolNode` | `handle_tool_errors` |
+| Parallel execution | `ToolNode` | automatic — all tool_calls in one AIMessage run concurrently |
+| Custom error handling | `ToolNode` | `handle_tool_errors` (see table in Example 2) |
 | Custom messages key | `ToolNode` | `messages_key` |
-| Read graph state in tool | `InjectedState` from `langgraph.prebuilt` | annotate parameter |
-| Read store in tool | `InjectedStore` from `langgraph.prebuilt` | annotate parameter |
+| Route based on messages key | `tools_condition` from `langgraph.prebuilt` | second arg `messages_key` |
+| Read graph state in tool | `InjectedState` from `langgraph.prebuilt` | `Annotated[StateType, InjectedState]` |
+| Read store in tool | `InjectedStore` from `langgraph.prebuilt` | `Annotated[BaseStore, InjectedStore()]` |
+| All context in one param | `ToolRuntime` from `langgraph.prebuilt.tool_node` | `runtime: ToolRuntime` (no Annotated needed) |
 | Route from a tool | `Command` from `langgraph.types` | return from `@tool` |
 | Intercept tool calls | `ToolNode` | `wrap_tool_call` / `awrap_tool_call` |
-

@@ -1,6 +1,6 @@
 ---
 title: "Chapter 9 — Advanced Patterns"
-description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, and the Functional API — source-verified patterns for LangGraph 1.2.1."
+description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, add_sequence, Overwrite, GraphOutput v2, and the Functional API — source-verified patterns for LangGraph 1.2.1."
 framework: langgraph
 language: python
 sidebar:
@@ -10,11 +10,11 @@ sidebar:
 
 # Chapter 9 — Advanced Patterns
 
-**What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send`, plus the Functional API `@entrypoint`/`@task`.
+**What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send` (including per-send timeouts), `add_sequence()` for concise linear pipelines, `Overwrite` for bypassing reducers, `GraphOutput` with the `version="v2"` invoke API, plus the Functional API `@entrypoint`/`@task`.
 
 Verified against **`langgraph==1.2.1`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`).
 
-**Time:** ~40 minutes. Most of this is reference — skim for patterns you need.
+**Time:** ~50 minutes. Most of this is reference — skim for patterns you need.
 
 > Prereqs: [Chapter 3 — Multi-agent systems](/langgraph-guide/python/chapter-03-multi-agent/) and [Chapter 4 — Tools](/langgraph-guide/python/chapter-04-tools/).
 
@@ -590,6 +590,7 @@ Key `RetryPolicy` fields (all have defaults):
 
 ```python
 import asyncio
+from datetime import timedelta
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.runtime import Runtime
@@ -629,6 +630,28 @@ builder.add_edge("scrape", END)
 
 graph = builder.compile()
 ```
+
+`TimeoutPolicy` also accepts `timedelta` for both timeout fields:
+
+```python
+from datetime import timedelta
+from langgraph.types import TimeoutPolicy
+
+# Using timedelta for more readable durations
+timeout = TimeoutPolicy(
+    run_timeout=timedelta(minutes=2),   # 2-minute hard cap
+    idle_timeout=timedelta(seconds=15), # 15-second idle cap
+    refresh_on="auto",                  # default: any progress resets the idle timer
+)
+```
+
+`TimeoutPolicy` dataclass fields:
+
+| Field | Type | Default | Effect |
+|---|---|---|---|
+| `run_timeout` | `float \| timedelta \| None` | `None` | Hard wall-clock cap on total node runtime |
+| `idle_timeout` | `float \| timedelta \| None` | `None` | Max time allowed without a progress signal |
+| `refresh_on` | `"auto" \| "heartbeat"` | `"auto"` | What resets `idle_timeout` |
 
 `refresh_on` values:
 
@@ -786,6 +809,370 @@ result = graph.invoke({"items": ["hello", "hi", "hey there"], "scores": []})
 print(result["scores"])   # [0.5, 0.2, 0.9] (order may vary)
 print(result["items"])    # ['avg_score=0.53']
 ```
+
+---
+
+### Pattern 10: `Send` with `timeout` parameter
+
+Since LangGraph 1.2.1, `Send` accepts an optional `timeout` keyword argument. This lets each individual fan-out branch carry its own deadline independently of the node-level `TimeoutPolicy`.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send, TimeoutPolicy
+
+
+class CrawlState(TypedDict):
+    urls: list[str]
+    results: Annotated[list[str], operator.add]
+
+
+class PageInput(TypedDict):
+    url: str
+
+
+def fan_out(state: CrawlState) -> list[Send]:
+    """Each URL gets its own Send with a 30-second deadline."""
+    return [
+        Send(
+            "fetch_page",
+            PageInput(url=url),
+            timeout=30.0,           # float: seconds until this branch is cancelled
+        )
+        for url in state["urls"]
+    ]
+
+
+def fan_out_with_policy(state: CrawlState) -> list[Send]:
+    """Use a full TimeoutPolicy for fine-grained idle + wall-clock control."""
+    return [
+        Send(
+            "fetch_page",
+            PageInput(url=url),
+            timeout=TimeoutPolicy(
+                run_timeout=30.0,   # hard cap
+                idle_timeout=10.0,  # cancel if idle for 10 s between progress signals
+                refresh_on="auto",
+            ),
+        )
+        for url in state["urls"]
+    ]
+
+
+def fetch_page(state: PageInput) -> dict:
+    import time
+    time.sleep(0.1)   # simulate network
+    return {"results": [f"content:{state['url']}"]}
+
+
+builder = StateGraph(CrawlState)
+builder.add_node("fetch_page", fetch_page)
+builder.add_conditional_edges(START, fan_out)
+builder.add_edge("fetch_page", END)
+
+graph = builder.compile()
+result = graph.invoke({"urls": ["a.com", "b.com", "c.com"], "results": []})
+print(result["results"])
+```
+
+**When to use per-`Send` timeout vs. node-level `TimeoutPolicy`:**
+
+| Scenario | Recommendation |
+|---|---|
+| All fan-out branches share the same deadline | Node-level `TimeoutPolicy` on `add_node` |
+| Different branches need different deadlines | Per-`Send` `timeout=` |
+| You need idle detection per-branch | Per-`Send` `timeout=TimeoutPolicy(idle_timeout=...)` |
+
+---
+
+### Pattern 11: `add_sequence()` — concise linear pipelines
+
+`StateGraph.add_sequence()` is a convenience method introduced in LangGraph 1.2.1. It registers a list of nodes and automatically wires them with edges — no separate `add_node` + `add_edge` calls needed. Each element is either a callable (name is derived from `__name__`) or a `("name", callable)` tuple.
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+
+class DocState(TypedDict):
+    raw: str
+    cleaned: str
+    summary: str
+    translated: str
+
+
+# ── Step functions ────────────────────────────────────────────────────────────
+
+def clean(state: DocState) -> dict:
+    return {"cleaned": state["raw"].strip().lower()}
+
+
+def summarize(state: DocState) -> dict:
+    # In production: call an LLM here
+    return {"summary": state["cleaned"][:80] + "..."}
+
+
+def translate(state: DocState) -> dict:
+    return {"translated": f"[ES] {state['summary']}"}
+
+
+# ── Build with add_sequence ───────────────────────────────────────────────────
+
+builder = StateGraph(DocState)
+
+# Registers "clean" → "summarize" → "translate" nodes and connects them in order.
+# Equivalent to three add_node() calls plus two add_edge() calls.
+builder.add_sequence([clean, summarize, translate])
+
+# add_sequence does NOT wire START or END — do those explicitly:
+builder.add_edge(START, "clean")
+builder.add_edge("translate", END)
+
+graph = builder.compile()
+
+result = graph.invoke({"raw": "  Hello World  ", "cleaned": "", "summary": "", "translated": ""})
+print(result["translated"])   # '[ES] hello world...'
+```
+
+**Mixed name forms** — pass a `("custom_name", fn)` tuple when you need a specific node name (e.g. to attach conditional edges or retry policies later):
+
+```python
+builder.add_sequence([
+    clean,                          # name inferred: "clean"
+    ("summarize_v2", summarize),    # explicit name
+    translate,                      # name inferred: "translate"
+])
+
+# You can still attach policies by name after the sequence is registered:
+builder.add_node(
+    "summarize_v2",
+    summarize,
+    retry_policy=RetryPolicy(max_attempts=3),
+    cache_policy=CachePolicy(ttl=300),
+)
+```
+
+> **Note:** `add_sequence` returns the `StateGraph` instance, so calls can be chained: `builder.add_sequence([...]).add_edge(START, "clean")`.
+
+---
+
+### Pattern 12: `Overwrite` — bypass reducers for one-shot resets
+
+When a state channel uses a reducer (e.g. `Annotated[list, operator.add]`), every node update *appends* rather than replaces. `Overwrite` is a wrapper that signals LangGraph to skip the reducer and write the value directly.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Overwrite
+
+
+class LogState(TypedDict):
+    # All node updates normally *append* to this list via operator.add
+    events: Annotated[list[str], operator.add]
+    run_id: str
+
+
+def append_events(state: LogState) -> dict:
+    """Normal update — appends to the existing list."""
+    return {"events": ["event_a", "event_b"]}
+
+
+def reset_events(state: LogState) -> dict:
+    """Overwrite bypasses operator.add and replaces the list entirely."""
+    return {"events": Overwrite(["session_reset"])}
+
+
+builder = StateGraph(LogState)
+builder.add_node("append", append_events)
+builder.add_node("reset", reset_events)
+builder.add_edge(START, "append")
+builder.add_edge("append", "reset")
+builder.add_edge("reset", END)
+
+graph = builder.compile()
+
+result = graph.invoke({"events": ["boot"], "run_id": "r1"})
+print(result["events"])
+# ["session_reset"]  — not ["boot", "event_a", "event_b", "session_reset"]
+```
+
+**Why this matters:** Without `Overwrite`, every fan-in from parallel `Send` branches accumulates results in the reducer. Use `Overwrite` when a later node needs to authoritatively set the channel to a clean value regardless of what was collected earlier.
+
+```python
+from langgraph.types import Overwrite
+
+def consolidate(state: PipelineState) -> dict:
+    # Deduplicate and canonicalise — then overwrite so nothing else appends
+    canonical = list(dict.fromkeys(state["results"]))
+    return {"results": Overwrite(canonical)}
+```
+
+---
+
+### Pattern 13: `GraphOutput` with `version="v2"`
+
+The `invoke` and `stream` APIs accept an optional `version` keyword argument. When `version="v2"`, the return type changes from a raw state dict to a `GraphOutput` named-tuple that bundles the output value with any `Interrupt` objects raised during the run.
+
+```python
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt
+from typing_extensions import TypedDict
+
+
+class ReviewState(TypedDict):
+    document: str
+    approved: bool
+
+
+def review_node(state: ReviewState) -> dict:
+    decision = interrupt({"prompt": "Approve this document?", "doc": state["document"]})
+    return {"approved": decision == "yes"}
+
+
+builder = StateGraph(ReviewState)
+builder.add_node("review", review_node)
+builder.add_edge(START, "review")
+builder.add_edge("review", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "doc-review-1"}}
+
+# ── version="v2" invoke ───────────────────────────────────────────────────────
+
+output = graph.invoke(
+    {"document": "Quarterly earnings report", "approved": False},
+    cfg,
+    version="v2",           # opt-in to GraphOutput return type
+)
+
+# GraphOutput exposes .value and .interrupts
+print(type(output))         # <class 'langgraph.types.GraphOutput'>
+print(output.value)         # state dict up to the interrupt point
+print(output.interrupts)    # tuple of Interrupt objects
+
+# Inspect each interrupt
+for interrupt_obj in output.interrupts:
+    print(interrupt_obj.value)   # {"prompt": "Approve this document?", "doc": "..."}
+
+# Resume with a human decision
+from langgraph.types import Command
+
+final = graph.invoke(Command(resume="yes"), cfg, version="v2")
+print(final.value["approved"])   # True
+print(final.interrupts)          # ()  — empty tuple, run completed
+```
+
+**`GraphOutput` fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `value` | `dict` | The graph's state at the point of return or interrupt |
+| `interrupts` | `tuple[Interrupt, ...]` | All interrupts raised during this invoke call |
+
+**Streaming with `version="v2"`** — each emitted event in `stream_mode="values"` is also a `GraphOutput`:
+
+```python
+for chunk in graph.stream(
+    {"document": "Board minutes", "approved": False},
+    cfg,
+    stream_mode="values",
+    version="v2",
+):
+    print(chunk.value, chunk.interrupts)
+```
+
+> **Migration note:** `version="v2"` is opt-in and backward-compatible. Existing code that omits `version=` continues to receive plain dicts.
+
+---
+
+### Pattern 14: `context_schema` and `Runtime[Context]` — complete injection example
+
+This pattern expands on Pattern 8 to show the minimal wiring needed for context injection from scratch, including the `configurable` key used by LangGraph Platform deployments.
+
+```python
+from dataclasses import dataclass
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import Runtime
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# ── 1. Define an immutable context dataclass ──────────────────────────────────
+
+@dataclass
+class AppContext:
+    user_id: str
+    db_url: str
+    feature_flags: tuple[str, ...] = ()
+
+
+# ── 2. Define graph state ─────────────────────────────────────────────────────
+
+class AppState(TypedDict):
+    query: str
+    result: str
+
+
+# ── 3. Nodes receive Runtime[AppContext] as a second argument ─────────────────
+
+def lookup_node(state: AppState, runtime: Runtime[AppContext]) -> dict:
+    ctx = runtime.context               # fully typed as AppContext
+    user_id = ctx.user_id               # IDE-aware, no dict key typos
+    db_url = ctx.db_url
+
+    # Simulate a DB call using the injected URL
+    result = f"DB({db_url}) answered '{state['query']}' for user '{user_id}'"
+
+    if "beta_feature" in ctx.feature_flags:
+        result += " [beta mode]"
+
+    return {"result": result}
+
+
+def format_node(state: AppState, runtime: Runtime[AppContext]) -> dict:
+    prefix = f"[{runtime.context.user_id}]"
+    return {"result": f"{prefix} {state['result']}"}
+
+
+# ── 4. Declare context_schema on StateGraph ───────────────────────────────────
+
+builder = StateGraph(AppState, context_schema=AppContext)
+builder.add_node("lookup", lookup_node)
+builder.add_node("format", format_node)
+builder.add_edge(START, "lookup")
+builder.add_edge("lookup", "format")
+builder.add_edge("format", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+
+# ── 5. Pass context at runtime via the `context=` keyword ────────────────────
+
+ctx = AppContext(
+    user_id="u42",
+    db_url="postgresql://prod/mydb",
+    feature_flags=("beta_feature",),
+)
+
+result = graph.invoke(
+    {"query": "What is my account balance?", "result": ""},
+    {"configurable": {"thread_id": "sess-42"}},
+    context=ctx,
+)
+print(result["result"])
+# [u42] DB(postgresql://prod/mydb) answered 'What is my account balance?' for user 'u42' [beta mode]
+```
+
+**Key rules for `context_schema`:**
+
+- The dataclass must be passed as `context=` at `invoke`/`stream` time, not embedded in state.
+- Context is immutable during a run — nodes can read it but cannot write back to it.
+- On LangGraph Platform, context can also arrive via `{"configurable": {"context": {...}}}` in the run config (the platform serialises/deserialises the dataclass automatically).
+- Any node that declares `runtime: Runtime[YourContext]` as a second parameter receives the injected context. Nodes that omit the second parameter are unaffected.
 
 ---
 
