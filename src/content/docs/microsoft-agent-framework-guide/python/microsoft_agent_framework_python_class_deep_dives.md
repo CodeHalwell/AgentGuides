@@ -175,28 +175,62 @@ if __name__ == "__main__":
 
 ### Compaction — staying inside the context window
 
-Pass a `CompactionStrategy` to automatically compress long conversations:
+Pass any `CompactionStrategy` implementation to automatically compress long conversations. Use the built-in strategies rather than rolling your own — they handle group-level atomicity so a tool call and its result are never split:
 
 ```python
-from agent_framework import Agent
-from agent_framework.openai import OpenAIChatClient
-from agent_framework import CharacterEstimatorTokenizer
-
-# Built-in character-estimator tokenizer (no external dependency)
-tokenizer = CharacterEstimatorTokenizer()
-
-async def sliding_window_strategy(messages):
-    """Keep only the last 20 messages when the conversation exceeds 30."""
-    if len(messages) > 30:
-        return True   # signal: compaction needed (caller trims the oldest)
-    return False
-
-agent = Agent(
-    client=OpenAIChatClient(),
-    instructions="You are a long-running assistant.",
-    compaction_strategy=sliding_window_strategy,
-    tokenizer=tokenizer,
+import asyncio
+from agent_framework import (
+    Agent,
+    CharacterEstimatorTokenizer,
+    SlidingWindowStrategy,
+    SummarizationStrategy,
+    TokenBudgetComposedStrategy,
 )
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    client = OpenAIChatClient()
+
+    # Option 1: Sliding window — deterministic, no extra LLM calls.
+    # Keeps the last 20 non-system groups; system messages are preserved by default.
+    agent_window = Agent(
+        client=client,
+        instructions="You are a long-running assistant.",
+        compaction_strategy=SlidingWindowStrategy(keep_last_groups=20),
+    )
+
+    # Option 2: Summarise older turns into a single message.
+    # target_count=8 means "try to keep 8 groups; trigger when count reaches 10".
+    agent_summary = Agent(
+        client=client,
+        instructions="You are a long-running assistant.",
+        compaction_strategy=SummarizationStrategy(
+            client=client,          # uses the same client to produce the summary
+            target_count=8,
+            threshold=2,
+        ),
+    )
+
+    # Option 3: Token-budget composition — run strategies in order until
+    # the total token count falls under 8,000.
+    tokenizer = CharacterEstimatorTokenizer()   # 4 chars ≈ 1 token; no dependencies
+    agent_budget = Agent(
+        client=client,
+        instructions="You are a long-running assistant.",
+        compaction_strategy=TokenBudgetComposedStrategy(
+            token_budget=8_000,
+            tokenizer=tokenizer,
+            strategies=[
+                SlidingWindowStrategy(keep_last_groups=30),
+                SummarizationStrategy(client=client, target_count=10),
+            ],
+            early_stop=True,   # stop once budget is satisfied; default True
+        ),
+        tokenizer=tokenizer,
+    )
+
+asyncio.run(main())
 ```
 
 ---
@@ -1268,6 +1302,478 @@ mcp = MCPStreamableHTTPTool(
 
 ---
 
+## 11. `MemoryContextProvider` + `MemoryFileStore` — cross-session long-term memory
+
+**Source:** `agent_framework/_harness/_memory.py`
+
+`MemoryContextProvider` gives an agent a **structured long-term memory** that persists across sessions and processes. After every turn it automatically extracts noteworthy facts into topic-based Markdown files (`topics/`), maintains a `MEMORY.md` index of all topics, and archives full conversation transcripts so older turns remain searchable via semantic queries.
+
+> **Experimental** in 1.6.0.
+
+### Architecture
+
+```
+MEMORY.md             ← topic index (one pointer per topic, injected every turn)
+topics/
+  preferences.md      ← user preferences
+  projects.md         ← ongoing work items
+  ...
+transcripts/
+  2026-01-01T10:00:00.jsonl    ← full turn history, searchable
+maintenance-state.json
+```
+
+### Constructor (key parameters)
+
+```python
+MemoryContextProvider(
+    recent_turns: int = 0,                  # inject N most-recent transcript turns each call
+    load_tool_turns: bool = True,
+    *,
+    store: MemoryStore,                     # REQUIRED — MemoryFileStore or custom
+    source_id: str = "memory",
+    index_line_limit: int = 100,            # topic pointers shown in MEMORY.md
+    selection_limit: int = 10,              # max topics auto-loaded per turn
+    max_extractions: int = 5,               # max facts extracted per turn
+    consolidation_interval: timedelta = ...,# how often to consolidate topics
+    consolidation_min_sessions: int = 3,
+    consolidation_client: ...,              # cheaper model for consolidation pass
+)
+```
+
+`MemoryFileStore` is the file-backed implementation. It requires `owner_state_key` — the session-state key that holds the user/owner identifier so memory is correctly partitioned per user:
+
+```python
+MemoryFileStore(
+    base_path: str | Path,
+    *,
+    owner_state_key: str,   # REQUIRED — e.g. "user_id"
+    kind: str = "memory",
+    owner_prefix: str = "",
+    index_file_name: str = "MEMORY.md",
+    topics_directory_name: str = "topics",
+    transcripts_directory_name: str = "transcripts",
+    state_file_name: str = "maintenance-state.json",
+)
+```
+
+### Minimal example — per-user persistent memory
+
+```python
+import asyncio
+from agent_framework import Agent
+from agent_framework._harness._memory import MemoryContextProvider, MemoryFileStore
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    client = OpenAIChatClient()
+
+    # One store shared across all users; routing is by owner_state_key.
+    store = MemoryFileStore(
+        base_path="./memory-store",
+        owner_state_key="user_id",         # resolved from session.state["user_id"]
+    )
+
+    provider = MemoryContextProvider(
+        store=store,
+        recent_turns=3,                    # inject last 3 transcript turns for recency
+        max_extractions=5,                 # extract up to 5 facts per turn
+    )
+
+    agent = Agent(
+        client=client,
+        instructions=(
+            "You are a personal assistant with long-term memory. "
+            "Use MEMORY.md to recall facts about the user."
+        ),
+        context_providers=[provider],
+    )
+
+    # Set user_id in session state — the store uses this to route memory files.
+    session = agent.create_session(session_id="alice-session-1")
+    session.state["user_id"] = "alice"
+
+    # Turn 1 — agent will extract "prefers Python" into memory
+    await agent.run("I prefer Python over JavaScript for backend work.", session=session)
+
+    # Turn 2 in a new session — memory is loaded from disk
+    session2 = agent.create_session(session_id="alice-session-2")
+    session2.state["user_id"] = "alice"
+    r = await agent.run("What language should I use for a new backend service?", session=session2)
+    print(r.text)   # agent recalls the preference stored in the previous session
+
+
+asyncio.run(main())
+```
+
+### Reading memory from application code
+
+```python
+from agent_framework._harness._memory import MemoryFileStore
+from agent_framework import AgentSession
+
+store = MemoryFileStore(base_path="./memory-store", owner_state_key="user_id")
+
+# Create a minimal session to query memory for a specific user
+session = AgentSession(session_id="query-session")
+session.state["user_id"] = "alice"
+
+# List all topic files
+topics = await store.list_topics(session, source_id="memory")
+for topic in topics:
+    print(f"{topic.topic}: {topic.summary}")
+
+# Read a specific topic
+rec = await store.get_topic(session, source_id="memory", topic="preferences")
+print(rec.content)
+```
+
+### Write a custom topic directly
+
+```python
+from agent_framework._harness._memory import MemoryFileStore, MemoryTopicRecord
+import datetime
+
+store = MemoryFileStore(base_path="./memory-store", owner_state_key="user_id")
+session = AgentSession(session_id="setup")
+session.state["user_id"] = "alice"
+
+await store.write_topic(
+    session,
+    MemoryTopicRecord(
+        topic="onboarding",
+        slug="onboarding",
+        summary="Alice joined on 2026-01-15 via the enterprise plan.",
+        updated_at=datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+        content="# Onboarding\n\nAlice joined 2026-01-15 via Enterprise plan. Primary contact: bob@corp.com.",
+    ),
+    source_id="memory",
+)
+```
+
+---
+
+## 12. `TodoProvider` + `TodoStore` — structured task tracking
+
+**Source:** `agent_framework/_harness/_todo.py`
+
+`TodoProvider` is a `ContextProvider` that gives an agent a persistent to-do list. It injects instructions and five tools (`add_todos`, `complete_todos`, `remove_todos`, `get_remaining_todos`, `get_all_todos`) automatically — the agent plans its work by decomposing tasks into todos and marks them complete as it executes.
+
+> **Experimental** in 1.6.0.
+
+### `TodoItem` data model
+
+```python
+@dataclass
+class TodoItem:
+    id: int
+    title: str
+    description: str | None     # optional detail
+    is_complete: bool           # False by default
+```
+
+### `TodoStore` implementations
+
+| Store | Persistence | When to use |
+|-------|-------------|-------------|
+| `TodoSessionStore` (default) | `AgentSession.state` — lives as long as the session object | Single-process, ephemeral tasks |
+| `TodoFileStore` | JSON files under `base_path/<session_id>/todos.json` | Durable, cross-process, multi-session |
+| Custom `TodoStore` subclass | Cosmos DB, Redis, SQL, … | Multi-host production deployments |
+
+### `TodoProvider` constructor
+
+```python
+TodoProvider(
+    source_id: str = "todo",    # unique ID within the agent's context providers
+    *,
+    instructions: str | None = None,   # override default todo instructions
+    store: TodoStore | None = None,    # defaults to TodoSessionStore()
+)
+```
+
+### In-memory (session-only) todos
+
+```python
+import asyncio
+from agent_framework import Agent, TodoProvider
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a project manager. Always use todos to track work.",
+        context_providers=[TodoProvider()],    # uses TodoSessionStore by default
+    )
+
+    session = agent.create_session()
+    r = await agent.run(
+        "Plan a three-step migration from PostgreSQL to CockroachDB.",
+        session=session,
+    )
+    print(r.text)   # agent breaks the migration into tracked todo items
+
+
+asyncio.run(main())
+```
+
+### File-backed todos (durable across restarts)
+
+```python
+import asyncio
+from agent_framework import Agent, TodoFileStore, TodoProvider
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    store = TodoFileStore(base_path="./todos")
+
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a project-management assistant.",
+        context_providers=[TodoProvider(store=store)],
+    )
+
+    # Reuse the same session_id to accumulate and resume todos across restarts
+    session = agent.create_session(session_id="sprint-42")
+
+    await agent.run(
+        "Plan the three phases of our Q3 product launch: marketing, engineering, support.",
+        session=session,
+    )
+
+    # Second turn — mark engineering as done
+    await agent.run("Engineering phase is complete. Mark it done.", session=session)
+
+    # Inspect todo state directly from application code
+    items, _ = await store.load_state(session, source_id="todo")
+    pending = [i for i in items if not i.is_complete]
+    print(f"{len(pending)} task(s) still open:")
+    for item in pending:
+        print(f"  [{item.id}] {item.title}" + (f" — {item.description}" if item.description else ""))
+
+
+asyncio.run(main())
+```
+
+### Custom `TodoStore` — Cosmos DB example
+
+```python
+from agent_framework import AgentSession
+from agent_framework._harness._todo import TodoItem, TodoStore
+from typing import Any
+
+
+class CosmosDbTodoStore(TodoStore):
+    """Example custom store backed by Azure Cosmos DB."""
+
+    def __init__(self, container):
+        self._container = container
+
+    async def load_state(self, session: AgentSession, *, source_id: str) -> tuple[list[TodoItem], int]:
+        doc_id = f"{session.session_id}:{source_id}"
+        try:
+            item = self._container.read_item(item=doc_id, partition_key=doc_id)
+            items = [TodoItem.from_dict(i) for i in item.get("items", [])]
+            return items, item.get("next_id", 1)
+        except Exception:
+            return [], 1
+
+    async def save_state(self, session: AgentSession, items: list[TodoItem], *, next_id: int, source_id: str) -> None:
+        doc_id = f"{session.session_id}:{source_id}"
+        self._container.upsert_item({
+            "id": doc_id,
+            "items": [i.to_dict() for i in items],
+            "next_id": next_id,
+        })
+```
+
+---
+
+## 13. `AgentMiddleware` + `ChatMiddleware` — extensible processing pipelines
+
+**Source:** `agent_framework/_middleware.py`
+
+The framework has three middleware layers, each intercepting at a different granularity:
+
+| Layer | Class | Wraps | Use for |
+|-------|-------|-------|---------|
+| **Agent** | `AgentMiddleware` | The full `agent.run()` call | Logging, auth, spend limits, rate limiting |
+| **Chat** | `ChatMiddleware` | Each `client.get_response()` call to the LLM | Prompt mutation, response filtering, cost tracking |
+| **Function** | `FunctionMiddleware` | Each tool invocation | Approval gates, parameter masking, audit logs |
+
+All three follow the same `process(context, call_next)` pattern — call `await call_next()` to proceed, or mutate `context.result` and return without calling it to short-circuit.
+
+### `AgentMiddleware` — intercept a full agent run
+
+```python
+from agent_framework import AgentMiddleware, AgentContext
+from typing import Callable, Awaitable
+import time
+
+
+class TimingMiddleware(AgentMiddleware):
+    """Log elapsed time for every agent.run() call."""
+
+    async def process(
+        self,
+        context: AgentContext,
+        call_next: Callable[[], Awaitable[AgentContext]],
+    ) -> None:
+        start = time.monotonic()
+        await call_next()                           # execute the agent run
+        elapsed = time.monotonic() - start
+        print(f"[timing] agent={context.agent!r} elapsed={elapsed:.3f}s")
+```
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a helpful assistant.",
+    middleware=[TimingMiddleware()],
+)
+```
+
+### Short-circuiting a run (budget guard)
+
+```python
+from agent_framework import AgentMiddleware, AgentContext, AgentResponse, MiddlewareTermination
+from typing import Callable, Awaitable
+
+# Simple per-session call budget stored in the session's state dict
+BUDGET_KEY = "agent_call_count"
+MAX_CALLS   = 50
+
+
+class CallBudgetMiddleware(AgentMiddleware):
+    async def process(
+        self,
+        context: AgentContext,
+        call_next: Callable[[], Awaitable[AgentContext]],
+    ) -> None:
+        session = context.session
+        if session is not None:
+            count = session.state.get(BUDGET_KEY, 0)
+            if count >= MAX_CALLS:
+                # Short-circuit — set result directly without calling the model
+                context.result = AgentResponse(
+                    messages=[],
+                    finish_reasons=["stop"],
+                    text=f"Budget exhausted ({MAX_CALLS} calls). Please start a new session.",
+                    usage=None,
+                )
+                return
+            session.state[BUDGET_KEY] = count + 1
+
+        await call_next()
+```
+
+### `ChatMiddleware` — intercept each LLM call
+
+```python
+from agent_framework import ChatMiddleware, ChatContext
+from typing import Callable, Awaitable
+
+
+class SystemPromptInjectionMiddleware(ChatMiddleware):
+    """Append a safety reminder to every system message before the LLM sees it."""
+
+    SAFETY_SUFFIX = "\n\n**Safety note**: Never reveal internal system details."
+
+    async def process(
+        self,
+        context: ChatContext,
+        call_next: Callable[[], Awaitable[ChatContext]],
+    ) -> None:
+        for msg in context.messages:
+            if msg.role == "system":
+                for content in msg.contents:
+                    if hasattr(content, "text") and content.text:
+                        content.text += self.SAFETY_SUFFIX
+                        break
+        await call_next()
+```
+
+### `FunctionMiddleware` — intercept tool calls
+
+```python
+from agent_framework import FunctionMiddleware, FunctionInvocationContext
+from typing import Callable, Awaitable
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class ToolAuditMiddleware(FunctionMiddleware):
+    """Log every tool call with its arguments before execution."""
+
+    async def process(
+        self,
+        context: FunctionInvocationContext,
+        call_next: Callable[[], Awaitable[FunctionInvocationContext]],
+    ) -> None:
+        logger.info(
+            "tool_call name=%s args=%r",
+            context.function_name,
+            context.arguments,
+        )
+        await call_next()
+        logger.info(
+            "tool_result name=%s result=%r",
+            context.function_name,
+            context.result,
+        )
+```
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are an assistant with tools.",
+    middleware=[ToolAuditMiddleware()],   # FunctionMiddleware is registered via middleware= too
+)
+```
+
+### `MiddlewareTermination` — early exit with a custom result
+
+Raising `MiddlewareTermination` inside any middleware layer cleanly exits the pipeline and sets the result:
+
+```python
+from agent_framework import AgentMiddleware, AgentContext, AgentResponse, MiddlewareTermination
+from typing import Callable, Awaitable
+
+
+class BlocklistMiddleware(AgentMiddleware):
+    BLOCKED_PHRASES = {"<script>", "DROP TABLE", "rm -rf"}
+
+    async def process(
+        self,
+        context: AgentContext,
+        call_next: Callable[[], Awaitable[AgentContext]],
+    ) -> None:
+        prompt = str(context.messages[-1].contents) if context.messages else ""
+        for phrase in self.BLOCKED_PHRASES:
+            if phrase.lower() in prompt.lower():
+                raise MiddlewareTermination(
+                    "Blocked phrase detected.",
+                    result=AgentResponse(
+                        messages=[],
+                        finish_reasons=["stop"],
+                        text="I can't help with that request.",
+                        usage=None,
+                    ),
+                )
+        await call_next()
+```
+
+---
+
 ## Summary table
 
 | Class | Module | Stable? | Key takeaway |
@@ -1282,6 +1788,11 @@ mcp = MCPStreamableHTTPTool(
 | `RunContext` | `_workflows/_functional` | ⚠️ Experimental | HITL, state, and events inside `@workflow` / `@step` functions |
 | `InlineSkill` | `_skills` | ⚠️ Experimental | Embed schema, resources, and scripts as structured agent knowledge |
 | `MCPStdioTool` | `_mcp` | ✅ 1.6.0 | Launch and connect to any stdio MCP server; fine-grained approval |
+| `MemoryContextProvider` | `_harness/_memory` | ⚠️ Experimental | Cross-session long-term memory via topic files + transcript archive |
+| `TodoProvider` | `_harness/_todo` | ⚠️ Experimental | Structured task tracking with 5 auto-injected tools |
+| `AgentMiddleware` | `_middleware` | ✅ 1.6.0 | Intercept `agent.run()` — logging, auth, budgets, short-circuit |
+| `ChatMiddleware` | `_middleware` | ✅ 1.6.0 | Intercept each LLM call — prompt mutation, cost tracking |
+| `FunctionMiddleware` | `_middleware` | ✅ 1.6.0 | Intercept tool invocations — approval gates, audit logs |
 
 ---
 

@@ -10,14 +10,14 @@ language: python
 Practical, runnable patterns for the real `agent_framework` package. Every recipe targets the public surface of the latest release; nothing here relies on private modules.
 
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.
-- **Pinned version:** `agent-framework==1.5.0`. Check the latest with `pip index versions agent-framework`.
+- **Pinned version:** `agent-framework==1.6.0`. Check the latest with `pip index versions agent-framework`.
 - **Python:** 3.10+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
-- **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `AgentMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`.
+- **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`, `CompactionProvider`, `ToolResultCompactionStrategy`, `SelectiveToolCallCompactionStrategy`, `TokenBudgetComposedStrategy`, `TodoProvider`, `TodoFileStore`, `MemoryContextProvider`, `MemoryFileStore`.
 
 ```bash
 pip install agent-framework
 # Or pin explicitly:
-pip install 'agent-framework==1.5.0'
+pip install 'agent-framework==1.6.0'
 ```
 
 ---
@@ -1307,6 +1307,180 @@ graph LR
 
 ---
 
+### Recipe 26 — `CompactionProvider` + `ToolResultCompactionStrategy` + `TokenBudgetComposedStrategy`
+
+Long-running agents accumulate tool chatter fast. This recipe uses the `CompactionProvider` context provider to apply a **two-phase compaction pipeline**:
+- **before**: trim what the model sees each turn using a token-budget strategy that collapses old tool-call groups first, then shrinks the sliding window.
+- **after**: compact the stored history so the *next* session starts leaner.
+
+```python
+# compaction_provider.py
+import asyncio
+from agent_framework import (
+    Agent,
+    CharacterEstimatorTokenizer,
+    CompactionProvider,
+    InMemoryHistoryProvider,
+    SlidingWindowStrategy,
+    ToolResultCompactionStrategy,
+    TokenBudgetComposedStrategy,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    client = OpenAIChatClient()
+    tokenizer = CharacterEstimatorTokenizer()
+
+    history = InMemoryHistoryProvider()
+
+    # before_strategy: try collapsing old tool calls first; fall back to the
+    # sliding window only if the token budget is still exceeded.
+    before_strategy = TokenBudgetComposedStrategy(
+        token_budget=6_000,
+        tokenizer=tokenizer,
+        strategies=[
+            ToolResultCompactionStrategy(keep_last_tool_call_groups=3),
+            SlidingWindowStrategy(keep_last_groups=20),
+        ],
+        early_stop=True,
+    )
+
+    # after_strategy: after each reply, collapse all but 1 tool-call group so
+    # the persisted history stays compact for future sessions.
+    after_strategy = ToolResultCompactionStrategy(keep_last_tool_call_groups=1)
+
+    compaction = CompactionProvider(
+        before_strategy=before_strategy,
+        after_strategy=after_strategy,
+        tokenizer=tokenizer,
+        history_source_id=history.source_id,   # "in_memory" by default
+    )
+
+    agent = Agent(
+        client=client,
+        instructions="You are a research agent that calls web search many times.",
+        context_providers=[history, compaction],  # history must come before compaction
+    )
+
+    session = agent.create_session()
+    for i in range(20):
+        response = await agent.run(
+            f"Turn {i}: search for Python async patterns and summarise.",
+            session=session,
+        )
+        print(f"[{i}] {response.text[:80]}...")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Key points:
+- `CompactionProvider` must be listed **after** the history provider so it can access the stored messages in `session.state`.
+- `history_source_id` defaults to `"in_memory"` — change it if your `InMemoryHistoryProvider` has a custom `source_id`.
+- `TokenBudgetComposedStrategy` runs its sub-strategies in order, stopping as soon as `token_budget` is satisfied. Place cheap strategies (no extra LLM calls) first.
+- `ToolResultCompactionStrategy` preserves readability by replacing dropped tool-call groups with a one-line summary like `[Tool results: web_search: 3 results]`.
+
+---
+
+### Recipe 27 — Long-term memory with `MemoryContextProvider` (Experimental)
+
+`MemoryContextProvider` gives an agent cross-session memory. After every turn it automatically extracts facts from the conversation into per-topic Markdown files, maintains a `MEMORY.md` index, and archives transcripts for semantic search. On subsequent turns the index is injected into context so the agent recalls earlier sessions without exceeding the context window.
+
+```python
+# memory_agent.py
+import asyncio
+from agent_framework import Agent
+from agent_framework._harness._memory import MemoryContextProvider, MemoryFileStore
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    client = OpenAIChatClient()
+
+    # MemoryFileStore creates:
+    #   ./memory/<source_id>/<owner_id>/memory/
+    #     MEMORY.md           ← topic index injected every turn
+    #     topics/*.md         ← one file per extracted topic
+    #     transcripts/*.jsonl ← full turn history
+    store = MemoryFileStore(
+        base_path="./memory",
+        owner_state_key="user_id",    # resolved from session.state["user_id"]
+    )
+
+    provider = MemoryContextProvider(
+        store=store,
+        recent_turns=3,       # also inject 3 most-recent transcript turns each call
+        max_extractions=5,    # extract up to 5 facts per turn into topic files
+    )
+
+    agent = Agent(
+        client=client,
+        instructions=(
+            "You are a personal assistant with long-term memory. "
+            "Proactively recall relevant facts about the user from MEMORY.md."
+        ),
+        context_providers=[provider],
+    )
+
+    # --- Session 1 ---
+    session1 = agent.create_session(session_id="alice-jan")
+    session1.state["user_id"] = "alice"   # routes memory to ./memory/.../alice/
+
+    await agent.run("I'm Alice. I prefer Python for backends and React for frontends.", session=session1)
+    await agent.run("My current project is a FastAPI service with a React dashboard.", session=session1)
+
+    print("Session 1 complete — facts extracted to disk.")
+
+    # --- Session 2 (simulates a new day / process restart) ---
+    session2 = agent.create_session(session_id="alice-feb")
+    session2.state["user_id"] = "alice"   # same user_id → same memory root
+
+    r = await agent.run(
+        "What stack should I use for a new backend microservice?",
+        session=session2,
+    )
+    # Agent recalls Alice's Python preference stored in the previous session.
+    print(r.text)
+
+    # Inspect extracted topics from application code
+    topics = await store.list_topics(session2, source_id="memory")
+    print(f"\nExtracted {len(topics)} memory topic(s):")
+    for t in topics:
+        print(f"  • {t.topic}: {t.summary}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**Key parameters:**
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `store` | required | `MemoryFileStore` or custom `MemoryStore` subclass |
+| `recent_turns` | `0` | Inject N most-recent transcript turns alongside MEMORY.md |
+| `max_extractions` | `5` | Maximum facts extracted from a single turn |
+| `selection_limit` | `10` | Maximum topic files auto-loaded per turn |
+| `consolidation_interval` | 7 days | How often topic files are consolidated |
+| `consolidation_client` | None (uses agent client) | Cheaper model for the consolidation pass |
+
+**`MemoryFileStore` constructor reference:**
+
+```python
+MemoryFileStore(
+    base_path="./memory",         # root directory
+    owner_state_key="user_id",    # session.state key that holds the user/owner ID
+    kind="memory",                # bucket name (subdirectory)
+    owner_prefix="",              # optional prefix for owner directory names
+)
+```
+
+The store enforces path isolation — owner IDs with `..` or absolute path characters raise `ValueError`. Use `store.list_topics(session, source_id=...)`, `store.get_topic(...)`, and `store.write_topic(...)` from application code to read and seed memory without running the agent.
+
+---
+
 ## Quick reference
 
 | Need | Class / function |
@@ -1328,6 +1502,11 @@ graph LR
 | Skills | `Skill(...)` + `SkillsProvider(skills=[...])` |
 | Eval gates | `LocalEvaluator(*checks)` + `evaluate_agent(...)` |
 | Agent todo list (exp.) | `TodoProvider(store=TodoFileStore(...))` |
+| Cross-session memory (exp.) | `MemoryContextProvider(store=MemoryFileStore(..., owner_state_key=...))` |
+| Compact context via provider | `CompactionProvider(before_strategy=..., after_strategy=..., history_source_id=...)` |
+| Drop old tool-call groups | `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=N)` |
+| Summarise old tool results | `ToolResultCompactionStrategy(keep_last_tool_call_groups=N)` |
+| Token-budget composition | `TokenBudgetComposedStrategy(token_budget=N, tokenizer=..., strategies=[...])` |
 | Plan / execute modes (exp.) | `AgentModeProvider(mode_descriptions={...})` |
 | Prompt injection defense (exp.) | `SecureAgentConfig(...)` from `agent_framework.security` |
 | Function-based workflow nodes | `@executor` / `FunctionExecutor(func, id=)` |
@@ -1335,5 +1514,9 @@ graph LR
 | In-memory skill source | `InMemorySkillsSource([skill_a, skill_b])` |
 | Custom composable skill source | Subclass `DelegatingSkillsSource(inner_source)` |
 | WebSocket MCP server | `MCPWebsocketTool(name=, url="wss://...", request_timeout=)` |
+| Intercept agent.run() | Subclass `AgentMiddleware`, override `async process(context, call_next)` |
+| Intercept LLM calls | Subclass `ChatMiddleware`, override `async process(context, call_next)` |
+| Intercept tool calls | Subclass `FunctionMiddleware`, override `async process(context, call_next)` |
+| Early-exit from middleware | `raise MiddlewareTermination(result=AgentResponse(...))` |
 
 For deep dives see the framework's other Python guides: [tools](./microsoft_agent_framework_python_tools/), [sessions](./microsoft_agent_framework_python_sessions/), [middleware](./microsoft_agent_framework_python_middleware/), [MCP](./microsoft_agent_framework_python_mcp/), [skills](./microsoft_agent_framework_python_skills/), [evaluation](./microsoft_agent_framework_python_evaluation/), [checkpointing](./microsoft_agent_framework_python_checkpointing/), and [orchestration](./microsoft_agent_framework_python_orchestration/).

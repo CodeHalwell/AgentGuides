@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
-description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.5.0."
+description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.6.0."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -335,7 +335,7 @@ agent = Agent(client=client, instructions="You are a research assistant.")
 await agent.run("Research the order pipeline")
 ```
 
-All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework-core==1.5.0`):
+All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework-core==1.6.0`):
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
