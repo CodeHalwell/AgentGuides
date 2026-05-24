@@ -423,6 +423,109 @@ agent.run(prompt)
 └─ AgentRunResult returned
 ```
 
+## Skip exceptions — short-circuit the pipeline
+
+Three exception classes let hook functions completely bypass the normal execution step and inject a synthetic result. Raise them inside `before_*` or `wrap_*` hooks.
+
+### `SkipModelRequest` — inject a cached response
+
+```python
+import asyncio
+import hashlib
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipModelRequest
+from pydantic_ai.messages import ModelResponse, TextPart, RequestUsage
+import datetime
+
+_cache: dict[str, ModelResponse] = {}
+
+def _cache_key(messages) -> str:
+    return hashlib.sha256(str(messages).encode()).hexdigest()
+
+def _make_response(text: str) -> ModelResponse:
+    return ModelResponse(
+        parts=[TextPart(content=text)],
+        model_name='cache',
+        usage=RequestUsage(request_tokens=0, response_tokens=0),
+        timestamp=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def serve_from_cache(ctx, request_context):
+    key = _cache_key(request_context.messages)
+    if key in _cache:
+        raise SkipModelRequest(_cache[key])   # ← bypass the model API call
+    return request_context
+
+@hooks.on.after_model_request
+async def populate_cache(ctx, *, request_context, response):
+    _cache[_cache_key(request_context.messages)] = response
+    return response
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+
+async def main():
+    r1 = await agent.run('What is 2 + 2?')   # API call
+    r2 = await agent.run('What is 2 + 2?')   # cache hit — no API call
+    print(r1.output, r2.output)
+
+asyncio.run(main())
+```
+
+`SkipModelRequest` takes a single `ModelResponse` argument. Any message history modifications made by earlier capabilities in the same `before_model_request` call are **not** persisted when this exception is raised.
+
+### `SkipToolValidation` — bypass Pydantic validation
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipToolValidation
+
+hooks = Hooks()
+
+@hooks.on.before_tool_validate(tools=['search'])
+async def normalise_query(ctx, *, call, tool_def, raw_args):
+    """Lowercase the query before validation so it doesn't fail enum checks."""
+    if isinstance(raw_args, dict) and 'query' in raw_args:
+        raise SkipToolValidation({**raw_args, 'query': raw_args['query'].lower()})
+    return raw_args
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+
+@agent.tool_plain
+def search(query: str) -> list[str]:
+    return [f'Result: {query}']
+```
+
+### `SkipToolExecution` — mock tool results
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipToolExecution
+
+DRY_RUN = True
+
+hooks = Hooks()
+
+@hooks.on.before_tool_execute(tools=['delete_record', 'send_email'])
+async def dry_run_guard(ctx, *, call, tool_def, args):
+    if DRY_RUN:
+        raise SkipToolExecution(f'[DRY RUN] {tool_def.name}({args})')
+    return args
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+
+@agent.tool_plain
+def delete_record(record_id: str) -> bool:
+    return True   # never runs in dry-run mode
+```
+
+`SkipToolExecution` takes the result to return to the model as its sole argument. The tool function is never called.
+
 ## Reference
 
 - `Hooks` class — `capabilities/hooks.py`
@@ -430,3 +533,4 @@ agent.run(prompt)
 - `AbstractCapability` — base class for custom capabilities (`capabilities/abstract.py`)
 - Hook function protocols (type annotations) — all `*HookFunc` classes in `capabilities/hooks.py`
 - `handle_deferred_tool_calls` hook — `capabilities/deferred_tool_handler.py`
+- `SkipModelRequest`, `SkipToolValidation`, `SkipToolExecution` — `exceptions.py`

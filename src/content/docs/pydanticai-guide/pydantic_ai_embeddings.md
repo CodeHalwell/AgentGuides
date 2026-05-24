@@ -7,7 +7,7 @@ language: python
 
 # Embeddings
 
-Verified against **pydantic-ai==1.100.0** — source module: `pydantic_ai.embeddings`.
+Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.embeddings`.
 
 The `Embedder` class provides a high-level, provider-agnostic API for generating vector embeddings. Specify a model name with `provider:model-name` syntax and call `embed_query()` or `embed_documents()` — the same interface works across OpenAI, Cohere, Google, Bedrock, and SentenceTransformers.
 
@@ -294,13 +294,271 @@ async def run_and_embed(prompt: str):
 asyncio.run(run_and_embed('Summarise the Python programming language in one sentence.'))
 ```
 
+## VoyageAI embeddings — domain-specific models
+
+VoyageAI offers specialised embedding models for code, legal text, and finance:
+
+```python
+# pip install voyageai
+import asyncio
+from pydantic_ai import Embedder
+
+async def main():
+    # General-purpose, high quality
+    gen_embedder = Embedder('voyageai:voyage-4')
+
+    # Optimised for code snippets
+    code_embedder = Embedder('voyageai:voyage-code-3')
+
+    # Optimised for legal documents
+    legal_embedder = Embedder('voyageai:voyage-law-2')
+
+    code_snippet = 'def fibonacci(n): return n if n <= 1 else fibonacci(n-1) + fibonacci(n-2)'
+    result = await code_embedder.embed_query(code_snippet)
+    print(f'Code embedding dimensions: {len(result.embeddings[0])}')
+
+asyncio.run(main())
+```
+
+## Cohere multi-lingual embeddings
+
+Cohere's models embed multiple languages into the same vector space, enabling cross-lingual retrieval:
+
+```python
+import asyncio
+from pydantic_ai import Embedder
+
+embedder = Embedder('cohere:embed-multilingual-v3.0')
+
+async def cross_lingual_search():
+    # Documents in different languages
+    docs = [
+        'Python is a high-level programming language.',       # English
+        'Python est un langage de programmation de haut niveau.',  # French
+        'Python ist eine höhere Programmiersprache.',              # German
+        'Pythonは高レベルのプログラミング言語です。',                   # Japanese
+    ]
+
+    # Query in English — finds semantically similar docs in all languages
+    doc_result = await embedder.embed_documents(docs)
+    query_result = await embedder.embed_query('high level scripting language')
+
+    import math
+    def cosine_sim(a, b):
+        dot = sum(x*y for x, y in zip(a, b))
+        return dot / (math.sqrt(sum(x*x for x in a)) * math.sqrt(sum(x*x for x in b)) + 1e-9)
+
+    q_vec = query_result.embeddings[0]
+    scored = sorted(
+        [(cosine_sim(q_vec, dvec), doc) for dvec, doc in zip(doc_result.embeddings, docs)],
+        reverse=True,
+    )
+    for score, doc in scored:
+        print(f'{score:.4f}  {doc[:60]}')
+
+asyncio.run(cross_lingual_search())
+```
+
+## `EmbeddingResult` — full property reference
+
+```python
+import asyncio
+from pydantic_ai import Embedder
+
+embedder = Embedder('openai:text-embedding-3-small')
+
+async def main():
+    result = await embedder.embed_query('What is machine learning?')
+
+    # Core embedding data
+    print(result.embeddings)          # list[list[float]] — one vector per input
+    print(result.inputs)              # list[str] — the original input texts
+    print(result.input_type)          # 'query' or 'document'
+
+    # Model metadata
+    print(result.model_name)          # e.g. 'text-embedding-3-small'
+    print(result.provider_name)       # e.g. 'openai'
+    print(result.timestamp)           # datetime of the request
+
+    # Usage statistics
+    print(result.usage.total_tokens)  # total tokens consumed
+    print(result.usage.prompt_tokens) # synonym for total_tokens on embedding models
+
+    # Provider-specific metadata
+    print(result.provider_details)    # raw provider response dict, or None
+    print(result.provider_response_id)  # provider's response ID, or None
+
+    # Access by index or by input text
+    print(result[0])                  # first embedding vector
+    print(result['What is machine learning?'])  # embedding for this exact input
+
+asyncio.run(main())
+```
+
+## Embedding multiple input types in one call
+
+```python
+import asyncio
+from pydantic_ai import Embedder
+from pydantic_ai.embeddings.result import EmbedInputType
+
+embedder = Embedder('openai:text-embedding-3-large')
+
+async def embed_mixed_corpus():
+    """Embed a corpus with explicit input_type control."""
+
+    # Documents for indexing — use 'document' type for best retrieval performance
+    documents = [
+        'Introduction to machine learning with Python.',
+        'Advanced neural network architectures.',
+        'Practical data preprocessing techniques.',
+    ]
+
+    doc_result = await embedder.embed(
+        documents,
+        input_type='document',
+    )
+    print(f'Embedded {len(doc_result.embeddings)} documents')
+    print(f'Input type: {doc_result.input_type}')  # 'document'
+
+    # Single query — use 'query' type
+    query_result = await embedder.embed(
+        'deep learning best practices',
+        input_type='query',
+    )
+    print(f'Query embedding dims: {len(query_result.embeddings[0])}')
+
+asyncio.run(embed_mixed_corpus())
+```
+
+## Dimensionality reduction with OpenAI
+
+OpenAI's `text-embedding-3-*` models support truncating the output dimension. Lower dimensions reduce storage and similarity computation cost with minimal quality loss:
+
+```python
+import asyncio
+from pydantic_ai import Embedder
+from pydantic_ai.embeddings import EmbeddingSettings
+
+async def main():
+    # Full dimensions: 3072 for text-embedding-3-large
+    full_embedder = Embedder('openai:text-embedding-3-large')
+    full_result = await full_embedder.embed_query('hello world')
+    print(f'Full dims: {len(full_result.embeddings[0])}')  # 3072
+
+    # Reduced to 256 dims — 12x smaller, still high quality
+    compact_embedder = Embedder(
+        'openai:text-embedding-3-large',
+        settings=EmbeddingSettings(dimensions=256),
+    )
+    compact_result = await compact_embedder.embed_query('hello world')
+    print(f'Compact dims: {len(compact_result.embeddings[0])}')  # 256
+
+asyncio.run(main())
+```
+
+## Production batch processing
+
+```python
+import asyncio
+from pydantic_ai import Embedder
+
+embedder = Embedder('openai:text-embedding-3-small')
+
+async def embed_corpus_in_batches(
+    texts: list[str],
+    batch_size: int = 100,
+) -> list[list[float]]:
+    """Embed a large corpus in batches to avoid rate limits."""
+    all_vectors: list[list[float]] = []
+
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        result = await embedder.embed_documents(batch)
+        all_vectors.extend(result.embeddings)
+        print(f'Processed {min(i + batch_size, len(texts))}/{len(texts)} texts')
+
+    return all_vectors
+
+async def main():
+    corpus = [f'Document about topic {i}' for i in range(350)]
+    vectors = await embed_corpus_in_batches(corpus, batch_size=100)
+    print(f'Total vectors: {len(vectors)}, each dim: {len(vectors[0])}')
+
+asyncio.run(main())
+```
+
+## Complete RAG pipeline
+
+End-to-end example: embed a knowledge base, then use an agent to answer questions via semantic search:
+
+```python
+import asyncio
+import math
+from pydantic_ai import Agent, Embedder, RunContext
+from dataclasses import dataclass, field
+
+@dataclass
+class KnowledgeBase:
+    documents: list[str]
+    vectors: list[list[float]] = field(default_factory=list)
+
+    def cosine_similarity(self, a: list[float], b: list[float]) -> float:
+        dot = sum(x * y for x, y in zip(a, b))
+        na = math.sqrt(sum(x * x for x in a))
+        nb = math.sqrt(sum(x * x for x in b))
+        return dot / (na * nb + 1e-9)
+
+    def search(self, query_vec: list[float], top_k: int = 3) -> list[str]:
+        scored = [
+            (self.cosine_similarity(query_vec, doc_vec), doc)
+            for doc_vec, doc in zip(self.vectors, self.documents)
+        ]
+        scored.sort(reverse=True)
+        return [doc for _, doc in scored[:top_k]]
+
+embedder = Embedder('openai:text-embedding-3-small')
+agent = Agent('openai:gpt-4o', deps_type=KnowledgeBase)
+
+@agent.system_prompt
+def knowledge_base_prompt(ctx: RunContext[KnowledgeBase]) -> str:
+    return f'You answer questions using a knowledge base of {len(ctx.deps.documents)} documents.'
+
+@agent.tool
+async def retrieve_docs(ctx: RunContext[KnowledgeBase], query: str) -> list[str]:
+    """Search the knowledge base for relevant documents."""
+    query_result = await embedder.embed_query(query)
+    return ctx.deps.search(query_result.embeddings[0], top_k=3)
+
+async def main():
+    # Build knowledge base
+    docs = [
+        'Python was created by Guido van Rossum and first released in 1991.',
+        'Python 3.0 was released in 2008 and broke backward compatibility with Python 2.',
+        'PEP 8 is the official Python style guide, promoting code readability.',
+        'Python uses indentation to define code blocks instead of braces.',
+        'The Python Package Index (PyPI) hosts over 500,000 packages.',
+    ]
+
+    kb = KnowledgeBase(documents=docs)
+    kb_result = await embedder.embed_documents(docs)
+    kb.vectors = list(kb_result.embeddings)
+
+    result = await agent.run('When was Python first released?', deps=kb)
+    print(result.output)
+
+asyncio.run(main())
+```
+
 ## Reference
 
 | Symbol | Module | Notes |
 |---|---|---|
 | `Embedder` | `pydantic_ai.embeddings` | High-level embedding interface |
 | `EmbeddingModel` | `pydantic_ai.embeddings` | Abstract base — subclass for custom models |
-| `EmbeddingResult` | `pydantic_ai.embeddings` | Holds `embeddings`, `model`, `usage` |
+| `EmbeddingResult` | `pydantic_ai.embeddings` | Holds `embeddings`, `model`, `usage`, `inputs`, `input_type` |
 | `EmbeddingSettings` | `pydantic_ai.embeddings` | `dimensions`, `encoding_format` |
 | `TestEmbeddingModel` | `pydantic_ai.embeddings` | Deterministic unit vectors for tests |
 | `KnownEmbeddingModelName` | `pydantic_ai.embeddings` | Literal type of all known model strings |
+| `WrapperEmbeddingModel` | `pydantic_ai.embeddings` | Base class for custom model wrappers |
+| `InstrumentedEmbeddingModel` | `pydantic_ai.embeddings` | OTel-instrumented model wrapper |

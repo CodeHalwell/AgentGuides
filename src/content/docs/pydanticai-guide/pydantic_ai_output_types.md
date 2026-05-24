@@ -318,9 +318,213 @@ def build_form_schema(fields: list[dict]) -> type:
 agent = Agent('openai:gpt-5.2', output_type=build_form_schema(user_fields))
 ```
 
+## Advanced `NativeOutput` patterns
+
+### Custom schema-injection template
+
+Override the `template` to control exactly how the schema is presented to the model. `{schema}` is the only required placeholder:
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, NativeOutput
+
+class Analysis(BaseModel):
+    topic: str
+    sentiment: str
+    key_points: list[str]
+
+TEMPLATE = (
+    'Analyse the input and return a JSON object that EXACTLY matches:\n'
+    '```json\n{schema}\n```\n'
+    'Nothing outside the JSON — no prose, no markdown, just the object.'
+)
+
+agent = Agent(
+    'ollama:llama3.2',
+    output_type=NativeOutput(Analysis, template=TEMPLATE),
+)
+result = agent.run_sync('Python 3.13 is fast and developer-friendly.')
+print(result.output)
+```
+
+### Suppress schema injection (`template=False`)
+
+When the provider sends the schema via API (e.g. OpenAI's `response_format=json_schema`), avoid duplicating it in the prompt:
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, NativeOutput
+
+class Report(BaseModel):
+    title: str
+    summary: str
+    word_count: int
+
+# OpenAI handles the schema natively — no text injection
+agent = Agent('openai:gpt-4o', output_type=NativeOutput(Report, template=False))
+```
+
+### Per-call output type override with `NativeOutput`
+
+Override `output_type` at `run()` time for dynamic schemas:
+
+```python
+import asyncio
+from pydantic import BaseModel
+from pydantic_ai import Agent, NativeOutput
+
+class ShortAnswer(BaseModel):
+    answer: str
+
+class DetailedAnswer(BaseModel):
+    answer: str
+    reasoning: str
+    confidence: float
+
+base_agent = Agent('openai:gpt-4o')
+
+async def main():
+    # Simple question
+    r1 = await base_agent.run(
+        'What is 2+2?',
+        output_type=NativeOutput(ShortAnswer),
+    )
+    print(r1.output.answer)
+
+    # Complex question
+    r2 = await base_agent.run(
+        'Explain quantum entanglement.',
+        output_type=NativeOutput(DetailedAnswer),
+    )
+    print(r2.output.reasoning)
+
+asyncio.run(main())
+```
+
+## Advanced `PromptedOutput` patterns
+
+### Multi-model portability
+
+Use `PromptedOutput` when you need the same agent to run across providers with different structured-output support:
+
+```python
+import os
+from pydantic import BaseModel
+from pydantic_ai import Agent, PromptedOutput
+
+class SummaryResult(BaseModel):
+    title: str
+    bullet_points: list[str]
+    word_count: int
+
+# Works with ANY text-capable model
+model = os.getenv('MODEL', 'openai:gpt-4o')
+agent = Agent(model, output_type=PromptedOutput(SummaryResult))
+result = agent.run_sync('Summarise: Python is a high-level language loved for its readability.')
+print(result.output)
+```
+
+### `PromptedOutput` with a branded system prompt
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, PromptedOutput
+
+class TechReview(BaseModel):
+    library: str
+    rating: int  # 1-10
+    pros: list[str]
+    cons: list[str]
+    verdict: str
+
+SCHEMA_TEMPLATE = (
+    'You are a senior software architect. Evaluate libraries objectively.\n\n'
+    'Respond ONLY with a JSON object matching:\n{schema}'
+)
+
+agent = Agent(
+    'groq:llama-3.3-70b-versatile',
+    output_type=PromptedOutput(TechReview, template=SCHEMA_TEMPLATE),
+)
+result = agent.run_sync('Review the FastAPI web framework.')
+print(f'{result.output.library}: {result.output.rating}/10')
+```
+
+## Advanced `TextOutput` patterns
+
+### `TextOutput` with `RunContext` — deps-aware parsing
+
+The parser function can take `RunContext` as its first argument to access dependencies, the run ID, or message history:
+
+```python
+import asyncio
+import re
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext, TextOutput
+
+@dataclass
+class ParseDeps:
+    decimal_separator: str = '.'  # '.' for US, ',' for EU
+
+def parse_price(ctx: RunContext[ParseDeps], text: str) -> float:
+    """Extract a price from the model output, respecting locale."""
+    sep = ctx.deps.decimal_separator
+    pattern = rf'\b\d{{1,3}}(?:[,\s]\d{{3}})*(?:{re.escape(sep)}\d{{1,2}})?\b'
+    match = re.search(pattern, text)
+    if match:
+        raw = match.group(0).replace(',', '').replace(' ', '').replace(sep, '.')
+        return float(raw)
+    return 0.0
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=ParseDeps,
+    output_type=TextOutput(parse_price),
+    instructions='State prices numerically, e.g. "The cost is 1,499.99".',
+)
+
+async def main():
+    result = await agent.run('How much does a MacBook Pro cost?', deps=ParseDeps(decimal_separator='.'))
+    print(f'Extracted price: {result.output:.2f}')
+
+asyncio.run(main())
+```
+
+### Async `TextOutput` parser
+
+```python
+import asyncio
+import httpx
+from pydantic_ai import Agent, TextOutput
+
+async def translate_to_german(text: str) -> str:
+    """Translate the model's English output to German via an external API."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            'https://translate.example.com/v1/translate',
+            json={'text': text, 'target': 'de'},
+            timeout=10,
+        )
+        return resp.json().get('translated', text)
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=TextOutput(translate_to_german),
+    instructions='Respond in English.',
+)
+
+async def main():
+    result = await agent.run('Describe Python in one sentence.')
+    print(result.output)   # German translation
+
+asyncio.run(main())
+```
+
 ## Reference
 
 - `Agent.__init__(..., output_type=...)` — `agent/__init__.py:220`
 - `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — `output.py`
 - `output_validator` decorator — `agent/__init__.py:1911`
 - `OutputSpec` type alias — `output.py`
+- `TextOutputFunc` — `output.py` — `Callable[[str], T] | Callable[[RunContext, str], T]`
+- Advanced patterns with `AgentSpec` and output — `pydantic_ai_advanced_classes_part2.md`

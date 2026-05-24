@@ -450,6 +450,211 @@ async def per_tenant(ctx: RunContext[TenantDeps]) -> AbstractToolset[TenantDeps]
     return FunctionToolset([load_tools_for(ctx.deps.tenant_id)])
 ```
 
+## `PreparedToolset` — advanced patterns
+
+### Internationalization: per-locale tool descriptions
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, PreparedToolset, RunContext
+from pydantic_ai.tools import ToolDefinition
+
+DESCRIPTIONS = {
+    'en': {
+        'search_products': 'Search the product catalogue.',
+        'get_order': 'Retrieve an order by ID.',
+    },
+    'es': {
+        'search_products': 'Buscar en el catálogo de productos.',
+        'get_order': 'Recuperar un pedido por ID.',
+    },
+    'ja': {
+        'search_products': '商品カタログを検索します。',
+        'get_order': 'IDで注文を取得します。',
+    },
+}
+
+@dataclass
+class UserDeps:
+    locale: str = 'en'
+
+tools = FunctionToolset[UserDeps]()
+
+@tools.tool_plain
+def search_products(query: str) -> list[str]:
+    return [f'Product: {query}']
+
+@tools.tool_plain
+def get_order(order_id: str) -> dict:
+    return {'id': order_id, 'status': 'shipped'}
+
+def localise_descriptions(ctx: RunContext[UserDeps], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+    locale_map = DESCRIPTIONS.get(ctx.deps.locale, DESCRIPTIONS['en'])
+    return [
+        ToolDefinition(
+            name=d.name,
+            description=locale_map.get(d.name, d.description),
+            parameters_json_schema=d.parameters_json_schema,
+        )
+        for d in defs
+    ]
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=UserDeps,
+    toolsets=[PreparedToolset(tools, prepare_func=localise_descriptions)],
+)
+
+async def main():
+    result = await agent.run('¿Puedes buscar laptops?', deps=UserDeps(locale='es'))
+    print(result.output)
+
+asyncio.run(main())
+```
+
+### Progressively restrict tools as workflow advances
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, PreparedToolset, RunContext
+from pydantic_ai.tools import ToolDefinition
+
+@dataclass
+class WorkflowDeps:
+    phase: str = 'init'  # 'init' → 'validated' → 'committed'
+
+tools = FunctionToolset[WorkflowDeps]()
+
+@tools.tool
+def validate_data(ctx: RunContext[WorkflowDeps], data: str) -> str:
+    ctx.deps.phase = 'validated'
+    return f'Validated: {data}'
+
+@tools.tool
+def commit_transaction(ctx: RunContext[WorkflowDeps], transaction_id: str) -> str:
+    ctx.deps.phase = 'committed'
+    return f'Committed: {transaction_id}'
+
+@tools.tool
+def rollback(ctx: RunContext[WorkflowDeps], reason: str) -> str:
+    ctx.deps.phase = 'init'
+    return f'Rolled back: {reason}'
+
+# Phase-gated tool visibility
+PHASE_TOOLS: dict[str, set[str]] = {
+    'init': {'validate_data'},
+    'validated': {'commit_transaction', 'rollback'},
+    'committed': set(),  # no tools after commit
+}
+
+def phase_filter(ctx: RunContext[WorkflowDeps], defs: list[ToolDefinition]) -> list[ToolDefinition]:
+    allowed = PHASE_TOOLS.get(ctx.deps.phase, set())
+    return [d for d in defs if d.name in allowed]
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=WorkflowDeps,
+    toolsets=[PreparedToolset(tools, prepare_func=phase_filter)],
+)
+
+async def main():
+    deps = WorkflowDeps(phase='init')
+    result = await agent.run('Process data "order_42" and commit if valid.', deps=deps)
+    print(f'Final phase: {deps.phase}')
+    print(result.output)
+
+asyncio.run(main())
+```
+
+## `DeferredLoadingToolset` — advanced patterns
+
+### Gradual tool discovery with tool search
+
+When using `DeferredLoadingToolset` with the `ToolSearch` capability, the model discovers tools through search rather than seeing them all upfront. This is especially powerful for agents with 50+ tools:
+
+```python
+import asyncio
+from pydantic_ai import Agent, FunctionToolset, DeferredLoadingToolset
+
+# Large library with many specialised tools
+analytics_tools = FunctionToolset[None]()
+
+@analytics_tools.tool_plain
+def cohort_analysis(cohort_id: str, metric: str) -> dict:
+    """Run a cohort analysis for the given metric."""
+    return {'cohort': cohort_id, 'metric': metric, 'value': 42.5}
+
+@analytics_tools.tool_plain
+def funnel_report(funnel_name: str, date_range: str) -> dict:
+    """Generate a conversion funnel report."""
+    return {'funnel': funnel_name, 'conversion_rate': 0.23}
+
+@analytics_tools.tool_plain
+def retention_curve(product_id: str, cohort_weeks: int) -> list[float]:
+    """Compute a retention curve for a product cohort."""
+    return [1.0, 0.8, 0.65, 0.55, 0.48]
+
+@analytics_tools.tool_plain
+def ab_test_significance(test_id: str) -> dict:
+    """Calculate statistical significance for an A/B test."""
+    return {'test_id': test_id, 'p_value': 0.03, 'significant': True}
+
+# Defer ALL analytics tools — the model must search for them
+deferred = DeferredLoadingToolset(analytics_tools)
+agent = Agent('openai:gpt-4o', toolsets=[deferred])
+
+async def main():
+    # Without deferred loading, all 4 tools appear in every prompt.
+    # With deferred loading, only tools the model searches for are loaded.
+    result = await agent.run('Is A/B test "checkout_v2" statistically significant?')
+    print(result.output)
+
+asyncio.run(main())
+```
+
+### Mixing deferred and always-visible tools
+
+Expose lightweight utility tools immediately; defer heavy/specialised ones:
+
+```python
+from pydantic_ai import Agent, FunctionToolset, DeferredLoadingToolset, CombinedToolset
+
+# Always-visible: fast, cheap, universally needed
+quick_tools = FunctionToolset[None]()
+
+@quick_tools.tool_plain
+def get_current_date() -> str:
+    from datetime import date
+    return date.today().isoformat()
+
+@quick_tools.tool_plain
+def format_number(n: float, decimals: int = 2) -> str:
+    return f'{n:,.{decimals}f}'
+
+# Deferred: expensive or rarely needed
+heavy_tools = FunctionToolset[None]()
+
+@heavy_tools.tool_plain
+def run_ml_model(model_name: str, input_data: dict) -> dict:
+    """Run inference on a large ML model."""
+    return {'prediction': 0.87}
+
+@heavy_tools.tool_plain
+def generate_report(report_type: str, parameters: dict) -> str:
+    """Generate a complex analytical report."""
+    return f'{report_type} report generated'
+
+agent = Agent(
+    'openai:gpt-4o',
+    toolsets=[
+        quick_tools,                                    # always visible
+        DeferredLoadingToolset(heavy_tools),            # discovered on demand
+    ],
+)
+```
+
 ## Gotchas
 
 - **Enter before use**: toolsets may hold resources (processes, HTTP clients, MCP sessions). Using an agent as an async context manager (`async with agent: ...`) enters every toolset.
@@ -457,6 +662,8 @@ async def per_tenant(ctx: RunContext[TenantDeps]) -> AbstractToolset[TenantDeps]
 - **`requires_approval=True` without `DeferredToolRequests`** in `output_type` raises at runtime. Always add `DeferredToolRequests` to the output union.
 - **`ExternalToolset` + streaming**: external deferrals terminate the stream early. Handle `DeferredToolRequests` as a normal output value.
 - **Durable execution**: every toolset must have an `id` when running under Temporal/Prefect/DBOS so activities can be routed.
+- **`PreparedToolset` constraint**: the prepare function cannot add or rename tools. Reducing or modifying definitions is fine; use `RenamedToolset` for renaming and `FunctionToolset.add_function()` for additions.
+- **`DeferredLoadingToolset` + non-search agent**: if the agent doesn't have a `ToolSearch` capability, deferred tools are simply never offered to the model. Make sure `ToolSearch` or the built-in tool search is active.
 
 ## Patterns
 
