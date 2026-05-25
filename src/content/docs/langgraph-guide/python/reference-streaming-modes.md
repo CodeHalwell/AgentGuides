@@ -64,7 +64,7 @@ for part in graph.stream({"x": 0}, cfg, stream_mode="updates", version="v2"):
 `StreamMode` is a `Literal` union exported from `langgraph.types`:
 
 ```python
-StreamMode = Literal["values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"]
+StreamMode = Literal["values", "updates", "checkpoints", "tasks", "debug", "messages", "custom", "tools"]
 ```
 
 | Mode | Yields | Typical use |
@@ -76,6 +76,7 @@ StreamMode = Literal["values", "updates", "checkpoints", "tasks", "debug", "mess
 | `"checkpoints"` | Checkpoint payloads (`config`, `values`, `metadata`, `next`, `parent_config`, `tasks`). | Audit logs, progress DBs. |
 | `"tasks"` | Task start / result events (`id`, `name`, `input`, `triggers` / `id`, `name`, `error`, `interrupts`, `result`). | Observability dashboards. |
 | `"debug"` | All checkpoint + task events wrapped in a `DebugPayload` with step number and timestamp. | Replacing prints while developing. |
+| `"tools"` | Per-tool-call start/delta/finish events. | Real-time streaming of tool execution output via `ToolCallTransformer`. |
 
 You can also pass a **list** of modes. With `version="v1"` the iterator yields `(mode, data)` tuples; with `version="v2"` every chunk is a `StreamPart` and you discriminate by `chunk["type"]`:
 
@@ -707,6 +708,140 @@ for part in graph.stream(
     version="v2",
 ):
     ...
+```
+
+## `stream_mode="tools"` — per-tool-call streaming
+
+The `"tools"` mode emits low-level protocol events as each tool call executes inside a `ToolNode`. Three event types flow through:
+
+| Event type | When it fires | Data fields |
+|---|---|---|
+| `tool-started` | A tool call begins | `tool_call_id`, `tool_name`, `input` |
+| `tool-output-delta` | A tool emits a partial output delta | `tool_call_id`, `delta` |
+| `tool-finished` | A tool call completes | `tool_call_id`, `output` |
+| `tool-error` | A tool call raises | `tool_call_id`, `message` |
+
+### Raw `tools` stream events
+
+```python
+from langchain_core.tools import tool
+from langgraph.graph import StateGraph, START
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_openai import ChatOpenAI
+
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+
+tools = [multiply]
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+
+def agent(state: MessagesState) -> dict:
+    return {"messages": [llm.invoke(state["messages"])]}
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", agent)
+builder.add_node("tools", ToolNode(tools))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile()
+
+for event in graph.stream(
+    {"messages": [("user", "What is 6 times 7?")]},
+    stream_mode="tools",
+):
+    print(event)
+# Example output:
+# {'method': 'tools', 'params': {'namespace': (), 'data': {'event': 'tool-started', 'tool_call_id': 'tc_01', 'tool_name': 'multiply', 'input': {'a': 6, 'b': 7}}}}
+# {'method': 'tools', 'params': {'namespace': (), 'data': {'event': 'tool-finished', 'tool_call_id': 'tc_01', 'output': 42}}}
+```
+
+### Structured streaming with `ToolCallTransformer`
+
+`ToolCallTransformer` (from `langgraph.prebuilt._tool_call_transformer`) is a stream transformer that projects raw `tools` events into **`ToolCallStream` handles** — one per tool invocation. Each handle exposes the tool's `tool_call_id`, `tool_name`, `input`, `output_deltas` (a channel of incremental results), and `output` (terminal).
+
+Add it at compile time:
+
+```python
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+
+graph = builder.compile(transformers=[ToolCallTransformer])
+```
+
+Then iterate `run.tool_calls` to get `ToolCallStream` objects as tools start:
+
+```python
+# Sync iteration
+with graph.stream(
+    {"messages": [("user", "What is 6 times 7?")]},
+    stream_mode="tools",
+) as run:
+    for tool_call_stream in run.tool_calls:
+        print(f"Tool started: {tool_call_stream.tool_name}, id={tool_call_stream.tool_call_id}")
+        print(f"Input: {tool_call_stream.input}")
+        # Iterate output deltas in real time
+        for delta in tool_call_stream.output_deltas:
+            print(f"  delta: {delta}")
+        print(f"Final output: {tool_call_stream.output}")
+```
+
+### `ToolCallStream` fields
+
+| Field | Type | Description |
+|---|---|---|
+| `tool_call_id` | `str` | The ID from the AI message's tool call. |
+| `tool_name` | `str` | Name of the tool being executed. |
+| `input` | `dict \| None` | The tool's input arguments (from the `tool-started` event). |
+| `output_deltas` | `StreamChannel[Any]` | Channel of incremental output chunks. Iterate sync or async. |
+| `output` | `Any` | Final output from the `tool-finished` event. `None` until complete. |
+| `error` | `str \| None` | Error message from `tool-error`. `None` on success. |
+| `completed` | `bool` | `True` once a terminal event has been seen. |
+
+### Async `ToolCallTransformer` example
+
+```python
+import asyncio
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+
+graph = builder.compile(transformers=[ToolCallTransformer])
+
+async def stream_tools():
+    async with graph.astream(
+        {"messages": [("user", "What is 6 times 7?")]},
+        stream_mode="tools",
+    ) as run:
+        async for tool_call_stream in run.tool_calls:
+            print(f"Tool: {tool_call_stream.tool_name} ({tool_call_stream.tool_call_id})")
+            async for delta in tool_call_stream.output_deltas:
+                print(f"  delta: {delta}")
+            if tool_call_stream.error:
+                print(f"  ERROR: {tool_call_stream.error}")
+            else:
+                print(f"  output: {tool_call_stream.output}")
+
+asyncio.run(stream_tools())
+```
+
+### Combining `"tools"` with other modes
+
+```python
+for mode, data in graph.stream(
+    {"messages": [("user", "Multiply 6 by 7")]},
+    stream_mode=["updates", "tools"],
+):
+    if mode == "updates":
+        print("Node update:", data)
+    elif mode == "tools":
+        # Raw tools event dict
+        event_data = data["params"]["data"]
+        if event_data.get("event") == "tool-finished":
+            print("Tool finished, output:", event_data.get("output"))
 ```
 
 ## Durability interacts with streaming

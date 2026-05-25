@@ -1,6 +1,6 @@
 ---
-title: "ToolNode, InjectedState, InjectedStore, ToolRuntime — API reference"
-description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, and ToolCallRequest interceptor — with source-verified signatures for langgraph==1.2.1."
+title: "ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference"
+description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.1."
 framework: langgraph
 language: python
 sidebar:
@@ -8,11 +8,11 @@ sidebar:
   order: 36
 ---
 
-# ToolNode, InjectedState, InjectedStore, ToolRuntime — API reference
+# ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference
 
-Verified against **`langgraph==1.2.1`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`).
+Verified against **`langgraph==1.2.1`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
 
-`ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, and `ToolCallRequest` — let tools read graph state, access the long-term store, stream partial output, and intercept calls before execution.
+`ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` — let tools read graph state, access the long-term store, stream partial output, intercept calls before execution, and consume per-tool-call streaming results in a structured way.
 
 ## Minimal runnable example
 
@@ -63,10 +63,12 @@ print(result["messages"][-1].content)  # 42
 | `InjectedStore` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
 | `ToolRuntime` | `langgraph.prebuilt.tool_node` |
 | `ToolCallRequest` | `langgraph.prebuilt.tool_node` |
+| `ToolCallTransformer` | `langgraph.prebuilt._tool_call_transformer` |
+| `ToolCallStream` | `langgraph.prebuilt._tool_call_stream` |
 | `ValidationNode` | `langgraph.prebuilt.tool_validator` (deprecated) |
 | `MessagesState` | `langgraph.graph.message` |
 
-The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, and `InjectedStore`. `ToolRuntime` and `ToolCallRequest` must be imported from `langgraph.prebuilt.tool_node` directly.
+The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, and `InjectedStore`. `ToolRuntime`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` must be imported from their specific sub-modules directly.
 
 ## `ToolNode`
 
@@ -734,6 +736,189 @@ tool_node = ToolNode(
 )
 ```
 
+## `ToolCallTransformer` + `ToolCallStream`
+
+`ToolCallTransformer` (module: `langgraph.prebuilt._tool_call_transformer`) is a built-in **`StreamTransformer`** that turns the raw `tools`-channel protocol events emitted during graph streaming into convenient **`ToolCallStream`** handles — one per tool invocation. It lets you consume per-tool incremental output (delta streaming), final output, and errors in a structured way without parsing raw event dicts.
+
+> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. The raw `tools` protocol events and `ToolCallTransformer` are both part of `stream_mode="tools"` — see also the [Streaming modes reference](./reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
+
+### Registration
+
+Pass `ToolCallTransformer` (the class itself, not an instance) to `compile()`:
+
+```python
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+
+graph = builder.compile(transformers=[ToolCallTransformer])
+```
+
+After registration the `tools` stream channel emits `ToolCallStream` objects instead of raw event dicts when you include `"tools"` in `stream_mode`.
+
+### `ToolCallStream` fields
+
+| Field | Type | Description |
+|---|---|---|
+| `tool_call_id` | `str` | Matches the `tool_call_id` from the `AIMessage`. |
+| `tool_name` | `str` | Name of the tool being invoked. |
+| `input` | `dict \| None` | Input arguments as received by the tool (from `on_tool_start`). `None` if not captured. |
+| `output_deltas` | `StreamChannel[Any]` | Channel of incremental delta chunks. Iterate sync or async as they arrive. |
+| `output` | `Any` | Terminal output from `tool-finished`. `None` until the tool completes successfully. |
+| `error` | `str \| None` | Terminal error message from `tool-error`. `None` until the tool fails. |
+| `completed` | `bool` | `True` once either `tool-finished` or `tool-error` has been observed. |
+
+### Synchronous example
+
+```python
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+
+
+@tool
+def search(query: str) -> str:
+    """Search the web for a query."""
+    return f"Results for: {query}"
+
+
+tools = [search]
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+tool_node = ToolNode(tools)
+
+
+def call_model(state: MessagesState) -> dict:
+    return {"messages": [llm.invoke(state["messages"])]}
+
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+# Register the transformer — this projects raw tools events into ToolCallStream handles
+graph = builder.compile(transformers=[ToolCallTransformer])
+
+config = {"configurable": {"thread_id": "t1"}}
+
+for run in graph.stream(
+    {"messages": [("user", "Search for LangGraph docs")]},
+    config,
+    stream_mode="tools",
+):
+    for tc_stream in run.tool_calls:
+        print(f"→ Tool started: {tc_stream.tool_name} (id={tc_stream.tool_call_id})")
+        print(f"  Input: {tc_stream.input}")
+
+        # Consume any delta chunks as they arrive
+        for delta in tc_stream:
+            print(f"  delta: {delta!r}")
+
+        # After iteration the terminal state is populated
+        if tc_stream.error:
+            print(f"  ERROR: {tc_stream.error}")
+        else:
+            print(f"  Output: {tc_stream.output}")
+```
+
+### Asynchronous example
+
+```python
+import asyncio
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+
+
+@tool
+async def async_search(query: str) -> str:
+    """Async search tool."""
+    return f"Async results for: {query}"
+
+
+tools = [async_search]
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+tool_node = ToolNode(tools)
+
+
+async def call_model(state: MessagesState) -> dict:
+    return {"messages": [await llm.ainvoke(state["messages"])]}
+
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(transformers=[ToolCallTransformer])
+
+config = {"configurable": {"thread_id": "async-1"}}
+
+
+async def main():
+    async for run in graph.astream(
+        {"messages": [("user", "Search for async patterns")]},
+        config,
+        stream_mode="tools",
+    ):
+        async for tc_stream in run.tool_calls:
+            print(f"→ {tc_stream.tool_name} started (id={tc_stream.tool_call_id})")
+            async for delta in tc_stream:
+                print(f"  delta: {delta!r}")
+            if tc_stream.error:
+                print(f"  ERROR: {tc_stream.error}")
+            else:
+                print(f"  Final: {tc_stream.output}")
+
+
+asyncio.run(main())
+```
+
+### Combining `"tools"` with other stream modes
+
+`ToolCallTransformer` works when `"tools"` is included in a list of stream modes:
+
+```python
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+
+graph = builder.compile(transformers=[ToolCallTransformer])
+config = {"configurable": {"thread_id": "multi"}}
+
+for mode, data in graph.stream(
+    {"messages": [("user", "Tell me the result of 6 × 7")]},
+    config,
+    stream_mode=["updates", "tools"],
+):
+    if mode == "updates":
+        # Normal state-delta events
+        print(f"[update] {list(data.keys())}")
+    elif mode == "tools":
+        # data is a run-level object; iterate its tool_calls
+        for tc in data.tool_calls:
+            print(f"[tool]   {tc.tool_name} → {tc.output}")
+```
+
+### How it works internally
+
+`ToolCallTransformer` subscribes to the `tools` channel and handles four protocol events:
+
+| Event | Action |
+|---|---|
+| `tool-started` | Creates a new `ToolCallStream(tool_call_id, tool_name, input)` and yields it on `run.tool_calls`. |
+| `tool-output-delta` | Calls `tc_stream._push_delta(payload)` — the delta is queued on `output_deltas`. |
+| `tool-finished` | Calls `tc_stream._finish(output)` — sets `output`, marks `completed=True`, closes `output_deltas`. |
+| `tool-error` | Calls `tc_stream._fail(message)` — sets `error`, marks `completed=True`, closes `output_deltas`. |
+
+`ToolCallStream` is not meant to be constructed directly — it is always produced by `ToolCallTransformer` as events flow through the stream mux.
+
 ## Gotchas
 
 - **`InjectedState` / `InjectedStore` parameters are invisible to the model.** They are stripped from the JSON schema before it is sent to the LLM. Do not prompt the model to fill them in.
@@ -753,5 +938,5 @@ tool_node = ToolNode(
 |---|---|
 | 1.1.0 (prebuilt) | `ToolCallRequest.override()` introduced; direct attribute assignment deprecated. `awrap_tool_call` added. |
 | 1.0.0 (prebuilt) | `ValidationNode` deprecated — use `create_agent` from `langchain.agents`. `AgentState` / `AgentStatePydantic` moved to `langchain.agents`. |
-| 1.2.0 / prebuilt 1.1.0 | `ToolRuntime` dataclass introduced in `langgraph-prebuilt`; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, `execution_info`, `server_info`. `emit_output_delta` added. |
+| 1.2.0 / prebuilt 1.1.0 | `ToolRuntime` dataclass introduced in `langgraph-prebuilt`; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, `execution_info`, `server_info`. `emit_output_delta` added. `ToolCallTransformer` stream transformer and `ToolCallStream` handle added; enable per-tool-call structured streaming via `compile(transformers=[ToolCallTransformer])` + `stream_mode="tools"`. |
 | 0.3.8 (langchain-core) | `InjectedStore` requires `langchain-core >= 0.3.8`. |
