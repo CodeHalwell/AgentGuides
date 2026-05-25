@@ -893,6 +893,59 @@ agent = LlmAgent(
 
 Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `state` (read-only `MappingProxyType`), `session`, `user_id`, `run_config`, `get_credential(key)`.
 
+## PubSubToolset (experimental)
+
+`PubSubToolset` exposes three Google Cloud Pub/Sub operations as ADK tools: `publish_message`, `pull_messages`, and `acknowledge_messages`. Install prerequisite: `pip install google-cloud-pubsub`.
+
+```python
+from google.adk.tools.pubsub.pubsub_toolset import PubSubToolset
+from google.adk.tools.pubsub.config import PubSubToolConfig
+from google.adk.agents import LlmAgent
+
+toolset = PubSubToolset(
+    tool_filter=["publish_message", "pull_messages"],    # optional filter
+    pubsub_tool_config=PubSubToolConfig(project_id="my-gcp-project"),
+)
+
+agent = LlmAgent(
+    name="event_router",
+    model="gemini-2.5-flash",
+    instruction="Publish and consume messages on Pub/Sub topics as instructed.",
+    tools=[toolset],
+)
+```
+
+> Full constructor reference, message tool signatures, and more examples → [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#5--pubsubtoolset-experimental).
+
+## SpannerToolset (experimental)
+
+`SpannerToolset` exposes Cloud Spanner schema inspection and SQL execution. Provides `spanner_list_table_names`, `spanner_get_table_schema`, `spanner_execute_sql`, `spanner_similarity_search`, and more. Requires `pip install google-cloud-spanner`.
+
+```python
+from google.adk.tools.spanner.spanner_toolset import SpannerToolset
+from google.adk.tools.spanner.settings import SpannerToolSettings, QueryResultMode
+from google.adk.agents import LlmAgent
+
+settings = SpannerToolSettings(
+    max_executed_query_result_rows=50,
+    query_result_mode=QueryResultMode.DICT_LIST,  # {column: value} per row
+)
+
+toolset = SpannerToolset(spanner_tool_settings=settings)
+
+agent = LlmAgent(
+    name="sql_assistant",
+    model="gemini-2.5-pro",
+    instruction=(
+        "You are a Spanner SQL assistant. List tables first, then inspect schemas "
+        "before writing queries. Cap all results at 50 rows."
+    ),
+    tools=[toolset],
+)
+```
+
+> Full constructor reference, vector similarity search setup, and more examples → [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#6--spannertoolset-experimental).
+
 ## SkillToolset (experimental)
 
 `SkillToolset` is an experimental feature that adds a skills system to an `LlmAgent`. A "skill" is a folder containing a `SKILL.md` instruction file (with optional `references/`, `assets/`, `scripts/` subfolders). The toolset dynamically exposes tools for the model to discover, load, and execute those skills.

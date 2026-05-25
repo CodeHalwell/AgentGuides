@@ -48,6 +48,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="13 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
   <LinkCard title="14 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
   <LinkCard title="15 · Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified class deep dives · 40 min" />
+  <LinkCard title="16 · Class deep dives — vol. 2" href="./google_adk_class_deep_dives_v2/" description="6 more source-verified deep dives: RemoteA2aAgent, LangGraphAgent, AuthCredential, GcsArtifactService, PubSubToolset, SpannerToolset · 35 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -84,6 +85,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Diagrams" href="./google_adk_diagrams/" />
   <LinkCard title="Production guide" href="./google_adk_production_guide/" />
   <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified deep dives: LlmAgent, RunConfig, Context, BasePlugin, App, Workflow, BaseNode, FunctionTool, RetryConfig, BaseTool." />
+  <LinkCard title="Class deep dives — vol. 2" href="./google_adk_class_deep_dives_v2/" description="6 more: RemoteA2aAgent, LangGraphAgent, AuthCredential, GcsArtifactService, PubSubToolset, SpannerToolset." />
 </CardGrid>
 
 ## What's new in v2.1.0 (May 2026)
@@ -141,6 +143,7 @@ Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#intr
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-24 | google-adk 2.1.0 | Added Class deep dives — vol. 2 page (6 source-verified deep dives: RemoteA2aAgent, LangGraphAgent, AuthCredential with all 5 auth types, GcsArtifactService, PubSubToolset, SpannerToolset). Library installed and source inspected directly from PyPI. Index updated with Zero → Hero step 16 and new reference card. | Claude |
 | 2026-05-23 | google-adk 2.1.0 | Version bump to 2.1.0; added Class deep dives page (10 source-verified deep dives: LlmAgent, RunConfig/StreamingMode/ToolThreadPoolConfig, Context/ToolContext, BasePlugin, App/EventsCompactionConfig/ResumabilityConfig, Workflow, BaseNode/Node, FunctionTool, RetryConfig, BaseTool); updated "What's new" section with 2.1.0 features; index version card, Aside, and deep dives navigation updated. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`); all PASS. | Claude |
 | 2026-05-20 | google-adk 2.0.0 | GA stable release. Install command updated `pip install google-adk --pre` → `pip install google-adk`; version card updated `v2.0.0b1` → `v2.0.0`; Aside tip updated to note stable status; "What's new in v2.0.0 GA" section added. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; `Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService` all PASS. | Claude routine |
 | 2026-05-20 | google-adk 2.0.0 | Added Evaluation page (AgentEvaluator, EvalCase, EvalSet, PrebuiltMetrics, rubric eval, custom metrics, pytest integration). Rewrote Advanced Python page (BuiltInPlanner, PlanReActPlanner, custom BasePlanner, BaseTool, BaseToolset, authenticated tools, HITL, Cloud Run deploy, OTEL). Expanded Tools page with BaseTool, BaseToolset, and ToolContext API sections. Updated index navigation. | Claude routine |

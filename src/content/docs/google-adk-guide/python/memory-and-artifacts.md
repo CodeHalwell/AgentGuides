@@ -155,7 +155,33 @@ local = FileArtifactService(root_dir="/var/adk/artifacts")
 
 # GCS (defaults to ADC credentials)
 gcs = GcsArtifactService(bucket_name="my-adk-artifacts")
+
+# GCS with explicit project
+gcs_proj = GcsArtifactService(bucket_name="my-adk-artifacts", project="my-gcp-project")
+
+# GCS with service account key file
+from google.oauth2 import service_account
+sa_creds = service_account.Credentials.from_service_account_file(
+    "sa.json",
+    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+)
+gcs_sa = GcsArtifactService("my-adk-artifacts", credentials=sa_creds)
 ```
+
+**GCS blob path structure** (verified `gcs_artifact_service.py:_get_blob_name`):
+
+| Scope | How to trigger | Blob path |
+|---|---|---|
+| Session-scoped | `session_id=<id>`, filename without `user:` prefix | `{app_name}/{user_id}/{session_id}/{filename}/{version}` |
+| User-scoped | `filename="user:foo"` prefix — `session_id` is ignored | `{app_name}/{user_id}/user/{filename}/{version}` |
+
+> **GCS note:** `GcsArtifactService` raises `InputValidationError` when `session_id=None` and the filename does not start with `"user:"`. Use the `"user:"` filename prefix (not `session_id=None` alone) for cross-session user storage.
+
+Version numbers start at **0** and increment by 1 on each save.
+
+**GCS IAM requirements:** `storage.objects.create` (save), `storage.objects.get` (load), `storage.objects.list` (list/versions), `storage.objects.delete` (delete). The `roles/storage.objectAdmin` role covers all four.
+
+> For more detailed `GcsArtifactService` examples — binary artifacts, user-scoped files, listing version metadata — see [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#4--gcsartifactservice).
 
 ### Saving and loading from tools
 

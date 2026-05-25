@@ -1,6 +1,6 @@
 ---
-title: "Agents (LlmAgent, Parallel, Loop, Sequential)"
-description: "The agent primitives shipped by google-adk and when to pick each."
+title: "Agents (LlmAgent, LangGraphAgent, RemoteA2aAgent, Parallel, Loop, Sequential)"
+description: "All agent primitives shipped by google-adk: LlmAgent, LangGraphAgent, RemoteA2aAgent, and the deprecated shell agents."
 framework: google-adk
 language: python
 sidebar:
@@ -9,7 +9,7 @@ sidebar:
 
 Verified against google-adk==2.1.0 (`google/adk/agents/`).
 
-ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`) and three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent`). As of 2.x the three shell agents are `@deprecated` in favour of `Workflow` — see the [workflows page](./workflows/). They still work but new projects should compose with `Workflow`.
+ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](./workflows/).
 
 ## Minimal example
 
@@ -37,16 +37,20 @@ asyncio.run(main())
 
 `Agent` is a type alias for `LlmAgent` (`agents/llm_agent.py:end`). `InMemoryRunner` wires in-memory session/memory/artifact services so the example runs with no GCP setup.
 
-## The four agents at a glance
+## Agent types at a glance
 
-| Class | Runs sub-agents | Terminates when | Status |
+| Class | Module | Purpose | Status |
 |---|---|---|---|
-| `LlmAgent` | No (uses `tools=` + `sub_agents=`) | model stops emitting function calls | Stable |
-| `SequentialAgent` | yes, in order | all finished | **Deprecated → `Workflow`** |
-| `ParallelAgent` | yes, concurrently | all finished | **Deprecated → `Workflow`** |
-| `LoopAgent` | yes, in order, repeated | `max_iterations` reached OR sub-agent sets `actions.escalate=True` | **Deprecated → `Workflow`** |
+| `LlmAgent` | `google.adk.agents` | LLM-backed; uses `tools=` + `sub_agents=` for orchestration | Stable |
+| `SequentialAgent` | `google.adk.agents` | Runs sub-agents in sequence | **Deprecated → `Workflow`** |
+| `ParallelAgent` | `google.adk.agents` | Runs sub-agents concurrently | **Deprecated → `Workflow`** |
+| `LoopAgent` | `google.adk.agents` | Runs sub-agents in a loop until `escalate` or `max_iterations` | **Deprecated → `Workflow`** |
+| `LangGraphAgent` | `google.adk.agents.langgraph_agent` | Wraps a compiled LangGraph graph as a `BaseAgent` | Stable (concept) |
+| `RemoteA2aAgent` | `google.adk.agents.remote_a2a_agent` | Calls a remote A2A-compatible agent over HTTP | `@a2a_experimental` |
 
 The deprecation notices are emitted via `typing_extensions.deprecated` at class level (see `sequential_agent.py:48`, `parallel_agent.py:150`, `loop_agent.py:52`).
+
+> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/).
 
 ## LlmAgent
 
@@ -424,6 +428,57 @@ Use `PlanReActPlanner` when you need structured planning on a non-thinking model
 ### 5 — Parallel multi-try with a judge
 `ParallelAgent` (or `Workflow` fan-out) of N candidate agents, followed by a "judge" `LlmAgent` that reads `state['candidate_1..N']` and picks the best. Pair each candidate's `output_key` to a distinct state slot.
 
+## LangGraphAgent
+
+`LangGraphAgent` wraps a compiled LangGraph `CompiledGraph` as a `BaseAgent`. Install prerequisite: `pip install langchain-core langgraph langchain-google-genai`.
+
+```python
+from langgraph.prebuilt import create_react_agent
+from langchain_google_genai import ChatGoogleGenerativeAI
+from google.adk.agents.langgraph_agent import LangGraphAgent
+from google.adk.runners import InMemoryRunner
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+graph = create_react_agent(llm, tools=[])
+
+agent = LangGraphAgent(
+    name="langgraph_agent",
+    description="Answers questions using a LangGraph ReAct graph.",
+    graph=graph,
+    instruction="You are a helpful assistant.",
+)
+```
+
+**Fields:** `graph: CompiledGraph` (required), `instruction: str` (injected as `SystemMessage` on the first turn only). All `BaseAgent` fields (`name`, `description`, `mode`, callbacks) also apply.
+
+**Memory rules:** If `graph.checkpointer` is set, ADK sends only the latest user messages and LangGraph manages history via its checkpointer. If no checkpointer, ADK sends the full conversation for that agent.
+
+> For detailed examples — multi-turn with `MemorySaver`, as a sub-agent in a multi-agent system — see [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#2--langgraphagent).
+
+## RemoteA2aAgent
+
+`RemoteA2aAgent` calls a remote A2A-compatible agent over HTTP, exposing it as a local `BaseAgent`. See also [MCP & A2A](./mcp-and-a2a/).
+
+```python
+from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
+from google.adk.agents import LlmAgent
+
+remote = RemoteA2aAgent(
+    name="remote_specialist",
+    agent_card="https://specialist.internal/.well-known/agent.json",
+    timeout=30.0,
+)
+
+root = LlmAgent(
+    name="coordinator",
+    model="gemini-2.5-flash",
+    instruction="For specialist tasks, delegate to 'remote_specialist'.",
+    sub_agents=[remote],
+)
+```
+
+> For full constructor reference and examples (signed requests, file-based cards, interceptors) — see [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#1--remotea2aagent).
+
 ## Gotchas
 
 - Setting `output_schema` **disables tool use** for that agent, including sub-agent transfer (`llm_agent.py:348-372`).
@@ -432,3 +487,5 @@ Use `PlanReActPlanner` when you need structured planning on a non-thinking model
 - `LoopAgent.run_live` is **not implemented** — `ParallelAgent.run_live` also raises `NotImplementedError`.
 - When a sub-agent has no `model`, it inherits from the nearest ancestor `LlmAgent`. If the root also omits `model`, the default is resolved via `LlmAgent._default_model` (`gemini-2.5-flash`).
 - Callables passed to `tools=` are wrapped as `FunctionTool(func=callable)` automatically. Pass an explicit `FunctionTool` only when you need `require_confirmation=`.
+- `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
+- `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
