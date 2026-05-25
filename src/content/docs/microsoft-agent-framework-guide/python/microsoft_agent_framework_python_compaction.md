@@ -9,7 +9,7 @@ language: python
 
 Long-running agents blow through the context window. Compaction strategies decide which messages to keep, which to drop, and which to replace with shorter summaries — **per turn**, before the messages reach the model.
 
-Six first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework-core==1.5.0` (`agent_framework._compaction`).
+Six first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework-core==1.6.0` (`agent_framework._compaction`).
 
 ## Mental model
 
@@ -1156,3 +1156,171 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+---
+
+## `SelectiveToolCallCompactionStrategy` — drop older tool-call groups
+
+When tool chatter dominates the conversation (e.g. a loop that calls `search` 30 times), you often only need the most recent tool-call group to remain visible. `SelectiveToolCallCompactionStrategy` drops older tool-call groups while leaving all non-tool messages untouched.
+
+```python
+from agent_framework import SelectiveToolCallCompactionStrategy, Agent
+from agent_framework.openai import OpenAIChatClient
+
+
+# Keep only the 2 most recent tool-call groups; all earlier ones are excluded.
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research agent that makes many web searches.",
+    compaction_strategy=SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=2),
+)
+```
+
+Constructor:
+
+```python
+SelectiveToolCallCompactionStrategy(
+    keep_last_tool_call_groups: int = 1,   # set to 0 to drop all tool-call groups
+)
+```
+
+`SelectiveToolCallCompactionStrategy` only targets groups annotated as `tool_call`. User and assistant text groups are never touched, which means it composes cleanly with `SlidingWindowStrategy` when you also need to trim conversational context.
+
+---
+
+## `ToolResultCompactionStrategy` — collapse older tool calls into summaries
+
+`ToolResultCompactionStrategy` is a softer alternative: instead of dropping older tool-call groups entirely, it replaces them with a compact one-line summary message like `[Tool results: get_weather: sunny 18°C, search_docs: 3 results found]`. The model still sees *that* the tool was called and what it returned, but in a fraction of the tokens.
+
+```python
+from agent_framework import ToolResultCompactionStrategy, Agent
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research agent.",
+    compaction_strategy=ToolResultCompactionStrategy(
+        keep_last_tool_call_groups=2,    # keep 2 full groups; collapse the rest
+    ),
+)
+```
+
+### Composing `SelectiveToolCallCompactionStrategy` + `SlidingWindowStrategy`
+
+Since neither strategy touches the other's message kinds, they compose naturally inside `TokenBudgetComposedStrategy`:
+
+```python
+import asyncio
+from agent_framework import (
+    Agent,
+    CharacterEstimatorTokenizer,
+    SelectiveToolCallCompactionStrategy,
+    SlidingWindowStrategy,
+    TokenBudgetComposedStrategy,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    tokenizer = CharacterEstimatorTokenizer()
+
+    # Tier 1: drop old tool-call groups entirely (fast, no LLM cost)
+    # Tier 2: if still over budget, shrink the sliding window
+    strategy = TokenBudgetComposedStrategy(
+        token_budget=6_000,
+        tokenizer=tokenizer,
+        strategies=[
+            SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=3),
+            SlidingWindowStrategy(keep_last_groups=20),
+        ],
+        early_stop=True,    # stop as soon as the budget is satisfied
+    )
+
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a research agent that searches and synthesises information.",
+        compaction_strategy=strategy,
+        tokenizer=tokenizer,
+    )
+
+    session = agent.create_session()
+    for _ in range(40):   # simulate a very long research loop
+        await agent.run("Search for the latest news and summarise.", session=session)
+
+asyncio.run(main())
+```
+
+---
+
+## `CompactionProvider` — plug compaction into the session pipeline
+
+For most use-cases, pass a `compaction_strategy=` directly to `Agent`. Use `CompactionProvider` when you need **two separate compaction passes**:
+
+- `before_strategy`: compact the messages already loaded into context (from the history provider) **before** they reach the model.
+- `after_strategy`: compact the messages stored by the history provider **after** the model replies (so the next turn starts leaner).
+
+```python
+import asyncio
+from agent_framework import (
+    Agent,
+    CompactionProvider,
+    InMemoryHistoryProvider,
+    SlidingWindowStrategy,
+    ToolResultCompactionStrategy,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    client = OpenAIChatClient()
+
+    # Order matters: history provider must be listed before CompactionProvider
+    # so CompactionProvider can find the stored messages in session.state.
+    history = InMemoryHistoryProvider()
+
+    compaction = CompactionProvider(
+        # Trim what the model sees each turn to the last 20 groups
+        before_strategy=SlidingWindowStrategy(keep_last_groups=20),
+        # After each reply, collapse old tool-call groups in stored history
+        # so the next session starts with a leaner baseline
+        after_strategy=ToolResultCompactionStrategy(keep_last_tool_call_groups=1),
+        history_source_id=history.source_id,   # must match the history provider's source_id
+    )
+
+    agent = Agent(
+        client=client,
+        instructions="You are a long-running assistant.",
+        context_providers=[history, compaction],
+    )
+
+    session = agent.create_session()
+    for turn in range(25):
+        await agent.run(f"Turn {turn}: summarise the conversation so far.", session=session)
+
+    print("Done — context was compacted after each turn.")
+
+asyncio.run(main())
+```
+
+### `CompactionProvider` constructor reference
+
+```python
+CompactionProvider(
+    *,
+    before_strategy: CompactionStrategy | None = None,
+    after_strategy:  CompactionStrategy | None = None,
+    tokenizer:       TokenizerProtocol | None = None,
+    source_id:       str = "compaction",
+    history_source_id: str = "in_memory",   # must match your history provider's source_id
+)
+```
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `before_strategy` | `None` | Applied to context messages before the model runs |
+| `after_strategy` | `None` | Applied to stored history messages after the model replies |
+| `tokenizer` | `None` | Token counter for token-aware strategies |
+| `source_id` | `"compaction"` | Unique ID in the context provider chain |
+| `history_source_id` | `"in_memory"` | Must match the `source_id` of the history provider you're pairing with |
+
+> **Tip:** `CompactionProvider` requires a history provider to be registered in `context_providers` before it. The framework's default `InMemoryHistoryProvider` uses `source_id="in_memory"` — so the default `history_source_id` value works out of the box for most setups.
