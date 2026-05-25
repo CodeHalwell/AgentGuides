@@ -363,12 +363,19 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import RemoveMessage, HumanMessage, AIMessage
 
 def clear_history_node(state: MessagesState) -> dict:
-    """Wipe the entire message history in one shot."""
-    return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
+    """Wipe the entire message history, preserving the current user message.
+
+    add_messages processes [RemoveMessage(REMOVE_ALL_MESSAGES), current_msg]
+    as: clear everything, then keep the messages that follow the sentinel.
+    """
+    current_msg = state["messages"][-1]  # keep the incoming user message
+    return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), current_msg]}
 
 def respond_node(state: MessagesState) -> dict:
-    last = state["messages"][-1]
-    return {"messages": [AIMessage(content=f"Fresh start! You said: {last.content}")]}
+    msgs = state["messages"]
+    last = msgs[-1] if msgs else None
+    content = f"Fresh start! You said: {last.content}" if last else "Fresh start!"
+    return {"messages": [AIMessage(content=content)]}
 
 builder = StateGraph(MessagesState)
 builder.add_node("clear", clear_history_node)

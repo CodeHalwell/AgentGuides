@@ -1821,8 +1821,10 @@ def recall_memories(state: ChatState, runtime: Runtime[UserContext]) -> dict:
 
 def save_memory(state: ChatState, runtime: Runtime[UserContext]) -> dict:
     """Save important facts to long-term store."""
-    user_id = runtime.context.user_id
-    last_ai = state["messages"][-1]
+    user_id = runtime.context.user_id if runtime.context else "anon"
+    last_ai = state["messages"][-1] if state["messages"] else None
+    if not last_ai:
+        return {}
 
     import uuid
     runtime.store.put(

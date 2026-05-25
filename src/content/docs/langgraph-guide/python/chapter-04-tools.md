@@ -334,17 +334,22 @@ graph = builder.compile(store=memory_store)
 
 ### Example 6: `ToolRuntime` — all-in-one injection (new in 1.2.1)
 
-`ToolRuntime` is a dataclass introduced in LangGraph 1.2.1 that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects it (via `_DirectlyInjectedToolArg`) and injects the object automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
+`ToolRuntime` is a dataclass introduced in LangGraph 1.2.1 that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
+
+Verified against the installed source (`langgraph-prebuilt==1.1.0`):
 
 ```python
 @dataclass
-class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
-    state: StateT | None = None           # full graph state dict
-    tool_call_id: str | None = None       # ID of the triggering tool call
-    config: RunnableConfig | None = None  # LangChain runnable config
-    store: BaseStore | None = None        # store passed to compile(store=...)
-    context: ContextT | None = None       # typed context object (if any)
-    stream_writer: StreamWriter | None = None  # stream tokens mid-tool
+class ToolRuntime(Generic[ContextT, StateT]):
+    state: StateT | None                       # full graph state dict
+    context: ContextT | None                   # typed context from context_schema
+    config: RunnableConfig | None              # LangChain runnable config
+    stream_writer: StreamWriter | None         # stream tokens mid-tool
+    tool_call_id: str | None                   # ID of the triggering tool call
+    store: BaseStore | None                    # store passed to compile(store=...)
+    tools: list[BaseTool]                      # all tools registered with ToolNode
+    execution_info: ExecutionInfo | None = None  # execution metadata
+    server_info: ServerInfo | None = None        # LangSmith Platform info (None in OSS)
 ```
 
 Use `ToolRuntime` when a single tool needs two or more of these values — it avoids stacking multiple `Annotated` parameters.
@@ -373,13 +378,14 @@ def smart_search(
     runtime: ToolRuntime,   # injected automatically — invisible to the LLM
 ) -> str:
     """Search documents, log the call, and stream progress back to the caller."""
-    state: WorkspaceState = runtime.state          # full graph state
+    # runtime.state is the full graph state dict; guard for None defensively
+    state: WorkspaceState | None = runtime.state
+    user_id = state["user_id"] if state else "anon"
+    project_id = state["project_id"] if state else "unknown"
+
     store = runtime.store                          # long-term store
     tool_call_id = runtime.tool_call_id            # tracing / audit
     writer = runtime.stream_writer                 # mid-tool streaming
-
-    user_id = state["user_id"]
-    project_id = state["project_id"]
 
     # Optionally stream a progress token before the result arrives.
     if writer:

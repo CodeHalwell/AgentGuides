@@ -96,8 +96,8 @@ def personalized_response(
     user_id = runtime.context.user_id
     tenant_id = runtime.context.tenant_id
 
-    # Read from the store
-    prefs = runtime.store.get(("users", user_id), "preferences")
+    # Read from the store (guard: store is None if graph was compiled without one)
+    prefs = runtime.store.get(("users", user_id), "preferences") if runtime.store else None
     theme = prefs.value.get("theme", "light") if prefs else "light"
 
     # Emit a progress event on the custom stream channel
@@ -116,13 +116,11 @@ builder.add_edge(START, "respond")
 builder.add_edge("respond", END)
 graph = builder.compile(checkpointer=InMemorySaver(), store=store)
 
-# Pass context at call time via configurable
+# Pass context at call time via the top-level `context=` keyword argument
 result = graph.invoke(
     {"messages": [HumanMessage("Hello")]},
-    {"configurable": {
-        "thread_id": "t1",
-        "context": AppContext(user_id="u123", tenant_id="acme"),
-    }},
+    {"configurable": {"thread_id": "t1"}},
+    context=AppContext(user_id="u123", tenant_id="acme"),
 )
 ```
 
@@ -171,7 +169,8 @@ def resilient_node(state: State, runtime: Runtime) -> dict:
     info = runtime.execution_info
 
     if info.node_attempt > 1:
-        elapsed = time.time() - info.node_first_attempt_time
+        # node_first_attempt_time is float | None; guard against None defensively
+        elapsed = time.time() - (info.node_first_attempt_time or time.time())
         print(f"Retry #{info.node_attempt} after {elapsed:.1f}s on thread {info.thread_id}")
 
     # Use task_id as an idempotency key for external API calls
@@ -213,38 +212,39 @@ def my_node(state: State) -> dict:
 
 ## `ToolRuntime[ContextT, StateT]` — tool-level injection
 
-`ToolRuntime` is a separate dataclass for **tool functions** invoked by `ToolNode`. It is distinct from `Runtime` — it provides the tool with access to the current graph state, the triggering tool-call ID, the store, and the typed context, but not execution metadata or drain control.
+`ToolRuntime` is a separate dataclass for **tool functions** invoked by `ToolNode`. It is distinct from `Runtime` — it provides the tool with access to the current graph state, the triggering tool-call ID, the store, typed context, and (on LangSmith Platform) execution metadata.
 
 ### Class definition
 
+Verified against the installed `langgraph-prebuilt==1.1.0` source (`langgraph.prebuilt.tool_node`):
+
 ```python
-# langgraph.prebuilt.tool_node
-from dataclasses import dataclass
-from typing import Generic, TypeVar
-
-ContextT = TypeVar("ContextT")
-StateT = TypeVar("StateT")
-
 @dataclass
 class ToolRuntime(Generic[ContextT, StateT]):
-    state: StateT | None                    # current graph state snapshot
-    tool_call_id: str | None                # ID of the ToolCall being executed
-    config: RunnableConfig | None           # runnable config passed to the tool
-    store: BaseStore | None                 # graph's persistent store
-    context: ContextT | None               # type-safe context from context_schema
-    stream_writer: StreamWriter | None      # write events to the custom stream channel
+    state: StateT | None                       # current graph state snapshot
+    context: ContextT | None                   # type-safe context from context_schema
+    config: RunnableConfig | None              # runnable config passed to the tool
+    stream_writer: StreamWriter | None         # write events to the custom stream channel
+    tool_call_id: str | None                   # ID of the ToolCall being executed
+    store: BaseStore | None                    # graph's persistent store
+    tools: list[BaseTool]                      # all tools registered with ToolNode
+    execution_info: ExecutionInfo | None = None  # execution metadata (always set)
+    server_info: ServerInfo | None = None        # LangSmith Platform metadata (None in OSS)
 ```
 
 ### Field reference
 
 | Field | Type | Description |
 |---|---|---|
-| `state` | `StateT \| None` | The current graph state at the time the tool is called. Lets tools read state without passing it through the tool call arguments. |
-| `tool_call_id` | `str \| None` | The ID of the `ToolCall` message that triggered this tool invocation. |
+| `state` | `StateT \| None` | The current graph state at the time the tool is called. Lets tools read state without passing it through tool call arguments. |
+| `context` | `ContextT \| None` | The typed context object from the graph's `context_schema`. |
 | `config` | `RunnableConfig \| None` | The full `RunnableConfig`. Unlike `Runtime`, `ToolRuntime` includes `config` directly. |
-| `store` | `BaseStore \| None` | The graph's persistent store. |
-| `context` | `ContextT \| None` | The typed context object from `configurable["context"]`. |
 | `stream_writer` | `StreamWriter \| None` | Emit events on the custom stream channel. |
+| `tool_call_id` | `str \| None` | The ID of the `ToolCall` message that triggered this tool invocation. |
+| `store` | `BaseStore \| None` | The graph's persistent store (`None` if not compiled with one). |
+| `tools` | `list[BaseTool]` | All tools registered with the `ToolNode`. Lets one tool look up or delegate to another. |
+| `execution_info` | `ExecutionInfo \| None` | Execution metadata (checkpoint ID, task ID, attempt number, thread ID). |
+| `server_info` | `ServerInfo \| None` | LangSmith Platform metadata (assistant/graph IDs, authenticated user). `None` in OSS LangGraph. |
 
 ### Usage example
 
@@ -305,9 +305,10 @@ tool_node = ToolNode([fetch_user_data])
 | **`config`** | **No** — add `config: RunnableConfig` separately | Yes (included directly) |
 | **`state`** | No — read from the `state` parameter | Yes — current graph state snapshot |
 | **`tool_call_id`** | No | Yes |
-| **`execution_info`** | Yes (`ExecutionInfo` dataclass) | No |
+| **`tools`** | No | Yes — all tools registered with `ToolNode` |
+| **`execution_info`** | Yes (`ExecutionInfo` dataclass) | Yes (`ExecutionInfo \| None`, always populated) |
 | **`previous`** | Yes — previous state snapshot | No |
-| **`server_info`** | Yes (`None` in OSS) | No |
+| **`server_info`** | Yes (`None` in OSS) | Yes (`None` in OSS) |
 | **`control`** | Yes (`RunControl`) | No |
 | **Generic type params** | `Runtime[ContextT]` | `ToolRuntime[ContextT, StateT]` |
 | **Added in** | v0.6.0 | v0.6.0 |
@@ -478,19 +479,20 @@ def call_agent(state: AgentState, runtime: Runtime[UserContext]) -> dict:
     if state["is_last"]:
         return {"messages": [AIMessage("Step limit reached.")]}
 
-    user_id = runtime.context.user_id
-    history = runtime.store.get(("sessions", user_id), "history")
+    user_id = runtime.context.user_id if runtime.context else "anon"
+    history = runtime.store.get(("sessions", user_id), "history") if runtime.store else None
     prev_messages = history.value if history else []
 
     runtime.stream_writer({"event": "agent_start", "user": user_id})
 
     response = llm_with_tools.invoke(state["messages"] + prev_messages)
 
-    runtime.store.put(
-        ("sessions", user_id),
-        "history",
-        {"last_response": response.content},
-    )
+    if runtime.store:
+        runtime.store.put(
+            ("sessions", user_id),
+            "history",
+            {"last_response": response.content},
+        )
     return {"messages": [response]}
 
 
@@ -679,5 +681,5 @@ class RemainingStepsManager(ManagedValue[int]):
 | 1.2.1 | `ExecutionInfo.node_first_attempt_time` field added. |
 | 1.2 | `RemainingSteps` added alongside the existing `IsLastStep`. Both re-exported from `langgraph.managed`. |
 | 0.6.0 | `Runtime`, `ToolRuntime`, and `get_runtime()` introduced. |
-| 1.0 | `IsLastStep` and `RemainingSteps` moved from `langgraph.managed` to `langgraph.managed.is_last_step`; old import path still re-exported. |
+| 1.0 | `IsLastStep` moved to `langgraph.managed.is_last_step`; old import path re-exported. (`RemainingSteps` did not yet exist.) |
 | 0.3 | `IsLastStep` introduced as the first managed value. |

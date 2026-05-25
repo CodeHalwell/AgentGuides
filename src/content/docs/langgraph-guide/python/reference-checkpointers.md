@@ -318,16 +318,16 @@ Set it at compile time so every invocation of that graph uses the same policy:
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 
-graph = builder.compile(
-    checkpointer=InMemorySaver(),
-    durability="async",       # background writes for better throughput
-)
+graph = builder.compile(checkpointer=InMemorySaver())
 ```
 
-Or override per-call via `invoke` / `stream` (not yet supported in all backends — check release notes):
+`durability` is a **per-call** option on `invoke` / `stream` / `ainvoke` / `astream` — it is **not** a `compile()` argument:
 
 ```python
-graph.invoke(inputs, cfg, durability="sync")
+# Set per-run when calling invoke or stream:
+graph.invoke(inputs, cfg, durability="async")   # background writes, better throughput
+graph.stream(inputs, cfg, durability="sync")    # wait for write before next step
+graph.invoke(inputs, cfg, durability="exit")    # write only when graph exits
 ```
 
 The legacy `checkpoint_during=False` kwarg is still accepted and maps to `durability="exit"`, but emits a `DeprecationWarning`. Migrate to the explicit `durability=` spelling.
