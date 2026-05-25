@@ -49,6 +49,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="14 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
   <LinkCard title="15 · Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified class deep dives · 40 min" />
   <LinkCard title="16 · Class deep dives — vol. 2" href="./google_adk_class_deep_dives_v2/" description="6 more source-verified deep dives: RemoteA2aAgent, LangGraphAgent, AuthCredential, GcsArtifactService, PubSubToolset, SpannerToolset · 35 min" />
+  <LinkCard title="17 · Class deep dives — vol. 3" href="./google_adk_class_deep_dives_v3/" description="10 more source-verified deep dives: AgentTool, BuiltInPlanner, PlanReActPlanner, InMemorySessionService, VertexAiRagMemoryService, UnsafeLocalCodeExecutor, BuiltInCodeExecutor, LiteLlm, AgentEvaluator, shell agents · 45 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -65,6 +66,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
   <LinkCard title="Evaluation" href="./evaluation/" />
   <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" />
+  <LinkCard title="Class deep dives vol. 3" href="./google_adk_class_deep_dives_v3/" />
 </CardGrid>
 
 ## Reference
@@ -86,6 +88,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./google_adk_production_guide/" />
   <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified deep dives: LlmAgent, RunConfig, Context, BasePlugin, App, Workflow, BaseNode, FunctionTool, RetryConfig, BaseTool." />
   <LinkCard title="Class deep dives — vol. 2" href="./google_adk_class_deep_dives_v2/" description="6 more: RemoteA2aAgent, LangGraphAgent, AuthCredential, GcsArtifactService, PubSubToolset, SpannerToolset." />
+  <LinkCard title="Class deep dives — vol. 3" href="./google_adk_class_deep_dives_v3/" description="10 more: AgentTool, BuiltInPlanner, PlanReActPlanner, InMemorySessionService, VertexAiRagMemoryService, UnsafeLocalCodeExecutor, BuiltInCodeExecutor, LiteLlm, AgentEvaluator, shell agents." />
 </CardGrid>
 
 ## What's new in v2.1.0 (May 2026)
@@ -143,6 +146,7 @@ Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#intr
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-25 | google-adk 2.1.0 | Added Class deep dives — vol. 3 page (10 source-verified deep dives: AgentTool with 4 patterns, BuiltInPlanner, PlanReActPlanner with comparison table, InMemorySessionService with state scoping, VertexAiRagMemoryService, UnsafeLocalCodeExecutor, BuiltInCodeExecutor with comparison table, LiteLlm with 6 provider examples, AgentEvaluator with pytest integration, LoopAgent/ParallelAgent/SequentialAgent with Workflow migration). Library installed and source inspected directly from PyPI. Index updated with Zero → Hero step 17 and new reference card. | Claude |
 | 2026-05-24 | google-adk 2.1.0 | Added Class deep dives — vol. 2 page (6 source-verified deep dives: RemoteA2aAgent, LangGraphAgent, AuthCredential with all 5 auth types, GcsArtifactService, PubSubToolset, SpannerToolset). Library installed and source inspected directly from PyPI. Index updated with Zero → Hero step 16 and new reference card. | Claude |
 | 2026-05-23 | google-adk 2.1.0 | Version bump to 2.1.0; added Class deep dives page (10 source-verified deep dives: LlmAgent, RunConfig/StreamingMode/ToolThreadPoolConfig, Context/ToolContext, BasePlugin, App/EventsCompactionConfig/ResumabilityConfig, Workflow, BaseNode/Node, FunctionTool, RetryConfig, BaseTool); updated "What's new" section with 2.1.0 features; index version card, Aside, and deep dives navigation updated. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`); all PASS. | Claude |
 | 2026-05-20 | google-adk 2.0.0 | GA stable release. Install command updated `pip install google-adk --pre` → `pip install google-adk`; version card updated `v2.0.0b1` → `v2.0.0`; Aside tip updated to note stable status; "What's new in v2.0.0 GA" section added. Core symbols verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; `Agent`, `LlmAgent`, `Runner`, `InMemorySessionService`, `FunctionTool`, `ToolContext`, `InMemoryMemoryService`, `InMemoryArtifactService` all PASS. | Claude routine |
