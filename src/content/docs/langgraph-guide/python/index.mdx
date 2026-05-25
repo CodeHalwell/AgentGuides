@@ -75,6 +75,7 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Functional API" href="/langgraph-guide/python/reference-functional-api/" />
   <LinkCard title="Command / Send" href="/langgraph-guide/python/reference-command-and-send/" />
   <LinkCard title="IsLastStep / RemainingSteps" href="/langgraph-guide/python/reference-managed-values/" />
+  <LinkCard title="Runtime / ToolRuntime injection" href="/langgraph-guide/python/reference-runtime-and-managed-values/" />
   <LinkCard title="Stream modes (v1 / v2)" href="/langgraph-guide/python/reference-streaming-modes/" />
   <LinkCard title="StateGraph API" href="/langgraph-guide/python/reference-state-graph/" />
   <LinkCard title="Checkpointers matrix" href="/langgraph-guide/python/reference-checkpointers/" />
@@ -101,6 +102,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="Prebuilt nodes reference" href="/langgraph-guide/python/reference-prebuilt-nodes/" description="ToolNode (all constructor params, wrap_tool_call, handle_tool_errors), InjectedState, InjectedStore, ToolRuntime, ToolCallRequest, tools_condition." />
   <LinkCard title="Channels reference" href="/langgraph-guide/python/reference-channels/" description="LastValue, BinaryOperatorAggregate, Topic, EphemeralValue, NamedBarrierValue, AnyValue — concurrent-write semantics, Annotated[] shorthands, fan-in patterns." />
   <LinkCard title="Managed values reference" href="/langgraph-guide/python/reference-managed-values/" description="IsLastStep and RemainingSteps — read-only state fields injected by the Pregel executor for recursion-limit detection and graceful truncation." />
+  <LinkCard title="Runtime, ToolRuntime & Managed Values reference" href="/langgraph-guide/python/reference-runtime-and-managed-values/" description="Runtime context injection, ToolRuntime for tools, ExecutionInfo, IsLastStep, RemainingSteps — accessing execution metadata and injecting immutable context into nodes and tools." />
   <LinkCard title="RemoteGraph reference" href="/langgraph-guide/python/reference-remote-graph/" description="Call a LangGraph Platform deployment as a local graph — same invoke/stream/get_state surface, interrupt/resume, and subgraph node wiring." />
 </CardGrid>
 
@@ -193,6 +195,8 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-25 | 1.2.1 | Review fixes: corrected `durability` placement (invoke/stream, not compile); fixed `context=` top-level param pattern; updated `ToolRuntime` to add missing `tools`, `execution_info`, `server_info` fields (source-verified); fixed `clear_history_node` P1 bug (preserve current message before REMOVE_ALL_MESSAGES); added None guards for `runtime.state`, `runtime.store`, `runtime.context`; removed `_DirectlyInjectedToolArg` private class from docs; fixed version history (RemainingSteps added in 1.2, not 1.0). | Claude review response |
+| 2026-05-24 | 1.2.1 | Deep source dive: enhanced chapters 1, 4, 9 with `add_sequence`, `context_schema`/`Runtime`, `ToolRuntime`, `REMOVE_ALL_MESSAGES`, `push_message`, `Overwrite`, `GraphOutput v2`, `TimeoutPolicy`, `Send(timeout=)`. Updated streaming modes ref (all 7 modes + `StreamPart` v2 typed union). Updated store ref (vector search, filter operators, TTL, batch). New ref page: Runtime, ToolRuntime & Managed Values. Updated recipes to v1.2.1 with 3 new examples. All content verified against `langgraph==1.2.1` source. | Claude enhancement |
 | 2026-05-22 | 1.2.1 | Patch release; version card updated 1.2.0 → 1.2.1; v1.2.1 bullet added to "What's new". All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.1` (`.routine-envs/check-0522-langgraph`); all PASS. | Claude routine |
 | 2026-05-12 | 1.2.0 | Minor release; version card and all version references updated 1.1.10 → 1.2.0; `langgraph-checkpoint` updated 4.0.3 → 4.1.0; `langgraph-prebuilt` updated to 1.1.0. "What's new" section updated with `ToolRuntime` and `ToolCallTransformer` additions. All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `InMemoryStore`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`) verified with `-W error::DeprecationWarning` against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`). | Claude routine |
 | 2026-04-28 | 1.1.10 | Patch release; version card and reference pages updated 1.1.9 → 1.1.10; `langgraph-checkpoint` updated 4.0.2 → 4.0.3. All key symbols verified against installed 1.1.10 (`.routine-envs/main-py-0428`). | Claude routine |

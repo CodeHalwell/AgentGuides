@@ -65,13 +65,14 @@ graph = (
 - **`Item`** — returned by `get` / `list_namespaces`. Fields: `value`, `key`, `namespace`, `created_at`, `updated_at`.
 - **`SearchItem(Item)`** — returned by `search`. Adds `score: float | None`.
 
-Any of these operations can raise `InvalidNamespaceError` (e.g., empty tuple, empty string label, or `"."` in a label).
+Any of these operations can raise `InvalidNamespaceError` (e.g., empty tuple, empty string label, `"."` in a label, or `"langgraph"` as the root segment).
 
 ## `BaseStore` surface
 
 All methods have sync and `a`-prefixed async variants.
 
 ```python
+# Sync
 store.get(namespace, key, *, refresh_ttl=None) -> Item | None
 store.put(namespace, key, value, index=None, *, ttl=NOT_PROVIDED) -> None
 store.delete(namespace, key) -> None
@@ -84,6 +85,14 @@ store.list_namespaces(
     *, prefix=None, suffix=None, max_depth=None, limit=100, offset=0,
 ) -> list[tuple[str, ...]]
 store.batch(ops: Iterable[Op]) -> list[Result]
+
+# Async equivalents — same signatures with await
+await store.aget(namespace, key, *, refresh_ttl=None) -> Item | None
+await store.aput(namespace, key, value, index=None, *, ttl=NOT_PROVIDED) -> None
+await store.adelete(namespace, key) -> None
+await store.asearch(namespace_prefix, /, *, query=None, filter=None, limit=10, offset=0, refresh_ttl=None) -> list[SearchItem]
+await store.alist_namespaces(*, prefix=None, suffix=None, max_depth=None, limit=100, offset=0) -> list[tuple[str, ...]]
+await store.abatch(ops: Iterable[Op]) -> list[Result]
 ```
 
 Under the hood, every single-item method funnels through `batch`/`abatch`. Submit mixed `GetOp`, `PutOp`, `SearchOp`, `ListNamespacesOp` for a single round-trip.
@@ -106,18 +115,109 @@ store.put(
 - `index=["metadata.title", "chapters[*].content"]` — path selectors. Supports:
   - dot-separated nesting (`"a.b.c"`),
   - `[*]` for every array element (each embedded separately),
-  - `[0]` for a specific index.
-- `ttl` — minutes until expiry. Raises `NotImplementedError` if you pass a value and the backend has `supports_ttl = False`.
+  - `[0]` / `[-1]` for a specific index or the last element.
+- `ttl` — **minutes** until expiry (not seconds). Raises `NotImplementedError` if you pass a value and the backend has `supports_ttl = False`.
+
+```python
+# Store a regular item (uses store's default index config)
+store.put(("docs",), "d1", {"text": "Python tutorial", "lang": "python"})
+
+# TTL: item expires after 30 minutes of inactivity
+store.put(("cache",), "result-xyz", {"data": "..."}, ttl=30)
+
+# Skip embedding for this item even if the store has vector search
+store.put(("docs",), "draft", {"text": "WIP..."}, index=False)
+
+# Embed only specific fields, overriding the store's default fields
+store.put(("docs",), "article", {"title": "Guide", "body": "...", "meta": "..."}, index=["title", "body"])
+
+# Async variant — identical signature
+await store.aput(("docs",), "d1", {"text": "Python tutorial"})
+await store.aput(("cache",), "result-xyz", {"data": "..."}, ttl=30)
+await store.aput(("docs",), "draft", {"text": "WIP..."}, index=False)
+```
+
+## `get()` — details
+
+```python
+store.get(
+    namespace: tuple[str, ...],
+    key: str,
+    *,
+    refresh_ttl: bool | None = None,
+) -> Item | None
+```
+
+- Returns `None` if the key does not exist.
+- `refresh_ttl=True` resets the TTL countdown for the item on each access — useful for "last accessed" cache semantics.
+- `refresh_ttl=None` (default) falls back to the store's `TTLConfig.refresh_on_read` setting (default `True`).
+
+```python
+item = store.get(("users", "alice"), "prefs")
+if item:
+    print(item.value)        # {'theme': 'dark'}
+    print(item.created_at)   # datetime
+    print(item.updated_at)   # datetime
+
+# Explicitly refresh TTL on this read
+item = store.get(("cache",), "result-xyz", refresh_ttl=True)
+
+# Async variant
+item = await store.aget(("users", "alice"), "prefs")
+item = await store.aget(("cache",), "result-xyz", refresh_ttl=True)
+```
 
 ## `search()` — filter + semantic
 
-Filtering on `value` keys is exact-match across every backend:
+### Basic filtering
+
+`filter=` accepts exact-match and comparison-operator expressions against top-level and nested value keys:
 
 ```python
-store.search(("docs",), filter={"type": "article", "status": "published"}, limit=20)
+# Exact match (shorthand)
+results = store.search(("docs",), filter={"status": "active"})
+
+# Exact match (explicit $eq — same as above)
+results = store.search(("docs",), filter={"status": {"$eq": "active"}})
+
+# Comparison operators
+results = store.search(("docs",), filter={"score": {"$gt": 4.99}})
+results = store.search(("docs",), filter={"score": {"$gte": 3.0}})
+results = store.search(("docs",), filter={"age": {"$lt": 30}})
+results = store.search(("docs",), filter={"age": {"$lte": 30}})
+results = store.search(("docs",), filter={"status": {"$ne": "deleted"}})
+
+# Multiple conditions (AND — all must match)
+results = store.search(
+    ("docs",),
+    filter={"score": {"$gte": 3.0}, "color": "red"},
+    limit=20,
+)
+
+# Nested dict filter
+results = store.search(
+    ("orders",),
+    filter={"meta": {"priority": "high"}},
+)
 ```
 
-Semantic search requires `IndexConfig`:
+### Filter operator reference
+
+| Operator | Meaning | Example |
+|---|---|---|
+| _(plain value)_ | Equal (shorthand for `$eq`) | `{"status": "active"}` |
+| `$eq` | Equal | `{"status": {"$eq": "active"}}` |
+| `$ne` | Not equal | `{"status": {"$ne": "deleted"}}` |
+| `$gt` | Greater than | `{"score": {"$gt": 4.0}}` |
+| `$gte` | Greater than or equal | `{"score": {"$gte": 4.0}}` |
+| `$lt` | Less than | `{"age": {"$lt": 30}}` |
+| `$lte` | Less than or equal | `{"age": {"$lte": 30}}` |
+
+Numeric comparisons use `float()` coercion internally, matching PostgreSQL JSONB behavior. Nested dict filters require the stored value to also be a dict with matching keys. Filtering is applied before semantic ranking, so `filter=` does not require an index.
+
+### Semantic (vector) search
+
+Requires the store to be created with `index=IndexConfig(...)`:
 
 ```python
 from langchain.embeddings import init_embeddings
@@ -140,10 +240,71 @@ results = store.search(
     limit=5,
 )
 for r in results:
-    print(r.score, r.value["text"])
+    print(r.score, r.value["text"])  # r.score is float | None
 ```
 
 If the store was not created with `index=`, the `query=` argument is silently ignored and `search` returns plain filtered results.
+
+```python
+# Async variant — identical parameters
+results = await store.asearch(
+    ("docs",),
+    query="memory-safe low-level languages",
+    filter={"type": "lang"},
+    limit=5,
+)
+```
+
+## `list_namespaces()`
+
+Explore the namespace tree:
+
+```python
+# All namespaces under "users", truncated to depth 2
+namespaces = store.list_namespaces(prefix=("users",), max_depth=2)
+# [('users', 'alice'), ('users', 'bob'), ...]
+
+# Namespaces ending with "prefs" anywhere in the tree
+namespaces = store.list_namespaces(suffix=("prefs",))
+
+# Wildcard: any namespace whose second segment is "config"
+namespaces = store.list_namespaces(prefix=("users", "*", "config"))
+
+# Async variant
+namespaces = await store.alist_namespaces(prefix=("users",), max_depth=2)
+```
+
+`prefix` / `suffix` accept `NamespacePath` tuples; use `"*"` as a wildcard segment. `max_depth` caps the tuple length returned. Given existing namespaces `("a","b","c")`, `("a","b","d","e")`, `("a","b","f")`:
+
+```python
+store.list_namespaces(prefix=("a", "b"), max_depth=3)
+# [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+```
+
+## `batch()` — atomic multi-op
+
+Submit any mix of `GetOp`, `PutOp`, `SearchOp`, `ListNamespacesOp` in a single call. Results are returned in the same order as the operations. `PutOp` always returns `None`.
+
+```python
+from langgraph.store.base import GetOp, PutOp, SearchOp, ListNamespacesOp
+
+results = store.batch([
+    GetOp(namespace=("users", "123"), key="prefs"),
+    PutOp(namespace=("users", "123"), key="cache", value={"data": "..."}),
+    SearchOp(namespace_prefix=("users",), filter={"active": True}, limit=5),
+    ListNamespacesOp(match_conditions=None, max_depth=2, limit=10, offset=0),
+])
+# results[0] -> Item | None
+# results[1] -> None  (PutOp)
+# results[2] -> list[SearchItem]
+# results[3] -> list[tuple[str, ...]]
+
+# Async variant
+results = await store.abatch([
+    PutOp(("cache",), "key", {"data": "..."}),
+    GetOp(("cache",), "key"),
+])
+```
 
 ## `IndexConfig`
 
@@ -163,6 +324,18 @@ class IndexConfig(TypedDict, total=False):
 - an async callable with the same shape,
 - a provider string like `"openai:text-embedding-3-small"` (LangChain resolves it).
 
+Common model dimensions (from source docstring):
+
+| Model | Dims |
+|---|---|
+| `openai:text-embedding-3-large` | 3072 |
+| `openai:text-embedding-3-small` | 1536 |
+| `openai:text-embedding-ada-002` | 1536 |
+| `cohere:embed-english-v3.0` | 1024 |
+| `cohere:embed-english-light-v3.0` | 384 |
+| `cohere:embed-multilingual-v3.0` | 1024 |
+| `cohere:embed-multilingual-light-v3.0` | 384 |
+
 ## `TTLConfig`
 
 ```python
@@ -172,18 +345,11 @@ class TTLConfig(TypedDict, total=False):
     sweep_interval_minutes: int | None
 ```
 
-Only set `ttl=...` on `put()` if the backend supports TTL. `InMemoryStore` supports TTL by accepting the kwarg but does not run a background sweeper — items are evicted lazily.
+- `refresh_on_read` — if `True`, every `get()` or `search()` that returns an item resets its TTL. Can be overridden per-call with `refresh_ttl=` on `get`/`search`.
+- `default_ttl` — applied to all `put()` calls that do not specify their own `ttl=`.
+- `sweep_interval_minutes` — how often the backend actively deletes expired items. `InMemoryStore` evicts lazily (no background sweeper).
 
-## `list_namespaces`
-
-Explore the tree:
-
-```python
-store.list_namespaces(prefix=("users",), max_depth=2)
-# [('users', 'alice'), ('users', 'bob'), ...]
-```
-
-`prefix` / `suffix` accept `NamespacePath` tuples; use `"*"` as a wildcard segment. `max_depth` caps the tuple length returned.
+Only set `ttl=...` on `put()` if the backend supports TTL. `InMemoryStore` accepts the kwarg (`supports_ttl = True`) but does not run a background sweeper.
 
 ## `InMemoryStore`
 
@@ -194,8 +360,73 @@ store = InMemoryStore(*, index: IndexConfig | None = None)
 ```
 
 - Pure-Python, process-local. Data is lost on exit.
-- Vector search uses numpy if installed, falls back to a pure-Python dot product otherwise. For any non-trivial corpus, `pip install numpy`.
-- Exposes sync and async methods (batched through `AsyncBatchedBaseStore` under the hood for async).
+- Vector search uses cosine similarity with numpy if installed, falls back to a pure-Python dot product otherwise. `pip install numpy` for any non-trivial corpus.
+- Exposes both sync and async methods; `abatch` runs embedding calls via `asyncio.gather` and ThreadPoolExecutor for sync embedding models.
+- `supports_ttl = True` — accepts `ttl=` on `put()`, but evicts lazily (no sweep thread).
+
+### With LangChain embeddings
+
+```python
+from langchain.embeddings import init_embeddings
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore(
+    index={
+        "dims": 1536,
+        "embed": init_embeddings("openai:text-embedding-3-small"),
+        "fields": ["text"],  # which fields to embed
+    }
+)
+
+store.put(("docs",), "doc1", {"text": "Python tutorial"})
+store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+
+results = store.search(("docs",), query="python programming", limit=5)
+for hit in results:
+    print(hit.key, hit.score)  # SearchItem has .score: float | None
+```
+
+### With a custom embed function
+
+```python
+from openai import OpenAI
+from langgraph.store.memory import InMemoryStore
+
+client = OpenAI()
+
+def embed_texts(texts: list[str]) -> list[list[float]]:
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=texts,
+    )
+    return [e.embedding for e in response.data]
+
+store = InMemoryStore(index={"dims": 1536, "embed": embed_texts})
+store.put(("docs",), "doc1", {"text": "Python tutorial"})
+results = store.search(("docs",), query="python programming", limit=5)
+```
+
+### With an async embed function
+
+```python
+from openai import AsyncOpenAI
+from langgraph.store.memory import InMemoryStore
+
+client = AsyncOpenAI()
+
+async def aembed_texts(texts: list[str]) -> list[list[float]]:
+    response = await client.embeddings.create(
+        model="text-embedding-3-small",
+        input=texts,
+    )
+    return [e.embedding for e in response.data]
+
+store = InMemoryStore(index={"dims": 1536, "embed": aembed_texts})
+
+# Use async methods so the embed function is awaited properly
+await store.aput(("docs",), "doc1", {"text": "Python tutorial"})
+results = await store.asearch(("docs",), query="python programming")
+```
 
 ## `PostgresStore` / `AsyncPostgresStore`
 
@@ -221,26 +452,49 @@ The `Runtime.store` attribute exposes whatever you passed to `compile(store=...)
 ```python
 from langgraph.runtime import Runtime
 
-def recall(state: State, runtime: Runtime) -> dict:
+def recall_node(state: State, runtime: Runtime) -> dict:
     if runtime.store is None:
         return {"memories": []}
     hits = runtime.store.search(
         ("memories", state["user_id"]),
-        query=state["query"],
+        query=state["question"],
         limit=3,
     )
-    return {"memories": [h.value for h in hits]}
+    context = "\n".join(item.value["text"] for item in hits)
+    return {"context": context}
+```
+
+For async nodes use `asearch` / `aget`:
+
+```python
+async def recall_node_async(state: State, runtime: Runtime) -> dict:
+    hits = await runtime.store.asearch(
+        ("memories", state["user_id"]),
+        query=state["question"],
+        limit=3,
+    )
+    return {"context": "\n".join(h.value["text"] for h in hits)}
 ```
 
 ## Using a Store from a tool (`InjectedStore`)
 
-Tools get the store injected automatically when wrapped by `ToolNode` (from `langgraph.prebuilt`):
+Tools get the store injected automatically when wrapped by `ToolNode` (from `langgraph.prebuilt`). The `store` argument is stripped from the schema the model sees, so the LLM cannot pass it.
 
 ```python
+import uuid
 from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedStore, ToolNode
 from langgraph.store.base import BaseStore
+
+@tool
+def remember_fact(
+    fact: str,
+    store: Annotated[BaseStore, InjectedStore()],
+) -> str:
+    """Store a fact in long-term memory."""
+    store.put(("facts",), str(uuid.uuid4()), {"text": fact})
+    return f"Remembered: {fact}"
 
 @tool
 def save_fact(
@@ -248,13 +502,14 @@ def save_fact(
     fact: str,
     store: Annotated[BaseStore, InjectedStore()],
 ) -> str:
+    """Save a fact scoped to a user."""
     store.put(("facts", user_id), fact, {"text": fact})
     return f"Saved for {user_id}"
 
-tool_node = ToolNode([save_fact])
+tool_node = ToolNode([remember_fact, save_fact])
 ```
 
-The `store` argument is stripped from the schema the model sees, so the LLM cannot pass it. `InjectedState` works the same way for whole-state injection; `ToolRuntime` bundles `state + context + config + store + stream_writer + tool_call_id` into one object.
+`InjectedState` works the same way for whole-state injection; `ToolRuntime` bundles `state + context + config + store + stream_writer + tool_call_id` into one object.
 
 ## Patterns
 
@@ -306,7 +561,7 @@ results = store.batch([
         offset=0,
     ),
     # List all namespaces under "mem"
-    ListNamespacesOp(prefix=("mem",), max_depth=2, limit=10, offset=0),
+    ListNamespacesOp(match_conditions=None, max_depth=2, limit=10, offset=0),
 ])
 # results is a list aligned with the ops:
 #   results[0] = None   (PutOp returns None)
@@ -355,8 +610,15 @@ def recall(
 ### 5. TTL-bounded cache
 
 ```python
-store.put(("cache", "bing"), query, {"json": result}, ttl=30)   # minutes
+# Store result with a 30-minute TTL
+store.put(("cache", "bing"), query, {"json": result}, ttl=30)
+
+# Retrieve and reset the TTL countdown on each read
 hit = store.get(("cache", "bing"), query, refresh_ttl=True)
+
+# Async equivalents
+await store.aput(("cache", "bing"), query, {"json": result}, ttl=30)
+hit = await store.aget(("cache", "bing"), query, refresh_ttl=True)
 ```
 
 ### 6. Filter operators — comparison-based search
@@ -374,18 +636,18 @@ store.put(("products",), "p2", {"name": "Widget B", "price": 24.99, "stock": 0})
 store.put(("products",), "p3", {"name": "Gadget",   "price": 4.99,  "stock": 100})
 store.put(("products",), "p4", {"name": "Premium",  "price": 99.99, "stock": 5})
 
-# Exact match
+# Items where stock > 0
 in_stock = store.search(("products",), filter={"stock": {"$gt": 0}})
 print([i.value["name"] for i in in_stock])
 # ['Widget A', 'Gadget', 'Premium']
 
-# Price range: between 5 and 30 inclusive
+# Price between 5 and 30 inclusive AND in stock
 affordable = store.search(
     ("products",),
     filter={"price": {"$gte": 5.0}, "stock": {"$gt": 0}},
 )
 print([i.value["name"] for i in affordable])
-# ['Widget A']   (Widget B is out of stock; Gadget < $5; Premium > $30)
+# ['Widget A']
 
 # Not equal
 not_widget = store.search(("products",), filter={"name": {"$ne": "Widget A"}})
@@ -538,20 +800,35 @@ store.put(("docs",), "d1", {
 # Each chapter string is embedded separately and matched individually.
 ```
 
+Supported path selector syntax (from `PutOp.index` source):
+
+| Syntax | Meaning |
+|---|---|
+| `"field"` | Top-level field |
+| `"parent.child.grandchild"` | Nested field via dot notation |
+| `"array[0]"` | First element of an array |
+| `"array[-1]"` | Last element of an array |
+| `"array[*]"` | Each element separately (one vector per element) |
+| `"a.b[*].c.d"` | Complex nested path with array expansion |
+| `"$"` | Entire value object (default when `fields` is not set) |
+
 ## Gotchas
 
-- **Namespace rules.** Each segment must be a non-empty string and must not contain `"."`. `("", "x")` raises `InvalidNamespaceError`.
+- **Namespace rules.** Each segment must be a non-empty string and must not contain `"."`. `("", "x")` raises `InvalidNamespaceError`. The root segment `"langgraph"` is reserved and also raises.
 - **`query=` is ignored without an index.** You will get filter-only results without any warning — always assert `store` was built with `index=IndexConfig(...)` when you rely on semantic search.
 - **`fields=["$"]`** means the entire value is stringified and embedded. Pick explicit fields for better recall and smaller embedding costs.
 - **`InMemoryStore` is not Platform-safe.** LangGraph Platform provides a managed store — don't pass one when deploying there.
-- **TTL is in minutes, not seconds.** A `ttl=30` means half an hour, not 30 seconds.
+- **TTL is in minutes, not seconds.** `ttl=30` means 30 minutes, not 30 seconds.
 - **`store.search` returns `list[SearchItem]`, not an iterator.** Always bounded by `limit` (default 10). Paginate with `offset`.
 - **`delete` uses `PutOp(...value=None)` internally.** If you subclass `BaseStore`, `PutOp.value is None` is the delete signal.
+- **`supports_ttl` check.** Passing `ttl=` to `put()` on a store with `supports_ttl = False` raises `NotImplementedError` at runtime, not at construction time.
+- **`InMemoryStore` TTL is lazy-eviction only.** There is no background sweep thread; items are removed when next accessed after expiry.
 
 ## Breaking changes
 
 | Version | Change |
 |---|---|
+| 1.2.1 | `GetOp.refresh_ttl` and `SearchOp.refresh_ttl` fields added; `TTLConfig.sweep_interval_minutes` added. |
 | 1.1 | Semantic-search result `SearchItem.score` is consistently `float | None` (previously backend-dependent). |
 | 1.0 | `Store` moved out of `experimental`; `InjectedStore` is the stable way to pull the store into tools. |
 | 0.6 | `runtime.store` replaces `config["configurable"]["store"]` for node injection. |
