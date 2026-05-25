@@ -288,6 +288,96 @@ builder.set_conditional_entry_point(
 )
 ```
 
+## `set_node_defaults`
+
+```python
+builder.set_node_defaults(
+    *,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
+    error_handler: StateNode | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
+) -> Self
+```
+
+Set default policies that apply to **every node** in the graph. Per-node values on `add_node(...)` always override these defaults. Defaults are resolved at compile time. They are **not** inherited by subgraphs.
+
+| Parameter | Applies to | Notes |
+|---|---|---|
+| `retry_policy` | All nodes (including error-handler nodes) | Same as `add_node(..., retry_policy=...)` |
+| `cache_policy` | Regular nodes only | Caching error-handler results is unsafe — skipped automatically |
+| `error_handler` | Regular nodes (not error-handler nodes) | Default error handler when a regular node raises and no per-node handler is set |
+| `timeout` | All nodes (including error-handler nodes) | Accepts `float` (seconds), `timedelta`, or `TimeoutPolicy` |
+
+```python
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import RetryPolicy, TimeoutPolicy
+from langgraph.checkpoint.memory import InMemorySaver
+from typing_extensions import TypedDict
+
+
+class State(TypedDict):
+    count: int
+    last_error: str
+
+
+# Graph-wide fallback handler for unhandled exceptions
+def global_error_handler(state: State, error: Exception) -> dict:
+    return {"last_error": f"{type(error).__name__}: {error}"}
+
+
+def flaky_node(state: State) -> dict:
+    if state["count"] % 3 == 0:
+        raise ConnectionError("simulated transient failure")
+    return {"count": state["count"] + 1}
+
+
+def finalize(state: State) -> dict:
+    return {}
+
+
+builder = (
+    StateGraph(State)
+    # Apply defaults to every node: 3 retries on any exception, 10 s timeout,
+    # and a global error handler for unhandled failures.
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=3),
+        timeout=10.0,
+        error_handler=global_error_handler,
+    )
+    .add_node("flaky", flaky_node)
+    .add_node("finalize", finalize,
+              retry_policy=RetryPolicy(max_attempts=1))  # overrides the graph default
+    .add_edge(START, "flaky")
+    .add_edge("flaky", "finalize")
+    .add_edge("finalize", END)
+)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+result = graph.invoke({"count": 0, "last_error": ""}, {"configurable": {"thread_id": "t1"}})
+print(result)
+```
+
+Per-node `retry_policy=RetryPolicy(max_attempts=1)` on `"finalize"` **overrides** the graph-level `max_attempts=3`. The `error_handler` and `timeout` from `set_node_defaults` still apply to `"finalize"` because no per-node override was given for those.
+
+`set_node_defaults` returns `Self` for method chaining:
+
+```python
+builder = (
+    StateGraph(State)
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=3, retry_on=ConnectionError),
+        error_handler=my_fallback,
+    )
+    .add_node("a", node_a)
+    .add_node("b", node_b, retry_policy=RetryPolicy(max_attempts=1))  # overrides
+    .add_edge(START, "a")
+    .add_edge("a", "b")
+    .add_edge("b", END)
+)
+graph = builder.compile()
+```
+
 ## `compile(...)`
 
 ```python
