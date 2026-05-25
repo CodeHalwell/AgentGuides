@@ -456,6 +456,7 @@ async def per_tenant(ctx: RunContext[TenantDeps]) -> AbstractToolset[TenantDeps]
 
 ```python
 import asyncio
+import dataclasses
 from dataclasses import dataclass
 from pydantic_ai import Agent, FunctionToolset, PreparedToolset, RunContext
 from pydantic_ai.tools import ToolDefinition
@@ -492,11 +493,7 @@ def get_order(order_id: str) -> dict:
 def localise_descriptions(ctx: RunContext[UserDeps], defs: list[ToolDefinition]) -> list[ToolDefinition]:
     locale_map = DESCRIPTIONS.get(ctx.deps.locale, DESCRIPTIONS['en'])
     return [
-        ToolDefinition(
-            name=d.name,
-            description=locale_map.get(d.name, d.description),
-            parameters_json_schema=d.parameters_json_schema,
-        )
+        dataclasses.replace(d, description=locale_map.get(d.name, d.description))
         for d in defs
     ]
 
@@ -619,7 +616,7 @@ asyncio.run(main())
 Expose lightweight utility tools immediately; defer heavy/specialised ones:
 
 ```python
-from pydantic_ai import Agent, FunctionToolset, DeferredLoadingToolset, CombinedToolset
+from pydantic_ai import Agent, FunctionToolset, DeferredLoadingToolset
 
 # Always-visible: fast, cheap, universally needed
 quick_tools = FunctionToolset[None]()

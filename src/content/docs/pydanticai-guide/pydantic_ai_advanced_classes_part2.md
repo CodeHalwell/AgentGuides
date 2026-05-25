@@ -231,6 +231,7 @@ Raise `SkipModelRequest(response)` inside `before_model_request` or `wrap_model_
 ```python
 import asyncio
 import hashlib
+import json
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import SkipModelRequest
@@ -240,7 +241,8 @@ from pydantic_ai.messages import ModelResponse, TextPart, RequestUsage
 _cache: dict[str, ModelResponse] = {}
 
 def _cache_key(messages) -> str:
-    content = str([str(m) for m in messages])
+    # Use model_dump for stable, field-aware serialisation instead of str()
+    content = json.dumps([m.model_dump(mode='json') for m in messages], sort_keys=True)
     return hashlib.sha256(content.encode()).hexdigest()
 
 hooks = Hooks()
@@ -778,14 +780,15 @@ async def maybe_handle(ctx, requests: DeferredToolRequests) -> DeferredToolResul
 
 Source: `pydantic_ai/toolsets/prepared.py`
 
-`PreparedToolset` wraps any toolset and runs a `(RunContext, list[ToolDefinition]) -> list[ToolDefinition]` function before each model request. Use it to rename, redescribe, add schema annotations, or hide individual tools based on runtime state — without reimplementing the underlying tool functions.
+`PreparedToolset` wraps any toolset and runs a `(RunContext, list[ToolDefinition]) -> list[ToolDefinition]` function before each model request. Use it to redescribe, add schema annotations, or hide individual tools based on runtime state — without reimplementing the underlying tool functions.
 
-**Important constraint**: the prepare function can modify or remove tools but cannot add new ones or change tool names to names that weren't in the original set. Use `FunctionToolset.add_function()` or `RenamedToolset` for that.
+**Important constraint**: the prepare function can modify (descriptions, schema annotations, `strict` mode) or remove tools, but **cannot rename, add, or substitute tools**. Use `RenamedToolset` for renaming and `FunctionToolset.add_function()` for additions.
 
 ### Locale-aware tool descriptions
 
 ```python
 import asyncio
+import dataclasses
 from dataclasses import dataclass
 from pydantic_ai import Agent, FunctionToolset, PreparedToolset, RunContext
 from pydantic_ai.tools import ToolDefinition
@@ -815,11 +818,7 @@ def get_record(record_id: str) -> dict:
 async def localise_tools(ctx: RunContext[UserDeps], defs: list[ToolDefinition]) -> list[ToolDefinition]:
     locale_map = DESCRIPTIONS.get(ctx.deps.locale, DESCRIPTIONS['en'])
     return [
-        ToolDefinition(
-            name=d.name,
-            description=locale_map.get(d.name, d.description),
-            parameters_json_schema=d.parameters_json_schema,
-        )
+        dataclasses.replace(d, description=locale_map.get(d.name, d.description))
         for d in defs
     ]
 
@@ -923,7 +922,7 @@ asyncio.run(main())
 ### Adding schema annotations for better structured output
 
 ```python
-from dataclasses import replace
+import dataclasses
 from pydantic_ai import Agent, FunctionToolset, PreparedToolset, RunContext
 from pydantic_ai.tools import ToolDefinition
 
@@ -941,11 +940,7 @@ def add_return_hints(_ctx: RunContext[None], defs: list[ToolDefinition]) -> list
         enriched_desc = d.description or ''
         if d.name == 'lookup_customer':
             enriched_desc += ' Returns: {id: int, name: str, tier: str}.'
-        annotated.append(ToolDefinition(
-            name=d.name,
-            description=enriched_desc,
-            parameters_json_schema=d.parameters_json_schema,
-        ))
+        annotated.append(dataclasses.replace(d, description=enriched_desc))
     return annotated
 
 agent = Agent('openai:gpt-4o', toolsets=[PreparedToolset(tools, prepare_func=add_return_hints)])
@@ -1421,14 +1416,15 @@ The parser can be `async`:
 
 ```python
 import asyncio
+import re
 import httpx
 from pydantic_ai import Agent, TextOutput
 
 async def enrich_with_lookup(text: str) -> dict:
     """Call an external API to enrich the model's text output."""
     async with httpx.AsyncClient() as client:
-        # Example: look up the first URL mentioned in the text
-        urls = [w for w in text.split() if w.startswith('http')]
+        # Use regex to reliably extract URLs regardless of surrounding punctuation
+        urls = re.findall(r'https?://\S+', text)
         if urls:
             try:
                 resp = await client.get(urls[0], timeout=5)

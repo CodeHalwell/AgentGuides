@@ -472,7 +472,11 @@ def parse_price(ctx: RunContext[ParseDeps], text: str) -> float:
     pattern = rf'\b\d{{1,3}}(?:[,\s]\d{{3}})*(?:{re.escape(sep)}\d{{1,2}})?\b'
     match = re.search(pattern, text)
     if match:
-        raw = match.group(0).replace(',', '').replace(' ', '').replace(sep, '.')
+        raw = match.group(0).replace(' ', '')
+        # Only strip commas as thousands separators when they are NOT the decimal separator
+        if sep != ',':
+            raw = raw.replace(',', '')
+        raw = raw.replace(sep, '.')
         return float(raw)
     return 0.0
 

@@ -432,6 +432,7 @@ Three exception classes let hook functions completely bypass the normal executio
 ```python
 import asyncio
 import hashlib
+import json
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import SkipModelRequest
@@ -441,7 +442,9 @@ import datetime
 _cache: dict[str, ModelResponse] = {}
 
 def _cache_key(messages) -> str:
-    return hashlib.sha256(str(messages).encode()).hexdigest()
+    # Use model_dump for stable, field-aware serialisation instead of str()
+    content = json.dumps([m.model_dump(mode='json') for m in messages], sort_keys=True)
+    return hashlib.sha256(content.encode()).hexdigest()
 
 def _make_response(text: str) -> ModelResponse:
     return ModelResponse(
