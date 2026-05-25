@@ -37,8 +37,8 @@ RemoteA2aAgent(
     description: str = "",
     httpx_client: Optional[httpx.AsyncClient] = None,   # deprecated; use a2a_client_factory
     timeout: float = 600.0,
-    genai_part_converter: ... = convert_genai_part_to_a2a_part,
-    a2a_part_converter: ... = convert_a2a_part_to_genai_part,
+    genai_part_converter: Callable = convert_genai_part_to_a2a_part,
+    a2a_part_converter: Callable = convert_a2a_part_to_genai_part,
     a2a_client_factory: Optional[A2AClientFactory] = None,
     a2a_request_meta_provider: Optional[Callable[[InvocationContext, A2AMessage], dict]] = None,
     full_history_when_stateless: bool = False,
@@ -240,17 +240,21 @@ coordinator = LlmAgent(
 
 Useful when: a team already has a LangGraph workflow they want to expose inside a larger ADK system, or for gradual migration from LangGraph to ADK.
 
-> **Install prerequisite:** `pip install langchain-core langgraph`
+> **Install prerequisite:** `pip install langchain-core langgraph langchain-google-genai`
+> (`langchain-google-genai` is needed for `ChatGoogleGenerativeAI` used in the examples below.)
 
 ### Class definition (verified `agents/langgraph_agent.py`)
 
 ```python
+from pydantic import ConfigDict
+
 class LangGraphAgent(BaseAgent):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # CompiledGraph is not a Pydantic model — arbitrary_types_allowed is required.
+
     graph: CompiledGraph
     instruction: str = ""
 ```
-
-`model_config = ConfigDict(arbitrary_types_allowed=True)` — `CompiledGraph` is not a Pydantic model so arbitrary types must be allowed.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
@@ -434,7 +438,7 @@ from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 
 cred = AuthCredential(
     auth_type=AuthCredentialTypes.API_KEY,
-    api_key="sk-1234567890abcdef",
+    api_key="YOUR_API_KEY_HERE",
 )
 ```
 
@@ -496,7 +500,7 @@ cred = AuthCredential(
     auth_type=AuthCredentialTypes.OAUTH2,
     oauth2=OAuth2Auth(
         client_id="1234.apps.googleusercontent.com",
-        client_secret="GOCSPX-secret",
+        client_secret="YOUR_CLIENT_SECRET",
         redirect_uri="http://localhost:8080/callback",
         scopes=["https://www.googleapis.com/auth/calendar.readonly"],
     ),
@@ -653,10 +657,12 @@ gcs = GcsArtifactService("my-adk-artifacts", credentials=sa_creds)
 
 The storage layout (verified `gcs_artifact_service.py:_get_blob_name`):
 
-| Scope | Blob path |
-|---|---|
-| Session-scoped | `{app_name}/{user_id}/{session_id}/{filename}/{version}` |
-| User-scoped (`filename="user:foo"`) | `{app_name}/{user_id}/user/{filename}/{version}` |
+| Scope | How to trigger | Blob path |
+|---|---|---|
+| Session-scoped | `session_id=<id>`, any filename without `user:` prefix | `{app_name}/{user_id}/{session_id}/{filename}/{version}` |
+| User-scoped | `filename="user:foo"` prefix — `session_id` is ignored | `{app_name}/{user_id}/user/{filename}/{version}` |
+
+> **GCS note:** Unlike some abstract ADK docs that say `session_id=None` = user-scoped, `GcsArtifactService` raises `InputValidationError` if `session_id is None` and the filename does not have the `"user:"` prefix (`gcs_artifact_service.py:_get_blob_prefix`). Always use the `"user:"` filename prefix for cross-session user storage.
 
 Version numbers are 0-based integers. The first save returns `0`; each subsequent save of the same filename increments by 1.
 
@@ -1021,13 +1027,14 @@ acknowledge_messages(
 ### Example 3 — custom credentials (non-ADC)
 
 ```python
+import pathlib
 from google.adk.tools.pubsub.pubsub_toolset import PubSubToolset
 from google.adk.tools.pubsub.pubsub_credentials import PubSubCredentialsConfig
 
 # PubSubCredentialsConfig is a BaseGoogleCredentialsConfig subclass
 # Default scope: "https://www.googleapis.com/auth/pubsub"
 cred_config = PubSubCredentialsConfig(
-    service_account_json=open("sa.json").read(),
+    service_account_json=pathlib.Path("sa.json").read_text(),
     # scopes default to pubsub scope — override only if needed
 )
 
@@ -1134,12 +1141,13 @@ toolset = SpannerToolset(
 ### Example 3 — custom credentials + database role
 
 ```python
+import pathlib
 from google.adk.tools.spanner.spanner_toolset import SpannerToolset
 from google.adk.tools.spanner.settings import SpannerToolSettings, QueryResultMode
 from google.adk.tools.spanner.spanner_credentials import SpannerCredentialsConfig
 
 cred_config = SpannerCredentialsConfig(
-    service_account_json=open("sa.json").read(),
+    service_account_json=pathlib.Path("sa.json").read_text(),
     # Default scopes: spanner.admin + spanner.data
 )
 

@@ -430,7 +430,7 @@ Use `PlanReActPlanner` when you need structured planning on a non-thinking model
 
 ## LangGraphAgent
 
-`LangGraphAgent` wraps a compiled LangGraph `CompiledGraph` as a `BaseAgent`. Install prerequisite: `pip install langchain-core langgraph`.
+`LangGraphAgent` wraps a compiled LangGraph `CompiledGraph` as a `BaseAgent`. Install prerequisite: `pip install langchain-core langgraph langchain-google-genai`.
 
 ```python
 from langgraph.prebuilt import create_react_agent

@@ -170,10 +170,12 @@ gcs_sa = GcsArtifactService("my-adk-artifacts", credentials=sa_creds)
 
 **GCS blob path structure** (verified `gcs_artifact_service.py:_get_blob_name`):
 
-| Scope | Blob path |
-|---|---|
-| Session-scoped | `{app_name}/{user_id}/{session_id}/{filename}/{version}` |
-| User-scoped (`filename="user:foo"`) | `{app_name}/{user_id}/user/{filename}/{version}` |
+| Scope | How to trigger | Blob path |
+|---|---|---|
+| Session-scoped | `session_id=<id>`, filename without `user:` prefix | `{app_name}/{user_id}/{session_id}/{filename}/{version}` |
+| User-scoped | `filename="user:foo"` prefix — `session_id` is ignored | `{app_name}/{user_id}/user/{filename}/{version}` |
+
+> **GCS note:** `GcsArtifactService` raises `InputValidationError` when `session_id=None` and the filename does not start with `"user:"`. Use the `"user:"` filename prefix (not `session_id=None` alone) for cross-session user storage.
 
 Version numbers start at **0** and increment by 1 on each save.
 

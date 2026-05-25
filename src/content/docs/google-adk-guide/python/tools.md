@@ -895,7 +895,7 @@ Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `
 
 ## PubSubToolset (experimental)
 
-`PubSubToolset` exposes three Google Cloud Pub/Sub operations as ADK tools: `publish_message`, `pull_messages`, and `acknowledge_messages`. Requires `pip install google-cloud-pubsub`. Install prerequisite: `pip install google-cloud-pubsub`.
+`PubSubToolset` exposes three Google Cloud Pub/Sub operations as ADK tools: `publish_message`, `pull_messages`, and `acknowledge_messages`. Install prerequisite: `pip install google-cloud-pubsub`.
 
 ```python
 from google.adk.tools.pubsub.pubsub_toolset import PubSubToolset
