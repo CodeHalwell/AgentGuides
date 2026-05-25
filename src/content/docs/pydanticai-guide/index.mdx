@@ -52,6 +52,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="17 · Evals" href="./pydantic_ai_evals_2025/" description="LLM-as-judge, regression testing · 20 min" />
   <LinkCard title="18 · Production" href="./pydantic_ai_production_guide/" description="Deployment, observability, cost · 30 min" />
   <LinkCard title="19 · Class deep dives" href="./pydantic_ai_class_deep_dives/" description="AgentRun.iter, AgentRunResult, ConcurrencyLimiter, Direct API, Tool advanced params, ModelSettings, Hooks, Thinking, WebSearch · 35 min" />
+  <LinkCard title="20 · Advanced class deep dives (Part 2)" href="./pydantic_ai_advanced_classes_part2/" description="AgentSpec, SkipModelRequest/SkipToolExecution/SkipToolValidation, ProcessEventStream, HandleDeferredToolCalls, PreparedToolset, DeferredLoadingToolset, InstructionPart, IncludeToolReturnSchemas · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -78,6 +79,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Embeddings" href="./pydantic_ai_embeddings/" />
   <LinkCard title="Streaming server" href="./pydantic_ai_streaming_server_fastapi/" />
   <LinkCard title="Class deep dives" href="./pydantic_ai_class_deep_dives/" description="AgentRun, AgentRunResult, ConcurrencyLimiter, Direct API, Tool advanced, ModelSettings, Hooks, Thinking, WebSearch" />
+  <LinkCard title="Advanced class deep dives (Part 2)" href="./pydantic_ai_advanced_classes_part2/" description="AgentSpec, SkipModelRequest, ProcessEventStream, HandleDeferredToolCalls, PreparedToolset, DeferredLoadingToolset, InstructionPart, IncludeToolReturnSchemas" />
 </CardGrid>
 
 ## Reference
@@ -92,6 +94,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Toolsets" href="./pydantic_ai_toolsets/" description="FunctionToolset, Prefixed, Filtered, Approval, Deferred, External." />
   <LinkCard title="Built-in tools" href="./pydantic_ai_builtin_tools/" description="WebSearch, WebFetch, CodeExecution, ImageGeneration, FileSearch, MCPServer, XSearch." />
   <LinkCard title="Class deep dives" href="./pydantic_ai_class_deep_dives/" description="AgentRun, AgentRunResult, ConcurrencyLimiter, Direct API, Tool advanced params, ModelSettings full ref, Hooks, Thinking, WebSearch." />
+  <LinkCard title="Advanced class deep dives (Part 2)" href="./pydantic_ai_advanced_classes_part2/" description="AgentSpec, SkipModelRequest/SkipToolExecution/SkipToolValidation, ProcessEventStream, HandleDeferredToolCalls, PreparedToolset, DeferredLoadingToolset, InstructionPart, IncludeToolReturnSchemas." />
   <LinkCard title="Advanced patterns" href="./pydantic_ai_advanced_patterns/" />
   <LinkCard title="Error handling & testing" href="./pydantic_ai_advanced_error_testing/" />
   <LinkCard title="Hooks" href="./pydantic_ai_hooks/" description="Lifecycle callbacks: Hooks capability." />
@@ -154,6 +157,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-24 | pydantic-ai 1.102.0 | Library installed (1.102.0) and source inspected directly. Ten classes deep-dived: `AgentSpec`, `SkipModelRequest`, `SkipToolExecution`, `SkipToolValidation`, `ProcessEventStream`, `HandleDeferredToolCalls`, `PreparedToolset`, `DeferredLoadingToolset`, `InstructionPart`, `IncludeToolReturnSchemas`. New guide `pydantic_ai_advanced_classes_part2.md` created. Hooks guide enhanced with Skip exceptions section. Output types guide enhanced with NativeOutput/PromptedOutput/TextOutput advanced patterns. Embeddings guide updated to 1.102.0 with VoyageAI, Cohere, batch processing, and RAG pipeline examples. Toolsets guide extended with PreparedToolset i18n, phase-gated, and DeferredLoadingToolset mixed-visibility patterns. Index updated with new nav entries. | Claude |
 | 2026-05-23 | pydantic-ai 1.102.0 | Version bumped 1.101.0 → 1.102.0; "What's new" heading updated to v1.102.0; v1.102.0 bullet added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.102.0` (`.routine-envs/check-0523-pydantic`); all PASS. 179 top-level exports confirmed; API surface unchanged. | Claude routine |
 | 2026-05-22 | pydantic-ai 1.101.0 | Version bumped 1.99.0 → 1.101.0 (two minor releases: 1.100.0, 1.101.0); "What's new" heading updated to v1.101.0; v1.100.0 and v1.101.0 bullets added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.101.0` (`.routine-envs/check-0522-pydantic`); all PASS. 178 top-level exports confirmed. | Claude routine |
 | 2026-05-22 | pydantic-ai 1.101.0 | Library installed (1.101.0) and source inspected directly. Ten classes deep-dived: `Tool` (§13), `ModelSettings` (§14), `Hooks` (§15), `Thinking` (§16), `WebSearch` (§17). `builtin_tools.md` migrated to `capabilities=[NativeTool(...)]` API. Toolsets guide: 3 new end-to-end examples. `index.mdx` and all `Verified against` headers updated to 1.101.0. | Claude |
