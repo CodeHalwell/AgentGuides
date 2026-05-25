@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Python - Recipes and Code Patterns"
-description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.5.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, and workflow checkpointing."
+description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.6.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, workflow checkpointing, compaction, long-term memory, and todo tracking."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -1391,8 +1391,7 @@ Key points:
 ```python
 # memory_agent.py
 import asyncio
-from agent_framework import Agent
-from agent_framework._harness._memory import MemoryContextProvider, MemoryFileStore
+from agent_framework import Agent, MemoryContextProvider, MemoryFileStore
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1444,8 +1443,8 @@ async def main() -> None:
     # Agent recalls Alice's Python preference stored in the previous session.
     print(r.text)
 
-    # Inspect extracted topics from application code
-    topics = await store.list_topics(session2, source_id="memory")
+    # Inspect extracted topics from application code (list_topics is synchronous)
+    topics = store.list_topics(session2, source_id="memory")
     print(f"\nExtracted {len(topics)} memory topic(s):")
     for t in topics:
         print(f"  • {t.topic}: {t.summary}")
@@ -1499,7 +1498,7 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Tool retries | `FunctionMiddleware` subclass, `await call_next()` in a loop |
 | Run-level guards | `AgentMiddleware` subclass, raise `MiddlewareTermination(result=...)` |
 | Workflow checkpoints | `FileCheckpointStorage(storage_path=...)` + `WorkflowBuilder(checkpoint_storage=)` |
-| Skills | `Skill(...)` + `SkillsProvider(skills=[...])` |
+| Skills | `SkillsProvider(my_skill)` or `SkillsProvider([skill_a, skill_b])` — takes a positional `source` (single `Skill`, list of `Skill`, or a `SkillsSource`) |
 | Eval gates | `LocalEvaluator(*checks)` + `evaluate_agent(...)` |
 | Agent todo list (exp.) | `TodoProvider(store=TodoFileStore(...))` |
 | Cross-session memory (exp.) | `MemoryContextProvider(store=MemoryFileStore(..., owner_state_key=...))` |

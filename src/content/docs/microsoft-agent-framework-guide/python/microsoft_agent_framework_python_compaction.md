@@ -1224,13 +1224,13 @@ from agent_framework.openai import OpenAIChatClient
 async def main() -> None:
     tokenizer = CharacterEstimatorTokenizer()
 
-    # Tier 1: collapse old tool-call groups (fast, no LLM cost)
+    # Tier 1: drop old tool-call groups entirely (fast, no LLM cost)
     # Tier 2: if still over budget, shrink the sliding window
     strategy = TokenBudgetComposedStrategy(
         token_budget=6_000,
         tokenizer=tokenizer,
         strategies=[
-            ToolResultCompactionStrategy(keep_last_tool_call_groups=3),
+            SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=3),
             SlidingWindowStrategy(keep_last_groups=20),
         ],
         early_stop=True,    # stop as soon as the budget is satisfied

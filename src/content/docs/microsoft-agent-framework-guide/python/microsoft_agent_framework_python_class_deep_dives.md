@@ -1361,8 +1361,7 @@ MemoryFileStore(
 
 ```python
 import asyncio
-from agent_framework import Agent
-from agent_framework._harness._memory import MemoryContextProvider, MemoryFileStore
+from agent_framework import Agent, MemoryContextProvider, MemoryFileStore
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1410,8 +1409,7 @@ asyncio.run(main())
 ### Reading memory from application code
 
 ```python
-from agent_framework._harness._memory import MemoryFileStore
-from agent_framework import AgentSession
+from agent_framework import AgentSession, MemoryFileStore
 
 store = MemoryFileStore(base_path="./memory-store", owner_state_key="user_id")
 
@@ -1419,27 +1417,28 @@ store = MemoryFileStore(base_path="./memory-store", owner_state_key="user_id")
 session = AgentSession(session_id="query-session")
 session.state["user_id"] = "alice"
 
-# List all topic files
-topics = await store.list_topics(session, source_id="memory")
+# List all topic files (synchronous — no await needed)
+topics = store.list_topics(session, source_id="memory")
 for topic in topics:
     print(f"{topic.topic}: {topic.summary}")
 
-# Read a specific topic
-rec = await store.get_topic(session, source_id="memory", topic="preferences")
+# Read a specific topic (synchronous)
+rec = store.get_topic(session, source_id="memory", topic="preferences")
 print(rec.content)
 ```
 
 ### Write a custom topic directly
 
 ```python
-from agent_framework._harness._memory import MemoryFileStore, MemoryTopicRecord
 import datetime
+from agent_framework import AgentSession, MemoryFileStore, MemoryTopicRecord
 
 store = MemoryFileStore(base_path="./memory-store", owner_state_key="user_id")
 session = AgentSession(session_id="setup")
 session.state["user_id"] = "alice"
 
-await store.write_topic(
+# write_topic is synchronous — no await
+store.write_topic(
     session,
     MemoryTopicRecord(
         topic="onboarding",
@@ -1464,13 +1463,19 @@ await store.write_topic(
 
 ### `TodoItem` data model
 
+`TodoItem` is a plain class (not a dataclass) — it uses `SerializationMixin` with `__slots__` for efficient serialisation:
+
 ```python
-@dataclass
 class TodoItem:
     id: int
     title: str
     description: str | None     # optional detail
     is_complete: bool           # False by default
+
+    def __init__(self, id: int, title: str, description: str | None = None, is_complete: bool = False) -> None: ...
+    def to_dict(self, *, exclude: set[str] | None = None, exclude_none: bool = True) -> dict: ...
+    @classmethod
+    def from_dict(cls, raw_item: dict, ...) -> "TodoItem": ...
 ```
 
 ### `TodoStore` implementations
@@ -1560,9 +1565,7 @@ asyncio.run(main())
 ### Custom `TodoStore` — Cosmos DB example
 
 ```python
-from agent_framework import AgentSession
-from agent_framework._harness._todo import TodoItem, TodoStore
-from typing import Any
+from agent_framework import AgentSession, TodoItem, TodoStore
 
 
 class CosmosDbTodoStore(TodoStore):
@@ -1641,7 +1644,7 @@ agent = Agent(
 ### Short-circuiting a run (budget guard)
 
 ```python
-from agent_framework import AgentMiddleware, AgentContext, AgentResponse, MiddlewareTermination
+from agent_framework import AgentMiddleware, AgentContext, AgentResponse
 from typing import Callable, Awaitable
 
 # Simple per-session call budget stored in the session's state dict
@@ -1757,7 +1760,7 @@ class BlocklistMiddleware(AgentMiddleware):
         context: AgentContext,
         call_next: Callable[[], Awaitable[AgentContext]],
     ) -> None:
-        prompt = str(context.messages[-1].contents) if context.messages else ""
+        prompt = context.messages[-1].text if context.messages else ""
         for phrase in self.BLOCKED_PHRASES:
             if phrase.lower() in prompt.lower():
                 raise MiddlewareTermination(
