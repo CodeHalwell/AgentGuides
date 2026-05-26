@@ -1115,647 +1115,493 @@ async def stream_processing():
 
 ---
 
-## Recipe 7: Cached Multi-Agent Research System (v1.0.3)
+## Recipe 7: Cached Multi-Agent Research System (v1.2.1)
 
-**Uses:** Node Caching, Deferred Nodes, Cross-Thread Memory
+**Uses:** `CachePolicy`, `InMemoryCache`, `InMemoryStore`, parallel `Send` fan-out
 
 ```python
-from langgraph.graph import StateGraph, START, END, deferred
-from langgraph.cache import cache_node, SemanticCache
-from langgraph.types import Send
-from langgraph.store.postgres import AsyncPostgresStore
-from langgraph.prebuilt import InjectedStore
+# Correct imports — all verified against langgraph==1.2.1
+import operator
 from typing import Annotated
-from langchain_openai import OpenAIEmbeddings
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send, RetryPolicy, CachePolicy
+from langgraph.store.memory import InMemoryStore
+from langgraph.cache.memory import InMemoryCache
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.runtime import Runtime
+
+
+# ---------------------------------------------------------------------------
+# State schema
+# ---------------------------------------------------------------------------
 
 class ResearchState(TypedDict):
     user_id: str
     topic: str
     search_queries: list[str]
-    research_results: Annotated[list[dict], lambda x, y: x + y]
-    cached_research: dict
+    # reducer: all parallel researcher writes are accumulated
+    research_results: Annotated[list[dict], operator.add]
     final_report: str
-    user_preferences: dict
 
-# Semantic cache for expensive research queries
-semantic_cache = SemanticCache(
-    embeddings=OpenAIEmbeddings(),
-    similarity_threshold=0.90,
-    ttl=7200  # Cache for 2 hours
-)
 
-# Cross-thread store for user preferences
-store = AsyncPostgresStore.from_conn_string(
-    "postgresql://user:password@localhost/langgraph_db"
-)
+class WorkerState(TypedDict):
+    """Narrow state used by each parallel worker node."""
+    query: str
 
-async def load_user_research_preferences(
-    state: ResearchState,
-    store: Annotated[AsyncPostgresStore, InjectedStore]
-) -> dict:
-    """Load user's research preferences from cross-thread memory."""
 
+# ---------------------------------------------------------------------------
+# Nodes
+# ---------------------------------------------------------------------------
+
+def load_prefs_and_plan(state: ResearchState, runtime: Runtime) -> dict:
+    """Load user preferences from the store and generate search queries."""
+    store = runtime.store
     user_id = state["user_id"]
-    namespace = ("global", "users", user_id, "research_prefs")
 
-    prefs_item = await store.aget(namespace, "preferences")
-    preferences = prefs_item.value if prefs_item else {
-        "preferred_sources": ["academic", "news", "web"],
-        "depth": "comprehensive",
-        "format": "detailed"
+    # Read stored preferences (or use defaults)
+    prefs_item = store.get(("users", user_id), "research_prefs") if store else None
+    prefs = prefs_item.value if prefs_item else {
+        "depth": "standard",   # or "comprehensive"
+        "max_queries": 3,
     }
 
-    return {"user_preferences": preferences}
-
-def generate_queries(state: ResearchState) -> dict:
-    """Generate research queries based on topic and preferences."""
-
     topic = state["topic"]
-    prefs = state["user_preferences"]
-    depth = prefs.get("depth", "comprehensive")
-
-    # Generate more queries for comprehensive research
-    num_queries = 5 if depth == "comprehensive" else 3
-
-    prompt = f"""Generate {num_queries} specific research queries for: {topic}
-
-    Consider these aspects:
-    1. Current trends
-    2. Historical context
-    3. Expert opinions
-    4. Statistical data
-    5. Future predictions
-    """
-
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
-    response = model.invoke(prompt)
-
-    import json
-    queries = json.loads(response.content)
+    n = prefs.get("max_queries", 3)
+    # In production: call an LLM to generate queries
+    queries = [f"{topic} - aspect {i+1}" for i in range(n)]
 
     return {"search_queries": queries}
 
-def fan_out_research(state: ResearchState) -> list[Send]:
-    """Fan-out: Create parallel research tasks."""
 
-    return [
-        Send("researcher", {
-            "query": query,
-            "sources": state["user_preferences"]["preferred_sources"]
-        })
-        for query in state["search_queries"]
-    ]
+def fan_out(state: ResearchState) -> list[Send]:
+    """Conditional edge: launch one researcher per query in parallel."""
+    return [Send("researcher", {"query": q}) for q in state["search_queries"]]
 
-# CACHED NODE - expensive research operations
-@cache_node(cache=semantic_cache, cache_key="query")
-def researcher(state: ResearchState) -> dict:
-    """Research one query (cached to avoid redundant API calls)."""
 
-    query = state.get("query")
-    sources = state.get("sources", ["web"])
-
-    # This expensive operation will be cached
-    results = []
-
-    if "web" in sources:
-        web_results = tavily_search(query)
-        results.extend(web_results)
-
-    if "academic" in sources:
-        academic_results = semantic_scholar_search(query)
-        results.extend(academic_results)
-
-    if "news" in sources:
-        news_results = news_api_search(query)
-        results.extend(news_results)
-
-    return {
-        "research_results": [{
-            "query": query,
-            "results": results,
-            "cached": False  # First time
-        }]
-    }
-
-# DEFERRED NODE - waits for all research to complete
-@deferred(wait_for=["researcher"])
-def synthesize_report(state: ResearchState) -> dict:
-    """Synthesize report only after ALL research completes."""
-
-    # At this point, all parallel research is done
-    all_results = state["research_results"]
-    user_format = state["user_preferences"].get("format", "detailed")
-
-    # Compile all findings
-    findings = []
-    for result in all_results:
-        findings.append(f"Query: {result['query']}")
-        for item in result["results"]:
-            findings.append(f"- {item.get('title')}: {item.get('snippet')}")
-
-    synthesis_prompt = f"""
-    Synthesize a {user_format} research report on: {state['topic']}
-
-    Research findings:
-    {chr(10).join(findings)}
-
-    Format: {user_format}
+def researcher(state: WorkerState) -> dict:
+    """Research a single query — runs in parallel (one per Send).
+    Results are merged into research_results via the operator.add reducer.
     """
+    query = state["query"]
+    # In production: call a search API or LLM here
+    result = {
+        "query": query,
+        "summary": f"[stub] findings for '{query}'",
+        "sources": [f"https://example.com/search?q={query.replace(' ', '+')}"],
+    }
+    return {"research_results": [result]}
 
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
-    response = model.invoke(synthesis_prompt)
 
-    return {"final_report": response.content}
+def synthesise(state: ResearchState, runtime: Runtime) -> dict:
+    """Combine all parallel results into a final report and save to store."""
+    store = runtime.store
+    all_results = state["research_results"]
 
-async def save_research_to_memory(
-    state: ResearchState,
-    store: Annotated[AsyncPostgresStore, InjectedStore]
-) -> dict:
-    """Save research to cross-thread memory for future use."""
+    bullets = "\n".join(f"- {r['query']}: {r['summary']}" for r in all_results)
+    report = f"## Research Report: {state['topic']}\n\n{bullets}"
 
-    user_id = state["user_id"]
-    namespace = ("global", "users", user_id, "research_history")
+    # Persist for future look-up
+    if store:
+        store.put(
+            ("users", state["user_id"], "reports"),
+            state["topic"],
+            {"report": report, "query_count": len(all_results)},
+        )
 
-    # Save this research
-    research_id = f"research-{uuid.uuid4().hex[:8]}"
-    await store.aput(
-        namespace,
-        research_id,
-        {
-            "topic": state["topic"],
-            "report": state["final_report"],
-            "date": datetime.now().isoformat(),
-            "query_count": len(state["search_queries"])
-        },
-        index=["topic", "report"]  # Enable semantic search
-    )
+    return {"final_report": report}
 
-    return {}
 
-# Build graph
+# ---------------------------------------------------------------------------
+# Graph construction
+# ---------------------------------------------------------------------------
+
 builder = StateGraph(ResearchState)
-builder.add_node("load_prefs", load_user_research_preferences)
-builder.add_node("generate_queries", generate_queries)
-builder.add_node("researcher", researcher)  # Cached & parallel
-builder.add_node("synthesize", synthesize_report)  # Deferred
-builder.add_node("save_memory", save_research_to_memory)
-
-builder.add_edge(START, "load_prefs")
-builder.add_edge("load_prefs", "generate_queries")
-builder.add_conditional_edges(
-    "generate_queries",
-    fan_out_research,
-    ["researcher"]
+builder.add_node(
+    "plan",
+    load_prefs_and_plan,
 )
-builder.add_edge("researcher", "synthesize")  # Deferred until all done
-builder.add_edge("synthesize", "save_memory")
-builder.add_edge("save_memory", END)
+builder.add_node(
+    "researcher",
+    researcher,
+    # Retry transient errors; cache results for 10 minutes per unique query
+    retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
+    cache_policy=CachePolicy(ttl=600),
+)
+builder.add_node("synthesise", synthesise)
 
-# Compile with cache and store
+builder.add_edge(START, "plan")
+builder.add_conditional_edges("plan", fan_out)   # dynamic fan-out
+builder.add_edge("researcher", "synthesise")
+builder.add_edge("synthesise", END)
+
+# Pass both store (long-term memory) and cache (node result caching)
+store = InMemoryStore()
+cache = InMemoryCache()
+checkpointer = InMemorySaver()
+
 research_graph = builder.compile(
-    cache=True,  # Enable node caching
-    store=store  # Cross-thread memory
+    checkpointer=checkpointer,
+    store=store,
+    cache=cache,
 )
 
+# ---------------------------------------------------------------------------
 # Usage
-config = {"configurable": {"thread_id": "research-session-1"}}
+# ---------------------------------------------------------------------------
 
-result = research_graph.invoke({
-    "user_id": "researcher-alice",
-    "topic": "Impact of AI on healthcare 2024"
-}, config=config)
+cfg = {"configurable": {"thread_id": "research-session-1"}}
 
+result = research_graph.invoke(
+    {"user_id": "alice", "topic": "AI in healthcare", "search_queries": [], "research_results": [], "final_report": ""},
+    cfg,
+)
 print(result["final_report"])
 
-# Future research on similar topics will hit cache!
-# User preferences persist across all threads!
+# Second run: identical queries hit the cache (CachePolicy ttl=600)
+result2 = research_graph.invoke(
+    {"user_id": "alice", "topic": "AI in healthcare", "search_queries": [], "research_results": [], "final_report": ""},
+    cfg,
+)
+print(result2["final_report"])  # same content, returned from cache
 ```
 
 ---
 
-## Recipe 8: Smart Shopping Assistant with State Updates (v1.0.3)
+## Recipe 8: Smart Shopping Assistant with Pre/Post Model Hooks (v1.2.1)
 
-**Uses:** Tools State Updates, Pre/Post Model Hooks, Command Tool
+**Uses:** `create_react_agent` with `pre_model_hook` / `post_model_hook`, `Command`-returning tools, custom state schema
 
 ```python
-from langgraph.prebuilt import ToolNode, create_react_agent
-from langgraph.llm_hooks import pre_model_hook, post_model_hook
+# Correct imports — verified against langgraph==1.2.1 / langgraph-prebuilt==1.1.0
+import operator
+from typing import Annotated, Any
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, SystemMessage
 from langchain_core.tools import tool
-from langgraph.types import StateUpdate
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import create_react_agent, InjectedState
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
+
+
+# ---------------------------------------------------------------------------
+# State schema — extends the default MessagesState with shopping fields
+# ---------------------------------------------------------------------------
 
 class ShoppingState(TypedDict):
-    messages: Annotated[list, add_messages]
-    user_id: str
-    cart: list[dict]
-    total: float
-    recommendations: list[dict]
+    messages:    Annotated[list[AnyMessage], add_messages]
+    user_id:     str
+    cart:        list[dict]
+    total:       float
     tokens_used: int
-    cost: float
-    conversation_phase: str
 
-# TOOLS WITH STATE UPDATES - directly modify graph state
-@tool(updates_state=True)
+
+# ---------------------------------------------------------------------------
+# Tools — use InjectedState to read the graph state directly
+#         Return Command to update state alongside the tool message
+# ---------------------------------------------------------------------------
+
+@tool
 def add_to_cart(
     product_id: str,
+    product_name: str,
+    price: float,
     quantity: int,
-    state: ShoppingState
-) -> StateUpdate:
-    """Add product to cart - updates state directly."""
-
-    # Fetch product
-    product = fetch_product(product_id)
-    item_total = product["price"] * quantity
-
-    # Update cart
-    current_cart = state.get("cart", [])
-    current_cart.append({
-        "product_id": product_id,
-        "name": product["name"],
-        "quantity": quantity,
-        "price": item_total
-    })
-
-    # Update recommendations based on cart
-    new_recs = get_recommendations_based_on_cart(current_cart)
-
-    # Return multiple state updates
-    return StateUpdate(
-        cart=current_cart,
-        total=state.get("total", 0.0) + item_total,
-        recommendations=new_recs,
-        messages=[{
-            "role": "tool",
-            "content": f"Added {quantity}x {product['name']} (${item_total}). Total: ${state.get('total', 0) + item_total}"
-        }]
+    state: Annotated[ShoppingState, InjectedState],
+) -> Command:
+    """Add a product to the shopping cart and update the total."""
+    item = {"product_id": product_id, "name": product_name, "price": price, "qty": quantity}
+    new_cart = state.get("cart", []) + [item]
+    new_total = state.get("total", 0.0) + price * quantity
+    return Command(
+        update={
+            "cart": new_cart,
+            "total": new_total,
+        },
+        goto="agent",  # return control to the agent node
     )
 
-@tool(updates_state=True)
-def remove_from_cart(
-    product_id: str,
-    state: ShoppingState
-) -> StateUpdate:
-    """Remove product from cart."""
 
+@tool
+def view_cart(state: Annotated[ShoppingState, InjectedState]) -> str:
+    """Return a human-readable summary of the current cart."""
     cart = state.get("cart", [])
+    if not cart:
+        return "Your cart is empty."
+    lines = [f"- {item['name']} x{item['qty']}  ${item['price'] * item['qty']:.2f}" for item in cart]
+    total = state.get("total", 0.0)
+    return "Cart:\n" + "\n".join(lines) + f"\n\nTotal: ${total:.2f}"
 
-    # Find and remove
-    removed_item = None
-    new_cart = []
-    for item in cart:
-        if item["product_id"] == product_id and not removed_item:
-            removed_item = item
-        else:
-            new_cart.append(item)
 
-    if not removed_item:
-        return StateUpdate(
-            messages=[{"role": "tool", "content": f"Product {product_id} not in cart"}]
-        )
-
-    new_total = sum(item["price"] for item in new_cart)
-
-    return StateUpdate(
-        cart=new_cart,
-        total=new_total,
-        messages=[{
-            "role": "tool",
-            "content": f"Removed {removed_item['name']} from cart. New total: ${new_total}"
-        }]
-    )
-
-@tool(updates_state=True)
-def apply_discount_code(
-    code: str,
-    state: ShoppingState
-) -> StateUpdate:
-    """Apply discount code - updates total."""
-
-    discount_info = validate_discount(code)
-
-    if not discount_info["valid"]:
-        return StateUpdate(
-            messages=[{"role": "tool", "content": f"Invalid discount code: {code}"}]
-        )
-
-    current_total = state.get("total", 0.0)
-    discount_amount = current_total * discount_info["percentage"]
-    new_total = current_total - discount_amount
-
-    return StateUpdate(
-        total=new_total,
-        messages=[{
-            "role": "tool",
-            "content": f"Applied {code}: {discount_info['percentage']*100}% off. New total: ${new_total:.2f}"
-        }]
-    )
-
-# COMMAND TOOLS - control conversation flow
-@command_tool
-def start_checkout(state: ShoppingState) -> dict:
-    """Begin checkout process."""
-    return {
-        "command": "set_phase",
-        "phase": "checkout",
-        "message": "Starting checkout..."
+@tool
+def search_products(category: str) -> list[dict]:
+    """Search available products in a category (stub)."""
+    catalogue = {
+        "laptop": [
+            {"id": "mbp-16",  "name": "MacBook Pro 16",   "price": 2499.0},
+            {"id": "xps-15",  "name": "Dell XPS 15",       "price": 1799.0},
+        ],
+        "monitor": [
+            {"id": "lg-27",   "name": "LG 27\" 4K",        "price": 499.0},
+        ],
     }
+    return catalogue.get(category.lower(), [])
 
-@command_tool
-def continue_shopping(state: ShoppingState) -> dict:
-    """Return to shopping."""
-    return {
-        "command": "set_phase",
-        "phase": "shopping",
-        "message": "Continue shopping"
-    }
 
-@command_tool
-def finish_order(order_details: dict) -> dict:
-    """Complete the order."""
-    return {
-        "command": "set_phase",
-        "phase": "complete",
-        "order": order_details
-    }
+# ---------------------------------------------------------------------------
+# Pre-model hook — inject cart context as a system message before every LLM call
+# ---------------------------------------------------------------------------
 
-# PRE/POST HOOKS for LLM calls
-@pre_model_hook
-def shopping_context_hook(state: ShoppingState, messages: list) -> dict:
-    """Inject shopping context before LLM calls."""
+def shopping_context_hook(state: ShoppingState) -> dict:
+    """Prepend a system message summarising the current cart state.
 
+    pre_model_hook receives the full state and returns a dict to merge
+    into state before the LLM call.  We prepend a SystemMessage to
+    'messages' — add_messages will handle the merge correctly.
+    """
     cart = state.get("cart", [])
     total = state.get("total", 0.0)
-    recs = state.get("recommendations", [])
+    summary = (
+        f"User {state.get('user_id', 'unknown')} | "
+        f"Cart: {len(cart)} item(s), total ${total:.2f}. "
+        "Help them find and add the best products for their needs."
+    )
+    return {"messages": [SystemMessage(content=summary)]}
 
-    # Build context
-    context = f"""
-    Current Cart ({len(cart)} items, ${total:.2f}):
-    {chr(10).join([f"- {item['name']} x{item['quantity']}" for item in cart])}
 
-    Recommendations: {", ".join([r["name"] for r in recs[:3]])}
+# ---------------------------------------------------------------------------
+# Post-model hook — accumulate token usage after every LLM call
+# ---------------------------------------------------------------------------
+
+def track_tokens(state: ShoppingState) -> dict:
+    """After the LLM responds, read usage_metadata from the latest AI message
+    and accumulate the token count.
+
+    post_model_hook receives the state (already updated with the new AI
+    message) and returns a dict to merge into state.
     """
+    last = state["messages"][-1]
+    usage = getattr(last, "usage_metadata", None) or {}
+    new_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+    return {"tokens_used": state.get("tokens_used", 0) + new_tokens}
 
-    # Insert context as system message
-    messages.insert(0, {
-        "role": "system",
-        "content": f"Shopping Assistant Context:\n{context}\n\nBe helpful and suggest relevant products."
-    })
 
-    return {"messages": messages}
+# ---------------------------------------------------------------------------
+# Build the agent
+# ---------------------------------------------------------------------------
 
-@post_model_hook
-def track_shopping_costs(state: ShoppingState, response: Any, metadata: dict) -> dict:
-    """Track LLM costs."""
+tools = [add_to_cart, view_cart, search_products]
 
-    usage = metadata.get("usage_metadata", {})
-    tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-    cost = tokens * 0.003 / 1000  # Rough estimate
+# Replace with a real LLM in production:
+# from langchain_anthropic import ChatAnthropic
+# llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+from unittest.mock import MagicMock
+from langchain_core.messages import AIMessage
+llm = MagicMock()
+llm.bind_tools.return_value = llm
+llm.invoke.return_value = AIMessage(content="Here are some laptop options for you.", tool_calls=[])
 
-    return {
-        "tokens_used": state.get("tokens_used", 0) + tokens,
-        "cost": state.get("cost", 0.0) + cost
-    }
-
-# Create agent with all tools
-tools = [
-    add_to_cart,
-    remove_from_cart,
-    apply_discount_code,
-    search_products,  # Regular tool
-    get_product_details  # Regular tool
-]
-
-command_tools = [
-    start_checkout,
-    continue_shopping,
-    finish_order
-]
-
-# Model with hooks
-model = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
-    pre_hook=shopping_context_hook,
-    post_hook=track_shopping_costs
-)
-
-# Create agent
 shopping_agent = create_react_agent(
-    model=model,
-    tools=tools + command_tools,
-    command_tools=command_tools
+    model=llm,
+    tools=tools,
+    state_schema=ShoppingState,
+    pre_model_hook=shopping_context_hook,   # inject cart context
+    post_model_hook=track_tokens,           # record token usage
+    checkpointer=InMemorySaver(),
 )
 
+# ---------------------------------------------------------------------------
 # Usage
-result = shopping_agent.invoke({
-    "messages": [{
-        "role": "user",
-        "content": "I need a laptop for programming. Add a good one to my cart."
-    }],
-    "user_id": "shopper-123"
-})
+# ---------------------------------------------------------------------------
+
+cfg = {"configurable": {"thread_id": "shopper-123"}}
+
+result = shopping_agent.invoke(
+    {
+        "messages": [("user", "I need a good laptop for programming. Show me options and add the best one.")],
+        "user_id": "shopper-123",
+        "cart": [],
+        "total": 0.0,
+        "tokens_used": 0,
+    },
+    cfg,
+)
 
 print(f"Cart: {result['cart']}")
 print(f"Total: ${result['total']:.2f}")
-print(f"LLM Cost: ${result['cost']:.4f}")
+print(f"Tokens used: {result['tokens_used']}")
+print(f"Last reply: {result['messages'][-1].content}")
 ```
 
 ---
 
-## Recipe 9: Intelligent Workflow Coordinator (v1.0.3)
+## Recipe 9: Intelligent Workflow Coordinator (v1.2.1)
 
-**Uses:** Deferred Nodes, Command Tool, Caching
+**Uses:** `Command` routing, `Send` fan-out, `defer=True` node, `RetryPolicy`
 
 ```python
-from langgraph.graph import StateGraph, START, END, deferred
-from langgraph.cache import cache_node
+# Correct imports — all verified against langgraph==1.2.1
+import operator
+from typing import Annotated, Literal
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command, Send, RetryPolicy
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+
+
+# ---------------------------------------------------------------------------
+# State schema
+# ---------------------------------------------------------------------------
+
+TASK_TYPES = ["data", "training", "validation"]
+
 
 class WorkflowState(TypedDict):
-    workflow_id: str
-    tasks: list[dict]
-    task_results: Annotated[dict, lambda x, y: {**x, **y}]
-    dependencies_met: bool
-    final_output: dict
+    workflow_id:    str
+    tasks:          list[dict]        # list of {"id":..., "type":..., "priority":...}
+    completed:      Annotated[list[str], operator.add]   # reducer: accumulate completed task ids
+    failed:         Annotated[list[str], operator.add]   # reducer: accumulate failed task ids
     workflow_status: str
 
-@command_tool
-def execute_task(task_id: str, task_type: str) -> dict:
-    """Execute a specific task type."""
-    return {
-        "command": "execute",
-        "task_id": task_id,
-        "task_type": task_type
-    }
 
-@command_tool
-def skip_task(task_id: str, reason: str) -> dict:
-    """Skip a task."""
-    return {
-        "command": "skip",
-        "task_id": task_id,
-        "reason": reason
-    }
+class TaskState(TypedDict):
+    """Narrow state injected into each worker by Send."""
+    task_id:   str
+    task_type: str
 
-@command_tool
-def retry_task(task_id: str) -> dict:
-    """Retry a failed task."""
-    return {
-        "command": "retry",
-        "task_id": task_id
-    }
 
-# Cached expensive tasks
-@cache_node(ttl=3600, cache_key="task_id")
-def data_processing_task(state: WorkflowState) -> dict:
-    """Expensive data processing (cached)."""
+# ---------------------------------------------------------------------------
+# Nodes
+# ---------------------------------------------------------------------------
 
-    task_id = state.get("current_task_id")
+def coordinator(state: WorkflowState) -> Command[Literal["fan_out", "__end__"]]:
+    """Decide whether to launch tasks or finish.
 
-    # Expensive operation
-    result = process_large_dataset(task_id)
-
-    return {
-        "task_results": {
-            task_id: {
-                "status": "complete",
-                "result": result,
-                "cached": False
-            }
-        }
-    }
-
-@cache_node(ttl=3600, cache_key="model_params")
-def model_training_task(state: WorkflowState) -> dict:
-    """Expensive ML training (cached)."""
-
-    task_id = state.get("current_task_id")
-
-    # Train model
-    model_result = train_ml_model(task_id)
-
-    return {
-        "task_results": {
-            task_id: {
-                "status": "complete",
-                "model": model_result,
-                "cached": False
-            }
-        }
-    }
-
-def validation_task(state: WorkflowState) -> dict:
-    """Validation task."""
-
-    task_id = state.get("current_task_id")
-
-    # Validate results
-    validation = validate_task_results(state["task_results"])
-
-    return {
-        "task_results": {
-            task_id: {
-                "status": "complete",
-                "validation": validation
-            }
-        }
-    }
-
-# DEFERRED NODE - waits for all upstream tasks
-@deferred(wait_for=["data_processing_task", "model_training_task", "validation_task"])
-def final_aggregation(state: WorkflowState) -> dict:
-    """Aggregate results only after ALL tasks complete."""
-
-    all_results = state["task_results"]
-
-    # All dependencies are met
-    aggregated = {
-        "data_processing": all_results.get("data_task"),
-        "model_training": all_results.get("training_task"),
-        "validation": all_results.get("validation_task"),
-        "timestamp": datetime.now().isoformat()
-    }
-
-    return {
-        "final_output": aggregated,
-        "workflow_status": "complete"
-    }
-
-def workflow_coordinator(state: WorkflowState) -> dict:
-    """Coordinate workflow execution with command tools."""
-
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
-
-    # Agent decides which tasks to execute
-    prompt = f"""
-    Workflow: {state['workflow_id']}
-    Tasks: {state['tasks']}
-    Completed: {list(state.get('task_results', {}).keys())}
-
-    Decide which task to execute next, or if workflow is complete.
-    Use command tools to control execution.
+    Returns Command(goto="fan_out") while there are pending tasks,
+    or Command(goto=END, update={"workflow_status": "complete"}) when done.
     """
+    completed = state.get("completed", [])
+    failed = state.get("failed", [])
+    done = completed + failed
+    pending = [t for t in state["tasks"] if t["id"] not in done]
 
-    response = model.invoke(prompt)
+    if not pending:
+        return Command(
+            goto=END,
+            update={"workflow_status": f"done — {len(completed)} ok, {len(failed)} failed"},
+        )
 
-    # Extract command from response
-    # Agent will use execute_task, skip_task, or retry_task
+    return Command(goto="fan_out")
 
-    return {"messages": [response]}
 
-# Build workflow graph
-builder = StateGraph(WorkflowState)
-builder.add_node("coordinator", workflow_coordinator)
-builder.add_node("data_task", data_processing_task)  # Cached
-builder.add_node("training_task", model_training_task)  # Cached
-builder.add_node("validation_task", validation_task)
-builder.add_node("aggregate", final_aggregation)  # Deferred
+def fan_out(state: WorkflowState) -> list[Send]:
+    """Launch all pending tasks in parallel using Send."""
+    completed = state.get("completed", [])
+    failed = state.get("failed", [])
+    done = set(completed + failed)
+    return [
+        Send("run_task", {"task_id": t["id"], "task_type": t["type"]})
+        for t in state["tasks"]
+        if t["id"] not in done
+    ]
 
-# Dynamic routing based on command tools
-def route_workflow(state: WorkflowState) -> str:
-    """Route based on coordinator's command."""
 
-    last_command = extract_command(state["messages"][-1])
+def run_task(state: TaskState) -> dict:
+    """Execute a single task.  Runs in parallel — one instance per Send.
 
-    if last_command["command"] == "execute":
-        task_type = last_command["task_type"]
-        return f"{task_type}_task"
-    elif last_command["command"] == "skip":
-        return "coordinator"
-    elif last_command["command"] == "retry":
-        return route_workflow(state)  # Retry logic
+    Results accumulate back into WorkflowState via the operator.add reducer
+    on 'completed' / 'failed'.
+    """
+    task_id = state["task_id"]
+    task_type = state["task_type"]
+
+    # Simulate work — replace with real logic
+    import random
+    success = random.random() > 0.1   # 10% artificial failure rate
+
+    if success:
+        print(f"  [task] {task_id} ({task_type}) OK")
+        return {"completed": [task_id]}
     else:
-        return "aggregate"
+        print(f"  [task] {task_id} ({task_type}) FAILED")
+        return {"failed": [task_id]}
 
-builder.add_edge(START, "coordinator")
-builder.add_conditional_edges(
-    "coordinator",
-    route_workflow,
-    {
-        "data_task": "data_task",
-        "training_task": "training_task",
-        "validation_task": "validation_task",
-        "aggregate": "aggregate"
+
+# ---------------------------------------------------------------------------
+# Graph construction
+#
+# Key features demonstrated:
+#  - coordinator uses Command for dynamic routing (no static edges from it)
+#  - fan_out returns list[Send] for variable-width parallelism
+#  - run_task uses retry_policy so transient failures are retried automatically
+#  - defer=True on the aggregate node means it runs AFTER all parallel run_task
+#    instances in the same super-step finish
+# ---------------------------------------------------------------------------
+
+def aggregate(state: WorkflowState) -> dict:
+    """Summarise.  Runs only after all parallel run_task nodes complete
+    because it is registered with defer=True.
+    """
+    return {
+        "workflow_status": (
+            f"aggregated: {len(state.get('completed', []))} completed, "
+            f"{len(state.get('failed', []))} failed"
+        )
     }
+
+
+builder = StateGraph(WorkflowState)
+builder.add_node("coordinator", coordinator)
+builder.add_node("fan_out",     fan_out)
+builder.add_node(
+    "run_task",
+    run_task,
+    retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.1),
+)
+builder.add_node(
+    "aggregate",
+    aggregate,
+    defer=True,          # waits for all non-deferred nodes in the same super-step
 )
 
-# Tasks return to coordinator
-builder.add_edge("data_task", "coordinator")
-builder.add_edge("training_task", "coordinator")
-builder.add_edge("validation_task", "coordinator")
-builder.add_edge("aggregate", END)
+builder.add_edge(START, "coordinator")
+# fan_out and run_task edges come from coordinator's Command / fan_out's Sends
+builder.add_edge("fan_out",   "run_task")
+builder.add_edge("run_task",  "aggregate")
+builder.add_edge("aggregate", "coordinator")   # loop back — coordinator will exit via END
 
-workflow_graph = builder.compile(cache=True)
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
 
-# Execute intelligent workflow
-result = workflow_graph.invoke({
-    "workflow_id": "ml-pipeline-001",
-    "tasks": [
-        {"id": "data_task", "type": "data", "priority": 1},
-        {"id": "training_task", "type": "training", "priority": 2},
-        {"id": "validation_task", "type": "validation", "priority": 3}
-    ]
-})
+cache = InMemoryCache()
+graph = builder.compile(
+    checkpointer=InMemorySaver(),
+    cache=cache,
+)
+
+cfg = {"configurable": {"thread_id": "workflow-001"}}
+result = graph.invoke(
+    {
+        "workflow_id": "ml-pipeline-001",
+        "tasks": [
+            {"id": "data_task",       "type": "data",       "priority": 1},
+            {"id": "training_task",   "type": "training",   "priority": 2},
+            {"id": "validation_task", "type": "validation", "priority": 3},
+        ],
+        "completed": [],
+        "failed": [],
+        "workflow_status": "pending",
+    },
+    cfg,
+    {"recursion_limit": 50},
+)
 
 print(f"Workflow Status: {result['workflow_status']}")
-print(f"Final Output: {result['final_output']}")
+print(f"Completed tasks: {result['completed']}")
+print(f"Failed tasks:    {result['failed']}")
 ```
 
 ---
