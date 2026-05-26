@@ -50,6 +50,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="15 · Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified class deep dives · 40 min" />
   <LinkCard title="16 · Class deep dives — vol. 2" href="./google_adk_class_deep_dives_v2/" description="6 more source-verified deep dives: RemoteA2aAgent, LangGraphAgent, AuthCredential, GcsArtifactService, PubSubToolset, SpannerToolset · 35 min" />
   <LinkCard title="17 · Class deep dives — vol. 3" href="./google_adk_class_deep_dives_v3/" description="10 more source-verified deep dives: AgentTool, BuiltInPlanner, PlanReActPlanner, InMemorySessionService, VertexAiRagMemoryService, UnsafeLocalCodeExecutor, BuiltInCodeExecutor, LiteLlm, AgentEvaluator, shell agents · 45 min" />
+  <LinkCard title="18 · Class deep dives — vol. 4" href="./google_adk_class_deep_dives_v4/" description="10 more source-verified deep dives: LongRunningFunctionTool, LiveRequestQueue, AnthropicLlm/Claude, SqliteSessionService, ExecuteBashTool, TransferToAgentTool, VertexAiMemoryBankService, SimplePromptOptimizer, SkillRegistry/SkillToolset, ToolConfirmation · 50 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -67,6 +68,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Evaluation" href="./evaluation/" />
   <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" />
   <LinkCard title="Class deep dives vol. 3" href="./google_adk_class_deep_dives_v3/" />
+  <LinkCard title="Class deep dives vol. 4" href="./google_adk_class_deep_dives_v4/" />
 </CardGrid>
 
 ## Reference
@@ -89,6 +91,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Class deep dives" href="./google_adk_class_deep_dives/" description="10 source-verified deep dives: LlmAgent, RunConfig, Context, BasePlugin, App, Workflow, BaseNode, FunctionTool, RetryConfig, BaseTool." />
   <LinkCard title="Class deep dives — vol. 2" href="./google_adk_class_deep_dives_v2/" description="6 more: RemoteA2aAgent, LangGraphAgent, AuthCredential, GcsArtifactService, PubSubToolset, SpannerToolset." />
   <LinkCard title="Class deep dives — vol. 3" href="./google_adk_class_deep_dives_v3/" description="10 more: AgentTool, BuiltInPlanner, PlanReActPlanner, InMemorySessionService, VertexAiRagMemoryService, UnsafeLocalCodeExecutor, BuiltInCodeExecutor, LiteLlm, AgentEvaluator, shell agents." />
+  <LinkCard title="Class deep dives — vol. 4" href="./google_adk_class_deep_dives_v4/" description="10 more: LongRunningFunctionTool, LiveRequestQueue, AnthropicLlm/Claude, SqliteSessionService, ExecuteBashTool, TransferToAgentTool, VertexAiMemoryBankService, SimplePromptOptimizer, SkillRegistry/SkillToolset, ToolConfirmation." />
 </CardGrid>
 
 ## What's new in v2.1.0 (May 2026)
@@ -146,6 +149,7 @@ Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#intr
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-05-26 | google-adk 2.1.0 | Added Class deep dives — vol. 4 page (10 source-verified deep dives: LongRunningFunctionTool, LiveRequestQueue/LiveRequest with 3 patterns, AnthropicLlm/Claude with ThinkingConfig mapping + multi-model team, SqliteSessionService with all 4 state scopes, ExecuteBashTool with BashToolPolicy, TransferToAgentTool with routing comparison table, VertexAiMemoryBankService with direct memory search, SimplePromptOptimizer with config guide, SkillRegistry/Skill/SkillToolset with custom registry pattern, ToolConfirmation with HITL approval gate). Library installed and source inspected directly from PyPI. Index updated with Zero → Hero step 18 and new reference cards. | Claude |
 | 2026-05-25 | google-adk 2.1.0 | Added Class deep dives — vol. 3 page (10 source-verified deep dives: AgentTool with 4 patterns, BuiltInPlanner, PlanReActPlanner with comparison table, InMemorySessionService with state scoping, VertexAiRagMemoryService, UnsafeLocalCodeExecutor, BuiltInCodeExecutor with comparison table, LiteLlm with 6 provider examples, AgentEvaluator with pytest integration, LoopAgent/ParallelAgent/SequentialAgent with Workflow migration). Library installed and source inspected directly from PyPI. Index updated with Zero → Hero step 17 and new reference card. | Claude |
 | 2026-05-24 | google-adk 2.1.0 | Added Class deep dives — vol. 2 page (6 source-verified deep dives: RemoteA2aAgent, LangGraphAgent, AuthCredential with all 5 auth types, GcsArtifactService, PubSubToolset, SpannerToolset). Library installed and source inspected directly from PyPI. Index updated with Zero → Hero step 16 and new reference card. | Claude |
 | 2026-05-23 | google-adk 2.1.0 | Version bump to 2.1.0; added Class deep dives page (10 source-verified deep dives: LlmAgent, RunConfig/StreamingMode/ToolThreadPoolConfig, Context/ToolContext, BasePlugin, App/EventsCompactionConfig/ResumabilityConfig, Workflow, BaseNode/Node, FunctionTool, RetryConfig, BaseTool); updated "What's new" section with 2.1.0 features; index version card, Aside, and deep dives navigation updated. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`); all PASS. | Claude |
