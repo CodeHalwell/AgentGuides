@@ -7,7 +7,7 @@ language: python
 
 # Toolsets
 
-Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.toolsets`.
+Verified against **pydantic-ai==1.103.0** — source modules: `pydantic_ai.toolsets.*`.
 
 A *toolset* is a reusable, named collection of tools with a shared policy (retries, timeout, metadata, instructions). PydanticAI ships 10+ toolset wrappers that let you filter, rename, combine, gate, or lazy-load tools without rewriting the functions. They're the supported way to attach non-code tool sources — MCP servers, remote APIs, human approval — to an agent.
 
@@ -872,14 +872,520 @@ async def main():
 asyncio.run(main())
 ```
 
+---
+
+## Deep dives — source-verified class details
+
+### `PrefixedToolset` — namespace isolation
+
+**Source**: `toolsets/prefixed.py`
+
+`PrefixedToolset` prepends a string to every tool name in the wrapped toolset, using `{prefix}_{original_name}` as the separator. It handles both name translation and call routing back to the original name.
+
+```python
+from pydantic_ai import Agent, FunctionToolset, PrefixedToolset, CombinedToolset, RunContext
+from dataclasses import dataclass
+
+@dataclass
+class Deps:
+    user: str
+
+# Two toolsets with a name collision: both have a "search" tool
+web_tools = FunctionToolset[Deps]()
+db_tools = FunctionToolset[Deps]()
+
+@web_tools.tool_plain
+def search(query: str) -> str:
+    """Search the web for information."""
+    return f'Web results for: {query}'
+
+@db_tools.tool_plain
+def search(query: str) -> str:  # noqa: F811 — same name, different toolset
+    """Search the internal database."""
+    return f'DB results for: {query}'
+
+# Without prefixing, CombinedToolset would raise on the name collision.
+# Prefix them:
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=Deps,
+    toolsets=[
+        CombinedToolset([
+            PrefixedToolset(web_tools, prefix='web'),
+            PrefixedToolset(db_tools, prefix='db'),
+        ])
+    ],
+)
+# Model now sees: web_search, db_search — no collision.
+result = agent.run_sync('Search the web for Python 3.13 news.', deps=Deps(user='alice'))
+print(result.output)
+```
+
+**Key implementation detail** (`toolsets/prefixed.py`): `PrefixedToolset.call_tool` strips the prefix before forwarding the call, so the underlying tool function still receives the original (unprefixed) name in `RunContext.tool_name`.
+
+```python
+# The model calls "web_search"; the underlying function sees tool_name="search"
+# in its RunContext. This is intentional — it keeps the underlying tool
+# independent of whatever prefix is applied.
+```
+
+**`tool_name_conflict_hint`** — if a collision still occurs after prefixing, the error message says _"Change the `prefix` attribute to avoid name conflicts."_ You can customise this hint on a subclass:
+
+```python
+class MyPrefixed(PrefixedToolset):
+    @property
+    def tool_name_conflict_hint(self) -> str:
+        return 'Rename the conflicting tool in the underlying FunctionToolset.'
+```
+
+---
+
+### `FilteredToolset` — per-step conditional visibility
+
+**Source**: `toolsets/filtered.py`
+
+`FilteredToolset` calls `filter_func(ctx, tool_def) -> bool` **on every agent step** before handing the tool list to the model. The filter is re-evaluated at each step, so you can dynamically hide or reveal tools based on conversation state.
+
+Both sync and async filter functions are accepted.
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, FilteredToolset, RunContext
+
+@dataclass
+class UserContext:
+    role: str          # 'admin' | 'viewer'
+    subscription: str  # 'free' | 'pro'
+
+tools = FunctionToolset[UserContext]()
+
+@tools.tool_plain
+def list_reports() -> list[str]:
+    """List available reports."""
+    return ['q1_report', 'q2_report']
+
+@tools.tool_plain
+def delete_report(report_id: str) -> str:
+    """Delete a report permanently. Admin only."""
+    return f'Deleted {report_id}'
+
+@tools.tool_plain
+def export_csv(report_id: str) -> str:
+    """Export a report as CSV. Pro subscribers only."""
+    return f'Exported {report_id} as CSV'
+
+# Sync filter — called per step, has access to ctx.deps
+def rbac_filter(ctx: RunContext[UserContext], tool_def) -> bool:
+    if tool_def.name == 'delete_report' and ctx.deps.role != 'admin':
+        return False
+    if tool_def.name == 'export_csv' and ctx.deps.subscription != 'pro':
+        return False
+    return True
+
+agent = Agent('openai:gpt-4o', deps_type=UserContext,
+              toolsets=[FilteredToolset(tools, filter_func=rbac_filter)])
+
+viewer = UserContext(role='viewer', subscription='free')
+result = agent.run_sync('List reports and delete report q1.', deps=viewer)
+# viewer only sees list_reports — the model can't call delete_report or export_csv
+print(result.output)
+```
+
+**Async filter** — useful for fetching permissions from an external service:
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, FilteredToolset, RunContext
+from pydantic_ai.tools import ToolDefinition
+
+@dataclass
+class AuthDeps:
+    session_token: str
+
+async def permission_filter(ctx: RunContext[AuthDeps], tool_def: ToolDefinition) -> bool:
+    """Check an auth service — only awaited if needed."""
+    if not tool_def.metadata.get('requires_permission'):
+        return True  # no auth check needed for unprotected tools
+    # Simulate async permission check
+    await asyncio.sleep(0.001)
+    permission = tool_def.metadata['requires_permission']
+    # Replace with real auth service call:
+    return ctx.deps.session_token.startswith('admin-') or permission == 'read'
+
+tools = FunctionToolset[AuthDeps]()
+
+@tools.tool_plain
+def read_data() -> str:
+    """Read data."""
+    return 'data'
+
+# Mark the write tool with required permission
+from pydantic_ai.tools import Tool
+import functools
+
+@tools.tool_plain
+def write_data(value: str) -> str:
+    """Write data. Requires write permission."""
+    return f'Written: {value}'
+
+# Attach metadata at registration time via FunctionToolset.add_function
+tools2 = FunctionToolset[AuthDeps](metadata={'requires_permission': 'write'})
+
+@tools2.tool_plain
+def admin_action() -> str:
+    """Admin-only action."""
+    return 'Done'
+
+from pydantic_ai import CombinedToolset
+agent = Agent('openai:gpt-4o', deps_type=AuthDeps,
+              toolsets=[FilteredToolset(CombinedToolset([tools, tools2]),
+                                        filter_func=permission_filter)])
+```
+
+**State-dependent filtering** — use the filter to hide a tool once a certain condition is reached:
+
+```python
+from pydantic_ai.messages import ModelRequest
+from pydantic_ai import Agent, FunctionToolset, FilteredToolset, RunContext
+
+tools = FunctionToolset[None]()
+
+@tools.tool_plain
+def confirm_purchase() -> str:
+    """Confirm the purchase. Only available once the cart is non-empty."""
+    return 'Purchase confirmed!'
+
+@tools.tool_plain
+def add_to_cart(item: str) -> str:
+    """Add an item to the cart."""
+    return f'{item} added to cart.'
+
+# Count how many items were added based on tool history
+def cart_filter(ctx: RunContext[None], tool_def) -> bool:
+    if tool_def.name != 'confirm_purchase':
+        return True
+    # Only show confirm_purchase if add_to_cart was called at least once
+    cart_calls = sum(
+        1 for msg in ctx.messages
+        for part in msg.parts
+        if hasattr(part, 'tool_name') and part.tool_name == 'add_to_cart'
+    )
+    return cart_calls > 0
+
+agent = Agent('openai:gpt-4o', toolsets=[FilteredToolset(tools, filter_func=cart_filter)])
+```
+
+---
+
+### `ApprovalRequiredToolset` — human-in-the-loop
+
+**Source**: `toolsets/approval_required.py`
+
+`ApprovalRequiredToolset` wraps any toolset so that when the model calls one of those tools, a `ApprovalRequired` exception is raised. The agent catches this and — if the output type includes `DeferredToolRequests` — surfaces it as a structured value that your application can use to ask a human for approval.
+
+#### Full HITL workflow
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, ApprovalRequiredToolset, RunContext
+from pydantic_ai.output import DeferredToolRequests
+from pydantic_ai.tools import DeferredToolResults, ToolApproved, ToolDenied
+
+@dataclass
+class AdminDeps:
+    admin_email: str
+
+# Tools that always need approval
+dangerous_tools = FunctionToolset[AdminDeps]()
+
+@dangerous_tools.tool
+def delete_user(ctx: RunContext[AdminDeps], user_id: str) -> str:
+    """Permanently delete a user account."""
+    return f'User {user_id} deleted by {ctx.deps.admin_email}'
+
+@dangerous_tools.tool
+def bulk_export(ctx: RunContext[AdminDeps], table: str) -> str:
+    """Export an entire database table to CSV."""
+    return f'Exported table {table}'
+
+# Wrap with approval gate
+gated = ApprovalRequiredToolset(dangerous_tools)
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=AdminDeps,
+    output_type=[str, DeferredToolRequests],  # <-- critical: allows DeferredToolRequests output
+    toolsets=[gated],
+)
+
+async def main():
+    deps = AdminDeps(admin_email='ops@example.com')
+    result1 = await agent.run('Delete user u-42 and export the audit_log table.', deps=deps)
+
+    if isinstance(result1.output, DeferredToolRequests):
+        print('Model wants to call these tools (awaiting approval):')
+        for call in result1.output.approvals:
+            print(f'  [{call.tool_call_id}] {call.tool_name}({call.args_as_dict()})')
+
+        # Human reviews and decides per call
+        human_decisions: dict[str, bool | ToolApproved | ToolDenied] = {}
+        for call in result1.output.approvals:
+            answer = input(f'Approve {call.tool_name}({call.args_as_dict()})? [y/N] ')
+            if answer.lower() == 'y':
+                human_decisions[call.tool_call_id] = ToolApproved()
+            else:
+                human_decisions[call.tool_call_id] = ToolDenied(message='Operation not approved by operator.')
+
+        # Resume the run with the decisions
+        result2 = await agent.run(
+            '',  # no new user message needed
+            deps=deps,
+            message_history=result1.all_messages(),
+            deferred_tool_results=DeferredToolResults(approvals=human_decisions),
+        )
+        print(result2.output)
+    else:
+        print(result1.output)
+
+asyncio.run(main())
+```
+
+#### Selective approval — `approval_required_func`
+
+By default, `ApprovalRequiredToolset` requires approval for **every** call. Pass `approval_required_func` to gate only specific tools:
+
+```python
+from pydantic_ai import ApprovalRequiredToolset, RunContext
+from pydantic_ai.tools import ToolDefinition
+
+def only_destructive(ctx: RunContext, tool_def: ToolDefinition, tool_args: dict) -> bool:
+    """Require approval only for destructive operations."""
+    return tool_def.name.startswith('delete_') or tool_def.name.startswith('bulk_')
+
+gated_selective = ApprovalRequiredToolset(
+    dangerous_tools,
+    approval_required_func=only_destructive,
+)
+```
+
+#### `ToolApproved` — override args
+
+`ToolApproved` accepts an optional `override_args` to substitute different arguments before the tool actually runs. This lets an operator correct or sanitise the model's arguments:
+
+```python
+from pydantic_ai.tools import ToolApproved
+
+# Model wanted to delete u-99, operator redirects to a safer test user
+decisions = {
+    call.tool_call_id: ToolApproved(override_args={'user_id': 'test-user-sandbox'})
+    for call in result1.output.approvals
+    if call.tool_name == 'delete_user'
+}
+```
+
+#### `DeferredToolRequests.build_results` convenience method
+
+```python
+# Approve all pending requests at once
+deferred_results = result1.output.build_results(approve_all=True)
+
+# Or approve some, deny others
+deferred_results = result1.output.build_results(
+    approvals={
+        call.tool_call_id: ToolApproved()
+        for call in result1.output.approvals
+        if call.tool_name != 'bulk_export'
+    },
+)
+```
+
+---
+
+### `DeferredLoadingToolset` — progressive tool disclosure
+
+**Source**: `toolsets/deferred_loading.py`
+
+`DeferredLoadingToolset` marks tools with `defer_loading=True` on their `ToolDefinition`, hiding them from the model until the `search_tools` function (or a native provider search) discovers them. This is the recommended way to work with large tool libraries (100+ tools) without overwhelming the context window.
+
+```python
+from pydantic_ai import Agent, FunctionToolset, DeferredLoadingToolset
+from pydantic_ai.capabilities import ToolSearch
+
+# A large library of 50+ tools
+big_library = FunctionToolset[None]()
+
+for i in range(20):
+    name = f'operation_{i}'
+    desc = f'Performs operation {i} on the dataset.'
+    # Register dynamically for this example
+    big_library.add_function(
+        lambda ctx, i=i: f'result of operation {i}',
+        name=name,
+        description=desc,
+    )
+
+# Hide all tools until tool search surfaces them
+hidden = DeferredLoadingToolset(big_library)
+
+# ToolSearch capability adds a search_tools function tool that discovers deferred tools
+agent = Agent(
+    'openai:gpt-4o',
+    toolsets=[hidden],
+    capabilities=[ToolSearch()],  # enables the search_tools built-in
+)
+result = agent.run_sync('Run operation 5 on the dataset.')
+print(result.output)
+```
+
+#### Selectively hide only some tools
+
+Pass `tool_names` to `DeferredLoadingToolset` to hide only specific tools; others remain visible:
+
+```python
+from pydantic_ai import FunctionToolset, DeferredLoadingToolset
+
+tools = FunctionToolset[None]()
+
+@tools.tool_plain
+def get_weather(city: str) -> str:
+    """Get current weather."""
+    return f'Sunny in {city}'
+
+@tools.tool_plain
+def send_alert(message: str) -> str:
+    """Send an emergency alert. Rarely needed."""
+    return f'Alert sent: {message}'
+
+@tools.tool_plain
+def list_sensors() -> list[str]:
+    """List active sensors."""
+    return ['sensor-1', 'sensor-2']
+
+# Only hide the rarely-used send_alert; get_weather and list_sensors stay visible
+partial_deferred = DeferredLoadingToolset(
+    tools,
+    tool_names=frozenset({'send_alert'}),
+)
+```
+
+#### How deferral works under the hood
+
+`DeferredLoadingToolset` (`toolsets/deferred_loading.py`) installs a `prepare_func` that calls `ToolDefinition.replace(defer_loading=True)` on the matching tools. The framework then:
+
+1. **Native path** (providers that support it like Anthropic/OpenAI): keeps all deferred tools in the wire payload with a provider-specific `defer_loading=True` flag, so the provider handles server-side discovery.
+2. **Local path**: drops deferred tools from the wire until the model calls `search_tools`, which returns the matching tool names. Discovered tools are promoted (set `defer_loading=False`) for subsequent steps.
+
+---
+
+### `ExternalToolset` — tools executed outside the agent run
+
+**Source**: `toolsets/external.py`
+
+`ExternalToolset` advertises tool schemas to the model but does **not** execute them. The agent pauses on a `DeferredToolRequests` output containing the model's calls; your application routes those calls to an external system (a queue, another process, a UI) and resumes the agent with the results.
+
+This pattern is useful for:
+- Long-running operations (file processing, slow APIs) that shouldn't block the agent.
+- Operations that require UI interaction (file upload dialogs, OAuth flows).
+- Durable execution contexts where the agent must survive a process restart.
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.toolsets import ExternalToolset
+from pydantic_ai.tools import ToolDefinition, DeferredToolResults
+from pydantic_ai.output import DeferredToolRequests
+
+# Define tool schemas — no Python implementation needed
+external = ExternalToolset([
+    ToolDefinition(
+        name='upload_file',
+        description='Upload a file to the document store. Returns the file ID.',
+        parameters_json_schema={
+            'type': 'object',
+            'properties': {
+                'filename': {'type': 'string'},
+                'content_type': {'type': 'string'},
+            },
+            'required': ['filename'],
+        },
+    ),
+    ToolDefinition(
+        name='run_etl_job',
+        description='Trigger a long-running ETL job. Returns job ID.',
+        parameters_json_schema={
+            'type': 'object',
+            'properties': {
+                'source_table': {'type': 'string'},
+                'target_table': {'type': 'string'},
+            },
+            'required': ['source_table', 'target_table'],
+        },
+    ),
+])
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[str, DeferredToolRequests],
+    toolsets=[external],
+)
+
+async def dispatch_to_queue(calls) -> dict[str, str]:
+    """Simulate dispatching to an external job queue."""
+    results = {}
+    for call in calls:
+        if call.tool_name == 'upload_file':
+            args = call.args_as_dict()
+            results[call.tool_call_id] = f'file_id_{args["filename"].replace(".", "_")}'
+        elif call.tool_name == 'run_etl_job':
+            args = call.args_as_dict()
+            results[call.tool_call_id] = f'job_{args["source_table"]}_to_{args["target_table"]}'
+    return results
+
+async def main():
+    result1 = await agent.run('Upload report.csv and run an ETL from raw_data to warehouse.')
+
+    if isinstance(result1.output, DeferredToolRequests):
+        print('External calls requested:')
+        for call in result1.output.calls:
+            print(f'  {call.tool_name}({call.args_as_dict()})')
+
+        # Execute externally and collect results
+        external_results = await dispatch_to_queue(result1.output.calls)
+
+        # Resume agent with the external results
+        result2 = await agent.run(
+            '',
+            message_history=result1.all_messages(),
+            deferred_tool_results=DeferredToolResults(calls=external_results),
+        )
+        print(result2.output)
+    else:
+        print(result1.output)
+
+asyncio.run(main())
+```
+
+**`DeferredToolset` is deprecated** — `ExternalToolset` is the replacement. The old name is still importable but emits a `DeprecationWarning`.
+
+---
+
 ## Reference
 
 - `AbstractToolset` — `toolsets/abstract.py`
 - `FunctionToolset` — `toolsets/function.py:44`
 - `CombinedToolset` — `toolsets/combined.py:26`
-- `PrefixedToolset` / `RenamedToolset` / `FilteredToolset` / `PreparedToolset` — `toolsets/*.py`
-- `ApprovalRequiredToolset` — `toolsets/approval_required.py:16`
-- `DeferredLoadingToolset` — `toolsets/deferred_loading.py:12`
-- `ExternalToolset` — `toolsets/external.py:17`
-- `IncludeReturnSchemasToolset` — `toolsets/include_return_schemas.py:12`
+- `PrefixedToolset` — `toolsets/prefixed.py`
+- `RenamedToolset` — `toolsets/renamed.py`
+- `FilteredToolset` — `toolsets/filtered.py`
+- `PreparedToolset` — `toolsets/prepared.py`
+- `ApprovalRequiredToolset` — `toolsets/approval_required.py`
+- `DeferredLoadingToolset` — `toolsets/deferred_loading.py`
+- `ExternalToolset` — `toolsets/external.py` (replaces deprecated `DeferredToolset`)
+- `IncludeReturnSchemasToolset` — `toolsets/include_return_schemas.py`
 - `SetMetadataToolset` — `toolsets/set_metadata.py`
+- `DeferredToolRequests` — `pydantic_ai.output`
+- `DeferredToolResults` — `pydantic_ai.tools`
+- `ToolApproved` / `ToolDenied` — `pydantic_ai.tools`
+- `ToolSearch` capability — `pydantic_ai.capabilities`

@@ -1,13 +1,13 @@
 ---
-title: "PydanticAI: Built-in / Native Tools"
-description: "Provider-native tools — WebSearchTool, WebFetchTool, CodeExecutionTool, ImageGenerationTool, FileSearchTool, MemoryTool, MCPServerTool, XSearchTool — and which providers support each."
+title: "PydanticAI: Built-in / Native Tools & Common Tools"
+description: "Provider-native tools (WebSearchTool, CodeExecutionTool, ImageGenerationTool, …) and local common tools (web_fetch_tool, duckduckgo_search_tool) — source-verified coverage of both families."
 framework: pydanticai
 language: python
 ---
 
-# Built-in / Native Tools
+# Built-in / Native Tools & Common Tools
 
-Verified against **pydantic-ai==1.101.0** — source module: `pydantic_ai.native_tools`.
+Verified against **pydantic-ai==1.103.0** — source modules: `pydantic_ai.native_tools`, `pydantic_ai.common_tools`.
 
 Native tools execute inside the LLM provider's infrastructure, not in your Python process. PydanticAI forwards a typed config to the provider and streams the results back as `NativeToolCallPart` / `NativeToolReturnPart`.
 
@@ -376,15 +376,276 @@ async for event in agent.run_stream_events(prompt):
         print(f'[native result] {event.result.content[:200]}')
 ```
 
+---
+
+## Common Tools — local Python tools (`pydantic_ai.common_tools`)
+
+**Common tools** are regular PydanticAI `Tool` objects that run in your Python process — not on the provider's infrastructure. They ship with the `pydantic-ai` package and are ready to use without API keys or provider configuration.
+
+> **Native vs. common tools — the key distinction**
+>
+> | | Native tools | Common tools |
+> |--|--|--|
+> | Runs in | Provider's infrastructure | Your Python process |
+> | Requires provider support | Yes (varies by provider) | No — works with any model |
+> | Configured via | `capabilities=[NativeTool(...)]` | `toolsets=[FunctionToolset([tool])]` or `tools=[tool]` |
+> | Examples | `WebSearchTool`, `CodeExecutionTool` | `web_fetch_tool`, `duckduckgo_search_tool` |
+
+---
+
+### `web_fetch_tool` — SSRF-protected URL fetching
+
+**Source**: `common_tools/web_fetch.py`  
+**Install**: `pip install "pydantic-ai-slim[web-fetch]"` (installs `markdownify` + `httpx`)
+
+`web_fetch_tool` fetches a URL, converts HTML to Markdown, and returns a `WebFetchResult` dict (or `BinaryContent` for PDFs/images). It uses `pydantic_ai._ssrf.safe_download` to block requests to private IP ranges by default.
+
+#### Minimal example
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
+agent = Agent(
+    'openai:gpt-4o',
+    tools=[web_fetch_tool()],
+)
+result = agent.run_sync('Summarise the content of https://docs.pydantic.dev/latest/')
+print(result.output)
+```
+
+#### Constructor (source: `common_tools/web_fetch.py:web_fetch_tool`)
+
+```python
+web_fetch_tool(
+    *,
+    max_content_length: int | None = 50_000,
+    allow_local_urls: bool = False,
+    timeout: int = 30,
+    allowed_domains: list[str] | None = None,
+    blocked_domains: list[str] | None = None,
+    headers: dict[str, str] | None = None,
+) -> Tool
+```
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `max_content_length` | `50_000` | Max characters returned (~12,500 tokens). `None` = no limit |
+| `allow_local_urls` | `False` | Set `True` in dev to allow `localhost`. **Never** in production |
+| `timeout` | `30` | HTTP request timeout in seconds |
+| `allowed_domains` | `None` | Whitelist — raises `ModelRetry` for other domains |
+| `blocked_domains` | `None` | Blacklist — raises `ModelRetry` for these domains |
+| `headers` | `None` | Extra HTTP headers. Overrides the default `Accept: text/markdown` header if `Accept` is provided |
+
+#### Default `Accept` header — markdown shortcut
+
+`web_fetch_tool` sends `Accept: text/markdown` by default. Servers that support it (Cloudflare Workers, Vercel, Mintlify) return Markdown directly, reducing token usage and improving quality. HTML is converted via `markdownify` when the server doesn't serve Markdown.
+
+#### Domain filtering — allowlist and blocklist
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
+# Only allow fetching from trusted documentation sites
+safe_fetcher = web_fetch_tool(
+    allowed_domains=['docs.pydantic.dev', 'docs.python.org', 'ai.pydantic.dev'],
+    max_content_length=30_000,
+    timeout=15,
+)
+
+agent = Agent('openai:gpt-4o', tools=[safe_fetcher])
+# Model can only fetch from the listed domains; any other URL raises ModelRetry
+```
+
+```python
+# Block specific domains (social media, tracking sites, etc.)
+filtered_fetcher = web_fetch_tool(
+    blocked_domains=['facebook.com', 'twitter.com', 'x.com', 'linkedin.com'],
+)
+```
+
+Note: `allowed_domains` and `blocked_domains` are **mutually exclusive per call** — the SSRF protection layer enforces exact hostname matching.
+
+#### Binary content handling
+
+For non-text URLs (PDFs, images, audio), `web_fetch_tool` returns a `BinaryContent` object rather than `WebFetchResult`. The model receives the binary directly (if the model supports multimodal input):
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool, WebFetchResult
+from pydantic_ai.messages import BinaryContent
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',   # Supports PDF reading
+    tools=[web_fetch_tool(max_content_length=None)],  # no truncation for PDFs
+)
+
+async def main():
+    result = await agent.run(
+        'Read https://example.com/report.pdf and summarise the key findings.'
+    )
+    print(result.output)
+
+asyncio.run(main())
+```
+
+#### Full configuration example — research agent
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
+research_fetcher = web_fetch_tool(
+    max_content_length=80_000,    # allow larger pages for research
+    allow_local_urls=False,        # keep SSRF protection on
+    timeout=60,                    # longer timeout for slow sites
+    headers={
+        'User-Agent': 'ResearchBot/1.0 (pydantic-ai)',
+        'Accept-Language': 'en-US,en;q=0.9',
+    },
+    blocked_domains=['ads.google.com', 'doubleclick.net'],
+)
+
+research_agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    tools=[research_fetcher],
+    system_prompt=(
+        'You are a research assistant. When you fetch a URL, extract the most relevant '
+        'information, cite the source URL, and keep your summary concise.'
+    ),
+)
+
+result = research_agent.run_sync(
+    'Fetch https://peps.python.org/pep-0703/ and explain the main proposal.'
+)
+print(result.output)
+```
+
+#### `WebFetchResult` TypedDict (source-verified)
+
+```python
+from pydantic_ai.common_tools.web_fetch import WebFetchResult
+
+# TypedDict fields:
+# url: str       — the URL that was fetched
+# title: str     — page <title>, or '' if not found
+# content: str   — page content converted to Markdown (or raw text for JSON/plain-text)
+```
+
+---
+
+### `duckduckgo_search_tool` — local DuckDuckGo search
+
+**Source**: `common_tools/duckduckgo.py`  
+**Install**: `pip install "pydantic-ai-slim[duckduckgo]"` (installs `ddgs`)
+
+`duckduckgo_search_tool` wraps the `ddgs` (DuckDuckGo Search) library as a PydanticAI tool. It runs in a thread pool (`anyio.to_thread.run_sync`) to keep the async event loop unblocked.
+
+#### Minimal example
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
+
+agent = Agent(
+    'openai:gpt-4o',
+    tools=[duckduckgo_search_tool(max_results=5)],
+)
+result = agent.run_sync('What are the latest Python 3.13 features?')
+print(result.output)
+```
+
+#### Constructor
+
+```python
+duckduckgo_search_tool(
+    duckduckgo_client: DDGS | None = None,
+    max_results: int | None = None,
+) -> Tool
+```
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `duckduckgo_client` | `None` | Pass a pre-configured `DDGS()` instance to share across calls |
+| `max_results` | `None` | Max results to return. `None` = results from the first response only |
+
+#### `DuckDuckGoResult` TypedDict (source-verified)
+
+Each result is a dict with these fields:
+
+```python
+from pydantic_ai.common_tools.duckduckgo import DuckDuckGoResult
+
+# TypedDict fields:
+# title: str   — result title
+# href: str    — result URL
+# body: str    — result snippet / body text
+```
+
+#### Shared DDGS client (reuse session)
+
+```python
+from ddgs import DDGS
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
+
+# Shared client — connection pool is reused across calls
+ddgs_client = DDGS()
+
+agent = Agent(
+    'openai:gpt-4o',
+    tools=[duckduckgo_search_tool(duckduckgo_client=ddgs_client, max_results=8)],
+)
+```
+
+#### Combining `duckduckgo_search_tool` with `web_fetch_tool`
+
+A common pattern: search for relevant URLs, then fetch and summarise each one.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    tools=[
+        duckduckgo_search_tool(max_results=5),
+        web_fetch_tool(max_content_length=20_000, timeout=20),
+    ],
+    system_prompt=(
+        'You are a research assistant. First search DuckDuckGo to find relevant pages, '
+        'then fetch the most promising URLs to read the full content. '
+        'Always cite your sources.'
+    ),
+)
+
+result = agent.run_sync('Research the current state of async Python frameworks in 2026.')
+print(result.output)
+```
+
+#### Note on rate limiting
+
+DuckDuckGo's unofficial API has no authentication but may rate-limit aggressive usage. For production workloads consider:
+- Caching results with a short TTL.
+- Using the `max_results` parameter to limit request size.
+- Using the native `WebSearchTool` capability on providers that support it (Anthropic, OpenAI, Groq) for higher rate limits.
+
+---
+
 ## Reference
 
 - `AbstractBuiltinTool` — `builtin_tools/__init__.py:41`
 - `WebSearchTool`, `WebSearchUserLocation` — `:90`, `:160`
 - `XSearchTool` — `:183`
 - `CodeExecutionTool` — `:274`
-- `WebFetchTool` / `UrlContextTool` — `:291`, `:352` (deprecated)
+- `WebFetchTool` / `UrlContextTool` — `:291`, `:352` (deprecated native tool)
 - `ImageGenerationTool` — `:364`
 - `MemoryTool` — `:456`
 - `MCPServerTool` — `:469`
 - `FileSearchTool` — `:540`
-- `BUILTIN_TOOLS_REQUIRING_CONFIG`, `SUPPORTED_BUILTIN_TOOLS`, `DEPRECATED_BUILTIN_TOOLS` — tail of the module
+- `BUILTIN_TOOLS_REQUIRING_CONFIG`, `SUPPORTED_BUILTIN_TOOLS`, `DEPRECATED_BUILTIN_TOOLS` — tail of `builtin_tools/__init__.py`
+- `web_fetch_tool`, `WebFetchResult` — `common_tools/web_fetch.py`
+- `duckduckgo_search_tool`, `DuckDuckGoResult` — `common_tools/duckduckgo.py`
