@@ -144,6 +144,374 @@ async def check_report_status(tool_context: ToolContext) -> dict:
 
 The key contract: the function **returns immediately** with a `{"status": "pending", ...}` dict. ADK delivers that response to the model, which then waits for the user to poll or for the next invocation to arrive. Do not block inside the function — that freezes the event loop.
 
+### Distinguishing `FunctionTool` vs `LongRunningFunctionTool`
+
+| Aspect | `FunctionTool` | `LongRunningFunctionTool` |
+|---|---|---|
+| `is_long_running` flag | `False` | `True` |
+| Declaration description | Unchanged | "`[LONG RUNNING TOOL]` …do not call again if pending" appended |
+| Return value | Anything JSON-serialisable | Same — **must** return immediately; typically `{"status": "pending", "job_id": ...}` |
+| Follow-up tool needed? | No | Yes (companion poll/status tool reads from `tool_context.state`) |
+
+### Multi-phase job with progress updates
+
+```python
+import asyncio
+from google.adk.tools import LongRunningFunctionTool
+from google.adk.tools.tool_context import ToolContext
+
+# Phase 1: submit the job
+async def export_dataset(dataset_id: str, format: str, tool_context: ToolContext) -> dict:
+    """Export a dataset in the requested format. Returns immediately with a job ID.
+
+    Args:
+      dataset_id: The dataset identifier.
+      format: Export format — 'csv', 'json', or 'parquet'.
+    Returns:
+      A dict with status ('pending') and job_id.
+    """
+    job_id = f"exp-{dataset_id}-{format}"
+    # Kick off async work (e.g. Cloud Run job, BigQuery export, etc.)
+    asyncio.create_task(_run_export(job_id, dataset_id, format))
+    tool_context.state[f"export_job:{job_id}"] = {"status": "pending", "pct": 0}
+    return {"status": "pending", "job_id": job_id, "eta_seconds": 30}
+
+async def _run_export(job_id: str, dataset_id: str, fmt: str):
+    """Background coroutine — updates state for the poll tool to read."""
+    await asyncio.sleep(15)   # simulate work
+    # In production, update state via a callback or shared store
+    print(f"[background] {job_id} complete")
+
+# Phase 2: poll status
+async def get_export_status(job_id: str, tool_context: ToolContext) -> dict:
+    """Check the status of a dataset export job.
+
+    Args:
+      job_id: The job ID returned by export_dataset.
+    Returns:
+      A dict with status ('pending' or 'done') and optionally a download_url.
+    """
+    info = tool_context.state.get(f"export_job:{job_id}")
+    if info is None:
+        return {"error": f"No job found for id {job_id!r}"}
+    return info
+
+export_tool = LongRunningFunctionTool(func=export_dataset)
+# get_export_status is a regular FunctionTool (auto-wrapped)
+```
+
+## AuthenticatedFunctionTool
+
+`AuthenticatedFunctionTool` (experimental) is a `FunctionTool` subclass that handles the ADK authentication flow before invoking your function. It:
+
+1. **First call** — credential not yet available → calls `CredentialManager.request_credential`, adds the auth flow to `actions.requested_auth_configs`, and returns `response_for_auth_required` (default: `"Pending User Authorization."`).
+2. **Subsequent call** — credential exchanged → injects it as a `credential` keyword argument and runs your function normally.
+
+The `credential` parameter is **not exposed to the model** — it is filtered from the function declaration.
+
+Source: `tools/authenticated_function_tool.py`.
+
+### API-key tool (pre-configured key)
+
+```python
+from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
+from google.adk.auth.auth_tool import AuthConfig
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+from google.adk.auth.auth_schemes import CustomAuthScheme
+import httpx
+
+# Declare the auth scheme (OpenAPI-style apiKey in header)
+api_key_scheme = CustomAuthScheme(type="apiKey", **{"in": "header", "name": "X-API-Key"})
+
+auth_cfg = AuthConfig(
+    auth_scheme=api_key_scheme,
+    raw_auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.API_KEY,
+        api_key="sk-my-secret-api-key",   # loaded from Secret Manager in production
+    ),
+)
+
+async def search_products(query: str, max_results: int = 5, credential=None) -> dict:
+    """Search the product catalogue.
+
+    Args:
+      query: Search terms.
+      max_results: Maximum number of results.
+    Returns:
+      A dict with 'products' list.
+    """
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://catalogue.internal/search",
+            params={"q": query, "limit": max_results},
+            headers={"X-API-Key": credential.api_key if credential else ""},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+search_tool = AuthenticatedFunctionTool(func=search_products, auth_config=auth_cfg)
+```
+
+### OAuth2 / OIDC (user consent flow)
+
+```python
+from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
+from google.adk.auth.auth_tool import AuthConfig
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
+from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
+
+google_oidc = OpenIdConnectWithConfig(
+    authorization_endpoint="https://accounts.google.com/o/oauth2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    scopes=["https://www.googleapis.com/auth/calendar.readonly"],
+)
+
+calendar_auth = AuthConfig(
+    auth_scheme=google_oidc,
+    raw_auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.OPEN_ID_CONNECT,
+        oauth2=OAuth2Auth(
+            client_id="YOUR_CLIENT_ID.apps.googleusercontent.com",
+            client_secret="YOUR_CLIENT_SECRET",
+            redirect_uri="https://myapp.example.com/oauth/callback",
+        ),
+    ),
+    credential_key="google-calendar",  # share token across multiple calendar tools
+)
+
+async def list_calendar_events(days_ahead: int = 7, credential=None) -> dict:
+    """List upcoming calendar events.
+
+    Args:
+      days_ahead: Number of days ahead to look.
+    Returns:
+      A dict with 'events' list.
+    """
+    import httpx
+    from datetime import datetime, timezone, timedelta
+
+    if not credential or not credential.oauth2 or not credential.oauth2.access_token:
+        return {"error": "no credential"}
+
+    now = datetime.now(timezone.utc)
+    time_max = now + timedelta(days=days_ahead)
+    async with httpx.AsyncClient() as c:
+        resp = await c.get(
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+            params={
+                "timeMin": now.isoformat(),
+                "timeMax": time_max.isoformat(),
+                "maxResults": 20,
+                "singleEvents": True,
+                "orderBy": "startTime",
+            },
+            headers={"Authorization": f"Bearer {credential.oauth2.access_token}"},
+        )
+        return resp.json()
+
+calendar_tool = AuthenticatedFunctionTool(
+    func=list_calendar_events,
+    auth_config=calendar_auth,
+    response_for_auth_required={
+        "status": "auth_required",
+        "message": "Please grant calendar access via the provided link.",
+    },
+)
+```
+
+### Bearer token (already obtained upstream)
+
+```python
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+from google.adk.auth.auth_schemes import CustomAuthScheme
+from google.adk.auth.auth_tool import AuthConfig
+from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
+
+bearer_auth = AuthConfig(
+    auth_scheme=CustomAuthScheme(type="http", scheme="bearer"),
+    raw_auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.HTTP,
+        http=HttpAuth(
+            scheme="bearer",
+            credentials=HttpCredentials(token="ya29.ALREADY_OBTAINED"),
+        ),
+    ),
+)
+
+async def call_internal_api(endpoint: str, credential=None) -> dict:
+    """Call an internal API with the user's bearer token.
+
+    Args:
+      endpoint: API endpoint path (relative to base URL).
+    Returns:
+      A dict with the API response.
+    """
+    import httpx
+    token = credential.http.credentials.token if credential else ""
+    async with httpx.AsyncClient() as c:
+        resp = await c.get(
+            f"https://internal.example.com/api/{endpoint}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        return resp.json()
+
+internal_tool = AuthenticatedFunctionTool(func=call_internal_api, auth_config=bearer_auth)
+```
+
+### `credential_key` — share tokens across tools
+
+When multiple tools use the same OAuth provider, set the same `credential_key` so the user only completes the OAuth flow once:
+
+```python
+SHARED_GOOGLE_AUTH = AuthConfig(
+    auth_scheme=OpenIdConnectWithConfig(
+        authorization_endpoint="https://accounts.google.com/o/oauth2/auth",
+        token_endpoint="https://oauth2.googleapis.com/token",
+        scopes=["https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/calendar.readonly"],
+    ),
+    raw_auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.OPEN_ID_CONNECT,
+        oauth2=OAuth2Auth(client_id="CLIENT_ID", client_secret="SECRET"),
+    ),
+    credential_key="google-workspace",  # same key → same cached token
+)
+
+gmail_tool = AuthenticatedFunctionTool(func=read_gmail, auth_config=SHARED_GOOGLE_AUTH)
+calendar_tool = AuthenticatedFunctionTool(func=read_calendar, auth_config=SHARED_GOOGLE_AUTH)
+```
+
+## ExecuteBashTool and BashToolPolicy
+
+`ExecuteBashTool` (experimental, `@experimental(FeatureName.SKILL_TOOLSET)`) lets an agent run shell commands in a sandboxed workspace. It always requests user confirmation before executing.
+
+Source: `tools/bash_tool.py`.
+
+### Constructor
+
+```python
+from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
+import pathlib
+
+# ── Minimal — allow all commands, 30 s timeout ────────────────────────────────
+bash = ExecuteBashTool()
+
+# ── Custom workspace ──────────────────────────────────────────────────────────
+bash = ExecuteBashTool(workspace=pathlib.Path("/tmp/agent-sandbox"))
+
+# ── With policy ───────────────────────────────────────────────────────────────
+policy = BashToolPolicy(
+    allowed_command_prefixes=("git", "python3", "pip"),  # block everything else
+    blocked_operators=("|", ";", "&&", "||", "`"),       # prevent chaining
+    timeout_seconds=60,
+    max_memory_bytes=512 * 1024 * 1024,   # 512 MB
+    max_file_size_bytes=100 * 1024 * 1024,  # 100 MB per write
+    max_child_processes=10,
+)
+bash = ExecuteBashTool(
+    workspace=pathlib.Path("/tmp/sandbox"),
+    policy=policy,
+)
+```
+
+### `BashToolPolicy` fields (frozen dataclass)
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `allowed_command_prefixes` | `tuple[str, ...]` | `("*",)` | `"*"` = allow all; otherwise restrict to listed prefixes |
+| `blocked_operators` | `tuple[str, ...]` | `()` | Shell operators that are rejected (e.g. `";", "&&", "\|"`) |
+| `timeout_seconds` | `int \| None` | `30` | Wall-clock timeout; process is killed with SIGKILL on breach |
+| `max_memory_bytes` | `int \| None` | `None` | Process virtual memory limit (`RLIMIT_AS`) |
+| `max_file_size_bytes` | `int \| None` | `None` | Max size of any file the process writes (`RLIMIT_FSIZE`) |
+| `max_child_processes` | `int \| None` | `None` | Max subprocess count (`RLIMIT_NPROC`) |
+
+### Return format
+
+`ExecuteBashTool.run_async` always returns a dict:
+
+```python
+{
+    "stdout": "<captured stdout or '<no stdout captured>'>",
+    "stderr": "<captured stderr>",
+    "returncode": 0,   # int exit code
+    # Present only on validation failure or execution error:
+    "error": "<reason>"
+}
+```
+
+### Usage example
+
+```python
+import asyncio, pathlib
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.runners import InMemoryRunner
+from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
+from google.genai import types
+
+# Enable the experimental flag first
+import os
+os.environ["GOOGLE_ADK_ALLOW_FEATURES"] = "skill_toolset"
+
+policy = BashToolPolicy(
+    allowed_command_prefixes=("ls", "cat", "echo", "python3 -c"),
+    blocked_operators=("|", ";", "&&", "||", "&"),
+    timeout_seconds=10,
+)
+bash_tool = ExecuteBashTool(
+    workspace=pathlib.Path("/tmp/work"),
+    policy=policy,
+)
+
+agent = LlmAgent(
+    name="code_runner",
+    model="gemini-2.5-flash",
+    instruction=(
+        "You can run shell commands in /tmp/work. "
+        "Always confirm before executing anything."
+    ),
+    tools=[bash_tool],
+)
+
+async def main():
+    app = App(name="shell_demo", root_agent=agent)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="shell_demo", user_id="dev"
+    )
+    async for event in runner.run_async(
+        user_id="dev",
+        session_id=session.id,
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part(text="List files in the workspace")]
+        ),
+    ):
+        if event.is_final_response() and event.content:
+            print("→", "".join(p.text or "" for p in event.content.parts))
+
+asyncio.run(main())
+```
+
+### Validation order
+
+Before spawning a subprocess, `ExecuteBashTool` runs `_validate_command`:
+
+1. **Prefix check** — if `allowed_command_prefixes != ("*",)`, the command must start with one of the listed prefixes (case-sensitive). Fails → `{"error": "Command not allowed..."}`.
+2. **Operator check** — if any `blocked_operators` token appears in the command string (simple substring match), fails → `{"error": "Operator ... is not allowed..."}`.
+3. **Confirmation** — `tool_context.request_confirmation(...)` is called on every valid command.
+
+After validation, the subprocess is launched with:
+- `cwd=workspace`
+- `start_new_session=True` (for clean signal propagation)
+- Resource limits applied via `preexec_fn` if `policy.max_*` fields are set
+
+### Security notes
+
+- `ExecuteBashTool` always requests confirmation (`request_confirmation` called before every run). In headless environments the confirmation callback must be handled by your `App` or a plugin.
+- Prefix matching is a **prefix** check, not a full command parser. `allowed_command_prefixes=("git",)` would permit `git-annex` as well. Use `blocked_operators` to prevent shell injection.
+- Use `workspace=` to confine the working directory; note that the process can still read/write absolute paths outside the workspace unless `RLIMIT_AS` / container isolation is also in place.
+
 ## AgentTool
 
 Wrap a whole agent as a callable tool. The agent's `input_schema` becomes the tool's parameter schema; its reply becomes the tool's return value.

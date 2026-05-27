@@ -245,7 +245,7 @@ ToolTrajectoryCriterion(threshold=1.0, match_type=ToolTrajectoryCriterion.MatchT
 
 ## `AgentEvaluator`
 
-The engine. Defined in `evaluation/agent_evaluator.py`.
+The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (source-verified for google-adk==2.1.0).
 
 ### `evaluate_eval_set` — programmatic, in-memory
 
@@ -263,6 +263,16 @@ await AgentEvaluator.evaluate_eval_set(
 ```
 
 `num_runs=2` (the default) runs each case twice and averages the scores, improving reliability for non-deterministic models. Increase to 5 for stability-sensitive metrics.
+
+**How `evaluate_eval_set` works internally (source-verified):**
+
+1. Loads the agent via `_get_agent_for_eval` — imports the module and looks for `get_agent_async` first, then `root_agent`.
+2. Creates an `InMemoryEvalSetsManager` and stores the eval set.
+3. Runs each `EvalCase` `num_runs` times — calls the agent via a `Runner` for each turn in the conversation.
+4. After all runs, scores each metric using the registered `MetricEvaluatorRegistry`.
+5. Averages scores across runs with `statistics.mean()`.
+6. Asserts each metric against its threshold — raises `AssertionError` if any fails.
+7. Optionally prints a tabular report via pandas/tabulate.
 
 ### `evaluate` — file-based
 
@@ -282,7 +292,7 @@ await AgentEvaluator.evaluate(
 ### Agent module conventions
 
 `AgentEvaluator` loads the module and looks for (in order):
-1. `get_agent_async` — an async factory `() -> BaseAgent`.
+1. `get_agent_async` — an async factory `() -> BaseAgent`. Checked first.
 2. `root_agent` — a module-level `BaseAgent` instance.
 
 ```python
@@ -309,6 +319,129 @@ async def get_agent_async():
         name="db_agent",
         tools=[make_db_tool(db)],
     )
+```
+
+### `find_config_for_test_file` — auto-load eval config
+
+When running file-based evals, `AgentEvaluator` can auto-discover a `test_config.json` file in the same folder:
+
+```python
+# Structure:
+# tests/eval_data/
+#   test_config.json          ← auto-discovered
+#   my_suite.evalset.json
+
+# tests/eval_data/test_config.json
+{
+  "criteria": {
+    "tool_trajectory_avg_score": 1.0,
+    "response_match_score": 0.7
+  }
+}
+```
+
+```python
+# Load it manually
+config = AgentEvaluator.find_config_for_test_file("tests/eval_data/my_suite.evalset.json")
+print(config.criteria)   # {"tool_trajectory_avg_score": 1.0, ...}
+```
+
+### Full end-to-end example with result capture
+
+```python
+import asyncio
+from google.adk.evaluation.agent_evaluator import AgentEvaluator
+from google.adk.evaluation.eval_case import EvalCase, Invocation, IntermediateData
+from google.adk.evaluation.eval_set import EvalSet
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.eval_metrics import PrebuiltMetrics, ToolTrajectoryCriterion
+from google.adk.evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
+from google.genai import types
+
+
+# --- Build eval cases --------------------------------------------------------
+cases = [
+    EvalCase(
+        eval_id="unit_conversion",
+        conversation=[
+            Invocation(
+                user_content=types.Content(
+                    role="user",
+                    parts=[types.Part(text="Convert 100 Fahrenheit to Celsius.")],
+                ),
+                final_response=types.Content(
+                    role="model",
+                    parts=[types.Part(text="37.78")],
+                ),
+                intermediate_data=IntermediateData(
+                    tool_uses=[
+                        types.FunctionCall(
+                            name="convert_temperature",
+                            args={"value": 100, "from_unit": "F", "to_unit": "C"},
+                        )
+                    ]
+                ),
+            )
+        ],
+    ),
+    EvalCase(
+        eval_id="multi_turn_booking",
+        conversation=[
+            Invocation(
+                user_content=types.Content(
+                    role="user",
+                    parts=[types.Part(text="Book a flight to Paris.")],
+                ),
+                final_response=types.Content(
+                    role="model",
+                    parts=[types.Part(text="Which date would you like to travel?")],
+                ),
+            ),
+            Invocation(
+                user_content=types.Content(
+                    role="user",
+                    parts=[types.Part(text="June 15th.")],
+                ),
+                final_response=types.Content(
+                    role="model",
+                    parts=[types.Part(text="Done! Flight booked for June 15th to Paris.")],
+                ),
+                intermediate_data=IntermediateData(
+                    tool_uses=[
+                        types.FunctionCall(
+                            name="book_flight",
+                            args={"destination": "Paris", "date": "2026-06-15"},
+                        )
+                    ]
+                ),
+            ),
+        ],
+    ),
+]
+
+eval_set = EvalSet(eval_set_id="travel_agent_suite", eval_cases=cases)
+
+eval_config = EvalConfig(
+    criteria={
+        PrebuiltMetrics.TOOL_TRAJECTORY_AVG_SCORE.value: ToolTrajectoryCriterion(
+            threshold=1.0,
+            match_type=ToolTrajectoryCriterion.MatchType.IN_ORDER,
+        ),
+        PrebuiltMetrics.RESPONSE_MATCH_SCORE.value: 0.5,
+    }
+)
+
+# --- Run evaluation ----------------------------------------------------------
+async def main():
+    await AgentEvaluator.evaluate_eval_set(
+        agent_module="my_package.travel_agent",
+        eval_set=eval_set,
+        eval_config=eval_config,
+        num_runs=2,
+        print_detailed_results=True,
+    )
+
+asyncio.run(main())
 ```
 
 ## Saving eval results

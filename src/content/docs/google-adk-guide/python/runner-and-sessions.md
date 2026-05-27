@@ -196,8 +196,8 @@ All subclass `BaseSessionService` and expose `create_session`, `get_session`, `l
 | Service | Import | Storage | Notes |
 |---|---|---|---|
 | `InMemorySessionService` | `google.adk.sessions` | Python dict | Dev/testing |
-| `DatabaseSessionService(db_url)` | `google.adk.sessions` (lazy) | Any SQLAlchemy URL | Requires `sqlalchemy>=2.0`. Supports SQLite, Postgres, MySQL, Spanner |
-| `SqliteSessionService` | `google.adk.sessions.sqlite_session_service` | SQLite file (async) | Zero-dep alternative to `DatabaseSessionService` for SQLite |
+| `DatabaseSessionService(db_url)` | `google.adk.sessions` (lazy) | Any SQLAlchemy URL | Requires `sqlalchemy>=2.0`, async driver. Supports SQLite, Postgres, MySQL, Spanner |
+| `SqliteSessionService` | `google.adk.sessions.sqlite_session_service` | SQLite file (async) | Zero-dep alternative to `DatabaseSessionService` for SQLite only |
 | `VertexAiSessionService(project, location, agent_engine_id, *, express_mode_api_key=None)` | `google.adk.sessions` | Vertex AI Agent Engine | Production-ready, scales with Agent Engine |
 
 ```python
@@ -215,6 +215,365 @@ svc = VertexAiSessionService(
 ```
 
 `DatabaseSessionService.create_session`/`get_session` run the underlying SQL inside an async session factory; Postgres and MySQL use row-level locking for concurrent `append_event` (`database_session_service.py:282-320`).
+
+---
+
+## `DatabaseSessionService` deep dive
+
+`DatabaseSessionService(db_url, **kwargs)` is the recommended persistent session backend for self-hosted deployments. It uses **SQLAlchemy 2.x async** with a per-session asyncio lock to serialise concurrent `append_event` calls within the same process.
+
+### Supported backends and URL format
+
+```python
+from google.adk.sessions import DatabaseSessionService
+
+# ── SQLite (local dev, single-process) ────────────────────────────────────────
+# aiosqlite is bundled with google-adk; no extra driver install needed
+svc = DatabaseSessionService(db_url="sqlite+aiosqlite:///./sessions.db")
+
+# In-memory SQLite for tests (data lost on close)
+svc_mem = DatabaseSessionService(db_url="sqlite+aiosqlite:///:memory:")
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+# pip install asyncpg
+svc = DatabaseSessionService(db_url="postgresql+asyncpg://user:pass@localhost:5432/adk")
+
+# With connection pool tuning
+svc = DatabaseSessionService(
+    db_url="postgresql+asyncpg://user:pass@pg-host/adk",
+    pool_size=10,           # max persistent connections
+    max_overflow=5,         # additional connections when pool is full
+    pool_recycle=3600,      # close connections older than 1 h
+    echo=False,             # set True to log every SQL statement
+)
+
+# ── MySQL / MariaDB ───────────────────────────────────────────────────────────
+# pip install aiomysql
+svc = DatabaseSessionService(db_url="mysql+aiomysql://user:pass@localhost:3306/adk")
+
+# ── Cloud Spanner ─────────────────────────────────────────────────────────────
+# pip install sqlalchemy-spanner
+svc = DatabaseSessionService(
+    db_url="spanner+spanner:///projects/my-proj/instances/my-inst/databases/adk"
+)
+```
+
+`**kwargs` are forwarded directly to `create_async_engine` — use them for pool parameters, SSL settings, etc.
+
+### Schema and tables
+
+ADK creates three tables automatically on first use (via `_prepare_tables`). There are two schema versions; new deployments use **V1**:
+
+| Table | Purpose |
+|---|---|
+| `sessions` | One row per session — `app_name`, `user_id`, `id`, `update_time`, `update_storage_marker`, plus serialised `state` (session-scoped only) |
+| `app_states` | One row per `(app_name)` — serialised `app_state` dict |
+| `user_states` | One row per `(app_name, user_id)` — serialised `user_state` dict |
+| `events` | One row per event — foreign-keyed to `sessions`, stores `event_data` JSON, `invocation_id`, `timestamp`, `branch`, etc. |
+
+State scopes are **split across tables** to enable efficient app- and user-level updates without touching every session row.
+
+### CRUD examples
+
+```python
+import asyncio
+from google.adk.sessions import DatabaseSessionService
+from google.adk.sessions.base_session_service import GetSessionConfig
+from google.genai import types
+
+svc = DatabaseSessionService(db_url="sqlite+aiosqlite:///./demo.db")
+
+async def main():
+    # ── create_session ────────────────────────────────────────────────────────
+    session = await svc.create_session(
+        app_name="myapp",
+        user_id="u1",
+        state={
+            "session:last_city": "London",  # session-scoped
+            "user:lang": "en",              # user-scoped (persists across sessions)
+            "app:feature_x": True,          # app-scoped (all users see this)
+        },
+        session_id="s1",   # omit for auto-generated UUID
+    )
+    print(session.id, session.state)
+
+    # ── get_session ──────────────────────────────────────────────────────────
+    loaded = await svc.get_session(
+        app_name="myapp",
+        user_id="u1",
+        session_id="s1",
+        config=GetSessionConfig(
+            num_recent_events=10,       # load only the last 10 events
+            # after_timestamp=1_747_000_000.0,  # or events after a timestamp
+        ),
+    )
+
+    # ── list_sessions ─────────────────────────────────────────────────────────
+    response = await svc.list_sessions(app_name="myapp", user_id="u1")
+    for s in response.sessions:
+        print(s.id, s.update_time)
+
+    # ── delete_session ────────────────────────────────────────────────────────
+    await svc.delete_session(app_name="myapp", user_id="u1", session_id="s1")
+
+asyncio.run(main())
+```
+
+### Concurrent writes and per-session locking
+
+`append_event` serialises concurrent writes within the **same process** using a per-session `asyncio.Lock`. Each unique `(app_name, user_id, session_id)` tuple gets its own lock that is reference-counted and removed when no longer needed.
+
+```python
+import asyncio
+from google.adk.sessions import DatabaseSessionService
+from google.adk.events.event import Event
+from google.genai import types
+
+svc = DatabaseSessionService(db_url="postgresql+asyncpg://user:pass@host/adk")
+
+async def concurrent_append_demo():
+    session = await svc.create_session(app_name="myapp", user_id="u1")
+
+    # Concurrent appends are safe within the same process.
+    # Different processes (or containers) are serialised by the DB
+    # — Postgres/MySQL use FOR UPDATE row-level locking.
+    event = Event(
+        invocation_id="inv-001",
+        author="user",
+        content=types.Content(role="user", parts=[types.Part(text="Hello")]),
+    )
+    appended = await svc.append_event(session=session, event=event)
+    print(appended.id, appended.timestamp)
+```
+
+> **Multi-process note:** For multi-process or multi-container deployments, use PostgreSQL or MySQL — these dialects use `SELECT ... FOR UPDATE` row-level locking on the session row when detected via `_supports_row_level_locking()`. SQLite is single-writer by design; run only one process against the same SQLite file.
+
+### Stale-session detection
+
+`append_event` compares the in-memory `session.update_storage_marker` against the value persisted in the DB. If another process has modified the session since it was loaded, a `ValueError` is raised:
+
+```
+ValueError: The session has been modified in storage since it was loaded.
+Please reload the session before appending more events.
+```
+
+Handle this by reloading the session and replaying:
+
+```python
+from google.adk.sessions import DatabaseSessionService
+from google.adk.events.event import Event
+
+async def safe_append(svc: DatabaseSessionService, session, event: Event):
+    """Append an event, reloading the session once if stale."""
+    try:
+        return await svc.append_event(session=session, event=event)
+    except ValueError as exc:
+        if "modified in storage" in str(exc):
+            fresh = await svc.get_session(
+                app_name=session.app_name,
+                user_id=session.user_id,
+                session_id=session.id,
+            )
+            return await svc.append_event(session=fresh, event=event)
+        raise
+```
+
+### Schema migration (V0 → V1)
+
+ADK detects the schema version from the existing tables. If the DB was created with an older ADK release (V0 schema), a migration is triggered automatically on first use. No manual migration scripts are needed; `_prepare_tables` handles it.
+
+### Production setup with Runner
+
+```python
+from google.adk.apps import App
+from google.adk.runners import Runner
+from google.adk.sessions import DatabaseSessionService
+from google.adk.artifacts import GcsArtifactService
+from google.adk.memory import VertexAiMemoryBankService
+
+app = App(name="prod_app", root_agent=my_agent)
+
+runner = Runner(
+    app=app,
+    session_service=DatabaseSessionService(
+        db_url="postgresql+asyncpg://adk_user:${PG_PASSWORD}@pg-host:5432/adk",
+        pool_size=10,
+        max_overflow=5,
+    ),
+    artifact_service=GcsArtifactService(bucket_name="my-adk-artifacts"),
+    memory_service=VertexAiMemoryBankService(
+        project="my-gcp-project",
+        location="us-central1",
+        agent_engine_id="1234567890",
+    ),
+)
+
+# Always clean up — closes the connection pool
+async with runner:
+    ...
+```
+
+---
+
+## `SqliteSessionService` deep dive
+
+`SqliteSessionService(db_path)` is a lighter-weight alternative to `DatabaseSessionService` for pure SQLite use. It uses **aiosqlite** directly (bundled with `google-adk`) instead of SQLAlchemy, making it a zero-extra-dependency choice.
+
+### Constructor
+
+```python
+from google.adk.sessions.sqlite_session_service import SqliteSessionService
+
+# ── File path (absolute or relative) ─────────────────────────────────────────
+svc = SqliteSessionService("sessions.db")
+svc = SqliteSessionService("/var/data/adk/sessions.db")
+
+# ── SQLAlchemy-style URL (also accepted) ──────────────────────────────────────
+svc = SqliteSessionService("sqlite:///sessions.db")          # relative
+svc = SqliteSessionService("sqlite:////abs/path/sessions.db")  # absolute
+
+# ── In-memory SQLite for tests ────────────────────────────────────────────────
+svc = SqliteSessionService(":memory:")
+```
+
+Path parsing logic (verified `sqlite_session_service.py:_parse_db_path`):
+- URLs starting with `sqlite:///` → strips the prefix, uses the trailing path.
+- Bare paths (`/path` or `./path`) → used directly.
+- `:memory:` → in-memory SQLite (no file created).
+
+### Schema
+
+`SqliteSessionService` creates four tables on first use:
+
+```sql
+-- App-wide shared state
+CREATE TABLE app_states (
+    app_name TEXT,
+    state    TEXT,        -- JSON
+    update_time REAL,
+    PRIMARY KEY (app_name)
+);
+
+-- User-wide state (spans all sessions for a user)
+CREATE TABLE user_states (
+    app_name  TEXT,
+    user_id   TEXT,
+    state     TEXT,       -- JSON
+    update_time REAL,
+    PRIMARY KEY (app_name, user_id)
+);
+
+-- Session metadata + session-scoped state
+CREATE TABLE sessions (
+    app_name    TEXT,
+    user_id     TEXT,
+    id          TEXT,
+    state       TEXT,     -- JSON (session-scoped only)
+    create_time REAL,
+    update_time REAL,
+    PRIMARY KEY (app_name, user_id, id)
+);
+
+-- Events (FK to sessions)
+CREATE TABLE events (
+    id             TEXT,
+    app_name       TEXT,
+    user_id        TEXT,
+    session_id     TEXT,
+    invocation_id  TEXT,
+    timestamp      REAL,
+    event_data     TEXT,  -- JSON serialised Event
+    FOREIGN KEY (app_name, user_id, session_id)
+        REFERENCES sessions(app_name, user_id, id)
+);
+```
+
+State is merged using SQLite's native `json_patch()` function for atomic partial updates.
+
+### Full usage example
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.runners import Runner
+from google.adk.sessions.sqlite_session_service import SqliteSessionService
+from google.adk.sessions.base_session_service import GetSessionConfig
+from google.genai import types
+
+agent = LlmAgent(name="chat", model="gemini-2.5-flash", instruction="Be helpful.")
+app = App(name="chatbot", root_agent=agent)
+
+async def main():
+    svc = SqliteSessionService("conversations.db")
+    runner = Runner(app=app, session_service=svc)
+
+    # Create a session with mixed-scope state
+    session = await svc.create_session(
+        app_name="chatbot",
+        user_id="alice",
+        state={
+            "user:preferred_language": "en",    # user-scoped → survives session deletion
+            "greeting_shown": False,            # session-scoped
+        },
+    )
+
+    # Run a turn
+    async for event in runner.run_async(
+        user_id="alice",
+        session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="Hello!")]),
+    ):
+        if event.is_final_response() and event.content:
+            print("Agent:", "".join(p.text or "" for p in event.content.parts))
+
+    # Load session with only the 5 most-recent events
+    recent = await svc.get_session(
+        app_name="chatbot",
+        user_id="alice",
+        session_id=session.id,
+        config=GetSessionConfig(num_recent_events=5),
+    )
+    print(f"Events loaded: {len(recent.events)}")
+
+    # Inspect state scopes
+    print("Session state:", recent.state.get("greeting_shown"))
+    print("User lang:", recent.state.get("user:preferred_language"))
+
+    # Delete the session (user-scoped state persists)
+    await svc.delete_session(
+        app_name="chatbot", user_id="alice", session_id=session.id
+    )
+
+    # Create a new session — user:preferred_language is still there
+    new_session = await svc.create_session(
+        app_name="chatbot", user_id="alice"
+    )
+    print("Lang still set:", new_session.state.get("user:preferred_language"))  # "en"
+
+    await runner.close()
+
+asyncio.run(main())
+```
+
+### State scopes — what survives deletion
+
+| State key prefix | Survives `delete_session`? | Scope |
+|---|---|---|
+| (none) / `session:` | No — lost when session is deleted | This session only |
+| `user:` | Yes — stored in `user_states` table | All sessions of this user in this app |
+| `app:` | Yes — stored in `app_states` table | All sessions, all users in this app |
+| `temp:` | No — never persisted at all | Current invocation only |
+
+### Migration detection
+
+`SqliteSessionService` raises a `RuntimeError` if it detects a DB created with the old `event_data` column schema that needs migration:
+
+```
+RuntimeError: Database schema is in old format. Please migrate.
+```
+
+Migrate by re-creating the DB file (for dev) or using `DatabaseSessionService` which handles migration automatically.
 
 ## Session state
 
