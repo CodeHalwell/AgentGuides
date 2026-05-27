@@ -356,22 +356,73 @@ Set `sub_agents=[a, b]` on a parent `LlmAgent` to get `transfer_to_agent` routin
 An `LlmAgent` with `output_schema=MyPydanticModel` can't use tools but emits a validated structured reply. Wire it downstream of a tool-enabled agent via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
 
 ### 3 — ReAct via `BuiltInPlanner`
+
+`BuiltInPlanner` delegates planning entirely to Gemini's native thinking feature. It injects a `ThinkingConfig` into every `LlmRequest` — the model then produces `thought=True` parts internally which are stripped before the response reaches the user.
+
+Source: `planners/built_in_planner.py`.
+
 ```python
 from google.adk.planners import BuiltInPlanner
+from google.adk.agents import LlmAgent
 from google.genai import types
 
+# ── Minimal — enable thinking, no token budget ────────────────────────────────
 agent = LlmAgent(
     name="thoughtful",
     model="gemini-2.5-pro",
-    planner=BuiltInPlanner(thinking_config=types.ThinkingConfig(include_thoughts=True)),
+    planner=BuiltInPlanner(
+        thinking_config=types.ThinkingConfig(include_thoughts=True)
+    ),
+    tools=[...],
+)
+
+# ── Cap thinking tokens (reduces latency / cost) ──────────────────────────────
+agent_capped = LlmAgent(
+    name="budgeted",
+    model="gemini-2.5-flash",
+    instruction="Research and summarise the topic.",
+    planner=BuiltInPlanner(
+        thinking_config=types.ThinkingConfig(
+            include_thoughts=True,
+            thinking_budget=4096,   # max thinking tokens; 0 disables thinking
+        )
+    ),
+    tools=[google_search],
+)
+```
+
+**How `BuiltInPlanner` works (verified source `built_in_planner.py`):**
+
+1. `apply_thinking_config(llm_request)` is called before each model call — sets `llm_request.config.thinking_config`. If the request already has a thinking config it is overwritten (a warning is logged).
+2. `build_planning_instruction(...)` returns `None` — no extra system instruction is prepended.
+3. `process_planning_response(...)` returns `None` — no response post-processing needed (Gemini handles it natively).
+
+**Accessing thought parts in callbacks:**
+
+```python
+async def capture_thoughts(callback_context, llm_response):
+    """Log thinking tokens for debugging."""
+    for part in (llm_response.content.parts or []):
+        if getattr(part, "thought", False) and part.text:
+            print("[THOUGHT]", part.text[:200])
+    return None   # don't modify the response
+
+agent = LlmAgent(
+    name="transparent",
+    model="gemini-2.5-pro",
+    planner=BuiltInPlanner(
+        thinking_config=types.ThinkingConfig(include_thoughts=True)
+    ),
+    after_model_callback=capture_thoughts,
     tools=[...],
 )
 ```
-`PlanReActPlanner` is also available for a textual plan-then-act flow (`planners/plan_re_act_planner.py`).
 
 ### PlanReActPlanner (no thinking-model required)
 
 `PlanReActPlanner` works with **any** Gemini model — it does not require `thinking_config` support. Instead it injects a structured prompt that instructs the model to emit planning, reasoning, action, and final-answer blocks using XML-style tags. The planner strips all content except function calls and the final answer from what is sent back to the user.
+
+Source: `planners/plan_re_act_planner.py`.
 
 ```python
 from google.adk.agents import LlmAgent
@@ -405,22 +456,101 @@ The CEO of Anthropic is Dario Amodei.
 
 **Tag semantics (from `planners/plan_re_act_planner.py`):**
 
-| Tag | Purpose | Shown to user |
-|---|---|---|
-| `/*PLANNING*/` | Initial plan in natural language | No — marked as `thought=True` |
-| `/*REPLANNING*/` | Revised plan when initial plan fails | No — marked as `thought=True` |
-| `/*REASONING*/` | Inline reasoning between tool calls | No — marked as `thought=True` |
-| `/*ACTION*/` | Function call block | The function call is executed |
-| `/*FINAL_ANSWER*/` | The response visible to the user | Yes |
+| Tag | Constant | Purpose | Shown to user |
+|---|---|---|---|
+| `/*PLANNING*/` | `PLANNING_TAG` | Initial plan in natural language | No — marked as `thought=True` |
+| `/*REPLANNING*/` | `REPLANNING_TAG` | Revised plan when initial plan fails | No — marked as `thought=True` |
+| `/*REASONING*/` | `REASONING_TAG` | Inline reasoning between tool calls | No — marked as `thought=True` |
+| `/*ACTION*/` | `ACTION_TAG` | Function call block | The function call is executed |
+| `/*FINAL_ANSWER*/` | `FINAL_ANSWER_TAG` | The response visible to the user | Yes |
+
+**Processing pipeline (verified source):**
+
+1. `build_planning_instruction(...)` — prepends a comprehensive NL instruction block to the system prompt covering: plan format, reasoning tags, action tags, tool-use rules, and the final-answer tag requirement.
+2. After the model responds, `process_planning_response(...)` splits the response parts:
+   - Text before the first `/*FINAL_ANSWER*/` tag → marked `thought=True` (never reaches the user).
+   - Text after `/*FINAL_ANSWER*/` → returned as the visible reply.
+   - Function calls → preserved and executed normally.
+
+**Multi-tool research agent:**
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.planners import PlanReActPlanner
+from google.adk.runners import InMemoryRunner
+from google.adk.apps import App
+from google.adk.tools import google_search
+from google.genai import types
+
+async def get_stock_price(ticker: str) -> dict:
+    """Get the latest price for a stock ticker.
+
+    Args:
+      ticker: Stock symbol, e.g. 'GOOG'.
+    Returns:
+      A dict with price and currency.
+    """
+    # In production: call a real market data API
+    return {"ticker": ticker, "price": 175.32, "currency": "USD"}
+
+async def get_company_news(company: str) -> dict:
+    """Fetch recent news about a company.
+
+    Args:
+      company: Full company name.
+    Returns:
+      A dict with headlines list.
+    """
+    return {"company": company, "headlines": ["Q1 earnings beat", "New product launch"]}
+
+analyst = LlmAgent(
+    name="analyst",
+    model="gemini-2.5-flash",
+    instruction=(
+        "You are a financial analyst. Use the available tools to research "
+        "companies and produce a concise investment brief."
+    ),
+    planner=PlanReActPlanner(),
+    tools=[get_stock_price, get_company_news, google_search],
+)
+
+async def main():
+    app = App(name="finance", root_agent=analyst)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="finance", user_id="u1"
+    )
+    async for event in runner.run_async(
+        user_id="u1",
+        session_id=session.id,
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part(text="Give me a brief on Alphabet Inc.")]
+        ),
+    ):
+        if event.is_final_response() and event.content:
+            print("Brief:", "".join(p.text or "" for p in event.content.parts))
+
+asyncio.run(main())
+```
 
 **When to use `PlanReActPlanner` vs `BuiltInPlanner`:**
 
-| Planner | Requires thinking model | Latency | Reasoning visible in traces |
-|---|---|---|---|
-| `BuiltInPlanner(thinking_config=...)` | Yes (Gemini 2.5 Pro/Flash) | Lower (native) | Yes (thought parts) |
-| `PlanReActPlanner()` | No | Higher (extra tokens) | Yes (thought parts) |
+| Planner | Requires thinking model | Latency overhead | Reasoning visible in traces | Cost |
+|---|---|---|---|---|
+| `BuiltInPlanner(thinking_config=...)` | Yes (Gemini 2.5 Pro/Flash only) | Low (native) | Yes (thought parts) | Thinking tokens charged separately |
+| `PlanReActPlanner()` | No (any Gemini model) | Higher (extra output tokens) | Yes (thought parts) | Normal output token rate |
 
-Use `PlanReActPlanner` when you need structured planning on a non-thinking model, or when you want the plan/reasoning explicitly captured for debugging.
+Use `PlanReActPlanner` when:
+- You need structured planning on a non-thinking model (e.g. `gemini-2.0-flash`).
+- You want the plan/reasoning explicitly tagged and capturable via callbacks.
+- You need to debug multi-step tool chains — the `/*REASONING*/` blocks reveal the model's intent at each step.
+
+Use `BuiltInPlanner` when:
+- You're using Gemini 2.5 Pro or Flash (supports `ThinkingConfig`).
+- Latency matters — native thinking is faster than generating reasoning tokens.
+- You want to cap reasoning cost with `thinking_budget`.
 
 ### 4 — Reflection loop
 `LoopAgent` (or the `Workflow` equivalent) with a single reflective `LlmAgent` that rewrites `state['draft']` each turn and escalates when satisfied. Use `include_contents="none"` on the reflective agent to avoid feeding the full history back each iteration.

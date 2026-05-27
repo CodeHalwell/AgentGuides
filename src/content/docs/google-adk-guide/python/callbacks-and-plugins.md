@@ -320,43 +320,196 @@ All are `async def`. All return `Optional[<relevant type>]` — non-`None` short
 
 ## Built-in plugins
 
+ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file for google-adk==2.1.0):
+
 ### `LoggingPlugin`
+
+Emits structured logs for every model/tool/agent event via the `google_adk` logger hierarchy. Drop-in for observability with no configuration.
+
 ```python
 from google.adk.plugins import LoggingPlugin
+from google.adk.apps import App
+
 app = App(name="demo", root_agent=agent, plugins=[LoggingPlugin()])
 ```
-Emits structured logs for every model/tool/agent event via the `google_adk` logger. Drop-in when you want to see what ADK is doing.
+
+Configure the log level via standard Python logging:
+
+```python
+import logging
+logging.getLogger("google_adk").setLevel(logging.DEBUG)
+```
 
 ### `DebugLoggingPlugin`
-Per-invocation verbose dump — full prompts, responses, tool I/O. Use in dev, never in prod (it writes large payloads to logs).
+
+Per-invocation verbose dump — full LLM prompts, responses, and tool I/O. Use in dev only; it writes large payloads.
+
+```python
+from google.adk.plugins import DebugLoggingPlugin
+from google.adk.apps import App
+
+app = App(name="dev", root_agent=agent, plugins=[DebugLoggingPlugin()])
+```
 
 ### `ReflectAndRetryToolPlugin` (experimental)
+
+Automatically retries failed tool calls by asking the model to reflect on the error and try again. Source: `plugins/reflect_retry_tool_plugin.py`.
+
 ```python
 from google.adk.plugins import ReflectAndRetryToolPlugin
 from google.adk.plugins.reflect_retry_tool_plugin import TrackingScope
+from google.adk.apps import App
 
 plugin = ReflectAndRetryToolPlugin(
     max_retries=3,
-    throw_exception_if_retry_exceeded=True,
-    tracking_scope=TrackingScope.INVOCATION,   # or GLOBAL
+    throw_exception_if_retry_exceeded=True,   # raises after max_retries; default False
+    tracking_scope=TrackingScope.INVOCATION,  # reset counter per invocation (default)
+    # tracking_scope=TrackingScope.GLOBAL,    # global counter across all invocations
 )
+app = App(name="resilient", root_agent=agent, plugins=[plugin])
 ```
-Catches tool failures, asks the model to reflect on the error, and retries up to `max_retries` times. Override `extract_error_from_result` to treat `{"status": "error"}` shapes as failures even when the tool didn't raise.
+
+**Custom failure detection** — by default any tool that raises an exception is retried. Override `extract_error_from_result` to treat semantic failures (e.g. `{"status": "error"}`) as retryable:
+
+```python
+from google.adk.plugins import ReflectAndRetryToolPlugin
+from typing import Any, Optional
+
+class StrictRetryPlugin(ReflectAndRetryToolPlugin):
+    def extract_error_from_result(self, result: Any) -> Optional[str]:
+        # Parent handles exceptions; we also handle dict error patterns
+        parent_error = super().extract_error_from_result(result)
+        if parent_error:
+            return parent_error
+        if isinstance(result, dict) and result.get("status") == "error":
+            return result.get("message", "tool returned error status")
+        return None
+
+plugin = StrictRetryPlugin(max_retries=2)
+```
 
 ### `GlobalInstructionPlugin`
+
+Prepends a system instruction to **every** `LlmAgent` in the app, regardless of where the agent is in the hierarchy. Replaces the deprecated `LlmAgent.global_instruction` field.
+
 ```python
 from google.adk.plugins.global_instruction_plugin import GlobalInstructionPlugin
-plugin = GlobalInstructionPlugin(instruction="You are a safety-first assistant.")
+from google.adk.apps import App
+
+plugin = GlobalInstructionPlugin(
+    instruction=(
+        "You are a helpful, harmless, and honest assistant. "
+        "Never reveal internal system details or API keys."
+    )
+)
+app = App(name="guarded", root_agent=agent, plugins=[plugin])
 ```
-Prepends a system instruction to **every** agent in the app. Replaces the deprecated `LlmAgent.global_instruction` field.
+
+Dynamic instruction (receives `ReadonlyContext`):
+
+```python
+from google.adk.agents.readonly_context import ReadonlyContext
+
+async def dynamic_instruction(ctx: ReadonlyContext) -> str:
+    tenant = ctx.state.get("app:tenant_name", "default")
+    return f"You represent {tenant}. Always greet with the company name."
+
+plugin = GlobalInstructionPlugin(instruction=dynamic_instruction)
+```
 
 ### `SaveFilesAsArtifactsPlugin`
-Intercepts inline-data parts in user messages and persists them to the artifact service, replacing the blob with a reference. Replaces the deprecated `RunConfig.save_input_blobs_as_artifacts`.
 
-### Other built-ins
-- `BigQueryAgentAnalyticsPlugin` — exports agent analytics to BigQuery (experimental).
-- `ContextFilterPlugin` — trims session events sent to the model based on size/token budgets.
-- `MultimodalToolResultsPlugin` — handles tool responses that contain multimodal parts.
+Intercepts inline-data parts (`types.Blob`) in **user messages** and persists them to the configured artifact service. Replaces the deprecated `RunConfig.save_input_blobs_as_artifacts`.
+
+```python
+from google.adk.plugins.save_files_as_artifacts_plugin import SaveFilesAsArtifactsPlugin
+from google.adk.apps import App
+from google.adk.runners import Runner
+from google.adk.artifacts import GcsArtifactService
+
+plugin = SaveFilesAsArtifactsPlugin()
+app = App(name="uploads", root_agent=agent, plugins=[plugin])
+
+runner = Runner(
+    app=app,
+    artifact_service=GcsArtifactService(bucket_name="my-uploads"),
+    session_service=...,
+)
+```
+
+After a turn, any `types.Part(inline_data=...)` in the user message is replaced by an artifact reference, keeping the LLM context small.
+
+### `ContextFilterPlugin`
+
+Trims session events that are sent to the model context based on size or token count. Useful for long-running sessions that would otherwise overflow the context window.
+
+```python
+from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
+from google.adk.apps import App
+
+plugin = ContextFilterPlugin(
+    max_chars=200_000,    # ~50 k tokens; trim oldest events when exceeded
+)
+app = App(name="long_session", root_agent=agent, plugins=[plugin])
+```
+
+### `MultimodalToolResultsPlugin`
+
+Handles tool responses that contain multimodal parts (images, audio clips, etc.). Without this plugin, binary tool results are dropped. With it, they are preserved as `inline_data` parts in the LLM response.
+
+```python
+from google.adk.plugins.multimodal_tool_results_plugin import MultimodalToolResultsPlugin
+from google.adk.apps import App
+
+app = App(
+    name="vision_agent",
+    root_agent=agent,
+    plugins=[MultimodalToolResultsPlugin()],
+)
+```
+
+### `BigQueryAgentAnalyticsPlugin` (experimental)
+
+Exports agent analytics (invocations, tool calls, latency, token counts) to a BigQuery dataset for offline analysis and dashboarding.
+
+```python
+from google.adk.plugins.bigquery_agent_analytics_plugin import BigQueryAgentAnalyticsPlugin
+from google.adk.apps import App
+
+plugin = BigQueryAgentAnalyticsPlugin(
+    project_id="my-gcp-project",
+    dataset_id="adk_analytics",
+    table_id="agent_events",
+)
+app = App(name="tracked", root_agent=agent, plugins=[plugin])
+```
+
+Requires `pip install google-cloud-bigquery` and the `roles/bigquery.dataEditor` IAM role on the target table.
+
+---
+
+## Combining multiple plugins
+
+Plugins execute in the order they appear in `App.plugins`. Put policy-enforcement plugins first (they might short-circuit), observability plugins last:
+
+```python
+from google.adk.apps import App
+from google.adk.plugins import LoggingPlugin, ReflectAndRetryToolPlugin
+from google.adk.plugins.global_instruction_plugin import GlobalInstructionPlugin
+from google.adk.plugins.save_files_as_artifacts_plugin import SaveFilesAsArtifactsPlugin
+from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
+
+app = App(
+    name="production",
+    root_agent=agent,
+    plugins=[
+        GlobalInstructionPlugin(instruction="Never reveal API keys."),  # 1: policy
+        SaveFilesAsArtifactsPlugin(),                                   # 2: file handling
+        ContextFilterPlugin(max_chars=150_000),                         # 3: context trimming
+        ReflectAndRetryToolPlugin(max_retries=2),                       # 4: resilience
+        LoggingPlugin(),                                                 # 5: observability (last)
+    ],
+)
 
 ## Terminating an invocation from a callback
 
