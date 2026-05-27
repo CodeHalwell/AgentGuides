@@ -499,6 +499,219 @@ for ns, chunk in orchestrator.stream(
 
 ---
 
+## Example 5: `graph.as_tool()` — use a compiled graph as a LangChain tool
+
+`CompiledStateGraph.as_tool()` (beta) converts a compiled graph into a `BaseTool` that any LangChain agent or `ToolNode` can call. This lets you compose graphs at the tool-call level: a parent agent calls a sub-agent via a regular tool invocation, and the sub-agent's result is returned as a `ToolMessage`.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
+from langchain_core.messages import AnyMessage, HumanMessage
+from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# ── Specialist sub-agent: research graph ─────────────────────────────────────
+
+class ResearchState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    topic: str
+    summary: str
+
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+
+
+def research_and_summarize(state: ResearchState) -> dict:
+    response = model.invoke([
+        HumanMessage(
+            f"Research this topic and provide a concise 2-paragraph summary: {state['topic']}"
+        )
+    ])
+    return {"summary": response.content, "messages": [response]}
+
+
+research_builder = StateGraph(ResearchState)
+research_builder.add_node("research", research_and_summarize)
+research_builder.add_edge(START, "research")
+research_builder.add_edge("research", END)
+
+research_graph = research_builder.compile()
+
+# ── Convert the graph to a tool ───────────────────────────────────────────────
+
+class ResearchInput(BaseModel):
+    topic: str = Field(description="The topic to research and summarize.")
+
+
+# as_tool() is beta — API may change in future versions
+research_tool = research_graph.as_tool(
+    args_schema=ResearchInput,
+    name="research_topic",
+    description=(
+        "Research a topic thoroughly and return a concise 2-paragraph summary. "
+        "Use this when you need background information or fact-checking on any subject."
+    ),
+)
+
+# ── Parent orchestrator that calls research_tool ──────────────────────────────
+
+class OrchestratorState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+
+tools = [research_tool]
+orchestrator_model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools(tools)
+tool_node = ToolNode(tools)
+
+
+def orchestrator_agent(state: OrchestratorState) -> dict:
+    response = orchestrator_model.invoke(state["messages"])
+    return {"messages": [response]}
+
+
+orch_builder = StateGraph(OrchestratorState)
+orch_builder.add_node("agent", orchestrator_agent)
+orch_builder.add_node("tools", tool_node)
+orch_builder.add_edge(START, "agent")
+orch_builder.add_conditional_edges("agent", tools_condition)
+orch_builder.add_edge("tools", "agent")
+
+orchestrator = orch_builder.compile(checkpointer=InMemorySaver())
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+config = {"configurable": {"thread_id": "as-tool-demo-1"}}
+result = orchestrator.invoke(
+    {"messages": [HumanMessage("Tell me about the history of LangGraph.")]},
+    config,
+)
+print(result["messages"][-1].content)
+```
+
+Key points about `as_tool()`:
+
+- The graph's **input schema** is inferred from its state `TypedDict` if you don't pass `args_schema`. Pass an explicit Pydantic model to control exactly which fields the LLM sees.
+- The tool returns the **final state** as a dict. Wrap the result if you want a string output for the `ToolMessage`.
+- `as_tool()` is marked **beta** — the API surface may change in future LangGraph versions.
+- For nested graphs that need human-in-the-loop, use a subgraph node (Example 4) instead, since tool calls don't support mid-execution interrupts.
+
+---
+
+## Example 6: `Command` with `Command.PARENT` — child-to-parent escalation
+
+A subgraph node can send updates **up to the parent graph** by returning `Command(graph=Command.PARENT, ...)`. This enables a specialist subgraph to escalate to the parent (e.g. signal that it needs more resources, or surface a final result into the parent's state).
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, AIMessage, HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.types import Command
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# ── Shared state keys (must exist in BOTH parent and child schemas) ───────────
+
+class ChildState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    escalate: bool   # child sets this; parent reads it
+
+
+class ParentState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    escalate: bool   # parent receives this update from the child
+    final_answer: str
+
+
+# ── Child graph ───────────────────────────────────────────────────────────────
+
+def child_worker(state: ChildState) -> Command[str]:
+    """A specialist that can either resolve a task or escalate to the parent."""
+    last_msg = state["messages"][-1].content if state["messages"] else ""
+
+    if "complex" in last_msg.lower():
+        # Escalate: update parent state and navigate parent to "escalation_handler"
+        return Command(
+            graph=Command.PARENT,           # target the closest parent graph
+            update={"escalate": True},      # write to parent's state key
+            goto="escalation_handler",      # navigate parent to this node
+        )
+
+    # Happy path: return a result normally
+    return {"messages": [AIMessage("Task completed by specialist.")]}
+
+
+child_builder = StateGraph(ChildState)
+child_builder.add_node("worker", child_worker, destinations={"escalation_handler"})
+child_builder.add_edge(START, "worker")
+child_builder.add_edge("worker", END)
+
+child_graph = child_builder.compile()
+
+
+# ── Parent graph ──────────────────────────────────────────────────────────────
+
+def supervisor(state: ParentState) -> dict:
+    return {"final_answer": "Delegating to specialist..."}
+
+
+def escalation_handler(state: ParentState) -> dict:
+    """Handles tasks the specialist couldn't complete."""
+    return {
+        "final_answer": "Escalated task handled at supervisor level.",
+        "escalate": False,
+    }
+
+
+parent_builder = StateGraph(ParentState)
+parent_builder.add_node("supervisor", supervisor)
+parent_builder.add_node("specialist", child_graph)      # child graph as a node
+parent_builder.add_node("escalation_handler", escalation_handler)
+
+parent_builder.add_edge(START, "supervisor")
+parent_builder.add_edge("supervisor", "specialist")
+parent_builder.add_edge("specialist", END)
+parent_builder.add_edge("escalation_handler", END)
+
+parent_graph = parent_builder.compile(checkpointer=InMemorySaver())
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+
+config = {"configurable": {"thread_id": "parent-cmd-demo"}}
+
+# Simple task — no escalation
+r1 = parent_graph.invoke(
+    {"messages": [HumanMessage("simple task")], "escalate": False, "final_answer": ""},
+    config,
+)
+print(r1["final_answer"])   # "Task completed by specialist."
+
+# Complex task — child escalates to parent
+config2 = {"configurable": {"thread_id": "parent-cmd-demo-2"}}
+r2 = parent_graph.invoke(
+    {"messages": [HumanMessage("complex task that needs escalation")],
+     "escalate": False, "final_answer": ""},
+    config2,
+)
+print(r2["final_answer"])   # "Escalated task handled at supervisor level."
+```
+
+Rules for `Command.PARENT`:
+
+- The state keys in `Command(update=...)` must exist in the **parent's** state schema. Writing to a key the parent doesn't have raises `InvalidUpdateError`.
+- `Command.PARENT` navigates the **closest** parent — if graphs are nested 3 levels deep, it targets level 2, not level 1.
+- Use `destinations={"node_name"}` on the child node's `add_node` call to make the Mermaid diagram show the edge correctly.
+
+---
+
 ## Gotchas
 
 - **`Command(goto=END)` vs `add_edge(node, END)`:** A node that returns `Command(goto=...)` bypasses all explicit edges from that node. Pick one style per node — never mix `add_edge` and `Command` routing for the same node.
@@ -506,3 +719,4 @@ for ns, chunk in orchestrator.stream(
 - **`Send` arg is the entire snapshot for the target node.** Workers see only what you passed in `Send("worker", {...})`, not the full `WorkflowState`. Include every key the worker reads.
 - **`checkpointer=True` is only for subgraphs.** Passing `checkpointer=True` to a root graph raises `RuntimeError`. Only compiled subgraphs can inherit a parent's checkpointer.
 - **`destinations=` is diagram-only.** It does not change execution — its sole purpose is to make the Mermaid visualization show the correct edges for nodes that use `Command`.
+- **`as_tool()` is beta.** The API is functional but may change in future LangGraph releases. Pin your `langgraph` version if relying on it in production.
