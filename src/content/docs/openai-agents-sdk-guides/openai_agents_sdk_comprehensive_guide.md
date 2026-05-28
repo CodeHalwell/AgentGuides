@@ -4,7 +4,7 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: 0.17.3 | Updated: May 19, 2026
+Latest: 0.17.4 | Updated: May 27, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -3133,6 +3133,7 @@ This comprehensive framework enables developers to build production-grade AI app
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.17.4 | May 27, 2026 | Patch release; stability and dependency improvements. Version bumped 0.17.3 → 0.17.4. No new public symbols. All key symbols (`Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) verified against installed `openai-agents 0.17.4` (`.routine-envs/openai-agents`); no `DeprecationWarning` emissions. | Claude routine |
 | 0.17.3 | May 19, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified against installed `openai-agents 0.17.3` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
 | 0.17.2 | May 12, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.2` (`.routine-envs/check-0512-py`): `Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`. |
 | 0.17.1 | May 11, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`). |
