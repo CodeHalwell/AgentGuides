@@ -35,7 +35,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <Aside type="tip" title="SDK Class Deep Dives — Vol. 1 & Vol. 3 (azure-ai-agents 1.1.0)">
   Source-verified deep dives covering **20 classes** total:
   - **[Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives/)** — `AgentsClient`, `FunctionTool`, `ToolSet`, `CodeInterpreterTool`, `FileSearchTool`, `BingGroundingTool`, `ConnectedAgentTool`, `AgentEventHandler`, `ThreadMessage`, `OpenApiTool`
-  - **[Vol. 3 (new)](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v3/)** — `AsyncFunctionTool`, `AzureFunctionTool`, `AzureAISearchTool`, `VectorStore`, `ThreadRun`, `RunStep`, `ResponseFormatJsonSchema`, `TruncationObject`, `MessageAttachment`, `AsyncAgentEventHandler`
+  - **[Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v3/)** — `AsyncFunctionTool`, `AzureFunctionTool`, `AzureAISearchTool`, `VectorStore`, `ThreadRun`, `RunStep`, `ResponseFormatJsonSchema`, `TruncationObject`, `MessageAttachment`, `AsyncAgentEventHandler`
+  - **[Vol. 4 (new)](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v4/)** — `AgentsClient` (`enable_auto_function_calls`, `create_thread_and_process_run`), `FunctionTool` (error handling, dynamic registration), `ToolSet` (composition), `CodeInterpreterTool` (file upload + run step inspection), `FileSearchTool` + `VectorStore` (full lifecycle), `AzureAISearchTool` (query modes), `BingGroundingTool` (market/freshness), `ConnectedAgentTool` (multi-agent end-to-end), `AgentEventHandler` (custom subclass), `AsyncToolSet` + `AsyncFunctionTool` (concurrent execution)
 </Aside>
 
 <Aside type="tip" title="Where to start">
@@ -72,6 +73,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="19 · Class deep dives (Vol. 1)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Agent, RawAgent, FunctionTool, WorkflowBuilder, RunContext, InlineSkill, MCPStdioTool — source-verified at 1.6.0 · 30 min" />
   <LinkCard title="20 · Class deep dives (Vol. 2)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/" description="FileHistoryProvider, AgentMiddleware, ChatMiddleware, FunctionMiddleware, CompactionProvider, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, FileCheckpointStorage, LocalEvaluator, WorkflowRunResult — source-verified at 1.6.0 · 35 min" />
   <LinkCard title="21 · SDK Class deep dives Vol. 3 (azure-ai-agents 1.1.0)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v3/" description="AsyncFunctionTool, AzureFunctionTool, AzureAISearchTool, VectorStore, ThreadRun, RunStep, ResponseFormatJsonSchema, TruncationObject, MessageAttachment, AsyncAgentEventHandler — source-verified · 45 min" />
+  <LinkCard title="22 · SDK Class deep dives Vol. 4 (azure-ai-agents 1.1.0)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v4/" description="enable_auto_function_calls, create_thread_and_process_run, FunctionTool dynamic registration, CodeInterpreterTool file upload, FileSearchTool+VectorStore lifecycle, AzureAISearchTool query modes, BingGroundingTool params, ConnectedAgentTool multi-agent, custom AgentEventHandler, AsyncToolSet concurrent execution — source-verified · 50 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -100,6 +102,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Class deep dives Vol. 1 (10 classes, source-verified)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" />
   <LinkCard title="Class deep dives Vol. 2 (10 more classes, source-verified)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/" />
   <LinkCard title="SDK Class deep dives Vol. 3 — azure-ai-agents 1.1.0 (10 new classes)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v3/" />
+  <LinkCard title="SDK Class deep dives Vol. 4 — azure-ai-agents 1.1.0 (10 more patterns)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v4/" />
 </CardGrid>
 
 ## Reference
@@ -126,6 +129,7 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Production guide" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, Kubernetes, CI/CD, compliance." />
   <LinkCard title="Class deep dives Vol. 1" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Agent, RawAgent, FunctionTool, WorkflowBuilder, RunContext, InlineSkill, MCPStdioTool — 10 classes from source." />
   <LinkCard title="Class deep dives Vol. 2" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/" description="FileHistoryProvider, AgentMiddleware, ChatMiddleware, FunctionMiddleware, CompactionProvider, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, FileCheckpointStorage, LocalEvaluator, WorkflowRunResult — 10 more classes from source." />
+  <LinkCard title="SDK Class deep dives Vol. 4 (azure-ai-agents 1.1.0)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v4/" description="enable_auto_function_calls, create_thread_and_process_run, FunctionTool, ToolSet, CodeInterpreterTool, FileSearchTool+VectorStore, AzureAISearchTool, BingGroundingTool, ConnectedAgentTool, AgentEventHandler, AsyncToolSet — 10 source-verified patterns." />
 </CardGrid>
 
 ## What's shipped (May 2026 introspection)
