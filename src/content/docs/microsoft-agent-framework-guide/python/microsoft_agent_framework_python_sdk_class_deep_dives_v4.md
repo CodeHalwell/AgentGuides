@@ -27,7 +27,7 @@ Earlier volumes:
 4. [CodeInterpreterTool — file upload, execution, and run step inspection](#4-codeinterpretertool--file-upload-execution-and-run-step-inspection)
 5. [FileSearchTool + VectorStore — full lifecycle with expiry policy](#5-filesearchtool--vectorstore--full-lifecycle-with-expiry-policy)
 6. [AzureAISearchTool — simple, semantic, and hybrid query modes](#6-azureaisearchtool--simple-semantic-and-hybrid-query-modes)
-7. [BingGroundingTool — market, count, freshness, and language parameters](#7-bingroundingtool--market-count-freshness-and-language-parameters)
+7. [BingGroundingTool — market, count, freshness, and language parameters](#7-binggroundingtool--market-count-freshness-and-language-parameters)
 8. [ConnectedAgentTool — multi-agent orchestration end to end](#8-connectedagenttool--multi-agent-orchestration-end-to-end)
 9. [AgentEventHandler — custom streaming subclass](#9-agenteventhandler--custom-streaming-subclass)
 10. [AsyncToolSet + AsyncFunctionTool — concurrent async tool execution](#10-asynctoolset--asyncfunctiontool--concurrent-async-tool-execution)
@@ -264,7 +264,7 @@ for defn in tool.definitions:
     print(defn.function.parameters)   # JSON schema derived from annotations
 ```
 
-### Dynamic registration with `add()`
+### Dynamic registration with `add_functions()`
 
 ```python
 import json
@@ -274,9 +274,9 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> str:
     # Stub — replace with a real rates API
     return json.dumps({"rate": 0.92, "source": "ECB"})
 
-tool = FunctionTool(set())        # start with no functions
-tool.add(search_products)         # register at runtime
-tool.add(get_exchange_rate)       # add a second function
+tool = FunctionTool(set())                          # start with no functions
+tool.add_functions({search_products})               # register at runtime
+tool.add_functions({get_exchange_rate})             # add a second function
 
 print(f"Registered {len(tool.definitions)} tools")
 ```
@@ -345,7 +345,7 @@ agent = client.create_agent(
 ```python
 # Useful when you need to modify a tool after construction
 function_tool = toolset.get_tool(FunctionTool)
-function_tool.add(get_exchange_rate)   # add another function dynamically
+function_tool.add_functions({get_exchange_rate})   # add another function dynamically
 ```
 
 ### `execute_tool_calls` — what happens internally
@@ -1174,7 +1174,7 @@ async def main() -> None:
         print(f"Status: {run.status}")
 
         # Read response
-        async for msg in await client.messages.list(thread_id=thread.id):
+        async for msg in client.messages.list(thread_id=thread.id):
             if msg.role == "assistant":
                 for content in msg.text_messages:
                     print(content.text.value)
@@ -1213,7 +1213,7 @@ For 3 tool calls each taking 200 ms, sequential execution is 600 ms; concurrent 
 ### Pattern A — Grounded RAG agent (FileSearch + AzureAISearch + BingGrounding)
 
 ```python
-from azure.ai.agents.models import ToolSet, FileSearchTool, AzureAISearchTool, BingGroundingTool
+from azure.ai.agents.models import ToolSet, FileSearchTool, AzureAISearchTool, AzureAISearchQueryType, BingGroundingTool
 
 toolset = ToolSet()
 toolset.add(FileSearchTool(["vs_internal_docs"]))        # proprietary internal docs

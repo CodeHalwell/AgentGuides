@@ -32,8 +32,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   The **correct** package is **`azure-ai-agents`** (import: `azure.ai.agents`) with the main class **`AgentsClient`**. All new content on this page and in the new SDK deep-dives document uses the correct package. See [Migration Notice](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_migration_notice/) for a full before/after comparison.
 </Aside>
 
-<Aside type="tip" title="SDK Class Deep Dives — Vol. 1 & Vol. 3 (azure-ai-agents 1.1.0)">
-  Source-verified deep dives covering **20 classes** total:
+<Aside type="tip" title="SDK Class Deep Dives — Vol. 1, Vol. 3 & Vol. 4 (azure-ai-agents 1.1.0)">
+  Source-verified deep dives covering **30 classes/patterns** total:
   - **[Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives/)** — `AgentsClient`, `FunctionTool`, `ToolSet`, `CodeInterpreterTool`, `FileSearchTool`, `BingGroundingTool`, `ConnectedAgentTool`, `AgentEventHandler`, `ThreadMessage`, `OpenApiTool`
   - **[Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v3/)** — `AsyncFunctionTool`, `AzureFunctionTool`, `AzureAISearchTool`, `VectorStore`, `ThreadRun`, `RunStep`, `ResponseFormatJsonSchema`, `TruncationObject`, `MessageAttachment`, `AsyncAgentEventHandler`
   - **[Vol. 4 (new)](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v4/)** — `AgentsClient` (`enable_auto_function_calls`, `create_thread_and_process_run`), `FunctionTool` (error handling, dynamic registration), `ToolSet` (composition), `CodeInterpreterTool` (file upload + run step inspection), `FileSearchTool` + `VectorStore` (full lifecycle), `AzureAISearchTool` (query modes), `BingGroundingTool` (market/freshness), `ConnectedAgentTool` (multi-agent end-to-end), `AgentEventHandler` (custom subclass), `AsyncToolSet` + `AsyncFunctionTool` (concurrent execution)
