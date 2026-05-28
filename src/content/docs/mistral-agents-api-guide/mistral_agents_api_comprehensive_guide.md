@@ -4,10 +4,10 @@ description: "> BREAKING: Mistral SDK v2.0.1 (March 12, 2026) is NOT backwards-c
 framework: mistral-agents-api
 ---
 
-Latest: 2.4.5 | Updated: May 9, 2026
+Latest: 2.4.7 | Updated: May 27, 2026
 # Mistral Agents API: Visual Architecture and Diagrams
 
-> **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.5**.
+> **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.7**.
 
 This document provides comprehensive visual representations of Mistral Agents API architecture, data flows, and patterns.
 
@@ -690,6 +690,127 @@ Agent Object:
 
 ---
 
+## 10. New in v2.4.7: Guardrails and Handoff Execution
+
+*Source: `mistralai==2.4.7` installed at `.routine-envs/mistralai`. Symbols inspected: `GuardrailConfig`, `ModerationLlmv1Config`, `ModerationLlmv2Config` (from `mistralai.client.models`), `Conversations.start()`, `BetaAgents.create()`, `Agents.complete()` (from `mistralai.client`).*
+
+### 10.1 Guardrails (`GuardrailConfig`)
+
+Attach content moderation to individual agents or conversations. The `guardrails` parameter accepts a list of `GuardrailConfig` objects, each of which configures a Mistral moderation model.
+
+```python
+import os
+from mistralai.client import Mistral
+from mistralai.client.models import (
+    GuardrailConfig,
+    ModerationLlmv2Config,
+)
+
+client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+
+# Attach guardrails when creating an agent
+agent = client.beta.agents.create(
+    model="mistral-large-latest",
+    name="SafeAssistant",
+    instructions="You are a helpful assistant.",
+    guardrails=[
+        GuardrailConfig(
+            block_on_error=True,           # return HTTP 403 on moderation error
+            moderation_llm_v2=ModerationLlmv2Config(
+                # uses mistral-moderation-2603 by default — omit model_name unless overriding
+                ignore_other_categories=False,
+            ),
+        )
+    ],
+)
+```
+
+`GuardrailConfig` fields (source: `mistralai/client/models/guardrailconfig.py`, v2.4.7):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `block_on_error` | `bool` | `False` | Return HTTP 403 and block the request on a moderation server error |
+| `moderation_llm_v1` | `ModerationLlmv1Config \| None` | `None` | Use Mistral Moderation v1 (`mistral-moderation-2411`) |
+| `moderation_llm_v2` | `ModerationLlmv2Config \| None` | `None` | Use Mistral Moderation v2 (`mistral-moderation-2603`) |
+
+`ModerationLlmv2Config` fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `model_name` | `str` | `"mistral-moderation-2603"` | Override model name. Omit in general use. |
+| `custom_category_thresholds` | `ModerationLlmv2CategoryThresholds \| None` | `None` | Per-category threshold overrides |
+| `ignore_other_categories` | `bool` | `False` | If `True`, only evaluate categories in `custom_category_thresholds` |
+| `action` | `ModerationLLMAction \| None` | `None` | Action on detection |
+
+You can also attach `guardrails` on a per-conversation basis via `conversations.start()`:
+
+```python
+conversation = client.beta.conversations.start(
+    agent_id=agent.id,
+    inputs="Tell me how to do something unsafe.",
+    guardrails=[
+        GuardrailConfig(
+            block_on_error=True,
+            moderation_llm_v2=ModerationLlmv2Config(),
+        )
+    ],
+)
+```
+
+**Pitfall:** `guardrails` and `moderation_llm_v1` / `moderation_llm_v2` are mutually exclusive with one another within a single `GuardrailConfig`. Providing both `moderation_llm_v1` and `moderation_llm_v2` in the same config object is technically permitted but the platform applies them sequentially — use one per config entry for clarity.
+
+---
+
+### 10.2 Handoff Execution Mode (`handoff_execution`)
+
+All `conversations` methods (`start`, `append`, `restart`, and their streaming variants) now accept a `handoff_execution` parameter that controls where agent-to-agent handoffs are executed.
+
+```python
+# Source: mistralai/client/models/conversationrequest.py v2.4.7
+# ConversationRequestHandoffExecution = Literal["client", "server"]
+
+# Server-side handoffs: Mistral platform routes automatically
+conversation = client.beta.conversations.start(
+    agent_id=router_agent.id,
+    inputs="I need help with a billing issue.",
+    handoff_execution="server",   # platform resolves handoffs without a client round-trip
+)
+
+# Client-side handoffs: inspect response and route yourself
+conversation = client.beta.conversations.start(
+    agent_id=router_agent.id,
+    inputs="I need help with a billing issue.",
+    handoff_execution="client",
+)
+# Check conversation.outputs for handoff events and dispatch manually
+```
+
+| Value | Behaviour |
+|-------|-----------|
+| `"server"` | Mistral platform executes agent-to-agent handoffs internally. The conversation response includes the final reply from the target agent. |
+| `"client"` | Platform returns a deferred handoff event in the conversation outputs. Your code inspects `AgentHandoffStartedEvent` / `AgentHandoffDoneEvent` and dispatches the next call. |
+
+`AgentHandoffStartedEvent` and `AgentHandoffDoneEvent` are in `mistralai.client.models` as of v2.4.7. Use `client` mode when you need to log, audit, or transform state between hops.
+
+---
+
+### 10.3 Prompt Cache Key (`prompt_cache_key`)
+
+The GA `agents.complete()` endpoint (not `beta.agents`) now accepts `prompt_cache_key: str | None` to tag a completion for server-side prompt caching. Reuse the same key across calls with identical system prompts to reduce latency on repeated tasks.
+
+```python
+# GA Agents API — note: client.agents.complete(), not client.beta.agents
+response = client.agents.complete(
+    agent_id=agent.id,
+    messages=[{"role": "user", "content": "Summarise this document..."}],
+    prompt_cache_key="doc-summary-v1",   # reused on subsequent calls with the same prompt
+)
+```
+
+**When to use:** Long, stable system prompts or few-shot examples that are sent repeatedly. The `prompt_cache_key` must be identical across calls for the cache to hit. It has no effect when the prompt content differs.
+
+---
+
 **End of Diagrams Documentation**
 
 All diagrams use ASCII art for clarity and can be copied/shared easily. For more detailed visual representation, refer to the comprehensive guide's code examples and the production guide's architecture sections.
@@ -700,6 +821,7 @@ All diagrams use ASCII art for clarity and can be copied/shared easily. For more
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.4.7 | May 27, 2026 | Minor feature release. Version bumped 2.4.5 → 2.4.7. New `guardrails` parameter on `beta.agents.create()` and `conversations.start()` documented (see §10 below). New `handoff_execution` parameter on all Conversations API methods documented. New `prompt_cache_key` on `agents.complete()` documented. Verified against installed `mistralai 2.4.7` (`.routine-envs/mistralai`); `from mistralai.client import Mistral` confirmed; `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
 | 2.4.5 | May 9, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.5` (`.routine-envs/check-0509-py`); `from mistralai.client import Mistral` import verified. Note: `from mistralai import Mistral` fails (top-level is a namespace package); correct import path remains `from mistralai.client import Mistral`. |
 | 2.4.4 | May 1, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.4` (`.routine-envs/check-mistral2-0501`); `from mistralai.client import Mistral` import verified with `-W error::DeprecationWarning`. |
 | 2.4.3 | April 28, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.3` (`.routine-envs/main-py-0428`); `from mistralai.client import Mistral` import verified. |
