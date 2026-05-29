@@ -10,7 +10,7 @@ sidebar:
 
 # Class deep-dives — 10 core LangGraph types
 
-Verified against **`langgraph==1.2.1`** / **`langgraph-prebuilt==1.1.0`** / **`langgraph-checkpoint==4.1.1`**.
+Verified against **`langgraph==1.2.2`** / **`langgraph-prebuilt==1.1.0`** / **`langgraph-checkpoint==4.1.1`**.
 
 Each section below was written by inspecting the installed package source directly. All signatures and behaviours are drawn from the actual implementation, not documentation.
 
