@@ -1,15 +1,17 @@
 ---
-title: "Microsoft Azure AI Agents SDK (Python) — Class Deep Dives v1.1.0"
-description: "Source-verified deep dives into 10 key classes from azure-ai-agents 1.1.0: AgentsClient, FunctionTool, ToolSet, CodeInterpreterTool, FileSearchTool, BingGroundingTool, ConnectedAgentTool, AgentEventHandler, ThreadMessage, and OpenApiTool."
+title: "azure-ai-agents Integration Add-on (Python) — Class Deep Dives Vol. 1"
+description: "Source-verified deep dives into 10 key classes from the azure-ai-agents 1.1.0 integration add-on: AgentsClient, FunctionTool, ToolSet, CodeInterpreterTool, FileSearchTool, BingGroundingTool, ConnectedAgentTool, AgentEventHandler, ThreadMessage, and OpenApiTool."
 framework: microsoft-agent-framework
 language: python
 ---
 
-# Microsoft Azure AI Agents SDK (Python) — Class Deep Dives v1.1.0
+# `azure-ai-agents` Integration Add-on (Python) — Class Deep Dives Vol. 1
 
-This document provides source-verified, in-depth reference material for the **`azure-ai-agents`** Python SDK at version 1.1.0. Every class signature, method, and property described here has been validated directly against the library source code. If you have seen documentation referring to a package called `agent-framework`, that package is incorrect — the real package name is `azure-ai-agents`.
+> **Note:** `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — not a replacement for `agent-framework`. For primary framework documentation see the [Comprehensive Python Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/). Use `azure-ai-agents` alongside `agent-framework` when you need direct access to Azure AI Agents service resources.
 
-> **Package**: `azure-ai-agents`  
+This document provides source-verified, in-depth reference material for the **`azure-ai-agents`** Python SDK at version 1.1.0. Every class signature, method, and property described here has been validated directly against the library source code.
+
+> **Package**: `azure-ai-agents` (integration add-on)
 > **Version covered**: 1.1.0  
 > **Main import**: `from azure.ai.agents import AgentsClient`  
 > **Async import**: `from azure.ai.agents.aio import AgentsClient`
@@ -47,7 +49,7 @@ The SDK depends on `azure-identity` for authentication, so install it too if you
 pip install azure-ai-agents azure-identity
 ```
 
-**Do not install** `agent-framework` — that is a different, unrelated package and will not provide the classes described in this document.
+This is an **add-on** package — install it alongside `agent-framework`, not as a replacement.
 
 ---
 
