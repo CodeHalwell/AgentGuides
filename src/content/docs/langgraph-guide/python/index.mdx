@@ -85,6 +85,7 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="RemoteGraph" href="/langgraph-guide/python/reference-remote-graph/" />
   <LinkCard title="Class deep-dives Vol. 1" href="/langgraph-guide/python/langgraph_class_deep_dives/" />
   <LinkCard title="Class deep-dives Vol. 2" href="/langgraph-guide/python/langgraph_class_deep_dives_v2/" />
+  <LinkCard title="Class deep-dives Vol. 3" href="/langgraph-guide/python/langgraph_class_deep_dives_v3/" />
 </CardGrid>
 
 ## Reference
@@ -108,6 +109,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="RemoteGraph reference" href="/langgraph-guide/python/reference-remote-graph/" description="Call a LangGraph Platform deployment as a local graph — same invoke/stream/get_state surface, interrupt/resume, and subgraph node wiring." />
   <LinkCard title="Class deep-dives Vol. 1" href="/langgraph-guide/python/langgraph_class_deep_dives/" description="Source-verified deep dives into 10 core types — StateGraph, CompiledStateGraph, InMemorySaver, ToolNode, create_react_agent, Command, Send, @task/@entrypoint, BinaryOperatorAggregate/Topic, InMemoryStore — each with multiple runnable examples." />
   <LinkCard title="Class deep-dives Vol. 2" href="/langgraph-guide/python/langgraph_class_deep_dives_v2/" description="Source-verified deep dives into 10 more types — RetryPolicy, CachePolicy/InMemoryCache, TimeoutPolicy, add_messages/MessagesState, tools_condition, ToolCallTransformer/ToolCallStream, StateSnapshot, IsLastStep/RemainingSteps, ToolRuntime, Runtime/RunControl — verified against langgraph==1.2.2." />
+  <LinkCard title="Class deep-dives Vol. 3" href="/langgraph-guide/python/langgraph_class_deep_dives_v3/" description="Source-verified deep dives into 10 more types — interrupt/Interrupt, DeltaChannel, EphemeralValue, NamedBarrierValue, RemoveMessage/push_message, Pregel, NodeBuilder, GraphOutput, PregelTask, IndexConfig/TTLConfig — verified against langgraph==1.2.2." />
 </CardGrid>
 
 <CardGrid>
@@ -199,6 +201,7 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-29 | 1.2.2 | Added Class deep-dives Vol. 3 — 10 source-verified deep dives into interrupt/Interrupt, DeltaChannel, EphemeralValue, NamedBarrierValue, RemoveMessage/push_message, Pregel, NodeBuilder, GraphOutput, PregelTask, IndexConfig/TTLConfig. Updated index Jump-to-topic grid and Reference links. |
 | 2026-05-28 | 1.2.2 | Added Class deep-dives Vol. 2 — 10 source-verified deep dives into RetryPolicy, CachePolicy/InMemoryCache, TimeoutPolicy, add_messages/MessagesState, tools_condition, ToolCallTransformer/ToolCallStream, StateSnapshot, IsLastStep/RemainingSteps, ToolRuntime, and Runtime/RunControl (all verified against langgraph==1.2.2). Updated version card and index links. |
 | 2026-05-25 | 1.2.1 | Review fixes: corrected `durability` placement (invoke/stream, not compile); fixed `context=` top-level param pattern; updated `ToolRuntime` to add missing `tools`, `execution_info`, `server_info` fields (source-verified); fixed `clear_history_node` P1 bug (preserve current message before REMOVE_ALL_MESSAGES); added None guards for `runtime.state`, `runtime.store`, `runtime.context`; removed `_DirectlyInjectedToolArg` private class from docs; fixed version history (RemainingSteps added in 1.2, not 1.0). | Claude review response |
 | 2026-05-24 | 1.2.1 | Deep source dive: enhanced chapters 1, 4, 9 with `add_sequence`, `context_schema`/`Runtime`, `ToolRuntime`, `REMOVE_ALL_MESSAGES`, `push_message`, `Overwrite`, `GraphOutput v2`, `TimeoutPolicy`, `Send(timeout=)`. Updated streaming modes ref (all 7 modes + `StreamPart` v2 typed union). Updated store ref (vector search, filter operators, TTL, batch). New ref page: Runtime, ToolRuntime & Managed Values. Updated recipes to v1.2.1 with 3 new examples. All content verified against `langgraph==1.2.2` source. | Claude enhancement |
