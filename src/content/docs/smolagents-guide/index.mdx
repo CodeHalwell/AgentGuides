@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.25.0** · May 2026 · Python 3.10+
+    **v1.26.0** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Learning, prototyping, simple automation, code-first workflows.
@@ -67,8 +67,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./smolagents_production_guide/" />
 </CardGrid>
 
-## What's new in v1.25.0 (May 2026)
+## What's new in v1.26.0 (May 2026)
 
+- **v1.26.0 (May 2026)** — Minor release; maintenance and dependency updates. All key symbols (`CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent`) verified against installed `smolagents==1.26.0` (`.routine-envs/check-0529-smolagents`); no `DeprecationWarning` emissions.
 - **v1.25.0 (May 2026)** — Minor release. `InferenceClientModel` default model updated to `Qwen/Qwen3-Next-80B-A3B-Thinking`. All key symbols (`CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent`) verified against installed `smolagents==1.25.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions.
 - **v1.24.0 (April 2026)** — `HfApiModel` removed; raises `ImportError`. Use `InferenceClientModel` for all HuggingFace-hosted model access. Expanded model compatibility; `token_counts` tracking fix for managed agents; vision model support for web browsing agents.
 
@@ -95,6 +96,7 @@ Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#intr
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-05-29 | 1.26.0 | Version bumped 1.25.0 → 1.26.0; "What's new" heading updated; v1.26.0 bullet added; comprehensive guide header updated; revision history entry added. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.26.0` (`.routine-envs/check-0529-smolagents`); no `DeprecationWarning`. | Claude routine |
 | 2026-05-19 | 1.25.0 | Version bumped 1.24.0 → 1.25.0; "What's new" updated; `InferenceClientModel` default model change noted. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.25.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning`. | Claude routine |
 | 2026-04-21 | 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | January 16, 2026 | 1.24.0 | Expanded model providers; tool call perf; multi-agent patterns. |

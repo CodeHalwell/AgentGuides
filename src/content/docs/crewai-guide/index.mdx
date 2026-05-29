@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.14.5** · May 2026 · Python 3.10+
+    **v1.14.6** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Team simulations, research pipelines, content creation, analyst crews.
@@ -86,8 +86,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./crewai_production_guide/" />
 </CardGrid>
 
-## What's new in v1.14.5 (May 2026)
+## What's new in v1.14.6 (May 2026)
 
+- **v1.14.6 (May 2026)** — Patch release; stability improvements. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions.
 - **v1.14.5 (May 2026)** — Patch release; stability improvements. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.5` (`.routine-envs/check-0519-crewai`); no `DeprecationWarning` emissions.
 - **v1.14.4 (May 1)** — Patch release; stability improvements.
 
@@ -144,6 +145,7 @@ Ready? **[Start Zero → Hero Step 1 →](./crewai_comprehensive_guide/#core-fun
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-05-29 | 1.14.6 | Version bumped 1.14.5 → 1.14.6; "What's new" heading updated to v1.14.6; v1.14.6 bullet added; comprehensive guide header updated; revision history entry added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-19 | 1.14.5 | Version bumped 1.14.4 → 1.14.5; "What's new" section updated; comprehensive guide header updated; revision history entries added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.5` (`.routine-envs/check-0519-crewai`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-01 | 1.14.4 | Version bumped 1.14.3 → 1.14.4; "What's new" section updated; revision history entry added. `Agent`, `Task`, `Crew` imports verified against installed 1.14.4 (`.routine-envs/check-crewai-0501`). | Claude routine |
 | 2026-04-25 | 1.14.3 | Pre-release 1.14.3a2 confirmed stable as v1.14.3; version card updated from pre-release to stable; revision history entry added. Symbols verified against installed `crewai 1.14.3` (`.routine-envs/crewai-py-0425`). | Claude routine |

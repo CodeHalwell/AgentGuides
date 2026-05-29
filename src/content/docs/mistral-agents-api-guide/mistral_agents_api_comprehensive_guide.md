@@ -1,13 +1,13 @@
 ---
-title: "Mistral Agents API: Visual Architecture and Diagrams"
+title: "Mistral Agents API: Comprehensive Technical Guide"
 description: "> BREAKING: Mistral SDK v2.0.1 (March 12, 2026) is NOT backwards-compatible with v1.x. See the migration guide for full details."
 framework: mistral-agents-api
 ---
 
-Latest: 2.4.7 | Updated: May 27, 2026
-# Mistral Agents API: Visual Architecture and Diagrams
+Latest: 2.4.8 | Updated: May 29, 2026
+# Mistral Agents API: Comprehensive Technical Guide
 
-> **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.7**.
+> **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.8**.
 
 This document provides comprehensive visual representations of Mistral Agents API architecture, data flows, and patterns.
 
@@ -821,6 +821,7 @@ All diagrams use ASCII art for clarity and can be copied/shared easily. For more
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.4.8 | May 29, 2026 | Patch release. Version bumped 2.4.7 → 2.4.8; `Latest:` header and title updated; revision history entry added. `from mistralai.client import Mistral` verified against installed `mistralai==2.4.8` (`.routine-envs/check-0529-mistral`); `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
 | 2.4.7 | May 27, 2026 | Minor feature release. Version bumped 2.4.5 → 2.4.7. New `guardrails` parameter on `beta.agents.create()` and `conversations.start()` documented (see §10 below). New `handoff_execution` parameter on all Conversations API methods documented. New `prompt_cache_key` on `agents.complete()` documented. Verified against installed `mistralai 2.4.7` (`.routine-envs/mistralai`); `from mistralai.client import Mistral` confirmed; `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
 | 2.4.5 | May 9, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.5` (`.routine-envs/check-0509-py`); `from mistralai.client import Mistral` import verified. Note: `from mistralai import Mistral` fails (top-level is a namespace package); correct import path remains `from mistralai.client import Mistral`. |
 | 2.4.4 | May 1, 2026 | Patch release. Version confirmed against installed `mistralai 2.4.4` (`.routine-envs/check-mistral2-0501`); `from mistralai.client import Mistral` import verified with `-W error::DeprecationWarning`. |
