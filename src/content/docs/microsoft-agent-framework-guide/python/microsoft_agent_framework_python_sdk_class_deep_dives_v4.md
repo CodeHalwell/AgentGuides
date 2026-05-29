@@ -1,17 +1,19 @@
 ---
-title: "Azure AI Agents SDK (Python) — Class Deep Dives Vol. 4"
-description: "Source-verified deep dives into 10 classes from azure-ai-agents 1.1.0: AgentsClient (enable_auto_function_calls, create_thread_and_process_run), FunctionTool, ToolSet, CodeInterpreterTool with file upload, FileSearchTool with VectorStore lifecycle, AzureAISearchTool query modes, BingGroundingTool parameters, ConnectedAgentTool multi-agent orchestration, AgentEventHandler custom streaming subclass, and AsyncToolSet with AsyncFunctionTool."
+title: "azure-ai-agents Integration Add-on (Python) — Class Deep Dives Vol. 4"
+description: "Source-verified deep dives into 10 classes from the azure-ai-agents 1.1.0 integration add-on: AgentsClient (enable_auto_function_calls, create_thread_and_process_run), FunctionTool, ToolSet, CodeInterpreterTool with file upload, FileSearchTool with VectorStore lifecycle, AzureAISearchTool query modes, BingGroundingTool parameters, ConnectedAgentTool multi-agent orchestration, AgentEventHandler custom streaming subclass, and AsyncToolSet with AsyncFunctionTool."
 framework: microsoft-agent-framework
 language: python
 ---
 
-# Azure AI Agents SDK (Python) — Class Deep Dives Vol. 4
+# `azure-ai-agents` Integration Add-on (Python) — Class Deep Dives Vol. 4
 
-**Package:** `azure-ai-agents`  
+> **Note:** `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — not a replacement for `agent-framework`. See the [integration overview](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_migration_notice/) for when to use it alongside the framework.
+
+**Package:** `azure-ai-agents` (integration add-on)
 **Version covered:** 1.1.0  
 **Verified against:** installed package at `/usr/local/lib/python3.11/dist-packages/azure/ai/agents/`
 
-This is the fourth volume of source-verified class deep dives for the `azure-ai-agents` Python SDK. Each section includes the real class signature derived from the installed source, followed by practical, runnable code examples. This volume emphasises **patterns and combinations** that are not covered in detail in earlier volumes — specifically tool composition, file operations, multi-agent orchestration, and custom streaming.
+This is the fourth volume of source-verified class deep dives for the `azure-ai-agents` integration add-on. Each section includes the real class signature derived from the installed source, followed by practical, runnable code examples. This volume emphasises **patterns and combinations** that are not covered in detail in earlier volumes — specifically tool composition, file operations, multi-agent orchestration, and custom streaming.
 
 Earlier volumes:
 - **[Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives/)** — `AgentsClient`, `FunctionTool`, `ToolSet`, `CodeInterpreterTool`, `FileSearchTool`, `BingGroundingTool`, `ConnectedAgentTool`, `AgentEventHandler`, `ThreadMessage`, `OpenApiTool`

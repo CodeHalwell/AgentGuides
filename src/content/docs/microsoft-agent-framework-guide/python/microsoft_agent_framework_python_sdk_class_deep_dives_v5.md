@@ -1,17 +1,19 @@
 ---
-title: "Azure AI Agents SDK (Python) — Class Deep Dives Vol. 5"
-description: "Source-verified deep dives into 10 classes from azure-ai-agents 1.1.0: Agent model, AgentThread, ToolOutput, VectorStoreFileBatch, VectorStoreFile, FileInfo, MessageDeltaChunk, RunStepDeltaChunk, SubmitToolOutputsAction, and AgentRunStream with AgentEventHandler overrides."
+title: "azure-ai-agents Integration Add-on (Python) — Class Deep Dives Vol. 5"
+description: "Source-verified deep dives into 10 classes from the azure-ai-agents 1.1.0 integration add-on: Agent model, AgentThread, ToolOutput, VectorStoreFileBatch, VectorStoreFile, FileInfo, MessageDeltaChunk, RunStepDeltaChunk, SubmitToolOutputsAction, and AgentRunStream with AgentEventHandler overrides."
 framework: microsoft-agent-framework
 language: python
 ---
 
-# Azure AI Agents SDK (Python) — Class Deep Dives Vol. 5
+# `azure-ai-agents` Integration Add-on (Python) — Class Deep Dives Vol. 5
 
-**Package:** `azure-ai-agents`  
+> **Note:** `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — not a replacement for `agent-framework`. See the [integration overview](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_migration_notice/) for when to use it alongside the framework.
+
+**Package:** `azure-ai-agents` (integration add-on)
 **Version covered:** 1.1.0  
 **Verified against:** installed package at `/usr/local/lib/python3.11/dist-packages/azure/ai/agents/`
 
-This is the fifth volume of source-verified class deep dives for the `azure-ai-agents` Python SDK. Earlier volumes focused on the tool and orchestration layer. This volume covers the **data model classes** — the objects you read from and write to — plus the streaming plumbing that connects them in real time.
+This is the fifth volume of source-verified class deep dives for the `azure-ai-agents` integration add-on. Earlier volumes focused on the tool and orchestration layer. This volume covers the **data model classes** — the objects you read from and write to — plus the streaming plumbing that connects them in real time.
 
 Earlier volumes:
 - **[Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives/)** — `AgentsClient`, `FunctionTool`, `ToolSet`, `CodeInterpreterTool`, `FileSearchTool`, `BingGroundingTool`, `ConnectedAgentTool`, `AgentEventHandler`, `ThreadMessage`, `OpenApiTool`
