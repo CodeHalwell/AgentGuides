@@ -4,7 +4,7 @@ description: "1. Introduction 2. Core Fundamentals 3. Simple Agents 4. Multi-Age
 framework: crewai
 ---
 
-Latest: 1.14.5 | Updated: May 19, 2026
+Latest: 1.14.6 | Updated: May 29, 2026
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 
@@ -2471,6 +2471,7 @@ This comprehensive guide now includes all features through CrewAI v1.14.2 (April
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.14.6 | May 29, 2026 | Patch release; stability improvements. `Latest:` header updated 1.14.5 → 1.14.6; revision history entry added. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`) with `-W error::DeprecationWarning`; no warnings. | Claude routine |
 | 1.14.5 | May 19, 2026 | Patch release; stability improvements. Version confirmed against installed `crewai 1.14.5` (`.routine-envs/check-0519-crewai`); `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified with `-W error::DeprecationWarning`; no warnings. | Claude routine |
 | 1.14.4 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `crewai 1.14.4` (`.routine-envs/check-crewai-0501`); `Agent`, `Task`, `Crew` imports verified with `-W error::DeprecationWarning`. |
 | 1.14.3 | April 25, 2026 | Pre-release 1.14.3a2 confirmed stable; stability improvements. |

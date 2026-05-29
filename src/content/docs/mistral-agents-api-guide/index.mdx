@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **mistralai 2.4.7** · May 2026 · Python 3.10+
+    **mistralai 2.4.8** · May 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Mistral-native workloads, hosted agents with connectors, MCP-heavy flows.
@@ -76,8 +76,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="May 2025 launch updates" href="./may_2025_launch_updates/" />
 </CardGrid>
 
-## What's new in v2.4.7 (May 2026)
+## What's new in v2.4.8 (May 2026)
 
+- **v2.4.8 (May 2026)** — Patch release; maintenance and dependency updates. `from mistralai.client import Mistral` verified against installed `mistralai==2.4.8` (`.routine-envs/check-0529-mistral`); `from mistralai import Mistral` still raises `ImportError`.
 - **v2.4.7 (May 2026)** — Minor feature release. New `guardrails` parameter on `client.beta.agents.create()` and `client.beta.conversations.start()`: attach `GuardrailConfig` objects with Mistral moderation v1 (`mistral-moderation-2411`) or v2 (`mistral-moderation-2603`) models, with optional `block_on_error` enforcement. New `handoff_execution` parameter on all `conversations` methods: `"client"` (you handle handoff routing) or `"server"` (Mistral platform executes handoffs automatically). New `prompt_cache_key` parameter on `agents.complete()` (GA agents API) for prompt-level caching. All symbols verified against installed `mistralai==2.4.7` (`.routine-envs/mistralai`); `from mistralai.client import Mistral` import confirmed correct; `from mistralai import Mistral` still raises `ImportError`.
 - **v2.4.6 (May 2026)** — Patch release; stability and dependency improvements.
 - **v2.4.5 (May 9)** — Patch release; stability improvements.
@@ -117,6 +118,7 @@ Ready? **[Start Zero → Hero Step 1 →](./mistral_agents_api_comprehensive_gui
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-05-29 | mistralai 2.4.8 | Version bumped 2.4.7 → 2.4.8 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed `mistralai==2.4.8` (`.routine-envs/check-0529-mistral`); `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
 | 2026-05-27 | mistralai 2.4.7 | Version bumped 2.4.5 → 2.4.7; "What's new" updated for 2.4.6 and 2.4.7; new features documented: `guardrails` on `beta.agents.create()` (`GuardrailConfig` with `ModerationLlmv1Config`/`ModerationLlmv2Config`), `handoff_execution` on `conversations.start()` (`"client"`/`"server"`), `prompt_cache_key` on `agents.complete()`. Verified against installed `mistralai 2.4.7` (`.routine-envs/mistralai`); `from mistralai.client import Mistral` confirmed; `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
 | 2026-05-09 | mistralai 2.4.5 | Version bumped 2.4.4 → 2.4.5 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.5 (`.routine-envs/check-0509-py`) — note: `from mistralai import Mistral` fails (top-level module is a namespace); correct path remains `from mistralai.client import Mistral`. | Claude routine |
 | 2026-05-01 | mistralai 2.4.4 | Version bumped 2.4.3 → 2.4.4 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.4 (`.routine-envs/check-mistral2-0501`). | Claude routine |
