@@ -633,7 +633,19 @@ node_strict = ToolNode([risky_tool], handle_tool_errors=False)
 **Module:** `langgraph.prebuilt.chat_agent_executor`  
 **Re-exported from:** `langgraph.prebuilt`
 
-> **Deprecation notice:** `create_react_agent` is deprecated in `langgraph-prebuilt==1.1.0` in favour of `create_agent` from `langchain.agents`. It remains functional and receives bug fixes.
+> **⚠ Deprecated in `langgraph-prebuilt==1.1.0`** (LangGraph v1.0). `create_react_agent` has moved to `langchain.agents.create_agent`. The old function continues to work — it transparently delegates to the new implementation — but emits a `DeprecationWarning` on each call. All new code should use `langchain.agents.create_agent`.
+>
+> **Migration is a one-line import change** for most projects:
+> ```python
+> # Before
+> from langgraph.prebuilt import create_react_agent
+> agent = create_react_agent(model, tools)
+>
+> # After
+> from langchain.agents import create_agent
+> agent = create_agent(model, tools)
+> ```
+> The parameter names and return type (`CompiledStateGraph`) are identical. `AgentState`, `AgentStatePydantic`, `HumanInterruptConfig`, `HumanInterrupt`, and `ValidationNode` also moved to `langchain.agents`.
 
 ### Full parameter reference
 
@@ -1601,7 +1613,7 @@ print(item)   # None — expired
 | Short-term memory (in-process) | `InMemorySaver` | `langgraph.checkpoint.memory` |
 | Custom checkpointer | `BaseCheckpointSaver` | `langgraph.checkpoint.base` |
 | Tool execution node | `ToolNode` | `langgraph.prebuilt.tool_node` |
-| Quick ReAct agent | `create_react_agent` | `langgraph.prebuilt` |
+| Quick ReAct agent (deprecated) | `create_react_agent` | `langgraph.prebuilt` — use `langchain.agents.create_agent` |
 | Routing + state updates | `Command` | `langgraph.types` |
 | Dynamic fan-out | `Send` | `langgraph.types` |
 | Pause for human input | `interrupt()` | `langgraph.types` |
