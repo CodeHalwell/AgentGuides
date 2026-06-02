@@ -1589,4 +1589,5 @@ asyncio.run(main())
 ---
 
 *This document was introspected from **agent-framework-core 1.7.0** source on 2026-06-01.*
-*Forward reference: See [azure-ai-agents integration Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v6/) for the Azure AI Agents add-on class reference.*
+*Forward reference: See [Class Deep Dives Vol. 5](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v5/) for `Executor`, `AgentExecutor`, edge groups, `Runner`, `SessionContext`, `AgentSession`, `BaseChatClient`, `SecretString`, `WorkflowCheckpoint`, and the full exception hierarchy.*
+*See also [azure-ai-agents integration Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives_v6/) for the Azure AI Agents add-on class reference.*
