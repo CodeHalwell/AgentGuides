@@ -140,10 +140,9 @@ img = Content.from_image_uri("https://example.com/photo.jpg", media_type="image/
 print(img.type)   # "uri"
 print(img.uri)    # "https://example.com/photo.jpg"
 
-# Inline binary data (e.g. screenshot bytes)
-import base64
+# Inline binary data (e.g. screenshot bytes) — from_data handles base64 encoding internally
 raw = b"\x89PNG..."
-img_data = Content.from_data(base64.b64encode(raw).decode(), media_type="image/png")
+img_data = Content.from_data(data=raw, media_type="image/png")
 print(img_data.type)       # "data"
 print(img_data.media_type) # "image/png"
 
