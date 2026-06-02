@@ -1362,3 +1362,7 @@ eval_set = EvalSet(
 | 8 | `LoadArtifactsTool` | Lazy-loads user artifacts into model context; handles MIME conversion; supports user-scoped (`user:`) artifacts. |
 | 9 | `exit_loop` / `get_user_choice_tool` | `exit_loop` signals `LoopAgent` termination; `get_user_choice_tool` is a `LongRunningFunctionTool` that suspends for user input. |
 | 10 | Multi-turn eval suite | Four Vertex-backed multi-turn metrics + `LlmAsJudge` ABC for custom evaluation. |
+
+---
+
+**Next:** [Class deep dives — vol. 10 →](./google_adk_class_deep_dives_v10/) — `Graph`/`Edge` (workflow graph internals), `NodeRunner`, `NodeState`/`NodeStatus`, `_ParallelWorker`, `ActiveStreamingTool`/`TranscriptionEntry`, `CachePerformanceAnalyzer`, `StreamingResponseAggregator`, `AgentRefConfig`/`CodeConfig`, `BaseAuthProvider`/`AuthProviderRegistry`, `FinishTaskTool`/`TaskRequest`/`TaskResult`.
