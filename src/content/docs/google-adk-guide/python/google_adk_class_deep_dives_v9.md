@@ -1031,7 +1031,7 @@ The function is wrapped automatically as a `FunctionTool` when added to an agent
 ```python
 def get_user_choice(
     options: list[str], tool_context: ToolContext
-) -> Optional[str]:
+) -> str | None:
     """Provides the options to the user and asks them to choose one."""
     tool_context.actions.skip_summarization = True
     return None
