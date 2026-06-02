@@ -1452,3 +1452,11 @@ asyncio.run(main())
 | `MemoryTool` | **This volume** | Brief mention in builtin_tools.md |
 | `CodeExecutionTool` | **This volume** | Brief mention in builtin_tools.md |
 | `AbstractNativeTool` | **This volume** | `NativeTool` / `NativeOrLocalTool` capabilities in v3 |
+
+---
+
+**Continue to [Class Deep Dives Vol. 8 →](./pydantic_ai_class_deep_dives_v8/)** —
+`ToolOutput`/`NativeOutput`/`PromptedOutput`/`TextOutput`/`StructuredDict`, `ApprovalRequiredToolset`,
+`DeferredLoadingToolset`, `Embedder`/`EmbeddingModel`/`EmbeddingResult`, `web_fetch_tool`,
+`PrefectAgent`/`TaskConfig`, `ImageGenerationSubagentTool`, `ConcurrencyLimitedModel`,
+`InstructionPart`/`AgentInstructions`.
