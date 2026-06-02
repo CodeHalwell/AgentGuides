@@ -215,7 +215,7 @@ print(result.output)
 **Module:** `pydantic_ai.toolsets.approval_required`  
 **Import:** `from pydantic_ai.toolsets import ApprovalRequiredToolset`
 
-`ApprovalRequiredToolset` wraps any existing toolset with a gate function. When the model requests a tool call that the gate marks as requiring approval, the call is suspended by raising `ApprovalRequired`. The outer orchestrator can then review the pending call and resume it by re-running with `tool_call_approved=True`.
+`ApprovalRequiredToolset` wraps any existing toolset with a gate function. When the model requests a tool call that the gate marks as requiring approval, the call is suspended by raising `ApprovalRequired`. The outer orchestrator can then review the pending call and resume it by re-running with `deferred_tool_results=DeferredToolResults(...)`.
 
 ### Class signature
 
@@ -265,17 +265,16 @@ agent = Agent('openai:gpt-4o', toolsets=[guarded_toolset])
 ```python
 import asyncio
 from pydantic_ai.exceptions import ApprovalRequired
-from pydantic_ai.tools import DeferredToolResults
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults
 
 
 async def run_with_approval(agent: Agent, prompt: str) -> str:
-    run = agent.run(prompt)
-    async with run as agent_run:
-        async for event in agent_run.stream_events():
+    async with agent.run_stream_events(prompt) as agent_run:
+        async for event in agent_run:
             pass
 
         # Check if a tool call is pending approval
-        if isinstance(agent_run.result, DeferredToolResults):
+        if isinstance(agent_run.result, DeferredToolRequests):
             pending = agent_run.result
             for call in pending.tool_calls:
                 # Present to human
@@ -289,7 +288,7 @@ async def run_with_approval(agent: Agent, prompt: str) -> str:
             result = await agent.run(
                 prompt,
                 message_history=pending.all_messages(),
-                tool_call_approved=True,
+                deferred_tool_results=DeferredToolResults(pending.tool_calls),
             )
             return result.output
 
@@ -833,9 +832,9 @@ prefect_agent = PrefectAgent(
 ### Running inside a Prefect flow with result persistence
 
 ```python
+import asyncio
 from pydantic_ai.durable_exec.prefect import PrefectAgent
 from prefect import flow
-from prefect.filesystems import S3
 
 
 @flow(name='document-analyser', persist_result=True)
@@ -848,7 +847,7 @@ async def analyse_documents(urls: list[str]) -> list[str]:
 
 
 # Run with result storage for checkpoint recovery
-await analyse_documents(['https://example.com/doc1.pdf', 'https://example.com/doc2.pdf'])
+asyncio.run(analyse_documents(['https://example.com/doc1.pdf', 'https://example.com/doc2.pdf']))
 ```
 
 ---
@@ -1030,6 +1029,8 @@ agent = Agent(limit_model_concurrency('openai:gpt-4o', limiter=5))
 ### Backpressure — reject when the queue is full
 
 ```python
+import asyncio
+from pydantic_ai import Agent
 from pydantic_ai.models.concurrency import ConcurrencyLimitedModel
 from pydantic_ai.concurrency import ConcurrencyLimit
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
@@ -1038,12 +1039,18 @@ model = ConcurrencyLimitedModel(
     'anthropic:claude-3-5-haiku-latest',
     limiter=ConcurrencyLimit(max_running=10, max_queued=50),
 )
+agent = Agent(model)
 
-try:
-    result = await agent.run('Hello')
-except ConcurrencyLimitExceeded:
-    # Queue is full; shed this request
-    return {'error': 'Service temporarily at capacity'}
+
+async def main():
+    try:
+        result = await agent.run('Hello')
+        return result.output
+    except ConcurrencyLimitExceeded:
+        # Queue is full; shed this request
+        return {'error': 'Service temporarily at capacity'}
+
+asyncio.run(main())
 ```
 
 ### Sharing a limiter across multiple models
