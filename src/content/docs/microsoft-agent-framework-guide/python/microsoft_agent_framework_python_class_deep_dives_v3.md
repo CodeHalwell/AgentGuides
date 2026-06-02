@@ -1345,3 +1345,7 @@ mcp_tool = MCPStreamableHTTPTool(
 | 1.3.0 | `FileHistoryProvider`, middleware layer |
 | 1.2.0 | `WorkflowBuilder`, `FunctionalWorkflow`, `RunContext`, `InlineSkill` |
 | 1.0.0 | `Agent`, `RawAgent`, `FunctionTool`, `MCPStdioTool`, `AgentSession` |
+
+---
+
+*Continue with [Class Deep Dives Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/) — `Message` + `Content`, `ChatOptions` + `ChatResponse`, `ResponseStream`, `AgentContext`, `FunctionalWorkflow` + `StepWrapper`, `WorkflowEvent` taxonomy, `SkillsSource` composition, `EvalItem` + `EvalResults`, `TokenizerProtocol`, `ConversationSplit`.*
