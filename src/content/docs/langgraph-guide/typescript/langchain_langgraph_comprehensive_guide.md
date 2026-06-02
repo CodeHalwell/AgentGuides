@@ -5,7 +5,7 @@ framework: langgraph
 language: typescript
 ---
 
-Latest: 1.3.2 | Updated: May 19, 2026
+Latest: 1.3.3 | Updated: June 2, 2026
 # LangChain.js and LangGraph.js Comprehensive Technical Guide
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
@@ -5049,6 +5049,7 @@ async function myNode(state: { messages: BaseMessage[] }) {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.3 | June 2, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.2 → 1.3.3; revision history entry added. All key symbols (`StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, `Command`, `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `createGraphRunStream`) verified against installed `@langchain/langgraph@1.3.3` (`/tmp/npm-0602`). Export count: 82 — PASS. | Claude routine |
 | 1.3.2 | May 19, 2026 | Patch releases 1.3.1 and 1.3.2; stability and dependency updates. All key symbols verified against installed `@langchain/langgraph@1.3.2` (`.routine-envs/check-0519-node`). | Claude routine |
 | 1.3.0 | May 5, 2026 | Minor release: `MessagesZodState`/`MessagesZodMeta` (Zod-based message state), `STREAM_EVENTS_V3_MODES` constant, `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream` streaming API, stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`), schema type guards (`isSerializableSchema`, `isStandardSchema`), `pushMessage` helper. All new symbols verified against installed `@langchain/langgraph@1.3.0` (`.routine-envs/check-0505-node`, Node 22). `STREAM_EVENTS_V3_MODES = ["values","updates","messages","tools","custom","tasks"]`. |
 | 1.2.9 | April 19, 2026 | Stability improvements and bug fixes following 1.2.8 |
