@@ -520,7 +520,7 @@ class AuditHandler(GraphCallbackHandler):
         print(f"[RESUME] from checkpoint={event.checkpoint_id} status={event.status}")
 
 
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
 from typing_extensions import TypedDict
@@ -537,7 +537,7 @@ builder.add_node("review", human_review)
 builder.add_edge(START, "review")
 builder.add_edge("review", END)
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 
 config: RunnableConfig = {
@@ -687,7 +687,7 @@ class GraphDrained(GraphBubbleUp):
 import asyncio
 from langgraph.runtime import Runtime, RunControl
 from langgraph.errors import GraphDrained
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
 from typing_extensions import TypedDict
@@ -708,7 +708,7 @@ builder.add_node("process", long_process)
 builder.add_edge(START, "process")
 builder.add_conditional_edges("process", should_continue)
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 
 async def run_with_drain():
@@ -800,7 +800,6 @@ class NodeTimeoutError(Exception):
 from langgraph.errors import NodeTimeoutError
 from langgraph.types import TimeoutPolicy, RetryPolicy
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 import time
 

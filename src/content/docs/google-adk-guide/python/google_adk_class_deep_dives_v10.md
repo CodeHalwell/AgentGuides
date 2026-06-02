@@ -652,6 +652,7 @@ from google.adk.agents import LlmAgent
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 from google.adk.utils.cache_performance_analyzer import CachePerformanceAnalyzer
+from google.adk import types
 
 LARGE_SYSTEM_PROMPT = "..." * 500   # > 4096 tokens
 
@@ -664,10 +665,11 @@ agent = LlmAgent(
 session_svc = InMemorySessionService()
 
 app = App(
+    name="researcher",
     agent=agent,
     session_service=session_svc,
     context_cache_config=ContextCacheConfig(
-        cache_intervals=[0, 5, 10],   # cache at turns 0, 5, 10
+        cache_intervals=5,   # cache every 5 turns
         ttl_seconds=3600,
     ),
 )
@@ -1024,6 +1026,7 @@ class GCPSecretManagerAuthProvider(BaseAuthProvider):
 
 
 # Registration
+from google.adk.apps.app import App
 from google.adk.auth.auth_provider_registry import AuthProviderRegistry
 
 registry = AuthProviderRegistry()
@@ -1033,7 +1036,7 @@ registry.register(
 )
 
 # Attach to App
-app = App(agent=agent, auth_provider_registry=registry)
+app = App(name="demo", agent=agent, auth_provider_registry=registry)
 ```
 
 ### Provider lookup in `AuthHandler`
