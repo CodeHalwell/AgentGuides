@@ -1390,9 +1390,9 @@ def get_runnable_for_task(func: Callable) -> Runnable:
         return CACHE[key]
     name = getattr(func, "__name__", None) or func.__class__.__name__
     if is_async_callable(func):
-        run = RunnableCallable(None, func, explode_args=True, name=name, ...)
+        run = RunnableCallable(None, func, explode_args=True, name=name)
     else:
-        run = RunnableCallable(func, ..., explode_args=True, name=name, ...)
+        run = RunnableCallable(func, None, explode_args=True, name=name)
 
     seq = RunnableSeq(
         run,
