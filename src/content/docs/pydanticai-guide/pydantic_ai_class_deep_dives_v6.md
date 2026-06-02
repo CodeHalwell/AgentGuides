@@ -1281,3 +1281,10 @@ async def call_with_tool(city: str) -> str:
 
 print(asyncio.run(call_with_tool('Paris')))
 ```
+
+---
+
+**Continue to [Class Deep Dives Vol. 7 →](./pydantic_ai_class_deep_dives_v7/)** —
+`AgentEventStream`, `ThinkingPart`/`ThinkingPartDelta`, `AudioUrl`/`VideoUrl`/`DocumentUrl`,
+`OutputContext`, `ModelRetry`, `RequestUsage`, `WebSearchTool`/`WebSearchUserLocation`,
+`MemoryTool`, `CodeExecutionTool`, `AbstractNativeTool`.
