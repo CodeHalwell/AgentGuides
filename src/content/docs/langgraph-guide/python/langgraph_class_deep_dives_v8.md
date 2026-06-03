@@ -1544,8 +1544,8 @@ for chunk in graph.stream(
 
 # Fan-out to your own sinks using the public streaming API:
 for chunk in graph.stream({"count": 0}, stream_mode="values"):
-    values_proto(((),(  "values", chunk)))
-    collect_proto(((),(  "values", chunk)))
+    values_proto(((), "values", chunk))
+    collect_proto(((), "values", chunk))
 ```
 
 ### Fan-in with `DuplexStream` + mode filtering
