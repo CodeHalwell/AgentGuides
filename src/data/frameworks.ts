@@ -26,7 +26,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['chatbot', 'automation', 'prototyping'],
-    version: 'v1.25.0',
+    version: 'v1.26.0',
   },
   {
     id: 'pydanticai',
@@ -37,7 +37,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.102.0',
+    version: 'v1.105.0',
   },
   {
     id: 'openai-agents',
@@ -48,7 +48,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.17.3',
+    version: 'v0.17.4',
   },
   {
     id: 'openai-agents-ts',
@@ -59,7 +59,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'web'],
-    version: 'v0.11.5',
+    version: 'v0.11.6',
   },
   {
     id: 'crewai',
@@ -70,7 +70,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['team-simulation', 'customer-service', 'orchestration'],
-    version: 'v1.14.5',
+    version: 'v1.14.6',
   },
   {
     id: 'autogen',
@@ -81,7 +81,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['research', 'multi-agent', 'experimentation'],
-    version: 'v0.13.1',
+    version: 'v0.13.2',
   },
   {
     id: 'langgraph-py',
@@ -92,7 +92,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'conditional-routing'],
-    version: 'v1.2.1',
+    version: 'v1.2.4',
   },
   {
     id: 'langgraph-ts',
@@ -103,7 +103,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'web'],
-    version: 'v1.3.2',
+    version: 'v1.3.4',
   },
   {
     id: 'llamaindex-py',
@@ -157,7 +157,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'v1.6.0',
+    version: 'v1.7.0',
   },
   {
     id: 'google-adk',
@@ -179,7 +179,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.2.87',
+    version: 'v0.2.88',
   },
   {
     id: 'claude-sdk-ts',
@@ -190,7 +190,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.3.150',
+    version: 'v0.3.161',
   },
   {
     id: 'mistral',
@@ -201,7 +201,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],
-    version: 'v2.4.5',
+    version: 'v2.4.8',
   },
   {
     id: 'semantic-kernel',

@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.2.87 | Updated: May 23, 2026
+Latest: 0.2.88 | Updated: June 3, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -141,7 +141,7 @@ source venv/bin/activate
 pip install --upgrade pip
 
 # Install Claude Agent SDK
-pip install claude-agent-sdk  # Latest stable release (0.2.87)
+pip install claude-agent-sdk  # Latest stable release (0.2.88)
 
 # Install recommended dependencies
 pip install python-dotenv pydantic aiohttp
@@ -2926,6 +2926,7 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.2.88 | June 3, 2026 | Patch release 0.2.88; stability and dependency updates. `Latest:` header updated 0.2.87 → 0.2.88; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 0.2.87 | May 23, 2026 | Patch releases 0.2.86–0.2.87; stability and dependency updates. `Latest:` header updated 0.2.85 → 0.2.87; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 0.2.85 | May 22, 2026 | Patch releases 0.2.83–0.2.85; stability and dependency updates. `Latest:` header updated 0.2.82 → 0.2.85; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.85` (`.routine-envs/check-0522-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 0.2.82 | May 19, 2026 | Major minor-version bump 0.1.81 → 0.2.82. Expanded API surface: sandbox types (`SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations`), task lifecycle types (`TaskBudget`, `TaskNotificationMessage`, `TaskUsage`), `EffortLevel`, `DeferredToolUse`, `SdkBeta`, `SdkPluginConfig`, store-backed session helpers, `project_key_for_directory`. Stale `pip install` version pin corrected. All core symbols verified against installed 0.2.82 (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
