@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.2.2** · May 2026 · Python 3.10 – 3.14
+    **v1.2.4** · June 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -53,7 +53,7 @@ A chaptered tutorial that takes you from a first graph to a production-ready age
   history for a single primitive, jump to the **Reference** section near the bottom
   of this page — one page per API (StateGraph, Checkpointers, Store, Functional
   API, Command/Send, streaming modes). Each is verified line-by-line against the
-  installed `langgraph==1.2.2` source.
+  installed `langgraph==1.2.4` source.
 </Aside>
 
 ## Jump to a topic
@@ -90,12 +90,13 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Class deep-dives Vol. 5" href="/langgraph-guide/python/langgraph_class_deep_dives_v5/" />
   <LinkCard title="Class deep-dives Vol. 6" href="/langgraph-guide/python/langgraph_class_deep_dives_v6/" />
   <LinkCard title="Class deep-dives Vol. 7" href="/langgraph-guide/python/langgraph_class_deep_dives_v7/" />
+  <LinkCard title="Class deep-dives Vol. 8" href="/langgraph-guide/python/langgraph_class_deep_dives_v8/" />
 </CardGrid>
 
 ## Reference
 
-Every page below is introspected against the installed `langgraph==1.2.2` /
-`langgraph-checkpoint==4.1.0` / `langgraph-checkpoint-sqlite==3.0.3` /
+Every page below is introspected against the installed `langgraph==1.2.4` /
+`langgraph-checkpoint==4.1.1` / `langgraph-checkpoint-sqlite==3.0.3` /
 `langgraph-checkpoint-postgres==3.0.5` source. If a signature disagrees with an
 older blog post or docs page, the source wins.
 
@@ -118,6 +119,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="Class deep-dives Vol. 5" href="/langgraph-guide/python/langgraph_class_deep_dives_v5/" description="Source-verified deep dives into 10 more types — RedisCache, EncryptedSerializer, JsonPlusSerializer, UntrackedValue, AnyValue, EmbeddingsLambda/ensure_embeddings, BaseCheckpointSaver, typed StreamParts, task.clear_cache, HumanInterrupt protocol — verified against langgraph==1.2.2." />
   <LinkCard title="Class deep-dives Vol. 6" href="/langgraph-guide/python/langgraph_class_deep_dives_v6/" description="Source-verified deep dives into 10 more types — GraphRunStream/AsyncGraphRunStream, StreamTransformer, StreamChannel, ValuesTransformer/CustomTransformer/UpdatesTransformer, GraphCallbackHandler, GraphInterruptEvent/GraphResumeEvent, GraphDrained, NodeTimeoutError, delete_ui_message/ui_message_reducer, ProtocolEvent — verified against langgraph==1.2.2." />
   <LinkCard title="Class deep-dives Vol. 7" href="/langgraph-guide/python/langgraph_class_deep_dives_v7/" description="Source-verified deep dives into 10 more types — PregelProtocol/StreamProtocol, BackgroundExecutor/AsyncBackgroundExecutor, AsyncBatchedBaseStore/_dedupe_ops, get_text_at_path/tokenize_path, SerdeEvent/register_serde_event_listener, BaseChannel, call()/SyncAsyncFuture, PregelScratchpad, StateNodeSpec/node Protocols, identifier/get_runnable_for_task — verified against langgraph==1.2.2." />
+  <LinkCard title="Class deep-dives Vol. 8" href="/langgraph-guide/python/langgraph_class_deep_dives_v8/" description="Source-verified deep dives into 10 more types — ExecutionInfo/Runtime.heartbeat, ServerInfo/BaseUser, ReplayState, StreamMux, Call (functional API internals), ChannelWrite/ChannelWriteEntry, PregelRunner/FuturesDict, WritesProtocol/PregelTaskWrites, SyncPregelLoop/AsyncPregelLoop, and DuplexStream — verified against langgraph==1.2.4." />
 </CardGrid>
 
 <CardGrid>
@@ -148,9 +150,9 @@ older blog post or docs page, the source wins.
 - **Prior (v1.1.x):** Type-safe streaming v2 API (`version="v2"` on `astream()`/`ainvoke()`); Pydantic/dataclass coercion; Python 3.10 – 3.14 support; time-travel fixes.
 
 <Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==1.2.2`, `langgraph-checkpoint==4.1.0`,
+  Introspected against `langgraph==1.2.4`, `langgraph-checkpoint==4.1.1`,
   `langgraph-prebuilt==1.1.0`, `langgraph-checkpoint-sqlite==3.0.3`,
-  `langgraph-checkpoint-postgres==3.0.5` in May 2026.
+  `langgraph-checkpoint-postgres==3.0.5` in June 2026.
 
   Known corrections vs older drafts / third-party guides:
 
@@ -209,6 +211,7 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-06-03 | 1.2.4 | Added Class deep-dives Vol. 8 — 10 source-verified deep dives into ExecutionInfo/Runtime.heartbeat (advanced patterns: idempotency keys, node_attempt timing, patch() for testing), ServerInfo/BaseUser (platform auth and tenant isolation), ReplayState (time-travel subgraph checkpoint tracking), StreamMux (streaming event dispatcher, transformer factories, child muxes), Call (functional API invocation internals), ChannelWrite/ChannelWriteEntry (write subsystem, do_write() imperative writes, mapper transforms), PregelRunner/FuturesDict (concurrent task execution, error routing, early cancellation), WritesProtocol/PregelTaskWrites (write protocol, deterministic sorting via path), SyncPregelLoop/AsyncPregelLoop (execution state machine, status fields, cooperative drain), and DuplexStream (multi-sink fan-out streaming). Updated version card to 1.2.4, version references in Reference section and Aside block, langgraph-checkpoint to 4.1.1. |
 | 2026-05-31 | 1.2.2 | Added Class deep-dives Vol. 5 — 10 source-verified deep dives into RedisCache, EncryptedSerializer, JsonPlusSerializer (strict mode), UntrackedValue, AnyValue, EmbeddingsLambda/ensure_embeddings (with path expressions), BaseCheckpointSaver (custom backend), typed StreamParts (ValuesStreamPart, UpdatesStreamPart, MessagesStreamPart, CheckpointStreamPart, TasksStreamPart), task.clear_cache/aclear_cache, and the HumanInterrupt structured HITL protocol with migration guidance to langchain.agents.interrupt. Updated index Jump-to-topic grid and Reference links. |
 | 2026-05-30 | 1.2.2 | Added Class deep-dives Vol. 4 — 10 source-verified deep dives into set_node_defaults, add_sequence, input_schema/output_schema, context_schema/Runtime.context, get_stream_writer/StreamWriter, push_ui_message, entrypoint.final, REMOVE_ALL_MESSAGES, error_handler on add_node, and the full error taxonomy (GraphRecursionError, InvalidUpdateError, NodeTimeoutError, EmptyChannelError). Updated index Jump-to-topic grid and Reference links. Enhanced create_react_agent migration guidance in Vol. 1. |
 | 2026-05-29 | 1.2.2 | Added Class deep-dives Vol. 3 — 10 source-verified deep dives into interrupt/Interrupt, DeltaChannel, EphemeralValue, NamedBarrierValue, RemoveMessage/push_message, Pregel, NodeBuilder, GraphOutput, PregelTask, IndexConfig/TTLConfig. Updated index Jump-to-topic grid and Reference links. |
