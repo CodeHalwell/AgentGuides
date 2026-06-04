@@ -171,7 +171,7 @@ async def validate_mid_stream():
 async def run_with_metadata():
     async with agent.run_stream(
         'Hello!',
-        run_metadata={'user_id': 'u123', 'session': 'web-abc'},
+        metadata={'user_id': 'u123', 'session': 'web-abc'},
     ) as stream:
         await stream.drain()
         print(f'Run ID: {stream.run_id}')
@@ -270,10 +270,10 @@ class ContextEnrichCapability(WrapperCapability):
         ctx: RunContext,
         request_context: ModelRequestContext,
     ) -> ModelRequestContext:
-        # Delegate to inner, then augment the returned context
+        # Delegate to inner, then inject the request-ID into run metadata
         request_context = await self.wrapped.before_model_request(ctx, request_context)
-        existing_meta = ctx.metadata or {}
-        existing_meta['request_id'] = ctx.run_id
+        ctx.metadata = ctx.metadata or {}
+        ctx.metadata[self.request_id_key] = ctx.run_id
         return request_context
 ```
 
@@ -345,7 +345,7 @@ print([type(l).__name__ for l in leaves])
 
 ```python
 FunctionToolset(
-    tools: Sequence[Tool | ToolFuncEither] = [],
+    tools: Sequence[Tool | ToolFuncEither] = (),
     *,
     max_retries: int | None = None,        # inherit from agent if None
     timeout: float | None = None,           # seconds; None = no limit
@@ -359,7 +359,7 @@ FunctionToolset(
     defer_loading: bool = False,            # hide from model until tool-search
     include_return_schema: bool | None = None,
     id: str | None = None,                  # required for durable execution
-    instructions: str | callable | Sequence = None,
+    instructions: str | Callable[..., str] | Sequence[str] | None = None,
 )
 ```
 
@@ -570,12 +570,34 @@ class AbstractToolset(ABC, Generic[AgentDepsT]):
 ### Minimal custom toolset
 
 ```python
+import ast
+import operator
 from pydantic_ai.toolsets.abstract import AbstractToolset
 from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai._run_context import RunContext
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai import Agent
 from typing import Any
+
+# AST-based safe arithmetic evaluator — avoids eval() on user input
+_SAFE_OPS: dict[type, Any] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+def _safe_eval(node: ast.expr) -> float:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_safe_eval(node.operand))
+    raise ValueError(f'Unsupported expression node: {type(node).__name__}')
 
 class CalculatorToolset(AbstractToolset):
     """A minimal custom toolset with a single calculator tool."""
@@ -609,10 +631,13 @@ class CalculatorToolset(AbstractToolset):
         if name == 'calculate':
             expr = tool_args['expression']
             try:
-                result = eval(expr, {'__builtins__': {}})  # noqa: S307
+                tree = ast.parse(expr, mode='eval')
+                result = _safe_eval(tree.body)
                 return f'{expr} = {result}'
-            except Exception as e:
+            except (ValueError, ZeroDivisionError) as e:
                 return f'Error: {e}'
+            except SyntaxError:
+                return 'Error: invalid expression syntax'
         raise ValueError(f'Unknown tool: {name!r}')
 
 agent = Agent('openai:gpt-4o', toolsets=[CalculatorToolset()])

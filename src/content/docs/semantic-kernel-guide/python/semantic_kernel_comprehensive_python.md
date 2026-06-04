@@ -13,7 +13,7 @@ Latest: 1.43.0 | Updated: June 4, 2026
 Last Updated: June 4, 2026
 Python Version: 3.10+ (3.9 dropped as of v1.41.2)
 Semantic Kernel: 1.43.0+
-Install note: v1.43.0 requires pre-release resolution (`pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel`) due to the `azure-ai-agents` pre-release transitive dependency.
+Install note: v1.43.0 requires pre-release resolution (`pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel`) due to the `azure-ai-agents` pre-release dependency.
 
 ---
 
@@ -2239,7 +2239,7 @@ await adapter.start(port=8080)
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.43.0 | June 4, 2026 | Minor release; `Latest:` header updated 1.42.0 → 1.43.0; version references updated; revision history entry added. `semantic-kernel==1.43.0` confirmed latest stable on PyPI (2026-06-04); full symbol verification blocked by env constraint (PyMeta3 build failure in CI); `--pre` flag expected to remain required; no API-breaking changes expected from patch-series progression. |
+| 1.43.0 | June 4, 2026 | Minor release; `Latest:` header updated 1.42.0 → 1.43.0; version references updated; revision history entry added. `semantic-kernel==1.43.0` confirmed latest stable on PyPI (2026-06-04); full symbol verification blocked by env constraint (PyMeta3 build failure in CI — carry-forward for next run); `--pre` flag expected to remain required. |
 | 1.42.0 | May 14, 2026 | Minor release; `mcp>=1.26.0` and `azure-ai-agents>=1.2.0b3` (pre-release) now required. Non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`) verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). **Known issue:** `semantic_kernel.connectors.ai.open_ai` emits `PydanticDeprecatedSince211` from `AzureAISearchDataSource` (internal SK issue; does not affect non-Azure connectors). |
 | 1.41.3 | April 28, 2026 | Version bumped 1.41.2 → 1.41.3 (patch release); header and version references updated. PyPI confirms 1.41.3 as latest stable. |
 | 1.41.2 | April 8, 2026 | Full MCP server/client support; A2A protocol; Oracle database connector; Google GenAI SDK migration; Python 3.10+ required |
