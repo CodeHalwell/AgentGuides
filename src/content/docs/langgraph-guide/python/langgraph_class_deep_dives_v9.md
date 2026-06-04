@@ -134,16 +134,20 @@ from typing import Callable, Awaitable
 from langchain_core.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
-# Semaphore must be created once at module level — not inside the function.
-# Creating it inside the interceptor would reset it on every call, defeating its purpose.
-_TOOL_SEMAPHORE = asyncio.Semaphore(5)   # max 5 concurrent tool calls
+# Initialise the semaphore lazily to avoid binding to an event loop before
+# one is running.  Module-level asyncio.Semaphore() works in Python 3.10+ but
+# fails in earlier versions and in certain test harnesses.
+_TOOL_SEMAPHORE: asyncio.Semaphore | None = None
 
 
 async def async_interceptor(
     request: ToolCallRequest,
     execute: Callable[[ToolCallRequest], Awaitable[ToolMessage]],
 ) -> ToolMessage:
-    """Rate-limit tool calls using a module-level async semaphore."""
+    """Rate-limit tool calls using a lazily-initialised async semaphore."""
+    global _TOOL_SEMAPHORE
+    if _TOOL_SEMAPHORE is None:
+        _TOOL_SEMAPHORE = asyncio.Semaphore(5)   # max 5 concurrent tool calls
     async with _TOOL_SEMAPHORE:
         return await execute(request)
 

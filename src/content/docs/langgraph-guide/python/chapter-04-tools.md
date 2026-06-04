@@ -586,6 +586,11 @@ tool_node = ToolNode(
 Use `override()` to sanitise or transform arguments before execution without mutating the original request:
 
 ```python
+from typing import Callable, Awaitable
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolCallRequest
+
+
 def sanitize_interceptor(
     request: ToolCallRequest,
     execute: Callable[[ToolCallRequest], ToolMessage],
@@ -605,12 +610,12 @@ def sanitize_interceptor(
     return execute(request)
 
 
-# Async variant — execute must be typed as Awaitable since we await it
+# Async variant — Awaitable must be imported at module scope so the forward
+# reference in the signature resolves correctly when get_type_hints() is called.
 async def async_sanitize_interceptor(
     request: ToolCallRequest,
-    execute: Callable[[ToolCallRequest], "Awaitable[ToolMessage]"],
+    execute: Callable[[ToolCallRequest], Awaitable[ToolMessage]],
 ) -> ToolMessage:
-    from typing import Awaitable
     # override() works identically in async interceptors
     new_tool_call = {**request.tool_call, "args": {"cleaned": True}}
     return await execute(request.override(tool_call=new_tool_call))

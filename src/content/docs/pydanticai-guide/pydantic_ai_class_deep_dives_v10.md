@@ -1256,10 +1256,11 @@ part = ToolReturnPart(
     content='Paris, France',
 )
 
-# Lambda form: merge into existing details
-part.provider_details = lambda existing: {**(existing or {}), 'source': 'web', 'relevance': 0.95}
+# Merge into existing details (provider_details is a plain dict, not a callable)
+existing = part.provider_details if isinstance(part.provider_details, dict) else {}
+part.provider_details = {**existing, 'source': 'web', 'relevance': 0.95}
 
-# Dict form: set directly
+# Or set directly with a new dict
 part.provider_details = {'cache_hit': True, 'latency_ms': 42}
 ```
 
