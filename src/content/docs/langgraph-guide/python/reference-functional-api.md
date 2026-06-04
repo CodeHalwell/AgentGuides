@@ -10,7 +10,7 @@ sidebar:
 
 # Functional API — API reference
 
-Verified against **`langgraph==1.2.1`** (module: `langgraph.func`).
+Verified against **`langgraph==1.2.4`** (module: `langgraph.func`).
 
 The Functional API lets you author a graph as a plain Python function instead of explicitly building a `StateGraph`. The result is still a `Pregel` object with the same `invoke` / `stream` / `get_state` / `update_state` surface — so you get checkpointing, interrupts, streaming, and time travel for free.
 
@@ -380,7 +380,46 @@ def remember(inp: dict, runtime: Runtime) -> dict:
     return {"saved": True}
 ```
 
-### 6. Cached task with manual cache invalidation
+### 6. Typed run-scoped context with `context_schema`
+
+Pass per-run metadata (tenant ID, feature flags, DB connection) that should not be checkpointed:
+
+```python
+from dataclasses import dataclass
+from langgraph.func import entrypoint, task
+from langgraph.runtime import Runtime
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+@dataclass
+class RunContext:
+    tenant_id: str
+    feature_flags: dict[str, bool]
+
+
+@task
+def process_item(item: str, tenant_id: str) -> str:
+    return f"[{tenant_id}] processed: {item}"
+
+
+@entrypoint(checkpointer=InMemorySaver(), context_schema=RunContext)
+def pipeline(items: list[str], runtime: Runtime[RunContext]) -> list[str]:
+    ctx = runtime.context   # type: RunContext — not persisted to checkpoint
+    futures = [process_item(item, ctx.tenant_id) for item in items]
+    return [f.result() for f in futures]
+
+
+result = pipeline.invoke(
+    ["a", "b", "c"],
+    config={"configurable": {"thread_id": "run-1"}},
+    context=RunContext(tenant_id="acme", feature_flags={"beta": True}),
+)
+# ['[acme] processed: a', '[acme] processed: b', '[acme] processed: c']
+```
+
+`context_schema` must be a dataclass, Pydantic model, or `TypedDict`. The context object is passed as the `context=` keyword argument to `invoke`/`stream` — separate from `config`. It is never persisted to checkpoints and never appears in `get_state()` output.
+
+### 7. Cached task with manual cache invalidation
 
 Cache expensive computations across runs; flush stale entries with `clear_cache`:
 
@@ -413,7 +452,7 @@ embed_document.clear_cache(cache)
 index_pipeline.invoke(["hello", "world"], cfg)     # recomputes
 ```
 
-### 7. Parallel tasks with per-task timeout and retry
+### 8. Parallel tasks with per-task timeout and retry
 
 ```python
 import asyncio
@@ -454,7 +493,7 @@ cfg = {"configurable": {"thread_id": "crawl-1"}}
 await crawl.ainvoke(["https://example.com", "https://httpbin.org/get"], cfg)
 ```
 
-### 8. Named `@task` with a custom `key_func` for the cache
+### 9. Named `@task` with a custom `key_func` for the cache
 
 Override the cache key when the default pickle-hash is too broad or too narrow:
 
@@ -492,7 +531,7 @@ pipeline.invoke(["https://example.com/", "http://example.com"], cfg)
 # [network] fetching https://example.com/  — only one fetch; both URLs share the key
 ```
 
-### 9. Typed `context_schema` on `@entrypoint`
+### 10. Typed `context_schema` on `@entrypoint`
 
 Use `context_schema=` to pass typed, read-only run context (user ID, feature flags, DB connections) without putting it in the serializable input:
 
@@ -555,7 +594,7 @@ result = answer.invoke(
 print(result["response"])
 ```
 
-### 10. Entrypoint calling a compiled `StateGraph` as a task
+### 11. Entrypoint calling a compiled `StateGraph` as a task
 
 Both Functional API and `StateGraph` compile to `Pregel`. You can use a compiled `StateGraph` inside a `@task`:
 

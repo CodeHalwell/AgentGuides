@@ -4,7 +4,7 @@ description: "2026 Update: Production-Ready Agentic Workflows"
 framework: haystack
 ---
 
-Latest: 2.29.0 | Updated: May 13, 2026
+Latest: 2.30.0 | Updated: June 4, 2026
 # Haystack Comprehensive Technical Guide: From Fundamentals to Expert-Level Agentic AI
 
 **2026 Update: Production-Ready Agentic Workflows**
@@ -2664,6 +2664,7 @@ invoker = ToolInvoker(tools=[web_search], raise_on_failure=True)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.30.0 | June 4, 2026 | Minor release; bug fixes and dependency updates. `Latest:` header updated 2.29.0 → 2.30.0; revision history entry added. Core symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) verified with `-W error::DeprecationWarning` against installed `haystack-ai==2.30.0` (system Python, 2026-06-04); no warnings. |
 | 2.29.0 | May 13, 2026 | Minor release; bug fixes and dependency updates. `Latest:` header updated 2.27.0 → 2.29.0; revision history entry added. Core symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) verified with `-W error::DeprecationWarning` against installed `haystack-ai==2.29.0` (`.routine-envs/check-0513-py`); no warnings. |
 | 2.28.0 | April 20, 2026 | GA after 2.28.0rc1/rc2; stabilisation. `SearchableToolset`, `LLMRanker`, `ToolInvoker` stabilised. Expanded provider support. |
 | 2.27.0 | April 1, 2026 | Python 3.9 dropped (min 3.10); 42 new integrations; `ChatMessage` internal structure refactored |

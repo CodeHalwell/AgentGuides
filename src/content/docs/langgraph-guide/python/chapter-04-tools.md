@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
-Verified against **`langgraph==1.2.1`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
+Verified against **`langgraph==1.2.4`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -539,9 +539,11 @@ result = graph.invoke({
 print(result["assigned_to"])  # "billing"
 ```
 
-### Example 8: `wrap_tool_call` interceptor
+### Example 8: `wrap_tool_call` interceptor and `ToolCallRequest.override()`
 
 `wrap_tool_call` (and its async twin `awrap_tool_call`) lets you intercept every tool call before and after execution. Receive a `ToolCallRequest` (with `.tool_call`, `.tool`, `.state`, `.runtime`) and a callable `execute` — add logging, auth checks, or argument transformations without modifying the tools themselves.
+
+**`ToolCallRequest.override()`** (new in 1.2.4) returns a new `ToolCallRequest` with specific fields replaced. Setting attributes directly on the instance is deprecated — always use `override()` for the immutable update pattern.
 
 ```python
 from typing import Callable
@@ -579,6 +581,53 @@ tool_node = ToolNode(
 )
 ```
 
+#### Mutating arguments with `override()`
+
+Use `override()` to sanitise or transform arguments before execution without mutating the original request:
+
+```python
+from typing import Callable, Awaitable
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolCallRequest
+
+
+def sanitize_interceptor(
+    request: ToolCallRequest,
+    execute: Callable[[ToolCallRequest], ToolMessage],
+) -> ToolMessage:
+    """Redact PII from tool args before execution."""
+    original_args = request.tool_call["args"]
+    cleaned_args = {
+        k: "[REDACTED]" if k in ("email", "phone", "ssn") else v
+        for k, v in original_args.items()
+    }
+
+    if cleaned_args != original_args:
+        # Build a new request — never mutate the original
+        new_tool_call = {**request.tool_call, "args": cleaned_args}
+        request = request.override(tool_call=new_tool_call)
+
+    return execute(request)
+
+
+# Async variant — Awaitable must be imported at module scope so the forward
+# reference in the signature resolves correctly when get_type_hints() is called.
+async def async_sanitize_interceptor(
+    request: ToolCallRequest,
+    execute: Callable[[ToolCallRequest], Awaitable[ToolMessage]],
+) -> ToolMessage:
+    # override() works identically in async interceptors
+    new_tool_call = {**request.tool_call, "args": {"cleaned": True}}
+    return await execute(request.override(tool_call=new_tool_call))
+
+
+tool_node = ToolNode(
+    [my_tool],
+    wrap_tool_call=sanitize_interceptor,
+    awrap_tool_call=async_sanitize_interceptor,
+)
+```
+
 > **Note:** `wrap_tool_call` overrides are not serialized to checkpoints and are not re-applied on resume. Put any stateful side effects in graph nodes rather than interceptors.
 
 ---
@@ -597,3 +646,4 @@ tool_node = ToolNode(
 | All context in one param | `ToolRuntime` from `langgraph.prebuilt.tool_node` | `runtime: ToolRuntime` (no Annotated needed) |
 | Route from a tool | `Command` from `langgraph.types` | return from `@tool` |
 | Intercept tool calls | `ToolNode` | `wrap_tool_call` / `awrap_tool_call` |
+| Immutable arg mutation in interceptors | `ToolCallRequest` from `langgraph.prebuilt.tool_node` | `.override(tool_call=..., state=...)` — returns a new instance |

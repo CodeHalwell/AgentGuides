@@ -10,7 +10,7 @@ sidebar:
 
 # StateGraph — API reference
 
-Verified against **`langgraph==1.2.1`** (modules: `langgraph.graph.state`, `langgraph.types`).
+Verified against **`langgraph==1.2.4`** (modules: `langgraph.graph.state`, `langgraph.types`).
 
 `StateGraph` is the primary graph builder. You declare a state schema, add nodes and edges, then call `.compile()` to get a `CompiledStateGraph` that implements the LangChain `Runnable` protocol (`invoke` / `stream` / `ainvoke` / `astream`).
 

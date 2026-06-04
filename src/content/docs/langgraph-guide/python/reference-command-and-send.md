@@ -10,7 +10,7 @@ sidebar:
 
 # Command, Send & control flow — API reference
 
-Verified against **`langgraph==1.2.1`** (module: `langgraph.types`).
+Verified against **`langgraph==1.2.4`** (module: `langgraph.types`).
 
 LangGraph's control flow primitives live in `langgraph.types`:
 
@@ -132,7 +132,19 @@ From inside a subgraph node, this routes the command to the **parent** graph —
 class Send:
     node: str
     arg:  Any
-    def __init__(self, /, node: str, arg: Any) -> None: ...
+    timeout: TimeoutPolicy | None   # added in 1.2.x
+
+    def __init__(
+        self,
+        /,
+        node: str,
+        arg: Any,
+        *,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
+    ) -> None:
+        self.node = node
+        self.arg = arg
+        self.timeout = TimeoutPolicy.coerce(timeout)  # normalised to TimeoutPolicy | None
 ```
 
 `Send` packages a node name and a custom state payload. Two places accept it:
@@ -142,7 +154,68 @@ class Send:
 
 The receiving node runs with the provided `arg` as its state snapshot for this task. The node is a concrete named node; the sent state can be any subset of the node's input schema.
 
-Equality is structural (`node` + `arg`), and `Send` is hashable.
+Equality is structural (`node` + `arg` + `timeout`), and `Send` is hashable.
+
+### Per-task timeout on `Send`
+
+The `timeout` parameter overrides the target node's default timeout for this specific dispatched task. Pass a `float` (seconds), `timedelta`, or `TimeoutPolicy` directly:
+
+```python
+import operator
+from datetime import timedelta
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send, TimeoutPolicy
+
+
+class BatchState(TypedDict):
+    jobs: list[dict]
+    results: Annotated[list[str], operator.add]
+
+
+class JobState(TypedDict):
+    id: str
+    payload: str
+    priority: str
+
+
+def dispatch(state: BatchState) -> list[Send]:
+    """Fan-out jobs; high-priority jobs get a 10-second hard cap, normal gets 60."""
+    sends = []
+    for job in state["jobs"]:
+        timeout = (
+            10.0                                     # high-priority: 10 s hard cap
+            if job["priority"] == "high"
+            else timedelta(seconds=60)               # normal: 60 s hard cap
+        )
+        sends.append(Send("run_job", job, timeout=timeout))
+    return sends
+
+
+def run_job(state: JobState) -> dict:
+    return {"results": [f"done:{state['id']}"]}
+
+
+builder = StateGraph(BatchState)
+builder.add_node("run_job", run_job)
+builder.add_conditional_edges(START, dispatch)
+builder.add_edge("run_job", END)
+graph = builder.compile()
+```
+
+For fine-grained control (both run and idle caps), pass a `TimeoutPolicy`:
+
+```python
+sends = [
+    Send(
+        "expensive_node",
+        {"item": item},
+        timeout=TimeoutPolicy(run_timeout=60.0, idle_timeout=10.0),
+    )
+    for item in items
+]
+```
 
 ## `interrupt()`
 
