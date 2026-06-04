@@ -852,8 +852,8 @@ def query_db(sql: str, conn_str: str) -> list[dict]:
 @entrypoint(checkpointer=InMemorySaver(), context_schema=DBContext)
 def data_pipeline(query: str, runtime: Runtime[DBContext]) -> dict:
     ctx = runtime.context   # type: DBContext
-    if ctx.read_only:
-        assert "SELECT" in query.upper(), "Only SELECT queries allowed in read-only mode"
+    if ctx.read_only and "SELECT" not in query.upper():
+        raise ValueError("Only SELECT queries allowed in read-only mode")
 
     rows = query_db(query, ctx.connection_string).result()
     return {"rows": rows, "query": query}
@@ -1236,7 +1236,8 @@ async def document_pipeline(
 ) -> list[dict]:
     ctx = runtime.context
     org_id = ctx.org_id
-    assert runtime.store is not None
+    if runtime.store is None:
+        raise RuntimeError("document_pipeline requires a store — pass store= to @entrypoint")
 
     # Use async store methods inside an async entrypoint — sync variants block the event loop
     prev_items = await runtime.store.asearch(("docs", org_id), limit=100)
