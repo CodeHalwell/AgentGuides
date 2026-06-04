@@ -411,15 +411,13 @@ def pipeline(items: list[str], runtime: Runtime[RunContext]) -> list[str]:
 
 result = pipeline.invoke(
     ["a", "b", "c"],
-    config={
-        "configurable": {"thread_id": "run-1"},
-        "context": RunContext(tenant_id="acme", feature_flags={"beta": True}),
-    },
+    config={"configurable": {"thread_id": "run-1"}},
+    context=RunContext(tenant_id="acme", feature_flags={"beta": True}),
 )
 # ['[acme] processed: a', '[acme] processed: b', '[acme] processed: c']
 ```
 
-`context_schema` must be a dataclass, Pydantic model, or `TypedDict`. The context object is passed in `config["context"]` at call time — it never appears in `get_state()` output.
+`context_schema` must be a dataclass, Pydantic model, or `TypedDict`. The context object is passed as the `context=` keyword argument to `invoke`/`stream` — separate from `config`. It is never persisted to checkpoints and never appears in `get_state()` output.
 
 ### 7. Cached task with manual cache invalidation
 
@@ -454,7 +452,7 @@ embed_document.clear_cache(cache)
 index_pipeline.invoke(["hello", "world"], cfg)     # recomputes
 ```
 
-### 7. Parallel tasks with per-task timeout and retry
+### 8. Parallel tasks with per-task timeout and retry
 
 ```python
 import asyncio

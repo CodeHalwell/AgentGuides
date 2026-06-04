@@ -605,11 +605,12 @@ def sanitize_interceptor(
     return execute(request)
 
 
-# Async variant
+# Async variant — execute must be typed as Awaitable since we await it
 async def async_sanitize_interceptor(
     request: ToolCallRequest,
-    execute: Callable[[ToolCallRequest], ToolMessage],
+    execute: Callable[[ToolCallRequest], "Awaitable[ToolMessage]"],
 ) -> ToolMessage:
+    from typing import Awaitable
     # override() works identically in async interceptors
     new_tool_call = {**request.tool_call, "args": {"cleaned": True}}
     return await execute(request.override(tool_call=new_tool_call))

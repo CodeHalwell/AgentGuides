@@ -134,14 +134,17 @@ from typing import Callable, Awaitable
 from langchain_core.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
+# Semaphore must be created once at module level — not inside the function.
+# Creating it inside the interceptor would reset it on every call, defeating its purpose.
+_TOOL_SEMAPHORE = asyncio.Semaphore(5)   # max 5 concurrent tool calls
+
 
 async def async_interceptor(
     request: ToolCallRequest,
     execute: Callable[[ToolCallRequest], Awaitable[ToolMessage]],
 ) -> ToolMessage:
-    """Rate-limit tool calls using an async semaphore."""
-    semaphore = asyncio.Semaphore(5)  # max 5 concurrent calls
-    async with semaphore:
+    """Rate-limit tool calls using a module-level async semaphore."""
+    async with _TOOL_SEMAPHORE:
         return await execute(request)
 
 
@@ -340,8 +343,9 @@ def inject_date_context(state: dict) -> dict:
 ### `post_model_hook` — human approval interrupt
 
 ```python
+from langchain_core.messages import AIMessage, RemoveMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import interrupt, Command
-from langchain_core.messages import AIMessage
 
 def require_approval(state: dict) -> dict:
     """Pause after every LLM response and ask a human to approve."""
@@ -509,7 +513,7 @@ builder = StateGraph(State)
 builder.add_node(
     "fetch",
     fetch,
-    retry=[rate_limit_policy, network_policy],
+    retry_policy=[rate_limit_policy, network_policy],
 )
 builder.add_edge(START, "fetch")
 builder.add_edge("fetch", END)
@@ -531,13 +535,13 @@ async def call_api(url: str) -> str: ...
 builder.add_node(
     "my_node",
     my_fn,
-    retry=RetryPolicy(max_attempts=3),          # single policy (also accepted)
+    retry_policy=RetryPolicy(max_attempts=3),      # single policy
 )
 
 builder.add_node(
     "my_node",
     my_fn,
-    retry=[policy_a, policy_b],                 # list of policies
+    retry_policy=[policy_a, policy_b],             # list of ordered policies
 )
 ```
 
@@ -806,17 +810,15 @@ builder.add_edge("process", END)
 
 graph = builder.compile(checkpointer=InMemorySaver())
 
-# Pass context via the config dict under "context" key
+# Pass context via the `context=` keyword argument — separate from config
 result = graph.invoke(
     {"messages": ["find AI papers"], "result": ""},
-    config={
-        "configurable": {"thread_id": "t1"},
-        "context": RequestContext(
-            tenant_id="acme-corp",
-            user_email="alice@acme.com",
-            feature_flags={"premium_search": True},
-        ),
-    },
+    config={"configurable": {"thread_id": "t1"}},
+    context=RequestContext(
+        tenant_id="acme-corp",
+        user_email="alice@acme.com",
+        feature_flags={"premium_search": True},
+    ),
 )
 print(result["result"])
 # '[acme-corp] Premium search for: find AI papers'
@@ -855,13 +857,11 @@ def data_pipeline(query: str, runtime: Runtime[DBContext]) -> dict:
 
 result = data_pipeline.invoke(
     "SELECT * FROM users LIMIT 10",
-    config={
-        "configurable": {"thread_id": "pipe-1"},
-        "context": DBContext(
-            connection_string="postgresql://localhost/mydb",
-            read_only=True,
-        ),
-    },
+    config={"configurable": {"thread_id": "pipe-1"}},
+    context=DBContext(
+        connection_string="postgresql://localhost/mydb",
+        read_only=True,
+    ),
 )
 ```
 
@@ -910,7 +910,7 @@ class Command(Generic[N], ToolOutputMixin):
 from typing import Literal
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Command
+from langgraph.types import Command, Send
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -1232,27 +1232,27 @@ async def document_pipeline(
 ) -> list[dict]:
     ctx = runtime.context
     org_id = ctx.org_id
+    assert runtime.store is not None
 
-    # Load any previously processed docs from the long-term store
-    prev_keys = [it.key for it in runtime.store.search(("docs", org_id), limit=100)]
+    # Use async store methods inside an async entrypoint — sync variants block the event loop
+    prev_items = await runtime.store.asearch(("docs", org_id), limit=100)
+    prev_keys = {it.key for it in prev_items}
 
     futures = [enrich(doc) for doc in docs if doc["id"] not in prev_keys]
     enriched = [f.result() for f in futures]
 
-    # Persist enriched docs to the store
+    # Persist enriched docs to the store (async)
     for doc in enriched:
-        runtime.store.put(("docs", org_id), doc["id"], doc)
+        await runtime.store.aput(("docs", org_id), doc["id"], doc)
 
     return enriched
 
 
-# Invoke
+# Invoke — pass context as a separate kwarg, not inside config
 result = await document_pipeline.ainvoke(
     [{"id": "d1", "text": "Hello"}, {"id": "d2", "text": "World"}],
-    config={
-        "configurable": {"thread_id": "pipeline-run-1"},
-        "context": AppContext(org_id="acme", api_key="sk-..."),
-    },
+    config={"configurable": {"thread_id": "pipeline-run-1"}},
+    context=AppContext(org_id="acme", api_key="sk-..."),
 )
 ```
 
