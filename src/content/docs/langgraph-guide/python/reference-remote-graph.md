@@ -10,7 +10,7 @@ sidebar:
 
 # RemoteGraph — API reference
 
-Verified against **`langgraph==1.2.1`** / **`langgraph-sdk==0.3.14`** (module: `langgraph.pregel.remote`).
+Verified against **`langgraph==1.2.4`** / **`langgraph-sdk==0.4.2`** (module: `langgraph.pregel.remote`).
 
 `RemoteGraph` is a drop-in replacement for a compiled `StateGraph` that calls a **LangGraph Platform deployment** (LangSmith, self-hosted server, or any API that speaks the LangGraph Server spec) over HTTP. It exposes the same `invoke`, `stream`, `get_state`, `update_state`, `get_state_history` surface as a local graph, so you can swap a local graph for a remote one without changing the calling code.
 

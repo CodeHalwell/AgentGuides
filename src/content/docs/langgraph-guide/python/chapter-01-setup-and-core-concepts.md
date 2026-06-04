@@ -48,11 +48,11 @@ Each node is a Python function. State flows through edges. Conditions route base
 
 ### Basic Installation
 
-LangGraph 1.2.1 is the current release. Install the core package alongside `langchain-core`:
+LangGraph 1.2.4 is the current release. Install the core package alongside `langchain-core`:
 
 ```bash
-# Core LangGraph (1.2.1)
-pip install "langgraph>=1.2.1" langchain-core
+# Core LangGraph (1.2.4)
+pip install "langgraph>=1.2.4" langchain-core
 
 # Async support
 pip install aiosqlite
