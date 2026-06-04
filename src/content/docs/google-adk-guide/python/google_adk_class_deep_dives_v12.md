@@ -31,7 +31,7 @@ Source-verified against **google-adk==2.1.0** (installed from PyPI, June 2026). 
 
 Plugins are the **application-level** counterpart to agent callbacks. Where callbacks are attached to a single `LlmAgent`, plugins are registered on the `Runner` and fire for every agent in the entire application. ADK executes all plugin callbacks before the corresponding agent callbacks; if any plugin returns a non-`None` value the remaining plugins *and* the agent callback are skipped (early-exit).
 
-### The 12 callback points (source-verified)
+### The 12 lifecycle callbacks + `close()` (source-verified)
 
 ```python
 class BasePlugin(ABC):
@@ -177,7 +177,7 @@ class ContextFilterPlugin(BasePlugin):
 | `custom_filter` | `Callable[[list[Content]], list[Content]]` — full control over history |
 | `name` | Plugin instance name (must be unique per Runner) |
 
-An **invocation** is defined as one or more consecutive human user messages (role=`"user"` that are not function responses). Tool outputs (`role="user"` + `function_response` parts) are transparent to the boundary detection.
+An **invocation** is defined as one or more consecutive human user messages (role=`"user"`) that are not function responses. Tool outputs (`role="user"` + `function_response` parts) are transparent to the boundary detection.
 
 ### Orphan-safe splitting
 
@@ -268,7 +268,7 @@ Both transformations are applied in sequence inside the single `before_model_cal
 ### Constructor (source-verified)
 
 ```python
-@experimental(FeatureName.REFLECT_RETRY_TOOL_PLUGIN)
+@experimental  # from google.adk.utils.feature_decorator — warns on instantiation
 class ReflectAndRetryToolPlugin(BasePlugin):
     def __init__(
         self,
@@ -297,7 +297,7 @@ class TrackingScope(Enum):
 
 ```python
 class ToolFailureResponse(BaseModel):
-    response_type: str = REFLECT_AND_RETRY_RESPONSE_TYPE  # sentinel sentinel
+    response_type: str = REFLECT_AND_RETRY_RESPONSE_TYPE  # sentinel
     error_type: str = ""
     error_details: str = ""
     retry_count: int = 0
@@ -626,7 +626,7 @@ async def extract_frames(video_url: str, tool_context: ToolContext) -> list[type
 
 **Source:** `google.adk.plugins.debug_logging_plugin`
 
-`DebugLoggingPlugin` implements **all 12 plugin callbacks** to produce a comprehensive YAML trace of every agent invocation. Each invocation is appended as a separate YAML document (delimited by `---`) to the configured output file.
+`DebugLoggingPlugin` implements **all 12 lifecycle callbacks** (every `BasePlugin` method except `close()`) to produce a comprehensive YAML trace of every agent invocation. Each invocation is appended as a separate YAML document (delimited by `---`) to the configured output file.
 
 ### Constructor (source-verified)
 
@@ -886,7 +886,7 @@ from google.adk.auth.auth_credential import AuthCredential, OAuth2Auth
 
 async def fetch_user_emails(
     max_results: int,
-    credential: AuthCredential,  # injected by the plugin
+    credential: AuthCredential,  # injected by AuthenticatedFunctionTool
 ) -> dict:
     """Fetch emails from Gmail using the authenticated user's credentials."""
     token = credential.oauth2.access_token
@@ -903,7 +903,9 @@ gmail_tool = AuthenticatedFunctionTool(
     func=fetch_user_emails,
     auth_config=AuthConfig(
         auth_scheme=OpenIdConnectWithConfig(
-            openid_connect_url="https://accounts.google.com/.well-known/openid-configuration",
+            # OpenIdConnectWithConfig requires explicit endpoint URLs (no discovery)
+            authorization_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+            token_endpoint="https://oauth2.googleapis.com/token",
             scopes=["https://www.googleapis.com/auth/gmail.readonly"],
         ),
         raw_auth_credential=AuthCredential(
