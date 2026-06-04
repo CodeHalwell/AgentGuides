@@ -17,10 +17,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```bash
     pip install --pre semantic-kernel
     ```
-    v1.42.0 requires `--pre` (pip) or `--prerelease=allow` (uv) — see [What's new](#whats-new-in-v1420-may-2026).
+    v1.43.0 requires `--pre` (pip) or `--prerelease=allow` (uv) — see [What's new](#whats-new-in-v1430-june-2026).
   </Card>
   <Card title="Version" icon="information">
-    **v1.42.0** · May 2026 · Python 3.10+
+    **v1.43.0** · June 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Azure-native enterprise agents, plugin-based architectures, Microsoft 365 integrations.
@@ -81,8 +81,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./semantic_kernel_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.42.0 (May 2026)
+## What's new in v1.43.0 (June 2026)
 
+- **v1.43.0 (June 2026)** — Minor release. `semantic-kernel==1.43.0` confirmed latest stable on PyPI (2026-06-04). Install with `pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel` as the `azure-ai-agents` pre-release transitive dependency is expected to persist. Non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`, `SelectionStrategy`, `TerminationStrategy`) are unchanged from v1.42.0 per PyPI metadata; full symbol verification deferred to environment with working pre-release install.
 - **v1.42.0 (May 14)** — Minor release. Requires `mcp>=1.26.0` (raised from 1.8) and `azure-ai-agents>=1.2.0b3` (pre-release dependency; plain `pip install semantic-kernel` will fail — use `pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel`). Non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`, `SelectionStrategy`, `TerminationStrategy`) verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). **Known issue:** importing `semantic_kernel.connectors.ai.open_ai` (which includes `OpenAIChatCompletion`) emits `PydanticDeprecatedSince211` from `AzureAISearchDataSource` at `azure_chat_prompt_execution_settings.py:134` — an internal SK issue; the warning does not affect non-Azure connectors at runtime. See risk register in the 2026-05-14 run report.
 - **v1.41.3 (April 28)** — Patch release; stability improvements.
 - **Vector store v1.34** — new API for embedding and retrieval.
@@ -127,6 +128,7 @@ Ready? **[Start Zero → Hero Step 1 →](./semantic_kernel_comprehensive_python
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-06-04 | semantic-kernel 1.43.0 | Version bumped 1.42.0 → 1.43.0 (minor release); version card updated to June 2026; "What's new" updated; install card anchor corrected; comprehensive guide header updated; revision history entry added. `semantic-kernel==1.43.0` confirmed latest stable on PyPI (2026-06-04); install with `--pre` flag (or `--prerelease=allow` in uv) expected to remain necessary due to `azure-ai-agents` pre-release transitive dep; full symbol verification blocked by env constraint (see risk register). | Claude routine |
 | 2026-05-14 | semantic-kernel 1.42.0 | Version bumped 1.41.3 → 1.42.0; version card updated to May 2026; "What's new" updated with mcp>=1.26.0 requirement and PydanticDeprecatedSince211 warning note; comprehensive guide header updated; revision history entry added. Non-Azure core symbols verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). | Claude routine |
 | 2026-04-28 | semantic-kernel 1.41.3 | Version bumped 1.41.2 → 1.41.3 (patch release); version card and "What's new" heading updated. PyPI confirms 1.41.3 as latest stable. | Claude routine |
 | 2026-04-22 | semantic-kernel 1.41.2 | Version card corrected from stale v1.36.0 to v1.41.2 (confirmed against PyPI); frameworks.ts updated from `Python 1.36.0` to `Python 1.41.2`. | Claude routine |

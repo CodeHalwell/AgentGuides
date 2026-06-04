@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.2.88** · June 2026 · Python 3.10+
+    **v0.2.89** · June 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     Claude-exclusive apps, Computer Use, MCP-heavy workflows, durable sessions.
@@ -74,8 +74,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" />
 </CardGrid>
 
-## What's new in v0.2.88 (June 2026)
+## What's new in v0.2.89 (June 2026)
 
+- **v0.2.89 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.89` (`/tmp/claude-sdk-check`, 2026-06-04); no `DeprecationWarning` emissions. 140 public symbols confirmed.
 - **v0.2.88 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed.
 - **v0.2.87 (May 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed.
 - **v0.2.86 (May 2026)** — Patch release; stability and dependency updates.
@@ -141,6 +142,7 @@ Ready? **[Start Zero → Hero Step 1 →](./anthropic_claude_agent_sdk_comprehen
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-06-04 | claude-agent-sdk 0.2.89 | Patch release 0.2.89; "What's new" heading updated to v0.2.89; v0.2.89 bullet added; comprehensive guide header updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.89` (`/tmp/claude-sdk-check`, 2026-06-04); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 2026-06-03 | claude-agent-sdk 0.2.88 | Patch release 0.2.88; version card updated June 2026; "What's new" heading updated to v0.2.88; v0.2.88 bullet added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 2026-05-23 | claude-agent-sdk 0.2.87 | Patch releases 0.2.86–0.2.87; "What's new" heading updated to v0.2.87; two patch bullets added. All core symbols verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 2026-05-22 | claude-agent-sdk 0.2.85 | Patch releases 0.2.83–0.2.85; "What's new" heading updated to v0.2.85; three patch bullets added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.85` (`.routine-envs/check-0522-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
