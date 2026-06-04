@@ -493,7 +493,7 @@ cfg = {"configurable": {"thread_id": "crawl-1"}}
 await crawl.ainvoke(["https://example.com", "https://httpbin.org/get"], cfg)
 ```
 
-### 8. Named `@task` with a custom `key_func` for the cache
+### 9. Named `@task` with a custom `key_func` for the cache
 
 Override the cache key when the default pickle-hash is too broad or too narrow:
 
@@ -531,7 +531,7 @@ pipeline.invoke(["https://example.com/", "http://example.com"], cfg)
 # [network] fetching https://example.com/  — only one fetch; both URLs share the key
 ```
 
-### 9. Typed `context_schema` on `@entrypoint`
+### 10. Typed `context_schema` on `@entrypoint`
 
 Use `context_schema=` to pass typed, read-only run context (user ID, feature flags, DB connections) without putting it in the serializable input:
 
@@ -594,7 +594,7 @@ result = answer.invoke(
 print(result["response"])
 ```
 
-### 10. Entrypoint calling a compiled `StateGraph` as a task
+### 11. Entrypoint calling a compiled `StateGraph` as a task
 
 Both Functional API and `StateGraph` compile to `Pregel`. You can use a compiled `StateGraph` inside a `@task`:
 
