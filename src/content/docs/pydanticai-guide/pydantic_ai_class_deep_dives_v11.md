@@ -50,7 +50,9 @@ ModelRequestNode    End[FinalResult[OutputDataT]]
 @dataclasses.dataclass
 class UserPromptNode(AgentNode[DepsT, NodeRunEndT]):
     user_prompt: str | Sequence[UserContent] | None
-    *,
+
+    _: dataclasses.KW_ONLY  # keyword-only fields below
+
     deferred_tool_results: DeferredToolResults | None = None
     instructions: str | None = None
     instructions_functions: list[SystemPromptRunner[DepsT]] = field(default_factory=list)
@@ -264,7 +266,7 @@ from pydantic_ai.capabilities import AbstractCapability
 
 class AuditCapability(AbstractCapability):
     """Logs every model request to an audit system."""
-    async def before_model_request(self, ctx, ...): ...  # audit logic
+    async def before_model_request(self, ctx, **kwargs): ...  # audit logic
 
 async def select_capability(ctx: RunContext[UserDeps]) -> AbstractCapability | None:
     """Only inject audit capability for enterprise users."""
@@ -395,7 +397,7 @@ async def maybe_memory(ctx: RunContext[SearchDeps]) -> MemoryTool | None:
 # NOTE: native_tools is managed through capabilities=[NativeTool(...)]
 # AgentNativeTool is exposed for typing custom NativeTool capability implementations
 from pydantic_ai.native_tools import AbstractNativeTool
-from pydantic_ai import AgentNativeTool
+from pydantic_ai import AgentNativeTool, RunContext
 
 def make_conditional_native_tool(
     deps_attr: str,
@@ -579,10 +581,13 @@ from pydantic_ai.messages import ToolSearchCallPart, ToolSearchReturnPart
 # Build a large toolset with deferred loading
 big_toolset = FunctionToolset()
 
-for i in range(50):
-    @big_toolset.tool(name=f'tool_{i}')
+def _make_tool(n: int):
+    @big_toolset.tool(name=f'tool_{n}')
     def _tool(ctx, x: int) -> int:
-        return x + i
+        return x + n
+
+for i in range(50):
+    _make_tool(i)
 
 lazy = DeferredLoadingToolset(big_toolset)  # only expose tool names until searched
 
@@ -897,6 +902,7 @@ async def handle_event(event):
 ### `AgentInstructions[DepsT]`
 
 ```python
+# Conceptual expansion of the AgentInstructions type alias:
 AgentInstructions = (
     TemplateStr[DepsT]
     | str
@@ -904,7 +910,7 @@ AgentInstructions = (
     | Callable[[RunContext[DepsT]], Awaitable[str | None]]
     | Callable[[], str | None]
     | Callable[[], Awaitable[str | None]]
-    | Sequence[<any of the above>]
+    | Sequence[str]   # simplified — any of the scalar forms above are valid sequence items
     | None
 )
 ```
@@ -1111,7 +1117,7 @@ from pydantic_ai import ConcurrencyLimiter
 shared_limiter = ConcurrencyLimiter(max_running=10)
 
 agent_a = Agent('openai:gpt-4o', max_concurrency=shared_limiter)
-agent_b = Agent('openai:gpt-4.1', max_concurrency=shared_limiter)
+agent_b = Agent('openai:gpt-4o', max_concurrency=shared_limiter)
 ```
 
 #### `model_settings: AgentModelSettings[AgentDepsT] | None = None`
@@ -1119,6 +1125,7 @@ agent_b = Agent('openai:gpt-4.1', max_concurrency=shared_limiter)
 Now accepts a callable `(RunContext[DepsT]) -> ModelSettings` in addition to a static dict. The callable is evaluated at the start of each run, after `deps` are available.
 
 ```python
+from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from pydantic_ai import ModelSettings
 
@@ -1142,7 +1149,7 @@ agent: Agent[Deps, str] = Agent(
 Sequence of `AbstractCapability` instances **or** callables returning one. Each capability can add instructions, toolsets, model-request hooks, and output hooks. Capabilities are combined via `CombinedCapability` internally, with ordering controlled by `CapabilityOrdering`.
 
 ```python
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities import AbstractCapability
 
 class LoggingCapability(AbstractCapability):
