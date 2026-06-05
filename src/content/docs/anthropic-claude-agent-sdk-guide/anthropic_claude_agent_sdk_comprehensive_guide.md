@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.2.89 | Updated: June 4, 2026
+Latest: 0.2.91 | Updated: June 5, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -141,7 +141,7 @@ source venv/bin/activate
 pip install --upgrade pip
 
 # Install Claude Agent SDK
-pip install claude-agent-sdk  # Latest stable release (0.2.89)
+pip install claude-agent-sdk  # Latest stable release (0.2.91)
 
 # Install recommended dependencies
 pip install python-dotenv pydantic aiohttp
@@ -2926,6 +2926,7 @@ options = ClaudeAgentOptions(
 
 | Version | Date | Changes |
 |---------|------|----------|
+| 0.2.91 | June 5, 2026 | Patch releases 0.2.90–0.2.91; stability and dependency updates. `Latest:` header updated 0.2.89 → 0.2.91; pip install version pin updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`) verified against installed `claude-agent-sdk==0.2.91` (`.routine-envs/check-0605-claude-py`, 2026-06-05); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 0.2.89 | June 4, 2026 | Patch release 0.2.89; stability and dependency updates. `Latest:` header updated 0.2.88 → 0.2.89; pip install version pin updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`) verified against installed `claude-agent-sdk==0.2.89` (`/tmp/claude-sdk-check`, 2026-06-04); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 0.2.88 | June 3, 2026 | Patch release 0.2.88; stability and dependency updates. `Latest:` header updated 0.2.87 → 0.2.88; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
 | 0.2.87 | May 23, 2026 | Patch releases 0.2.86–0.2.87; stability and dependency updates. `Latest:` header updated 0.2.85 → 0.2.87; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
