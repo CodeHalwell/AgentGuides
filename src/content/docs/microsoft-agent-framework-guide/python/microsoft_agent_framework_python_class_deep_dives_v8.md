@@ -1510,3 +1510,7 @@ class ToolTimingMiddleware(FunctionMiddleware):
 | **New** `DelegatingSkillsSource` + `InMemorySkillsSource` | New skills composition primitives. Existing `FileSkillsSource` and `AggregatingSkillsSource` unchanged. |
 | **New** `FunctionInvocationContext.add_tools` / `remove_tools` | Progressive tool exposure (@experimental PROGRESSIVE_TOOLS). Existing `FunctionMiddleware` unaffected. |
 | **`agent-framework-core`** bumped to **1.8.0** | 261 public symbols (up from 242 in 1.7.0). Run `pip install agent-framework==1.8.0` to upgrade. |
+
+---
+
+**Next:** [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) — `OllamaChatClient`, `PurviewPolicyMiddleware`, `DurableAIAgent` + Worker + Client, `GitHubCopilotAgent`, `HyperlightExecuteCodeTool`, `HyperlightCodeActProvider`, `Mem0ContextProvider`, `RedisContextProvider` + `RedisHistoryProvider`, `StandardMagenticManager` + `MagenticContext`, `FileSkillsSource` + `FilteringSkillsSource` + `AggregatingSkillsSource`
