@@ -32,6 +32,8 @@ Every section was written by inspecting the installed package source directly (`
 
 [→ Vol. 9 covers ToolCallRequest/override(), Send+timeout, create_react_agent pre/post hooks, RetryPolicy chained policies, CachePolicy custom key_func, InMemoryStore raw embeddings, context_schema+Runtime.context, Command.PARENT cross-subgraph routing, TimeoutPolicy.coerce(), entrypoint multi-policy retry](./langgraph_class_deep_dives_v9/)
 
+[→ Vol. 11 covers InjectedState, InjectedStore, MessagesState, Overwrite, ToolOutputMixin, CheckpointMetadata, CheckpointTuple, StateUpdate, PersistentDict, DeltaChannelHistory](./langgraph_class_deep_dives_v11/)
+
 ---
 
 ## 1 · `Durability` — checkpoint write timing

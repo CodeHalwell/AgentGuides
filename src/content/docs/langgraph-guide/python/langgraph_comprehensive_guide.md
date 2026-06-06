@@ -1,22 +1,26 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.2.0 (May 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Latest Version: LangGraph 1.2.4 (June 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
 framework: langgraph
 language: python
 ---
 
-Latest: 1.2.0 | Updated: May 12, 2026
+Latest: 1.2.4 | Updated: June 6, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.2.0 (May 2026)
+**Latest Version**: LangGraph 1.2.4 (June 2026)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
-> **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed `langgraph==1.2.0` package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
+> **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.x (verified May 2026):**
+**What's real in v1.2.4 (verified June 2026):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
 - `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
+- `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
+- `Overwrite` (`langgraph.types`) — bypass a reducer and replace a channel value directly
+- `MessagesState` (`langgraph.graph`) — built-in TypedDict with `add_messages` reducer, ready to subclass
+- `CheckpointMetadata` / `CheckpointTuple` (`langgraph.types`, `langgraph.checkpoint.base`) — inspect and traverse checkpoint history
 - Type-safe v2 streaming / invoke API (`version="v2"`)
 - Pydantic / dataclass auto-coercion on input
 - Python 3.10 – 3.14 support (Python 3.9 dropped)
