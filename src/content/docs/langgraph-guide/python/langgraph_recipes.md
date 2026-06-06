@@ -1,21 +1,25 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.1 (May 2026)"
+description: "Updated for LangGraph 1.2.4 (June 2026)"
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.2.1 (May 2026)**
+**Updated for LangGraph 1.2.4 (June 2026)**
 
-This guide includes recipes demonstrating the latest v1.2.1 features:
+This guide includes recipes demonstrating the latest v1.2.4 features:
 - Node Caching for performance
 - Deferred Nodes for fan-in patterns
 - Pre/Post Model Hooks for LLM customization
 - Cross-Thread Memory for persistent context
 - Tools State Updates for dynamic behavior
 - Command Tool for edgeless flows
+- `InjectedState` + `InjectedStore` for context-aware tools (Recipe 9)
+- `Overwrite` for resetting accumulated channels (Recipe 10)
+- `CheckpointTuple` for checkpoint history browsing and time-travel (Recipe 11)
+- `update_state` / `StateUpdate` for human-in-the-loop approval flows (Recipe 12)
 
 ---
 
@@ -1929,3 +1933,346 @@ Key points:
 - `runtime.stream_writer` accepts any JSON-serialisable dict. These are surfaced when the caller uses `stream_mode="custom"` (or a list that includes `"custom"`).
 - `runtime.store` is the same store instance passed to `compile(store=...)` or the `config` dict, so tools share the same persistent memory as graph nodes.
 - `runtime.tool_call_id` matches the `id` field on the `ToolCall` that triggered this invocation — useful for correlating streaming progress events to a specific call when multiple tool calls fire in parallel.
+
+---
+
+## Recipe 9: State-Aware Shopping Agent with `InjectedState` + `InjectedStore`
+
+This recipe demonstrates how `InjectedState` and `InjectedStore` let tools access graph state and persistent storage **without exposing internal details to the LLM**.
+
+```python
+from typing import Any, Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore, tools_condition, create_react_agent
+from langgraph.store.memory import InMemoryStore
+from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
+
+# Extend MessagesState with domain-specific fields
+class ShopState(MessagesState):
+    user_id: str
+    cart: list[dict]        # [{"id": str, "name": str, "price": float}]
+    user_tier: str          # "standard" | "premium"
+
+# ── Tools ────────────────────────────────────────────────────────────────────
+
+@tool
+def add_to_cart(
+    product_id: str,
+    product_name: str,
+    price: float,
+    # Injected from state — invisible to LLM
+    cart: Annotated[list, InjectedState("cart")],
+    user_tier: Annotated[str, InjectedState("user_tier")],
+) -> str:
+    """Add a product to the shopping cart."""
+    discount = 0.20 if user_tier == "premium" else 0.0
+    final_price = price * (1 - discount)
+    # Note: returning a string here; ToolNode wraps it in ToolMessage
+    return (
+        f"Added {product_name!r} at ${final_price:.2f}"
+        f"{' (20% premium discount applied)' if discount else ''}. "
+        f"Cart now has {len(cart) + 1} item(s)."
+    )
+
+@tool
+def view_cart(
+    state: Annotated[dict, InjectedState()],
+) -> str:
+    """View the current cart contents."""
+    cart = state.get("cart", [])
+    tier = state.get("user_tier", "standard")
+    if not cart:
+        return f"Cart is empty ({tier} account)."
+    lines = [f"  • {item['name']}: ${item['price']:.2f}" for item in cart]
+    return f"Cart ({tier}, {len(cart)} items):\n" + "\n".join(lines)
+
+@tool
+def save_preference(
+    key: str,
+    value: str,
+    user_id: Annotated[str, InjectedState("user_id")],
+    store: Annotated[Any, InjectedStore()],
+) -> str:
+    """Save a shopping preference (e.g. favourite brand, size)."""
+    store.put(("preferences", user_id), key, {"value": value})
+    return f"Saved preference: {key} = {value}"
+
+@tool
+def get_preference(
+    key: str,
+    user_id: Annotated[str, InjectedState("user_id")],
+    store: Annotated[Any, InjectedStore()],
+) -> str:
+    """Retrieve a previously saved shopping preference."""
+    item = store.get(("preferences", user_id), key)
+    if item is None:
+        return f"No preference found for '{key}'."
+    return f"Your {key}: {item.value['value']}"
+
+# ── Agent setup ───────────────────────────────────────────────────────────────
+
+tools = [add_to_cart, view_cart, save_preference, get_preference]
+model = ChatAnthropic(model="claude-3-5-haiku-20241022").bind_tools(tools)
+persistent_store = InMemoryStore()
+
+def agent_node(state: ShopState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+builder = StateGraph(ShopState)
+builder.add_node("agent", agent_node)
+builder.add_node("tools", ToolNode(tools))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(store=persistent_store)
+
+# ── Usage ─────────────────────────────────────────────────────────────────────
+
+from langchain_core.messages import HumanMessage
+
+result = graph.invoke({
+    "messages": [HumanMessage("Add some Sony headphones for $299 to my cart")],
+    "user_id": "user-42",
+    "cart": [],
+    "user_tier": "premium",
+})
+print(result["messages"][-1].content)
+# "Added 'Sony headphones' at $239.20 (20% premium discount applied). Cart now has 1 item(s)."
+```
+
+---
+
+## Recipe 10: Resetting Accumulated State with `Overwrite`
+
+When a node needs to **replace** an accumulator channel rather than append to it, use `Overwrite` to bypass the reducer entirely.
+
+```python
+import operator
+from typing import Annotated, Literal
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Overwrite
+from langgraph.checkpoint.memory import InMemorySaver
+
+class PipelineState(TypedDict):
+    batch_id: str
+    events: Annotated[list[str], operator.add]  # accumulates across nodes
+    errors: Annotated[list[str], operator.add]
+    phase: str
+
+# Normal accumulation — appends to events
+def process_batch(state: PipelineState) -> dict:
+    batch = state["batch_id"]
+    return {
+        "events": [f"processed:{batch}"],
+        "phase": "processed",
+    }
+
+# Appends error detail
+def handle_error(state: PipelineState) -> dict:
+    return {
+        "errors": [f"error in batch {state['batch_id']}"],
+        "events": [f"error:{state['batch_id']}"],
+        "phase": "errored",
+    }
+
+# Clears both lists — hard reset before re-processing
+def reset_state(state: PipelineState) -> dict:
+    return {
+        "events": Overwrite(value=[f"reset:{state['batch_id']}"]),
+        "errors": Overwrite(value=[]),
+        "phase": "reset",
+    }
+
+def route(state: PipelineState) -> Literal["handle_error", "reset_state", "__end__"]:
+    if state["errors"]:
+        return "handle_error"
+    if state["phase"] == "reset":
+        return "__end__"
+    return "__end__"
+
+builder = StateGraph(PipelineState)
+builder.add_node("process", process_batch)
+builder.add_node("handle_error", handle_error)
+builder.add_node("reset_state", reset_state)
+builder.add_edge(START, "process")
+builder.add_conditional_edges("process", route)
+builder.add_edge("handle_error", "reset_state")
+builder.add_edge("reset_state", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+
+# Run with a batch that will have an error, then reset
+# In practice you'd trigger the error condition via routing logic
+result = graph.invoke({
+    "batch_id": "batch-007",
+    "events": ["initial"],
+    "errors": [],
+    "phase": "pending",
+})
+print(result["events"])   # depends on routing; after reset → ["reset:batch-007"]
+print(result["errors"])   # [] — overwritten by reset_state
+```
+
+### Key rule for `Overwrite`
+
+Only one node may `Overwrite` a given channel per super-step. If two concurrent nodes both return `Overwrite(...)` for the same channel, LangGraph raises `InvalidUpdateError`.
+
+---
+
+## Recipe 11: Checkpoint History Browser with `CheckpointTuple`
+
+Use `CheckpointTuple` to build a debugging tool that inspects every state the graph passed through, and supports rewinding to any historical step.
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import StateUpdate
+from typing_extensions import TypedDict
+
+class WorkflowState(TypedDict):
+    input: str
+    draft: str
+    score: float
+    revision: int
+
+def draft_step(state: WorkflowState) -> dict:
+    return {
+        "draft": f"Draft #{state['revision'] + 1} for: {state['input']}",
+        "revision": state["revision"] + 1,
+        "score": 0.5 + state["revision"] * 0.1,
+    }
+
+saver = InMemorySaver()
+builder = StateGraph(WorkflowState)
+builder.add_node("draft", draft_step)
+builder.add_edge(START, "draft")
+builder.add_edge("draft", END)
+graph = builder.compile(checkpointer=saver)
+
+config = {"configurable": {"thread_id": "audit-demo"}}
+
+# Run three times to build up history
+for _ in range(3):
+    graph.invoke({"input": "AI trends", "draft": "", "score": 0.0, "revision": 0}, config)
+
+# ── Browse checkpoint history ─────────────────────────────────────────────────
+
+print("=== Checkpoint History ===")
+checkpoints = list(saver.list(config))
+for i, cp in enumerate(checkpoints):
+    meta = cp.metadata
+    vals = cp.checkpoint.get("channel_values", {})
+    print(
+        f"[{i}] source={meta.get('source')!r:8} "
+        f"step={meta.get('step'):3}  "
+        f"revision={vals.get('revision', '?')}  "
+        f"score={vals.get('score', '?')}"
+    )
+
+# ── Time-travel: rewind to an earlier step ──────────────────────────────────
+
+# Pick the second-oldest checkpoint (index -1 is newest)
+target_cp = checkpoints[-2]
+past_state = graph.get_state(target_cp.config)
+print(f"\nRewound to revision={past_state.values['revision']}, score={past_state.values['score']}")
+
+# Continue from that historical point (forks the thread)
+resumed = graph.invoke(None, target_cp.config)
+print(f"After resume: revision={resumed['revision']}, score={resumed['score']}")
+
+# ── Filter by source ─────────────────────────────────────────────────────────
+
+loop_checkpoints = list(saver.list(config, filter={"source": "loop"}))
+print(f"\nLoop checkpoints: {len(loop_checkpoints)}")
+```
+
+---
+
+## Recipe 12: Human-in-the-Loop Approval with `update_state` and `StateUpdate`
+
+Pause the graph at a sensitive step, let a human review and modify state, then resume:
+
+```python
+from typing import Literal
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import StateUpdate
+
+class ApprovalState(TypedDict):
+    request: str
+    draft_action: str
+    approved: bool
+    reviewer_note: str
+    result: str
+
+def generate_action(state: ApprovalState) -> dict:
+    """Generate a proposed action (requires human approval before executing)."""
+    return {
+        "draft_action": f"Transfer $10,000 for: {state['request']}",
+        "approved": False,
+    }
+
+def execute_action(state: ApprovalState) -> dict:
+    """Execute the approved action."""
+    if not state["approved"]:
+        return {"result": "Cancelled — not approved."}
+    return {
+        "result": f"Executed: {state['draft_action']}. Note: {state['reviewer_note']}"
+    }
+
+saver = InMemorySaver()
+builder = StateGraph(ApprovalState)
+builder.add_node("generate", generate_action)
+builder.add_node("execute", execute_action)
+builder.add_edge(START, "generate")
+builder.add_edge("generate", "execute")  # interrupted here in practice
+builder.add_edge("execute", END)
+
+# Interrupt AFTER generate so the human sees the draft before execute runs
+graph = builder.compile(checkpointer=saver, interrupt_after=["generate"])
+
+config = {"configurable": {"thread_id": "approval-thread"}}
+
+# Step 1: Start the graph — it pauses after "generate"
+graph.invoke(
+    {"request": "vendor invoice #1234", "draft_action": "", "approved": False,
+     "reviewer_note": "", "result": ""},
+    config,
+)
+
+# Step 2: Human reviews draft_action via get_state
+state = graph.get_state(config)
+print("Draft action:", state.values["draft_action"])
+# → "Transfer $10,000 for: vendor invoice #1234"
+
+# Step 3: Human approves (and optionally edits)
+graph.update_state(
+    config,
+    {
+        "approved": True,
+        "reviewer_note": "Verified invoice matches PO-5678",
+        # Human can also change draft_action here if needed
+    },
+    as_node="generate",  # treat this as if generate emitted the update
+)
+
+# Step 4: Resume — execute now runs
+final = graph.invoke(None, config)
+print("Result:", final["result"])
+# → "Executed: Transfer $10,000 for: vendor invoice #1234. Note: Verified invoice matches PO-5678"
+
+# ── Bulk update: apply multiple edits atomically ─────────────────────────────
+
+# For multi-field updates you want transactional, use bulk_update_state:
+graph.bulk_update_state(
+    config,
+    [
+        [StateUpdate({"approved": True}, as_node="generate")],
+        [StateUpdate({"reviewer_note": "All clear"}, as_node="generate")],
+    ],
+)
