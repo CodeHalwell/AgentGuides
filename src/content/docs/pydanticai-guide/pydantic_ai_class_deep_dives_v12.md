@@ -90,8 +90,6 @@ import asyncio
 from dataclasses import dataclass
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext
-from pydantic_ai import Agent
-from pydantic_ai.models.test import TestModel
 
 
 @dataclass
@@ -180,7 +178,6 @@ ds.add_evaluator(LengthCheck(min_length=5), specific_case='long')
 
 ```python
 from tenacity import retry_if_exception_type, stop_after_attempt
-from httpx import HTTPStatusError
 from pydantic_ai.retries import RetryConfig
 
 report = await dataset.evaluate(

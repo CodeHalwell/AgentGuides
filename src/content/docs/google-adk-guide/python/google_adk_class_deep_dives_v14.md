@@ -966,7 +966,7 @@ index_settings_3level = VectorSearchIndexSettings(
 
 ---
 
-## 7 · `LangGraphAgent` + LangGraph MemorySaver checkpointer
+## 7 · `LangGraphAgent` + LangGraph InMemorySaver checkpointer
 
 **Source:** `google.adk.agents.langgraph_agent`
 
@@ -986,18 +986,18 @@ else:
 
 This is the critical branching point. When you supply a LangGraph checkpointer, ADK steps back and lets LangGraph own the conversation state.
 
-### Example 1 — multi-turn with LangGraph MemorySaver
+### Example 1 — multi-turn with LangGraph InMemorySaver
 
 ```python
 import asyncio
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
 from google.adk.agents.langgraph_agent import LangGraphAgent
 from google.adk.runners import InMemoryRunner
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-checkpointer = MemorySaver()  # in-memory; use PostgresSaver for production
+checkpointer = InMemorySaver()  # in-memory; use PostgresSaver for production
 
 def get_weather(city: str) -> str:
     """Get current weather for a city."""

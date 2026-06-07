@@ -10,7 +10,7 @@ sidebar:
 
 # Class deep-dives Vol. 12 — Production infrastructure & advanced streaming
 
-Verified against **`langgraph==1.2.4`** / **`langgraph-checkpoint==4.1.1`** / **`langgraph-sdk==0.1.x`**.
+Verified against **`langgraph==1.2.4`** / **`langgraph-checkpoint==4.1.1`** / **`langgraph-sdk==0.4.2`**.
 
 Every section was written by inspecting the installed package source directly. All signatures and behaviours are drawn from the actual implementation, not documentation.
 
