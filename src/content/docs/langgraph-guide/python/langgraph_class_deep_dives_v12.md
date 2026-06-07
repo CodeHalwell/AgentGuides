@@ -277,7 +277,7 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 
     # Fork from step 2 (use its checkpoint_id as the new thread's parent)
     snapshots = list(graph.get_state_history(config))
-    step2_config = snapshots[-3].config  # oldest first, so -3 ≈ step 2
+    step2_config = snapshots[-2].config  # newest first; -1 = oldest (step 1), -2 = step 2
     graph.invoke({"counter": 0}, {**config, "configurable": {**config["configurable"], **step2_config["configurable"]}})
 ```
 
