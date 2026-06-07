@@ -1580,4 +1580,4 @@ The `ack_id` values from `pull_messages` are passed directly to `acknowledge_mes
 
 Verified against **google-adk==2.2.0** (June 2026). All constructor signatures, field names, and default values in this document were read from the installed source at `/usr/local/lib/python3.11/dist-packages/google/adk/`.
 
-Forward link: [Class deep dives — vol. 13 →](./google_adk_class_deep_dives_v13/)
+Previous: [Class deep dives — vol. 13 →](./google_adk_class_deep_dives_v13/)

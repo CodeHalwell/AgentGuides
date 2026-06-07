@@ -993,8 +993,15 @@ class LifecyclePayload(TypedDict, total=False):
 ### Example 1: Monitor subgraph lifecycle in a multi-agent graph
 
 ```python
+from typing import TypedDict
 from langchain_anthropic import ChatAnthropic
+from langgraph.graph import StateGraph
 from langgraph.prebuilt import create_react_agent
+
+
+class State(TypedDict):
+    messages: list
+
 
 model = ChatAnthropic(model="claude-haiku-4-5")
 

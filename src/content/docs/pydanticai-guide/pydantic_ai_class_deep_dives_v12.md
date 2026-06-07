@@ -1440,7 +1440,7 @@ asyncio.run(run_with_approval_queue('Please send a welcome email to alice@exampl
 
 ```python
 from pydantic_ai.toolsets.external import ExternalToolset
-from pydantic_ai import FunctionToolset, ToolDefinition
+from pydantic_ai import Agent, FunctionToolset, ToolDefinition
 
 
 # Combine: some tools execute locally, others are external
