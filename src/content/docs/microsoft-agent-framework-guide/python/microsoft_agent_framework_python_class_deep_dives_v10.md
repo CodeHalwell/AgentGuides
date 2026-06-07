@@ -40,9 +40,9 @@ declarative HITL).
 3. [`AGUIChatClient` + `AGUIHttpService` + `AGUIRequest` + `AGUIChatOptions`](#3-aguichatclient--aguihttpservice--aguirequest--aguichatoptions)
 4. [`AnthropicClient` + `AnthropicChatOptions` + `ThinkingConfig`](#4-anthropicclient--anthropicchatoptions--thinkingconfig)
 5. [`BedrockChatClient` + `BedrockChatOptions` + `BedrockGuardrailConfig`](#5-bedrockchatclient--bedrockchatoptions--bedrockguardrailconfig)
-6. [`CopilotStudioAgent` + `CopilotStudioSettings`](#6-copilotudioagent--copilotstudiosettings)
-7. [`GroupChatOrchestrator` + `GroupChatState` + `GroupChatSelectionFunction` + `TerminationCondition`](#7-groupchatorcestrator--groupchatstate--groupchatselectionfunction--terminationcondition)
-8. [`AgentBasedGroupChatOrchestrator` + `AgentOrchestrationOutput`](#8-agentbasedgroupchatorcestrator--agentorchestrationoutput)
+6. [`CopilotStudioAgent` + `CopilotStudioSettings`](#6-copilotstudioagent--copilotstudiosettings)
+7. [`GroupChatOrchestrator` + `GroupChatState` + `GroupChatSelectionFunction` + `TerminationCondition`](#7-groupchatorchestrator--groupchatstate--groupchatselectionfunction--terminationcondition)
+8. [`AgentBasedGroupChatOrchestrator` + `AgentOrchestrationOutput`](#8-agentbasedgroupchatorchestrator--agentorchestrationoutput)
 9. [`HandoffBuilder` + `HandoffConfiguration` + `HandoffSentEvent`](#9-handoffbuilder--handoffconfiguration--handoffsentevent)
 10. [`ExternalInputRequest` + `ExternalInputResponse` + `MCPToolApprovalRequest`](#10-externalinputrequest--externalinputresponse--mcptoolapprovalrequest)
 
@@ -166,15 +166,12 @@ async def main():
     agent = A2AAgent(url="http://localhost:9000")
     session = A2AAgentSession()
 
-    # Stream tokens in real time
-    async for update in await agent.run("Plan a 3-day itinerary for Tokyo.", session=session, stream=True):
-        print(update.text, end="", flush=True)
-    print()
-
-    # Check whether the remote agent requested more input
+    # Run the agent and check if it needs more input
     response = await agent.run("Plan a 3-day itinerary for Tokyo.", session=session)
+    print(response.text)
+
     if isinstance(response.continuation_token, A2AContinuationToken):
-        # Resume using the continuation token on the SAME session
+        # Remote agent paused and needs clarification — send follow-up on same session
         follow_up = await agent.run(
             "Focus the itinerary on food tours.",
             session=session,
@@ -928,9 +925,13 @@ asyncio.run(main())
 
 ### Example 3 — Copilot Studio bot as a participant in a handoff workflow
 
+`HandoffBuilder` requires `Agent` instances, so wrap the `CopilotStudioAgent` in a
+`@tool` and expose it through a thin local `Agent`. The triage agent then routes
+HR queries to that wrapper via the standard handoff mechanism.
+
 ```python
 import asyncio
-from agent_framework import Agent
+from agent_framework import Agent, tool
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_copilotstudio import CopilotStudioAgent
 from agent_framework.orchestrations import HandoffBuilder
@@ -944,18 +945,38 @@ hr_bot = CopilotStudioAgent(
     description="Handles HR queries: leave, benefits, payroll.",
 )
 
-# NOTE: HandoffBuilder requires Agent instances; wrap the CopilotStudioAgent
-# in a thin local Agent that routes calls to it if you need handoff injection.
-# For orchestrator-directed patterns, AgentBasedGroupChatOrchestrator accepts
-# any SupportsAgentRun participant.
+@tool
+async def call_hr_bot(query: str) -> str:
+    """Call the Copilot Studio HR bot for HR queries."""
+    response = await hr_bot.run(query)
+    return response.text
+
+hr_agent = Agent(
+    client=OpenAIChatClient(model="gpt-4o"),
+    name="hr_agent",
+    instructions="Handles HR queries by calling the HR bot tool.",
+    tools=[call_hr_bot],
+)
+
 triage_agent = Agent(
     client=OpenAIChatClient(model="gpt-4o"),
     name="triage",
-    instructions="Decide whether queries are HR-related or general support.",
+    instructions=(
+        "Classify incoming queries. Hand off to hr_agent for any HR-related "
+        "topics (leave, benefits, payroll). Handle general questions yourself."
+    ),
+)
+
+workflow = (
+    HandoffBuilder()
+    .participants([triage_agent, hr_agent])
+    .add_handoff(triage_agent, hr_agent, "HR-related query")
+    .start(triage_agent)
+    .build()
 )
 
 async def main():
-    response = await hr_bot.run("How do I submit a holiday request?")
+    response = await workflow.run("How do I submit a holiday request?")
     print(response.text)
 
 asyncio.run(main())
@@ -1328,8 +1349,9 @@ from agent_framework.orchestrations import HandoffSentEvent
 
 async def main():
     async for event in workflow.run_stream("I need help with my subscription."):
-        if isinstance(event.data, HandoffSentEvent):
-            print(f"[HANDOFF] {event.data.source} → {event.data.target}")
+        event_data = getattr(event, "data", None)
+        if isinstance(event_data, HandoffSentEvent):
+            print(f"[HANDOFF] {event_data.source} → {event_data.target}")
         elif hasattr(event, "text") and event.text:
             print(event.text)
 
@@ -1456,8 +1478,9 @@ async def main():
     workflow = factory.create_workflow()
 
     async for event in workflow.run_stream("Start onboarding."):
-        if isinstance(event.data, ExternalInputRequest):
-            req: ExternalInputRequest = event.data
+        event_data = getattr(event, "data", None)
+        if isinstance(event_data, ExternalInputRequest):
+            req: ExternalInputRequest = event_data
             print(f"[INPUT REQUIRED] {req.message}")
             # Simulate user input (in production: read from API / UI)
             user_text = "Python"
@@ -1508,8 +1531,9 @@ async def main():
     async for event in workflow.run_stream(
         "Find documents about the Q3 budget review."
     ):
-        if isinstance(event.data, MCPToolApprovalRequest):
-            req: MCPToolApprovalRequest = event.data
+        event_data = getattr(event, "data", None)
+        if isinstance(event_data, MCPToolApprovalRequest):
+            req: MCPToolApprovalRequest = event_data
             print(f"[APPROVAL REQUEST] Tool: {req.tool_name} on {req.server_url}")
             print(f"  Arguments: {req.arguments}")
             print(f"  Header names present: {req.header_names}")
@@ -1569,12 +1593,13 @@ async def main():
     workflow = factory.create_workflow()
 
     async for event in workflow.run_stream("Begin document review."):
-        if isinstance(event.data, ExternalInputRequest):
-            print(f"Question: {event.data.message}")
+        event_data = getattr(event, "data", None)
+        if isinstance(event_data, ExternalInputRequest):
+            print(f"Question: {event_data.message}")
             await workflow.resume(ExternalInputResponse(user_input="quarterly-reports"))
 
-        elif isinstance(event.data, MCPToolApprovalRequest):
-            req = event.data
+        elif isinstance(event_data, MCPToolApprovalRequest):
+            req = event_data
             print(f"Approve search_documents with args {req.arguments}? [y]")
             await workflow.resume(
                 ToolApprovalResponse(request_id=req.request_id, approved=True)
@@ -1588,4 +1613,4 @@ asyncio.run(main())
 
 ---
 
-*Next: [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) for integration package deep dives (Ollama, Purview, Durable, Hyperlight, Mem0, Redis, Magentic-One internals, skill discovery).*
+*Previous: [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) — integration package deep dives (Ollama, Purview, Durable, Hyperlight, Mem0, Redis, Magentic-One internals, skill discovery).*
