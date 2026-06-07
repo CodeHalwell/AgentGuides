@@ -111,7 +111,7 @@ agent = Agent(
     model="anthropic.claude-3-5-sonnet-20241022-v2:0"
 )
 
-response = agent({"messages": [{"role": "user", "content": "Say hello to Alice"}]})
+response = agent("Say hello to Alice")
 print(response)
 ```
 
