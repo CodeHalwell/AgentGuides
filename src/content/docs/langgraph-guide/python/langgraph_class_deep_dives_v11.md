@@ -34,6 +34,8 @@ Every section was written by inspecting the installed package source directly. A
 
 [→ Vol. 10 covers Durability checkpoint modes, NodeError/NodeCancelledError, TaskPayload/TaskResultPayload, CheckpointPayload/CheckpointTask, Item/SearchItem, GetOp/PutOp/SearchOp/ListNamespacesOp/MatchCondition, UIMessage/RemoveUIMessage, GraphOutput v2, StreamPart variants, PregelExecutableTask/CacheKey](./langgraph_class_deep_dives_v10/)
 
+[→ Vol. 12 covers RemoteGraph/RemoteException, PostgresSaver/ShallowPostgresSaver, AsyncPostgresSaver, PostgresStore/PoolConfig, AsyncPostgresStore, ANNIndexConfig/HNSWConfig/IVFFlatConfig/PostgresIndexConfig, GraphRunStream/SubgraphRunStream, ToolCallWithContext/ToolInvocationError, LifecyclePayload/LifecycleTransformer, MessagesTransformer/CheckpointsTransformer/TasksTransformer](./langgraph_class_deep_dives_v12/)
+
 ---
 
 ## 1 · `InjectedState` — inject graph state into tools
