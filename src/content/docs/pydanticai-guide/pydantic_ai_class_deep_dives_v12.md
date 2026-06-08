@@ -1515,6 +1515,14 @@ image_approval = ExternalToolset(
 
 ---
 
+---
+
+## Next: Vol. 13
+
+[Class Deep Dives Vol. 13](./pydantic_ai_class_deep_dives_v13/) covers: `TemplateStr` (Handlebars dynamic instructions), the `Hooks` capability (30+ lifecycle hook protocols), `WebSearch` + `WebFetch` capabilities (native/local fallback), `Thinking` (cross-provider extended reasoning), `NativeOrLocalTool` (base framework for native/local pairs), `ExaToolset` + Exa tools, `TavilySearchTool`, `AgentWorker` + `agent_to_a2a` (FastA2A protocol), `PrepareTools` + `PrepareOutputTools`, and `ReinjectSystemPrompt` + `SetToolMetadata` + `PrefixTools`.
+
+---
+
 ## Revision history
 
 | Date | Package version | Notes |
