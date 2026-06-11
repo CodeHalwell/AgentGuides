@@ -1352,6 +1352,7 @@ agent = Agent(
 | `HandleResponseEvent`, `ModelResponseStreamEvent`, `ToolSearchCallPart` | Vol. 11 |
 | `Dataset`, `LLMJudge`, `ExternalToolset`, `RetryConfig` | Vol. 12 |
 | `TemplateStr`, `Hooks`, `WebSearch`, `WebFetch`, `Thinking`, `NativeOrLocalTool`, `ExaToolset`, `TavilySearchTool`, `AgentWorker`, `PrepareTools`, `ReinjectSystemPrompt`, `SetToolMetadata`, `PrefixTools` | **Vol. 13** |
+| `FallbackModel`, `InstrumentationSettings`, `InstrumentedModel`, `ModelProfile`, `EmbeddingModel`, `EmbeddingResult`, `WrapperEmbeddingModel`, `InstrumentedEmbeddingModel`, `TestEmbeddingModel`, `CombinedToolset`, `ApprovalRequiredToolset`, `DeferredLoadingToolset`, `WrapperToolset`, `FilteredToolset`, `RenamedToolset`, `WrapperCapability`, `CombinedCapability`, `AGUIAdapter`, `AGUIEventStream` | [Vol. 14](./pydantic_ai_class_deep_dives_v14/) |
 
 ## Revision history
 
