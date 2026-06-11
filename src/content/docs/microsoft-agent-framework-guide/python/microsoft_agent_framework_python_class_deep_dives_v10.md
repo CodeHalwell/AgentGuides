@@ -25,6 +25,8 @@ inferred from documentation alone.
 - [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v8/) — `AgentFileStore` hierarchy, `FileAccessProvider`, `MCPSkill` + `MCPSkillsSource`, `ToolMode`, `AgentEvalConverter` + `CheckResult` + `RubricScore`, `ChatContext`, `WorkflowAgent` + `WorkflowContext`, `TruncationStrategy`, `HistoryProvider` + `InMemoryHistoryProvider`, `DelegatingSkillsSource` + `InMemorySkillsSource` + `FunctionInvocationContext`
 - [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) — `OllamaChatClient`, `PurviewPolicyMiddleware`, `DurableAIAgent` + `DurableAIAgentClient` + `DurableAIAgentWorker`, `GitHubCopilotAgent`, `HyperlightExecuteCodeTool` + `HyperlightCodeActProvider`, `Mem0ContextProvider`, `RedisContextProvider` + `RedisHistoryProvider`, `StandardMagenticManager` + `MagenticContext`, `FileSkillsSource` + `FilteringSkillsSource`
 
+**Next:** [Vol. 11](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v11/) — `OpenAIChatClient` + `OpenAIChatOptions` + `ReasoningOptions`, `OpenAIChatCompletionClient`, `FoundryChatClient` + cloud tools, `FoundryMemoryProvider`, `FoundryLocalClient`, `AzureAISearchContextProvider`, `CosmosCheckpointStorage` + `CosmosHistoryProvider`, `OrchestrationState`, `ClaudeAgent`, `AgentFunctionApp` — source-verified at 1.8.1
+
 This volume covers **ten class groups** drawn from four integration packages and the
 orchestrations package: **A2A protocol consumer & server bridges**, **AG-UI protocol**,
 **Anthropic & Bedrock chat clients**, **Microsoft Copilot Studio**, and **advanced
