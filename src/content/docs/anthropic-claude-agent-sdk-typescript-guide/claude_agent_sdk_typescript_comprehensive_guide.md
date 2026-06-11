@@ -4,7 +4,7 @@ description: "The Claude Agent SDK is the official TypeScript library for buildi
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-Latest: 0.3.165 | Updated: June 5, 2026
+Latest: 0.3.168 | Updated: June 8, 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -3264,6 +3264,7 @@ The comprehensive guide continues with detailed sections on each topic with exte
 
 | Version | Date | Changes | Reviewer |
 |---------|------|----------|----------|
+| 0.3.168 | June 8, 2026 | Patch releases 0.3.166–0.3.168; no API changes. `Latest:` header updated 0.3.165 → 0.3.168; revision history entry added. `@anthropic-ai/claude-agent-sdk@0.3.168` confirmed latest stable via npm registry (2026-06-08); 25-export surface verified against `/tmp/npm-0608-ts-sdk`: `query`, `tool`, `createSdkMcpServer`, `InMemorySessionStore`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
 | 0.3.165 | June 5, 2026 | Patch releases 0.3.163–0.3.165; no API changes. `Latest:` header updated 0.3.162 → 0.3.165; revision history entry added. `@anthropic-ai/claude-agent-sdk@0.3.165` confirmed latest stable via npm registry (2026-06-05); 25-export surface unchanged. | Claude routine |
 | 0.3.162 | June 4, 2026 | Patch release 0.3.162; no API changes. `Latest:` header updated 0.3.161 → 0.3.162; revision history entry added. `@anthropic-ai/claude-agent-sdk@0.3.162` confirmed latest stable via npm registry (2026-06-04); 25-export surface unchanged. | Claude routine |
 | 0.3.161 | June 3, 2026 | Patch release 0.3.161; no API changes. `Latest:` header updated 0.3.160 → 0.3.161; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.161` (`/tmp/npm-0603`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
