@@ -1317,3 +1317,5 @@ asyncio.run(main())
 <Aside type="note" title="Verified against 1.106.0">
 All class signatures, field names, type aliases, and deprecation notices verified by inspecting installed **pydantic-ai 1.106.0** source directly from PyPI. Run `pip show pydantic-ai` to confirm your installed version.
 </Aside>
+
+**Next:** [Class Deep Dives Vol. 12](./pydantic_ai_class_deep_dives_v12/) — `pydantic_evals` evaluation framework (`Dataset`, `Case`, `Evaluator`, `EvaluatorContext`, built-in evaluators, `LLMJudge`, `generate_dataset`, online evaluation), `SpanTree`/`SpanQuery`, `MCPSamplingModel`, `RetryConfig`/`TenacityTransport`, `ExternalToolset`.

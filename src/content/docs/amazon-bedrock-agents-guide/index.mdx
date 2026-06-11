@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **Strands 1.36.0** · April 2026 · Python 3.10+
+    **Strands 1.42.0** · June 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     AWS-native workloads, secure sandboxed agents, enterprise IAM.
@@ -79,9 +79,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="March 2025 updates" href="./march_2025_updates_summary/" />
 </CardGrid>
 
-## What's new (April 2026 / March 2025 GA)
+## What's new in Strands 1.42.0 (June 2026)
 
-- **Strands SDK 1.36** with expanded tool library, refined tracing, TypeScript parity.
+- **v1.37.0–1.42.0 (April–June 2026)** — Six minor releases. Core symbols (`Agent`, `tool`, `AgentBase`, `AgentSkills`, `Plugin`, `Skill`, `Snapshot`, `ToolContext`, `ModelRetryStrategy`, `MultiAgentPlugin`) verified against installed `strands-agents==1.42.0` (`.routine-envs/refresh-py`, 2026-06-07); 23 top-level exports confirmed; no `DeprecationWarning` emissions.
+- **v1.36.0 (April 2026)** — Expanded tool library, refined tracing, TypeScript parity.
 - **AgentCore GA** — secure sandbox runtimes, managed memory, identity via AWS IAM.
 - **Multi-agent collaboration** — supervisor-style routing between Bedrock agents.
 - **A2A protocol** — interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK.
@@ -112,6 +113,7 @@ Ready? **[Start Zero → Hero Step 1 →](./bedrock_agentcore_comprehensive_guid
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-06-07 | Strands 1.42.0 | Version bumped 1.36.0 → 1.42.0 (six minor releases: 1.37.0–1.42.0); version card updated; "What's new" section updated; broken `__version__` import fixed in strands SDK guide (symbol absent from 1.42.0 package; replaced with `importlib.metadata.version`); revision history entry added. Core symbols (`Agent`, `tool`, `AgentBase`, `AgentSkills`, `Plugin`, `Skill`, `Snapshot`, `ToolContext`, `ModelRetryStrategy`, `MultiAgentPlugin`) verified against installed `strands-agents==1.42.0` (`.routine-envs/refresh-py`, 2026-06-07); 23 top-level exports confirmed. |
 | 2026-04-21 | Strands 1.36 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | April 17, 2026 | Strands 1.36.0 | Expanded tool library, refined tracing, TS parity. |
 | March 2025 | AgentCore GA | Secure sandbox runtimes; managed memory; multi-agent collaboration. |

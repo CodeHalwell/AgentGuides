@@ -10,8 +10,8 @@ framework: amazon-bedrock-agents
 
 A complete technical reference for the AWS Strands Agents SDK, a lightweight, open-source Python framework for building collaborative AI agent systems on Amazon Bedrock. Strands provides four collaboration patterns: Agents as Tools, Swarms, Agent Graphs, and Workflows.
 
-**Version:** 1.36.0 (April 17, 2026)
-**Last Updated:** April 20, 2026
+**Version:** 1.42.0 (June 2026)
+**Last Updated:** June 7, 2026
 **Status:** Open Source, Generally Available
 **Language:** Python
 **GitHub:** https://github.com/awslabs/strands-agents (hypothetical)
@@ -94,9 +94,11 @@ export AWS_PROFILE=default
 ### Quick Verification
 
 ```python
-from strands import Agent, tool, __version__
+import importlib.metadata
+from strands import Agent, tool
 
-print(f"Strands version: {__version__}")
+# strands does not expose __version__; use importlib.metadata instead
+print(f"Strands version: {importlib.metadata.version('strands-agents')}")
 
 # Create a simple agent
 @tool
@@ -105,13 +107,12 @@ def hello(name: str) -> str:
     return f"Hello, {name}!"
 
 agent = Agent(
-    name="HelloAgent",
     tools=[hello],
     model="anthropic.claude-3-5-sonnet-20241022-v2:0"
 )
 
-response = agent.run("Say hello to Alice")
-print(response)  # "Hello, Alice!"
+response = agent("Say hello to Alice")
+print(response)
 ```
 
 ---
@@ -1176,13 +1177,14 @@ AWS Strands provides a powerful, lightweight framework for building collaborativ
 
 ---
 
-**Last Updated:** April 20, 2026
+**Last Updated:** June 7, 2026
 **Status:** Open Source, Generally Available
 
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.42.0 | June 7, 2026 | Version bumped 1.36.0 → 1.42.0 (six minor releases: 1.37.0–1.42.0); version header updated; broken `__version__` import fixed (symbol absent from 1.42.0; replaced with `importlib.metadata.version`); guide header "Last Updated" corrected; revision history entry added. Core symbols (`Agent`, `tool`, `AgentBase`, `AgentSkills`, `Plugin`, `Skill`, `Snapshot`, `ToolContext`, `ModelRetryStrategy`, `MultiAgentPlugin`) verified against installed `strands-agents==1.42.0` (`.routine-envs/refresh-py`, 2026-06-07); 23 top-level exports confirmed; no `DeprecationWarning` emissions. |
 | 1.36.0 | April 17, 2026 | Incremental improvements; multi-agent graph workflows; interrupt propagation through nested nodes; `AgentCoreMemorySessionManager` integration; Steering Hooks |
 | 1.35.0 | April 2026 | Previous documented version |
 | 1.0 | March 2025 | Initial guide created |
