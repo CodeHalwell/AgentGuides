@@ -1564,3 +1564,7 @@ asyncio.run(main())
 | `agent-framework[redis]` | 1.8.0 | `RedisHistoryProvider` Azure AD `credential_provider` path; `store_context_from` filter; `vector_algorithm` / `vector_distance_metric` options |
 | `agent-framework[orchestrations]` | 1.8.0 | `MagenticProgressLedger` retry logic; `StandardMagenticManager.progress_ledger_retry_count`; `MagenticContext.from_dict` / `to_dict` |
 | `agent-framework` (core) | 1.8.0 | `FileSkillsSource` path-traversal guard; `FilteringSkillsSource`; `AggregatingSkillsSource` |
+
+---
+
+*Next: [Vol. 10](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v10/) for A2A consumer & server bridges, AG-UI protocol, Anthropic + Bedrock clients, Copilot Studio, custom group-chat orchestration, handoff routing, and declarative HITL.*
