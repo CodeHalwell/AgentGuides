@@ -475,16 +475,22 @@ def redacting_converter(
 
 # Wire into to_a2a via a custom executor factory
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
+from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
+from google.adk.a2a.executor.config import A2aAgentExecutorConfig
 from google.adk.agents import LlmAgent
 
 agent = LlmAgent(name="safe_agent", model="gemini-2.5-flash", instruction="Be helpful.")
 
-# Pass the custom executor that uses redacting_converter
-# (the factory receives the runner and returns an executor instance)
+# Inject the redacting part converter via A2aAgentExecutorConfig so all
+# text parts emitted by the agent are screened before reaching A2A clients.
 app = to_a2a(
     agent,
     host="0.0.0.0",
     port=8004,
+    agent_executor_factory=lambda runner: A2aAgentExecutor(
+        runner=runner,
+        config=A2aAgentExecutorConfig(gen_ai_part_converter=_redacting_part_converter),
+    ),
 )
 ```
 
@@ -663,7 +669,7 @@ credential = AuthCredential(
 
 ```python
 from typing import Optional
-from pydantic import Field
+from pydantic import Field, ConfigDict
 from google.adk.auth.auth_schemes import CustomAuthScheme
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 
@@ -679,8 +685,7 @@ class HmacAuthScheme(CustomAuthScheme):
     timestamp_header: str = "X-Request-Timestamp"
     signing_key_env_var: str = "HMAC_SIGNING_KEY"
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 # Use it in an AuthenticatedFunctionTool
 hmac_scheme = HmacAuthScheme()
@@ -1923,11 +1928,6 @@ from google.adk.tools.base_tool import BaseTool
 
 class RemoteRegistryToolConfig(BaseToolConfig):
     """Loads a tool definition from a remote tool registry by slug."""
-
-    # Extra fields beyond BaseToolConfig's strict schema
-    # (BaseToolConfig uses extra="forbid", so we override model_config)
-    from pydantic import ConfigDict
-    model_config = ConfigDict(extra="forbid")
 
     registry_url: str = Field(description="Base URL of the remote tool registry")
     tool_slug: str = Field(description="Unique slug identifying the tool in the registry")
