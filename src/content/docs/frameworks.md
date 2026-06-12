@@ -14,7 +14,7 @@ Detailed comparison of all supported agent frameworks to help you choose the rig
 | Framework | Language | Best For | Complexity | Learning Curve | Community | Last Updated |
 |-----------|----------|----------|-----------|-----------------|-----------|--------------|
 | **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | Apr 2026 |
-| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | Apr 2026 |
+| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | Jun 2026 |
 | **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Apr 2026 |
 | **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | Apr 2026 |
 | **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Apr 2026 |
@@ -562,7 +562,7 @@ If you outgrow a framework:
 | **Haystack** | ~11k | Active | Good | 10+ |
 | **OpenAI SDK** | ~23k | Growing | Excellent | 3 |
 | **SmolAgents** | ~4k | Growing | Good | 100+ |
-| **PydanticAI** | ~2k | Growing | Good | 10+ |
+| **PydanticAI** | ~8k | Growing | Excellent | 15+ |
 
 ---
 
