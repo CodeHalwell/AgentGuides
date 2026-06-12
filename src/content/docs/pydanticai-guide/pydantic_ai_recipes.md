@@ -1,12 +1,12 @@
 ---
 title: "Pydantic AI: Recipes & Real-World Examples"
-description: "Version: 1.101.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, and XML prompt enrichment."
+description: "Version: 1.107.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
 framework: pydanticai
 ---
 
 # Pydantic AI: Recipes & Real-World Examples
 
-**Version:** 1.101.0 (May 2026)
+**Version:** 1.107.0 (June 2026)
 **Purpose:** Practical, production-tested code examples for common scenarios
 
 ---
@@ -964,6 +964,304 @@ async def main():
     print('Recommended:', rec.recommended_products)
     print('Total cost:', rec.total_cost)
     print('Reasoning:', rec.reasoning)
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+---
+
+## Recipe 11: Capability Bundle — scoped tool set per user role
+
+```python
+"""
+Demonstrates the `Capability` convenience class: bundle tools, toolsets, and
+instructions under a single named capability that can be toggled per run.
+
+Pattern:
+- Build a 'read-only' and an 'admin' Capability
+- Inject only the appropriate one based on the caller's role
+"""
+
+import asyncio
+from dataclasses import dataclass
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Capability
+from pydantic_ai.models.test import TestModel
+
+# --- Capabilities ---
+
+read_cap: Capability = Capability(
+    id='read',
+    description='Read-only data access tools',
+    instructions='You may ONLY read data. Never modify anything.',
+)
+
+admin_cap: Capability = Capability(
+    id='admin',
+    description='Full CRUD data access tools',
+    instructions='You have full read/write access. Confirm destructive actions.',
+)
+
+
+@read_cap.tool_plain
+def list_users() -> list[str]:
+    """List all user names."""
+    return ['alice', 'bob', 'carol']
+
+
+@read_cap.tool_plain
+def get_user(name: str) -> dict:
+    """Get details for a specific user."""
+    return {'name': name, 'active': True}
+
+
+@admin_cap.tool_plain
+def list_users_admin() -> list[str]:
+    """List all users including suspended accounts."""
+    return ['alice', 'bob', 'carol', 'suspended_dave']
+
+
+@admin_cap.tool_plain
+def delete_user(name: str) -> str:
+    """Permanently delete a user account."""
+    return f'User {name!r} deleted.'
+
+
+@dataclass
+class Deps:
+    role: str  # 'read' or 'admin'
+
+
+agent = Agent(TestModel(custom_result_text='Done.'), deps_type=Deps)
+
+
+async def run_as(role: str, query: str) -> str:
+    cap = admin_cap if role == 'admin' else read_cap
+    result = await agent.run(query, deps=Deps(role=role), capabilities=[cap])
+    return result.output
+
+
+async def main() -> None:
+    print(await run_as('read', 'List users'))
+    print(await run_as('admin', 'Delete user bob'))
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+---
+
+## Recipe 12: Web-research agent with `WebSearch` + `WebFetch` (native / local fallback)
+
+```python
+"""
+Research agent that combines WebSearch (for discovery) and WebFetch (for full content).
+Uses native=True on both capabilities so the agent picks the fastest path on each
+provider; falls back to DuckDuckGo / markdownify-based fetch on providers that don't
+support native tools.
+
+Requirements (for the local fallback paths):
+  pip install "pydantic-ai-slim[web-fetch,duckduckgo]"
+"""
+
+import asyncio
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch, WebFetch
+from pydantic_ai.models.test import TestModel
+
+
+class ResearchSummary(BaseModel):
+    topic: str
+    key_facts: list[str]
+    sources: list[str]
+
+
+agent = Agent(
+    TestModel(custom_result_text='{"topic":"AI","key_facts":["fact1"],"sources":["https://example.com"]}'),
+    output_type=ResearchSummary,
+    system_prompt=(
+        'You are a research assistant. Use web_search to discover relevant pages, '
+        'then web_fetch to read them in full. Summarise the findings.'
+    ),
+    capabilities=[
+        WebSearch(
+            native=True,
+            local='duckduckgo',
+            search_context_size='high',
+            blocked_domains=['reddit.com', 'twitter.com'],
+        ),
+        WebFetch(
+            native=True,
+            local=True,
+            enable_citations=True,
+            max_content_tokens=4096,
+        ),
+    ],
+)
+
+
+async def main() -> None:
+    result = await agent.run('Research: What are the latest advances in diffusion models?')
+    summary = result.output
+    print(f'Topic: {summary.topic}')
+    for fact in summary.key_facts:
+        print(f'  • {fact}')
+    print('Sources:', summary.sources)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+---
+
+## Recipe 13: Inline HITL with `HandleDeferredToolCalls`
+
+```python
+"""
+Demonstrates `HandleDeferredToolCalls`: intercept deferred tool calls inline,
+automatically approve low-risk operations, reject high-risk ones with an
+explanation, and let the agent continue without a second invocation.
+"""
+
+import asyncio
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import HandleDeferredToolCalls
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved
+
+
+LOW_RISK_TOOLS = {'send_notification', 'log_event'}
+HIGH_RISK_TOOLS = {'delete_record', 'send_email_blast'}
+
+
+async def approval_handler(
+    ctx: RunContext[None],
+    requests: DeferredToolRequests,
+) -> DeferredToolResults | None:
+    results: dict[str, ToolApproved | str] = {}
+
+    for call in requests.tool_calls:
+        if call.tool_name in LOW_RISK_TOOLS:
+            results[call.tool_call_id] = ToolApproved()
+        elif call.tool_name in HIGH_RISK_TOOLS:
+            results[call.tool_call_id] = (
+                f'Rejected: {call.tool_name} requires manual review'
+            )
+
+    if not results:
+        return None
+
+    return requests.build_results(results)
+
+
+toolset = FunctionToolset()
+
+
+@toolset.tool_plain(requires_approval=True)
+def send_notification(message: str) -> str:
+    """Send a push notification."""
+    return f'Notification sent: {message}'
+
+
+@toolset.tool_plain(requires_approval=True)
+def delete_record(record_id: str) -> str:
+    """Permanently delete a database record."""
+    return f'Record {record_id} deleted'
+
+
+agent = Agent(
+    TestModel(custom_result_text='All actions processed.'),
+    toolsets=[toolset],
+    capabilities=[HandleDeferredToolCalls(handler=approval_handler)],
+)
+
+
+async def main() -> None:
+    result = await agent.run('Send a notification about the deploy, then delete record #42.')
+    print(result.output)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+---
+
+## Recipe 14: `ProcessEventStream` — latency observer + thinking-strip processor
+
+```python
+"""
+Shows both forms of ProcessEventStream:
+1. Observer (async def → None): records first-token latency.
+2. Processor (async generator): strips ThinkingPart events so downstream
+   consumers never see extended-thinking content.
+"""
+
+import asyncio
+import time
+from collections.abc import AsyncIterable, AsyncIterator
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import ProcessEventStream
+from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPart
+from pydantic_ai.models.test import TestModel
+
+
+class LatencyTracker:
+    first_token_ms: float | None = None
+    _start: float = 0.0
+
+    def reset(self) -> None:
+        self._start = time.monotonic()
+
+
+tracker = LatencyTracker()
+
+
+async def latency_observer(
+    ctx: RunContext[None],
+    stream: AsyncIterable[AgentStreamEvent],
+) -> None:
+    tracker.reset()
+    async for event in stream:
+        if tracker.first_token_ms is None and isinstance(event, PartStartEvent):
+            tracker.first_token_ms = (time.monotonic() - tracker._start) * 1000
+
+
+async def strip_thinking(
+    ctx: RunContext[None],
+    stream: AsyncIterable[AgentStreamEvent],
+) -> AsyncIterator[AgentStreamEvent]:
+    async for event in stream:
+        if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
+            continue
+        yield event
+
+
+agent = Agent(
+    TestModel(custom_result_text='42 is the answer.'),
+    capabilities=[
+        ProcessEventStream(handler=latency_observer),
+        ProcessEventStream(handler=strip_thinking),
+    ],
+)
+
+
+async def main() -> None:
+    result = await agent.run('What is the meaning of life?')
+    print('Output:', result.output)
+    if tracker.first_token_ms is not None:
+        print(f'First-token latency: {tracker.first_token_ms:.1f} ms')
+    else:
+        print('First-token latency: n/a (TestModel)')
+
 
 if __name__ == '__main__':
     asyncio.run(main())
