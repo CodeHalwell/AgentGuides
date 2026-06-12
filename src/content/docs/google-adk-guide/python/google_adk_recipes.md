@@ -1,13 +1,13 @@
 ---
 title: "Google ADK - Practical Recipes and Examples"
-description: "Version: 2.1.0 Focus: Real-world implementations and use cases"
+description: "Version: 2.2.0 Focus: Real-world implementations and use cases"
 framework: google-adk
 language: python
 ---
 
 # Google ADK - Practical Recipes and Examples
 
-**Version:** Verified against google-adk==2.1.0  
+**Version:** Verified against google-adk==2.2.0  
 **Focus:** Real-world implementations and use cases
 
 ---
@@ -1667,6 +1667,334 @@ async def main():
         print(f"Q: {q}")
         print(f"A: {events[-1].content.parts[0].text}\n")
 
+
+asyncio.run(main())
+```
+
+---
+
+## Recipe 13 — Self-Healing API Agent with `ReflectAndRetryToolPlugin`
+
+An agent that automatically retries failed tool calls using structured reflection guidance, including detecting soft failures returned as error dicts.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.plugins.reflect_retry_tool_plugin import (
+    ReflectAndRetryToolPlugin, TrackingScope,
+)
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
+from typing import Any, Optional
+
+# Simulates a flaky third-party payments API
+_attempt_count = {}
+
+def charge_card(amount: float, currency: str, card_token: str) -> dict:
+    """Charge a payment card."""
+    key = card_token
+    _attempt_count[key] = _attempt_count.get(key, 0) + 1
+    if _attempt_count[key] <= 2:
+        return {"status": "error", "error_code": 429, "message": "Rate limit exceeded"}
+    return {"status": "success", "charge_id": f"ch_{card_token[:8]}", "amount": amount}
+
+class PaymentsRetryPlugin(ReflectAndRetryToolPlugin):
+    """Detects rate-limit responses (status=error) and triggers retry."""
+
+    async def extract_error_from_result(
+        self, *, tool: BaseTool, tool_args: dict, tool_context: ToolContext, result: Any
+    ) -> Optional[dict]:
+        if isinstance(result, dict) and result.get("status") == "error":
+            return result
+        return None
+
+agent = LlmAgent(
+    name="payments_agent",
+    model="gemini-2.5-flash",
+    instruction=(
+        "Process payment requests. Use charge_card to charge the card. "
+        "If a charge fails, retry with the same arguments."
+    ),
+    tools=[charge_card],
+)
+
+async def main():
+    runner = InMemoryRunner(
+        agent=agent,
+        app_name="payments",
+        plugins=[
+            PaymentsRetryPlugin(
+                max_retries=4,
+                throw_exception_if_retry_exceeded=False,
+                tracking_scope=TrackingScope.INVOCATION,
+            )
+        ],
+    )
+    await runner.session_service.create_session(
+        app_name="payments", user_id="u1", session_id="s1"
+    )
+    events = await runner.run_debug(
+        "Charge $49.99 USD to card token 'tok_abc123'.",
+        user_id="u1", session_id="s1",
+    )
+    print(events[-1].content.parts[0].text)
+
+asyncio.run(main())
+```
+
+---
+
+## Recipe 14 — Few-Shot Agent with Dynamic Example Provider
+
+An agent that injects domain-specific few-shot examples based on the user's query, improving accuracy without increasing the base system prompt size.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.tools.example_tool import ExampleTool
+from google.adk.examples.base_example_provider import BaseExampleProvider
+from google.adk.examples.example import Example
+from google.genai import types
+
+class ISODateProvider(BaseExampleProvider):
+    """Shows date-format examples only when the user asks about dates."""
+
+    _DATE_EXAMPLES = [
+        Example(
+            input=types.Content(
+                role="user",
+                parts=[types.Part.from_text("Convert '25th December 2024' to ISO format.")],
+            ),
+            output=[types.Content(
+                role="model",
+                parts=[types.Part.from_text("2024-12-25")],
+            )],
+        ),
+        Example(
+            input=types.Content(
+                role="user",
+                parts=[types.Part.from_text("What is ISO format for March 3rd, 2025?")],
+            ),
+            output=[types.Content(
+                role="model",
+                parts=[types.Part.from_text("2025-03-03")],
+            )],
+        ),
+    ]
+
+    _CURRENCY_EXAMPLES = [
+        Example(
+            input=types.Content(
+                role="user",
+                parts=[types.Part.from_text("What is the ISO currency code for British pounds?")],
+            ),
+            output=[types.Content(
+                role="model",
+                parts=[types.Part.from_text("GBP")],
+            )],
+        ),
+    ]
+
+    def get_examples(self, query: str) -> list[Example]:
+        q = query.lower()
+        if any(kw in q for kw in ["date", "iso", "convert", "format", "december", "january"]):
+            return self._DATE_EXAMPLES
+        if any(kw in q for kw in ["currency", "code", "pound", "dollar", "euro"]):
+            return self._CURRENCY_EXAMPLES
+        return []
+
+agent = LlmAgent(
+    name="standards_agent",
+    model="gemini-2.5-flash",
+    instruction="Answer questions about ISO standards precisely.",
+    tools=[ExampleTool(ISODateProvider())],
+)
+
+async def main():
+    runner = InMemoryRunner(agent=agent, app_name="iso")
+    await runner.session_service.create_session(
+        app_name="iso", user_id="u1", session_id="s1"
+    )
+    for q in [
+        "Convert 'January 1st, 2026' to ISO date format.",
+        "ISO currency code for Japanese yen?",
+        "What's the speed of light?",
+    ]:
+        events = await runner.run_debug(q, user_id="u1", session_id="s1")
+        print(f"Q: {q}")
+        print(f"A: {events[-1].content.parts[0].text}\n")
+
+asyncio.run(main())
+```
+
+---
+
+## Recipe 15 — Tool Environment Simulation for CI Testing
+
+A complete CI-safe test harness that mocks all external tool calls without any real network access, supporting both deterministic injection and LLM-generated mocks.
+
+```python
+import asyncio
+import json
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.tools.environment_simulation.environment_simulation_config import (
+    EnvironmentSimulationConfig, ToolSimulationConfig, InjectionConfig,
+    InjectedError, MockStrategy,
+)
+from google.adk.tools.environment_simulation.environment_simulation_plugin import (
+    EnvironmentSimulationPlugin,
+)
+
+# Real tool definitions (would call external APIs in production)
+def get_exchange_rate(base: str, target: str) -> dict:
+    """Fetch current exchange rate."""
+    ...  # real implementation calls an FX API
+
+def get_market_data(symbol: str) -> dict:
+    """Fetch market data for a stock symbol."""
+    ...  # real implementation calls a market data API
+
+def send_trade_notification(email: str, message: str) -> dict:
+    """Send a trade notification email."""
+    ...  # real implementation calls an email service
+
+agent = LlmAgent(
+    name="trading_agent",
+    model="gemini-2.5-flash",
+    instruction=(
+        "You are a trading assistant. Check exchange rates and market data, "
+        "then send notifications when trades are executed."
+    ),
+    tools=[get_exchange_rate, get_market_data, send_trade_notification],
+)
+
+# CI simulation config — no real API calls
+sim_config = EnvironmentSimulationConfig(
+    tool_simulation_configs=[
+        # Deterministic FX rate injections
+        ToolSimulationConfig(
+            tool_name="get_exchange_rate",
+            injection_configs=[
+                InjectionConfig(
+                    match_args={"base": "USD", "target": "GBP"},
+                    injected_response={"base": "USD", "target": "GBP", "rate": 0.79},
+                ),
+                InjectionConfig(
+                    match_args={"base": "USD", "target": "EUR"},
+                    injected_response={"base": "USD", "target": "EUR", "rate": 0.92},
+                ),
+            ],
+            # Fallback for unmatched currency pairs
+            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+        ),
+        # 10% rate-limit errors for chaos testing
+        ToolSimulationConfig(
+            tool_name="get_market_data",
+            injection_configs=[
+                InjectionConfig(
+                    injection_probability=0.1,
+                    random_seed=99,
+                    injected_error=InjectedError(
+                        injected_http_error_code=429,
+                        error_message="Rate limit: retry after 1s",
+                    ),
+                ),
+            ],
+            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+        ),
+        # Email always succeeds in tests
+        ToolSimulationConfig(
+            tool_name="send_trade_notification",
+            injection_configs=[
+                InjectionConfig(
+                    injection_probability=1.0,
+                    injected_response={"status": "sent", "message_id": "msg_test_001"},
+                )
+            ],
+        ),
+    ],
+    simulation_model="gemini-2.0-flash",
+    environment_data=json.dumps({
+        "stocks": [
+            {"symbol": "GOOG", "price": 185.50, "change_pct": 1.2},
+            {"symbol": "AAPL", "price": 212.00, "change_pct": -0.5},
+        ]
+    }),
+)
+
+async def main():
+    runner = InMemoryRunner(
+        agent=agent,
+        app_name="trading",
+        plugins=[EnvironmentSimulationPlugin(config=sim_config)],
+    )
+    await runner.session_service.create_session(
+        app_name="trading", user_id="u1", session_id="s1"
+    )
+    events = await runner.run_debug(
+        "What's the USD to GBP rate? Also check GOOG market data and "
+        "send a notification to trader@example.com.",
+        user_id="u1", session_id="s1",
+    )
+    print(events[-1].content.parts[0].text)
+
+asyncio.run(main())
+```
+
+---
+
+## Recipe 16 — Code Analysis Agent with `VertexAiCodeExecutor`
+
+A stateful data analysis agent that executes Python across multiple turns, retaining variables between turns for interactive data exploration.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
+
+executor = VertexAiCodeExecutor(
+    stateful=True,           # variables persist across turns
+    optimize_data_file=True, # CSV attachments auto-extracted
+    error_retry_attempts=2,
+    timeout_seconds=30,
+)
+
+agent = LlmAgent(
+    name="data_explorer",
+    model="gemini-2.5-flash",
+    instruction=(
+        "You are an interactive data analyst. "
+        "Execute Python code to answer user questions about data. "
+        "Show your work — write code, execute it, and explain the output. "
+        "Variables defined in earlier turns are still available."
+    ),
+    code_executor=executor,
+)
+
+async def main():
+    runner = InMemoryRunner(agent=agent, app_name="explorer")
+    await runner.session_service.create_session(
+        app_name="explorer", user_id="analyst1", session_id="session1"
+    )
+
+    conversation = [
+        "Load this dataset: data = {'month': ['Jan','Feb','Mar','Apr','May'], "
+        "'sales': [12000, 15000, 11000, 18000, 22000]}. Convert to a pandas DataFrame.",
+        "Calculate the month-over-month growth rate for each month.",
+        "Which month had the highest growth rate? Plot sales as a line chart.",
+    ]
+
+    for turn in conversation:
+        print(f"\n>>> {turn}")
+        events = await runner.run_debug(
+            turn, user_id="analyst1", session_id="session1"
+        )
+        if events and events[-1].content:
+            print(events[-1].content.parts[0].text)
 
 asyncio.run(main())
 ```
