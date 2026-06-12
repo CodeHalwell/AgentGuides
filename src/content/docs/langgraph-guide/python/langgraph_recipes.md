@@ -2276,3 +2276,447 @@ graph.bulk_update_state(
         [StateUpdate({"reviewer_note": "All clear"}, as_node="generate")],
     ],
 )
+```
+
+---
+
+## Recipe 13: `ToolRuntime` — unified runtime injection
+
+`ToolRuntime` is the single dataclass injected into any tool that declares `runtime: ToolRuntime`. It replaces the older `InjectedState` / `InjectedStore` annotations with one unified parameter, and additionally exposes `tool_call_id`, `config`, `stream_writer`, and the full `tools` list.
+
+```python
+import datetime
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage
+from langchain_core.tools import tool
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.store.memory import InMemoryStore
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain_anthropic import ChatAnthropic
+
+
+class WorkflowState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    user_id: str
+    session_start: str
+
+
+@tool
+def save_research_note(topic: str, content: str, runtime: ToolRuntime) -> str:
+    """Save a research note to long-term memory for the current user.
+
+    Args:
+        topic: Short topic label for the note.
+        content: The note content to persist.
+    """
+    user_id = runtime.state["user_id"]           # read from graph state
+    call_id = runtime.tool_call_id               # unique per invocation
+
+    # Persist to the store — survives across threads
+    runtime.store.put(
+        ("research", user_id),
+        call_id,
+        {
+            "topic": topic,
+            "content": content,
+            "saved_at": datetime.datetime.utcnow().isoformat(),
+        },
+    )
+
+    # Stream a custom event visible to any stream consumer
+    runtime.stream_writer({"note_saved": {"topic": topic, "call_id": call_id}})
+
+    return f"Note on '{topic}' saved (id={call_id[:8]})"
+
+
+@tool
+def list_notes(runtime: ToolRuntime) -> str:
+    """List all research notes saved for the current user."""
+    user_id = runtime.state["user_id"]
+    items = runtime.store.search(("research", user_id))
+    if not items:
+        return "No notes saved yet."
+    lines = [f"- {item.value['topic']}: {item.value['content'][:60]}" for item in items]
+    return "\n".join(lines)
+
+
+tools = [save_research_note, list_notes]
+model = ChatAnthropic(model="claude-opus-4-8").bind_tools(tools)
+store = InMemoryStore()
+
+
+def call_model(state: WorkflowState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+
+graph = StateGraph(WorkflowState)
+graph.add_node("agent", call_model)
+graph.add_node("tools", ToolNode(tools))
+graph.add_edge(START, "agent")
+graph.add_conditional_edges("agent", tools_condition)
+graph.add_edge("tools", "agent")
+
+app = graph.compile(checkpointer=InMemorySaver(), store=store)
+
+result = app.invoke(
+    {
+        "messages": [{"role": "user", "content": "Save a note: LangGraph uses Pregel-style supersteps"}],
+        "user_id": "alice",
+        "session_start": datetime.datetime.utcnow().isoformat(),
+    },
+    config={"configurable": {"thread_id": "alice-session-1"}},
+)
+```
+
+---
+
+## Recipe 14: `ToolNode.wrap_tool_call` — interceptor for retries, caching, and auditing
+
+`wrap_tool_call` is a sync interceptor that wraps every tool execution inside a `ToolNode`. Use it for cross-cutting concerns — rate-limiting, audit logging, result caching — without modifying each tool individually.
+
+```python
+import hashlib
+import json
+import time
+from collections import defaultdict
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, ToolMessage
+from langchain_core.tools import tool
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt.tool_node import ToolCallRequest
+from langchain_anthropic import ChatAnthropic
+
+
+# ── Simple in-process cache ──────────────────────────────────────────────────
+
+_result_cache: dict[str, tuple[str, float]] = {}
+_call_log: list[dict] = []
+_call_counts: dict[str, list[float]] = defaultdict(list)
+RATE_LIMIT_PER_MINUTE = 10
+CACHE_TTL_SECONDS = 120
+
+
+def observability_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
+    """Layer rate-limiting, caching, and audit logging onto every tool call."""
+    tool_name = request.tool_call["name"]
+    args = request.tool_call["args"]
+    call_id = request.tool_call["id"]
+    now = time.time()
+
+    # ── 1. Rate limiting ─────────────────────────────────────────────────────
+    window = [t for t in _call_counts[tool_name] if now - t < 60]
+    _call_counts[tool_name] = window
+    if len(window) >= RATE_LIMIT_PER_MINUTE:
+        return ToolMessage(
+            content=f"Rate limit hit for '{tool_name}'. Retry in {60 - (now - window[0]):.0f}s.",
+            tool_call_id=call_id,
+        )
+    _call_counts[tool_name].append(now)
+
+    # ── 2. Cache lookup ──────────────────────────────────────────────────────
+    cache_key = hashlib.md5(
+        json.dumps({"tool": tool_name, "args": args}, sort_keys=True).encode()
+    ).hexdigest()
+    if cache_key in _result_cache:
+        cached_content, cached_at = _result_cache[cache_key]
+        if now - cached_at < CACHE_TTL_SECONDS:
+            _call_log.append({"call_id": call_id, "tool": tool_name, "source": "cache"})
+            return ToolMessage(content=cached_content, tool_call_id=call_id)
+
+    # ── 3. Execute and cache result ──────────────────────────────────────────
+    result: ToolMessage = execute()
+    _result_cache[cache_key] = (result.content, now)
+    _call_log.append({
+        "call_id": call_id,
+        "tool": tool_name,
+        "args": args,
+        "source": "live",
+        "timestamp": now,
+    })
+    return result
+
+
+# ── Tools ────────────────────────────────────────────────────────────────────
+
+@tool
+def get_exchange_rate(from_currency: str, to_currency: str) -> str:
+    """Get the exchange rate between two currencies."""
+    # Replace with a real FX API in production
+    rates = {"USD_EUR": 0.92, "EUR_USD": 1.09, "GBP_USD": 1.27}
+    key = f"{from_currency}_{to_currency}"
+    rate = rates.get(key, "unknown")
+    return f"1 {from_currency} = {rate} {to_currency}"
+
+
+@tool
+def get_country_info(country: str) -> str:
+    """Get basic information about a country."""
+    info = {
+        "France": "Capital: Paris, Currency: EUR, Population: 68M",
+        "UK": "Capital: London, Currency: GBP, Population: 67M",
+    }
+    return info.get(country, f"No data for {country}")
+
+
+class AgentState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+
+tools = [get_exchange_rate, get_country_info]
+model = ChatAnthropic(model="claude-opus-4-8").bind_tools(tools)
+tool_node = ToolNode(tools, wrap_tool_call=observability_wrapper)
+
+
+def call_model(state: AgentState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+
+graph = StateGraph(AgentState)
+graph.add_node("agent", call_model)
+graph.add_node("tools", tool_node)
+graph.add_edge(START, "agent")
+graph.add_conditional_edges("agent", tools_condition)
+graph.add_edge("tools", "agent")
+
+app = graph.compile()
+result = app.invoke({"messages": [{"role": "user", "content": "USD to EUR rate?"}]})
+
+# Second call uses cache
+result2 = app.invoke({"messages": [{"role": "user", "content": "USD to EUR exchange rate again?"}]})
+print(f"Audit log entries: {len(_call_log)}")
+```
+
+---
+
+## Recipe 15: Custom channels — `BinaryOperatorAggregate`, `Topic`, and `EphemeralValue`
+
+Custom channels give you precise control over how state fields merge when multiple nodes write to them in the same step.
+
+```python
+import operator
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.topic import Topic
+from langgraph.channels.ephemeral_value import EphemeralValue
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+
+
+# ── Reducer functions ─────────────────────────────────────────────────────────
+
+def keep_max_confidence(a: float, b: float) -> float:
+    """BinaryOperatorAggregate reducer: keep the highest confidence score."""
+    return max(a, b)
+
+
+# ── State definition with three custom channel types ─────────────────────────
+
+class EnsembleState(TypedDict):
+    document: str
+
+    # BinaryOperatorAggregate: each parallel classifier writes a score;
+    # only the maximum survives to the next node.
+    best_confidence: Annotated[float, keep_max_confidence]
+
+    # Topic (step-scoped): ALL classifier labels written this step are collected
+    # into a list; the list is cleared at the start of the next step.
+    this_step_labels: Annotated[Sequence[str], Topic(str)]
+
+    # EphemeralValue: carries intermediate tokens from tokenize → classify;
+    # visible only within the same step, never persisted in checkpoints.
+    token_count: Annotated[int, EphemeralValue(int)]
+
+    # Standard list accumulation using operator.add
+    all_labels: Annotated[list[str], operator.add]
+
+
+# ── Nodes ────────────────────────────────────────────────────────────────────
+
+def tokenize(state: EnsembleState) -> dict:
+    """Count tokens — written to EphemeralValue, only visible this step."""
+    tokens = state["document"].split()
+    return {"token_count": len(tokens)}
+
+
+def classifier_a(state: EnsembleState) -> dict:
+    """Fast shallow classifier."""
+    tokens = state.get("token_count", 0)
+    confidence = min(0.5 + tokens * 0.01, 0.85)
+    return {
+        "best_confidence": confidence,
+        "this_step_labels": "invoice",           # single value → Topic collects it
+        "all_labels": ["invoice"],
+    }
+
+
+def classifier_b(state: EnsembleState) -> dict:
+    """Slow deep classifier — usually more accurate."""
+    return {
+        "best_confidence": 0.93,
+        "this_step_labels": "financial_document",
+        "all_labels": ["financial_document"],
+    }
+
+
+def classifier_c(state: EnsembleState) -> dict:
+    """Rule-based classifier."""
+    text = state["document"].lower()
+    label = "invoice" if "invoice" in text or "amount due" in text else "unknown"
+    return {
+        "best_confidence": 0.70 if label != "unknown" else 0.30,
+        "this_step_labels": label,
+        "all_labels": [label],
+    }
+
+
+def aggregate(state: EnsembleState) -> dict:
+    # this_step_labels contains ALL labels from the three classifiers this step
+    labels = list(state["this_step_labels"])  # e.g. ["invoice", "financial_document", "invoice"]
+    # best_confidence is the max across all three classifiers
+    print(f"Labels this step: {labels}")
+    print(f"Best confidence : {state['best_confidence']}")
+    print(f"token_count (ephemeral, should be 0 or missing here): {state.get('token_count')}")
+    return {}
+
+
+def fan_out(state: EnsembleState):
+    """Run all three classifiers in parallel via Send."""
+    return [
+        Send("classifier_a", state),
+        Send("classifier_b", state),
+        Send("classifier_c", state),
+    ]
+
+
+# ── Graph ─────────────────────────────────────────────────────────────────────
+
+graph = StateGraph(EnsembleState)
+graph.add_node("tokenize", tokenize)
+graph.add_node("classifier_a", classifier_a)
+graph.add_node("classifier_b", classifier_b)
+graph.add_node("classifier_c", classifier_c)
+graph.add_node("aggregate", aggregate)
+
+graph.add_edge(START, "tokenize")
+graph.add_conditional_edges("tokenize", fan_out, ["classifier_a", "classifier_b", "classifier_c"])
+graph.add_edge("classifier_a", "aggregate")
+graph.add_edge("classifier_b", "aggregate")
+graph.add_edge("classifier_c", "aggregate")
+graph.add_edge("aggregate", END)
+
+app = graph.compile()
+result = app.invoke({
+    "document": "Invoice #1234 — Amount due: $4,500",
+    "best_confidence": 0.0,
+    "this_step_labels": [],
+    "token_count": 0,
+    "all_labels": [],
+})
+print(f"All labels accumulated: {result['all_labels']}")
+```
+
+---
+
+## Recipe 16: `NamedBarrierValue` — fan-in that waits for named contributors
+
+`NamedBarrierValue` blocks a node from running until every named token has been written. This is stronger than a standard fan-in edge because it is declared in the state schema and enforced by the channel runtime, not by graph topology alone.
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.channels.named_barrier_value import NamedBarrierValue
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+
+
+REQUIRED_VALIDATORS = {"schema_check", "auth_check", "quota_check"}
+
+
+class APIGatewayState(TypedDict):
+    request_body: dict
+    user_id: str
+
+    # The node that reads this field cannot proceed until all three tokens arrive
+    validation_barrier: Annotated[str, NamedBarrierValue(str, REQUIRED_VALIDATORS)]
+
+    response_status: int
+    response_body: str
+
+
+def check_schema(state: APIGatewayState) -> dict:
+    """Validate request body schema."""
+    required_fields = {"action", "payload"}
+    missing = required_fields - set(state["request_body"].keys())
+    if missing:
+        raise ValueError(f"Missing fields: {missing}")
+    return {"validation_barrier": "schema_check"}
+
+
+def check_auth(state: APIGatewayState) -> dict:
+    """Validate that user_id is present and non-empty."""
+    if not state["user_id"]:
+        raise PermissionError("Missing user_id")
+    return {"validation_barrier": "auth_check"}
+
+
+def check_quota(state: APIGatewayState) -> dict:
+    """Check that the user has not exceeded their API quota."""
+    # In production, query a quota service here
+    allowed_users = {"alice", "bob", "charlie"}
+    if state["user_id"] not in allowed_users:
+        raise PermissionError(f"Quota exceeded for {state['user_id']}")
+    return {"validation_barrier": "quota_check"}
+
+
+def process_request(state: APIGatewayState) -> dict:
+    """Runs only after schema_check, auth_check, AND quota_check all completed."""
+    action = state["request_body"].get("action")
+    return {
+        "response_status": 200,
+        "response_body": f"Action '{action}' processed for user {state['user_id']}",
+    }
+
+
+def dispatch_validators(state: APIGatewayState):
+    """Fan out to all three validators in parallel."""
+    return [
+        Send("schema_check", state),
+        Send("auth_check", state),
+        Send("quota_check", state),
+    ]
+
+
+graph = StateGraph(APIGatewayState)
+graph.add_node("schema_check", check_schema)
+graph.add_node("auth_check", check_auth)
+graph.add_node("quota_check", check_quota)
+graph.add_node("process", process_request)
+
+graph.add_conditional_edges(
+    START, dispatch_validators, ["schema_check", "auth_check", "quota_check"]
+)
+# All three must complete before "process" runs
+graph.add_edge("schema_check", "process")
+graph.add_edge("auth_check", "process")
+graph.add_edge("quota_check", "process")
+graph.add_edge("process", END)
+
+app = graph.compile()
+result = app.invoke({
+    "request_body": {"action": "create_order", "payload": {"item": "widget"}},
+    "user_id": "alice",
+    "validation_barrier": "",
+    "response_status": 0,
+    "response_body": "",
+})
+print(result["response_status"], result["response_body"])
+# 200  Action 'create_order' processed for user alice
+```
