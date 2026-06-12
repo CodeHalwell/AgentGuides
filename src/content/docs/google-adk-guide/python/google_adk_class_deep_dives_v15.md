@@ -178,7 +178,7 @@ class PerUserRetryPlugin(ReflectAndRetryToolPlugin):
     """Each user gets their own independent failure counter."""
 
     def _get_scope_key(self, tool_context: ToolContext) -> str:
-        # key = user_id + tool_name → fully isolated per user
+        # scope key = user_id → each user has an independent failure counter
         return tool_context.user_id
 ```
 
@@ -282,11 +282,10 @@ agent = LlmAgent(
 ### Example 2 — YAML spec with API key auth
 
 ```python
-import yaml
+from fastapi.openapi.models import APIKey, APIKeyIn
 from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
-from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
-from google.adk.auth.auth_schemes import CustomAuthScheme
-from google.genai import types as genai_types
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+from google.adk.auth.auth_schemes import AuthScheme
 
 SPEC_YAML = """
 openapi: "3.0.0"
@@ -311,19 +310,16 @@ paths:
           description: Forecast data
 """
 
+# API key auth: passed as X-API-Key request header
+api_key_scheme = APIKey(in_=APIKeyIn.header, name="X-API-Key")
+
 toolset = OpenAPIToolset(
     spec_str=SPEC_YAML,
     spec_str_type="yaml",
-    auth_scheme=CustomAuthScheme(
-        name="api_key",
-        description="API key in X-API-Key header",
-    ),
+    auth_scheme=api_key_scheme,
     auth_credential=AuthCredential(
-        auth_type=AuthCredentialTypes.HTTP,
-        http=HttpAuth(
-            scheme="bearer",
-            credentials=HttpCredentials(token="my-secret-api-key"),
-        ),
+        auth_type=AuthCredentialTypes.API_KEY,
+        api_key="my-secret-api-key",
     ),
 )
 ```
@@ -343,6 +339,30 @@ def make_correlation_headers(ctx: ReadonlyContext) -> dict[str, str]:
         "X-Correlation-ID": correlation_id,
         "X-Client-Version": "2.2.0",
     }
+
+orders_spec = {
+    "openapi": "3.0.0",
+    "info": {"title": "Orders API", "version": "1.0.0"},
+    "servers": [{"url": "https://orders.example.com/api"}],
+    "paths": {
+        "/orders": {"get": {"operationId": "listOrders", "summary": "List orders",
+                            "responses": {"200": {"description": "Order list"}}}},
+        "/orders/{id}": {"get": {"operationId": "getOrder", "summary": "Get order",
+                                  "parameters": [{"name": "id", "in": "path", "required": True,
+                                                  "schema": {"type": "string"}}],
+                                  "responses": {"200": {"description": "Order details"}}}},
+    },
+}
+
+inventory_spec = {
+    "openapi": "3.0.0",
+    "info": {"title": "Inventory API", "version": "1.0.0"},
+    "servers": [{"url": "https://inventory.example.com/api"}],
+    "paths": {
+        "/stock": {"get": {"operationId": "checkStock", "summary": "Check stock levels",
+                           "responses": {"200": {"description": "Stock levels"}}}},
+    },
+}
 
 orders_toolset = OpenAPIToolset(
     spec_dict=orders_spec,
@@ -629,7 +649,7 @@ InjectionConfig(
 | Value | Behaviour |
 |---|---|
 | `MOCK_STRATEGY_UNSPECIFIED` | No fallback mock — returns `None` (no-op) |
-| `TOOL_SPEC_MOCK_STRATEGY` | Uses the LLM + tool spec + `environment_data`/`tracing` to generate a plausible response |
+| `MOCK_STRATEGY_TOOL_SPEC` | Uses the LLM + tool spec + `environment_data`/`tracing` to generate a plausible response |
 
 ### Example 1 — deterministic response injection for unit testing
 
@@ -640,14 +660,17 @@ from google.adk.runners import InMemoryRunner
 from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig, ToolSimulationConfig, InjectionConfig,
 )
+from google.adk.tools.environment_simulation.environment_simulation_engine import (
+    EnvironmentSimulationEngine,
+)
 from google.adk.tools.environment_simulation.environment_simulation_plugin import (
     EnvironmentSimulationPlugin,
 )
 
 def get_stock_price(ticker: str) -> dict:
     """Fetch the current stock price for a ticker symbol."""
-    # In production this would call a real API
-    ...
+    # In production this would call a real API; return a stub for safety
+    return {"ticker": ticker, "price": 0.0, "currency": "USD"}
 
 agent = LlmAgent(
     name="trader",
@@ -680,7 +703,9 @@ async def main():
     runner = InMemoryRunner(
         agent=agent,
         app_name="trader",
-        plugins=[EnvironmentSimulationPlugin(config=sim_config)],
+        plugins=[EnvironmentSimulationPlugin(
+            simulator_engine=EnvironmentSimulationEngine(sim_config)
+        )],
     )
     await runner.session_service.create_session(
         app_name="trader", user_id="u1", session_id="s1"
@@ -717,7 +742,7 @@ sim_config = EnvironmentSimulationConfig(
                 ),
                 # 80% pass through to the mock strategy fallback
             ],
-            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
         )
     ],
     simulation_model="gemini-2.5-flash",
@@ -744,11 +769,11 @@ sim_config = EnvironmentSimulationConfig(
     tool_simulation_configs=[
         ToolSimulationConfig(
             tool_name="lookup_user",
-            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
         ),
         ToolSimulationConfig(
             tool_name="update_user",
-            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
         ),
     ],
     simulation_model="gemini-2.0-flash",
@@ -761,7 +786,7 @@ sim_config = EnvironmentSimulationConfig(
 - `tool_simulation_configs` must be **non-empty** and contain no duplicate `tool_name` values (validated at construction).
 - `injection_configs` are evaluated in order; the first matching config fires. Put specific `match_args` before catch-all configs.
 - `injected_latency_seconds` is capped at `120.0` seconds.
-- `TOOL_SPEC_MOCK_STRATEGY` makes real LLM calls — it is not free. Use deterministic `injection_configs` for unit tests; reserve `TOOL_SPEC_MOCK_STRATEGY` for exploratory testing.
+- `MOCK_STRATEGY_TOOL_SPEC` makes real LLM calls — it is not free. Use deterministic `injection_configs` for unit tests; reserve `MOCK_STRATEGY_TOOL_SPEC` for exploratory testing.
 
 ---
 
@@ -1135,7 +1160,7 @@ import asyncio
 from playwright.async_api import async_playwright, Page
 from google.adk.tools.computer_use.base_computer import BaseComputer, ComputerState
 from google.adk.tools.tool_context import ToolContext
-from typing import Literal
+from typing import Literal, Optional
 
 class PlaywrightComputer(BaseComputer):
     """Chromium-based computer using Playwright."""
@@ -1195,6 +1220,7 @@ class PlaywrightComputer(BaseComputer):
         return await self._snapshot()
 
     async def scroll_at(self, x: int, y: int, direction: str, magnitude: int) -> ComputerState:
+        await self._page.mouse.move(x, y)
         delta = {"up": (0, -magnitude), "down": (0, magnitude),
                  "left": (-magnitude, 0), "right": (magnitude, 0)}
         dx, dy = delta[direction]
@@ -1223,9 +1249,10 @@ class PlaywrightComputer(BaseComputer):
 
     async def drag_and_drop(self, x: int, y: int,
                             destination_x: int, destination_y: int) -> ComputerState:
-        await self._page.drag_and_drop(
-            f"[data-x='{x}']", f"[data-x='{destination_x}']"
-        )
+        await self._page.mouse.move(x, y)
+        await self._page.mouse.down()
+        await self._page.mouse.move(destination_x, destination_y)
+        await self._page.mouse.up()
         return await self._snapshot()
 ```
 
@@ -1493,12 +1520,12 @@ SkillToolset(
 )
 ```
 
-The toolset registers four built-in tools:
+The toolset always registers four built-in tools, plus a fifth when a `registry` is supplied:
 - `list_skills` — list all available skills
 - `load_skill` — activate a skill (loads instructions into the agent's context)
 - `load_skill_resource` — retrieve a skill's assets/references
 - `run_skill_script` — execute a skill's shell/Python script
-- `search_skills` — (only if `registry` is provided) semantic search for skills
+- `search_skills` — *(registry only)* semantic search for skills in the remote registry
 
 ### Example 1 — inline skill definition
 

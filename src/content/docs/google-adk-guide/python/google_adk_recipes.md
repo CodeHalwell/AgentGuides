@@ -1844,22 +1844,26 @@ from google.adk.tools.environment_simulation.environment_simulation_config impor
     EnvironmentSimulationConfig, ToolSimulationConfig, InjectionConfig,
     InjectedError, MockStrategy,
 )
+from google.adk.tools.environment_simulation.environment_simulation_engine import (
+    EnvironmentSimulationEngine,
+)
 from google.adk.tools.environment_simulation.environment_simulation_plugin import (
     EnvironmentSimulationPlugin,
 )
 
 # Real tool definitions (would call external APIs in production)
+# Return minimal stubs so the agent works even without the simulation layer.
 def get_exchange_rate(base: str, target: str) -> dict:
     """Fetch current exchange rate."""
-    ...  # real implementation calls an FX API
+    return {"base": base, "target": target, "rate": 1.0, "source": "stub"}
 
 def get_market_data(symbol: str) -> dict:
     """Fetch market data for a stock symbol."""
-    ...  # real implementation calls a market data API
+    return {"symbol": symbol, "price": 0.0, "change_pct": 0.0, "source": "stub"}
 
 def send_trade_notification(email: str, message: str) -> dict:
     """Send a trade notification email."""
-    ...  # real implementation calls an email service
+    return {"status": "sent", "email": email, "source": "stub"}
 
 agent = LlmAgent(
     name="trading_agent",
@@ -1888,7 +1892,7 @@ sim_config = EnvironmentSimulationConfig(
                 ),
             ],
             # Fallback for unmatched currency pairs
-            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
         ),
         # 10% rate-limit errors for chaos testing
         ToolSimulationConfig(
@@ -1903,7 +1907,7 @@ sim_config = EnvironmentSimulationConfig(
                     ),
                 ),
             ],
-            mock_strategy_type=MockStrategy.TOOL_SPEC_MOCK_STRATEGY,
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
         ),
         # Email always succeeds in tests
         ToolSimulationConfig(
@@ -1929,7 +1933,9 @@ async def main():
     runner = InMemoryRunner(
         agent=agent,
         app_name="trading",
-        plugins=[EnvironmentSimulationPlugin(config=sim_config)],
+        plugins=[EnvironmentSimulationPlugin(
+            simulator_engine=EnvironmentSimulationEngine(sim_config)
+        )],
     )
     await runner.session_service.create_session(
         app_name="trading", user_id="u1", session_id="s1"
