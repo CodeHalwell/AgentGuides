@@ -1,6 +1,6 @@
 ---
-title: "Class deep dives — volume 17 (10 additional classes)"
-description: "Source-verified deep dives into 10 more google-adk 2.2.0 classes: LongRunningFunctionTool (async background task pattern), OpenAPIToolset + RestApiTool (REST API from OpenAPI specs), PubSubToolset + PubSubToolConfig (event-driven pub/sub, @experimental), VertexAiRagRetrieval (built-in Vertex AI RAG), RetryConfig (workflow node retry with exponential backoff + jitter), RemoteA2aAgent (calling remote A2A services from ADK graphs), LiveRequest + LiveRequestQueue (bidirectional streaming live agents), AuthHandler + AuthSchemes (full OAuth2 flow orchestration), SkillToolset (agent skill discovery + code execution), GoogleSearchTool + UrlContextTool + GoogleMapsGroundingTool (model-native built-in tools)."
+title: "Class deep dives — volume 17 (2.2.0 expanded examples)"
+description: "Source-verified 2.2.0 deep dives with expanded examples for 10 google-adk classes: LongRunningFunctionTool (async background task pattern), OpenAPIToolset + RestApiTool (REST API from OpenAPI specs), PubSubToolset + PubSubToolConfig (event-driven pub/sub, @experimental), VertexAiRagRetrieval (built-in Vertex AI RAG), RetryConfig (workflow node retry with exponential backoff + jitter), RemoteA2aAgent (calling remote A2A services from ADK graphs), LiveRequest + LiveRequestQueue (bidirectional streaming live agents), AuthHandler + AuthSchemes (full OAuth2 flow orchestration), SkillToolset (agent skill discovery + code execution), GoogleSearchTool + UrlContextTool + GoogleMapsGroundingTool (model-native built-in tools)."
 framework: google-adk
 language: python
 sidebar:
@@ -9,6 +9,8 @@ sidebar:
 ---
 
 Source-verified against **google-adk==2.2.0** (installed from PyPI, June 2026). Every field name, signature, and code example is drawn from the installed package source at `/usr/local/lib/python3.11/dist-packages/google/adk/`.
+
+> **Note:** Several classes in this volume were first introduced in earlier volumes (v1–v6). This volume provides 2.2.0-verified signatures and expanded, self-contained examples that reflect the current API surface. See the sidebar for the definitive per-volume index.
 
 | # | Class / group | Module | Status |
 |---|---|---|---|
@@ -59,6 +61,7 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 _JOBS: dict[str, dict] = {}
+_BACKGROUND_TASKS: set = set()
 
 
 async def export_report(
@@ -84,7 +87,9 @@ async def export_report(
         _JOBS[job_id]["status"] = "DONE"
         _JOBS[job_id]["download_url"] = f"https://reports.example.com/{job_id}.csv"
 
-    asyncio.create_task(_do_work())
+    task = asyncio.create_task(_do_work())
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {"job_id": job_id, "status": "PENDING"}
 
 
@@ -159,12 +164,17 @@ def check_training(job_id: str) -> dict:
         job_id: The job ID returned by start_training.
 
     Returns:
-        dict with status, current_epoch, and optionally model_path.
+        dict with status ('RUNNING' or 'DONE'), current_epoch, and optionally model_path.
     """
     job = _TRAINING_JOBS.get(job_id)
     if not job:
         return {"status": "NOT_FOUND"}
-    return job
+    # Simulate progress: mark DONE after 3 checks (current_epoch reaches total_epochs)
+    job["current_epoch"] = min(job["current_epoch"] + 3, job["total_epochs"])
+    if job["current_epoch"] >= job["total_epochs"]:
+        job["status"] = "DONE"
+        job["model_path"] = f"gs://my-bucket/models/{job_id}"
+    return dict(job)
 
 
 training_tool = LongRunningFunctionTool(func=start_training)
@@ -175,7 +185,7 @@ agent = LlmAgent(
     instruction=(
         "You manage ML training jobs. "
         "When a user asks to train a model, call start_training and report the job_id. "
-        "Poll check_training until status is COMPLETED before announcing success."
+        "Poll check_training until status is 'DONE' before announcing the model_path."
     ),
     tools=[training_tool, check_training],
 )
@@ -354,8 +364,10 @@ def _headers(ctx: ReadonlyContext) -> dict[str, str]:
     """Inject a correlation ID from session state into every request."""
     return {"X-Correlation-Id": ctx.state.get("correlation_id", "unknown")}
 
+import pathlib
+
 toolset = OpenAPIToolset(
-    spec_str=open("crm_api_spec.yaml").read(),
+    spec_str=pathlib.Path("crm_api_spec.yaml").read_text(encoding="utf-8"),
     spec_str_type="yaml",
     auth_scheme=bearer_token_scheme(),
     auth_credential=bearer_token_credential("MY_BEARER_TOKEN"),
@@ -382,7 +394,7 @@ ctx = ssl.create_default_context()
 ctx.load_verify_locations("/etc/ssl/corporate-ca.crt")
 
 toolset = OpenAPIToolset(
-    spec_str=open("internal_api.json").read(),
+    spec_str=pathlib.Path("internal_api.json").read_text(encoding="utf-8"),
     spec_str_type="json",
     ssl_verify=ctx,          # custom SSLContext
     preserve_property_names=True,  # API wants camelCase params
@@ -901,7 +913,7 @@ card_path.write_text(json.dumps({
     "skills": [{"id": "search", "name": "Search", "description": "Search the web."}],
     "defaultInputModes": ["text/plain"],
     "defaultOutputModes": ["text/plain"],
-}))
+}), encoding="utf-8")
 
 search_agent = RemoteA2aAgent(
     name="search_agent",
@@ -945,19 +957,37 @@ orchestrator = LlmAgent(
 
 ### Error handling
 
-`RemoteA2aAgent` raises `AgentCardResolutionError` (importable from the same module) when the AgentCard cannot be resolved:
+`RemoteA2aAgent` raises `AgentCardResolutionError` (importable from the same module) when the AgentCard cannot be resolved. For URL and file-path forms, **resolution is lazy** — it happens on the first invocation, not at construction time. Wrap the `runner.run()` call (not the constructor) to catch it:
 
 ```python
+import asyncio
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent, AgentCardResolutionError
+from google.adk.runners import InMemoryRunner
+from google.genai import types
 
-try:
-    agent = RemoteA2aAgent(
-        name="unknown",
-        agent_card="https://does-not-exist.example.com",
-    )
-    # Resolution is lazy — happens on first invocation
-except AgentCardResolutionError as e:
-    print(f"Could not resolve agent card: {e}")
+# Construction succeeds even for a bad URL — resolution is deferred
+agent = RemoteA2aAgent(
+    name="unknown",
+    agent_card="https://does-not-exist.example.com",
+)
+
+runner = InMemoryRunner(agent=agent, app_name="demo")
+
+async def run():
+    try:
+        session = await runner.session_service.create_session(
+            app_name="demo", user_id="u1"
+        )
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id=session.id,
+            new_message=types.Content(role="user", parts=[types.Part(text="hello")]),
+        ):
+            pass
+    except AgentCardResolutionError as e:
+        print(f"Could not resolve agent card: {e}")
+
+asyncio.run(run())
 ```
 
 ---
@@ -1144,14 +1174,15 @@ queue.send(LiveRequest(close=True))
 from google.adk.auth.auth_handler import AuthHandler
 from google.adk.auth.auth_tool import AuthConfig
 
-handler = AuthHandler(auth_config: AuthConfig)
+# Constructor:
+# handler = AuthHandler(auth_config=<AuthConfig>)
 
 # Key methods:
-handler.generate_auth_request()               # → AuthConfig with auth_uri for user consent
-handler.generate_auth_uri()                   # → AuthCredential with oauth2.auth_uri populated
-await handler.exchange_auth_token()            # → AuthCredential with access_token
-await handler.parse_and_store_auth_response(state)  # store credential in session state
-handler.get_auth_response(state)              # → AuthCredential | None from session state
+# handler.generate_auth_request()               → AuthConfig with auth_uri for user consent
+# handler.generate_auth_uri()                   → AuthCredential with oauth2.auth_uri populated
+# await handler.exchange_auth_token()            → AuthCredential with access_token
+# await handler.parse_and_store_auth_response(state)  # store credential in session state
+# handler.get_auth_response(state)              → AuthCredential | None from session state
 ```
 
 `AuthHandler` is typically used by ADK internals (the `AuthPreprocessor` and `RestApiTool`), but you can use it directly in custom tools that need to orchestrate OAuth2 flows.
@@ -1237,7 +1268,6 @@ _AUTH_KEY = "example_oidc"
 
 async def get_user_profile(
     tool_context: ToolContext,
-    user_id: str,
 ) -> dict:
     """Return the user's profile from the identity provider.
 
@@ -1304,52 +1334,78 @@ print(scheme.header_name)   # "X-Internal-Api-Key"
 
 ## 9 · `SkillToolset`
 
-**Source:** `google.adk.tools.skill_toolset`
+**Source:** `google.adk.tools.skill_toolset`, `google.adk.skills.models`
 
-`SkillToolset` gives agents the ability to **discover and invoke agent "skills"** — named, versioned capabilities registered in a `SkillRegistry`. Skills can be invoked by description lookup, direct name/version reference, or — if a code executor is provided — via Python script execution. It is the runtime side of the ADK Skills system.
+`SkillToolset` gives agents the ability to **discover and invoke agent "skills"** — structured `Skill` objects that bundle a name, description, and markdown instructions. Pass a list of `Skill` objects directly, or supply a `SkillRegistry` for dynamic loading. When a `code_executor` is attached, the toolset also exposes a `run_skill_script` tool for Python-script-based skill chaining.
 
 ### Constructor (source-verified)
 
 ```python
 from google.adk.tools.skill_toolset import SkillToolset
 
-SkillToolset(
-    *,
-    skill_registry: SkillRegistry,
-    tool_filter: ToolPredicate | list[str] | None = None,
-    code_executor: BaseCodeExecutor | None = None,   # enables script execution
-    script_timeout: int = 300,                        # seconds for script execution
-    tool_name_prefix: str | None = None,
-)
+# SkillToolset(
+#     skills: list[Skill] | None = None,          # inline skill definitions
+#     *,
+#     registry: SkillRegistry | None = None,      # dynamic loader (alternative to skills)
+#     code_executor: BaseCodeExecutor | None = None,  # enables run_skill_script
+#     script_timeout: int = 300,                  # seconds; subprocess only
+#     additional_tools: list[ToolUnion] | None = None,
+#     tool_name_prefix: str | None = None,
+#     tool_filter: ToolPredicate | list[str] | None = None,
+# )
 ```
 
-`SkillToolset` generates several internal tools: a `list_skills` tool (discover what skills exist), a `get_skill_details` tool (inspect a skill's API), a `use_skill` tool (invoke a skill directly), and — when `code_executor` is provided — a `run_skill_script` tool (execute Python that uses skills).
-
-### Example 1 — skill discovery and invocation
+### `Skill` + `Frontmatter` (source-verified)
 
 ```python
-from google.adk.skills import SkillRegistry
+from google.adk.skills.models import Skill, Frontmatter
+
+# Frontmatter holds discovery metadata:
+#   name: str          — kebab-case or snake_case, max 64 chars
+#   description: str   — what the skill does, max 1 024 chars
+#   license: str | None
+#   allowed_tools: str | None   — space-delimited pre-approved tool names
+
+# Skill bundles frontmatter + markdown instructions:
+#   frontmatter: Frontmatter
+#   instructions: str      — the L2 prompt/instructions loaded when skill activates
+#   resources: Resources   — optional L3 assets (scripts, files)
+```
+
+### Example 1 — inline skills (no registry)
+
+```python
+from google.adk.skills.models import Skill, Frontmatter
 from google.adk.tools.skill_toolset import SkillToolset
 from google.adk.agents.llm_agent import LlmAgent
 
-# Create and populate a skill registry
-registry = SkillRegistry()
+summarise_skill = Skill(
+    frontmatter=Frontmatter(
+        name="summarise-text",
+        description="Summarise a block of text into up to 5 bullet points.",
+    ),
+    instructions=(
+        "When asked to summarise text, split the input on sentences, "
+        "take up to 5, and return them as a bullet list prefixed with '•'."
+    ),
+)
 
-# Register a skill
-@registry.skill(name="summarise_text", description="Summarise a block of text into bullet points.")
-def summarise_text(text: str, max_bullets: int = 5) -> str:
-    """Summarise text into bullet points."""
-    sentences = text.split(". ")[:max_bullets]
-    return "\n".join(f"• {s.strip()}" for s in sentences if s.strip())
+translate_skill = Skill(
+    frontmatter=Frontmatter(
+        name="translate-text",
+        description="Translate text to a target language.",
+    ),
+    instructions="Translate the provided text to the requested language accurately.",
+)
 
-toolset = SkillToolset(skill_registry=registry)
+toolset = SkillToolset(skills=[summarise_skill, translate_skill])
 
 agent = LlmAgent(
     name="skill_agent",
     model="gemini-2.0-flash",
     instruction=(
         "You help users by discovering and using registered skills. "
-        "Start by listing available skills, then use them as needed."
+        "Start by listing available skills with list_skills, then activate the right one."
     ),
     tools=[toolset],
 )
@@ -1358,31 +1414,28 @@ agent = LlmAgent(
 ### Example 2 — skill toolset with code executor (script mode)
 
 ```python
-from google.adk.skills import SkillRegistry
+from google.adk.skills.models import Skill, Frontmatter
 from google.adk.tools.skill_toolset import SkillToolset
 from google.adk.code_executors.local_code_executor import LocalCodeExecutor
 from google.adk.agents.llm_agent import LlmAgent
 
-registry = SkillRegistry()
-
-@registry.skill(name="compute_stats", description="Compute basic statistics on a list of numbers.")
-def compute_stats(numbers: list[float]) -> dict:
-    """Return mean, min, max, and count for a list of numbers."""
-    if not numbers:
-        return {"error": "empty list"}
-    return {
-        "count": len(numbers),
-        "mean": sum(numbers) / len(numbers),
-        "min": min(numbers),
-        "max": max(numbers),
-    }
+stats_skill = Skill(
+    frontmatter=Frontmatter(
+        name="compute-stats",
+        description="Compute mean, min, max, and count for a list of numbers.",
+    ),
+    instructions=(
+        "Use Python to compute statistics on the provided list of numbers. "
+        "Return a dict with keys: count, mean, min, max."
+    ),
+)
 
 executor = LocalCodeExecutor()
 
 toolset = SkillToolset(
-    skill_registry=registry,
+    skills=[stats_skill],
     code_executor=executor,
-    script_timeout=30,    # 30-second cap on script execution
+    script_timeout=30,    # 30-second cap for subprocess execution
 )
 
 agent = LlmAgent(
@@ -1399,14 +1452,17 @@ agent = LlmAgent(
 ### Example 3 — prefixed tool names to avoid collisions
 
 ```python
-from google.adk.skills import SkillRegistry
+from google.adk.skills.models import Skill, Frontmatter
 from google.adk.tools.skill_toolset import SkillToolset
 from google.adk.agents.llm_agent import LlmAgent
 
-registry = SkillRegistry()
+skill = Skill(
+    frontmatter=Frontmatter(name="search-web", description="Search the web for current info."),
+    instructions="Search for the query and return a concise summary of the top results.",
+)
 
 toolset = SkillToolset(
-    skill_registry=registry,
+    skills=[skill],
     tool_name_prefix="myapp",  # tools become myapp_list_skills, myapp_use_skill, …
 )
 
@@ -1421,14 +1477,17 @@ agent = LlmAgent(
 ### Example 4 — filtering which skill tools are exposed
 
 ```python
-from google.adk.skills import SkillRegistry
+from google.adk.skills.models import Skill, Frontmatter
 from google.adk.tools.skill_toolset import SkillToolset
 
-registry = SkillRegistry()
+skill = Skill(
+    frontmatter=Frontmatter(name="draft-email", description="Draft a professional email."),
+    instructions="Draft a clear, professional email based on the user's intent.",
+)
 
 # Expose only discovery tools; disable direct invocation and scripting
 toolset = SkillToolset(
-    skill_registry=registry,
+    skills=[skill],
     tool_filter=["list_skills", "get_skill_details"],
 )
 ```
@@ -1458,7 +1517,7 @@ from google.adk.tools.google_search_tool import google_search
 
 **Model compatibility:**
 - **Gemini 1.x**: Injects `types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())`. **Cannot** be combined with other tools — raises `ValueError` if any other tools are already present.
-- **Gemini 2.x**: Injects `types.Tool(google_search=types.GoogleSearch())`. Can be combined with other tools (including function tools) when `bypass_multi_tools_limit=False`.
+- **Gemini 2.x**: Injects `types.Tool(google_search=types.GoogleSearch())`. By default (`bypass_multi_tools_limit=False`) Gemini 2 still enforces its internal multi-tool guard; set `bypass_multi_tools_limit=True` to lift that restriction and allow combining Google Search with other function tools in the same agent.
 
 ### `UrlContextTool` (source-verified)
 
