@@ -426,7 +426,7 @@ from langgraph.store.base import (
 )
 ```
 
-`BaseStore.batch()` is the **only abstract method** — all convenience methods (`get`, `put`, `search`, `delete`, `list_namespaces`) delegate to it. Understanding the op types lets you build high-throughput pipelines that issue many operations in a single round-trip.
+`BaseStore` has **two abstract methods** — `batch()` (sync) and `abatch()` (async). All convenience methods (`get`, `put`, `search`, `delete`, `list_namespaces` and their async counterparts) delegate to one of these. Custom store implementations must override both. Understanding the op types lets you build high-throughput pipelines that issue many operations in a single round-trip.
 
 ### Op types at a glance
 
@@ -447,16 +447,21 @@ from langgraph.store.base import GetOp, PutOp, SearchOp
 
 store = InMemoryStore()
 
-# Batch: two puts + one get — all executed atomically
-results = store.batch([
+# Batch puts together in one call for efficiency
+put_results = store.batch([
     PutOp(("inventory",), "item_a", {"qty": 10, "category": "tools"}),
     PutOp(("inventory",), "item_b", {"qty": 5,  "category": "consumables"}),
-    GetOp(("inventory",), "item_a"),
 ])
+print(put_results)    # [None, None]  — PutOp results are always None
 
-item_a = results[2]   # result for GetOp (third op)
-print(item_a.value)   # {"qty": 10, "category": "tools"}
-print(results[:2])    # [None, None]  — PutOp results are None
+# Reads must be in a separate batch — same-batch GetOps see the state
+# *before* the PutOps in that batch have been committed.
+read_results = store.batch([
+    GetOp(("inventory",), "item_a"),
+    GetOp(("inventory",), "item_b"),
+])
+print(read_results[0].value)   # {"qty": 10, "category": "tools"}
+print(read_results[1].value)   # {"qty": 5, "category": "consumables"}
 ```
 
 ### Example 2: Compound search + list in one batch
@@ -550,7 +555,7 @@ These two `TypedDict`s are the constructor-level knobs on any store implementati
 |---|---|---|
 | `dims` | `int` | Embedding vector dimension |
 | `embed` | `Embeddings \| EmbeddingsFunc \| AEmbeddingsFunc \| str` | How to embed text |
-| `fields` | `list[str] \| None` | JSON-path fields to embed. `["$"]` embeds the whole value (default) |
+| `fields` | `list[str]` | JSON-path fields to embed. `["$"]` embeds the whole value (default). Omit the key to use `["$"]`. |
 
 ### `TTLConfig` fields
 
@@ -619,25 +624,39 @@ store.put(
 
 ### Example 3: `TTLConfig` — automatic expiry
 
+TTL support is **adapter-specific** — `InMemoryStore` does not support it
+(`supports_ttl = False`). Production adapters such as `AsyncPostgresStore`
+(from `langgraph-checkpoint-postgres`) do. The constructor argument is `ttl`
+(not `index`) and the per-item `ttl` kwarg on `put` / `aput` is gated behind
+`supports_ttl`.
+
 ```python
+# TTL requires a store adapter that sets supports_ttl = True.
+# Example shown with a hypothetical PostgresStore — replace with your adapter.
+#
+# from langgraph_checkpoint_postgres import AsyncPostgresStore
+#
+# async with AsyncPostgresStore.from_conn_string(
+#     "postgresql://user:pass@localhost/db",
+#     ttl={
+#         "default_ttl": 60.0,          # items expire after 60 minutes by default
+#         "refresh_on_read": True,       # reset timer on every get/search
+#         "sweep_interval_minutes": 10,  # background sweeper interval
+#     },
+# ) as store:
+#     # Use store default TTL (60 min)
+#     await store.aput(("sessions",), "sess_1", {"user": "alice"})
+#
+#     # Override to 5 minutes for this item
+#     await store.aput(("sessions",), "sess_2", {"user": "bob"}, ttl=5.0)
+#
+#     # This item never expires
+#     await store.aput(("sessions",), "sess_3", {"user": "carol"}, ttl=None)
+
+# For InMemoryStore, TTL arguments are rejected at runtime:
 from langgraph.store.memory import InMemoryStore
-
-store = InMemoryStore(
-    ttl={
-        "default_ttl": 60.0,          # items expire after 60 minutes by default
-        "refresh_on_read": True,      # reset timer on every get/search
-        "sweep_interval_minutes": 10, # purge expired items every 10 minutes
-    }
-)
-
-# This item uses the store default (60 min)
-store.put(("sessions",), "sess_1", {"user": "alice"})
-
-# This item overrides to 5 minutes
-store.put(("sessions",), "sess_2", {"user": "bob"}, ttl=5.0)
-
-# This item never expires
-store.put(("sessions",), "sess_3", {"user": "carol"}, ttl=None)
+store = InMemoryStore()   # no ttl= parameter accepted
+print(store.supports_ttl)   # False
 ```
 
 ### Example 4: Nested field indexing with JSON-path syntax
@@ -1154,20 +1173,24 @@ print(result["status"])   # recovered: negative value: -1
 
 ### Example 2: Catching `NodeTimeoutError`
 
+`TimeoutPolicy` relies on asyncio cancellation — it fires reliably only when
+the node is `async` (or uses cooperative `await` points). A sync node that
+blocks in `time.sleep()` cannot be preempted by the event loop.
+
 ```python
+import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.errors import NodeError, NodeTimeoutError
 from langgraph.types import Command, TimeoutPolicy
-import time
 
 
 class State(TypedDict):
     result: str
 
 
-def slow_node(state: State) -> dict:
-    time.sleep(10)   # will exceed run_timeout
+async def slow_node(state: State) -> dict:
+    await asyncio.sleep(10)   # cooperative — can be cancelled by the timeout
     return {"result": "done"}
 
 
@@ -1191,7 +1214,7 @@ graph = (
     .compile()
 )
 
-result = graph.invoke({"result": ""})
+result = asyncio.run(graph.ainvoke({"result": ""}))
 print(result["result"])   # timed out
 ```
 
@@ -1199,39 +1222,97 @@ print(result["result"])   # timed out
 
 ```python
 import signal
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphDrained
-from langgraph.runtime import get_runtime
+from langgraph.runtime import Runtime
+from langgraph.types import Command
 
-def setup_sigterm_handler():
-    def _handler(signum, frame):
-        runtime = get_runtime()
-        if runtime and runtime.control:
-            runtime.control.request_drain("SIGTERM received")
+_control_ref = None   # global reference so the signal handler can reach it
 
-    signal.signal(signal.SIGTERM, _handler)
 
-# When drain is requested, LangGraph raises GraphDrained after the current
-# superstep, saves the checkpoint, and the run can be resumed later.
+class State(TypedDict):
+    step: int
+
+
+def step_node(state: State, runtime: Runtime) -> Command:
+    global _control_ref
+    _control_ref = runtime.control
+
+    if runtime.drain_requested:
+        return Command(update={}, goto=END)
+    return Command(update={"step": state["step"] + 1})
+
+
+checkpointer = InMemorySaver()
+graph = (
+    StateGraph(State)
+    .add_node("step", step_node)
+    .add_edge(START, "step")
+    .add_conditional_edges("step", lambda s: "step" if s["step"] < 100 else END)
+    .compile(checkpointer=checkpointer)
+)
+
+
+def _sigterm_handler(signum, frame):
+    if _control_ref is not None:
+        _control_ref.request_drain("SIGTERM received")
+
+
+signal.signal(signal.SIGTERM, _sigterm_handler)
+
+# Simulate a drain after 3 steps by calling request_drain() directly
+import threading
+
+def _drain_after_delay():
+    import time; time.sleep(0.01)
+    if _control_ref:
+        _control_ref.request_drain("simulated SIGTERM")
+
+threading.Thread(target=_drain_after_delay, daemon=True).start()
+
+cfg = {"configurable": {"thread_id": "drain-demo"}}
 try:
-    result = graph.invoke({"step": 0, "done": False})
+    graph.invoke({"step": 0}, cfg)
 except GraphDrained as e:
     print(f"Graph drained gracefully: {e.reason}")
-    # checkpoint has been saved; resume later with the same thread_id
+    # Checkpoint was saved; resume with the same thread_id later
+    print("Resume by calling graph.invoke({}, cfg) again")
 ```
 
 ### Example 4: `GraphRecursionError` — adjusting the recursion limit
 
 ```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
 from langgraph.errors import GraphRecursionError
 
+
+class State(TypedDict):
+    counter: int
+
+
+def count_up(state: State) -> dict:
+    return {"counter": state["counter"] + 1}
+
+
+# Unconditional self-loop — will always hit the recursion limit
+looping_graph = (
+    StateGraph(State)
+    .add_node("count", count_up)
+    .add_edge(START, "count")
+    .add_edge("count", "count")   # loops forever
+    .compile()
+)
+
 try:
-    result = graph.invoke(
-        {"messages": [{"role": "user", "content": "Loop forever"}]},
-        config={"recursion_limit": 10},
-    )
-except GraphRecursionError as e:
-    print("Hit the recursion limit — increase it or fix the loop")
-    print(e)
+    looping_graph.invoke({"counter": 0}, config={"recursion_limit": 5})
+except GraphRecursionError:
+    print("Hit the recursion limit — increase it or add a termination condition")
+
+# To raise the limit:
+# looping_graph.invoke({"counter": 0}, config={"recursion_limit": 100})
 ```
 
 ---
@@ -1373,7 +1454,7 @@ print(result["done"])   # at most recursion_limit-1 items
 from typing_extensions import TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
 from langgraph.managed.is_last_step import IsLastStep
-from langgraph.types import RetryPolicy
+from langgraph.types import Command, RetryPolicy
 
 
 class State(TypedDict):
@@ -1381,10 +1462,12 @@ class State(TypedDict):
     is_last_step: IsLastStep
 
 
-def loop_or_stop(state: State) -> dict | None:
+def loop_or_stop(state: State) -> dict | Command:
     if state["is_last_step"]:
         print(f"Stopping at counter={state['counter']} (last step)")
-        return {}
+        # Must use Command(goto=END) — returning {} still routes through
+        # keep_going which would loop again since counter < 100.
+        return Command(goto=END)
     return {"counter": state["counter"] + 1}
 
 
@@ -1400,7 +1483,8 @@ graph = (
     .compile()
 )
 
-graph.invoke({"counter": 0}, config={"recursion_limit": 5})
+result = graph.invoke({"counter": 0}, config={"recursion_limit": 5})
+print(result["counter"])   # stops before hitting GraphRecursionError
 ```
 
 ---
