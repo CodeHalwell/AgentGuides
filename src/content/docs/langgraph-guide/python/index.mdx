@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.2.4** · June 2026 · Python 3.10 – 3.14
+    **v1.2.5** · June 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -83,6 +83,10 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Prebuilt Nodes" href="/langgraph-guide/python/reference-prebuilt-nodes/" />
   <LinkCard title="Channels" href="/langgraph-guide/python/reference-channels/" />
   <LinkCard title="RemoteGraph" href="/langgraph-guide/python/reference-remote-graph/" />
+  <LinkCard title="v3 streaming (stream_events)" href="/langgraph-guide/python/langgraph_class_deep_dives_v16/#background-the-v3-streaming-protocol" />
+  <LinkCard title="GraphRunStream / AsyncGraphRunStream" href="/langgraph-guide/python/langgraph_class_deep_dives_v16/#1--graphrunstream" />
+  <LinkCard title="ChatModelStream (per-LLM streaming)" href="/langgraph-guide/python/langgraph_class_deep_dives_v16/#7--messagestransformer--chatmodelstream" />
+  <LinkCard title="SubgraphRunStream (subgraph navigation)" href="/langgraph-guide/python/langgraph_class_deep_dives_v16/#3--subgraphrunstream--asyncsubgraphrunstream" />
   <LinkCard title="Class deep-dives Vol. 1" href="/langgraph-guide/python/langgraph_class_deep_dives/" />
   <LinkCard title="Class deep-dives Vol. 2" href="/langgraph-guide/python/langgraph_class_deep_dives_v2/" />
   <LinkCard title="Class deep-dives Vol. 3" href="/langgraph-guide/python/langgraph_class_deep_dives_v3/" />
@@ -99,7 +103,7 @@ Need one specific concept? Land directly on the chapter that owns it.
 
 ## Reference
 
-Every page below is introspected against the installed `langgraph==1.2.4` /
+Every page below is introspected against the installed `langgraph==1.2.5` /
 `langgraph-checkpoint==4.1.1` / `langgraph-checkpoint-sqlite==3.0.3` /
 `langgraph-checkpoint-postgres==3.0.5` source. If a signature disagrees with an
 older blog post or docs page, the source wins.
@@ -128,6 +132,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="Class deep-dives Vol. 10" href="/langgraph-guide/python/langgraph_class_deep_dives_v10/" description="Source-verified deep dives into Durability checkpoint modes, NodeError/NodeCancelledError, TaskPayload/TaskResultPayload, CheckpointPayload/CheckpointTask, Item/SearchItem, GetOp/PutOp/SearchOp/ListNamespacesOp/MatchCondition, UIMessage/RemoveUIMessage, GraphOutput v2, StreamPart variants, and PregelExecutableTask/CacheKey — verified against langgraph==1.2.4." />
   <LinkCard title="Class deep-dives Vol. 11" href="/langgraph-guide/python/langgraph_class_deep_dives_v11/" description="Source-verified deep dives into InjectedState, InjectedStore, MessagesState, Overwrite, ToolOutputMixin, CheckpointMetadata, CheckpointTuple, StateUpdate, PersistentDict, and DeltaChannelHistory — verified against langgraph==1.2.4." />
   <LinkCard title="Class deep-dives Vol. 12" href="/langgraph-guide/python/langgraph_class_deep_dives_v12/" description="Source-verified deep dives into RemoteGraph/RemoteException, PostgresSaver/ShallowPostgresSaver, AsyncPostgresSaver, PostgresStore/PoolConfig, AsyncPostgresStore, ANNIndexConfig/HNSWConfig/IVFFlatConfig/PostgresIndexConfig, GraphRunStream/SubgraphRunStream, ToolCallWithContext/ToolInvocationError, LifecyclePayload/LifecycleTransformer, MessagesTransformer/CheckpointsTransformer/TasksTransformer — verified against langgraph==1.2.4." />
+  <LinkCard title="Class deep-dives Vol. 16" href="/langgraph-guide/python/langgraph_class_deep_dives_v16/" description="Source-verified deep dives into the v3 streaming protocol (beta, langgraph==1.2.5): GraphRunStream, AsyncGraphRunStream, SubgraphRunStream/AsyncSubgraphRunStream, ValuesTransformer, UpdatesTransformer, CustomTransformer, MessagesTransformer/ChatModelStream, SubgraphTransformer, LifecycleTransformer/LifecyclePayload, and StreamChannel." />
 </CardGrid>
 
 <CardGrid>
@@ -141,8 +146,9 @@ older blog post or docs page, the source wins.
   <LinkCard title="Streaming server (FastAPI)" href="/langgraph-guide/python/langgraph_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.2.x (May 2026)
+## What's new in v1.2.x (June 2026)
 
+- **v1.2.5 (June 2026)** — Patch release; `langgraph==1.2.5` with stability and dependency updates. No new public API surface. All core graph symbols verified with `-W error::DeprecationWarning`.
 - **`TimeoutPolicy` dataclass** (`langgraph.types`) — fine-grained per-node/per-task timeout control with `run_timeout` (hard cap), `idle_timeout` (progress-based cap), and `refresh_on` (`"auto"` or `"heartbeat"`). Replaces the single `timeout=float` kwarg with a richer API.
 - **`Runtime.heartbeat()`** — call from inside a long-running async node or task to reset an idle timeout. No-op outside an active idle-timed attempt.
 - **`RunControl` + cooperative draining** — `runtime.control`, `runtime.drain_requested`, `runtime.drain_reason` let external code signal a graph run to exit gracefully without cancelling it abruptly.
@@ -158,7 +164,7 @@ older blog post or docs page, the source wins.
 - **Prior (v1.1.x):** Type-safe streaming v2 API (`version="v2"` on `astream()`/`ainvoke()`); Pydantic/dataclass coercion; Python 3.10 – 3.14 support; time-travel fixes.
 
 <Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==1.2.4`, `langgraph-checkpoint==4.1.1`,
+  Introspected against `langgraph==1.2.5`, `langgraph-checkpoint==4.1.1`,
   `langgraph-prebuilt==1.1.0`, `langgraph-checkpoint-sqlite==3.0.3`,
   `langgraph-checkpoint-postgres==3.0.5` in June 2026.
 
@@ -219,6 +225,7 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-06-15 | 1.2.5 | Added Class deep-dives Vol. 16 — 10 source-verified deep dives into the v3 streaming protocol (beta): GraphRunStream/AsyncGraphRunStream (caller-driven pumping, projections, context manager, abort, interleave, output/interrupted/interrupts properties), SubgraphRunStream/AsyncSubgraphRunStream (in-process subgraph navigation handles, path/status/error fields, recursive grandchild traversal), ValuesTransformer (full-state snapshots on run.values, scope filtering), UpdatesTransformer (per-node deltas on run.updates), CustomTransformer (get_stream_writer payloads on run.custom), MessagesTransformer/ChatModelStream (per-LLM-call handles with .text/.reasoning/.tool_calls/.output projections, token streaming), SubgraphTransformer (subgraph discovery via tasks events, direct-children-only scope, mini-mux child creation), LifecycleTransformer/LifecyclePayload (all-depth subgraph lifecycle events, error detection), and StreamChannel (single-consumer drainable queue, tee fan-out, named auto-forwarding). Updated version card to 1.2.5, "What's new" section, Reference Aside, and Jump-to-topic grid. |
 | 2026-06-07 | 1.2.4 | Added Class deep-dives Vol. 12 — 10 source-verified deep dives into RemoteGraph/RemoteException (call deployed graphs as nodes, state management, distributed tracing), PostgresSaver/ShallowPostgresSaver (full vs constant-space persistence, pipeline mode, connection pooling, time-travel), AsyncPostgresSaver (async twin with asyncio.Lock and AsyncConnectionPool), PostgresStore/PoolConfig (TTL expiry, sweeper thread, InjectedStore in tools), AsyncPostgresStore (AsyncBatchedBaseStore coalescing, concurrent aput/aget), ANNIndexConfig/HNSWConfig/IVFFlatConfig/PostgresIndexConfig (pgvector index types, halfvec, distance metrics), GraphRunStream/SubgraphRunStream (v3 streaming projections, token streaming, abort(), interleave()), ToolCallWithContext/ToolInvocationError (tool dispatch internals, custom error handlers, categorised errors), LifecyclePayload/LifecycleTransformer (subgraph lifecycle monitoring, cause tracking, timing traces), and MessagesTransformer/CheckpointsTransformer/TasksTransformer (per-LLM-call streaming handles, checkpoint flush events, task execution tracing). Updated Jump-to-topic grid and Reference section with Vol. 10–12 links. |
 | 2026-06-04 | 1.2.4 | Added Class deep-dives Vol. 9 — 10 source-verified deep dives into ToolCallRequest.override() (immutable interceptor mutation), Send+timeout (per-task fan-out timeouts), create_react_agent hooks (pre_model_hook, post_model_hook, version="v2", response_format), RetryPolicy chaining (ordered list of policies), CachePolicy custom key_func (per-user namespace isolation), InMemoryStore raw embedding callables (no LangChain dependency), context_schema+Runtime.context (typed run-scoped context in StateGraph and @entrypoint), Command.PARENT (cross-subgraph routing with error escalation), TimeoutPolicy.coerce() (run_timeout vs idle_timeout), and @entrypoint multi-policy retry. Updated reference files to v1.2.4. |
 | 2026-06-03 | 1.2.4 | Added Class deep-dives Vol. 8 — 10 source-verified deep dives into ExecutionInfo/Runtime.heartbeat (advanced patterns: idempotency keys, node_attempt timing, patch() for testing), ServerInfo/BaseUser (platform auth and tenant isolation), ReplayState (time-travel subgraph checkpoint tracking), StreamMux (streaming event dispatcher, transformer factories, child muxes), Call (functional API invocation internals), ChannelWrite/ChannelWriteEntry (write subsystem, do_write() imperative writes, mapper transforms), PregelRunner/FuturesDict (concurrent task execution, error routing, early cancellation), WritesProtocol/PregelTaskWrites (write protocol, deterministic sorting via path), SyncPregelLoop/AsyncPregelLoop (execution state machine, status fields, cooperative drain), and DuplexStream (multi-sink fan-out streaming). Updated version card to 1.2.4, version references in Reference section and Aside block, langgraph-checkpoint to 4.1.1. |
