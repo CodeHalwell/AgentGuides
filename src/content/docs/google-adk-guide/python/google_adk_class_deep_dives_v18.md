@@ -19,7 +19,7 @@ Source-verified against **google-adk==2.2.0** (installed from PyPI, June 2026). 
 | 5 | `SessionContext` | `google.adk.tools.mcp_tool.session_context` | Stable |
 | 6 | `McpInstructionProvider` | `google.adk.agents.mcp_instruction_provider` | Stable |
 | 7 | `UiWidget` | `google.adk.events.ui_widget` | Stable |
-| 8 | `EnvironmentToolset` | `google.adk.tools.environment._environment_toolset` | `@experimental` |
+| 8 | `EnvironmentToolset` | `google.adk.tools.environment` | `@experimental` |
 | 9 | `LoadMcpResourceTool` | `google.adk.tools.load_mcp_resource_tool` | Stable |
 | 10 | `App` (all config knobs) | `google.adk.apps.app` | Stable |
 
@@ -85,6 +85,7 @@ async def increment_counter(tool_context: ToolContext) -> dict:
 
 ```python
 from google.adk.agents.context import Context
+from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 
 
@@ -112,6 +113,7 @@ async def load_previous_response(tool_context: ToolContext) -> dict:
 
 ```python
 from google.adk.agents.context import Context
+from google.adk.tools.tool_context import ToolContext
 
 
 async def knowledge_recall_tool(query: str, tool_context: ToolContext) -> dict:
@@ -135,6 +137,7 @@ async def after_agent_callback(ctx: Context) -> None:
 
 ```python
 from google.adk.agents.context import Context
+from google.adk.tools.tool_context import ToolContext
 from google.adk.auth.auth_tool import AuthConfig
 from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
@@ -158,7 +161,9 @@ GOOGLE_OAUTH_CONFIG = AuthConfig(
 
 async def list_calendar_events(tool_context: ToolContext) -> dict:
     """List Google Calendar events — requests OAuth2 if not already resolved."""
-    cred = tool_context.get_credential("google_oauth")
+    # get_auth_response returns the resolved credential for this auth config,
+    # or None if the user has not yet completed the OAuth2 flow.
+    cred = tool_context.get_auth_response(GOOGLE_OAUTH_CONFIG)
     if cred is None:
         # Suspend tool, ask the user to complete OAuth2
         tool_context.request_credential(GOOGLE_OAUTH_CONFIG)
@@ -173,7 +178,7 @@ async def list_calendar_events(tool_context: ToolContext) -> dict:
 ```python
 from google.adk.agents.context import Context
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.workflow._workflow import Workflow
+from google.adk.workflow import Workflow
 
 
 research_agent = LlmAgent(name="researcher", model="gemini-2.0-flash",
@@ -419,8 +424,7 @@ import uvicorn
 from starlette.applications import Starlette
 
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.workflow._workflow import Workflow
-from google.adk.workflow._base_node import START
+from google.adk.workflow import Workflow, START
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 
 extract = LlmAgent(name="extract", model="gemini-2.0-flash",
@@ -511,11 +515,10 @@ async def delete_user_account(
     """
     tc = tool_context.tool_confirmation
     if tc is None or not tc.confirmed:
-        # First call — suspend and ask the human
+        # First call — suspend and ask the human.
+        # request_confirmation takes keyword-only args: hint and payload.
         tool_context.request_confirmation(
-            ToolConfirmation(
-                hint=f"Permanently delete account '{user_id}'? This cannot be undone.",
-            )
+            hint=f"Permanently delete account '{user_id}'? This cannot be undone.",
         )
         return {"status": "awaiting_confirmation"}
 
@@ -536,7 +539,6 @@ with override_feature_enabled(FeatureName.TOOL_CONFIRMATION, True):
 ### Example 2 — using `payload` to collect data from the human
 
 ```python
-from google.adk.tools.tool_confirmation import ToolConfirmation
 from google.adk.tools.tool_context import ToolContext
 
 
@@ -554,12 +556,10 @@ async def transfer_funds(
     tc = tool_context.tool_confirmation
     if tc is None or not tc.confirmed:
         tool_context.request_confirmation(
-            ToolConfirmation(
-                hint=(
-                    f"Transfer ${amount:.2f} to {destination_account}. "
-                    "Please enter your 2FA code in the 'payload' field."
-                ),
-            )
+            hint=(
+                f"Transfer ${amount:.2f} to {destination_account}. "
+                "Please enter your 2FA code in the 'payload' field."
+            ),
         )
         return {"status": "awaiting_2fa"}
 
@@ -573,7 +573,6 @@ async def transfer_funds(
 ### Example 3 — resuming from `tool_context.resume_inputs`
 
 ```python
-from google.adk.tools.tool_confirmation import ToolConfirmation
 from google.adk.tools.tool_context import ToolContext
 
 
@@ -590,9 +589,7 @@ async def sensitive_query(
 
     if confirmation is None:
         tool_context.request_confirmation(
-            ToolConfirmation(
-                hint=f"DBA approval required for: {sql[:120]}",
-            )
+            hint=f"DBA approval required for: {sql[:120]}",
         )
         return {"status": "pending_approval"}
 
@@ -633,7 +630,7 @@ SessionContext(
 |---|---|
 | `await start()` | Start background task, wait for `ClientSession` to be ready |
 | `await close()` | Signal background task to shut down, await cleanup |
-| `async with lifecycle as session:` | Context manager that calls start/close |
+| `async with ctx as session:` | Context manager that calls start/close |
 | `session` property | The live `ClientSession`, or `None` before start |
 | `_run_guarded(coro)` | Race a coroutine against the background task (transport crash detection) |
 
@@ -941,8 +938,8 @@ from google.adk.agents.callback_context import CallbackContext
 
 async def after_tool_callback(ctx: CallbackContext, tool_response, event):
     """Log any UI widget metadata attached to this tool event."""
-    if event and event.actions and event.actions.ui_widgets:
-        for widget in event.actions.ui_widgets:
+    if event and event.actions and event.actions.render_ui_widgets:
+        for widget in event.actions.render_ui_widgets:
             print(f"Widget {widget.id} ({widget.provider}): {widget.payload}")
 ```
 
@@ -950,14 +947,14 @@ async def after_tool_callback(ctx: CallbackContext, tool_response, event):
 
 ## 8 · `EnvironmentToolset` — file and shell tools for coding agents
 
-**Source:** `google.adk.tools.environment._environment_toolset`
+**Source:** `google.adk.tools.environment`
 
 `EnvironmentToolset` is an `@experimental` toolset that gives an LlmAgent four environment interaction tools: **Execute** (run shell commands), **ReadFile**, **EditFile** (surgical replacement), and **WriteFile**. A `BaseEnvironment` implementation (e.g. `LocalEnvironment` or a Docker-based one) provides the actual execution backend. The toolset injects an environment-level system instruction on every LLM call.
 
 ### Constructor (source-verified)
 
 ```python
-from google.adk.tools.environment._environment_toolset import EnvironmentToolset
+from google.adk.tools.environment import EnvironmentToolset
 
 EnvironmentToolset(
     *,
@@ -977,14 +974,14 @@ The toolset exposes 4 tools:
 ### Example 1 — coding agent with a local environment
 
 ```python
-from google.adk.tools.environment._environment_toolset import EnvironmentToolset
+from google.adk.tools.environment import EnvironmentToolset
 from google.adk.agents.llm_agent import LlmAgent
 
 # LocalEnvironment executes commands in the current process working directory.
 # Install: pip install google-adk[environment]  (may need extra deps)
 try:
     from google.adk.environment.local_environment import LocalEnvironment
-    env = LocalEnvironment(work_dir="/tmp/agent_workspace")
+    env = LocalEnvironment(working_dir="/tmp/agent_workspace")
 except ImportError:
     env = None   # environment extra not installed
 
@@ -1200,13 +1197,15 @@ class App(BaseModel):
 
 Controls automatic context compaction. Two modes, combinable:
 
-| Field | Type | Description |
-|---|---|---|
-| `token_threshold` | `int \| None` | Compact when prompt token count exceeds this |
-| `event_retention_size` | `int \| None` | Keep this many raw events after compaction |
-| `compaction_interval` | `int \| None` | Compact every N new invocations (sliding window) |
-| `overlap_size` | `int \| None` | Include N previous invocations in each summary |
-| `summarizer` | `BaseEventsSummarizer \| None` | Custom summariser (auto-created from `LlmEventSummarizer` if `None`) |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `compaction_interval` | `int` | **Yes** | Compact every N new invocations (sliding-window trigger) |
+| `overlap_size` | `int` | **Yes** | Include N previous invocations in each summary for continuity |
+| `token_threshold` | `int \| None` | No | Also compact when prompt token count exceeds this |
+| `event_retention_size` | `int \| None` | No | Keep this many raw events un-compacted after a token-threshold compaction |
+| `summarizer` | `BaseEventsSummarizer \| None` | No | Custom summariser (auto-created from `LlmEventSummarizer` if `None`) |
+
+> **Note:** `compaction_interval` and `overlap_size` are **required** (no defaults). Always provide both. `token_threshold` and `event_retention_size` are optional and activate the additional token-based mode when set.
 
 ### `ResumabilityConfig` (source: `google.adk.apps._configs`)
 
@@ -1240,18 +1239,22 @@ app = App(name="my_assistant", root_agent=agent)
 
 ```python
 from google.adk.apps.app import App
-from google.adk.apps._configs import EventsCompactionConfig
+from google.adk.apps import EventsCompactionConfig
 from google.adk.agents.llm_agent import LlmAgent
 
 agent = LlmAgent(name="long_chat", model="gemini-2.0-flash",
                  instruction="You are a helpful assistant for long conversations.")
 
-# Compact when prompt exceeds 30 000 tokens; retain the last 5 raw events
+# Compact when prompt exceeds 30 000 tokens; retain the last 5 raw events.
+# compaction_interval and overlap_size are REQUIRED — set them even when
+# primarily relying on token_threshold.
 app = App(
     name="long_chat_app",
     root_agent=agent,
     events_compaction_config=EventsCompactionConfig(
-        token_threshold=30_000,
+        compaction_interval=20,   # required: sliding-window fallback every 20 turns
+        overlap_size=2,           # required: include 2 previous turns in each summary
+        token_threshold=30_000,   # also trigger on token count
         event_retention_size=5,
     ),
 )
@@ -1261,7 +1264,7 @@ app = App(
 
 ```python
 from google.adk.apps.app import App
-from google.adk.apps._configs import EventsCompactionConfig
+from google.adk.apps import EventsCompactionConfig
 from google.adk.agents.llm_agent import LlmAgent
 
 agent = LlmAgent(name="session_agent", model="gemini-2.0-flash",
@@ -1324,13 +1327,14 @@ agent = LlmAgent(
 )
 
 # Cache the system instruction with a 1-hour TTL;
-# only activate caching when the cached content is >= 4096 tokens
+# only activate caching when the estimated request is >= 4096 tokens.
+# The field is min_tokens (not min_token_count).
 app = App(
     name="cached_app",
     root_agent=agent,
     context_cache_config=ContextCacheConfig(
         ttl_seconds=3600,
-        min_token_count=4096,
+        min_tokens=4096,
     ),
 )
 ```
