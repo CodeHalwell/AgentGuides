@@ -73,8 +73,10 @@ orchestrator = LlmAgent(
         "to the most appropriate specialist: billing for payment issues, "
         "support for technical problems, sales for new purchases."
     ),
+    # Omit sub_agents when using an explicit TransferToAgentTool.
+    # If sub_agents is set, ADK auto-builds its own TransferToAgentTool from
+    # the same names, creating duplicate tool declarations.
     tools=[TransferToAgentTool(agent_names=["billing", "support", "sales"])],
-    sub_agents=[billing_agent, support_agent, sales_agent],
 )
 ```
 
@@ -97,6 +99,7 @@ def build_orchestrator(enabled_agents: list[str]) -> LlmAgent:
             )
         )
 
+    # Omit sub_agents alongside the explicit tool to avoid duplicate declarations.
     return LlmAgent(
         name="router",
         model="gemini-2.0-flash",
@@ -105,7 +108,6 @@ def build_orchestrator(enabled_agents: list[str]) -> LlmAgent:
             f"Available specialists: {', '.join(enabled_agents)}."
         ),
         tools=[TransferToAgentTool(agent_names=enabled_agents)],
-        sub_agents=sub_agents,
     )
 
 
@@ -1740,18 +1742,19 @@ from google.adk.workflow._base_node import START
 
 
 async def classify_ticket(ctx, node_input):
-    """Emit a route ('billing', 'tech', or 'general') for RoutingMap dispatch.
+    """Emit a route for RoutingMap dispatch, preserving the original payload.
 
     RoutingMap edges match against Event.actions.route, not Event.output.
-    Use Event(route=...) — a plain yield "billing" sets output, not route.
+    Include output=node_input so the selected handler receives the ticket text;
+    without it child_ctx.output is None and handlers receive node_input=None.
     """
     text = str(node_input).lower()
     if "invoice" in text or "payment" in text:
-        yield Event(route="billing")
+        yield Event(output=node_input, route="billing")
     elif "error" in text or "crash" in text:
-        yield Event(route="tech")
+        yield Event(output=node_input, route="tech")
     else:
-        yield Event(route="general")
+        yield Event(output=node_input, route="general")
 
 
 async def handle_billing(ctx, node_input):
@@ -1788,14 +1791,14 @@ from google.adk.workflow._base_node import START
 
 
 async def get_priority(ctx, node_input):
-    """Emit a route ('high', 'medium', or 'low') based on input length."""
+    """Emit a route and preserve payload so handlers receive the original input."""
     score = len(str(node_input))
     if score > 100:
-        yield Event(route="high")
+        yield Event(output=node_input, route="high")
     elif score > 50:
-        yield Event(route="medium")
+        yield Event(output=node_input, route="medium")
     else:
-        yield Event(route="low")
+        yield Event(output=node_input, route="low")
 
 
 async def urgent_handler(ctx, node_input):
