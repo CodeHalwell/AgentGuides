@@ -840,7 +840,7 @@ from agent_framework._middleware import AgentMiddlewarePipeline
 
 class LoggingAgentMiddleware(AgentMiddleware):
     async def process(self, ctx: AgentContext, call_next) -> None:
-        print(f"[agent-middleware] instructions={ctx.agent.instructions[:30]}...")
+        print(f"[agent-middleware] agent={ctx.agent.name!r}, messages={len(ctx.messages)}")
         await call_next()
 
 
