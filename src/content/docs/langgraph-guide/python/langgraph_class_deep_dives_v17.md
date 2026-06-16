@@ -855,14 +855,19 @@ async def async_node(state: State) -> dict:
 
 **Module:** `langgraph.types`
 
-`stream_mode="checkpoints"` emits a `CheckpointStreamPart` after **every checkpoint write**. This lets you observe the graph's persistence layer in real time — useful for audit trails, progress dashboards, and debugging multi-step graphs.
+`stream_mode="checkpoints"` emits one event per checkpoint write. This lets you observe the graph's persistence layer in real time — useful for audit trails, progress dashboards, and debugging multi-step graphs.
+
+**v1 API (default):** Each iteration yields a `CheckpointPayload` dict directly.
+**v2 API (`version="v2"`):** Each iteration yields a `CheckpointStreamPart` with `{"type", "ns", "data"}` wrapping. The examples below use the default v1 API.
 
 ```python
+# v2 wrapper shape (stream(..., version="v2") only)
 class CheckpointStreamPart(TypedDict, Generic[StateT]):
     type: Literal["checkpoints"]
     ns:   tuple[str, ...]          # namespace path (empty for root graph)
     data: CheckpointPayload[StateT]
 
+# v1 shape — yielded directly when using the default stream() API
 class CheckpointPayload(TypedDict, Generic[StateT]):
     config:        RunnableConfig | None      # this checkpoint's config
     metadata:      CheckpointMetadata         # step, source, writes
@@ -904,10 +909,10 @@ graph = builder.compile(checkpointer=InMemorySaver())
 config = {"configurable": {"thread_id": "chk-demo"}}
 
 for part in graph.stream({"step": 0}, config, stream_mode="checkpoints"):
-    cp = part["data"]
-    print(f"step={cp['values']['step']:2d}  "
-          f"next={cp['next']}  "
-          f"metadata_step={cp['metadata'].get('step', '?')}")
+    # v1 API (default): part IS the CheckpointPayload dict directly
+    print(f"step={part['values']['step']:2d}  "
+          f"next={part['next']}  "
+          f"metadata_step={part['metadata'].get('step', '?')}")
 ```
 
 Output resembles:
@@ -932,14 +937,14 @@ for part in graph.stream(
     config,
     stream_mode="checkpoints",
 ):
-    cp = part["data"]
+    # part IS the CheckpointPayload dict (v1 API)
     audit_log.append({
         "timestamp":    datetime.utcnow().isoformat(),
-        "step":         cp["metadata"].get("step"),
-        "source":       cp["metadata"].get("source"),
-        "state_values": cp["values"],
-        "next_nodes":   cp["next"],
-        "task_count":   len(cp["tasks"]),
+        "step":         part["metadata"].get("step"),
+        "source":       part["metadata"].get("source"),
+        "state_values": part["values"],
+        "next_nodes":   part["next"],
+        "task_count":   len(part["tasks"]),
     })
 
 print(json.dumps(audit_log, indent=2))
@@ -956,14 +961,15 @@ for kind, payload in graph.stream(
     if kind == "updates":
         print(f"  [update] {payload}")
     elif kind == "checkpoints":
-        print(f"  [checkpoint] step={payload['data']['values']['step']}")
+        # payload IS the CheckpointPayload dict in v1 multi-mode streaming
+        print(f"  [checkpoint] step={payload['values']['step']}")
 ```
 
 ### Reading `CheckpointTask` fields
 
 ```python
 for part in graph.stream({"step": 0}, config, stream_mode="checkpoints"):
-    for task in part["data"]["tasks"]:
+    for task in part["tasks"]:  # part IS CheckpointPayload in v1 API
         print(f"  task id={task['id'][:8]}  name={task['name']}", end="")
         if "error" in task:
             print(f"  ERROR: {task['error']}", end="")
@@ -999,16 +1005,18 @@ class TaskResultPayload(TypedDict):
     result:     dict[str, Any]      # channel → written value
 ```
 
-Each `TasksStreamPart` looks like:
+**v1 API (default):** Each iteration yields either a `TaskPayload` or `TaskResultPayload` dict directly.
+**v2 API (`version="v2"`):** Each iteration yields a `TasksStreamPart` with `{"type", "ns", "data"}` wrapping:
 
 ```python
+# v2 wrapper shape only
 class TasksStreamPart(TypedDict):
     type: Literal["tasks"]
     ns:   tuple[str, ...]
     data: TaskPayload | TaskResultPayload
 ```
 
-You can distinguish start from result by checking for the `"input"` key (only in `TaskPayload`) or the `"result"` key (only in `TaskResultPayload`).
+The examples below use the default v1 API. Distinguish start from result by checking for the `"input"` key (present only in `TaskPayload`). Note: `result` is always present in `TaskResultPayload` — check `interrupts` and `error` to determine the outcome.
 
 ### Example 1 — logging task lifecycle
 
@@ -1033,7 +1041,8 @@ builder.add_edge("add_ten", END)
 graph = builder.compile()
 
 for part in graph.stream({"value": 5}, stream_mode="tasks"):
-    data = part["data"]
+    # v1 API: part IS TaskPayload or TaskResultPayload directly
+    data = part
     if "input" in data:
         # TaskPayload — task started
         print(f"[START ] {data['name']}  triggers={data['triggers']}  input={data['input']}")
@@ -1064,7 +1073,8 @@ for mode, payload in graph.stream(
     if mode == "custom":
         print(f"[CUSTOM] {payload}")
     elif mode == "tasks":
-        data = payload["data"]
+        # v1 multi-mode: payload IS TaskPayload or TaskResultPayload directly
+        data = payload
         if "input" in data:
             print(f"[TASK START] {data['name']} ← {data['triggers']}")
         elif data.get("error"):
@@ -1098,10 +1108,10 @@ graph = builder.compile(checkpointer=saver)
 config = {"configurable": {"thread_id": "t-tasks"}}
 
 for part in graph.stream({"approved": False}, config, stream_mode="tasks"):
-    data = part["data"]
-    if "interrupts" in data and data["interrupts"]:
-        print(f"Node '{data['name']}' is waiting for human input:")
-        for intr in data["interrupts"]:
+    # v1 API: part IS TaskPayload or TaskResultPayload directly
+    if "interrupts" in part and part["interrupts"]:
+        print(f"Node '{part['name']}' is waiting for human input:")
+        for intr in part["interrupts"]:
             print(f"  interrupt value={intr.get('value', '?')!r}")
 ```
 
@@ -1259,6 +1269,6 @@ print(result["error"])  # 'ValueError: something went wrong'
 | `add_sequence()` | No `START`/`END` edges added automatically | Forgetting to add `add_edge(START, first_node)` and `add_edge(last_node, END)` |
 | `update_state()` | Thin wrapper around `bulk_update_state([[StateUpdate(...)]])` | Passing `as_node=None` when the last node is ambiguous — raises if multiple nodes wrote in the last step |
 | `get_stream_writer()` | Writes to `stream_mode="custom"`; raises `RuntimeError` outside a graph run | Using inside `asyncio.create_task()` on Python < 3.11 — context not propagated |
-| `stream_mode="checkpoints"` | Fires after **every** checkpoint write, including intermediate steps | Expecting only one event per `invoke()` — there are N+1 (one per super-step plus initial) |
-| `stream_mode="tasks"` | Distinguish start vs result by checking for `"input"` key | Assuming `data["result"]` always exists — it's absent on error or interrupt |
+| `stream_mode="checkpoints"` | v1 yields `CheckpointPayload` directly; fires after every checkpoint write | Using `part["data"]` (v2 wrapper) with the default v1 API — causes `KeyError` |
+| `stream_mode="tasks"` | Distinguish start vs result by checking for `"input"` key; v1 yields payload directly (no `["data"]` wrapper) | Checking `data["result"]` to infer success — `result` is always present (may be `{}`); check `interrupts` and `error` instead |
 | `set_node_defaults()` | Applied at `compile()` time; subgraphs do **not** inherit | Calling it after `compile()` — changes are silently ignored |
