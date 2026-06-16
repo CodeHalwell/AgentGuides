@@ -104,16 +104,18 @@ class State:
 ### Superstep semantics in depth
 
 ```
-Superstep N begins
-  ├── Executor A runs: state.set("counter", 1)   → goes to _pending
-  └── Executor B runs: state.get("counter")       → returns None  ← committed has no "counter" yet
+Superstep N begins (all executors share one State object; _pending starts empty)
+  ├── Executor A runs: state.set("counter", 1)   → _pending = {"counter": 1}
+  └── Executor B runs: state.get("counter")       → returns 1  ← _pending checked first
 
 Runner calls state.commit()
   └── _pending {"counter": 1} → _committed; _pending cleared
 
 Superstep N+1 begins
-  └── Executor C runs: state.get("counter")       → returns 1  ← now visible
+  └── Executor C runs: state.get("counter")       → returns 1  ← from _committed
 ```
+
+> **Note:** `get()` checks `_pending` before `_committed`, so within the same superstep, writes from one executor are immediately visible to all other executors sharing the same `State` object. The guarantee is that all executors start the superstep with the same `_committed` snapshot; intra-superstep ordering of reads and writes depends on execution order. `export_state()` returns only `_committed` state (pending writes are excluded from checkpoint snapshots).
 
 ### Example 1 — basic get/set/delete inside an executor
 
