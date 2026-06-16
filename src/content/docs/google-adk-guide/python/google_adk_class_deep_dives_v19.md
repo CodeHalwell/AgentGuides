@@ -49,19 +49,25 @@ Inherits all `FunctionTool` behaviour. The `func` is always `transfer_to_agent`;
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
 
+# mode='single_turn' keeps agents in the tree (so find_agent() can locate them
+# during transfer) but excludes them from _AgentTransferLlmRequestProcessor's
+# auto-generated TransferToAgentTool, avoiding duplicate tool declarations.
 billing_agent = LlmAgent(
     name="billing",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="You handle billing questions, invoices, and payment issues.",
 )
 support_agent = LlmAgent(
     name="support",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="You handle technical support and troubleshooting.",
 )
 sales_agent = LlmAgent(
     name="sales",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="You handle new subscriptions, upgrades, and pricing.",
 )
 
@@ -73,10 +79,8 @@ orchestrator = LlmAgent(
         "to the most appropriate specialist: billing for payment issues, "
         "support for technical problems, sales for new purchases."
     ),
-    # Omit sub_agents when using an explicit TransferToAgentTool.
-    # If sub_agents is set, ADK auto-builds its own TransferToAgentTool from
-    # the same names, creating duplicate tool declarations.
     tools=[TransferToAgentTool(agent_names=["billing", "support", "sales"])],
+    sub_agents=[billing_agent, support_agent, sales_agent],
 )
 ```
 
@@ -89,17 +93,18 @@ from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
 
 def build_orchestrator(enabled_agents: list[str]) -> LlmAgent:
     """Build an orchestrator whose transfer menu reflects runtime config."""
-    sub_agents = []
-    for name in enabled_agents:
-        sub_agents.append(
-            LlmAgent(
-                name=name,
-                model="gemini-2.0-flash",
-                instruction=f"You are the {name} specialist agent.",
-            )
+    # mode='single_turn' registers agents in the tree without triggering
+    # the auto-TransferToAgentTool that would duplicate the explicit tool.
+    sub_agents = [
+        LlmAgent(
+            name=name,
+            model="gemini-2.0-flash",
+            mode="single_turn",
+            instruction=f"You are the {name} specialist agent.",
         )
+        for name in enabled_agents
+    ]
 
-    # Omit sub_agents alongside the explicit tool to avoid duplicate declarations.
     return LlmAgent(
         name="router",
         model="gemini-2.0-flash",
@@ -108,6 +113,7 @@ def build_orchestrator(enabled_agents: list[str]) -> LlmAgent:
             f"Available specialists: {', '.join(enabled_agents)}."
         ),
         tools=[TransferToAgentTool(agent_names=enabled_agents)],
+        sub_agents=sub_agents,
     )
 
 
@@ -436,7 +442,7 @@ from google.adk.tools.preload_memory_tool import preload_memory_tool
 from google.adk.agents.callback_context import CallbackContext
 
 
-# ADK enforces the parameter name 'callback_context' for all agent callbacks.
+# ADK calls this as callback(callback_context=...) so the parameter name must match.
 async def save_memory_after_turn(callback_context: CallbackContext) -> None:
     """Callback: persist session to long-term memory after every agent turn."""
     await callback_context.add_session_to_memory()
@@ -1295,8 +1301,8 @@ parallel_agent = node(my_llm_agent, parallel_worker=True)
 # Class-based:
 class MyNode(Node):
     parallel_worker: bool = True
-    async def run_node_impl(self, *, ctx, node_input): ...
-        yield result
+    async def run_node_impl(self, *, ctx, node_input):
+        yield node_input  # override to implement node logic
 ```
 
 `auth_config` requires `rerun_on_resume=True` (auth flows may interrupt and resume).
