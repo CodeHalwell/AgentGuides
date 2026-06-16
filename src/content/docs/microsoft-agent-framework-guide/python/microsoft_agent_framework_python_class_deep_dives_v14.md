@@ -751,11 +751,14 @@ print(pipeline_full.has_middlewares)   # True
 
 ```python
 from agent_framework import Agent, FunctionMiddleware
+from agent_framework._middleware import FunctionInvocationContext
 from agent_framework.openai import OpenAIChatClient
 
 
 # A plain async function is automatically wrapped in MiddlewareWrapper
-async def trace_fn(ctx, call_next):
+# — but it must annotate its first arg as FunctionInvocationContext so
+# categorize_middleware() can identify it as function middleware.
+async def trace_fn(ctx: FunctionInvocationContext, call_next):
     print(f"Calling: {ctx.function.name}")
     await call_next()
 
@@ -830,7 +833,7 @@ from agent_framework._middleware import AgentMiddlewarePipeline
 
 class LoggingAgentMiddleware(AgentMiddleware):
     async def process(self, ctx: AgentContext, call_next) -> None:
-        print(f"[agent-middleware] instructions={ctx.instructions[:30]}...")
+        print(f"[agent-middleware] instructions={ctx.agent.instructions[:30]}...")
         await call_next()
 
 
@@ -884,7 +887,7 @@ class TimingChatMiddleware(ChatMiddleware):
         start = time.monotonic()
         await call_next()
         elapsed = time.monotonic() - start
-        print(f"Chat call took {elapsed:.3f}s, model={ctx.options.model_id}")
+        print(f"Chat call took {elapsed:.3f}s, model={(ctx.options or {}).get('model')}")
 
 
 pipeline = ChatMiddlewarePipeline(TimingChatMiddleware())
