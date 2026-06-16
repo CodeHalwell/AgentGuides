@@ -130,8 +130,7 @@ async def counter_step(ctx: WorkflowContext[int, int]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder()
-    builder.add_executor(counter_step)
+    builder = WorkflowBuilder(start_executor=counter_step)
     wf = builder.build()
 
     result = await wf.run(None)
@@ -161,9 +160,7 @@ async def consumer(message: str, ctx: WorkflowContext[str]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder()
-    builder.add_executor(producer)
-    builder.add_executor(consumer)
+    builder = WorkflowBuilder(start_executor=producer)
     builder.add_edge(producer, consumer)
     wf = builder.build()
 
@@ -294,9 +291,7 @@ async def step_b(msg: str, ctx: WorkflowContext[str]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder()
-    builder.add_executor(step_a)
-    builder.add_executor(step_b)
+    builder = WorkflowBuilder(start_executor=step_a)
     builder.add_edge(step_a, step_b)
     wf = builder.build()  # No output_from= → OutputDesignation(outputs=None)
 
@@ -328,9 +323,7 @@ async def summarizer(msg: str, ctx: WorkflowContext[str]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder()
-    builder.add_executor(enricher)
-    builder.add_executor(summarizer)
+    builder = WorkflowBuilder(start_executor=enricher)
     builder.add_edge(enricher, summarizer)
     # Only summarizer's yields become terminal outputs
     wf = builder.build(output_from=[summarizer])
@@ -362,9 +355,7 @@ async def stage_two(msg: str, ctx: WorkflowContext[str]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder()
-    builder.add_executor(stage_one)
-    builder.add_executor(stage_two)
+    builder = WorkflowBuilder(start_executor=stage_one)
     builder.add_edge(stage_one, stage_two)
     wf = builder.build(
         output_from=[stage_two],
@@ -438,7 +429,7 @@ them — a standard OTel link pattern.
 
 ```python
 import asyncio
-from agent_framework import WorkflowBuilder, WorkflowContext, executor, handler
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
 from agent_framework._workflows._runner_context import MessageType, WorkflowMessage
 
 
@@ -456,9 +447,7 @@ async def receiver(msg: dict, ctx: WorkflowContext[None]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder()
-    builder.add_executor(sender)
-    builder.add_executor(receiver)
+    builder = WorkflowBuilder(start_executor=sender)
     builder.add_edge(sender, receiver)
     wf = builder.build()
     result = await wf.run(None)
@@ -728,9 +717,9 @@ from agent_framework._middleware import MiddlewareWrapper, FunctionInvocationCon
 
 async def my_logging_fn(
     ctx: FunctionInvocationContext,
-    call_next: Callable[..., Awaitable[None]],
+    call_next: Callable[[], Awaitable[None]],
 ) -> None:
-    print(f"[before] tool={ctx.tool_name}")
+    print(f"[before] tool={ctx.function.name}")
     await call_next()
     print(f"[after]  result={ctx.result}")
 
@@ -742,7 +731,8 @@ print(type(wrapper))  # <class 'agent_framework._middleware.MiddlewareWrapper'>
 ### Example 2 — `has_middlewares` gate
 
 ```python
-from agent_framework import FunctionMiddlewarePipeline, FunctionMiddleware
+from agent_framework import FunctionMiddleware
+from agent_framework._middleware import FunctionMiddlewarePipeline
 
 
 class NoopMiddleware(FunctionMiddleware):
@@ -766,7 +756,7 @@ from agent_framework.openai import OpenAIChatClient
 
 # A plain async function is automatically wrapped in MiddlewareWrapper
 async def trace_fn(ctx, call_next):
-    print(f"Calling: {ctx.tool_name}")
+    print(f"Calling: {ctx.function.name}")
     await call_next()
 
 
@@ -1072,7 +1062,7 @@ class FunctionRequestResult(TypedDict, total=False):
 
 ```python
 import asyncio
-from agent_framework import BaseChatClient, ChatOptions, ChatResponse, FunctionTool, tool
+from agent_framework import BaseChatClient, ChatOptions, ChatResponse, FunctionTool, Message, tool
 from agent_framework._tools import FunctionRequestResult
 
 
@@ -1097,7 +1087,7 @@ class InspectingChatClient(BaseChatClient):
             function_call_results=None,
             function_call_count=1,
         )
-        return ChatResponse(role="assistant", content=[])
+        return ChatResponse(messages=Message(role="assistant", contents=[]))
 ```
 
 ### Example 2 — manual FunctionRequestResult construction for testing
@@ -1110,7 +1100,7 @@ from agent_framework import Message, Content
 result: FunctionRequestResult = {
     "action": "continue",
     "errors_in_a_row": 0,
-    "result_message": Message(role="tool", content=["42"]),
+    "result_message": Message(role="tool", contents=["42"]),
     "update_role": "tool",
     "function_call_results": [Content(type="text", text="42")],
     "function_call_count": 1,
