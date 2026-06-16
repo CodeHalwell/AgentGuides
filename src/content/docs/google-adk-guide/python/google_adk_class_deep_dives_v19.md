@@ -434,7 +434,7 @@ from google.adk.tools.preload_memory_tool import preload_memory_tool
 from google.adk.agents.callback_context import CallbackContext
 
 
-# after_agent_callback is called with keyword argument callback_context=...
+# ADK enforces the parameter name 'callback_context' for all agent callbacks.
 async def save_memory_after_turn(callback_context: CallbackContext) -> None:
     """Callback: persist session to long-term memory after every agent turn."""
     await callback_context.add_session_to_memory()
