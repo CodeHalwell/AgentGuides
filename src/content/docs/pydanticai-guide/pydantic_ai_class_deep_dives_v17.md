@@ -197,7 +197,9 @@ from pydantic_ai import Agent
 provider = AzureProvider(
     azure_endpoint='https://my-resource.openai.azure.com/openai/v1/',
     api_key='my-azure-key',
-    # api_version deliberately omitted; provider suppresses it for /v1 endpoints
+    # api_version MUST be omitted for /v1 endpoints — the constructor raises
+    # UserError if you pass it, because these endpoints reject api-version params.
+    # OPENAI_API_VERSION env var is also ignored on this code path.
 )
 agent = Agent(OpenAIChatModel('gpt-4.1', provider=provider))
 ```
@@ -367,7 +369,7 @@ provider = DeepSeekProvider(api_key=os.environ['DEEPSEEK_API_KEY'])
 # deepseek-v4-flash: supports_thinking=True, thinking_always_enabled=False
 agent = Agent(
     OpenAIChatModel('deepseek-v4-flash', provider=provider),
-    model_settings=ModelSettings(reasoning_effort='high'),
+    model_settings=ModelSettings(thinking='high'),  # unified cross-provider field
 )
 
 async def main():
@@ -1228,24 +1230,34 @@ builder.add(builder.edge_from(log_error).to(builder.end_node))
 
 ### `Edge` — label graph edges for Mermaid diagrams
 
-`Edge` is a frozen dataclass with a single field. Annotate return types with it to add labels to edges in generated Mermaid diagrams:
+`Edge` is a frozen dataclass with a single field. In **legacy `BaseNode`-based graphs**, `Annotated[T, Edge(label='...')]` return-type annotations are parsed to label edges. In **builder-based graphs**, labels are added via `.label(text)` on the `EdgePathBuilder` chain — `Edge` annotations on step return types are not parsed by the builder runner:
 
 ```python
-from typing import Annotated
-from pydantic_graph import GraphBuilder, Edge
+from pydantic_graph import GraphBuilder
 
-builder = GraphBuilder()
+builder = GraphBuilder(input_type=str, output_type=str)
 
 @builder.step
-async def evaluate(ctx) -> Annotated[str, Edge(label='result')] | Annotated[None, Edge(label='skip')]:
-    if ctx.inputs:
-        return 'processed'
-    return None
+async def evaluate(ctx) -> str | None:
+    return ctx.inputs if ctx.inputs else None
 
-# Edge labels appear in rendered Mermaid output
-# Builder-based Graph uses render() or str(graph) — NOT mermaid_code() (legacy API)
+@builder.step
+async def skip_step(ctx) -> str:
+    return 'skipped'
+
+@builder.step
+async def result_step(ctx) -> str:
+    return f'processed: {ctx.inputs}'
+
+# Use .label() on edge_from() chains to annotate Mermaid diagrams
+builder.add(builder.edge_from(builder.start_node).to(evaluate))
+builder.add(builder.edge_from(evaluate).label('result').to(result_step))
+builder.add(builder.edge_from(evaluate).label('skip').to(skip_step))
+builder.add(builder.edge_from(result_step).to(builder.end_node))
+builder.add(builder.edge_from(skip_step).to(builder.end_node))
+
 graph = builder.build()
-print(graph.render())   # or: str(graph)
+print(graph.render())  # Mermaid diagram with 'result' and 'skip' edge labels
 ```
 
 ### `TypeExpression` — complex union types in generic positions
