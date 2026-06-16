@@ -722,13 +722,13 @@ class BaseMiddlewarePipeline(ABC):
 
 ```python
 import asyncio
-from typing import Callable
+from typing import Awaitable, Callable
 from agent_framework._middleware import MiddlewareWrapper, FunctionInvocationContext
 
 
 async def my_logging_fn(
     ctx: FunctionInvocationContext,
-    call_next: Callable,
+    call_next: Callable[..., Awaitable[None]],
 ) -> None:
     print(f"[before] tool={ctx.tool_name}")
     await call_next()
@@ -1296,12 +1296,14 @@ LLM never sees the raw untrusted content directly. `LabeledMessage` tracks the l
 conversation message. `PolicyEnforcementFunctionMiddleware` blocks tool invocations when the
 context integrity is `UNTRUSTED` (unless the tool is explicitly allow-listed or the user approves).
 
-> **Experimental:** All members of `agent_framework.security` carry `@experimental(feature_id=ExperimentalFeature.FIDES)`. Suppress `ExperimentalWarning` with `import warnings; warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
+> **Experimental:** All members of `agent_framework.security` carry `@experimental(feature_id=ExperimentalFeature.FIDES)`. Suppress `ExperimentalWarning` with `from agent_framework._feature_stage import ExperimentalWarning; import warnings; warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
 
 ### Class signatures
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 from enum import Enum
 from typing import Any
 from pydantic import BaseModel, Field
@@ -1381,6 +1383,7 @@ PolicyEnforcementFunctionMiddleware sees UNTRUSTED context
 ### Example 1 — storing untrusted content and creating a reference
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
@@ -1423,6 +1426,7 @@ print(label.integrity)  # IntegrityLabel.UNTRUSTED
 ### Example 2 — `LabeledMessage` tracking label through conversation
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
@@ -1459,6 +1463,7 @@ print(tool_msg.security_label.integrity)  # IntegrityLabel.UNTRUSTED
 ### Example 3 — `PolicyEnforcementFunctionMiddleware` blocking untrusted calls
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
@@ -1503,6 +1508,7 @@ agent = Agent(
 ### Example 4 — `approval_on_violation` for human review gate
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
@@ -1540,6 +1546,7 @@ agent = Agent(
 ### Example 5 — `SecureAgentConfig` as a one-shot setup (wraps all of the above)
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
@@ -1575,6 +1582,7 @@ agent = Agent(
 ### Example 6 — `InspectVariableInput` schema inspection
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
