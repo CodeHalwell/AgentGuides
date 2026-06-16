@@ -121,7 +121,7 @@ Superstep N+1 begins
 
 ```python
 import asyncio
-from typing import Never
+from typing_extensions import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
@@ -147,7 +147,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from typing import Never
+from typing_extensions import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
@@ -280,7 +280,7 @@ class OutputDesignation:
 
 ```python
 import asyncio
-from typing import Never
+from typing_extensions import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
@@ -313,7 +313,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from typing import Never
+from typing_extensions import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
@@ -346,7 +346,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from typing import Never
+from typing_extensions import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
@@ -437,7 +437,7 @@ them — a standard OTel link pattern.
 
 ```python
 import asyncio
-from typing import Never
+from typing_extensions import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 from agent_framework._workflows._runner_context import MessageType, WorkflowMessage
 
