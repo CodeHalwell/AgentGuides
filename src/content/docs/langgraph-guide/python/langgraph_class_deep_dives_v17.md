@@ -216,7 +216,7 @@ class TimeoutPolicy:
 
 When `refresh_on="auto"` (default), any LangChain callback event (LLM token, tool call, etc.) resets the idle clock automatically. Use `refresh_on="heartbeat"` for nodes that do their own I/O and want explicit control.
 
-Timeouts rely on **asyncio cancellation**, so they only fire on async graphs. CPU-bound synchronous work will block the loop and delay the signal.
+Timeouts rely on **asyncio cancellation**, so they only fire on async graphs. Any code that blocks the event loop — CPU-bound work, `time.sleep()`, synchronous I/O — delays the cancellation signal because the loop cannot process it until the blocking call returns.
 
 ### Example 1 — hard run_timeout on a slow LLM call
 
@@ -253,7 +253,8 @@ async def run():
         print(f"  kind={e.kind!r}, elapsed={e.elapsed:.2f}s")
 
 asyncio.run(run())
-# Timed out: Node 'slow' exceeded its run timeout of 5.000s (elapsed: 5.00xs).
+# Timed out: Node 'slow' exceeded its run timeout of 5.000s (elapsed: 5.00Xs).
+# (actual elapsed seconds vary; 'X' represents a digit in the real output)
 ```
 
 ### Example 2 — idle_timeout with explicit heartbeats (`refresh_on="heartbeat"`)
@@ -603,7 +604,7 @@ print(result)
 # {'raw': '  hello, world!  ', 'cleaned': 'hello, world!', 'validated': True, 'stored': True}
 ```
 
-### Example 2 — named nodes (when names would collide or aren't inferrable)
+### Example 2 — named nodes (when names would collide or aren't inferable)
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -1263,7 +1264,7 @@ print(result["error"])  # 'ValueError: something went wrong'
 | Class / symbol | Key insight | Common mistake |
 |---------------|-------------|----------------|
 | `RetryPolicy` sequence | LangGraph uses the **first matching** policy in the list | Forgetting `max_attempts=1` on the "give up" policy — it defaults to 3 |
-| `TimeoutPolicy` + `heartbeat()` | `idle_timeout` needs explicit `heartbeat()` when `refresh_on="heartbeat"` | Using sync `time.sleep()` — blocks GIL, timeout fires late |
+| `TimeoutPolicy` + `heartbeat()` | `idle_timeout` needs explicit `heartbeat()` when `refresh_on="heartbeat"` | Using `time.sleep()` in an async node — blocks the event loop, delaying cancellation signals |
 | `Overwrite` | Bypasses the reducer entirely; at most one per channel per super-step | Using `Overwrite` on a `LastValue` channel — it's a no-op; `LastValue` always replaces |
 | `interrupt()` multi | Node re-runs from top on resume; already-resolved interrupts return immediately | Calling `interrupt()` in a loop without handling the replay — state mutation side-effects run twice |
 | `add_sequence()` | No `START`/`END` edges added automatically | Forgetting to add `add_edge(START, first_node)` and `add_edge(last_node, END)` |
