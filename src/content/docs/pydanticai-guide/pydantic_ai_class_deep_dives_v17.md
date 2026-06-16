@@ -1357,7 +1357,7 @@ print(transform.label)  # 'Transform Data'
 
 ### `Step.as_node()` — produce a `StepNode` for legacy bridge usage
 
-`as_node(inputs=None)` binds an optional `InputT` value to the step and returns a `StepNode`. Its primary purpose is to produce a v1-compatible `BaseNode` subclass so that a builder-defined step can be passed to a legacy `BaseNode`-based graph runner, or used as the explicit entry point when calling `graph.run(step.as_node(initial_value))`.
+`as_node(inputs=None)` binds an optional `InputT` value to the step and returns a `StepNode` — a `BaseNode` subclass. Its primary purpose is to produce a v1-compatible node so that a builder-defined step can be passed to a **legacy `BaseNode`-based graph runner**. For the builder-based `Graph`, pass inputs via the keyword argument `graph.run(inputs=...)` — the `Graph.run()` signature is keyword-only and does not accept a positional node argument.
 
 ```python
 import asyncio
