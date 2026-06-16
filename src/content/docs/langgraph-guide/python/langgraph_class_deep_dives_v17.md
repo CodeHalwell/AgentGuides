@@ -95,7 +95,8 @@ builder.add_edge("api", END)
 graph = builder.compile()
 result = graph.invoke({"attempts": 0, "result": ""})
 print(result)
-# {'attempts': 3, 'result': 'success'}
+# {'attempts': 1, 'result': 'success'}
+# Note: failed attempts are rolled back — only the successful run's writes apply.
 ```
 
 ### Example 2 — sequence of policies (ordered exception matching)
@@ -1257,7 +1258,7 @@ print(result["error"])  # 'ValueError: something went wrong'
 | `interrupt()` multi | Node re-runs from top on resume; already-resolved interrupts return immediately | Calling `interrupt()` in a loop without handling the replay — state mutation side-effects run twice |
 | `add_sequence()` | No `START`/`END` edges added automatically | Forgetting to add `add_edge(START, first_node)` and `add_edge(last_node, END)` |
 | `update_state()` | Thin wrapper around `bulk_update_state([[StateUpdate(...)]])` | Passing `as_node=None` when the last node is ambiguous — raises if multiple nodes wrote in the last step |
-| `get_stream_writer()` | Writes to `stream_mode="custom"`; no-op outside a graph run | Using inside `asyncio.create_task()` on Python < 3.11 — context not propagated |
+| `get_stream_writer()` | Writes to `stream_mode="custom"`; raises `RuntimeError` outside a graph run | Using inside `asyncio.create_task()` on Python < 3.11 — context not propagated |
 | `stream_mode="checkpoints"` | Fires after **every** checkpoint write, including intermediate steps | Expecting only one event per `invoke()` — there are N+1 (one per super-step plus initial) |
 | `stream_mode="tasks"` | Distinguish start vs result by checking for `"input"` key | Assuming `data["result"]` always exists — it's absent on error or interrupt |
 | `set_node_defaults()` | Applied at `compile()` time; subgraphs do **not** inherit | Calling it after `compile()` — changes are silently ignored |
