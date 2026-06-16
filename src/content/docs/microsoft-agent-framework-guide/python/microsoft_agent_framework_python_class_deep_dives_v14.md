@@ -119,11 +119,12 @@ Superstep N+1 begins
 
 ```python
 import asyncio
+from typing import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def counter_step(ctx: WorkflowContext[int, int]) -> None:
+async def counter_step(ctx: WorkflowContext[Never, int]) -> None:
     current = ctx.state.get("visits", 0)
     ctx.state.set("visits", current + 1)
     await ctx.yield_output(current + 1)
@@ -144,17 +145,18 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from typing import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def producer(ctx: WorkflowContext[None, str]) -> None:
+async def producer(ctx: WorkflowContext[str, Never]) -> None:
     ctx.state.set("data", "hello from producer")
     await ctx.send_message("go")
 
 
 @executor
-async def consumer(message: str, ctx: WorkflowContext[str]) -> None:
+async def consumer(message: str, ctx: WorkflowContext[Never, str]) -> None:
     data = ctx.state.get("data", "<missing>")
     await ctx.yield_output(f"Consumer received: {data}")
 
@@ -276,17 +278,18 @@ class OutputDesignation:
 
 ```python
 import asyncio
+from typing import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def step_a(ctx: WorkflowContext[None, str]) -> None:
+async def step_a(ctx: WorkflowContext[str, str]) -> None:
     await ctx.yield_output("from A")
     await ctx.send_message("go")
 
 
 @executor
-async def step_b(msg: str, ctx: WorkflowContext[str]) -> None:
+async def step_b(msg: str, ctx: WorkflowContext[Never, str]) -> None:
     await ctx.yield_output("from B")
 
 
@@ -308,17 +311,18 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from typing import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def enricher(ctx: WorkflowContext[None, str]) -> None:
+async def enricher(ctx: WorkflowContext[str, str]) -> None:
     await ctx.yield_output("enrichment data")  # hidden — not in output_from
     await ctx.send_message("enriched")
 
 
 @executor
-async def summarizer(msg: str, ctx: WorkflowContext[str]) -> None:
+async def summarizer(msg: str, ctx: WorkflowContext[Never, str]) -> None:
     await ctx.yield_output("final summary")  # terminal
 
 
@@ -340,17 +344,18 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from typing import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def stage_one(ctx: WorkflowContext[None, str]) -> None:
+async def stage_one(ctx: WorkflowContext[str, str]) -> None:
     await ctx.yield_output("stage 1 done")  # intermediate
     await ctx.send_message("continue")
 
 
 @executor
-async def stage_two(msg: str, ctx: WorkflowContext[str]) -> None:
+async def stage_two(msg: str, ctx: WorkflowContext[Never, str]) -> None:
     await ctx.yield_output("final result")  # terminal
 
 
@@ -429,18 +434,19 @@ them — a standard OTel link pattern.
 
 ```python
 import asyncio
+from typing import Never
 from agent_framework import WorkflowBuilder, WorkflowContext, executor
 from agent_framework._workflows._runner_context import MessageType, WorkflowMessage
 
 
 @executor
-async def sender(ctx: WorkflowContext[None, None]) -> None:
+async def sender(ctx: WorkflowContext[dict, Never]) -> None:
     # WorkflowContext.send_message() wraps your payload in a WorkflowMessage internally
     await ctx.send_message({"task": "process this"})
 
 
 @executor
-async def receiver(msg: dict, ctx: WorkflowContext[None]) -> None:
+async def receiver(msg: dict, ctx: WorkflowContext[Never, str]) -> None:
     # The msg parameter IS the .data field extracted from the WorkflowMessage
     print(f"Received: {msg['task']}")
     await ctx.yield_output("done")
@@ -847,7 +853,8 @@ print(pipeline.has_middlewares)  # True
 ### Example 2 — `matches()` for pipeline caching
 
 ```python
-from agent_framework._middleware import FunctionMiddlewarePipeline, FunctionMiddleware
+from agent_framework import FunctionMiddleware
+from agent_framework._middleware import FunctionMiddlewarePipeline
 
 
 class RetryMiddleware(FunctionMiddleware):
@@ -1078,7 +1085,7 @@ def fixed_answer() -> str:
 class InspectingChatClient(BaseChatClient):
     last_loop_result: FunctionRequestResult | None = None
 
-    async def get_response(self, messages, options) -> ChatResponse:
+    async def _inner_get_response(self, *, messages, stream, options, **kwargs):
         # The real implementation calls FunctionInvocationLayer._process_function_calls
         # which returns FunctionRequestResult at each step.
         # This is a simplified demonstration of the TypedDict fields.
@@ -1090,7 +1097,7 @@ class InspectingChatClient(BaseChatClient):
             function_call_results=None,
             function_call_count=1,
         )
-        return ChatResponse(messages=Message(role="assistant", contents=[]))
+        return ChatResponse(messages=[Message(role="assistant", contents=[])])
 ```
 
 ### Example 2 — manual FunctionRequestResult construction for testing
