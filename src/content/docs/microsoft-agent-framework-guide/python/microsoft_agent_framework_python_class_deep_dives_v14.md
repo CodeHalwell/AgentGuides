@@ -681,7 +681,7 @@ from.
 ### Class signatures
 
 ```python
-from typing import Generic, TypeVar, Callable, Awaitable
+from typing import Any, Generic, TypeVar, Callable, Awaitable
 from abc import ABC, abstractmethod
 
 ContextT = TypeVar("ContextT")
@@ -1156,6 +1156,7 @@ on timestamp.
 ### Class signatures
 
 ```python
+from typing import ClassVar
 from enum import Enum
 import logging
 
