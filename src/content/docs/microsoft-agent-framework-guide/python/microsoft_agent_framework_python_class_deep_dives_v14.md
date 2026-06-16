@@ -67,6 +67,7 @@ state. In practice you access `State` through `WorkflowContext.state` — you ne
 ### Class signature
 
 ```python
+from typing import Any
 from agent_framework._workflows._state import State
 
 class State:
@@ -118,7 +119,7 @@ Superstep N+1 begins
 
 ```python
 import asyncio
-from agent_framework import WorkflowBuilder, WorkflowContext, executor, handler
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
@@ -144,7 +145,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import WorkflowBuilder, WorkflowContext, executor, handler
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
@@ -394,6 +395,7 @@ enabling distributed tracing across executor boundaries and multi-source fan-in 
 from enum import Enum
 from dataclasses import dataclass
 from typing import Any
+from agent_framework import WorkflowEvent
 
 class MessageType(Enum):
     STANDARD = "standard"   # normal inter-executor message
@@ -720,12 +722,13 @@ class BaseMiddlewarePipeline(ABC):
 
 ```python
 import asyncio
+from typing import Callable
 from agent_framework._middleware import MiddlewareWrapper, FunctionInvocationContext
 
 
 async def my_logging_fn(
     ctx: FunctionInvocationContext,
-    call_next: callable,
+    call_next: Callable,
 ) -> None:
     print(f"[before] tool={ctx.tool_name}")
     await call_next()
@@ -1300,10 +1303,14 @@ context integrity is `UNTRUSTED` (unless the tool is explicitly allow-listed or 
 ```python
 import warnings
 from enum import Enum
+from typing import Any
 from pydantic import BaseModel, Field
+from agent_framework import Message
 from agent_framework.security import (
     ConfidentialityLabel,
+    ContentLabel,
     ContentVariableStore,
+    IntegrityLabel,
     InspectVariableInput,
     LabeledMessage,
     PolicyEnforcementFunctionMiddleware,
@@ -1452,13 +1459,12 @@ print(tool_msg.security_label.integrity)  # IntegrityLabel.UNTRUSTED
 ### Example 3 — `PolicyEnforcementFunctionMiddleware` blocking untrusted calls
 
 ```python
-import warnings, asyncio
+import warnings
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework.security import (
-    SecureAgentConfig,
     PolicyEnforcementFunctionMiddleware,
     LabelTrackingFunctionMiddleware,
 )
