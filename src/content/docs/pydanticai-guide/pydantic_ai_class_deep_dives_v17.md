@@ -765,8 +765,8 @@ from pydantic_graph import GraphBuilder
 
 `GraphBuilder` is the **primary API for building graphs** in `pydantic_graph`. It replaces the deprecated `BaseNode`-based class hierarchy with a fluent, type-safe builder that compiles to an executable `Graph`. You define step functions, wire them with edges, and call `.build()` once.
 
-<Aside type="caution">
-The old `BaseNode` subclass API is deprecated as of `pydantic_graph` 1.107.0. Use `GraphBuilder` for all new graphs.
+<Aside type="note">
+`GraphBuilder` is the recommended API for all new graphs. The `BaseNode` subclass pattern remains fully supported and interoperable with builder graphs via helpers such as `match_node()` and the `StepNode` bridge. The old `pydantic_graph.nodes` import path (not `BaseNode` itself) is what carries a deprecation warning.
 </Aside>
 
 ### Constructor
@@ -1038,7 +1038,7 @@ collect_join = builder.join(collect_reducer, initial=[])
 async def output_step(ctx):
     return ctx.inputs   # pass through the joined list
 
-builder.add_mapping_edge(produce, square)
+builder.add_mapping_edge(produce, square, downstream_join_id=collect_join.id)
 builder.add_edge(square, collect_join)      # Join is a MiddleNode — wire it directly
 builder.add_edge(collect_join, output_step)
 builder.add_edge(builder.start_node, produce)
