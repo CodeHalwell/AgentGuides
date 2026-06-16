@@ -81,10 +81,8 @@ orchestrator = LlmAgent(
 ### Example 2 — dynamic agent list built at runtime
 
 ```python
-import asyncio
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
-from google.adk.apps.app import App
 
 
 def build_orchestrator(enabled_agents: list[str]) -> LlmAgent:
@@ -317,7 +315,6 @@ tag_extractor = LlmAgent(
 ```python
 # This example shows what SetModelResponseTool.run_async() does internally.
 # You would not call this in production code — it is called by the framework.
-import asyncio
 from pydantic import BaseModel
 from google.adk.tools.set_model_response_tool import SetModelResponseTool
 
@@ -1037,7 +1034,6 @@ import os
 import asyncio
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.toolbox_toolset import ToolboxToolset
-from google.adk.apps.app import App
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 
@@ -1130,7 +1126,6 @@ JoinNode(
 ### Example 1 — basic fan-out / fan-in pattern
 
 ```python
-import asyncio
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.workflow._join_node import JoinNode
 from google.adk.workflow._workflow import Workflow
@@ -1171,7 +1166,6 @@ wf = Workflow(
 ### Example 2 — `JoinNode` output dict structure
 
 ```python
-import asyncio
 from google.adk.workflow._join_node import JoinNode
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
@@ -1306,7 +1300,6 @@ class MyNode(Node):
 ### Example 1 — simple `@node` decorator
 
 ```python
-import asyncio
 from google.adk.workflow._node import node
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
@@ -1500,7 +1493,6 @@ In practice you do not construct `_ParallelWorker` directly — use `@node(paral
 ### Example 1 — `@node(parallel_worker=True)` fan-out
 
 ```python
-import asyncio
 from google.adk.workflow._node import node
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
@@ -1742,7 +1734,6 @@ wf = Workflow(
 ```python
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
-from google.adk.agents.context import Context
 
 
 async def classify_ticket(ctx, node_input):
@@ -1856,9 +1847,7 @@ wf = Workflow(
 ### Example 5 — full pattern: fan-out → parallel work → fan-in → reduce
 
 ```python
-import asyncio
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.workflow._join_node import JoinNode
 from google.adk.workflow._node import node
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
@@ -1905,17 +1894,17 @@ wf = Workflow(
 
 | Topic | Volume | Sections |
 |---|---|---|
-| `transfer_to_agent` free function, `FunctionTool` | [Vol. 1](/google-adk-guide/python/google_adk_class_deep_dives) | `FunctionTool`, tool dispatch |
-| `BaseTool`, `process_llm_request` protocol | [Vol. 3](/google-adk-guide/python/google_adk_class_deep_dives_v3) | `BaseTool` internals |
-| `BaseToolset`, `get_tools` protocol | [Vol. 5](/google-adk-guide/python/google_adk_class_deep_dives_v5) | `BaseToolset` lifecycle |
-| `LlmAgent.output_schema`, `output_key` | [Vol. 6](/google-adk-guide/python/google_adk_class_deep_dives_v6) | `LlmAgent` structured output |
-| Memory services: `InMemoryMemoryService`, `VertexAiMemoryBankService` | [Vol. 8](/google-adk-guide/python/google_adk_class_deep_dives_v8) | Memory architecture |
-| `LlamaIndexRetrieval` base class | [Vol. 9](/google-adk-guide/python/google_adk_class_deep_dives_v9) | Retrieval tools |
-| `MCPToolset`, `StdioConnectionParams`, `SseConnectionParams` | [Vol. 10](/google-adk-guide/python/google_adk_class_deep_dives_v10) | MCP toolsets |
-| `RetryConfig` (used by `@node`) | [Vol. 12](/google-adk-guide/python/google_adk_class_deep_dives_v12) | Workflow retry |
-| `BaseNode`, `START` sentinel | [Vol. 13](/google-adk-guide/python/google_adk_class_deep_dives_v13) | Workflow nodes |
-| `Graph`, `EdgeItem`, `validate_graph` | [Vol. 14](/google-adk-guide/python/google_adk_class_deep_dives_v14) | Graph construction |
-| `AuthConfig`, `auth_config` on nodes | [Vol. 15](/google-adk-guide/python/google_adk_class_deep_dives_v15) | Node auth |
-| `VertexAiRagRetrieval` (compare to `VertexAiSearchTool`) | [Vol. 17](/google-adk-guide/python/google_adk_class_deep_dives_v17) | Grounding and retrieval |
-| `Context` (unified `ToolContext`/`CallbackContext`) | [Vol. 18](/google-adk-guide/python/google_adk_class_deep_dives_v18) | Context and HITL |
-| `App`, `EventsCompactionConfig`, `ContextCacheConfig` | [Vol. 18](/google-adk-guide/python/google_adk_class_deep_dives_v18) | App configuration |
+| `transfer_to_agent` free function, `FunctionTool` | [Vol. 1](./google_adk_class_deep_dives/) | `FunctionTool`, tool dispatch |
+| `BaseTool`, `process_llm_request` protocol | [Vol. 3](./google_adk_class_deep_dives_v3/) | `BaseTool` internals |
+| `BaseToolset`, `get_tools` protocol | [Vol. 5](./google_adk_class_deep_dives_v5/) | `BaseToolset` lifecycle |
+| `LlmAgent.output_schema`, `output_key` | [Vol. 6](./google_adk_class_deep_dives_v6/) | `LlmAgent` structured output |
+| Memory services: `InMemoryMemoryService`, `VertexAiMemoryBankService` | [Vol. 8](./google_adk_class_deep_dives_v8/) | Memory architecture |
+| `LlamaIndexRetrieval` base class | [Vol. 9](./google_adk_class_deep_dives_v9/) | Retrieval tools |
+| `MCPToolset`, `StdioConnectionParams`, `SseConnectionParams` | [Vol. 10](./google_adk_class_deep_dives_v10/) | MCP toolsets |
+| `RetryConfig` (used by `@node`) | [Vol. 12](./google_adk_class_deep_dives_v12/) | Workflow retry |
+| `BaseNode`, `START` sentinel | [Vol. 13](./google_adk_class_deep_dives_v13/) | Workflow nodes |
+| `Graph`, `EdgeItem`, `validate_graph` | [Vol. 14](./google_adk_class_deep_dives_v14/) | Graph construction |
+| `AuthConfig`, `auth_config` on nodes | [Vol. 15](./google_adk_class_deep_dives_v15/) | Node auth |
+| `VertexAiRagRetrieval` (compare to `VertexAiSearchTool`) | [Vol. 17](./google_adk_class_deep_dives_v17/) | Grounding and retrieval |
+| `Context` (unified `ToolContext`/`CallbackContext`) | [Vol. 18](./google_adk_class_deep_dives_v18/) | Context and HITL |
+| `App`, `EventsCompactionConfig`, `ContextCacheConfig` | [Vol. 18](./google_adk_class_deep_dives_v18/) | App configuration |
