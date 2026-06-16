@@ -124,7 +124,7 @@ from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def counter_step(ctx: WorkflowContext[Never, int]) -> None:
+async def counter_step(_: None, ctx: WorkflowContext[Never, int]) -> None:
     current = ctx.state.get("visits", 0)
     ctx.state.set("visits", current + 1)
     await ctx.yield_output(current + 1)
@@ -150,7 +150,7 @@ from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def producer(ctx: WorkflowContext[str, Never]) -> None:
+async def producer(_: None, ctx: WorkflowContext[str, Never]) -> None:
     ctx.state.set("data", "hello from producer")
     await ctx.send_message("go")
 
@@ -283,7 +283,7 @@ from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def step_a(ctx: WorkflowContext[str, str]) -> None:
+async def step_a(_: None, ctx: WorkflowContext[str, str]) -> None:
     await ctx.yield_output("from A")
     await ctx.send_message("go")
 
@@ -316,7 +316,7 @@ from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def enricher(ctx: WorkflowContext[str, str]) -> None:
+async def enricher(_: None, ctx: WorkflowContext[str, str]) -> None:
     await ctx.yield_output("enrichment data")  # hidden — not in output_from
     await ctx.send_message("enriched")
 
@@ -349,7 +349,7 @@ from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
 
 @executor
-async def stage_one(ctx: WorkflowContext[str, str]) -> None:
+async def stage_one(_: None, ctx: WorkflowContext[str, str]) -> None:
     await ctx.yield_output("stage 1 done")  # intermediate
     await ctx.send_message("continue")
 
@@ -441,7 +441,7 @@ from agent_framework._workflows._runner_context import MessageType, WorkflowMess
 
 
 @executor
-async def sender(ctx: WorkflowContext[dict, Never]) -> None:
+async def sender(_: None, ctx: WorkflowContext[dict, Never]) -> None:
     # WorkflowContext.send_message() wraps your payload in a WorkflowMessage internally
     await ctx.send_message({"task": "process this"})
 
@@ -1090,14 +1090,14 @@ class InspectingChatClient(BaseChatClient):
         # The real implementation calls FunctionInvocationLayer._process_function_calls
         # which returns FunctionRequestResult at each step.
         # This is a simplified demonstration of the TypedDict fields.
-        self.last_loop_result = FunctionRequestResult(
-            action="return",
-            errors_in_a_row=0,
-            result_message=None,
-            update_role=None,
-            function_call_results=None,
-            function_call_count=1,
-        )
+        self.last_loop_result = {
+            "action": "return",
+            "errors_in_a_row": 0,
+            "result_message": None,
+            "update_role": None,
+            "function_call_results": None,
+            "function_call_count": 1,
+        }
         return ChatResponse(messages=[Message(role="assistant", contents=[])])
 ```
 
