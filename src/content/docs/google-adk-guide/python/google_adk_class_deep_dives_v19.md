@@ -350,32 +350,31 @@ print(list_tool.name)     # "set_model_response"
 print(str_list_tool.name) # "set_model_response"
 ```
 
-### Example 5 — dict schema output with tools
+### Example 5 — BaseModel schema combined with tools
 
 ```python
+from pydantic import BaseModel
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.google_search_tool import google_search
 
-# Raw dict schema — set_model_response generates a single 'response' parameter
-# whose type matches the dict schema shape passed to SchemaType.
-raw_schema = {
-    "type": "object",
-    "properties": {
-        "summary": {"type": "string"},
-        "sources": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["summary", "sources"],
-}
 
-dict_schema_agent = LlmAgent(
-    name="dict_schema_agent",
+class SearchSummary(BaseModel):
+    summary: str
+    sources: list[str]
+
+
+# Use a BaseModel — not a raw dict — when combining output_schema with tools.
+# SetModelResponseTool assigns the dict as a Python type annotation, which
+# fails during FunctionDeclaration building; BaseModel is the supported path.
+search_agent = LlmAgent(
+    name="search_agent",
     model="gemini-2.0-flash",
     instruction=(
         "Search for information and call set_model_response with "
         "a summary string and list of source URLs."
     ),
     tools=[google_search],
-    output_schema=raw_schema,
+    output_schema=SearchSummary,
 )
 ```
 
@@ -413,7 +412,7 @@ from google.adk.memory.vertex_ai_memory_bank_service import VertexAiMemoryBankSe
 memory_service = VertexAiMemoryBankService(
     project="my-gcp-project",
     location="us-central1",
-    agent_engine_resource_name="projects/my-gcp-project/locations/us-central1/reasoningEngines/123",
+    agent_engine_id="123",   # numeric ID only, not the full resource path
 )
 
 agent = LlmAgent(
