@@ -327,10 +327,10 @@ async def summarizer(msg: str, ctx: WorkflowContext[Never, str]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder(start_executor=enricher)
-    builder.add_edge(enricher, summarizer)
     # Only summarizer's yields become terminal outputs
-    wf = builder.build(output_from=[summarizer])
+    builder = WorkflowBuilder(start_executor=enricher, output_from=[summarizer])
+    builder.add_edge(enricher, summarizer)
+    wf = builder.build()
 
     result = await wf.run(None)
     print(result.get_outputs())              # ["final summary"]
@@ -360,12 +360,13 @@ async def stage_two(msg: str, ctx: WorkflowContext[Never, str]) -> None:
 
 
 async def main() -> None:
-    builder = WorkflowBuilder(start_executor=stage_one)
-    builder.add_edge(stage_one, stage_two)
-    wf = builder.build(
+    builder = WorkflowBuilder(
+        start_executor=stage_one,
         output_from=[stage_two],
         intermediate_output_from=[stage_one],
     )
+    builder.add_edge(stage_one, stage_two)
+    wf = builder.build()
 
     result = await wf.run(None)
     print(result.get_outputs())              # ["final result"]
