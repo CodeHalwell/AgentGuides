@@ -177,22 +177,27 @@ if decl and decl.parameters_json_schema:
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
 
-# Leaf agents
+# Leaf agents — mode='single_turn' excludes them from auto-TransferToAgentTool
+# while keeping them in the agent tree so find_agent() can locate them on transfer.
 billing_invoice = LlmAgent(
     name="billing_invoice",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="Handle invoice generation and downloads.",
 )
 billing_payment = LlmAgent(
     name="billing_payment",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="Handle payment processing and refunds.",
 )
 
-# Mid-level router
+# Mid-level router — mode='single_turn' here too so top_router's auto-processor
+# doesn't duplicate the tool that top_router already declares explicitly.
 billing_router = LlmAgent(
     name="billing",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="Handle all billing matters. Route to invoice or payment specialists.",
     tools=[TransferToAgentTool(agent_names=["billing_invoice", "billing_payment"])],
     sub_agents=[billing_invoice, billing_payment],
@@ -201,6 +206,7 @@ billing_router = LlmAgent(
 support_agent = LlmAgent(
     name="support",
     model="gemini-2.0-flash",
+    mode="single_turn",
     instruction="Handle all support and troubleshooting requests.",
 )
 
