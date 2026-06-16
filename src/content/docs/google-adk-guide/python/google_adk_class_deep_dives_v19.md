@@ -397,11 +397,11 @@ The tool reads `tool_context.user_content.parts[0].text` as the search query. On
 ```python
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.preload_memory_tool import preload_memory_tool
-from google.adk.apps.app import App
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.memory.vertex_ai_memory_bank_service import VertexAiMemoryBankService
 
-# Memory service must be configured on the App for preload to have data.
-# App wires it into the runner automatically.
+# Memory service must be configured on Runner; App does not accept it.
 memory_service = VertexAiMemoryBankService(
     project="my-gcp-project",
     location="us-central1",
@@ -418,9 +418,10 @@ agent = LlmAgent(
     tools=[preload_memory_tool],   # injected before every LLM call
 )
 
-app = App(
-    name="memory_app",
-    root_agent=agent,
+runner = Runner(
+    app_name="memory_app",
+    agent=agent,
+    session_service=InMemorySessionService(),
     memory_service=memory_service,
 )
 ```
@@ -430,12 +431,13 @@ app = App(
 ```python
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.preload_memory_tool import preload_memory_tool
-from google.adk.agents.context import Context
+from google.adk.agents.callback_context import CallbackContext
 
 
-async def save_memory_after_turn(ctx: Context) -> None:
+# after_agent_callback is called with keyword argument callback_context=...
+async def save_memory_after_turn(callback_context: CallbackContext) -> None:
     """Callback: persist session to long-term memory after every agent turn."""
-    await ctx.add_session_to_memory()
+    await callback_context.add_session_to_memory()
 
 
 agent = LlmAgent(
@@ -1732,19 +1734,24 @@ wf = Workflow(
 ### Example 2 — conditional routing with a RoutingMap
 
 ```python
+from google.adk.events.event import Event
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
 
 
 async def classify_ticket(ctx, node_input):
-    """Classify a support ticket; yields 'billing', 'tech', or 'general'."""
+    """Emit a route ('billing', 'tech', or 'general') for RoutingMap dispatch.
+
+    RoutingMap edges match against Event.actions.route, not Event.output.
+    Use Event(route=...) — a plain yield "billing" sets output, not route.
+    """
     text = str(node_input).lower()
     if "invoice" in text or "payment" in text:
-        yield "billing"
+        yield Event(route="billing")
     elif "error" in text or "crash" in text:
-        yield "tech"
+        yield Event(route="tech")
     else:
-        yield "general"
+        yield Event(route="general")
 
 
 async def handle_billing(ctx, node_input):
@@ -1759,9 +1766,6 @@ async def handle_general(ctx, node_input):
     yield f"General handled: {node_input}"
 
 
-# RoutingMap: classify_ticket's yielded string → target callable/node.
-# Callables in edge tuples become FunctionNodes, NOT route dispatchers;
-# use a dict (RoutingMap) for conditional branching.
 wf = Workflow(
     name="ticket_router",
     edges=[
@@ -1778,19 +1782,20 @@ wf = Workflow(
 ### Example 3 — dict-based routing
 
 ```python
+from google.adk.events.event import Event
 from google.adk.workflow._workflow import Workflow
 from google.adk.workflow._base_node import START
 
 
 async def get_priority(ctx, node_input):
-    """Return 'high', 'medium', or 'low' based on ticket severity."""
+    """Emit a route ('high', 'medium', or 'low') based on input length."""
     score = len(str(node_input))
     if score > 100:
-        yield "high"
+        yield Event(route="high")
     elif score > 50:
-        yield "medium"
+        yield Event(route="medium")
     else:
-        yield "low"
+        yield Event(route="low")
 
 
 async def urgent_handler(ctx, node_input):
