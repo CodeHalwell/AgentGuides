@@ -912,14 +912,22 @@ builder.add_mapping_edge(produce_items, process_item)
 
 ### `edge_from().broadcast()` — send same data to multiple steps in parallel
 
+`broadcast()` takes a **single callback** that receives the builder and returns a list of edge paths — not multiple path arguments:
+
 ```python
 builder.add(
     builder.edge_from(source_step)
-        .broadcast(
-            builder.edge_from(source_step).to(branch_a),
-            builder.edge_from(source_step).to(branch_b),
-        )
+        .broadcast(lambda b: [
+            b.to(branch_a),
+            b.to(branch_b),
+        ])
 )
+```
+
+For simple fan-out to a fixed set of steps you can also call `.to()` with multiple destinations, which creates an implicit broadcast fork:
+
+```python
+builder.add(builder.edge_from(source_step).to(branch_a, branch_b))
 ```
 
 ### `build(validate_graph_structure=True)` — compile to executable Graph
@@ -1029,8 +1037,8 @@ async def output_step(ctx):
     return ctx.inputs   # pass through the joined list
 
 builder.add_mapping_edge(produce, square)
-builder.add_edge(square, collect_join.as_node())
-builder.add_edge(collect_join.as_node(), output_step)
+builder.add_edge(square, collect_join)      # Join is a MiddleNode — wire it directly
+builder.add_edge(collect_join, output_step)
 builder.add_edge(builder.start_node, produce)
 builder.add_edge(output_step, builder.end_node)
 
@@ -1095,18 +1103,19 @@ Decisions are built through `GraphBuilder.decision()` and the `.match()` / `.mat
 
 ```python
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 from pydantic_graph import GraphBuilder
 
 @dataclass
 class State:
-    pass
+    ticket: str = field(default='')  # store original text for downstream steps
 
 builder = GraphBuilder(state_type=State, input_type=str, output_type=str)
 
 @builder.step
 async def classify(ctx) -> Literal['urgent', 'billing', 'general']:
+    ctx.state.ticket = ctx.inputs  # save original text before routing
     if 'urgent' in ctx.inputs.lower():
         return 'urgent'
     elif 'billing' in ctx.inputs.lower():
@@ -1114,17 +1123,19 @@ async def classify(ctx) -> Literal['urgent', 'billing', 'general']:
     else:
         return 'general'
 
+# NOTE: ctx.inputs here is the *category string* ('urgent'/'billing'/'general'),
+# not the original ticket text. Use ctx.state.ticket to access the original.
 @builder.step
 async def handle_urgent(ctx):
-    return f'URGENT: {ctx.inputs}'
+    return f'URGENT: {ctx.state.ticket}'
 
 @builder.step
 async def handle_billing(ctx):
-    return f'BILLING: {ctx.inputs}'
+    return f'BILLING: {ctx.state.ticket}'
 
 @builder.step
 async def handle_general(ctx):
-    return f'GENERAL: {ctx.inputs}'
+    return f'GENERAL: {ctx.state.ticket}'
 
 # Use Literal types — not raw strings — for value-based routing
 ticket_router = (
@@ -1143,7 +1154,8 @@ builder.add(builder.edge_from(handle_general).to(builder.end_node))
 graph = builder.build()
 
 async def main():
-    out = await graph.run(inputs='This is urgent!')
+    state = State()
+    out = await graph.run(state=state, inputs='This is urgent!')
     print(out)  # URGENT: This is urgent!
 
 asyncio.run(main())
@@ -1361,8 +1373,8 @@ builder.add_edge(builder.start_node, process)
 builder.add_edge(process, builder.end_node)
 graph = builder.build()
 
-# as_node() is used to pass an explicit entry step with pre-bound inputs
-result = asyncio.run(graph.run(process.as_node(21)))
+# Graph.run() is keyword-only; pass inputs= directly
+result = asyncio.run(graph.run(inputs=21))
 print(result)  # 42
 ```
 
