@@ -193,7 +193,7 @@ policy = RetryPolicy(
 | `max_interval` | `128.0` | Upper cap on wait time |
 | `max_attempts` | `3` | Total attempts, including the first |
 | `jitter` | `True` | Adds random ±20 % to avoid thundering-herd |
-| `retry_on` | `default_retry_on` | Excludes `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `AttributeError`, `NameError` |
+| `retry_on` | `default_retry_on` | Excludes `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, `StopAsyncIteration`, `OSError`; also handles `ConnectionError` (always retries) and `httpx`/`requests` HTTP 5xx errors |
 
 ---
 
@@ -408,13 +408,13 @@ result = graph.invoke({"messages": [], "turn_count": 0})
 print(result["messages"])  # ['[Summary of 3 messages]']
 ```
 
-### What `Overwrite` cannot do
+### What `Overwrite` cannot do (and one gotcha)
 
 | Scenario | Behaviour |
 |----------|-----------|
-| Two concurrent nodes both `Overwrite` the same key | `InvalidUpdateError` — only one `Overwrite` per key per super-step |
-| Use `Overwrite` on a `LastValue` channel | `Overwrite` is a no-op; `LastValue` always writes directly |
-| Mix `Overwrite` and a normal update for the same key in one super-step | `InvalidUpdateError` |
+| Two concurrent nodes both `Overwrite` the same key | `InvalidUpdateError` — `BinaryOperatorAggregate.update()` raises on a second `Overwrite` |
+| Mix one `Overwrite` and one normal write for the same key | **Allowed** — the normal write is processed first; the `Overwrite` then replaces the result (or is skipped if it arrived before the normal write, which is also processed). Only two `Overwrite` values in the same super-step raises. |
+| Use `Overwrite` on a `LastValue` (plain, non-annotated) channel | **Bug risk** — `LastValue.update()` assigns `values[-1]` directly without unwrapping `Overwrite`, so the `Overwrite` *wrapper object* gets stored as the field value. Only use `Overwrite` on `Annotated[..., reducer]` (i.e., `BinaryOperatorAggregate`) channels. |
 
 ---
 
