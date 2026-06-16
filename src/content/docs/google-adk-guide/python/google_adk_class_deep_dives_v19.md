@@ -1686,10 +1686,9 @@ class Workflow(BaseNode):
 
     edges: list[EdgeItem] = []
     # EdgeItem formats:
-    #   (source, target)                          — simple edge
-    #   (source, [target1, target2])              — fan-out
-    #   (source, callable_route_fn)               — conditional routing
-    #   (source, {"value": "target", ...})        — dict-based routing
+    #   (source, target)                              — simple edge
+    #   (source, (target1, target2))                  — fan-out (tuple, not list)
+    #   (source, {"value": node_callable, ...})       — RoutingMap conditional routing
 
     max_concurrency: int | None = None
     # Limits parallel static-graph nodes. None = unlimited.
@@ -1719,17 +1718,18 @@ worker_nodes = [
 ]
 
 # max_concurrency=2: only 2 of the 5 workers run at the same time.
+# Fan-out uses a tuple of NodeLike objects, not a list of name strings.
 wf = Workflow(
     name="bounded_fan_out",
     max_concurrency=2,
     edges=[
         (START, split),
-        (split, [w.name for w in worker_nodes]),
+        (split, tuple(worker_nodes)),   # tuple fan-out to all workers
     ],
 )
 ```
 
-### Example 2 — conditional routing with a callable route function
+### Example 2 — conditional routing with a RoutingMap
 
 ```python
 from google.adk.workflow._workflow import Workflow
@@ -1737,7 +1737,7 @@ from google.adk.workflow._base_node import START
 
 
 async def classify_ticket(ctx, node_input):
-    """Classify a support ticket as 'billing', 'tech', or 'general'."""
+    """Classify a support ticket; yields 'billing', 'tech', or 'general'."""
     text = str(node_input).lower()
     if "invoice" in text or "payment" in text:
         yield "billing"
@@ -1745,11 +1745,6 @@ async def classify_ticket(ctx, node_input):
         yield "tech"
     else:
         yield "general"
-
-
-def route_by_category(output) -> str:
-    """Route function: maps classifier output to next node name."""
-    return output  # output IS the target node name
 
 
 async def handle_billing(ctx, node_input):
@@ -1764,13 +1759,18 @@ async def handle_general(ctx, node_input):
     yield f"General handled: {node_input}"
 
 
+# RoutingMap: classify_ticket's yielded string → target callable/node.
+# Callables in edge tuples become FunctionNodes, NOT route dispatchers;
+# use a dict (RoutingMap) for conditional branching.
 wf = Workflow(
     name="ticket_router",
     edges=[
         (START, classify_ticket),
-        (classify_ticket, route_by_category),  # callable route
-        # The orchestrator calls route_by_category(output) → "billing"|"tech"|"general"
-        # and dispatches to the matching node
+        (classify_ticket, {
+            "billing": handle_billing,
+            "tech": handle_tech,
+            "general": handle_general,
+        }),
     ],
 )
 ```
@@ -1809,10 +1809,12 @@ wf = Workflow(
     name="priority_router",
     edges=[
         (START, get_priority),
-        # Dict edge: output value → target node name
-        (get_priority, {"high": "urgent_handler",
-                        "medium": "standard_handler",
-                        "low": "low_handler"}),
+        # RoutingMap: output value → target callable (NodeLike), not a string name
+        (get_priority, {
+            "high": urgent_handler,
+            "medium": standard_handler,
+            "low": low_handler,
+        }),
     ],
 )
 ```
@@ -1831,10 +1833,11 @@ extract = LlmAgent(name="extract", model="gemini-2.0-flash",
 classify = LlmAgent(name="classify", model="gemini-2.0-flash",
                     instruction="Classify the extracted entities by type.")
 
-# Build the Graph manually for programmatic control
-graph = Graph()
-graph.add_edge(START, extract)
-graph.add_edge(extract, classify)
+# Graph has no add_edge(); use from_edge_items() for programmatic construction.
+graph = Graph.from_edge_items([
+    (START, extract),
+    (extract, classify),
+])
 graph.validate_graph()   # raises if graph is invalid (cycles, orphans, etc.)
 
 # Pass the pre-compiled graph — do NOT also set edges
