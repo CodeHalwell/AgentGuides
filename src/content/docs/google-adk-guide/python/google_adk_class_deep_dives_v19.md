@@ -1155,10 +1155,10 @@ join = JoinNode(name="join_translations")
 wf = Workflow(
     name="parallel_translate",
     edges=[
-        (START, ["translate_fr", "translate_de"]),  # fan-out
-        ("translate_fr", "join_translations"),
-        ("translate_de", "join_translations"),       # fan-in
-        ("join_translations", summarise),
+        (START, (translate_fr, translate_de)),  # tuple fan-out: NodeLike objects
+        (translate_fr, join),
+        (translate_de, join),                   # fan-in
+        (join, summarise),
     ],
 )
 ```
@@ -1192,10 +1192,10 @@ join = JoinNode(name="join")
 wf = Workflow(
     name="score_aggregator",
     edges=[
-        (START, ["branch_a", "branch_b"]),
-        ("branch_a", "join"),
-        ("branch_b", "join"),
-        ("join", aggregate),
+        (START, (branch_a, branch_b)),  # tuple fan-out: NodeLike objects
+        (branch_a, join),
+        (branch_b, join),
+        (join, aggregate),
     ],
 )
 ```
@@ -1248,11 +1248,11 @@ async def synthesise(ctx, node_input):
 wf = Workflow(
     name="multi_search",
     edges=[
-        (START, ["search_web", "search_wiki", "search_news"]),
-        ("search_web", "join_search"),
-        ("search_wiki", "join_search"),
-        ("search_news", "join_search"),
-        ("join_search", synthesise),
+        (START, (search_web, search_wiki, search_news)),  # tuple fan-out
+        (search_web, join),
+        (search_wiki, join),
+        (search_news, join),
+        (join, synthesise),
     ],
 )
 ```
