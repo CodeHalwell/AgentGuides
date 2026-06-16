@@ -12,7 +12,11 @@ import { Aside } from '@astrojs/starlight/components';
 All examples verified against **pydantic-ai 1.107.0** source installed directly from PyPI. Class signatures, field names, and behaviour match the installed package at this version.
 </Aside>
 
-Ten class groups spanning the complete provider ecosystem and the new `pydantic_graph` builder API: `LiteLLMProvider` (the universal proxy that auto-routes to any backend with correct model profiles); `AzureProvider` (Azure AI Foundry — Express Mode API keys, ADC credentials, and the `api_version` suppression rule for `/v1`-suffix endpoints); `DeepSeekProvider` (the `reasoning_content` wire-field, `send_back_thinking_parts='field'`, per-model `tool_choice=required` restriction); `CerebrasProvider` (ultra-fast inference with `X-Cerebras-3rd-Party-Integration` header, `zai`/`gpt-oss` reasoning models, six disabled settings); `GitHubProvider` (GitHub Models — `provider/model:tag` naming, six provider families, `GITHUB_API_KEY` env var); `FireworksProvider` + `TogetherProvider` + `NebiusProvider` + `SambaNovaProvider` (the OpenAI-compatible community GPU provider quartet — endpoint URLs, `accounts/fireworks/models/` prefix stripping, `SAMBANOVA_BASE_URL` custom endpoint); `GraphBuilder` (`pydantic_graph`'s fluent builder — `step()` / `stream()` decorators, `join()` / `decision()` helpers, `add()` / `add_edge()` / `add_mapping_edge()` wiring, `build()`); `Fork` + `Join` + `ReducerContext` (parallel fan-out with `is_map`, `cancel_sibling_tasks()` for early stopping, `preferred_parent_fork`); `Decision` + `DecisionBranch` + `Edge` + `TypeExpression` (conditional routing — type-based dispatch, custom `matches` predicate, `Edge` labels for Mermaid, `TypeExpression` workaround for complex union types); `Step` + `StepContext` + `StepNode` (step execution primitives — `StepContext.state`/`deps`/`inputs`, `Step.as_node()`, streaming steps).
+Ten class groups spanning the complete provider ecosystem and the new `pydantic_graph` builder API: `LiteLLMProvider` (the universal proxy that auto-routes to any backend with correct model profiles); `AzureProvider` (Azure AI Foundry — Express Mode API keys, ADC credentials, and the `api_version` suppression rule for `/v1`-suffix endpoints); `DeepSeekProvider` (the `reasoning_content` wire-field, `send_back_thinking_parts='field'`, per-model `tool_choice=required` restriction); `CerebrasProvider` (ultra-fast inference with `X-Cerebras-3rd-Party-Integration` header, `zai`/`gpt-oss` reasoning models, six disabled settings); `GitHubProvider` (GitHub Models — `provider/model:tag` naming, six provider families, `GITHUB_API_KEY` env var); `FireworksProvider` + `TogetherProvider` + `NebiusProvider` + `SambaNovaProvider` (the OpenAI-compatible community GPU provider quartet — endpoint URLs, `accounts/fireworks/models/` prefix stripping, `SAMBANOVA_BASE_URL` custom endpoint); `GraphBuilder` (`pydantic_graph`'s fluent builder — `step()` / `stream()` decorators, `join()` / `decision()` helpers, `add()` / `add_edge()` / `add_mapping_edge()` wiring, `build()`); `Fork` + `Join` + `ReducerContext` (parallel fan-out with `is_map`, `cancel_sibling_tasks()` for early stopping, `preferred_parent_fork`); `Decision` + `DecisionBranch` + `Edge` + `TypeExpression` (conditional routing — type-based dispatch with `Literal` types, custom `matches` predicate, `Edge` labels for Mermaid, `TypeExpression` workaround for complex union types); `Step` + `StepContext` + `StepNode` (step execution primitives — `StepContext.state`/`deps`/`inputs`, `Step.as_node()`, streaming steps).
+
+<Aside type="note" title="Provider pattern">
+Providers are **not** passed directly to `Agent`. Pass the provider to the model constructor (e.g. `OpenAIChatModel('name', provider=provider)`) and hand the resulting model object to `Agent`. All examples below follow this pattern.
+</Aside>
 
 ---
 
@@ -22,6 +26,7 @@ Ten class groups spanning the complete provider ecosystem and the new `pydantic_
 **Import:**
 ```python
 from pydantic_ai.providers.litellm import LiteLLMProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 ```
 
 `LiteLLMProvider` is the universal gateway that lets you point a single `OpenAIChatModel` at [LiteLLM Proxy](https://docs.litellm.ai/docs/proxy/quick_start) and route calls to any backend (Anthropic, Gemini, Bedrock, Azure, local Ollama) without changing your agent code. It wraps an `AsyncOpenAI` client pointed at the LiteLLM endpoint and implements `model_profile()` to return the correct schema transformer for whatever backend the model name prefix implies.
@@ -47,20 +52,21 @@ When `openai_client` is `None`, the provider creates an `AsyncOpenAI` client poi
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.providers.litellm import LiteLLMProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = LiteLLMProvider(api_base='http://localhost:4000', api_key='sk-litellm-key')
 
 # Route to Anthropic Claude via LiteLLM — provider sets AnthropicModelProfile automatically
-agent = Agent('openai:anthropic/claude-opus-4-8', model_provider=provider)
+agent = Agent(OpenAIChatModel('anthropic/claude-opus-4-8', provider=provider))
 
 # Route to Google Gemini — GoogleModelProfile applied
-agent_gemini = Agent('openai:google/gemini-2.0-flash', model_provider=provider)
+agent_gemini = Agent(OpenAIChatModel('google/gemini-2.0-flash', provider=provider))
 
 # Route to Bedrock — AmazonModelProfile applied
-agent_bedrock = Agent('openai:bedrock/us.amazon.nova-pro-v1:0', model_provider=provider)
+agent_bedrock = Agent(OpenAIChatModel('bedrock/us.amazon.nova-pro-v1:0', provider=provider))
 
 # Route to local Ollama — falls back to OpenAIModelProfile (no prefix match)
-agent_ollama = Agent('openai:ollama/llama3.2', model_provider=provider)
+agent_ollama = Agent(OpenAIChatModel('ollama/llama3.2', provider=provider))
 ```
 
 The prefix-to-profile mapping:
@@ -88,6 +94,7 @@ import os
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.litellm import LiteLLMProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 # LiteLLM Proxy running locally with master key in config.yaml
 provider = LiteLLMProvider(
@@ -96,8 +103,7 @@ provider = LiteLLMProvider(
 )
 
 agent = Agent(
-    'openai:anthropic/claude-sonnet-4-6',
-    model_provider=provider,
+    OpenAIChatModel('anthropic/claude-sonnet-4-6', provider=provider),
     system_prompt='You are a helpful assistant.',
 )
 
@@ -117,6 +123,7 @@ import httpx
 from openai import AsyncOpenAI
 from pydantic_ai import Agent
 from pydantic_ai.providers.litellm import LiteLLMProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 custom_http = httpx.AsyncClient(
     timeout=httpx.Timeout(60.0),
@@ -129,7 +136,7 @@ openai_client = AsyncOpenAI(
 )
 provider = LiteLLMProvider(openai_client=openai_client)
 
-agent = Agent('openai:mistralai/mistral-large-latest', model_provider=provider)
+agent = Agent(OpenAIChatModel('mistralai/mistral-large-latest', provider=provider))
 ```
 
 ---
@@ -140,6 +147,7 @@ agent = Agent('openai:mistralai/mistral-large-latest', model_provider=provider)
 **Import:**
 ```python
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 ```
 
 `AzureProvider` wraps `AsyncAzureOpenAI` and adds PydanticAI model profiles for non-OpenAI models deployed on Azure (Llama, DeepSeek, Mistral, Cohere, Grok). It supports two authentication paths: API key and Azure AD / Entra ID via `openai_client`.
@@ -163,6 +171,7 @@ AzureProvider(
 import os
 from pydantic_ai import Agent
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = AzureProvider(
     azure_endpoint=os.environ['AZURE_OPENAI_ENDPOINT'],  # e.g. https://<resource>.openai.azure.com/
@@ -170,7 +179,7 @@ provider = AzureProvider(
     api_key=os.environ['AZURE_OPENAI_API_KEY'],
 )
 
-agent = Agent('openai:gpt-4.5', model_provider=provider)
+agent = Agent(OpenAIChatModel('gpt-4.5', provider=provider))
 result = agent.run_sync('List the Azure regions with lowest latency.')
 print(result.output)
 ```
@@ -181,6 +190,7 @@ Azure's GA API (`/openai/v1/`) and Azure AI Foundry serverless model endpoints (
 
 ```python
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 # Azure OpenAI GA API (v1 suffix) — api_version is NOT sent in requests
@@ -189,13 +199,14 @@ provider = AzureProvider(
     api_key='my-azure-key',
     # api_version deliberately omitted; provider suppresses it for /v1 endpoints
 )
-agent = Agent('openai:gpt-4.1', model_provider=provider)
+agent = Agent(OpenAIChatModel('gpt-4.1', provider=provider))
 ```
 
 ### Azure AI Foundry serverless model endpoint
 
 ```python
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 # Serverless endpoint — no api_version, model name is just the deployment
@@ -204,7 +215,7 @@ provider = AzureProvider(
     api_key='my-serverless-key',
 )
 # DeepSeek-V3-0324 on Azure — profile sets reasoning_content field automatically
-agent = Agent('openai:DeepSeek-V3-0324', model_provider=provider)
+agent = Agent(OpenAIChatModel('DeepSeek-V3-0324', provider=provider))
 ```
 
 ### Azure AD / Entra ID authentication
@@ -215,6 +226,7 @@ Pass a pre-built `AsyncAzureOpenAI` client configured with an `azure.identity` c
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
 from openai import AsyncAzureOpenAI
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 token_provider = get_bearer_token_provider(
@@ -227,7 +239,7 @@ client = AsyncAzureOpenAI(
     api_version='2025-04-01-preview',
 )
 provider = AzureProvider(openai_client=client)
-agent = Agent('openai:gpt-4.5-turbo', model_provider=provider)
+agent = Agent(OpenAIChatModel('gpt-4.5-turbo', provider=provider))
 ```
 
 ### Non-OpenAI models and model profiles
@@ -247,6 +259,7 @@ Note: all Azure profiles disable `openai_chat_supports_document_input` since the
 
 ```python
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 provider = AzureProvider(
@@ -255,9 +268,9 @@ provider = AzureProvider(
     api_key='my-key',
 )
 # Llama on Azure — meta_model_profile applied (no JSON schema transformer quirks)
-llama_agent = Agent('openai:Llama-3.1-8B-Instruct', model_provider=provider)
+llama_agent = Agent(OpenAIChatModel('Llama-3.1-8B-Instruct', provider=provider))
 # Mistral on Azure — mistral_model_profile, PromptedOutput workaround enabled
-mistral_agent = Agent('openai:mistral-large-2407', model_provider=provider)
+mistral_agent = Agent(OpenAIChatModel('mistral-large-2407', provider=provider))
 ```
 
 ---
@@ -268,6 +281,7 @@ mistral_agent = Agent('openai:mistral-large-2407', model_provider=provider)
 **Import:**
 ```python
 from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 ```
 
 `DeepSeekProvider` is the provider for the [DeepSeek API](https://api.deepseek.com). Its model profile has three DeepSeek-specific quirks not present in any other provider: the `reasoning_content` wire field for thinking tokens, the `send_back_thinking_parts='field'` flag that tells PydanticAI to echo thinking tokens back on subsequent turns, and a per-model restriction on `tool_choice=required` for reasoning models.
@@ -291,12 +305,12 @@ If neither `api_key` nor `openai_client` is provided the constructor raises `Use
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
-# Reads DEEPSEEK_API_KEY automatically
 provider = DeepSeekProvider(api_key=os.environ['DEEPSEEK_API_KEY'])
 
 # deepseek-chat is the V3 chat model (non-reasoning)
-agent = Agent('openai:deepseek-chat', model_provider=provider)
+agent = Agent(OpenAIChatModel('deepseek-chat', provider=provider))
 
 async def main():
     result = await agent.run('Explain beam search in two sentences.')
@@ -313,6 +327,7 @@ The `deepseek-reasoner` model (DeepSeek-R1) exposes its chain-of-thought in the 
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.messages import ThinkingPart, TextPart
 
 provider = DeepSeekProvider(api_key=os.environ['DEEPSEEK_API_KEY'])
@@ -322,7 +337,7 @@ provider = DeepSeekProvider(api_key=os.environ['DEEPSEEK_API_KEY'])
 #   openai_chat_send_back_thinking_parts='field'
 #   thinking_always_enabled=True
 #   ignore_streamed_leading_whitespace=True
-reasoning_agent = Agent('openai:deepseek-reasoner', model_provider=provider)
+reasoning_agent = Agent(OpenAIChatModel('deepseek-reasoner', provider=provider))
 
 async def main():
     result = await reasoning_agent.run('What is 17 × 23?')
@@ -344,14 +359,14 @@ DeepSeek V4 models (`deepseek-v4-flash`, `deepseek-v4-pro`, etc.) support thinki
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.settings import ModelSettings
 
 provider = DeepSeekProvider(api_key=os.environ['DEEPSEEK_API_KEY'])
 
 # deepseek-v4-flash: supports_thinking=True, thinking_always_enabled=False
 agent = Agent(
-    'openai:deepseek-v4-flash',
-    model_provider=provider,
+    OpenAIChatModel('deepseek-v4-flash', provider=provider),
     model_settings=ModelSettings(reasoning_effort='high'),
 )
 
@@ -368,14 +383,15 @@ Reasoning models (`deepseek-reasoner` and all `deepseek-v4-*` SKUs) do not suppo
 
 ```python
 from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 provider = DeepSeekProvider(api_key='...')
 
-# This will NOT raise an error — tool_choice=required is silently dropped for reasoning models
-agent = Agent('openai:deepseek-reasoner', model_provider=provider)
+# tool_choice=required is silently dropped for reasoning models
+agent = Agent(OpenAIChatModel('deepseek-reasoner', provider=provider))
 # For deepseek-chat (non-reasoning) tool_choice=required IS supported
-chat_agent = Agent('openai:deepseek-chat', model_provider=provider)
+chat_agent = Agent(OpenAIChatModel('deepseek-chat', provider=provider))
 ```
 
 ---
@@ -386,6 +402,7 @@ chat_agent = Agent('openai:deepseek-chat', model_provider=provider)
 **Import:**
 ```python
 from pydantic_ai.providers.cerebras import CerebrasProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 ```
 
 `CerebrasProvider` targets the [Cerebras Cloud API](https://inference.cerebras.ai/), known for extremely low latency on Llama and reasoning models. The provider adds a `X-Cerebras-3rd-Party-Integration: pydantic-ai` header on every request and disables six OpenAI settings that Cerebras does not support.
@@ -407,13 +424,13 @@ CerebrasProvider(
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.cerebras import CerebrasProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = CerebrasProvider(api_key=os.environ['CEREBRAS_API_KEY'])
 
 # Llama 3.3 70B on Cerebras hardware — extremely low latency
 agent = Agent(
-    'openai:llama-3.3-70b',
-    model_provider=provider,
+    OpenAIChatModel('llama-3.3-70b', provider=provider),
     system_prompt='Answer concisely.',
 )
 
@@ -431,14 +448,14 @@ Cerebras does not support: `frequency_penalty`, `logit_bias`, `presence_penalty`
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.providers.cerebras import CerebrasProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.settings import ModelSettings
 
 provider = CerebrasProvider(api_key='...')
 
 # frequency_penalty is silently ignored — Cerebras doesn't support it
 agent = Agent(
-    'openai:llama-3.3-70b',
-    model_provider=provider,
+    OpenAIChatModel('llama-3.3-70b', provider=provider),
     model_settings=ModelSettings(frequency_penalty=0.5),  # dropped at wire level
 )
 ```
@@ -451,14 +468,14 @@ Models prefixed `zai-` or `gpt-oss` on Cerebras support extended thinking. These
 import os
 from pydantic_ai import Agent
 from pydantic_ai.providers.cerebras import CerebrasProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.settings import ModelSettings
 
 provider = CerebrasProvider(api_key=os.environ['CEREBRAS_API_KEY'])
 
 # zai-r1-mini — fast reasoning model on Cerebras
 reasoning_agent = Agent(
-    'openai:zai-r1-mini',
-    model_provider=provider,
+    OpenAIChatModel('zai-r1-mini', provider=provider),
     model_settings=ModelSettings(reasoning_effort='low'),  # supported by zai models
 )
 result = reasoning_agent.run_sync('How many prime numbers are below 100?')
@@ -474,14 +491,14 @@ import os
 from pydantic_ai import Agent
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.providers.cerebras import CerebrasProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 cerebras_provider = CerebrasProvider(api_key=os.environ['CEREBRAS_API_KEY'])
 
 agent = Agent(
     FallbackModel(
-        'openai:llama-3.3-70b',     # tries Cerebras first (low latency)
-        'openai:gpt-4.1',           # falls back to OpenAI on errors
-        model_providers={'openai:llama-3.3-70b': cerebras_provider},
+        OpenAIChatModel('llama-3.3-70b', provider=cerebras_provider),  # tries Cerebras first
+        OpenAIChatModel('gpt-4.1'),  # falls back to OpenAI on errors
     ),
     system_prompt='You are a coding assistant.',
 )
@@ -495,6 +512,7 @@ agent = Agent(
 **Import:**
 ```python
 from pydantic_ai.providers.github import GitHubProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 ```
 
 `GitHubProvider` connects to [GitHub Models](https://docs.github.com/en/github-models) at `https://models.github.ai/inference`. GitHub Models provides free-tier access to dozens of models from multiple vendors. Model names follow the `provider/model:tag` convention (e.g. `meta/llama-3.3-70b-instruct:latest`).
@@ -516,11 +534,12 @@ GitHubProvider(
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.github import GitHubProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 # GITHUB_API_KEY should be a GitHub Personal Access Token with models:read scope
 provider = GitHubProvider(api_key=os.environ['GITHUB_API_KEY'])
 
-agent = Agent('openai:gpt-4o', model_provider=provider)
+agent = Agent(OpenAIChatModel('gpt-4o', provider=provider))
 
 async def main():
     result = await agent.run('Explain the difference between asyncio and threading.')
@@ -536,24 +555,25 @@ GitHub Models uses `provider/model` or `provider/model:tag` names. The provider 
 ```python
 import os
 from pydantic_ai.providers.github import GitHubProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 provider = GitHubProvider(api_key=os.environ['GITHUB_API_KEY'])
 
 # Meta Llama — meta_model_profile applied
-llama = Agent('openai:meta/llama-3.3-70b-instruct:latest', model_provider=provider)
+llama = Agent(OpenAIChatModel('meta/llama-3.3-70b-instruct:latest', provider=provider))
 
 # xAI Grok — grok_model_profile applied
-grok = Agent('openai:xai/grok-2', model_provider=provider)
+grok = Agent(OpenAIChatModel('xai/grok-2', provider=provider))
 
 # Mistral — mistral_model_profile applied
-mistral = Agent('openai:mistral-ai/mistral-large-24.11', model_provider=provider)
+mistral = Agent(OpenAIChatModel('mistral-ai/mistral-large-24.11', provider=provider))
 
 # DeepSeek — deepseek_model_profile applied (reasoning_content field etc.)
-deepseek = Agent('openai:deepseek/deepseek-r1', model_provider=provider)
+deepseek = Agent(OpenAIChatModel('deepseek/deepseek-r1', provider=provider))
 
 # OpenAI models (no prefix) — openai_model_profile
-gpt41 = Agent('openai:gpt-4.1', model_provider=provider)
+gpt41 = Agent(OpenAIChatModel('gpt-4.1', provider=provider))
 ```
 
 Provider prefix → profile mapping:
@@ -573,6 +593,7 @@ Provider prefix → profile mapping:
 ```python
 import os, asyncio
 from pydantic_ai.providers.github import GitHubProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import Agent
 
 provider = GitHubProvider(api_key=os.environ['GITHUB_API_KEY'])
@@ -586,7 +607,7 @@ question = 'What is the time complexity of quicksort?'
 
 async def main():
     for model_name in models:
-        agent = Agent(f'openai:{model_name}', model_provider=provider)
+        agent = Agent(OpenAIChatModel(model_name, provider=provider))
         result = await agent.run(question)
         print(f'--- {model_name} ---')
         print(result.output[:200])
@@ -598,7 +619,7 @@ asyncio.run(main())
 
 ## 6. `FireworksProvider` + `TogetherProvider` + `NebiusProvider` + `SambaNovaProvider` — OpenAI-Compatible GPU Providers
 
-Four community GPU providers share the same `Provider[AsyncOpenAI]` pattern but differ in their endpoint URLs, model naming conventions, and supported model families.
+Four community GPU providers share the same `Provider[AsyncOpenAI]` pattern but differ in their endpoint URLs, model naming conventions, and supported model families. All are used by passing the provider to `OpenAIChatModel`.
 
 ### `FireworksProvider` — Fireworks AI
 
@@ -610,18 +631,17 @@ Models on Fireworks use an `accounts/fireworks/models/<model-name>` path. The pr
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.fireworks import FireworksProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = FireworksProvider(api_key=os.environ['FIREWORKS_API_KEY'])
 
 # Full model path required — prefix stripped before profile lookup
 agent = Agent(
-    'openai:accounts/fireworks/models/llama-v3p3-70b-instruct',
-    model_provider=provider,
+    OpenAIChatModel('accounts/fireworks/models/llama-v3p3-70b-instruct', provider=provider)
 )
 # Qwen model — qwen_model_profile applied automatically
 qwen_agent = Agent(
-    'openai:accounts/fireworks/models/qwen2p5-72b-instruct',
-    model_provider=provider,
+    OpenAIChatModel('accounts/fireworks/models/qwen2p5-72b-instruct', provider=provider)
 )
 
 async def main():
@@ -645,18 +665,17 @@ Together AI uses `org/model` naming (e.g. `meta-llama/Llama-3-8b-hf`):
 import os, asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.together import TogetherProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = TogetherProvider(api_key=os.environ['TOGETHER_API_KEY'])
 
 # meta-llama prefix → meta_model_profile
 agent = Agent(
-    'openai:meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    model_provider=provider,
+    OpenAIChatModel('meta-llama/Llama-3.3-70B-Instruct-Turbo', provider=provider)
 )
 # DeepSeek on Together
 deepseek_agent = Agent(
-    'openai:deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
-    model_provider=provider,
+    OpenAIChatModel('deepseek-ai/DeepSeek-R1-Distill-Llama-70B', provider=provider)
 )
 
 async def main():
@@ -679,24 +698,16 @@ Nebius also uses `org/model` naming. Unlike Fireworks, models without a `/` sepa
 import os
 from pydantic_ai import Agent
 from pydantic_ai.providers.nebius import NebiusProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = NebiusProvider(api_key=os.environ['NEBIUS_API_KEY'])
 
 # Qwen on Nebius
-agent = Agent(
-    'openai:Qwen/Qwen3-30B-A3B',
-    model_provider=provider,
-)
+agent = Agent(OpenAIChatModel('Qwen/Qwen3-30B-A3B', provider=provider))
 # DeepSeek on Nebius — deepseek_model_profile (reasoning_content etc.)
-deepseek_agent = Agent(
-    'openai:deepseek-ai/DeepSeek-R1',
-    model_provider=provider,
-)
+deepseek_agent = Agent(OpenAIChatModel('deepseek-ai/DeepSeek-R1', provider=provider))
 # OpenAI-compatible gpt-oss models (Harmony format)
-gpt_oss_agent = Agent(
-    'openai:openai/gpt-oss-mini',
-    model_provider=provider,
-)
+gpt_oss_agent = Agent(OpenAIChatModel('openai/gpt-oss-mini', provider=provider))
 ```
 
 **Endpoint:** `https://api.studio.nebius.com/v1`  
@@ -712,6 +723,7 @@ SambaNova is unique in supporting a `SAMBANOVA_BASE_URL` env var for on-prem dep
 import os
 from pydantic_ai import Agent
 from pydantic_ai.providers.sambanova import SambaNovaProvider
+from pydantic_ai.models.openai import OpenAIChatModel
 
 # Cloud endpoint (default: https://api.sambanova.ai/v1)
 provider = SambaNovaProvider(api_key=os.environ['SAMBANOVA_API_KEY'])
@@ -723,14 +735,8 @@ on_prem_provider = SambaNovaProvider(
 )
 # Also readable from env: SAMBANOVA_BASE_URL
 
-agent = Agent(
-    'openai:Meta-Llama-3.3-70B-Instruct',
-    model_provider=provider,
-)
-qwen_agent = Agent(
-    'openai:Qwen2.5-72B-Instruct',
-    model_provider=provider,
-)
+agent = Agent(OpenAIChatModel('Meta-Llama-3.3-70B-Instruct', provider=provider))
+qwen_agent = Agent(OpenAIChatModel('Qwen2.5-72B-Instruct', provider=provider))
 ```
 
 **Endpoint:** `https://api.sambanova.ai/v1` (or `SAMBANOVA_BASE_URL`)  
@@ -1074,9 +1080,14 @@ outer_join = builder.join(reducer, initial=0, preferred_parent_fork='farthest')
 **Import:**
 ```python
 from pydantic_graph import Decision, Edge, TypeExpression
+from typing import Literal
 ```
 
-`Decision` is the conditional branching node in `pydantic_graph`. It inspects the output type (or runs a custom predicate) to route execution to different downstream steps. `Edge` annotates graph edges with labels for Mermaid diagram generation. `TypeExpression` is a workaround for Python type-checker limitations when using complex union types in generic parameters.
+`Decision` is the conditional branching node in `pydantic_graph`. It inspects the **type** of the output (using `isinstance` or `Literal` matching) to route execution to different downstream steps. The `source` argument to `builder.match()` must be a type or `Literal` — not a raw value. `Edge` annotates graph edges with labels for Mermaid diagram generation. `TypeExpression` is a workaround for Python type-checker limitations when using complex union types in generic parameters.
+
+<Aside type="note" title="match() requires types, not values">
+`builder.match(Literal['urgent'])` works — `Literal` is a type. `builder.match('urgent')` does **not** work — a raw string is a value, not a type, and causes a `TypeError` at runtime when the runner tries `isinstance(value, 'urgent')`. Always use `Literal[...]` to match specific string/int values.
+</Aside>
 
 ### `Decision` + `DecisionBranch`
 
@@ -1085,6 +1096,7 @@ Decisions are built through `GraphBuilder.decision()` and the `.match()` / `.mat
 ```python
 import asyncio
 from dataclasses import dataclass
+from typing import Literal
 from pydantic_graph import GraphBuilder
 
 @dataclass
@@ -1094,7 +1106,7 @@ class State:
 builder = GraphBuilder(state_type=State, input_type=str, output_type=str)
 
 @builder.step
-async def classify(ctx) -> str:
+async def classify(ctx) -> Literal['urgent', 'billing', 'general']:
     if 'urgent' in ctx.inputs.lower():
         return 'urgent'
     elif 'billing' in ctx.inputs.lower():
@@ -1114,12 +1126,12 @@ async def handle_billing(ctx):
 async def handle_general(ctx):
     return f'GENERAL: {ctx.inputs}'
 
-# Create a decision node that branches on the string value
+# Use Literal types — not raw strings — for value-based routing
 ticket_router = (
     builder.decision(note='Route ticket by category')
-    .branch(builder.match('urgent').to(handle_urgent))
-    .branch(builder.match('billing').to(handle_billing))
-    .branch(builder.match('general').to(handle_general))
+    .branch(builder.match(Literal['urgent']).to(handle_urgent))
+    .branch(builder.match(Literal['billing']).to(handle_billing))
+    .branch(builder.match(Literal['general']).to(handle_general))
 )
 
 builder.add(builder.edge_from(builder.start_node).to(classify))
@@ -1139,12 +1151,13 @@ asyncio.run(main())
 
 ### Custom `matches` predicate
 
-When simple type-matching is not enough, supply a callable:
+When you need logic beyond `isinstance`/`Literal` dispatch, supply a `matches` callable. The `source` is still a type (for exhaustiveness checking), but the runtime decision uses your predicate:
 
 ```python
 import re
+from typing import Literal
 
-# Route based on a regex pattern, not a type
+# Route based on a regex pattern
 spam_decision = (
     builder.decision(note='Spam filter')
     .branch(
@@ -1188,6 +1201,7 @@ async def process_success(ctx):
 async def log_error(ctx):
     return f'Error logged: {ctx.inputs.message}'
 
+# SuccessResult and ErrorResult are concrete types — isinstance dispatch works correctly
 result_router = (
     builder.decision()
     .branch(builder.match(SuccessResult).to(process_success))
@@ -1216,9 +1230,10 @@ async def evaluate(ctx) -> Annotated[str, Edge(label='result')] | Annotated[None
         return 'processed'
     return None
 
-# Edge labels appear in graph.mermaid_code() output
+# Edge labels appear in rendered Mermaid output
+# Builder-based Graph uses render() or str(graph) — NOT mermaid_code() (legacy API)
 graph = builder.build()
-print(graph.mermaid_code())
+print(graph.render())   # or: str(graph)
 ```
 
 ### `TypeExpression` — complex union types in generic positions
@@ -1226,7 +1241,7 @@ print(graph.mermaid_code())
 Python's type checker sometimes rejects complex type expressions (like `Union[str, int]`) in positions that expect `type[T]`. `TypeExpression[T]` is a workaround:
 
 ```python
-from typing import Union
+from typing import Union, Literal, Any
 from pydantic_graph import GraphBuilder, TypeExpression
 
 # Without TypeExpression — may cause type checker error:
@@ -1236,7 +1251,6 @@ from pydantic_graph import GraphBuilder, TypeExpression
 builder = GraphBuilder(output_type=TypeExpression[Union[str, int]])
 
 # Similarly for Literal types, Any, or complex generics:
-from typing import Literal, Any
 builder2 = GraphBuilder(input_type=TypeExpression[Literal['start', 'resume']])
 builder3 = GraphBuilder(state_type=TypeExpression[Any])
 ```
@@ -1329,29 +1343,32 @@ print(transform.id)     # NodeID('transform')
 print(transform.label)  # 'Transform Data'
 ```
 
-### `Step.as_node()` — bind inputs for dynamic graph entry
+### `Step.as_node()` — produce a `StepNode` for legacy bridge usage
 
-`as_node()` binds an `InputT` value to the step and returns a `StepNode` — the bridge between the new `GraphBuilder`-based API and the `BaseNode`-based runner. This is how a step in a builder graph returns a "jump" to another step:
+`as_node(inputs=None)` binds an optional `InputT` value to the step and returns a `StepNode`. Its primary purpose is to produce a v1-compatible `BaseNode` subclass so that a builder-defined step can be passed to a legacy `BaseNode`-based graph runner, or used as the explicit entry point when calling `graph.run(step.as_node(initial_value))`.
 
 ```python
+import asyncio
 from pydantic_graph import GraphBuilder
 
-builder = GraphBuilder()
+builder = GraphBuilder(input_type=int, output_type=int)
 
 @builder.step
-async def step_a(ctx):
-    if ctx.inputs > 10:
-        # Jump to step_b with a different value — using as_node()
-        return step_b.as_node(ctx.inputs - 10)
-    return ctx.inputs
-
-@builder.step
-async def step_b(ctx):
+async def process(ctx):
     return ctx.inputs * 2
 
-builder.add_edge(builder.start_node, step_a)
-builder.add_edge(step_b, builder.end_node)
+builder.add_edge(builder.start_node, process)
+builder.add_edge(process, builder.end_node)
+graph = builder.build()
+
+# as_node() is used to pass an explicit entry step with pre-bound inputs
+result = asyncio.run(graph.run(process.as_node(21)))
+print(result)  # 42
 ```
+
+<Aside type="caution">
+`Step.as_node()` is **not** a "dynamic jump" mechanism inside a builder step body. Returning a `StepNode` from within `@builder.step` is treated as regular data, not as a routing instruction. To branch dynamically, wire edges through a `builder.decision()` node instead.
+</Aside>
 
 ### `StepNode` — bridge from BaseNode to Step
 
