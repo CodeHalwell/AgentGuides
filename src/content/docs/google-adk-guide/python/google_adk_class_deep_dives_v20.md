@@ -577,11 +577,8 @@ These three `@experimental(FeatureName.TOOL_CONFIG)` Pydantic models form the YA
 ### Class signatures (source-verified)
 
 ```python
-from google.adk.tools.tool_configs import (
-    BaseToolConfig,   # base class; extra="forbid"
-    ToolArgsConfig,   # holds free key-value pairs; extra="allow"
-    ToolConfig,       # name + optional args
-)
+# Source excerpt — actual classes live in google.adk.tools.tool_configs
+from pydantic import BaseModel, ConfigDict
 
 class BaseToolConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
