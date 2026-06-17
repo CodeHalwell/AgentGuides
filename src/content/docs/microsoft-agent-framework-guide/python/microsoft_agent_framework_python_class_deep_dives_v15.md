@@ -279,16 +279,20 @@ client = AGUIChatClient(
 agent = Agent(client=client, name="Analyst")
 ```
 
-**Example 3 — attach retrying middleware to the AG-UI client:**
+**Example 3 — resilient client using httpx retry transport:**
 
 ```python
+import httpx
 from agent_framework import Agent
 from agent_framework.ag_ui import AGUIChatClient
-from agent_framework._middleware import RetryMiddleware  # if available in your install
+
+# httpx.HTTPTransport handles automatic retries at the HTTP layer
+transport = httpx.HTTPTransport(retries=3)
+http_client = httpx.AsyncClient(transport=transport, timeout=120.0)
 
 client = AGUIChatClient(
     endpoint="http://flaky-agent.example.com/",
-    middleware=[RetryMiddleware(max_retries=3)],
+    http_client=http_client,
 )
 agent = Agent(client=client, name="Resilient")
 ```
@@ -368,7 +372,7 @@ agent = Agent(client=OpenAIChatClient(), name="TodoBot", tools=[add_todo])
 wrapped = AgentFrameworkAgent(
     agent,
     state_schema=TodoState,
-    predict_state_config={"items": {"tool": "add_todo", "tool_argument": "item"}},
+    predict_state_config={"items": {"tool": "add_todo", "tool_argument": "task"}},
     require_confirmation=False,
 )
 ```
@@ -500,7 +504,7 @@ async def fetch_chart_data(symbol: str):
     )
 ```
 
-**Example 3 — state-only update with empty text:**
+**Example 3 — state update without a separate `tool_result` display payload:**
 
 ```python
 from agent_framework import tool
@@ -511,6 +515,7 @@ async def set_user_preference(theme: str, language: str):
     """Save user preferences without modifying the conversation."""
     return state_update(
         text="Preferences saved.",
+        # No tool_result — the state merge is the sole side-effect
         state={"preferences": {"theme": theme, "language": language}},
     )
 ```
