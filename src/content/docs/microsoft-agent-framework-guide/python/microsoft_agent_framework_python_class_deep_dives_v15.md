@@ -990,14 +990,15 @@ GAIATelemetryConfig(
 )
 ```
 
-Provides OpenTelemetry configuration for the benchmark run. Call `.setup_observability()`
-before `GAIA.run()` to activate tracing.
+Provides OpenTelemetry configuration for the benchmark run. Pass an instance to
+`GAIA(telemetry_config=config)` to activate tracing — there is no separate
+`.setup_observability()` call.
 
 ### `TaskRunner` protocol
 
 ```python
 class TaskRunner(Protocol):
-    async def run(self, task: Task) -> Prediction:
+    async def __call__(self, task: Task) -> Prediction:
         ...
 ```
 
