@@ -988,7 +988,7 @@ asyncio.run(main())
 import asyncio
 from pathlib import Path
 from dataclasses import dataclass
-from pydantic_graph import Graph, BaseNode, End
+from pydantic_graph import Graph, BaseNode, End, GraphRuntimeError
 from pydantic_graph.persistence.file import FileStatePersistence
 
 @dataclass
@@ -1006,19 +1006,20 @@ class ProcessItem(BaseNode[WorkState, None, str]):
 graph = Graph(nodes=[ProcessItem])
 
 async def resume_or_start(run_id: str) -> str:
-    json_file = Path(f'{run_id}.json')
-    persistence = FileStatePersistence(json_file)
+    persistence = FileStatePersistence(Path(f'{run_id}.json'))
 
-    if json_file.exists():
-        # Restore the pending node and state from the saved file; iter_from_persistence
-        # calls persistence.set_graph_types() and load_next() internally.
-        print('Resuming from saved state...')
+    try:
+        # iter_from_persistence calls load_next() internally; raises
+        # GraphRuntimeError when no 'created' snapshot exists — which covers
+        # both a brand-new run and a run whose file already contains only
+        # completed snapshots.
+        print('Attempting to resume...')
         async with graph.iter_from_persistence(persistence) as run:
             async for _ in run:
                 pass
         return run.result.output
-    else:
-        print('Starting fresh run')
+    except GraphRuntimeError:
+        print('No pending snapshot — starting fresh run')
         run_result = await graph.run(ProcessItem(), state=WorkState(), persistence=persistence)
         return run_result.output
 
@@ -1182,7 +1183,9 @@ async def main():
 asyncio.run(main())
 ```
 
-### `deep_copy=False` for performance on immutable state
+### `deep_copy=False` for performance
+
+`deep_copy=True` (default) deep-copies the state object before recording each snapshot so that later in-place mutations don't retroactively alter historical records. Set `deep_copy=False` to skip that copy when you know you won't read snapshot state values after the run.
 
 ```python
 import asyncio
@@ -1190,24 +1193,27 @@ from dataclasses import dataclass
 from pydantic_graph import Graph, BaseNode, End
 from pydantic_graph.persistence.in_mem import FullStatePersistence
 
-@dataclass(frozen=True)
-class ImmutableState:
-    n: int
+@dataclass
+class CountState:
+    n: int = 0
 
 @dataclass
-class Node(BaseNode[ImmutableState, None, int]):
+class Node(BaseNode[CountState, None, int]):
     async def run(self, ctx) -> 'Node | End[int]':
-        new_state = ImmutableState(n=ctx.state.n + 1)
-        ctx.state = new_state  # replace with new frozen instance
+        ctx.state.n += 1
         return End(ctx.state.n) if ctx.state.n >= 3 else Node()
 
 graph = Graph(nodes=[Node])
 
 async def main():
-    # deep_copy=False: safe when state is frozen/immutable
+    # deep_copy=False avoids the per-snapshot deep copy.  All NodeSnapshot.state
+    # entries then share the same object, so they all reflect the final state value.
     persistence = FullStatePersistence(deep_copy=False)
-    run_result = await graph.run(Node(), state=ImmutableState(n=0), persistence=persistence)
+    run_result = await graph.run(Node(), state=CountState(), persistence=persistence)
     print(run_result.output)   # 3
+
+    node_snaps = [s for s in persistence.history if hasattr(s, 'node')]
+    print([s.state.n for s in node_snaps])   # [3, 3, 3] — all share the final state
 
 asyncio.run(main())
 ```
