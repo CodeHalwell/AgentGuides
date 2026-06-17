@@ -413,7 +413,7 @@ def format_output(node_input, ctx):
     )
 
 wf = Workflow(
-    name="sentiment-pipeline",
+    name="sentiment_pipeline",
     edges=[("START", sentiment_node, format_output)],
 )
 
@@ -462,7 +462,6 @@ entity_agent = LlmAgent(
         "Call finish_task with the structured result."
     ),
     output_schema=ExtractedEntities,
-    output_key="entities",
 )
 
 # Workflow._validate_no_task_mode_graph_nodes() rejects LlmAgent(mode="task")
@@ -474,7 +473,9 @@ async def entity_node(node_input, ctx):
 
 @node
 def summarise(node_input, ctx):
-    entities = ctx.session.state.get("entities", {})
+    # node_input carries the finish_task args dict from the task-mode agent.
+    # task-mode does not write output_key to session state — use node_input instead.
+    entities = node_input or {}
     summary = (
         f"Found {len(entities.get('people', []))} people, "
         f"{len(entities.get('organisations', []))} orgs, "
@@ -482,7 +483,7 @@ def summarise(node_input, ctx):
     )
     ctx.actions.state_delta["summary"] = summary
 
-wf = Workflow(name="ner-pipeline", edges=[("START", entity_node, summarise)])
+wf = Workflow(name="ner_pipeline", edges=[("START", entity_node, summarise)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
@@ -514,7 +515,7 @@ from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow
-from google.adk.tools.agent_tool import AgentTool
+
 research_agent = LlmAgent(
     name="researcher",
     model="gemini-2.5-flash",
@@ -534,6 +535,9 @@ writer_agent = LlmAgent(
 
 # The coordinator uses mode="chat" so it can delegate to sub-agents
 # across multiple LLM rounds without closing the event loop.
+# sub_agents with mode="task" → model_post_init() creates _TaskAgentTool for each,
+# which is what _extract_task_delegation_fcs() checks for. Using AgentTool in
+# tools=[] bypasses this check and task delegation never fires.
 coordinator = LlmAgent(
     name="coordinator",
     model="gemini-2.5-pro",
@@ -544,14 +548,10 @@ coordinator = LlmAgent(
         "Then pass the result to the writer sub-agent to produce the article. "
         "Finally, summarise what was accomplished."
     ),
-    tools=[
-        # AgentTool wires sub-agents as task-delegation tools
-        AgentTool(agent=research_agent),
-        AgentTool(agent=writer_agent),
-    ],
+    sub_agents=[research_agent, writer_agent],
 )
 
-wf = Workflow(name="research-write", edges=[("START", coordinator)])
+wf = Workflow(name="research_write", edges=[("START", coordinator)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
@@ -787,7 +787,7 @@ def process_if_approved(node_input, ctx: Context):
     ctx.actions.state_delta["status"] = "approved"
     ctx.actions.state_delta["comment"] = node_input.get("comment", "")
 
-wf = Workflow(name="approval-wf", edges=[("START", approval_gate, process_if_approved)])
+wf = Workflow(name="approval_wf", edges=[("START", approval_gate, process_if_approved)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
