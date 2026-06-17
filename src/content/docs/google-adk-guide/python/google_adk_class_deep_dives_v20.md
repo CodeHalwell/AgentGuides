@@ -1109,8 +1109,10 @@ async def stream_task(runner, user_id, session_id, message):
     async for adk_event in runner.run_async(
         user_id=user_id, session_id=session_id, new_message=message
     ):
-        # Every ADK event becomes an A2A status update so the aggregator
-        # observes all state transitions, not only the final response.
+        # Map each ADK event to a simple A2A state: completed for the final
+        # response, working for everything else. This example does not map ADK
+        # interrupt events (auth/input_required) — those would need separate
+        # handling before calling process_event with the matching TaskState.
         state = TaskState.completed if adk_event.is_final_response() else TaskState.working
         a2a_event = TaskStatusUpdateEvent(
             id="task-1",
