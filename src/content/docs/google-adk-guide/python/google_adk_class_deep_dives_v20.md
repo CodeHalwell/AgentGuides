@@ -651,8 +651,11 @@ from google.adk.tools.function_tool import FunctionTool
 
 def build_http_tool(args: ToolArgsConfig) -> BaseTool:
     """Factory function loadable via ToolConfig pattern 4."""
-    base_url = getattr(args, "base_url", "https://api.example.com")
-    timeout = getattr(args, "timeout", 10)
+    # ToolArgsConfig uses extra="allow"; in Pydantic v2 extra fields are stored
+    # in model_extra, not as regular attributes — use model_extra.get() to access them.
+    extras = args.model_extra or {}
+    base_url = extras.get("base_url", "https://api.example.com")
+    timeout = extras.get("timeout", 10)
 
     async def call_api(endpoint: str, method: str = "GET") -> dict:
         """Call the configured API endpoint."""
@@ -979,6 +982,8 @@ asyncio.run(demo())
 
 **Source:** `google.adk.a2a.executor.task_result_aggregator`
 
+> **Install note:** The examples in this section import from the `a2a` package (the A2A Python SDK), which is a separate PyPI package required for A2A features. Install it with `pip install a2a-sdk` alongside `google-adk`. The `a2a` types (`TaskState`, `TaskStatusUpdateEvent`, etc.) are defined there — not in `google.adk.a2a`.
+
 `TaskResultAggregator` is used inside `A2aAgentExecutorImpl` to accumulate `TaskStatusUpdateEvent`s from the ADK runner and emit the correct final A2A task state. The challenge: ADK runners emit `working` events during execution, but intermediate state transitions (e.g. to `auth_required`) must not prematurely terminate the event stream for the A2A client. The aggregator solves this by recording the true state internally while re-writing intermediate events to `working`.
 
 ### State priority (source-verified)
@@ -1107,8 +1112,8 @@ print(aggregator.task_state)  # TaskState.failed — cannot be overridden
 
 ```python
 def _should_retry_node(exception, retry_config, node_state) -> bool:
-    if not retry_config:              return False
-    if attempt_count >= max_attempts: return False  # max_attempts default: 5
+    if not retry_config:                                          return False
+    if node_state.attempt_count >= retry_config.max_attempts:    return False  # max_attempts default: 5
     if retry_config.exceptions is not None:
         if type(exception).__name__ not in retry_config.exceptions:
             return False
