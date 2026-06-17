@@ -427,7 +427,6 @@ add_agent_framework_fastapi_endpoint(app, wrapped_wf, path="/pipeline")
 **Example 2 — factory pattern for isolated per-session workflows:**
 
 ```python
-from agent_framework.declarative import WorkflowFactory
 from agent_framework.ag_ui import AgentFrameworkWorkflow
 
 def build_workflow(thread_id: str):
@@ -827,6 +826,8 @@ server = DevServer(auth_enabled=False)
 app = server.create_app()  # build the FastAPI app
 
 # Add agents later (e.g. after loading config)
+agent_a = ...  # Agent instances added after config load
+agent_b = ...
 server.set_pending_entities([agent_a, agent_b])
 uvicorn.run(app, port=8080)
 ```
@@ -1441,7 +1442,7 @@ durable_worker.start()
 
 ```python
 from agent_framework.azure import DurableAIAgentWorker, AgentCallbackContext, AgentResponseCallbackProtocol
-from agent_framework._types import AgentResponse, AgentResponseUpdate
+from agent_framework import AgentResponse, AgentResponseUpdate
 
 class ServiceBusCallback(AgentResponseCallbackProtocol):
     async def on_agent_response(self, response: AgentResponse, ctx: AgentCallbackContext):
@@ -1700,7 +1701,7 @@ import azure.functions as func
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework.azure import AgentFunctionApp, AgentResponseCallbackProtocol, AgentCallbackContext
-from agent_framework._types import AgentResponse, AgentResponseUpdate
+from agent_framework import AgentResponse, AgentResponseUpdate
 import logging
 
 class LoggingCallback(AgentResponseCallbackProtocol):
