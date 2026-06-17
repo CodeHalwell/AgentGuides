@@ -1053,7 +1053,10 @@ async def main():
     await graph.run(Step(), state=SimpleState(), persistence=p)
     data = json.loads(p.json_file.read_bytes())
     for snap in data:
-        print(snap['status'], snap.get('node', {}).get('__class__', 'EndSnapshot'))
+        if snap.get('kind') == 'node':
+            print(snap['status'], snap.get('node', {}).get('__class__', '?'))
+        else:   # EndSnapshot: no 'status' field
+            print('end', snap.get('result'))
 
 asyncio.run(main())
 ```
@@ -1121,6 +1124,7 @@ import asyncio
 from dataclasses import dataclass
 from pydantic_graph import Graph, BaseNode, End
 from pydantic_graph.persistence.in_mem import FullStatePersistence
+from pydantic_graph.persistence import NodeSnapshot
 
 @dataclass
 class CountState:
@@ -1141,7 +1145,10 @@ async def main():
     print(f'Result: {run_result.output}')   # 3
     print(f'Snapshots taken: {len(persistence.history)}')
     for snap in persistence.history:
-        print(type(snap).__name__, snap.status, snap.state.n)
+        if isinstance(snap, NodeSnapshot):
+            print(type(snap).__name__, snap.status, snap.state.n)
+        else:   # EndSnapshot has no 'status' field
+            print(type(snap).__name__, snap.state.n)
 
 asyncio.run(main())
 ```
