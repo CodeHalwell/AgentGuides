@@ -582,7 +582,7 @@ All nine fields carry the `google_` prefix so they merge cleanly with other mode
 
 ### `google_cached_content` caveat
 
-When `google_cached_content` is set, **the model strips `system_instruction`, `tools`, and `tool_config` from the outgoing request** — both the Gemini API and Vertex AI reject requests that include those fields alongside a cached-content reference. Any tools registered on the agent and any system prompt are silently dropped; a `UserWarning` is emitted when stripping actually removes a field.
+When `google_cached_content` is set, **the model strips `system_instruction`, `tools`, and `tool_config` from the outgoing request** — both the Gemini API and Vertex AI reject requests that include those fields alongside a cached-content reference. Any tools registered on the agent and any system prompt are dropped from the request; a `UserWarning` is emitted whenever stripping actually removes a field.
 
 ```python
 import asyncio
