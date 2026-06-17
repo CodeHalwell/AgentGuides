@@ -287,7 +287,7 @@ from agent_framework import Agent
 from agent_framework.ag_ui import AGUIChatClient
 
 # httpx.HTTPTransport handles automatic retries at the HTTP layer
-transport = httpx.HTTPTransport(retries=3)
+transport = httpx.AsyncHTTPTransport(retries=3)
 http_client = httpx.AsyncClient(transport=transport, timeout=120.0)
 
 client = AGUIChatClient(
@@ -665,7 +665,7 @@ from agent_framework import Content
 class MentionAwareConverter(ThreadItemConverter):
     def tag_to_message_content(self, tag) -> Content:
         # Convert @mention to a plain-text hint instead of default behaviour
-        return Content(text=f"[mentioned: @{tag.display_name}]")
+        return Content.from_text(f"[mentioned: @{tag.display_name}]")
 
 converter = MentionAwareConverter()
 messages = await converter.to_agent_input(thread_items)
@@ -1015,7 +1015,7 @@ class MyTaskRunner:
     def __init__(self, agent: Agent):
         self.agent = agent
 
-    async def run(self, task: Task) -> Prediction:
+    async def __call__(self, task: Task) -> Prediction:
         response = await self.agent.run(task.question)
         return Prediction(prediction=response.text, messages=response.messages)
 
@@ -1038,7 +1038,6 @@ config = GAIATelemetryConfig(
     enable_tracing=True,
     applicationinsights_connection_string="InstrumentationKey=...",
 )
-config.setup_observability()
 
 gaia = GAIA(hf_token="hf_xxxxx", telemetry_config=config)
 results = await gaia.run(runner, level=[1, 2], parallel=4)
@@ -1059,9 +1058,9 @@ for level in [1, 2, 3]:
         score = sum(r.evaluation.score for r in lvl_results) / len(lvl_results)
         print(f"Level {level}: avg score = {score:.3f}")
 
-# results.json contains serialised TaskResult list
+# results.json is JSONL — one JSON object per line
 with open("results.json") as f:
-    saved = json.load(f)
+    saved = [json.loads(line) for line in f if line.strip()]
 print(f"Saved {len(saved)} results")
 ```
 
@@ -1461,12 +1460,12 @@ import signal
 
 durable_worker = DurableAIAgentWorker(worker)
 durable_worker.add_agent(agent)
-durable_worker.start()
 
 def shutdown(sig, frame):
     durable_worker.stop()
 
 signal.signal(signal.SIGTERM, shutdown)
+durable_worker.start()  # blocks until stopped
 signal.signal(signal.SIGINT, shutdown)
 ```
 
