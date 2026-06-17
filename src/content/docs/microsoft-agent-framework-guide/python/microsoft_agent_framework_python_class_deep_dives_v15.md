@@ -662,13 +662,26 @@ response = await agent.run(messages)
 **Example 3 — override how @-mention tags are converted:**
 
 ```python
+from chatkit.types import UserMessageTextContent, UserMessageTagContent
 from agent_framework.chatkit import ThreadItemConverter
-from agent_framework import Content
+from agent_framework import Message
 
 class MentionAwareConverter(ThreadItemConverter):
-    def tag_to_message_content(self, tag) -> Content:
-        # Convert @mention to a plain-text hint instead of default behaviour
-        return Content.from_text(f"[mentioned: @{tag.display_name}]")
+    async def user_message_to_input(self, item, is_last_message=True):
+        # In 1.8.1, tag_to_message_content is NOT called by the base class;
+        # override user_message_to_input to handle both text and @-mention parts.
+        parts = []
+        if item.content:
+            for part in item.content:
+                if isinstance(part, UserMessageTextContent):
+                    parts.append(part.text)
+                elif isinstance(part, UserMessageTagContent):
+                    name = getattr(part.data, "name", getattr(part, "text", "unknown"))
+                    parts.append(f"[mentioned: @{name}]")
+        text = "".join(parts).strip()
+        if not text:
+            return None
+        return Message(role="user", contents=[text])
 
 converter = MentionAwareConverter()
 messages = await converter.to_agent_input(thread_items)
