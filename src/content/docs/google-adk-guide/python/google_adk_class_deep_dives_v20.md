@@ -734,6 +734,8 @@ RequestInput(
 
 **camelCase aliases** — all fields have camelCase aliases via `alias_generator=alias_generators.to_camel` with `populate_by_name=True`, so `interrupt_id` == `interruptId` in JSON / event serialisation.
 
+> **Field names in 2.2.0:** the Python fields are `interrupt_id` and `message`. Older community examples sometimes use `id` or `hint` — those are **not** valid field names or aliases in 2.2.0 and will be silently ignored (or raise a validation error if `extra="forbid"` is set). Always use `interrupt_id` / `message` with this version.
+
 **`response_schema`** accepts:
 - `type[BaseModel]` — a Pydantic model class
 - Generic alias — e.g. `list[str]`, `dict[str, int]`
@@ -786,25 +788,31 @@ async def main():
     session = await runner.session_service.create_session(
         app_name="demo", user_id="u1"
     )
+    from google.adk.workflow.utils._workflow_hitl_utils import (
+        get_request_input_interrupt_ids,
+        create_request_input_response,
+    )
+
     # First run — workflow pauses at approval_gate
     interrupted_event = None
     async for event in runner.run_async(
         user_id="u1", session_id=session.id,
         new_message=types.Content(role="user", parts=[types.Part(text="Process order #42")])
     ):
-        if event.long_running_tool_ids:
+        # Use get_request_input_interrupt_ids to detect RequestInput interrupts:
+        # it reads interrupt IDs from the adk_request_input function-call args,
+        # which is more explicit than checking event.long_running_tool_ids
+        # (long_running_tool_ids carries general FC IDs, not just HITL ones).
+        if get_request_input_interrupt_ids(event):
             interrupted_event = event
             break
 
     if interrupted_event:
-        # long_running_tool_ids is set[str] | None — use iter(), not indexing
-        interrupt_id = next(iter(interrupted_event.long_running_tool_ids))
+        interrupt_ids = get_request_input_interrupt_ids(interrupted_event)
+        interrupt_id = interrupt_ids[0]
         print(f"Workflow paused. Interrupt ID: {interrupt_id}")
 
         # Resume with approval
-        from google.adk.workflow.utils._workflow_hitl_utils import (
-            create_request_input_response,
-        )
         resume_part = create_request_input_response(
             interrupt_id=interrupt_id,
             response={"approved": True, "comment": "Looks good!"},
