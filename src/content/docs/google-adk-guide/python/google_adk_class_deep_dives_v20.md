@@ -220,7 +220,7 @@ config = EventsCompactionConfig(
 | `{var_name}` | `session.state["var_name"]`; raises `KeyError` if missing |
 | `{var_name?}` | Same but returns `""` if missing (optional) |
 | `{artifact.file_name}` | Loads the named artifact and calls `str()` on it; raises `KeyError` if not found |
-| `{artifact.file_name?}` | Same but returns `""` if the artifact does not exist (optional form — `?` is stripped before the `artifact.` prefix check) |
+| `{artifact.file_name?}` | Same but returns `""` if the artifact does not exist — **requires `artifact_service` to be configured**; if `artifact_service is None` raises `ValueError` even with `?` |
 
 Scope-prefixed keys work too: `{app:shared_var}`, `{user:prefs}`, `{temp:step_result}`.
 
@@ -252,11 +252,8 @@ async def build_instruction(ctx: ReadonlyContext) -> str:
     return await inject_session_state(
         "You are helping user '{user_name}'. "
         "Their account tier is '{user:tier}'. "
-        # {artifact.draft.txt?} — optional artifact: '?' suffix is stripped before
-        # the 'artifact.' prefix check (same rule as state vars), so this loads
-        # the artifact named 'draft.txt' and returns '' if it doesn't exist.
-        "Current draft document (may be empty): '{artifact.draft.txt?}'. "
-        "Focus on {topic?}.",  # optional state var — no error if 'topic' not in state
+        "Current topic (may be empty): '{topic?}'. "  # optional state var — '' if absent
+        "Focus on {mode?}.",  # second optional var — no error if 'mode' not in state
         ctx,
     )
 
@@ -1580,7 +1577,7 @@ asyncio.run(main())
 | # | Class / symbol | Module | Key insight |
 |---|---|---|---|
 | 1 | Compaction pipeline | `apps.compaction` | Two strategies run in priority order; HITL guards prevent compacting pending FC/auth events; rolling-summary seed avoids duplicate summaries |
-| 2 | `inject_session_state` | `utils.instructions_utils` | `{var?}` optional form; `{artifact.file_name}` async load; scope prefixes work; non-identifier patterns returned verbatim |
+| 2 | `inject_session_state` | `utils.instructions_utils` | `{var?}` optional form; `{artifact.file_name}` async load (requires `artifact_service`; `?` skips missing artifact but not missing service); scope prefixes work; non-identifier patterns returned verbatim |
 | 3 | `run_llm_agent_as_node` | `workflow._llm_agent_wrapper` | `single_turn` forces `include_contents=none`; `task` waits for FinishTaskTool success FR; `chat` dispatch loop replays unresolved task FCs on resume |
 | 4 | `ToolConfig` / YAML DSL | `tools.tool_configs` | 5 reference patterns; `ToolArgsConfig(extra="allow")` for free kwargs; `BaseToolConfig(extra="forbid")` for custom configs |
 | 5 | `RequestInput` | `events.request_input` | camelCase aliases; `response_schema` accepts Pydantic type/generic alias/dict; stable `interrupt_id` for retry cycles |
