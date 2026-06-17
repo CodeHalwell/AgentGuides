@@ -55,7 +55,7 @@ bridging, Azure-specific storage/search providers, and the Durable Task hosting 
 
 ## 1. AG-UI client layer
 
-**Module:** `agent_framework.ag_ui`  
+**Module:** `agent_framework.ag_ui` (underscore separator — not `agent_framework.agui`)  
 **Install:** `pip install agent-framework[ag-ui]`
 
 AG-UI is Microsoft's streaming protocol for stateful AI frontends. The client layer
@@ -289,7 +289,7 @@ import httpx
 from agent_framework import Agent
 from agent_framework.ag_ui import AGUIChatClient
 
-# httpx.HTTPTransport handles automatic retries at the HTTP layer
+# httpx.AsyncHTTPTransport handles automatic retries at the HTTP layer
 transport = httpx.AsyncHTTPTransport(retries=3)
 http_client = httpx.AsyncClient(transport=transport, timeout=120.0)
 
