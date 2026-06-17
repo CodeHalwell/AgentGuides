@@ -1121,9 +1121,15 @@ async def stream_task(runner, user_id, session_id, message):
         all_events.append(a2a_event)
         yield a2a_event  # stream to A2A client
 
-    # Emit final event with the true aggregated state
+    # Aggregator only records failed/auth_required/input_required; it never
+    # promotes to completed. Derive the final state manually.
+    final_state = (
+        TaskState.completed
+        if aggregator.task_state == TaskState.working
+        else aggregator.task_state
+    )
     final_status = TaskStatus(
-        state=aggregator.task_state,
+        state=final_state,
         message=aggregator.task_status_message,
     )
     yield TaskStatusUpdateEvent(id="task-1", status=final_status, final=True)
@@ -1488,14 +1494,16 @@ asyncio.run(main())
 ```python
 from google.adk.tools.spanner.admin_toolset import SpannerAdminToolset
 
-# Only allow listing operations — no create/mutate
+# Only allow listing operations — no create/mutate.
+# tool_filter is checked against the pre-prefix tool name (the raw function
+# name); get_tools_with_prefix() adds "spanner_" AFTER filtering.
 read_only_toolset = SpannerAdminToolset(
     tool_filter=[
-        "spanner_list_instances",
-        "spanner_get_instance",
-        "spanner_list_databases",
-        "spanner_list_instance_configs",
-        "spanner_get_instance_config",
+        "list_instances",
+        "get_instance",
+        "list_databases",
+        "list_instance_configs",
+        "get_instance_config",
     ],
 )
 
