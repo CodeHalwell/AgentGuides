@@ -359,6 +359,7 @@ from agent_framework.ag_ui import AgentFrameworkAgent, state_update
 class TodoState(BaseModel):
     items: list[str] = Field(default_factory=list)
     count: int = 0
+    last_added: str | None = None
 
 @tool
 async def add_todo(task: str):
