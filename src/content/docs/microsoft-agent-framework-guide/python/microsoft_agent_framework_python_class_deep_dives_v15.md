@@ -110,17 +110,16 @@ asyncio.run(main())
 from agent_framework.ag_ui import AGUIHttpService
 
 async def resume_with_state():
-    svc = AGUIHttpService("http://localhost:8888/", timeout=120.0)
-    async for event in svc.post_run(
-        thread_id="t-001",
-        run_id="r-002",
-        messages=[],
-        state={"user_preference": "brief"},
-        resume={"interrupt_id": "confirm-action", "decision": "approved"},
-    ):
-        if event["type"] == "TEXT_MESSAGE_CONTENT":
-            print(event["delta"], end="", flush=True)
-    await svc.http_client.aclose()
+    async with AGUIHttpService("http://localhost:8888/", timeout=120.0) as svc:
+        async for event in svc.post_run(
+            thread_id="t-001",
+            run_id="r-002",
+            messages=[],
+            state={"user_preference": "brief"},
+            resume={"interrupt_id": "confirm-action", "decision": "approved"},
+        ):
+            if event["type"] == "TEXT_MESSAGE_CONTENT":
+                print(event["delta"], end="", flush=True)
 ```
 
 **Example 3 — pass tools so the remote server can invoke them:**
@@ -699,7 +698,7 @@ async def chat(body: dict):
     thread_items = body["thread_items"]
 
     messages = simple_to_agent_input(thread_items)
-    response_stream = agent.run(messages, stream=True)
+    response_stream = await agent.run(messages, stream=True)
 
     async def generate():
         async for event in stream_agent_response(response_stream, thread_id=thread_id):
@@ -714,8 +713,9 @@ async def chat(body: dict):
 from agent_framework.chatkit import stream_agent_response
 
 events = []
+response_stream = await agent.run("Summarise this", stream=True)
 async for event in stream_agent_response(
-    agent.run("Summarise this", stream=True),
+    response_stream,
     thread_id="t-001",
 ):
     events.append(event)
@@ -733,8 +733,9 @@ from agent_framework.chatkit import stream_agent_response
 def deterministic_id(prefix: str) -> str:
     return f"{prefix}-{hashlib.md5(prefix.encode()).hexdigest()[:8]}"
 
+response_stream = await agent.run("Hello", stream=True)
 async for event in stream_agent_response(
-    agent.run("Hello", stream=True),
+    response_stream,
     thread_id="t-fixed",
     generate_id=deterministic_id,
 ):
@@ -1496,9 +1497,9 @@ client = DurableAIAgentClient(
 app = FastAPI()
 
 @app.post("/ask")
-async def ask(body: dict):
+def ask(body: dict):
     agent = client.get_agent("durable-assistant")
-    response = agent.run(body["message"])  # returns AgentResponse (not a coroutine)
+    response = agent.run(body["message"])  # synchronous — FastAPI runs this in a thread pool
     return {"text": response.text}
 ```
 
@@ -1532,9 +1533,9 @@ _client = DurableAIAgentClient(TaskHubGrpcClient(host_address="localhost:4001"))
 app = FastAPI()
 
 @app.post("/chat/{agent_name}")
-async def chat(agent_name: str, body: dict):
+def chat(agent_name: str, body: dict):
     agent = _client.get_agent(agent_name)
-    response = agent.run(body["message"])
+    response = agent.run(body["message"])  # synchronous — FastAPI runs this in a thread pool
     return {"text": response.text}
 ```
 
