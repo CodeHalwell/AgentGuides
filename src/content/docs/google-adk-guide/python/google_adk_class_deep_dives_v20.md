@@ -251,8 +251,11 @@ async def build_instruction(ctx: ReadonlyContext) -> str:
     return await inject_session_state(
         "You are helping user '{user_name}'. "
         "Their account tier is '{user:tier}'. "
+        # {artifact.draft.txt?} — optional artifact: '?' suffix is stripped before
+        # the 'artifact.' prefix check (same rule as state vars), so this loads
+        # the artifact named 'draft.txt' and returns '' if it doesn't exist.
         "Current draft document (may be empty): '{artifact.draft.txt?}'. "
-        "Focus on {topic?}.",  # optional — no error if 'topic' not in state
+        "Focus on {topic?}.",  # optional state var — no error if 'topic' not in state
         ctx,
     )
 
@@ -978,8 +981,16 @@ async def demo():
         state=state,
     )
 
-    # Format 2: AuthCredential dict — stage 1 fails; stage 2 uses model_validate
-    # (auth_type is not API_KEY for OAuth2; for API_KEY types use format 3 instead)
+    # Format 2: plain string — stage 1 fails; stage 2 sees auth_type==API_KEY
+    # and wraps the string directly as the api_key value
+    await process_auth_resume(
+        response_data="sk-test-456",
+        auth_config=auth_config,
+        state=state,
+    )
+
+    # Format 3: AuthCredential dict — stage 1 fails; stage 2 branches on auth_type
+    # (non-API_KEY types, e.g. OAuth2, expect an AuthCredential-shaped dict)
     oauth_config = AuthConfig(
         auth_scheme=ApiKeySecurityScheme(name="x-api-key", in_="header"),
         raw_auth_credential=AuthCredential(auth_type=AuthCredentialTypes.OAUTH2),
@@ -987,14 +998,6 @@ async def demo():
     await process_auth_resume(
         response_data={"auth_type": "OAUTH2", "oauth2": {"access_token": "tok-abc"}},
         auth_config=oauth_config,
-        state=state,
-    )
-
-    # Format 3: plain string — stage 1 fails; stage 2 wraps it as api_key
-    # (only works when raw_auth_credential.auth_type == API_KEY)
-    await process_auth_resume(
-        response_data="sk-test-456",
-        auth_config=auth_config,
         state=state,
     )
 
