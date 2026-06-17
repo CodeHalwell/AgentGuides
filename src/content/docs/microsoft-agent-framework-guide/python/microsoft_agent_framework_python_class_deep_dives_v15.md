@@ -261,6 +261,9 @@ agent = Agent(
 async def main():
     response = await agent.run("What is the capital of France?")
     print(response.text)
+
+import asyncio
+asyncio.run(main())
 ```
 
 **Example 2 — override timeout for long-running analysis requests:**
@@ -1290,6 +1293,7 @@ agentic_provider = AzureAISearchContextProvider(
 # AZURE_SEARCH_INDEX_NAME=docs
 # AZURE_SEARCH_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
+from agent_framework import Agent
 from agent_framework.azure import AzureAISearchContextProvider
 
 provider = AzureAISearchContextProvider(env_file_path=".env")
@@ -1391,6 +1395,7 @@ history = CosmosHistoryProvider(
 **Example 3 — selectively store context from specific providers:**
 
 ```python
+from agent_framework import Agent
 from agent_framework.azure import CosmosHistoryProvider, AzureAISearchContextProvider
 
 search = AzureAISearchContextProvider(source_id="my_search", ...)
@@ -1454,8 +1459,14 @@ durable_worker.start()
 **Example 2 — callback to stream updates to Azure Service Bus:**
 
 ```python
+from durabletask.worker import TaskHubGrpcWorker
+from agent_framework import Agent, AgentResponse, AgentResponseUpdate
+from agent_framework.openai import OpenAIChatClient
 from agent_framework.azure import DurableAIAgentWorker, AgentCallbackContext, AgentResponseCallbackProtocol
-from agent_framework import AgentResponse, AgentResponseUpdate
+
+bus_client = ...  # e.g. azure.servicebus.aio.ServiceBusClient(conn_str="...")
+worker = TaskHubGrpcWorker(host_address="localhost:4001")
+agent = Agent(client=OpenAIChatClient(), name="durable-assistant")
 
 class ServiceBusCallback(AgentResponseCallbackProtocol):
     async def on_agent_response(self, response: AgentResponse, ctx: AgentCallbackContext):
@@ -1581,7 +1592,8 @@ DurableAIAgentOrchestrationContext.get_agent(agent_name: str) -> DurableAIAgent[
 ```
 
 The returned `DurableAIAgent.run()` here returns a `Task` (not `AgentResponse`) —
-`yield` it or `await` it per the Durable Task API.
+`yield` it inside the orchestration generator (Durable orchestrators are generator
+functions; `await` is not supported).
 
 **Example 1 — orchestration that chains two agents:**
 
