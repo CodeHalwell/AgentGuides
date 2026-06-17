@@ -504,8 +504,7 @@ from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow
-
-# Sub-agents run as task nodes; coordinator runs as chat node.
+from google.adk.tools.agent_tool import AgentTool
 research_agent = LlmAgent(
     name="researcher",
     model="gemini-2.5-flash",
@@ -537,12 +536,8 @@ coordinator = LlmAgent(
     ),
     tools=[
         # AgentTool wires sub-agents as task-delegation tools
-        __import__("google.adk.tools.agent_tool", fromlist=["AgentTool"]).AgentTool(
-            agent=research_agent
-        ),
-        __import__("google.adk.tools.agent_tool", fromlist=["AgentTool"]).AgentTool(
-            agent=writer_agent
-        ),
+        AgentTool(agent=research_agent),
+        AgentTool(agent=writer_agent),
     ],
 )
 
@@ -671,6 +666,7 @@ def build_http_tool(args: ToolArgsConfig) -> BaseTool:
         import httpx
         async with httpx.AsyncClient(base_url=base_url, timeout=timeout) as c:
             resp = await c.request(method, endpoint)
+            resp.raise_for_status()
             return resp.json()
 
     return FunctionTool(func=call_api)
@@ -976,7 +972,8 @@ auth_config = AuthConfig(
 state = State()
 
 async def demo():
-    # Format 1: full AuthConfig dict — stage 1 succeeds (OAuth2 web UI flow)
+    # Format 1: full AuthConfig dict — stage 1 succeeds (sends a complete
+    # AuthConfig dict including the exchanged credential; works for any auth type)
     await process_auth_resume(
         response_data={
             "auth_scheme": {"type": "apiKey", "name": "x-api-key", "in": "header"},
@@ -997,8 +994,10 @@ async def demo():
         state=state,
     )
 
-    # Format 3: AuthCredential dict — stage 1 fails; stage 2 branches on auth_type
-    # (non-API_KEY types, e.g. OAuth2, expect an AuthCredential-shaped dict)
+    # Format 3: AuthCredential dict — stage 1 fails; stage 2 branches on
+    # raw_auth_credential.auth_type, NOT the auth scheme.
+    # auth_type=OAUTH2 causes stage 2 to call AuthCredential.model_validate(response_data).
+    # (The ApiKeySecurityScheme here is intentional: stage 2 only checks auth_type.)
     oauth_config = AuthConfig(
         auth_scheme=ApiKeySecurityScheme(name="x-api-key", in_="header"),
         raw_auth_credential=AuthCredential(auth_type=AuthCredentialTypes.OAUTH2),
