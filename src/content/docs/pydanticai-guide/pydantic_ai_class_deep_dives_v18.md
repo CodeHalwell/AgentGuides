@@ -150,7 +150,7 @@ Models whose name does not match any prefix still receive `OpenAIModelProfile` w
 ```python
 OVHcloudProvider(
     *,
-    api_key: str | None = None,          # OVHCLOUD_AI_ENDPOINTS_ACCESS_TOKEN env var
+    api_key: str | None = None,          # OVHCLOUD_API_KEY env var
     openai_client: AsyncOpenAI | None = None,
     http_client: httpx.AsyncClient | None = None,
 )
@@ -874,7 +874,7 @@ from pydantic_ai.settings import ModelSettings
 provider = XaiProvider(api_key='xai-your-key')
 agent = Agent(
     XAIModel('grok-4.3', provider=provider),
-    model_settings=ModelSettings(reasoning_effort='high'),  # maps to grok native reasoning_effort
+    model_settings=ModelSettings(thinking='high'),  # maps to GrokModelProfile reasoning_effort via unified thinking
 )
 
 async def main():
@@ -975,8 +975,8 @@ async def main():
     Path('runs').mkdir(exist_ok=True)
 
     state = CountState()
-    result, _ = await graph.run(Increment(), state=state, persistence=persistence)
-    print(f'Final count: {result}')   # 5
+    run_result = await graph.run(Increment(), state=state, persistence=persistence)
+    print(f'Final count: {run_result.output}')   # 5
     print(f'Snapshots: {persistence.json_file.read_text()[:80]}...')
 
 asyncio.run(main())
@@ -1006,18 +1006,21 @@ class ProcessItem(BaseNode[WorkState, None, str]):
 graph = Graph(nodes=[ProcessItem])
 
 async def resume_or_start(run_id: str) -> str:
-    persistence = FileStatePersistence(Path(f'{run_id}.json'))
-    graph.set_types(persistence)   # registers StateT/RunEndT on persistence
+    json_file = Path(f'{run_id}.json')
+    persistence = FileStatePersistence(json_file)
 
-    # load_next() returns the pending NodeSnapshot if the run was interrupted
-    snapshot = await persistence.load_next()
-    if snapshot is not None:
-        print(f'Resuming from snapshot {snapshot.id!r}')
-        result, _ = await graph.run_from(snapshot, persistence=persistence)
+    if json_file.exists():
+        # Restore the pending node and state from the saved file; iter_from_persistence
+        # calls persistence.set_graph_types() and load_next() internally.
+        print('Resuming from saved state...')
+        async with graph.iter_from_persistence(persistence) as run:
+            async for _ in run:
+                pass
+        return run.result.output
     else:
         print('Starting fresh run')
-        result, _ = await graph.run(ProcessItem(), state=WorkState(), persistence=persistence)
-    return result
+        run_result = await graph.run(ProcessItem(), state=WorkState(), persistence=persistence)
+        return run_result.output
 
 asyncio.run(resume_or_start('work-run-001'))
 ```
@@ -1101,8 +1104,8 @@ graph = Graph(nodes=[DoubleIt])
 
 async def main():
     persistence = SimpleStatePersistence()
-    result, _ = await graph.run(DoubleIt(), state=RunState(value=1), persistence=persistence)
-    print(result)                          # 8
+    run_result = await graph.run(DoubleIt(), state=RunState(value=1), persistence=persistence)
+    print(run_result.output)               # 8
     print(persistence.last_snapshot)       # EndSnapshot with state.value=8
 
 asyncio.run(main())
@@ -1132,9 +1135,9 @@ graph = Graph(nodes=[Count])
 
 async def main():
     persistence = FullStatePersistence()
-    result, _ = await graph.run(Count(), state=CountState(), persistence=persistence)
+    run_result = await graph.run(Count(), state=CountState(), persistence=persistence)
 
-    print(f'Result: {result}')   # 3
+    print(f'Result: {run_result.output}')   # 3
     print(f'Snapshots taken: {len(persistence.history)}')
     for snap in persistence.history:
         print(type(snap).__name__, snap.status, snap.state.n)
@@ -1172,7 +1175,7 @@ async def main():
 
     # Deserialise into a new instance
     p2 = FullStatePersistence()
-    graph.set_types(p2)   # must set types before load_json
+    p2.set_graph_types(graph)   # must set types before load_json
     p2.load_json(raw)
     print(f'Restored {len(p2.history)} snapshots')
 
@@ -1203,8 +1206,8 @@ graph = Graph(nodes=[Node])
 async def main():
     # deep_copy=False: safe when state is frozen/immutable
     persistence = FullStatePersistence(deep_copy=False)
-    result, _ = await graph.run(Node(), state=ImmutableState(n=0), persistence=persistence)
-    print(result)   # 3
+    run_result = await graph.run(Node(), state=ImmutableState(n=0), persistence=persistence)
+    print(run_result.output)   # 3
 
 asyncio.run(main())
 ```
