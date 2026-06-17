@@ -325,7 +325,7 @@ name spoofing.
 | Parameter | Default | Notes |
 |-----------|---------|-------|
 | `state_schema` | `None` | Pydantic model or plain dict class; drives frontend state type hints |
-| `predict_state_config` | `None` | Keys: tool names; values: `{"state_key": "...", "tool": "..."}` |
+| `predict_state_config` | `None` | Keys: state field names; values: `{"tool": "tool_name", "tool_argument": "arg_name"}` |
 | `require_confirmation` | `True` | Predictive state updates wait for user confirmation before applying |
 | `use_service_session` | `False` | Hand session management to the AG-UI service layer |
 
@@ -368,7 +368,7 @@ agent = Agent(client=OpenAIChatClient(), name="TodoBot", tools=[add_todo])
 wrapped = AgentFrameworkAgent(
     agent,
     state_schema=TodoState,
-    predict_state_config={"add_todo": {"state_key": "items", "tool": "add_todo"}},
+    predict_state_config={"items": {"tool": "add_todo", "tool_argument": "item"}},
     require_confirmation=False,
 )
 ```
