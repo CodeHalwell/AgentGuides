@@ -307,7 +307,8 @@ while current is not None:
 
 print("Checkpoint chain (newest → oldest):")
 for entry in chain:
-    print(f"  step={entry['step']}  next={entry['next']}  at={entry['created_at'][:19]}")
+    ts = entry['created_at'][:19] if entry['created_at'] else "n/a"
+    print(f"  step={entry['step']}  next={entry['next']}  at={ts}")
 ```
 
 ### `StateSnapshot` field reference
@@ -453,15 +454,16 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 
 # ---- subgraph ----
+# 'item' is shared with the parent — LangGraph passes it in automatically.
 class SubState(TypedDict):
     item: str
-    processed: bool
 
 def process_item(state: SubState) -> Command:
     result = f"[done:{state['item']}]"
+    # Write the result directly to the parent's 'outputs' channel.
     return Command(
-        update={"processed": True},          # updates subgraph state
-        graph=Command.PARENT,                # AND writes to parent
+        update={"outputs": [result]},
+        graph=Command.PARENT,
     )
 
 sub_builder = StateGraph(SubState)
@@ -472,11 +474,8 @@ subgraph = sub_builder.compile()
 
 # ---- parent graph ----
 class ParentState(TypedDict):
-    items:   list[str]
-    outputs: Annotated[list[str], operator.add]
-
-def launcher(state: ParentState) -> dict:
-    return {}  # subgraph is called via the node below
+    item:    str                                    # shared with subgraph
+    outputs: Annotated[list[str], operator.add]    # written to by subgraph via PARENT
 
 parent_builder = StateGraph(ParentState)
 parent_builder.add_node("run_sub", subgraph)
@@ -484,12 +483,10 @@ parent_builder.add_edge(START, "run_sub")
 parent_builder.add_edge("run_sub", END)
 parent_graph = parent_builder.compile()
 
-# When process_item returns Command(graph=Command.PARENT, ...) it writes
-# to the subgraph's own outputs first, then signals the parent.
-# The parent here wires the subgraph as a node — the update goes to
-# the parent's writable channels.
-result = parent_graph.invoke({"items": ["x", "y"], "outputs": []})
-print(result)
+# The subgraph receives 'item' from parent state, processes it,
+# then pushes the result back to parent's 'outputs' via Command.PARENT.
+result = parent_graph.invoke({"item": "x", "outputs": []})
+print(result)  # {'item': 'x', 'outputs': ['[done:x]']}
 ```
 
 ### `Command` field combinations reference
@@ -613,7 +610,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 class State(TypedDict):
-    messages: Annotated[list, add_messages(format="langchain-openai")]
+    messages: Annotated[list, lambda l, r: add_messages(l, r, format="langchain-openai")]
 
 def node_with_raw_messages(state: State) -> dict:
     return {"messages": [
@@ -790,7 +787,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
 - The channel raises `InvalidUpdateError` if a value is written that isn't in `names`
 - Use `Annotated[None, NamedBarrierValue(str, {"a", "b"})]` — the value type is typically `None` since you only care that all tokens arrived
 
-**Important:** Do not include the barrier field in the initial `invoke` input; let the channel start empty.
+**Important:** Do not include the barrier field in the initial `invoke` input; let the channel start empty. In `langgraph==1.2.5`, passing `barrier=None` is treated as a write of `None`, which is not in `names` and triggers `InvalidUpdateError`. The safe rule is to omit the key entirely.
 
 ### Example 1 — waiting for two parallel branches
 
@@ -1059,7 +1056,7 @@ def push_message(
 - `message` — any message-like: `BaseMessage`, `(role, content)` tuple, dict, or `BaseMessageChunk`
 - `state_key` — the state channel to write into; defaults to `"messages"`; pass `None` to stream only without writing to state
 - Returns the fully typed `AnyMessage` with an assigned `id`
-- **Requires** a `messages` (or matching `state_key`) channel with `add_messages` reducer in the graph state
+- When `state_key` is set (the default), the target channel must have an `add_messages`-compatible reducer; pass `state_key=None` to stream only without any state write
 
 ### Example 1 — streaming messages during a long-running node
 
@@ -1207,8 +1204,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.channels.ephemeral_value import EphemeralValue
 
 class State(TypedDict):
-    trigger:  Annotated[Optional[str], EphemeralValue(Optional[str])]
-    result:   str
+    trigger:   Annotated[Optional[str], EphemeralValue(str)]
+    result:    str
     processed: bool
 
 def on_trigger(state: State) -> dict:
@@ -1217,8 +1214,10 @@ def on_trigger(state: State) -> dict:
     return {"processed": False}
 
 def cleanup(state: State) -> dict:
-    # trigger is None here — EphemeralValue cleared after on_trigger
-    assert state["trigger"] is None or True  # EmptyChannelError caught by graph
+    # EphemeralValue clears after the super-step that wrote it.
+    # Accessing 'trigger' here raises EmptyChannelError internally;
+    # the graph surfaces it as None in subsequent nodes.
+    print("trigger in cleanup:", state.get("trigger"))  # None
     return {}
 
 builder = StateGraph(State)
@@ -1287,7 +1286,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.channels.ephemeral_value import EphemeralValue
 
 class State(TypedDict):
-    config_override: Annotated[Optional[dict], EphemeralValue(Optional[dict])]
+    config_override: Annotated[Optional[dict], EphemeralValue(dict)]
     model:           str
     results:         list[str]
 
@@ -1495,7 +1494,7 @@ print(f"New version: {r3['version'] > r1['version']}")   # True
 | `Command` | `goto` accepts a mix of strings and `Send` objects; `graph=Command.PARENT` writes to the parent | Returning `Command(goto=["node"])` with a list when it should be `Command(goto="node")` (string for single) |
 | `add_messages` | ID-based dedup happens silently — no error if you update an existing message | Calling `RemoveMessage(id=x)` with an ID that doesn't exist — raises `ValueError` |
 | `Topic` | `accumulate=True` persists across steps; `accumulate=False` (default) clears each step | Expecting `Topic(str)` to accumulate across nodes in different super-steps |
-| `NamedBarrierValue` | Do not include the barrier field in the initial `invoke` input | Passing `barrier=None` in the initial state — triggers `InvalidUpdateError` |
+| `NamedBarrierValue` | Do not include the barrier field in the initial `invoke` input | Including the barrier key with any value (even `None`) — `None` is treated as a write and may trigger `InvalidUpdateError`; safest is to omit the key entirely |
 | `entrypoint` + `previous` | `previous` is the **return value** of the last call on the same `thread_id` | Forgetting to provide a checkpointer — without one, `previous` is always `None` |
 | `push_message` | Emits to the `"messages"` stream AND writes to state (unless `state_key=None`) | Calling without a matching `add_messages` reducer in state — message is written but reducer is absent |
 | `EphemeralValue` | Clears after one super-step; `guard=True` raises on concurrent writes | Using `guard=True` with parallel `Send` nodes — both write the channel, triggering `InvalidUpdateError` |
