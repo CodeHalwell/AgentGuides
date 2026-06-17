@@ -166,7 +166,7 @@ arguments and the current message ID across calls.
 | `current_message_id` | `str \| None` | ID of the message being streamed |
 | `current_tool_call_id` | `str \| None` | ID of the active tool call |
 | `current_tool_name` | `str \| None` | Name of the active tool |
-| `accumulated_tool_args` | `str` | JSON string accumulated across `TOOL_CALL_ARGS_DELTA` events |
+| `accumulated_tool_args` | `str` | JSON string accumulated across `TOOL_CALL_ARGS` events |
 | `thread_id` / `run_id` | `str \| None` | Populated on `RUN_STARTED` |
 
 **Example 1 — manually drive the converter event by event:**
@@ -201,8 +201,8 @@ converter = AGUIEventConverter()
 
 for ev in [
     {"type": "TOOL_CALL_START", "toolCallId": "tc-1", "toolCallName": "get_price"},
-    {"type": "TOOL_CALL_ARGS_DELTA", "toolCallId": "tc-1", "delta": '{"tick'},
-    {"type": "TOOL_CALL_ARGS_DELTA", "toolCallId": "tc-1", "delta": 'er": "MSFT"}'},
+    {"type": "TOOL_CALL_ARGS", "toolCallId": "tc-1", "delta": '{"tick'},
+    {"type": "TOOL_CALL_ARGS", "toolCallId": "tc-1", "delta": 'er": "MSFT"}'},
     {"type": "TOOL_CALL_END", "toolCallId": "tc-1"},
 ]:
     update = converter.convert_event(ev)
@@ -630,8 +630,8 @@ appropriate handler for each.
 ```python
 from agent_framework.chatkit import simple_to_agent_input
 
-# simple_to_agent_input uses a default ThreadItemConverter instance
-messages = simple_to_agent_input(thread_items)
+# simple_to_agent_input is a coroutine — must be awaited
+messages = await simple_to_agent_input(thread_items)
 response = await agent.run(messages)
 ```
 
@@ -647,7 +647,7 @@ async def fetch_sharepoint_bytes(attachment_id: str) -> bytes:
             return await r.read()
 
 converter = ThreadItemConverter(attachment_data_fetcher=fetch_sharepoint_bytes)
-messages = converter.to_agent_input(thread_items)
+messages = await converter.to_agent_input(thread_items)
 response = await agent.run(messages)
 ```
 
@@ -663,7 +663,7 @@ class MentionAwareConverter(ThreadItemConverter):
         return Content(text=f"[mentioned: @{tag.display_name}]")
 
 converter = MentionAwareConverter()
-messages = converter.to_agent_input(thread_items)
+messages = await converter.to_agent_input(thread_items)
 ```
 
 ---
@@ -697,7 +697,7 @@ async def chat(body: dict):
     thread_id = body["thread_id"]
     thread_items = body["thread_items"]
 
-    messages = simple_to_agent_input(thread_items)
+    messages = await simple_to_agent_input(thread_items)
     response_stream = await agent.run(messages, stream=True)
 
     async def generate():
@@ -1487,7 +1487,7 @@ DurableAIAgentClient.get_agent(agent_name: str) -> DurableAIAgent[AgentResponse]
 **Example 1 — invoke a durable agent from an HTTP endpoint:**
 
 ```python
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework.azure import DurableAIAgentClient
 from fastapi import FastAPI
 
@@ -1509,7 +1509,7 @@ def ask(body: dict):
 **Example 2 — poll until response with explicit retry config:**
 
 ```python
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework.azure import DurableAIAgentClient
 
 # Increase retries for slow agents (max_poll_retries * poll_interval_seconds = max wait)
@@ -1526,7 +1526,7 @@ print(result.text)
 **Example 3 — reuse a single client across multiple requests:**
 
 ```python
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework.azure import DurableAIAgentClient
 from fastapi import FastAPI
 
@@ -1563,7 +1563,6 @@ The returned `DurableAIAgent.run()` here returns a `Task` (not `AgentResponse`) 
 **Example 1 — orchestration that chains two agents:**
 
 ```python
-from durabletask import Orchestration
 from agent_framework.azure import DurableAIAgentOrchestrationContext
 
 def my_pipeline(ctx):
@@ -1579,7 +1578,6 @@ def my_pipeline(ctx):
 **Example 2 — fan-out pattern (parallel agents):**
 
 ```python
-from durabletask import Orchestration
 from agent_framework.azure import DurableAIAgentOrchestrationContext
 
 def parallel_analysis(ctx):
@@ -1594,7 +1592,7 @@ def parallel_analysis(ctx):
 **Example 3 — error handling inside orchestration:**
 
 ```python
-from durabletask import Orchestration, TaskFailedError
+from durabletask import TaskFailedError
 from agent_framework.azure import DurableAIAgentOrchestrationContext
 
 def safe_pipeline(ctx):
