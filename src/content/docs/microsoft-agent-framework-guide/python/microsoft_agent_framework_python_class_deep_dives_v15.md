@@ -347,13 +347,13 @@ add_agent_framework_fastapi_endpoint(app, wrapped, path="/")
 **Example 2 — typed state schema with predictive updates:**
 
 ```python
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from agent_framework import Agent, tool
 from agent_framework.openai import OpenAIChatClient
 from agent_framework.ag_ui import AgentFrameworkAgent, state_update
 
 class TodoState(BaseModel):
-    items: list[str] = []
+    items: list[str] = Field(default_factory=list)
     count: int = 0
 
 @tool
@@ -796,6 +796,8 @@ uvicorn.run(app, host="127.0.0.1", port=8080)
 ```python
 from agent_framework.devui import DevServer
 
+import uvicorn
+
 server = DevServer(
     entities_dir="./agents",      # scans *.py files for Agent/Workflow instances
     port=9090,
@@ -809,6 +811,7 @@ uvicorn.run(server.get_app(), host="0.0.0.0", port=9090)
 **Example 3 — add agents dynamically after construction:**
 
 ```python
+import uvicorn
 from agent_framework.devui import DevServer
 
 server = DevServer(auth_enabled=False)
@@ -898,7 +901,7 @@ serve(entities=[agent], port=8080)
 ## 5. GAIA benchmark harness
 
 **Module:** `agent_framework.lab.gaia`  
-**Install:** `pip install agent-framework[lab]`
+**Install:** `pip install agent-framework-lab`
 
 GAIA (General AI Assistants benchmark) is a public benchmark for evaluating
 general-purpose AI assistants. The Agent Framework lab module provides a typed
@@ -1251,8 +1254,8 @@ agentic_provider = AzureAISearchContextProvider(
     azure_openai_resource_url="https://my-openai.openai.azure.com",
     model="gpt-4o",
     mode="agentic",
-    retrieval_reasoning_effort="standard",  # "minimal" | "standard" | "high"
-    agentic_message_history_count=5,        # how many prior messages to include
+    retrieval_reasoning_effort="medium",  # "minimal" | "low" | "medium"
+    agentic_message_history_count=5,      # how many prior messages to include
 )
 ```
 
