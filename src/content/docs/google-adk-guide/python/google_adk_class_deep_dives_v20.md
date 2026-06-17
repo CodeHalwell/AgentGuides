@@ -214,7 +214,8 @@ config = EventsCompactionConfig(
 |---|---|
 | `{var_name}` | `session.state["var_name"]`; raises `KeyError` if missing |
 | `{var_name?}` | Same but returns `""` if missing (optional) |
-| `{artifact.filename}` | Loads the artifact and calls `str()` on it |
+| `{artifact.file_name}` | Loads the named artifact and calls `str()` on it; raises `KeyError` if not found |
+| `{artifact.file_name?}` | Same but returns `""` if the artifact does not exist (optional form — `?` is stripped before the `artifact.` prefix check) |
 
 Scope-prefixed keys work too: `{app:shared_var}`, `{user:prefs}`, `{temp:step_result}`.
 
@@ -403,7 +404,7 @@ def format_output(node_input, ctx):
 
 wf = Workflow(
     name="sentiment-pipeline",
-    nodes=[sentiment_node, format_output],
+    edges=[("START", sentiment_node, format_output)],
 )
 
 async def main():
@@ -461,7 +462,7 @@ def summarise(node_input, ctx):
     )
     ctx.actions.state_delta["summary"] = summary
 
-wf = Workflow(name="ner-pipeline", nodes=[entity_agent, summarise])
+wf = Workflow(name="ner-pipeline", edges=[("START", entity_agent, summarise)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
@@ -534,7 +535,7 @@ coordinator = LlmAgent(
     ],
 )
 
-wf = Workflow(name="research-write", nodes=[coordinator])
+wf = Workflow(name="research-write", edges=[("START", coordinator)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
@@ -708,7 +709,7 @@ class DatabaseToolConfig(BaseToolConfig):
 
 **Source:** `google.adk.events.request_input`
 
-`RequestInput` is the data model for workflow HITL interrupts that request user input (as opposed to auth interrupts which use `AuthConfig`). It is created inside `FunctionNode` or a custom `@node` decorated function and passed to `ctx.request_input()` which calls `create_request_input_event()` and raises `NodeInterruptedError`.
+`RequestInput` is the data model for workflow HITL interrupts that request user input (as opposed to auth interrupts which use `AuthConfig`). It is **yielded** (or returned) from a `@node` function; `BaseNode.run()` intercepts the yielded value, calls `create_request_input_event()` to wrap it in an interrupt `Event`, and marks the node as WAITING. There is no `ctx.request_input()` method — the yield is the mechanism.
 
 ### Constructor (source-verified)
 
@@ -749,26 +750,27 @@ class ApprovalResponse(BaseModel):
 @node
 async def approval_gate(node_input, ctx: Context):
     """Pause workflow and ask the user for approval."""
-    await ctx.request_input(
-        RequestInput(
-            message="Please approve or reject this action.",
-            response_schema=ApprovalResponse,
-            payload={"action": node_input},  # custom context for the UI
-        )
+    # Yield RequestInput — BaseNode.run() intercepts the yield and converts
+    # it to an interrupt Event. With rerun_on_resume=False (the default), the
+    # user's response dict becomes this node's output and flows to the next
+    # node as its node_input.
+    yield RequestInput(
+        message="Please approve or reject this action.",
+        response_schema=ApprovalResponse,
+        payload={"action": node_input},  # custom context for the UI
     )
 
 @node
 def process_if_approved(node_input, ctx: Context):
-    # resume_inputs is dict[str, Any] keyed by interrupt ID string.
-    # When no explicit interrupt_id was set, grab the first available value.
-    approval = next(iter(ctx.resume_inputs.values()), None)
-    if not isinstance(approval, dict) or not approval.get("approved"):
+    # node_input is the user's response from approval_gate
+    # (resolved as a dict matching ApprovalResponse when rerun_on_resume=False)
+    if not isinstance(node_input, dict) or not node_input.get("approved"):
         ctx.actions.state_delta["status"] = "rejected"
         return
     ctx.actions.state_delta["status"] = "approved"
-    ctx.actions.state_delta["comment"] = approval.get("comment", "")
+    ctx.actions.state_delta["comment"] = node_input.get("comment", "")
 
-wf = Workflow(name="approval-wf", nodes=[approval_gate, process_if_approved])
+wf = Workflow(name="approval-wf", edges=[("START", approval_gate, process_if_approved)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
@@ -818,18 +820,18 @@ from google.adk.workflow._node import node
 @node
 async def collect_tags(node_input, ctx: Context):
     """Request a list of string tags from the user."""
-    await ctx.request_input(
-        RequestInput(
-            message="Please provide tags for this item (list of strings).",
-            response_schema=list[str],
-            interrupt_id="collect-tags-001",  # stable ID for idempotency
-        )
+    # Yielding RequestInput pauses the node. With rerun_on_resume=False (default),
+    # the user's list response flows to save_tags as its node_input.
+    yield RequestInput(
+        message="Please provide tags for this item (list of strings).",
+        response_schema=list[str],
+        interrupt_id="collect-tags-001",  # stable ID for idempotency
     )
 
 @node
 def save_tags(node_input, ctx: Context):
-    # resume_inputs is keyed by interrupt ID string — use the same ID set above
-    tags = ctx.resume_inputs.get("collect-tags-001", [])
+    # node_input is the user's response list from collect_tags's output
+    tags = node_input if isinstance(node_input, list) else []
     ctx.actions.state_delta["tags"] = tags
     print(f"Saved tags: {tags}")
 ```
@@ -848,14 +850,14 @@ REVIEW_INTERRUPT_ID = "document-review-v1"
 @node
 async def request_document_review(node_input, ctx: Context):
     draft = ctx.session.state.get("draft", "")
-    await ctx.request_input(
-        RequestInput(
-            interrupt_id=REVIEW_INTERRUPT_ID,
-            message=f"Please review this draft: {draft[:200]}...",
-            payload={"draft_length": len(draft)},
-            response_schema=dict,  # free-form reviewer comments
-        )
+    yield RequestInput(
+        interrupt_id=REVIEW_INTERRUPT_ID,
+        message=f"Please review this draft: {draft[:200]}...",
+        payload={"draft_length": len(draft)},
+        response_schema=dict,  # free-form reviewer comments
     )
+    # The reviewer's comment dict becomes this node's output and flows to
+    # the next graph node as its node_input.
 ```
 
 ---
