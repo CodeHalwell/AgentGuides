@@ -1224,4 +1224,4 @@ asyncio.run(main())
 
 | Version | Date | Changes |
 |---|---|---|
-| 1.107.0 | 2026-06 | Initial publication — `AlibabaProvider`, `OVHcloudProvider`, `HerokuProvider`, `gateway_provider`, `GoogleProvider`/`GoogleCloudProvider`, `GoogleModel`/`GoogleModelSettings`, `CohereModel`/`CohereProvider`, `XaiProvider`/`XAIModel`, `FileStatePersistence`, `SimpleStatePersistence`/`FullStatePersistence` |
+| 1.107.0 | 2026-06-17 | Initial publication — `AlibabaProvider`, `OVHcloudProvider`, `HerokuProvider`, `gateway_provider`, `GoogleProvider`/`GoogleCloudProvider`, `GoogleModel`/`GoogleModelSettings`, `CohereModel`/`CohereProvider`, `XaiProvider`/`XAIModel`, `FileStatePersistence`, `SimpleStatePersistence`/`FullStatePersistence` |
