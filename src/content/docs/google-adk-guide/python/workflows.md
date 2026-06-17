@@ -313,8 +313,8 @@ from google.adk.events.request_input import RequestInput
 @node(rerun_on_resume=True)
 async def approve(draft: str, ctx):
     decision = yield RequestInput(
-        id="approval",
-        hint="Approve the draft? yes/no",
+        interrupt_id="approval_001",
+        message="Approve the draft? yes/no",
     )
     if decision == "yes":
         return draft
