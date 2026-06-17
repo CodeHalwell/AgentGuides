@@ -955,30 +955,34 @@ resume_content = build_resume_message(
 
 ```python
 import asyncio
+# APIKey and APIKeyIn are the correct auth-scheme types from FastAPI's OpenAPI models;
+# google.adk.auth.auth_schemes re-exports SecurityScheme (which includes APIKey).
+from fastapi.openapi.models import APIKey, APIKeyIn
 from google.adk.workflow.utils._workflow_hitl_utils import process_auth_resume
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import ApiKeySecurityScheme
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 from google.adk.sessions.state import State
 
 auth_config = AuthConfig(
-    auth_scheme=ApiKeySecurityScheme(name="x-api-key", in_="header"),
+    auth_scheme=APIKey(name="x-api-key", in_=APIKeyIn.header),
     raw_auth_credential=AuthCredential(
         auth_type=AuthCredentialTypes.API_KEY,
         api_key="",  # will be filled by resume
     ),
 )
 
-state = State()
+# State requires value dict and delta dict positional args.
+state = State({}, {})
 
 async def demo():
     # Format 1: full AuthConfig dict — stage 1 succeeds (sends a complete
-    # AuthConfig dict including the exchanged credential; works for any auth type)
+    # AuthConfig dict including the exchanged credential; works for any auth type).
+    # AuthCredentialTypes values are lowercase strings: "apiKey", "oauth2", etc.
     await process_auth_resume(
         response_data={
             "auth_scheme": {"type": "apiKey", "name": "x-api-key", "in": "header"},
             "exchanged_auth_credential": {
-                "auth_type": "API_KEY",
+                "auth_type": "apiKey",   # AuthCredentialTypes.API_KEY.value
                 "api_key": "sk-test-123",
             },
         },
@@ -997,13 +1001,13 @@ async def demo():
     # Format 3: AuthCredential dict — stage 1 fails; stage 2 branches on
     # raw_auth_credential.auth_type, NOT the auth scheme.
     # auth_type=OAUTH2 causes stage 2 to call AuthCredential.model_validate(response_data).
-    # (The ApiKeySecurityScheme here is intentional: stage 2 only checks auth_type.)
+    # (The APIKey scheme here is intentional: stage 2 only checks auth_type.)
     oauth_config = AuthConfig(
-        auth_scheme=ApiKeySecurityScheme(name="x-api-key", in_="header"),
+        auth_scheme=APIKey(name="x-api-key", in_=APIKeyIn.header),
         raw_auth_credential=AuthCredential(auth_type=AuthCredentialTypes.OAUTH2),
     )
     await process_auth_resume(
-        response_data={"auth_type": "OAUTH2", "oauth2": {"access_token": "tok-abc"}},
+        response_data={"auth_type": "oauth2", "oauth2": {"access_token": "tok-abc"}},
         auth_config=oauth_config,
         state=state,
     )
@@ -1083,8 +1087,8 @@ print(f"Final message: {aggregator.task_status_message}")
 ### Example 2 — use in a custom A2A executor
 
 ```python
-from a2a.server.events import Event as A2AEvent, TaskStatusUpdateEvent
-from a2a.types import TaskState, TaskStatus
+from a2a.server.events import Event as A2AEvent
+from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from google.adk.a2a.executor.task_result_aggregator import TaskResultAggregator
 
 async def stream_task(runner, user_id, session_id, message):
