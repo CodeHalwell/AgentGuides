@@ -1199,6 +1199,7 @@ import asyncio
 from dataclasses import dataclass
 from pydantic_graph import Graph, BaseNode, End
 from pydantic_graph.persistence.in_mem import FullStatePersistence
+from pydantic_graph.persistence import NodeSnapshot
 
 @dataclass
 class CountState:
@@ -1219,7 +1220,7 @@ async def main():
     run_result = await graph.run(Node(), state=CountState(), persistence=persistence)
     print(run_result.output)   # 3
 
-    node_snaps = [s for s in persistence.history if hasattr(s, 'node')]
+    node_snaps = [s for s in persistence.history if isinstance(s, NodeSnapshot)]
     print([s.state.n for s in node_snaps])   # [3, 3, 3] — all share the final state
 
 asyncio.run(main())
