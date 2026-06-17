@@ -1246,7 +1246,7 @@ Supports two modes:
 **Example 1 — semantic search with managed identity:**
 
 ```python
-from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential
 from agent_framework import Agent
 from agent_framework.azure import AzureAISearchContextProvider
 from agent_framework.openai import OpenAIChatClient
@@ -1350,7 +1350,7 @@ can resume across process restarts. Implements `before_run` (loads prior history
 **Example 1 — persist agent history to Cosmos DB with managed identity:**
 
 ```python
-from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential
 from agent_framework import Agent
 from agent_framework.azure import CosmosHistoryProvider
 from agent_framework.openai import OpenAIChatClient
@@ -1377,7 +1377,7 @@ print(response.text)
 
 ```python
 from azure.cosmos.aio import CosmosClient
-from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential
 from agent_framework.azure import CosmosHistoryProvider
 
 cosmos = CosmosClient(
