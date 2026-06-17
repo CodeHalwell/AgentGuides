@@ -698,7 +698,7 @@ async def chat(body: dict):
     thread_items = body["thread_items"]
 
     messages = await simple_to_agent_input(thread_items)
-    response_stream = await agent.run(messages, stream=True)
+    response_stream = agent.run(messages, stream=True)
 
     async def generate():
         async for event in stream_agent_response(response_stream, thread_id=thread_id):
@@ -713,7 +713,7 @@ async def chat(body: dict):
 from agent_framework.chatkit import stream_agent_response
 
 events = []
-response_stream = await agent.run("Summarise this", stream=True)
+response_stream = agent.run("Summarise this", stream=True)
 async for event in stream_agent_response(
     response_stream,
     thread_id="t-001",
@@ -733,7 +733,7 @@ from agent_framework.chatkit import stream_agent_response
 def deterministic_id(prefix: str) -> str:
     return f"{prefix}-{hashlib.md5(prefix.encode()).hexdigest()[:8]}"
 
-response_stream = await agent.run("Hello", stream=True)
+response_stream = agent.run("Hello", stream=True)
 async for event in stream_agent_response(
     response_stream,
     thread_id="t-fixed",
