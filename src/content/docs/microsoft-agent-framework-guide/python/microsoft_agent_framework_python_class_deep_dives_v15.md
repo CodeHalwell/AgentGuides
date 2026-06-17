@@ -447,9 +447,11 @@ from agent_framework.ag_ui import AgentFrameworkWorkflow
 from agent_framework import WorkflowBuilder
 
 class AuditedWorkflow(AgentFrameworkWorkflow):
-    async def run(self, messages, *, thread_id, run_id, state=None, **kwargs):
+    async def run(self, input_data: dict):
+        thread_id = self._thread_id_from_input(input_data)
+        run_id = input_data.get("run_id") or input_data.get("runId", "")
         print(f"[audit] thread={thread_id} run={run_id}")
-        async for event in super().run(messages, thread_id=thread_id, run_id=run_id, state=state, **kwargs):
+        async for event in super().run(input_data):
             yield event
 
 wf = WorkflowBuilder().add_agent(...).build()
