@@ -771,7 +771,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 from pydantic_ai.models.cohere import CohereModel
 from pydantic_ai.providers.cohere import CohereProvider
 
@@ -928,7 +928,7 @@ class FileStatePersistence(BaseStatePersistence[StateT, RunEndT]):
     json_file: Path   # one file per graph run; reused across steps of the same run
 ```
 
-Types are registered lazily via `set_types(state_type, run_end_type)` before the first write (the `Graph.run()` machinery calls this automatically). The internal `pydantic.TypeAdapter` handles polymorphic `Snapshot[StateT, RunEndT]` serialisation.
+Types are registered before the first write via `set_graph_types(graph)` (higher-level helper that extracts the type args automatically) or the lower-level `set_types(state_type, run_end_type)` — the `Graph.run()` machinery calls this automatically so manual registration is only needed when deserialising snapshots outside of a normal run. The internal `pydantic.TypeAdapter` handles polymorphic `Snapshot[StateT, RunEndT]` serialisation.
 
 ### File locking protocol
 
