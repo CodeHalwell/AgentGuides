@@ -103,6 +103,7 @@ async def inspect_compaction(session: Session, event_retention_size: int = 5):
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.apps._configs import EventsCompactionConfig
@@ -119,7 +120,7 @@ agent = LlmAgent(
 # When both are active, token-threshold is checked first; if it fires,
 # sliding-window is skipped for that turn.
 app = App(
-    agent=agent,
+    root_agent=agent,
     name="dual-compact-demo",
     events_compaction_config=EventsCompactionConfig(
         token_threshold=50_000,
@@ -138,7 +139,7 @@ async def main():
         async for event in runner.run_async(
             user_id="u1",
             session_id=session.id,
-            new_message=f"Message {i}: tell me something interesting.",
+            new_message=types.Content(role="user", parts=[types.Part(text=f"Message {i}: tell me something interesting.")]),
         ):
             pass  # events flow; compaction runs post-invocation
     print("Done — check session.events for CompactedEvent entries.")
@@ -198,6 +199,9 @@ from google.adk.apps._configs import EventsCompactionConfig
 config = EventsCompactionConfig(
     token_threshold=20_000,
     event_retention_size=5,
+    # compaction_interval and overlap_size are required integer fields in 2.2.0
+    compaction_interval=10,
+    overlap_size=3,
     summarizer=BulletSummarizer(),
 )
 ```
@@ -237,6 +241,7 @@ async def inject_session_state(
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.utils.instructions_utils import inject_session_state
@@ -271,7 +276,7 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="What can you help me with?",
+        new_message=types.Content(role="user", parts=[types.Part(text="What can you help me with?")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -371,6 +376,7 @@ The task wrapper sniffs `finish_task` FCs and waits for the matching FR from `Fi
 
 ```python
 import asyncio
+from google.genai import types
 from pydantic import BaseModel
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
@@ -415,7 +421,7 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="I absolutely love this product!",
+        new_message=types.Content(role="user", parts=[types.Part(text="I absolutely love this product!")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text if event.content else "")
@@ -427,6 +433,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from pydantic import BaseModel
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
@@ -472,10 +479,10 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message=(
+        new_message=types.Content(role="user", parts=[types.Part(text=(
             "Apple Inc. was founded by Steve Jobs in Cupertino. "
             "Tim Cook now leads the company."
-        ),
+        ))]),
     ):
         pass
     state = (await runner.session_service.get_session(
@@ -490,6 +497,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow
@@ -545,7 +553,7 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="Write a short article about the history of quantum computing.",
+        new_message=types.Content(role="user", parts=[types.Part(text="Write a short article about the history of quantum computing.")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text[:200] if event.content else "")
@@ -631,15 +639,12 @@ tools:
 ```
 
 ```python
-import asyncio
-from google.adk.agents.agent_config import AgentLoader
+# config_agent_utils.from_config is the current loader for YAML configs.
+# Note: deprecated in 2.2.0 — expected to be replaced by a stable public API.
+from google.adk.agents.config_agent_utils import from_config
 
-async def main():
-    loader = AgentLoader(config_path="agents/research_agent.yaml")
-    agent = await loader.load()
-    print(f"Loaded: {agent.name} with {len(await agent.canonical_tools())} tools")
-
-asyncio.run(main())
+agent = from_config("agents/research_agent.yaml")
+print(f"Loaded: {agent.name}")
 ```
 
 ### Example 2 — custom tool factory for ToolConfig pattern 5
@@ -735,6 +740,7 @@ RequestInput(
 
 ```python
 import asyncio
+from google.genai import types
 from pydantic import BaseModel
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
@@ -780,7 +786,8 @@ async def main():
     # First run — workflow pauses at approval_gate
     interrupted_event = None
     async for event in runner.run_async(
-        user_id="u1", session_id=session.id, new_message="Process order #42"
+        user_id="u1", session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="Process order #42")])
     ):
         if event.long_running_tool_ids:
             interrupted_event = event
@@ -792,7 +799,6 @@ async def main():
         print(f"Workflow paused. Interrupt ID: {interrupt_id}")
 
         # Resume with approval
-        from google.genai import types
         from google.adk.workflow.utils._workflow_hitl_utils import (
             create_request_input_response,
         )
@@ -1174,7 +1180,8 @@ retry_cfg = RetryConfig(
     backoff_factor=3.0,
     max_delay=30.0,
     jitter=0.5,  # smaller jitter for predictable delays
-    exceptions=["httpx.TimeoutException", "httpx.ConnectError"],
+    # Use bare class names: _should_retry_node compares type(exception).__name__
+    exceptions=["TimeoutException", "ConnectError"],
 )
 
 @node(retry_config=retry_cfg)
@@ -1413,16 +1420,16 @@ Note: `SpannerAdminToolset` provides **management plane** operations. For **data
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.tools.spanner.admin_toolset import SpannerAdminToolset
-from google.adk.tools.spanner.spanner_credentials import SpannerCredentialsConfig
 from google.adk.runners import InMemoryRunner
 
-admin_toolset = SpannerAdminToolset(
-    credentials_config=SpannerCredentialsConfig(
-        use_default_credentials=True,   # Application Default Credentials
-    ),
-)
+# credentials_config=None (default) uses Application Default Credentials.
+# To pass explicit credentials: credentials_config=SpannerCredentialsConfig(
+#     credentials=google.auth.default(scopes=[...])[0]
+# )
+admin_toolset = SpannerAdminToolset()
 
 admin_agent = LlmAgent(
     name="spanner_admin",
@@ -1481,6 +1488,7 @@ read_only_agent = LlmAgent(
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.tools.spanner.admin_toolset import SpannerAdminToolset
 from google.adk.tools.spanner.spanner_toolset import SpannerToolset
@@ -1495,7 +1503,7 @@ data_tools = SpannerToolset(
     project_id="my-gcp-project",
     instance_id="my-instance",
     database_id="my-database",
-    tool_settings=SpannerToolSettings(
+    spanner_tool_settings=SpannerToolSettings(
         max_query_result_rows=100,
     ),
 )
@@ -1519,10 +1527,10 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message=(
+        new_message=types.Content(role="user", parts=[types.Part(text=(
             "Check if there's an instance called 'prod-instance'. "
             "If so, list its databases. If not, let me know."
-        ),
+        ))]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -1537,7 +1545,7 @@ asyncio.run(main())
 | # | Class / symbol | Module | Key insight |
 |---|---|---|---|
 | 1 | Compaction pipeline | `apps.compaction` | Two strategies run in priority order; HITL guards prevent compacting pending FC/auth events; rolling-summary seed avoids duplicate summaries |
-| 2 | `inject_session_state` | `utils.instructions_utils` | `{var?}` optional form; `{artifact.name}` async load; scope prefixes work; non-identifier patterns returned verbatim |
+| 2 | `inject_session_state` | `utils.instructions_utils` | `{var?}` optional form; `{artifact.file_name}` async load; scope prefixes work; non-identifier patterns returned verbatim |
 | 3 | `run_llm_agent_as_node` | `workflow._llm_agent_wrapper` | `single_turn` forces `include_contents=none`; `task` waits for FinishTaskTool success FR; `chat` dispatch loop replays unresolved task FCs on resume |
 | 4 | `ToolConfig` / YAML DSL | `tools.tool_configs` | 5 reference patterns; `ToolArgsConfig(extra="allow")` for free kwargs; `BaseToolConfig(extra="forbid")` for custom configs |
 | 5 | `RequestInput` | `events.request_input` | camelCase aliases; `response_schema` accepts Pydantic type/generic alias/dict; stable `interrupt_id` for retry cycles |
