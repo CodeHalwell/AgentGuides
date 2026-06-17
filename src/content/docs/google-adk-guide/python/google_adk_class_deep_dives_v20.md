@@ -152,7 +152,8 @@ asyncio.run(main())
 ```python
 from typing import Optional
 from google.adk.apps.base_events_summarizer import BaseEventsSummarizer
-from google.adk.events.event import Event, EventCompaction
+from google.adk.events.event_actions import EventCompaction
+from google.adk.events.event import Event
 import time
 
 class BulletSummarizer(BaseEventsSummarizer):
@@ -441,6 +442,7 @@ from pydantic import BaseModel
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
 from google.adk.workflow._node import node
+from google.adk.workflow._llm_agent_wrapper import run_llm_agent_as_node
 
 class ExtractedEntities(BaseModel):
     people: list[str]
@@ -462,6 +464,13 @@ entity_agent = LlmAgent(
     output_key="entities",
 )
 
+# Workflow._validate_no_task_mode_graph_nodes() rejects LlmAgent(mode="task")
+# placed directly as a static graph node. Wrap it in a @node function instead.
+@node
+async def entity_node(node_input, ctx):
+    async for event in run_llm_agent_as_node(entity_agent, ctx=ctx, node_input=node_input):
+        yield event
+
 @node
 def summarise(node_input, ctx):
     entities = ctx.session.state.get("entities", {})
@@ -472,7 +481,7 @@ def summarise(node_input, ctx):
     )
     ctx.actions.state_delta["summary"] = summary
 
-wf = Workflow(name="ner-pipeline", edges=[("START", entity_agent, summarise)])
+wf = Workflow(name="ner-pipeline", edges=[("START", entity_node, summarise)])
 
 async def main():
     runner = InMemoryRunner(agent=wf, app_name="demo")
@@ -936,9 +945,10 @@ def build_resume_message(interrupt_id: str, user_response: dict) -> types.Conten
     return types.Content(role="user", parts=[part])
 
 # Example usage:
+# user_response must be a dict (Mapping[str, Any]); wrap lists/scalars in a dict.
 resume_content = build_resume_message(
     interrupt_id="collect-tags-001",
-    response=["python", "async", "google-adk"],
+    user_response={"tags": ["python", "async", "google-adk"]},
 )
 ```
 
@@ -1464,7 +1474,7 @@ async def main():
     async for event in runner.run_async(
         user_id="admin",
         session_id=session.id,
-        new_message="List all Spanner instances in project my-gcp-project.",
+        new_message=types.Content(role="user", parts=[types.Part(text="List all Spanner instances in project my-gcp-project.")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -1518,7 +1528,7 @@ data_tools = SpannerToolset(
     instance_id="my-instance",
     database_id="my-database",
     spanner_tool_settings=SpannerToolSettings(
-        max_query_result_rows=100,
+        max_executed_query_result_rows=100,
     ),
 )
 
