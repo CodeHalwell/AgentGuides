@@ -440,6 +440,7 @@ import asyncio
 from google.genai import types
 from pydantic import BaseModel
 from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow
 from google.adk.workflow._node import node
 from google.adk.workflow._llm_agent_wrapper import run_llm_agent_as_node
@@ -1097,7 +1098,6 @@ print(f"Final message: {aggregator.task_status_message}")
 ### Example 2 — use in a custom A2A executor
 
 ```python
-from a2a.server.events import Event as A2AEvent
 from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from google.adk.a2a.executor.task_result_aggregator import TaskResultAggregator
 
@@ -1109,16 +1109,17 @@ async def stream_task(runner, user_id, session_id, message):
     async for adk_event in runner.run_async(
         user_id=user_id, session_id=session_id, new_message=message
     ):
-        # Convert ADK event to A2A TaskStatusUpdateEvent (simplified)
-        if adk_event.is_final_response():
-            a2a_event = TaskStatusUpdateEvent(
-                id="task-1",
-                status=TaskStatus(state=TaskState.working),
-                final=False,
-            )
-            aggregator.process_event(a2a_event)
-            all_events.append(a2a_event)
-            yield a2a_event  # stream to A2A client
+        # Every ADK event becomes an A2A status update so the aggregator
+        # observes all state transitions, not only the final response.
+        state = TaskState.completed if adk_event.is_final_response() else TaskState.working
+        a2a_event = TaskStatusUpdateEvent(
+            id="task-1",
+            status=TaskStatus(state=state),
+            final=False,
+        )
+        aggregator.process_event(a2a_event)
+        all_events.append(a2a_event)
+        yield a2a_event  # stream to A2A client
 
     # Emit final event with the true aggregated state
     final_status = TaskStatus(
