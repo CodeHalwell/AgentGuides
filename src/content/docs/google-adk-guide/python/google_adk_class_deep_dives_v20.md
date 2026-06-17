@@ -130,7 +130,7 @@ app = App(
 )
 
 async def main():
-    runner = InMemoryRunner(agent=agent, app_name="dual-compact-demo")
+    runner = InMemoryRunner(app=app)
     session = await runner.session_service.create_session(
         app_name="dual-compact-demo", user_id="u1"
     )
@@ -641,7 +641,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 2 — custom tool factory for ToolConfig pattern 4
+### Example 2 — custom tool factory for ToolConfig pattern 5
 
 ```python
 # my_tools/toolbox.py
@@ -650,7 +650,7 @@ from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.function_tool import FunctionTool
 
 def build_http_tool(args: ToolArgsConfig) -> BaseTool:
-    """Factory function loadable via ToolConfig pattern 4."""
+    """Factory function loadable via ToolConfig pattern 5."""
     # ToolArgsConfig uses extra="allow"; in Pydantic v2 extra fields are stored
     # in model_extra, not as regular attributes — use model_extra.get() to access them.
     extras = args.model_extra or {}
@@ -759,7 +759,9 @@ async def approval_gate(node_input, ctx: Context):
 
 @node
 def process_if_approved(node_input, ctx: Context):
-    approval = ctx.resume_inputs.get(0)  # first resume input
+    # resume_inputs is dict[str, Any] keyed by interrupt ID string.
+    # When no explicit interrupt_id was set, grab the first available value.
+    approval = next(iter(ctx.resume_inputs.values()), None)
     if not isinstance(approval, dict) or not approval.get("approved"):
         ctx.actions.state_delta["status"] = "rejected"
         return
@@ -783,7 +785,8 @@ async def main():
             break
 
     if interrupted_event:
-        interrupt_id = interrupted_event.long_running_tool_ids[0]
+        # long_running_tool_ids is set[str] | None — use iter(), not indexing
+        interrupt_id = next(iter(interrupted_event.long_running_tool_ids))
         print(f"Workflow paused. Interrupt ID: {interrupt_id}")
 
         # Resume with approval
@@ -825,7 +828,8 @@ async def collect_tags(node_input, ctx: Context):
 
 @node
 def save_tags(node_input, ctx: Context):
-    tags = ctx.resume_inputs.get(0, [])
+    # resume_inputs is keyed by interrupt ID string — use the same ID set above
+    tags = ctx.resume_inputs.get("collect-tags-001", [])
     ctx.actions.state_delta["tags"] = tags
     print(f"Saved tags: {tags}")
 ```
@@ -925,7 +929,14 @@ resume_content = build_resume_message(
 
 ### Example 3 — process_auth_resume for three response formats
 
-`process_auth_resume` accepts the resume payload in three formats (tried in order):
+`process_auth_resume` uses a two-stage dispatch:
+
+1. **Stage 1** — attempt `AuthConfig.model_validate(response_data)`. If it succeeds, the
+   full auth config (including the exchanged credential) is stored directly.
+2. **Stage 2** (if stage 1 raises `ValidationError` / `TypeError`) — call
+   `_build_credential_from_value`, which branches on `raw_auth_credential.auth_type`:
+   - `API_KEY` → wrap the raw value as a plain-string api key
+   - anything else → `AuthCredential.model_validate(value)` (expects an AuthCredential dict)
 
 ```python
 import asyncio
@@ -946,7 +957,7 @@ auth_config = AuthConfig(
 state = State()
 
 async def demo():
-    # Format 1: full AuthConfig dict (from OAuth2 consent redirect)
+    # Format 1: full AuthConfig dict — stage 1 succeeds (OAuth2 web UI flow)
     await process_auth_resume(
         response_data={
             "auth_scheme": {"type": "apiKey", "name": "x-api-key", "in": "header"},
@@ -959,16 +970,22 @@ async def demo():
         state=state,
     )
 
-    # Format 2: plain API key string
+    # Format 2: AuthCredential dict — stage 1 fails; stage 2 uses model_validate
+    # (auth_type is not API_KEY for OAuth2; for API_KEY types use format 3 instead)
+    oauth_config = AuthConfig(
+        auth_scheme=ApiKeySecurityScheme(name="x-api-key", in_="header"),
+        raw_auth_credential=AuthCredential(auth_type=AuthCredentialTypes.OAUTH2),
+    )
     await process_auth_resume(
-        response_data="sk-test-456",
-        auth_config=auth_config,
+        response_data={"auth_type": "OAUTH2", "oauth2": {"access_token": "tok-abc"}},
+        auth_config=oauth_config,
         state=state,
     )
 
-    # Format 3: AuthCredential dict
+    # Format 3: plain string — stage 1 fails; stage 2 wraps it as api_key
+    # (only works when raw_auth_credential.auth_type == API_KEY)
     await process_auth_resume(
-        response_data={"auth_type": "API_KEY", "api_key": "sk-test-789"},
+        response_data="sk-test-456",
         auth_config=auth_config,
         state=state,
     )
@@ -1522,7 +1539,7 @@ asyncio.run(main())
 | 3 | `run_llm_agent_as_node` | `workflow._llm_agent_wrapper` | `single_turn` forces `include_contents=none`; `task` waits for FinishTaskTool success FR; `chat` dispatch loop replays unresolved task FCs on resume |
 | 4 | `ToolConfig` / YAML DSL | `tools.tool_configs` | 5 reference patterns; `ToolArgsConfig(extra="allow")` for free kwargs; `BaseToolConfig(extra="forbid")` for custom configs |
 | 5 | `RequestInput` | `events.request_input` | camelCase aliases; `response_schema` accepts Pydantic type/generic alias/dict; stable `interrupt_id` for retry cycles |
-| 6 | HITL utilities | `workflow.utils._workflow_hitl_utils` | `adk_request_input` FC name constant; `process_auth_resume` tries AuthConfig dict → AuthCredential dict → plain value |
+| 6 | HITL utilities | `workflow.utils._workflow_hitl_utils` | `adk_request_input` FC name constant; `process_auth_resume` stage 1: full AuthConfig dict; stage 2: API_KEY type → plain string, others → AuthCredential dict |
 | 7 | `TaskResultAggregator` | `a2a.executor.task_result_aggregator` | Priority: failed > auth_required > input_required > working; intermediate events re-written to `working` to prevent premature A2A stream termination |
 | 8 | Retry internals | `workflow.utils._retry_utils` | `attempt_count` is 1-based; delay formula: `initial × backoff^(attempt-1)`; exception filter uses type **name** strings |
 | 9 | `GoogleLLMVariant` + model utils | `utils.variant_utils` / `model_name_utils` / `output_schema_utils` | `GOOGLE_GENAI_USE_VERTEXAI` env switch; `extract_model_name` handles Vertex/Apigee paths; `can_use_output_schema_with_tools` gates `SetModelResponseTool` injection |
