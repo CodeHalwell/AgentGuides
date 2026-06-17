@@ -20,7 +20,7 @@ Source-verified against **google-adk==2.2.0** (installed in `/tmp/adk-env`, June
 | 6 | HITL workflow utilities | `google.adk.workflow.utils._workflow_hitl_utils` | Stable (internal) |
 | 7 | `TaskResultAggregator` | `google.adk.a2a.executor.task_result_aggregator` | `@a2a_experimental` |
 | 8 | Retry internals | `google.adk.workflow.utils._retry_utils` | Stable (internal) |
-| 9 | `GoogleLLMVariant` + model-name utilities | `google.adk.utils.variant_utils` / `model_name_utils` / `output_schema_utils` | Stable (internal) |
+| 9 | `GoogleLLMVariant` + model-name utilities | `google.adk.utils.variant_utils` / `google.adk.utils.model_name_utils` / `google.adk.utils.output_schema_utils` | Stable (internal) |
 | 10 | `SpannerAdminToolset` | `google.adk.tools.spanner.admin_toolset` | `@experimental` |
 
 ---
