@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI — Class Deep Dives Vol. 18"
-description: "Source-verified deep dives into 10 class groups from pydantic-ai 1.107.0: AlibabaProvider (DashScope + Qwen omni audio), OVHcloudProvider (multi-family profile routing), HerokuProvider (Heroku Inference API), gateway_provider (Pydantic AI Gateway multi-upstream routing + region-encoded keys), GoogleProvider + GoogleCloudProvider (Gemini API vs Google Cloud/Vertex AI), GoogleModel + GoogleModelSettings (all 9 settings including cached_content caveat + GoogleCloudServiceTier), CohereModel + CohereProvider + CohereModelSettings (Command-R family via AsyncClientV2), XaiProvider + XAIModel (gRPC SDK + LazyAsyncClient loop affinity + GrokModelProfile/GrokReasoningEffort), FileStatePersistence (atomic file-lock persistence for pydantic_graph), SimpleStatePersistence + FullStatePersistence (in-memory simple vs full-history with dump_json/load_json). All verified against pydantic-ai 1.107.0 / pydantic-graph 1.107.0 source."
+description: "Source-verified deep dives into 10 class groups from pydantic-ai 1.107.0: AlibabaProvider (DashScope + Qwen omni audio), OVHcloudProvider (multi-family profile routing), HerokuProvider (Heroku Inference API), gateway_provider (Pydantic AI Gateway multi-upstream routing + region-encoded keys), GoogleProvider + GoogleCloudProvider (Gemini API vs Google Cloud/Vertex AI), GoogleModel + GoogleModelSettings (all 9 settings including cached_content caveat + GoogleCloudServiceTier), CohereModel + CohereProvider + CohereModelSettings (Command-R family via AsyncClientV2), XaiProvider + XaiModel (gRPC SDK + LazyAsyncClient loop affinity + GrokModelProfile/GrokReasoningEffort), FileStatePersistence (atomic file-lock persistence for pydantic_graph), SimpleStatePersistence + FullStatePersistence (in-memory simple vs full-history with dump_json/load_json). All verified against pydantic-ai 1.107.0 / pydantic-graph 1.107.0 source."
 sidebar:
   label: "Class deep dives (Vol. 18)"
   order: 44
@@ -12,7 +12,7 @@ import { Aside } from '@astrojs/starlight/components';
 All examples verified against **pydantic-ai 1.107.0** / **pydantic-graph 1.107.0** source installed directly from PyPI. Class signatures, field names, and behaviour match the installed package at this version.
 </Aside>
 
-Ten class groups spanning new providers, the Google ecosystem, and graph persistence: `AlibabaProvider` (Alibaba Cloud DashScope — Qwen profiles, omni audio URI encoding, dual env-var support); `OVHcloudProvider` (OVHcloud AI Endpoints — prefix-based multi-family profile routing for six model families); `HerokuProvider` (Heroku Inference API — `HEROKU_INFERENCE_KEY`, configurable `HEROKU_INFERENCE_URL`); `gateway_provider` (Pydantic AI Gateway — multi-upstream dispatch, `route` override, region-encoded API key with automatic base-URL inference); `GoogleProvider` + `GoogleCloudProvider` (Gemini API vs Google Cloud/Vertex AI — `GOOGLE_API_KEY` vs ADC credentials, `BaseGoogleProvider` shared base, migration guidance); `GoogleModel` + `GoogleModelSettings` (all nine provider-prefixed settings — `google_cached_content` caveat on tool/system-prompt stripping, `google_safety_settings`, `MediaResolution`, `GoogleCloudServiceTier`); `CohereModel` + `CohereProvider` + `CohereModelSettings` (Command-R family — `CO_API_KEY`, `AsyncClientV2`, thinking content mapping, `LatestCohereModelNames`); `XaiProvider` + `XAIModel` (xAI gRPC SDK — `_LazyAsyncClient` per-loop affinity, `GrokModelProfile`, `GrokReasoningEffort`, builtin-tool gate, gRPC error mapping); `FileStatePersistence` (file-based graph persistence — atomic `.pydantic-graph-persistence-lock` lock file, snapshot lifecycle, `anyio`-based async I/O); `SimpleStatePersistence` + `FullStatePersistence` (in-memory graph persistence — lightweight latest-only vs full history with `dump_json`/`load_json` round-trip).
+Ten class groups spanning new providers, the Google ecosystem, and graph persistence: `AlibabaProvider` (Alibaba Cloud DashScope — Qwen profiles, omni audio URI encoding, dual env-var support); `OVHcloudProvider` (OVHcloud AI Endpoints — prefix-based multi-family profile routing for six model families); `HerokuProvider` (Heroku Inference API — `HEROKU_INFERENCE_KEY`, configurable `HEROKU_INFERENCE_URL`); `gateway_provider` (Pydantic AI Gateway — multi-upstream dispatch, `route` override, region-encoded API key with automatic base-URL inference); `GoogleProvider` + `GoogleCloudProvider` (Gemini API vs Google Cloud/Vertex AI — `GOOGLE_API_KEY` vs ADC credentials, `BaseGoogleProvider` shared base, migration guidance); `GoogleModel` + `GoogleModelSettings` (all nine provider-prefixed settings — `google_cached_content` caveat on tool/system-prompt stripping, `google_safety_settings`, `MediaResolution`, `GoogleCloudServiceTier`); `CohereModel` + `CohereProvider` + `CohereModelSettings` (Command-R family — `CO_API_KEY`, `AsyncClientV2`, thinking content mapping, `LatestCohereModelNames`); `XaiProvider` + `XaiModel` (xAI gRPC SDK — `_LazyAsyncClient` per-loop affinity, `GrokModelProfile`, `GrokReasoningEffort`, builtin-tool gate, gRPC error mapping); `FileStatePersistence` (file-based graph persistence — atomic `.pydantic-graph-persistence-lock` lock file, snapshot lifecycle, `anyio`-based async I/O); `SimpleStatePersistence` + `FullStatePersistence` (in-memory graph persistence — lightweight latest-only vs full history with `dump_json`/`load_json` round-trip).
 
 <Aside type="note" title="Provider pattern">
 Providers are passed to the **model constructor**, not directly to `Agent`. Always write `Agent(SomeModel('model-name', provider=provider))`, never `Agent(model='model-name', provider=provider)`. All examples below follow this pattern.
@@ -796,16 +796,16 @@ asyncio.run(main())
 
 ---
 
-## 8. `XaiProvider` + `XAIModel` — xAI Grok via gRPC SDK
+## 8. `XaiProvider` + `XaiModel` — xAI Grok via gRPC SDK
 
 **Module:** `pydantic_ai.providers.xai`, `pydantic_ai.models.xai`  
 **Import:**
 ```python
 from pydantic_ai.providers.xai import XaiProvider
-from pydantic_ai.models.xai import XAIModel, XAIModelSettings
+from pydantic_ai.models.xai import XaiModel, XaiModelSettings
 ```
 
-`XAIModel` is the only model in pydantic-ai that uses a **gRPC transport** (`xai-sdk`) rather than an HTTP client. This shapes both the provider design (a `_LazyAsyncClient` that binds per event-loop) and the error handling (gRPC status codes mapped to HTTP equivalents).
+`XaiModel` is the only model in pydantic-ai that uses a **gRPC transport** (`xai-sdk`) rather than an HTTP client. This shapes both the provider design (a `_LazyAsyncClient` that binds per event-loop) and the error handling (gRPC status codes mapped to HTTP equivalents).
 
 ### `_LazyAsyncClient` — per-event-loop gRPC channel
 
@@ -849,11 +849,11 @@ Models that match `'grok-4'`, `'code'`, `'build'`, or are in the `_GROK_43_REASO
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.xai import XaiProvider
-from pydantic_ai.models.xai import XAIModel
+from pydantic_ai.models.xai import XaiModel
 
 # XAI_API_KEY env var is read automatically if api_key is omitted
 provider = XaiProvider(api_key='xai-your-key')
-agent = Agent(XAIModel('grok-3', provider=provider))
+agent = Agent(XaiModel('grok-3', provider=provider))
 
 async def main():
     result = await agent.run('What are the design principles of the Rust programming language?')
@@ -868,12 +868,12 @@ asyncio.run(main())
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.xai import XaiProvider
-from pydantic_ai.models.xai import XAIModel
+from pydantic_ai.models.xai import XaiModel
 from pydantic_ai.settings import ModelSettings
 
 provider = XaiProvider(api_key='xai-your-key')
 agent = Agent(
-    XAIModel('grok-4.3', provider=provider),
+    XaiModel('grok-4.3', provider=provider),
     model_settings=ModelSettings(thinking='high'),  # maps to GrokModelProfile reasoning_effort via unified thinking
 )
 
@@ -890,14 +890,14 @@ asyncio.run(main())
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.providers.xai import XaiProvider
-from pydantic_ai.models.xai import XAIModel
+from pydantic_ai.models.xai import XaiModel
 from pydantic_ai.capabilities.x_search import XSearch
 
 provider = XaiProvider(api_key='xai-your-key')
 
 # grok-4.3 has grok_supports_builtin_tools=True
 agent = Agent(
-    XAIModel('grok-4.3', provider=provider),
+    XaiModel('grok-4.3', provider=provider),
     capabilities=[XSearch()],   # activates xAI native X/web search
 )
 
@@ -1224,4 +1224,4 @@ asyncio.run(main())
 
 | Version | Date | Changes |
 |---|---|---|
-| 1.107.0 | 2026-06-17 | Initial publication — `AlibabaProvider`, `OVHcloudProvider`, `HerokuProvider`, `gateway_provider`, `GoogleProvider`/`GoogleCloudProvider`, `GoogleModel`/`GoogleModelSettings`, `CohereModel`/`CohereProvider`, `XaiProvider`/`XAIModel`, `FileStatePersistence`, `SimpleStatePersistence`/`FullStatePersistence` |
+| 1.107.0 | 2026-06-17 | Initial publication — `AlibabaProvider`, `OVHcloudProvider`, `HerokuProvider`, `gateway_provider`, `GoogleProvider`/`GoogleCloudProvider`, `GoogleModel`/`GoogleModelSettings`, `CohereModel`/`CohereProvider`, `XaiProvider`/`XaiModel`, `FileStatePersistence`, `SimpleStatePersistence`/`FullStatePersistence` |
