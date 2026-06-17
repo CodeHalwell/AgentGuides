@@ -365,7 +365,8 @@ async def add_todo(task: str):
     """Add a task to the todo list."""
     return state_update(
         text=f"Added task: {task}",
-        state={"items": ["__append__", task], "count": "__increment__"},
+        # state_update merges via dict.update — pass the full replacement value
+        state={"last_added": task},
     )
 
 agent = Agent(client=OpenAIChatClient(), name="TodoBot", tools=[add_todo])
@@ -428,12 +429,12 @@ add_agent_framework_fastapi_endpoint(app, wrapped_wf, path="/pipeline")
 from agent_framework.declarative import WorkflowFactory
 from agent_framework.ag_ui import AgentFrameworkWorkflow
 
-def build_workflow():
+def build_workflow(thread_id: str):
     from agent_framework import WorkflowBuilder
     return WorkflowBuilder().add_agent(...).build()
 
 wrapped_wf = AgentFrameworkWorkflow(
-    workflow_factory=build_workflow,  # called fresh per thread_id
+    workflow_factory=build_workflow,  # called with thread_id per new session
     name="IsolatedPipeline",
 )
 ```
@@ -1466,8 +1467,8 @@ def shutdown(sig, frame):
     durable_worker.stop()
 
 signal.signal(signal.SIGTERM, shutdown)
+signal.signal(signal.SIGINT, shutdown)   # register before start() — which blocks
 durable_worker.start()  # blocks until stopped
-signal.signal(signal.SIGINT, shutdown)
 ```
 
 ---
