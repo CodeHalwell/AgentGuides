@@ -54,7 +54,7 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools import google_search
 from google.genai import types
 
-# RecordingsPlugin is registered at runner construction time.
+# RecordingsPlugin is passed to Runner at construction time.
 # It activates only when _adk_recordings_config is present in session state.
 agent = LlmAgent(
     name="research_agent",
@@ -68,11 +68,8 @@ runner = Runner(
     agent=agent,
     app_name="research_app",
     session_service=session_service,
+    plugins=[RecordingsPlugin()],
 )
-runner.agent_registry  # ensure agent tree is built
-
-# Register the plugin after construction.
-recordings_plugin = RecordingsPlugin()
 
 
 async def record_golden_run():
@@ -131,9 +128,8 @@ runner = Runner(
     agent=agent,
     app_name="research_app",
     session_service=session_service,
+    plugins=[ReplayPlugin()],
 )
-
-replay_plugin = ReplayPlugin()
 
 
 async def run_conformance_test():
@@ -213,7 +209,10 @@ async def run_parallel_conformance():
     agent = LlmAgent(name="my_agent", model="gemini-2.0-flash", instruction="Help.")
     session_service = InMemorySessionService()
     runner = Runner(
-        agent=agent, app_name="ci_app", session_service=session_service
+        agent=agent,
+        app_name="ci_app",
+        session_service=session_service,
+        plugins=[ReplayPlugin()],
     )
     # Run three user turns in parallel — each gets a distinct invocation_id
     # so agent_tool_replay_indices[agent_name] starts at 0 for each.
