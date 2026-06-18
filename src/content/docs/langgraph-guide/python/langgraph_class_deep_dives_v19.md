@@ -870,19 +870,19 @@ builder.add_edge("approval", "action")
 builder.add_edge("action", END)
 
 from langgraph.checkpoint.memory import InMemorySaver
-graph = builder.compile(checkpointer=InMemorySaver(), interrupt_before=["approval"])
+graph = builder.compile(checkpointer=InMemorySaver())
 
 async def run():
     config = {"configurable": {"thread_id": "hitl-1"}}
-    # interrupt_before=["approval"] — first invocation pauses before the node
-    # and returns normally (no exception raised).
+    # approval_node calls interrupt() — with a checkpointer, ainvoke returns
+    # normally and the interrupt value is saved to the checkpoint.
     await graph.ainvoke({"approved": False, "result": ""}, config=config)
 
-    # Inspect pending interrupts before resuming
+    # Inspect the pending dynamic interrupt
     snap = await graph.aget_state(config)
-    print(f"Next node(s): {snap.next}")   # ('approval',)
+    print(f"Pending interrupts: {snap.interrupts}")  # interrupt value visible here
 
-    # Resume with approval
+    # Resume by answering the interrupt
     result = await graph.ainvoke(Command(resume="yes"), config=config)
     print(f"Result: {result['result']}")
 
@@ -1661,7 +1661,7 @@ from typing_extensions import TypedDict
 class State(TypedDict):
     counter: int
 
-def counter_node(state: State) -> dict:
+async def counter_node(state: State) -> dict:
     return {"counter": state["counter"] + 1}
 
 builder = StateGraph(State)
