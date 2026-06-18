@@ -402,7 +402,6 @@ if __name__ == '__main__':
 # Prefer GoogleCloudProvider for new code.
 import asyncio
 import os
-from typing_extensions import deprecated
 from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 
@@ -1360,7 +1359,7 @@ The `pydantic_graph.exceptions` hierarchy covers all graph lifecycle errors with
 | `kind` | `Literal['node']` | Discriminator for ser/de |
 | `id` | `str` | Auto from `node.get_snapshot_id()` if `UNSET_SNAPSHOT_ID` |
 
-### Example 1 — Custom Redis-backed `BaseStatePersistence`
+### Example 1 — Custom in-memory `BaseStatePersistence`
 
 ```python
 import asyncio
@@ -1403,7 +1402,7 @@ class InMemoryPersistence(BaseStatePersistence):
         self._order.append(snapshot.id)
 
     @asynccontextmanager
-    def record_run(self, snapshot_id: str):  # sync method returning async context manager
+    async def record_run(self, snapshot_id: str):
         snap = self._snapshots[snapshot_id]
         if isinstance(snap, NodeSnapshot):
             snap.status = 'running'
