@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 16"
-description: "Source-verified deep dives into 10 class groups from agent-framework 1.8.1: FoundryAgent+FoundryAgentOptions (hosted Azure AI agents), FoundryLocalClient (on-device LLM), FoundryMemoryProvider (Foundry semantic memory), FoundryEvals+GeneratedEvaluatorRef (cloud eval harness — 20 built-in evaluators), BedrockChatClient+BedrockChatOptions+BedrockGuardrailConfig (Bedrock Converse API), BedrockEmbeddingClient+BedrockEmbeddingOptions (Bedrock Titan embeddings), MagenticManagerBase (custom Magentic manager authoring), BaseGroupChatOrchestrator+GroupChatRequestSentEvent+GroupChatResponseReceivedEvent (group chat base class and event model), AgentRequestInfoResponse+CacheProvider (HITL approval response + cache protocol), Purview exception hierarchy + acquire_token (MSAL token flow)."
+description: "Source-verified deep dives into 10 class groups from agent-framework 1.8.1: FoundryAgent+FoundryAgentOptions (hosted Azure AI agents), FoundryLocalClient (on-device LLM), FoundryMemoryProvider (Foundry semantic memory), FoundryEvals+GeneratedEvaluatorRef (cloud eval harness — 19 built-in evaluators), BedrockChatClient+BedrockChatOptions+BedrockGuardrailConfig (Bedrock Converse API), BedrockEmbeddingClient+BedrockEmbeddingOptions (Bedrock Titan embeddings), MagenticManagerBase (custom Magentic manager authoring), BaseGroupChatOrchestrator+GroupChatRequestSentEvent+GroupChatResponseReceivedEvent (group chat base class and event model), AgentRequestInfoResponse+CacheProvider (HITL approval response + cache protocol), Purview exception hierarchy + acquire_token (MSAL token flow)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -175,7 +175,6 @@ asyncio.run(main())
 import asyncio
 from agent_framework import tool
 from agent_framework.foundry import FoundryAgent
-from agent_framework.openai import OpenAIChatClient
 from azure.identity import DefaultAzureCredential
 
 @tool
@@ -666,7 +665,7 @@ the call site:
 | `promptVariables` | `dict[str, dict[str, str]]` | Variables for managed prompts |
 
 **Unsupported options** (type-annotated `None`): `seed`, `frequency_penalty`,
-`presence_penalty`, `allow_multiple_tool_calls`, `user`, `store`, `logit_bias`.
+`presence_penalty`, `allow_multiple_tool_calls`, `user`, `store`, `logit_bias`, `metadata`.
 
 ### `BedrockGuardrailConfig`
 
@@ -711,7 +710,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, ChatOptions
+from agent_framework import Agent
 from agent_framework.amazon import BedrockChatClient, BedrockChatOptions, BedrockGuardrailConfig
 
 async def main():
@@ -958,23 +957,24 @@ class SimpleDelegateManager(MagenticManagerBase):
     """Always delegates to the first available agent — no planning LLM needed."""
 
     async def plan(self, ctx: MagenticContext) -> Message:
-        agents = list(ctx.agent_names)
+        agents = list(ctx.participant_descriptions.keys())
         return Message(role="assistant", contents=[f"Delegate to: {agents[0]}"])
 
     async def replan(self, ctx: MagenticContext) -> Message:
         return await self.plan(ctx)
 
     async def create_progress_ledger(self, ctx: MagenticContext) -> MagenticProgressLedger:
+        first_agent = list(ctx.participant_descriptions.keys())[0]
         return MagenticProgressLedger(
-            is_request_satisfied=False,
-            is_in_loop=False,
-            is_progress_being_made=True,
-            next_speaker=list(ctx.agent_names)[0],
-            instruction_or_question="Please complete the task.",
+            is_request_satisfied=MagenticProgressLedgerItem(reason="Task ongoing.", answer=False),
+            is_in_loop=MagenticProgressLedgerItem(reason="No loop detected.", answer=False),
+            is_progress_being_made=MagenticProgressLedgerItem(reason="First round.", answer=True),
+            next_speaker=MagenticProgressLedgerItem(reason="Only participant.", answer=first_agent),
+            instruction_or_question=MagenticProgressLedgerItem(reason="Direct delegation.", answer="Please complete the task."),
         )
 
     async def prepare_final_answer(self, ctx: MagenticContext) -> Message:
-        last = ctx.conversation[-1] if ctx.conversation else None
+        last = ctx.chat_history[-1] if ctx.chat_history else None
         return last or Message(role="assistant", contents=["Done."])
 
 async def main():
@@ -1017,12 +1017,13 @@ class StatefulManager(MagenticManagerBase):
                        contents=[f"Revision #{self._plan_revision_count}: refine approach."])
 
     async def create_progress_ledger(self, ctx: MagenticContext) -> MagenticProgressLedger:
+        first_agent = list(ctx.participant_descriptions.keys())[0]
         return MagenticProgressLedger(
-            is_request_satisfied=False,
-            is_in_loop=False,
-            is_progress_being_made=True,
-            next_speaker=list(ctx.agent_names)[0],
-            instruction_or_question="Continue.",
+            is_request_satisfied=MagenticProgressLedgerItem(reason="Still working.", answer=False),
+            is_in_loop=MagenticProgressLedgerItem(reason="No loop detected.", answer=False),
+            is_progress_being_made=MagenticProgressLedgerItem(reason=f"Revision #{self._plan_revision_count}.", answer=True),
+            next_speaker=MagenticProgressLedgerItem(reason="Only participant.", answer=first_agent),
+            instruction_or_question=MagenticProgressLedgerItem(reason="Continuing task.", answer="Continue."),
         )
 
     async def prepare_final_answer(self, ctx: MagenticContext) -> Message:
@@ -1040,7 +1041,10 @@ class StatefulManager(MagenticManagerBase):
 ```python
 import asyncio
 from agent_framework import Agent, WorkflowBuilder
-from agent_framework.orchestrations import MagenticManagerBase, MagenticBuilder, MagenticContext, MagenticProgressLedger
+from agent_framework.orchestrations import (
+    MagenticManagerBase, MagenticBuilder,
+    MagenticContext, MagenticProgressLedger, MagenticProgressLedgerItem,
+)
 from agent_framework import Message
 from agent_framework.foundry import FoundryChatClient
 
@@ -1054,13 +1058,13 @@ class BudgetedManager(MagenticManagerBase):
         return Message(role="assistant", contents=["Retrying with a different approach."])
 
     async def create_progress_ledger(self, ctx: MagenticContext) -> MagenticProgressLedger:
-        agents = list(ctx.agent_names)
+        agents = list(ctx.participant_descriptions.keys())
         return MagenticProgressLedger(
-            is_request_satisfied=False,
-            is_in_loop=False,
-            is_progress_being_made=True,
-            next_speaker=agents[0] if agents else "",
-            instruction_or_question="Continue the task.",
+            is_request_satisfied=MagenticProgressLedgerItem(reason="Task ongoing.", answer=False),
+            is_in_loop=MagenticProgressLedgerItem(reason="No loop detected.", answer=False),
+            is_progress_being_made=MagenticProgressLedgerItem(reason="Working.", answer=True),
+            next_speaker=MagenticProgressLedgerItem(reason="First participant.", answer=agents[0] if agents else ""),
+            instruction_or_question=MagenticProgressLedgerItem(reason="Continuing.", answer="Continue the task."),
         )
 
     async def prepare_final_answer(self, ctx: MagenticContext) -> Message:
@@ -1336,9 +1340,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, request_info
+from agent_framework import Agent, Message
 from agent_framework.orchestrations import AgentRequestInfoResponse
-from agent_framework import Message
 from agent_framework.foundry import FoundryChatClient
 
 async def main():
@@ -1361,7 +1364,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from typing import Any
-from agent_framework.microsoft import CacheProvider, PurviewPolicyMiddleware, PurviewSettings
+from agent_framework.microsoft import CacheProvider
 
 class InMemoryCache:
     """Simple in-memory CacheProvider implementation for testing."""
