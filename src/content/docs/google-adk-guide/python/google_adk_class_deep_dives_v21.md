@@ -117,10 +117,15 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
+from google.adk.tools import google_search
+
+# Tool set must match the recording agent so the framework can resolve
+# function_call.name before ReplayPlugin.before_tool_callback intercepts it.
 agent = LlmAgent(
     name="research_agent",
     model="gemini-2.0-flash",
     instruction="Answer questions using web search when needed.",
+    tools=[google_search],
 )
 
 session_service = InMemorySessionService()
@@ -976,20 +981,19 @@ print("Singleton type:", type(request_processor).__name__)
 ```python
 import json
 
-# _parse_tool_confirmation handles two payload shapes:
+# _parse_tool_confirmation validates the dict as ToolConfirmation (extra="forbid").
+# ToolConfirmation only accepts: hint (str), confirmed (bool), payload (Any).
 # FORMAT A: Direct dict from native ADK clients
 format_a = {
-    "approved": True,
-    "tool_name": "send_email",
-    "user_comment": "Yes, send it.",
+    "confirmed": True,
+    "payload": {"comment": "Yes, send it."},  # optional structured data for the tool
 }
 
-# FORMAT B: ADK web client wraps the dict as a JSON string under "response"
+# FORMAT B: ADK web client wraps the confirmed dict as a JSON string under "response"
 format_b = {
     "response": json.dumps({
-        "approved": True,
-        "tool_name": "send_email",
-        "user_comment": "Yes, send it.",
+        "confirmed": True,
+        "payload": {"comment": "Yes, send it."},
     })
 }
 
@@ -1311,7 +1315,10 @@ async def run_inference():
     # Each run produces one list[Invocation]; the outer list has 3 entries.
     responses: list[EvalCaseResponses] = await EvaluationGenerator.generate_responses(
         eval_set=eval_set,
-        agent_module_path="mypackage.agent",  # module exporting root_agent
+        # EvaluationGenerator imports this path then accesses .agent.root_agent,
+        # so pass the package name ("mypackage"), not "mypackage.agent".
+        # Expected layout: mypackage/__init__.py + mypackage/agent.py (defines root_agent)
+        agent_module_path="mypackage",
         repeat_num=3,
     )
     for ecr in responses:
