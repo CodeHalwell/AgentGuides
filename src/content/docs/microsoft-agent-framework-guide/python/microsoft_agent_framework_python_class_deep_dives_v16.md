@@ -669,6 +669,12 @@ the call site:
 
 ### `BedrockGuardrailConfig`
 
+> **Note (1.8.1):** `BedrockGuardrailConfig` and the other Bedrock-specific option keys
+> (`performanceConfig`, `requestMetadata`, `promptVariables`) are defined in `BedrockChatOptions`
+> but are **not forwarded** to the Converse API by `BedrockChatClient._prepare_options` in this
+> release. Pass them as native `additional_request_fields` via the underlying boto3 client
+> until the SDK surfaces them directly.
+
 ```python
 class BedrockGuardrailConfig(TypedDict, total=False):
     guardrailIdentifier: str          # guardrail ID
@@ -706,33 +712,30 @@ async def main():
 asyncio.run(main())
 ```
 
-**Example 2 — apply Bedrock guardrails with sync streaming mode:**
+**Example 2 — multi-turn conversation with explicit per-call options:**
 
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework.amazon import BedrockChatClient, BedrockChatOptions, BedrockGuardrailConfig
+from agent_framework.amazon import BedrockChatClient
 
 async def main():
     client = BedrockChatClient(
         region="us-east-1",
         model="amazon.nova-pro-v1:0",
     )
-    options: BedrockChatOptions = {
-        "guardrailConfig": BedrockGuardrailConfig(
-            guardrailIdentifier="gr-abc123",
-            guardrailVersion="DRAFT",
-            trace="enabled",
-            streamProcessingMode="sync",  # block stream until guardrails pass
-        ),
-        "max_tokens": 1024,
-    }
-    agent = Agent(client=client)
-    result = await agent.run(
-        "Describe best practices for handling customer PII.",
-        options=options,
+    agent = Agent(
+        client=client,
+        instructions="You are a concise technical writer.",
+        default_options={"max_tokens": 512, "temperature": 0.3},
     )
-    print(result.text)
+    # First turn — establish context
+    r1 = await agent.run("What is the Bedrock Converse API?")
+    print("Turn 1:", r1.text)
+
+    # Second turn — follow-up using the same session (history is maintained)
+    r2 = await agent.run("How does it compare to InvokeModel?")
+    print("Turn 2:", r2.text)
 
 asyncio.run(main())
 ```
@@ -1153,48 +1156,26 @@ class GroupChatResponseReceivedEvent:
     participant_name: str
 ```
 
-**Example 1 — observe group chat events via a ContextProvider:**
+**Example 1 — observe group chat events via workflow streaming:**
+
+> `GroupChatResponseReceivedEvent` is emitted as a `WorkflowEvent` with
+> `type="group_chat"`. Use `workflow.run(stream=True)` to observe them — the event
+> is not accessible through `SessionContext` fields inside a `ContextProvider`.
 
 ```python
 import asyncio
-from dataclasses import dataclass
-from typing import Any
-from agent_framework import Agent, ContextProvider, AgentSession, SessionContext
+from agent_framework import Agent, WorkflowEvent
 from agent_framework.orchestrations import (
-    GroupChatBuilder, GroupChatState,
-    GroupChatRequestSentEvent, GroupChatResponseReceivedEvent,
+    GroupChatBuilder, GroupChatState, GroupChatResponseReceivedEvent,
 )
-from agent_framework import SupportsAgentRun
 from agent_framework.foundry import FoundryChatClient
-
-class ChatObserver(ContextProvider):
-    """Log every request and response event in a group chat."""
-
-    async def before_run(
-        self,
-        *,
-        agent: SupportsAgentRun,
-        session: AgentSession,
-        context: SessionContext,
-        state: dict[str, Any],
-    ) -> None:
-        for event in context.events_since_last_run:
-            if isinstance(event, GroupChatRequestSentEvent):
-                print(f"[Round {event.round_index}] → {event.participant_name}")
-            elif isinstance(event, GroupChatResponseReceivedEvent):
-                print(f"[Round {event.round_index}] ← {event.participant_name}")
 
 async def main():
     client = FoundryChatClient(model="gpt-4o")
-    observer = ChatObserver(source_id="chat-observer")
-    # Attach the observer to each participant so it receives group-chat events
-    writer = Agent(client=client, name="writer", instructions="Write clearly.",
-                   context_providers=[observer])
-    reviewer = Agent(client=client, name="reviewer", instructions="Review and improve.",
-                     context_providers=[observer])
+    writer = Agent(client=client, name="writer", instructions="Write clearly.")
+    reviewer = Agent(client=client, name="reviewer", instructions="Review and improve.")
 
-    # Round-robin selection function — required routing mechanism for GroupChatBuilder
-    def round_robin(state):
+    def round_robin(state: GroupChatState) -> str:
         names = list(state.participants.keys())
         return names[state.current_round % len(names)]
 
@@ -1203,7 +1184,13 @@ async def main():
         selection_func=round_robin,
         max_rounds=4,
     ).build()
-    result = await workflow.run("Write a tweet about renewable energy.")
+
+    # stream=True yields WorkflowEvent objects; group-chat events have type="group_chat"
+    stream = workflow.run("Write a tweet about renewable energy.", stream=True)
+    async for event in stream:
+        if event.type == "group_chat" and isinstance(event.data, GroupChatResponseReceivedEvent):
+            print(f"[Round {event.data.round_index}] ← {event.data.participant_name}")
+    result = await stream
     print(result.text)
 
 asyncio.run(main())
