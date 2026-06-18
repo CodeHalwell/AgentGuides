@@ -174,7 +174,7 @@ async def trace_tasks():
             if task_type == "task":
                 print(f"Task started: {task_event['payload']['name']}")
             elif task_type == "task_result":
-                name = task_event['payload']['id']
+                name = task_event['payload']['name']
                 print(f"Task finished: {name}")
 
 asyncio.run(trace_tasks())
@@ -874,13 +874,13 @@ graph = builder.compile(checkpointer=InMemorySaver(), interrupt_before=["approva
 
 async def run():
     config = {"configurable": {"thread_id": "hitl-1"}}
-    # First call hits the interrupt
-    try:
-        await graph.ainvoke({"approved": False, "result": ""}, config=config)
-    except Exception as e:
-        # GraphInterrupt is surfaced as a raised exception when not using
-        # interrupt_before — here we used interrupt_before so it returns normally
-        print(f"Interrupted: {type(e).__name__}")
+    # interrupt_before=["approval"] — first invocation pauses before the node
+    # and returns normally (no exception raised).
+    await graph.ainvoke({"approved": False, "result": ""}, config=config)
+
+    # Inspect pending interrupts before resuming
+    snap = await graph.aget_state(config)
+    print(f"Next node(s): {snap.next}")   # ('approval',)
 
     # Resume with approval
     result = await graph.ainvoke(Command(resume="yes"), config=config)
@@ -1366,7 +1366,7 @@ class State(TypedDict):
     approved: bool
 
 def propose_command(state: State) -> dict:
-    cmd = "rm -rf /tmp/old_data"
+    cmd = "ls -la /tmp"
     return {"command": cmd}
 
 def request_approval(state: State) -> dict:
