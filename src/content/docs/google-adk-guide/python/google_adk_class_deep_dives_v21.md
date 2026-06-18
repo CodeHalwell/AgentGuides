@@ -1395,13 +1395,13 @@ print("_LiveSession: async context manager for BIDI audio eval sessions.")
 # on live audio sessions without modification.
 
 from google.adk.agents.run_config import RunConfig, StreamingMode
-from google.genai.types import AudioTranscriptionConfig
+from google.genai import types as genai_types
 
 live_run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI,
     response_modalities=["AUDIO"],
-    output_audio_transcription=AudioTranscriptionConfig(),
-    input_audio_transcription=AudioTranscriptionConfig(),
+    output_audio_transcription=genai_types.AudioTranscriptionConfig(),
+    input_audio_transcription=genai_types.AudioTranscriptionConfig(),
 )
 
 print("Live eval RunConfig:")
