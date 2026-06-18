@@ -546,7 +546,7 @@ for behavior in retrieved.behaviors:
 
 ```python
 from google.adk.evaluation.eval_config import EvalConfig, CustomMetricConfig
-from google.adk.evaluation.eval_metric import EvalMetric
+from google.adk.evaluation.eval_metrics import EvalMetric
 from google.adk.agents.common_configs import CodeConfig  # importlib path wrapper
 
 # Minimal config using shorthand float thresholds
@@ -625,7 +625,8 @@ finally:
 # can import it as "mypackage.metrics.check_response_length".
 
 from typing import Optional
-from google.adk.evaluation.eval_metric import EvalMetric, EvaluationResult
+from google.adk.evaluation.eval_metrics import EvalMetric
+from google.adk.evaluation.evaluator import EvaluationResult
 from google.adk.evaluation.eval_case import Invocation
 from google.adk.evaluation.conversation_scenario import ConversationScenario
 
@@ -647,7 +648,6 @@ def check_response_length(
             count += 1
     return EvaluationResult(
         overall_score=total_score / count if count else 0.0,
-        metric_name=eval_metric.metric_name,
     )
 
 
@@ -772,32 +772,18 @@ from google.adk.evaluation.rubric_based_evaluator import (
     MajorityVotePerInvocationResultsAggregator,
     MeanInvocationResultsSummarizer,
 )
-from google.adk.evaluation.eval_metric import EvalMetric
+from google.adk.evaluation.eval_metrics import EvalMetric, RubricsBasedCriterion
 
-# Create two evaluators scoped to different rubric types,
-# enabling separate dimensions of quality scoring.
-response_quality_evaluator = RubricBasedEvaluator(
-    eval_metric=EvalMetric(metric_name="response_quality_score", threshold=0.8),
-    criterion_type="rubric_based",  # matches the criterion type in EvalConfig
-    auto_rater_response_parser=DefaultAutoRaterResponseParser(),
-    per_invocation_results_aggregator=MajorityVotePerInvocationResultsAggregator(),
-    invocation_results_summarizer=MeanInvocationResultsSummarizer(),
-    rubric_type="FINAL_RESPONSE_QUALITY",  # only evaluates rubrics with this type
-)
-
-tool_quality_evaluator = RubricBasedEvaluator(
-    eval_metric=EvalMetric(metric_name="tool_quality_score", threshold=1.0),
-    criterion_type="rubric_based",
-    rubric_type="TOOL_USE_QUALITY",  # separate dimension
-)
-
-# Create rubrics that will be filtered by type
-rubrics = [
+# Define rubrics up-front; they must be embedded in the criterion at construction
+# time because RubricBasedEvaluator asserts criterion.rubrics in __init__.
+response_quality_rubrics = [
     Rubric(
         rubric_id="r1",
         rubric_content=RubricContent(text_property="Response is concise."),
         type="FINAL_RESPONSE_QUALITY",
     ),
+]
+tool_quality_rubrics = [
     Rubric(
         rubric_id="r2",
         rubric_content=RubricContent(text_property="Correct tool was called."),
@@ -805,12 +791,38 @@ rubrics = [
     ),
 ]
 
-# Each evaluator sees only its own typed rubrics
-response_quality_evaluator.create_effective_rubrics_list(rubrics)
-tool_quality_evaluator.create_effective_rubrics_list(rubrics)
+# Create two evaluators scoped to different rubric types,
+# enabling separate dimensions of quality scoring.
+response_quality_evaluator = RubricBasedEvaluator(
+    eval_metric=EvalMetric(
+        metric_name="response_quality_score",
+        criterion=RubricsBasedCriterion(
+            threshold=0.8,
+            rubrics=response_quality_rubrics,
+        ),
+    ),
+    criterion_type=RubricsBasedCriterion,  # pass the class, not a string
+    auto_rater_response_parser=DefaultAutoRaterResponseParser(),
+    per_invocation_results_aggregator=MajorityVotePerInvocationResultsAggregator(),
+    invocation_results_summarizer=MeanInvocationResultsSummarizer(),
+    rubric_type="FINAL_RESPONSE_QUALITY",  # only evaluates rubrics with this type
+)
 
-print("Response quality rubrics:", [r.rubric_id for r in response_quality_evaluator.get_effective_rubrics_list()])
-print("Tool quality rubrics:", [r.rubric_id for r in tool_quality_evaluator.get_effective_rubrics_list()])
+tool_quality_evaluator = RubricBasedEvaluator(
+    eval_metric=EvalMetric(
+        metric_name="tool_quality_score",
+        criterion=RubricsBasedCriterion(
+            threshold=1.0,
+            rubrics=tool_quality_rubrics,
+        ),
+    ),
+    criterion_type=RubricsBasedCriterion,
+    rubric_type="TOOL_USE_QUALITY",  # separate dimension
+)
+
+# rubric_type filtering narrows which rubrics each evaluator acts on
+print("Response quality rubrics:", [r.rubric_id for r in response_quality_evaluator._rubrics])
+print("Tool quality rubrics:", [r.rubric_id for r in tool_quality_evaluator._rubrics])
 # Outputs: ['r1'] and ['r2'] respectively
 ```
 
@@ -1382,9 +1394,8 @@ print("_LiveSession: async context manager for BIDI audio eval sessions.")
 # This allows metrics like response_match_score (which compares text) to work
 # on live audio sessions without modification.
 
-from google.adk.runners.run_config import RunConfig, StreamingMode
-from google.adk.agents.live_request_queue import LiveRequestQueue
-from google.adk.models.audio_transcription_config import AudioTranscriptionConfig
+from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.genai.types import AudioTranscriptionConfig
 
 live_run_config = RunConfig(
     streaming_mode=StreamingMode.BIDI,
