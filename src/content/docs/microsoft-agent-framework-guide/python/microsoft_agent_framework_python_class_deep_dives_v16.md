@@ -123,7 +123,7 @@ Extends `OpenAIChatOptions` with two Foundry-specific fields:
 | HostedAgents | Omit `agent_version`; set `allow_preview=True` to use preview session APIs |
 | `project_client` | If you pass your own `AIProjectClient`, `allow_preview` is ignored |
 | `client_type` override | Pass `client_type=RawFoundryAgentChatClient` to get a raw client without middleware layers on the chat call |
-| Function tools | Executed locally by the framework; the Foundry service sees tool definitions and returns tool-call requests |
+| Function tools | In **preview mode** (`allow_preview=True`) tool definitions are forwarded with the request; in **non-preview mode** they are **stripped** from the request body — the service only sees tools declared in the deployed Foundry agent definition. Local `FunctionTool` objects are still executed client-side by the function invocation layer when the service returns a tool-call response |
 | Auth | Accepts any `AzureCredentialTypes` — `DefaultAzureCredential`, `AzureCliCredential`, managed identity |
 
 **Example 1 — call a PromptAgent with a pinned version:**
@@ -150,6 +150,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from agent_framework import AgentSession
 from agent_framework.foundry import FoundryAgent, FoundryAgentOptions
 from azure.identity import AzureCliCredential
 
@@ -160,10 +161,14 @@ async def main():
         credential=AzureCliCredential(),
         allow_preview=True,
         default_options=FoundryAgentOptions(
-            isolation_key="tenant-abc",   # creates one session per tenant
+            isolation_key="tenant-abc",   # creates one hosted session per tenant
         ),
     )
-    result = await agent.run("Summarise my account activity")
+    # AgentSession is required: isolation_key only calls create_session() when
+    # a session object is present (session.service_session_id is set on first run
+    # and reused on subsequent runs for the same session).
+    session = AgentSession()
+    result = await agent.run("Summarise my account activity", session=session)
     print(result.text)
 
 asyncio.run(main())
@@ -575,7 +580,7 @@ async def main():
     evals = FoundryEvals(
         client=client,
         evaluators=[
-            FoundryEvals.GROUNDEDNESS,
+            FoundryEvals.FLUENCY,       # no context field required
             FoundryEvals.RELEVANCE,
             FoundryEvals.HATE_UNFAIRNESS,
             FoundryEvals.VIOLENCE,
