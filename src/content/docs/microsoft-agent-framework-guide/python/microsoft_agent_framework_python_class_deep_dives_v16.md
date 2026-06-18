@@ -1205,7 +1205,7 @@ async def main():
     async for event in stream:
         if event.type == "group_chat" and isinstance(event.data, GroupChatResponseReceivedEvent):
             print(f"[Round {event.data.round_index}] ← {event.data.participant_name}")
-    result = await stream
+    result = await stream.get_final_response()
     print(result.text)
 
 asyncio.run(main())
@@ -1565,12 +1565,17 @@ token = get_token("your-client-id", "your-tenant-id")
 print(f"Token acquired ({len(token)} chars)")
 ```
 
-**Example 3 — custom scopes for non-Power-Platform APIs + rate-limit retry:**
+**Example 3 — custom scopes for non-Power-Platform APIs + retry with back-off:**
+
+> **Note:** `acquire_token()` raises `AgentException` on all failures (MSAL silent/interactive
+> failures and no-token outcomes). It does **not** raise `PurviewRateLimitError` — that
+> exception is raised by the Purview HTTP middleware when the Purview API returns a 429, not
+> by `acquire_token`. Retry logic around `acquire_token` should therefore catch `AgentException`.
 
 ```python
-import asyncio
 import time
-from agent_framework.microsoft import acquire_token, PurviewRateLimitError
+from agent_framework.exceptions import AgentException
+from agent_framework.microsoft import acquire_token
 
 AZURE_MANAGEMENT_SCOPES = ["https://management.azure.com/.default"]
 
@@ -1582,10 +1587,10 @@ def acquire_with_retry(client_id: str, tenant_id: str, max_retries: int = 3) -> 
                 tenant_id=tenant_id,
                 scopes=AZURE_MANAGEMENT_SCOPES,
             )
-        except PurviewRateLimitError:
+        except AgentException:
             if attempt < max_retries - 1:
                 wait = 2 ** attempt  # exponential back-off: 1s, 2s, 4s
-                print(f"Rate limited. Retrying in {wait}s...")
+                print(f"Token acquisition failed. Retrying in {wait}s...")
                 time.sleep(wait)
             else:
                 raise
