@@ -839,12 +839,13 @@ asyncio.run(run("timeout"))  # Timeout: ...
 asyncio.run(run("loop"))     # Recursion limit hit: ...
 ```
 
-### Example 2 — catching GraphBubbleUp in subgraphs
+### Example 2 — interrupt/resume with a checkpointer (GraphInterrupt is a GraphBubbleUp subclass)
 
 ```python
 # GraphBubbleUp and its subclasses (GraphInterrupt, ParentCommand) are
-# internal signals. They must NOT be caught in node code. If you need to
-# detect an interrupt from outside the graph, catch it at the top level:
+# internal signals. They must NOT be caught in node code. With a checkpointer,
+# interrupt() raises GraphInterrupt internally and the graph suspends cleanly —
+# no user-level catching required. Resume by passing Command(resume=...).
 
 import asyncio
 from langgraph.graph import StateGraph, START, END
@@ -951,7 +952,7 @@ class ValidationNode(RunnableCallable):
 ```
 
 Accepted schema types:
-- `type[BaseModel]` — Pydantic v1 or v2 model class; uses `model.model_name` as tool name
+- `type[BaseModel]` — Pydantic v1 or v2 model class; uses `schema.__name__` (the class name) as the tool name for routing
 - `BaseTool` — extracts `tool.args_schema`; the tool name is used for routing
 - `Callable` — a schema is auto-created from the function signature
 
