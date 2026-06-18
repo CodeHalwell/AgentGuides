@@ -1428,7 +1428,7 @@ async def run():
     )
 
     # Check the state to see the pending interrupt
-    state = graph.get_state(config)
+    state = await graph.aget_state(config)
     print(f"Pending interrupts: {state.interrupts}")
 
     # Resume with acceptance
@@ -1436,7 +1436,7 @@ async def run():
         Command(resume={"type": "accept", "args": None}),
         config=config,
     )
-    print(result["messages"][-1].content)  # Executed: rm -rf /tmp/old_data
+    print(result["messages"][-1].content)  # Executed: ls -la /tmp
 
 asyncio.run(run())
 ```
