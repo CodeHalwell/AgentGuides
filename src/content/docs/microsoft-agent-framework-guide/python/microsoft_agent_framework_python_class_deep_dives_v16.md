@@ -1506,10 +1506,8 @@ from azure.identity import DefaultAzureCredential
 
 async def main():
     settings = PurviewSettings(
-        endpoint="https://my-purview.purview.azure.com",
-        tenant_id="my-tenant",
-        client_id="my-client-id",
-        client_secret="my-secret",
+        app_name="my-agent-app",
+        tenant_id="my-tenant-id",
     )
     # PurviewPolicyMiddleware requires (credential, settings) — credential first
     credential = DefaultAzureCredential()
