@@ -1,11 +1,12 @@
 ---
-title: "PydanticAI: Class Deep Dives Vol. 19"
+title: "PydanticAI — Class Deep Dives Vol. 19"
 description: "BedrockConverseModel, BedrockProvider, deprecated Google providers, DynamicToolset, CapabilityOwnedToolset, web UI API, OTel GenAI spec types, Thinking capability, ImageGeneration capability, pydantic_graph persistence primitives (pydantic-ai 1.107.0)"
 sidebar:
+  label: "Class deep dives (Vol. 19)"
   order: 45
 ---
 
-import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 Source-verified against `pydantic-ai==1.107.0` installed at `/usr/local/lib/python3.11/dist-packages/pydantic_ai/`. All constructor signatures, field names, constants, and default values were read directly from the installed package source.
 
@@ -1361,6 +1362,7 @@ The `pydantic_graph.exceptions` hierarchy covers all graph lifecycle errors with
 ```python
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 from pydantic_graph.persistence import (
@@ -1397,19 +1399,29 @@ class InMemoryPersistence(BaseStatePersistence):
         self._snapshots[snapshot.id] = snapshot
         self._order.append(snapshot.id)
 
-    async def record_run(self, snapshot_id: str) -> None:
+    @asynccontextmanager
+    def record_run(self, snapshot_id: str):  # sync method returning async context manager
         snap = self._snapshots[snapshot_id]
         if isinstance(snap, NodeSnapshot):
-            if snap.status == 'created':
-                snap.status = 'pending'
-            elif snap.status == 'pending':
-                snap.status = 'running'
-                snap.start_ts = datetime.now(timezone.utc)
+            snap.status = 'running'
+            snap.start_ts = datetime.now(timezone.utc)
+        try:
+            yield
+        except Exception:
+            if isinstance(snap, NodeSnapshot):
+                snap.status = 'error'
+                snap.duration = (datetime.now(timezone.utc) - snap.start_ts).total_seconds()
+            raise
+        else:
+            if isinstance(snap, NodeSnapshot):
+                snap.status = 'success'
+                snap.duration = (datetime.now(timezone.utc) - snap.start_ts).total_seconds()
 
     async def load_next(self) -> Snapshot | None:
         for sid in self._order:
             snap = self._snapshots[sid]
-            if isinstance(snap, NodeSnapshot) and snap.status == 'pending':
+            if isinstance(snap, NodeSnapshot) and snap.status == 'created':
+                snap.status = 'pending'
                 return snap
         return None
 
