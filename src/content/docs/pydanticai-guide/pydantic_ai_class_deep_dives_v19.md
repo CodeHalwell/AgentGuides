@@ -1362,6 +1362,7 @@ The `pydantic_graph.exceptions` hierarchy covers all graph lifecycle errors with
 
 ```python
 import asyncio
+import copy
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -1374,6 +1375,7 @@ from pydantic_graph.persistence import (
     SnapshotStatus,
     UNSET_SNAPSHOT_ID,
 )
+from pydantic_graph.exceptions import GraphNodeStatusError
 from pydantic_graph.basenode import BaseNode, End
 
 
@@ -1404,6 +1406,7 @@ class InMemoryPersistence(BaseStatePersistence):
     async def record_run(self, snapshot_id: str):
         snap = self._snapshots[snapshot_id]
         if isinstance(snap, NodeSnapshot):
+            GraphNodeStatusError.check(snap.status)  # raises for running/success/error
             snap.status = 'running'
             snap.start_ts = datetime.now(timezone.utc)
         try:
@@ -1423,7 +1426,7 @@ class InMemoryPersistence(BaseStatePersistence):
             snap = self._snapshots[sid]
             if isinstance(snap, NodeSnapshot) and snap.status == 'created':
                 snap.status = 'pending'
-                return snap
+                return copy.deepcopy(snap)  # return isolated copy so live run can't corrupt stored history
         return None
 
     async def load_all(self) -> list[Snapshot]:
