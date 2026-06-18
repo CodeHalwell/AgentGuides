@@ -170,12 +170,12 @@ async def trace_tasks():
     )
     async with run:
         async for task_event in run.tasks:
-            task_type = task_event.get("type")
-            if task_type == "task":
-                print(f"Task started: {task_event['payload']['name']}")
-            elif task_type == "task_result":
-                name = task_event['payload']['name']
-                print(f"Task finished: {name}")
+            # TasksTransformer pushes raw payloads — no "type"/"payload" wrapper.
+            # Distinguish start (has "input") from result (has "result").
+            if "input" in task_event:   # task-start payload
+                print(f"Task started: {task_event['name']}")
+            else:                        # task-result payload
+                print(f"Task finished: {task_event['name']}, error={task_event['error']}")
 
 asyncio.run(trace_tasks())
 ```
@@ -240,8 +240,10 @@ async def full_audit():
     print(f"Checkpoints: {len(checkpoints)}")
     print(f"Tasks: {len(tasks)}")
     for t in tasks:
-        if t.get("type") == "task":
-            print(f"  Task: {t['payload']['name']}")
+        if "input" in t:   # task-start payload
+            print(f"  Task started: {t['name']}")
+        else:               # task-result payload
+            print(f"  Task finished: {t['name']}")
 
 asyncio.run(full_audit())
 ```
@@ -762,12 +764,13 @@ Exception
 │   └── ParentCommand      — Command.PARENT bubbled up through subgraph
 ├── GraphRecursionError    — recursion_limit exceeded
 ├── InvalidUpdateError     — concurrent conflicting channel writes
-├── NodeError              — node raised an unexpected exception
 ├── NodeCancelledError     — node was cancelled
 ├── NodeTimeoutError       — TimeoutPolicy limit exceeded
 ├── EmptyInputError        — graph invoked with empty input
 └── TaskNotFound           — executor cannot locate a task (distributed mode)
 ```
+
+> **Note:** `NodeError` is **not** an exception. It is a frozen dataclass (`@dataclass(frozen=True)`) with `node: str` and `error: BaseException` fields. It is injected as a parameter into error-handler functions registered via `add_node(..., error_handler=...)` — you do not catch it; you declare it as a parameter type.
 
 ### `ErrorCode` enum
 
@@ -1706,36 +1709,24 @@ def error_handler(state: State) -> dict:
     # the langgraph error handling mechanism
     return {"error": "caught", "result": "fallback"}
 
+# Pass the error_handler callable to add_node — LangGraph automatically
+# creates an internal handler node (__error_handler__<name>) and wires it.
+# do NOT add the handler node manually with is_error_handler=True.
 builder = StateGraph(State)
-builder.add_node("risky", risky_operation)
-builder.add_node(
-    "error_handler",
-    error_handler,
-    is_error_handler=True,    # marks as error handler
-)
+builder.add_node("risky", risky_operation, error_handler=error_handler)
 builder.add_edge(START, "risky")
 builder.add_edge("risky", END)
-# Wire error handler: if risky raises, route to error_handler
-# This is done via add_node's error_handler kwarg:
-# builder.add_node("risky", risky_operation, error_handler="error_handler")
 
-# Check the StateNodeSpec that records the error_handler_node link
-spec = builder.nodes.get("risky")
-if spec:
-    print(f"error_handler_node: {spec.error_handler_node}")
-    print(f"is_error_handler: {spec.is_error_handler}")
+# Inspect the auto-wired StateNodeSpec fields
+risky_spec = builder.nodes["risky"]
+print(f"error_handler_node: {risky_spec.error_handler_node}")  # '__error_handler__risky'
+print(f"is_error_handler: {risky_spec.is_error_handler}")      # False
 
-# Build graph with proper error routing: pass the callable directly,
-# not a string. add_node creates/marks the error-handler node internally.
-builder2 = StateGraph(State)
-builder2.add_node("risky", risky_operation, error_handler=error_handler)
-builder2.add_node("error_handler", error_handler)
-builder2.add_edge(START, "risky")
-builder2.add_edge("risky", END)
-builder2.add_edge("error_handler", END)
-graph2 = builder2.compile()
+handler_spec = builder.nodes[risky_spec.error_handler_node]
+print(f"handler is_error_handler: {handler_spec.is_error_handler}")  # True
 
-result = graph2.invoke({"result": "", "error": None})
+graph = builder.compile()
+result = graph.invoke({"result": "", "error": None})
 print(f"result={result['result']}, error={result['error']}")
 # result=fallback, error=caught
 ```
