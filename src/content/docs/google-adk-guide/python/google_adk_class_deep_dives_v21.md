@@ -604,15 +604,18 @@ with tempfile.NamedTemporaryFile(
     json.dump(config_data, f)
     config_path = f.name
 
-# Load from file
-loaded = get_evaluation_criteria_or_default(config_path)
-assert isinstance(loaded, EvalConfig)
-print("Loaded criteria:", {k: v for k, v in loaded.criteria.items()})
+try:
+    # Load from file
+    loaded = get_evaluation_criteria_or_default(config_path)
+    assert isinstance(loaded, EvalConfig)
+    print("Loaded criteria:", {k: v for k, v in loaded.criteria.items()})
 
-# No path → returns _DEFAULT_EVAL_CONFIG
-default = get_evaluation_criteria_or_default(None)
-print("Default criteria:", {k: v for k, v in default.criteria.items()})
-# Outputs: {"tool_trajectory_avg_score": 1.0, "response_match_score": 0.8}
+    # No path → returns _DEFAULT_EVAL_CONFIG
+    default = get_evaluation_criteria_or_default(None)
+    print("Default criteria:", {k: v for k, v in default.criteria.items()})
+    # Outputs: {"tool_trajectory_avg_score": 1.0, "response_match_score": 0.8}
+finally:
+    Path(config_path).unlink(missing_ok=True)
 ```
 
 ### Example 3 — implementing a custom metric function (sync and async variants)
