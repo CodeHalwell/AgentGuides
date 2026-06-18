@@ -547,7 +547,7 @@ for behavior in retrieved.behaviors:
 ```python
 from google.adk.evaluation.eval_config import EvalConfig, CustomMetricConfig
 from google.adk.evaluation.eval_metric import EvalMetric
-from google.adk.tools.evaluation.utils import CodeConfig  # importlib path wrapper
+from google.adk.agents.common_configs import CodeConfig  # importlib path wrapper
 
 # Minimal config using shorthand float thresholds
 minimal_config = EvalConfig(
@@ -909,11 +909,10 @@ assert isinstance(request_processor, InteractionsRequestProcessor)
 print("Singleton type:", type(request_processor).__name__)
 
 # The processor yields no events — it is a pure preprocessing step
-# To verify: run_async is an async generator that never yields
-import asyncio
+# To verify: run_async is an async generator function that never yields
 import inspect
 
-print("run_async is a coroutine function:", inspect.iscoroutinefunction(request_processor.run_async))
+print("run_async is an async generator function:", inspect.isasyncgenfunction(request_processor.run_async))
 # The return annotation is AsyncGenerator[Event, None] with no yields
 print("Processor has no side outputs — only mutates llm_request.previous_interaction_id")
 ```
@@ -1006,15 +1005,13 @@ def send_email(to: str, subject: str, body: str, tool_context: ToolContext) -> d
     """Send an email — requires user confirmation before execution."""
     return {"status": "sent", "to": to, "subject": subject}
 
-# To enable tool confirmation, set require_user_confirmation=True on the tool.
+# To enable tool confirmation, set require_confirmation=True on the FunctionTool.
 # When the LLM calls this tool, the framework emits an adk_request_confirmation
 # function call to the client instead of executing immediately.
 # After the user approves, _RequestConfirmationLlmRequestProcessor's 4-step
 # pipeline detects the confirmation response in the next user event and
 # re-executes the tool without sending another LLM request.
-email_tool = FunctionTool(func=send_email)
-# Note: require_user_confirmation is set on the tool registration, not here.
-# The framework wraps it transparently.
+email_tool = FunctionTool(func=send_email, require_confirmation=True)
 
 agent = LlmAgent(
     name="email_agent",
