@@ -325,7 +325,7 @@ asyncio.run(stream_messages_demo())
 
 ```python
 import asyncio
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
@@ -511,7 +511,7 @@ builder = StateGraph(State)
 builder.add_node(
     "flaky",
     flaky_node,
-    retry=RetryPolicy(max_attempts=5, retry_on=ValueError),
+    retry_policy=RetryPolicy(max_attempts=5, retry_on=ValueError),
     timeout=TimeoutPolicy(run_timeout=10.0),
 )
 builder.add_edge(START, "flaky")
@@ -581,7 +581,8 @@ asyncio.run(run())
 
 import asyncio
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import TimeoutPolicy, RetryPolicy, NodeTimeoutError
+from langgraph.types import TimeoutPolicy, RetryPolicy
+from langgraph.errors import NodeTimeoutError
 from typing_extensions import TypedDict
 
 class State(TypedDict):
@@ -599,7 +600,7 @@ builder.add_node(
     # Hard 5s cap + 2s idle cap; any stream/write resets idle
     timeout=TimeoutPolicy(run_timeout=5.0, idle_timeout=2.0, refresh_on="auto"),
     # Retry up to 2 times on timeout
-    retry=RetryPolicy(max_attempts=2, retry_on=NodeTimeoutError),
+    retry_policy=RetryPolicy(max_attempts=2, retry_on=NodeTimeoutError),
 )
 builder.add_edge(START, "bounded")
 builder.add_edge("bounded", END)
