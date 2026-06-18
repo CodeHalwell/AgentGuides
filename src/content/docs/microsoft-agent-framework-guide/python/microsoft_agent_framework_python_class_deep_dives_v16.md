@@ -876,10 +876,18 @@ async def main():
         model="anthropic.claude-3-5-sonnet-20241022-v2:0",
         region="us-east-1",
     )
-    memory = MemoryContextProvider(
-        embedding_client=embedding_client,
-        memory_store=MemoryFileStore(file_path="/tmp/bedrock-memories.json"),
+    # Demonstrate get_embeddings directly
+    results = await embedding_client.get_embeddings(
+        ["The project deadline is June 30.", "Budget is $50k."]
     )
+    print(f"Embedded {len(results.embeddings)} strings, dim={len(results.embeddings[0].vector)}")
+
+    # Pair with file-backed persistent memory (MemoryFileStore, not a vector store)
+    file_store = MemoryFileStore(
+        base_path="/tmp/bedrock-memories",
+        owner_state_key="user_id",     # session-state key holding the current user/owner ID
+    )
+    memory = MemoryContextProvider(store=file_store)
     agent = Agent(
         client=chat_client,
         context_providers=[memory],
@@ -945,7 +953,7 @@ MagenticManagerBase(
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import (
     MagenticManagerBase, MagenticBuilder,
     MagenticContext, MagenticProgressLedger, MagenticProgressLedgerItem,
@@ -984,8 +992,7 @@ async def main():
         instructions="Research and answer factual questions.",
     )
     manager = SimpleDelegateManager(max_stall_count=2, max_round_count=5)
-    magentic = MagenticBuilder(agents=[researcher], manager=manager)
-    workflow = WorkflowBuilder().add_executor(magentic).build()
+    workflow = MagenticBuilder(participants=[researcher], manager=manager).build()
     result = await workflow.run("What is the capital of Australia?")
     print(result.text)
 
@@ -1040,7 +1047,7 @@ class StatefulManager(MagenticManagerBase):
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import (
     MagenticManagerBase, MagenticBuilder,
     MagenticContext, MagenticProgressLedger, MagenticProgressLedgerItem,
@@ -1081,8 +1088,7 @@ async def main():
         max_reset_count=3,
         max_round_count=10,
     )
-    magentic = MagenticBuilder(agents=[worker], manager=manager)
-    workflow = WorkflowBuilder().add_executor(magentic).build()
+    workflow = MagenticBuilder(participants=[worker], manager=manager).build()
     result = await workflow.run("Analyse the Q3 sales data.")
     print(result.text)
 
@@ -1153,9 +1159,10 @@ class GroupChatResponseReceivedEvent:
 import asyncio
 from dataclasses import dataclass
 from typing import Any
-from agent_framework import Agent, WorkflowBuilder, ContextProvider, AgentSession, SessionContext
+from agent_framework import Agent, ContextProvider, AgentSession, SessionContext
 from agent_framework.orchestrations import (
-    GroupChatBuilder, GroupChatRequestSentEvent, GroupChatResponseReceivedEvent,
+    GroupChatBuilder, GroupChatState,
+    GroupChatRequestSentEvent, GroupChatResponseReceivedEvent,
 )
 from agent_framework import SupportsAgentRun
 from agent_framework.foundry import FoundryChatClient
@@ -1179,56 +1186,82 @@ class ChatObserver(ContextProvider):
 
 async def main():
     client = FoundryChatClient(model="gpt-4o")
-    writer = Agent(client=client, name="writer", instructions="Write clearly.")
-    reviewer = Agent(client=client, name="reviewer", instructions="Review and improve.")
-
     observer = ChatObserver(source_id="chat-observer")
-    chat = GroupChatBuilder(
-        agents=[writer, reviewer],
-        context_providers=[observer],
+    # Attach the observer to each participant so it receives group-chat events
+    writer = Agent(client=client, name="writer", instructions="Write clearly.",
+                   context_providers=[observer])
+    reviewer = Agent(client=client, name="reviewer", instructions="Review and improve.",
+                     context_providers=[observer])
+
+    # Round-robin selection function — required routing mechanism for GroupChatBuilder
+    def round_robin(state):
+        names = list(state.participants.keys())
+        return names[state.current_round % len(names)]
+
+    workflow = GroupChatBuilder(
+        participants=[writer, reviewer],
+        selection_func=round_robin,
         max_rounds=4,
-    )
-    workflow = WorkflowBuilder().add_executor(chat).build()
+    ).build()
     result = await workflow.run("Write a tweet about renewable energy.")
     print(result.text)
 
 asyncio.run(main())
 ```
 
-**Example 2 — custom subclass that rotates speakers by topic keyword:**
+**Example 2 — keyword routing via `selection_func`:**
+
+> **Subclassing `BaseGroupChatOrchestrator`** requires implementing `_handle_messages` and
+> `_handle_response` (both raise `NotImplementedError` in the base class). For most custom
+> routing needs, `selection_func=` is the recommended approach — it receives a
+> `GroupChatState` snapshot and returns the name of the next participant.
 
 ```python
 import asyncio
-from agent_framework.orchestrations import BaseGroupChatOrchestrator
-from agent_framework import Message
+from agent_framework import Agent
+from agent_framework.orchestrations import GroupChatBuilder, GroupChatState
+from agent_framework.foundry import FoundryChatClient
 
-class KeywordRoutingOrchestrator(BaseGroupChatOrchestrator):
-    """Route to agents based on keywords in the last user message."""
+ROUTING = {
+    "code": "coder",
+    "test": "tester",
+    "deploy": "devops",
+}
 
-    ROUTING = {
-        "code": "coder",
-        "test": "tester",
-        "deploy": "devops",
-    }
+def keyword_router(state: GroupChatState) -> str:
+    """Route to the agent whose keyword appears in the latest message."""
+    if state.conversation:
+        for content in reversed(state.conversation[-1].contents):
+            if isinstance(content, str):
+                text = content.lower()
+                for keyword, agent_name in ROUTING.items():
+                    if keyword in text and agent_name in state.participants:
+                        return agent_name
+    # Default: first participant
+    return next(iter(state.participants))
 
-    async def _select_next_speaker(self, conversation: list[Message]) -> str:
-        last_text = ""
-        if conversation:
-            for content in reversed(conversation[-1].contents):
-                if isinstance(content, str):
-                    last_text = content.lower()
-                    break
-        for keyword, agent_name in self.ROUTING.items():
-            if keyword in last_text:
-                return agent_name
-        return "coder"  # default
+async def main():
+    client = FoundryChatClient(model="gpt-4o")
+    coder = Agent(client=client, name="coder", instructions="Write code.")
+    tester = Agent(client=client, name="tester", instructions="Write tests.")
+    devops = Agent(client=client, name="devops", instructions="Handle deployment.")
+
+    workflow = GroupChatBuilder(
+        participants=[coder, tester, devops],
+        selection_func=keyword_router,
+        max_rounds=3,
+    ).build()
+    result = await workflow.run("Please write tests for the login module.")
+    print(result.text)
+
+asyncio.run(main())
 ```
 
 **Example 3 — cap rounds to prevent runaway conversations:**
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import GroupChatBuilder, TerminationCondition
 from agent_framework import Message
 from agent_framework.foundry import FoundryChatClient
@@ -1248,12 +1281,16 @@ async def main():
     agent_a = Agent(client=client, name="agent_a", instructions="Propose a solution.")
     agent_b = Agent(client=client, name="agent_b", instructions="Critique the solution.")
 
-    chat = GroupChatBuilder(
-        agents=[agent_a, agent_b],
+    def alternate(state):
+        names = list(state.participants.keys())
+        return names[state.current_round % len(names)]
+
+    workflow = GroupChatBuilder(
+        participants=[agent_a, agent_b],
+        selection_func=alternate,
         max_rounds=6,
         termination_condition=stop_on_consensus,
-    )
-    workflow = WorkflowBuilder().add_executor(chat).build()
+    ).build()
     result = await workflow.run("Should we migrate to microservices?")
     print(result.text)
 
