@@ -1345,34 +1345,38 @@ There is no built-in implementation in `agent_framework.microsoft` — the most 
 pattern is to provide an in-memory dict-backed implementation for tests and a Redis-backed
 one in production.
 
-**Example 1 — HITL approval gate using `AgentRequestInfoResponse.approve()`:**
+**Example 1 — `AgentRequestInfoResponse` factory methods:**
+
+> `AgentRequestInfoResponse` is the response object you send back to a paused workflow.
+> In a HITL flow the workflow emits a `request_info` event and suspends; you resume it
+> with `workflow.run(responses={event.request_id: AgentRequestInfoResponse(...)})`.
+> The `@response_handler` decorator belongs on executor classes, not on `Agent`.
 
 ```python
-import asyncio
-from agent_framework import Agent, response_handler
 from agent_framework.orchestrations import AgentRequestInfoResponse
-from agent_framework.foundry import FoundryChatClient
+from agent_framework import Message
 
-@response_handler
-async def human_review(agent_response: str) -> AgentRequestInfoResponse:
-    """Present the draft response to a human and decide whether to approve."""
-    print(f"\nAgent draft:\n{agent_response}\n")
-    decision = input("Approve? [y/n]: ").strip().lower()
-    if decision == "y":
-        return AgentRequestInfoResponse.approve()
-    correction = input("Enter correction: ")
-    return AgentRequestInfoResponse.from_strings([correction])
+# 1. Approve — continue with the agent's existing draft
+approval = AgentRequestInfoResponse.approve()
+print(f"Approve payload messages: {len(approval.messages)}")  # 0
 
-async def main():
-    agent = Agent(
-        client=FoundryChatClient(model="gpt-4o"),
-        instructions="Draft a response for human review.",
-        response_handler=human_review,
-    )
-    result = await agent.run("Write a customer email about a service outage.")
-    print(result.text)
+# 2. Provide corrections as plain strings (converted to Messages internally)
+correction = AgentRequestInfoResponse.from_strings([
+    "Please use a more empathetic tone.",
+    "Mention the estimated recovery time of 2 hours.",
+])
+print(f"Correction messages: {len(correction.messages)}")  # 2
 
-asyncio.run(main())
+# 3. Provide fully structured Message objects
+structured = AgentRequestInfoResponse.from_messages([
+    Message(role="user", contents=["The outage lasted 2 hours."]),
+    Message(role="user", contents=["Affected 1,200 customers in the EU region."]),
+])
+print(f"Structured messages: {len(structured.messages)}")  # 2
+
+# In a workflow HITL loop:
+# events = result.get_request_info_events()
+# resumed = await workflow.run(responses={events[0].request_id: correction})
 ```
 
 **Example 2 — pass structured `Message` objects back from a HITL step:**
@@ -1498,6 +1502,7 @@ from agent_framework.microsoft import (
     PurviewSettings,
 )
 from agent_framework.foundry import FoundryChatClient
+from azure.identity import DefaultAzureCredential
 
 async def main():
     settings = PurviewSettings(
@@ -1506,7 +1511,9 @@ async def main():
         client_id="my-client-id",
         client_secret="my-secret",
     )
-    purview_mw = PurviewPolicyMiddleware(settings=settings)
+    # PurviewPolicyMiddleware requires (credential, settings) — credential first
+    credential = DefaultAzureCredential()
+    purview_mw = PurviewPolicyMiddleware(credential, settings)
     agent = Agent(
         client=FoundryChatClient(model="gpt-4o"),
         middleware=[purview_mw],
