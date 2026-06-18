@@ -378,9 +378,10 @@ from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google_cloud import GoogleCloudProvider
 
 provider = GoogleCloudProvider(
-    service_account_file='sa.json',
     project='my-gcp-project',    # was project_id=
     location='us-central1',      # was region=
+    # Uses Application Default Credentials automatically.
+    # For a service account: pass credentials=service_account.Credentials.from_service_account_file('sa.json', ...)
 )
 model = GoogleModel('gemini-2.5-pro', provider=provider)
 agent = Agent(model)
@@ -399,29 +400,28 @@ if __name__ == '__main__':
 
 ```python
 # This shows the legacy API pattern that still works but is deprecated.
-# Prefer GoogleCloudProvider for new code.
+# Prefer GoogleCloudProvider + GoogleModel for new code.
 import asyncio
 import os
 from pydantic_ai import Agent
-from pydantic_ai.models.google import GoogleModel
 
-# Both deprecated providers still function; they delegate to the same
-# GoogleModel infrastructure. This example shows how to select a non-default
-# region using the old API for teams that haven't migrated yet.
+# GoogleVertexProvider uses httpx and is designed for the deprecated GeminiModel.
+# GoogleCloudProvider uses google-genai and is required for the modern GoogleModel.
 try:
     from pydantic_ai.providers.google_vertex import GoogleVertexProvider  # type: ignore[import]
+    from pydantic_ai.models.gemini import GeminiModel  # type: ignore[import]
 
     provider = GoogleVertexProvider(
         project_id=os.environ.get('GCP_PROJECT', 'my-project'),
         region='europe-west4',       # EU region for data residency
         model_publisher='google',    # only 'google' is supported
     )
-    model = GoogleModel('gemini-2.5-pro', provider=provider)
+    model = GeminiModel('gemini-2.5-pro', provider=provider)
 except Exception:
-    # Fall back to GoogleCloudProvider if deprecated module raises
+    # Fall back to modern GoogleModel + GoogleCloudProvider
     from pydantic_ai.providers.google_cloud import GoogleCloudProvider
-    provider = GoogleCloudProvider(location='europe-west4')
-    model = GoogleModel('gemini-2.5-pro', provider=provider)
+    from pydantic_ai.models.google import GoogleModel
+    model = GoogleModel('gemini-2.5-pro', provider=GoogleCloudProvider(location='europe-west4'))
 
 agent = Agent(model)
 
@@ -657,7 +657,7 @@ class WeatherCapability(AbstractCapability[Any]):
 
     api_key: str
 
-    def get_toolsets(self, ctx: RunContext[Any]):
+    def get_toolset(self):
         ts = FunctionToolset()
 
         @ts.tool
@@ -665,8 +665,7 @@ class WeatherCapability(AbstractCapability[Any]):
             # In real code: call a weather API using self.api_key
             return f'The weather in {city} is sunny, 22°C.'
 
-        # Wrap in CapabilityOwnedToolset to bind to this capability instance.
-        return [CapabilityOwnedToolset(wrapped=ts, capability=self)]
+        return CapabilityOwnedToolset(wrapped=ts, capability=self)
 
 
 weather_cap = WeatherCapability(api_key='weather-api-key-123')
@@ -743,17 +742,17 @@ class HeavyAnalyticsCapability(AbstractCapability[Any]):
 
     defer_loading: bool = True  # Mark as deferred
 
-    def get_toolsets(self, ctx: RunContext[Any]):
+    def get_toolset(self):
         ts = FunctionToolset()
 
         @ts.tool
         async def run_analytics(ctx: RunContext[Any], query: str) -> str:
             return f'Analytics result for: {query}'
 
-        return [CapabilityOwnedToolset(wrapped=ts, capability=self)]
+        return CapabilityOwnedToolset(wrapped=ts, capability=self)
 
 
-cap = HeavyAnalyticsCapability()
+cap = HeavyAnalyticsCapability(id='heavy_analytics')  # id required when defer_loading=True
 agent = Agent('openai:gpt-4o', capabilities=[cap])
 
 
