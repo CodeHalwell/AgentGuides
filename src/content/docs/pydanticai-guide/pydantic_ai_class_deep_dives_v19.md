@@ -801,10 +801,11 @@ The `models` parameter accepts either a sequence (model names/instances) or a ma
 import os
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.ui._web.api import create_api_app
 
 agent = Agent(
-    OpenAIModel('gpt-4o', api_key=os.environ['OPENAI_API_KEY']),
+    OpenAIModel('gpt-4o', provider=OpenAIProvider(api_key=os.environ['OPENAI_API_KEY'])),
     system_prompt='You are a helpful assistant.',
 )
 
@@ -822,11 +823,13 @@ import os
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.ui._web.api import create_api_app
 
 agent = Agent(
-    OpenAIModel('gpt-4o', api_key=os.environ['OPENAI_API_KEY']),
+    OpenAIModel('gpt-4o', provider=OpenAIProvider(api_key=os.environ['OPENAI_API_KEY'])),
     system_prompt='You are a research assistant.',
 )
 
@@ -834,7 +837,7 @@ agent = Agent(
 models = {
     'GPT-4o (fast)': 'openai:gpt-4o',
     'GPT-4o-mini (cheap)': 'openai:gpt-4o-mini',
-    'Claude Sonnet': AnthropicModel('claude-sonnet-4-6', api_key=os.environ['ANTHROPIC_API_KEY']),
+    'Claude Sonnet': AnthropicModel('claude-sonnet-4-6', provider=AnthropicProvider(api_key=os.environ['ANTHROPIC_API_KEY'])),
 }
 
 app = create_api_app(
@@ -1222,10 +1225,10 @@ import asyncio
 import os
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
 
-# OpenAI Responses API model that supports native ImageGenerationTool
-model = OpenAIModel('gpt-4o', api_key=os.environ.get('OPENAI_API_KEY', 'test'))
+# OpenAI Responses API model exposes the native ImageGenerationTool
+model = OpenAIResponsesModel('gpt-4o')  # reads OPENAI_API_KEY from env
 
 agent = Agent(
     model,
@@ -1267,8 +1270,8 @@ agent = Agent(
     model,
     capabilities=[
         ImageGeneration(
-            # Subagent model for generation (must support ImageGenerationTool)
-            fallback_model='openai-responses:gpt-image-1',
+            # Conversational Responses model used as subagent to call ImageGenerationTool
+            fallback_model='openai-responses:gpt-4o',
             quality='high',
             output_format='png',
             size='1024x1024',
@@ -1293,9 +1296,9 @@ import asyncio
 import os
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
 
-model = OpenAIModel('gpt-4o', api_key=os.environ.get('OPENAI_API_KEY', 'test'))
+model = OpenAIResponsesModel('gpt-4o')  # reads OPENAI_API_KEY from env
 
 agent = Agent(
     model,
@@ -1477,11 +1480,11 @@ graph = Graph(nodes=[IncrementNode, DoneNode])
 async def main() -> None:
     state = CountState()
     persistence = FullStatePersistence()
-    result, history = await graph.run(IncrementNode(), state=state, persistence=persistence)
+    run_result = await graph.run(IncrementNode(), state=state, persistence=persistence)
 
-    print(f'Result: {result}')  # Counted to 3
+    print(f'Result: {run_result.output}')  # Counted to 3
 
-    for snap in history:
+    for snap in await persistence.load_all():
         if isinstance(snap, NodeSnapshot):
             duration_ms = (snap.duration or 0) * 1000
             print(
