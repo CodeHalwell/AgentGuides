@@ -754,14 +754,15 @@ print(result["count"])  # 3
 
 LangGraph defines a rich exception hierarchy. Most developers know `GraphRecursionError` and `NodeTimeoutError`, but the less-documented exceptions (`EmptyInputError`, `TaskNotFound`, `GraphBubbleUp`, `ParentCommand`, `ErrorCode`) are equally important for robust error handling.
 
-### Full exception hierarchy
+### Exception hierarchy
 
 ```
 Exception
 ├── GraphBubbleUp          — internal signal; never catch in user code
 │   ├── GraphInterrupt     — raised when interrupt() is called
 │   │   └── NodeInterrupt  — deprecated alias (v0.x)
-│   └── ParentCommand      — Command.PARENT bubbled up through subgraph
+│   ├── ParentCommand      — Command.PARENT bubbled up through subgraph
+│   └── GraphDrained       — all tasks exhausted (streaming/internal use)
 ├── GraphRecursionError    — recursion_limit exceeded
 ├── InvalidUpdateError     — concurrent conflicting channel writes
 ├── NodeCancelledError     — node was cancelled
@@ -988,7 +989,7 @@ class State(TypedDict):
 def fake_llm(state: State) -> dict:
     """Simulate an LLM that generates a tool call."""
     # In a real app this would be: llm.bind_tools([ExtractNumber]).invoke(...)
-    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
+    # Use dict literals — TypedDict classes are typing constructs, not runtime constructors.
     # First attempt: send -5 (invalid) to trigger re-prompting
     if len(state["messages"]) == 1:
         tool_call = {"name": "ExtractNumber", "args": {"value": -5}, "id": "tc-1", "type": "tool_call"}
@@ -1197,7 +1198,7 @@ print(result["messages"][-1].content)  # Reply: hi
 
 Both manage task lifecycle flags: `__cancel_on_exit__` (cancel if not started when the context exits) and `__reraise_on_exit__` (propagate the first task exception on exit). The `__next_tick__` flag defers execution to the next event loop tick.
 
-On context exit, both executors re-raise the first exception from any task flagged with `reraise=True`, swallowing only `CancelledError`. This means `GraphBubbleUp` subclasses (`GraphInterrupt`, `ParentCommand`) raised inside a background task **will** propagate out of the context manager. Handle them inside the task function if you need to prevent this.
+On context exit, both executors re-raise the first exception from any task still in `self.tasks` that is flagged with `reraise=True`, swallowing only `CancelledError`. `GraphBubbleUp` exceptions are handled specially: the `done()` callback (registered via `add_done_callback` in `submit()`) catches `GraphBubbleUp` and removes the task from `self.tasks` immediately. By the time `__exit__`/`__aexit__` copies `self.tasks`, those tasks are already gone, so `GraphBubbleUp` is effectively suppressed — it will not propagate out of the context manager.
 
 ### `Submit` protocol
 
@@ -1374,7 +1375,7 @@ def propose_command(state: State) -> dict:
     return {"command": cmd}
 
 def request_approval(state: State) -> dict:
-    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
+    # Use dict literals — TypedDict classes are typing constructs, not runtime constructors.
     request: HumanInterrupt = {
         "action_request": {
             "action": "execute_command",
@@ -1468,7 +1469,7 @@ def draft_node(state: State) -> dict:
     return {"draft": "Subject: Meeting\n\nHi team, please join tomorrow's standup."}
 
 def edit_and_approve(state: State) -> dict:
-    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
+    # Use dict literals — TypedDict classes are typing constructs, not runtime constructors.
     request: HumanInterrupt = {
         "action_request": {
             "action": "review_email",
@@ -1554,7 +1555,7 @@ def build_response(
     if not allowed.get(choice, False):
         raise ValueError(f"Action '{choice}' is not permitted by this interrupt config")
 
-    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
+    # Use dict literals — TypedDict classes are typing constructs, not runtime constructors.
     if choice in ("accept", "ignore"):
         return {"type": choice, "args": None}
     elif choice == "response":
@@ -1562,7 +1563,7 @@ def build_response(
     else:  # edit — args must be an ActionRequest carrying the (edited) action + args
         return {"type": "edit", "args": {"action": action_name, "args": edited_args or {}}}
 
-# Example usage — dict literal for Python 3.10 compatibility
+# Example usage — dict literal, since TypedDict classes are not runtime constructors
 cfg: HumanInterruptConfig = {
     "allow_ignore": True, "allow_respond": True, "allow_edit": True, "allow_accept": True
 }
