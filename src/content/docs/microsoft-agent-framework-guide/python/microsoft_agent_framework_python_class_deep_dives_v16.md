@@ -885,7 +885,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent
+from agent_framework import Agent, AgentSession
 from agent_framework import MemoryContextProvider, MemoryFileStore
 from agent_framework.amazon import BedrockChatClient, BedrockEmbeddingClient
 
@@ -916,8 +916,12 @@ async def main():
         context_providers=[memory],
         instructions="Use recalled context to answer questions.",
     )
-    await agent.run("The project deadline is June 30.")
-    result = await agent.run("When is the project due?")
+    # AgentSession is required: MemoryFileStore resolves the owner from
+    # session.state[owner_state_key] and raises RuntimeError if the key is absent.
+    session = AgentSession()
+    session.state["user_id"] = "user-42"
+    await agent.run("The project deadline is June 30.", session=session)
+    result = await agent.run("When is the project due?", session=session)
     print(result.text)
 
 asyncio.run(main())
