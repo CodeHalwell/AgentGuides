@@ -278,6 +278,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import Agent, tool
 from agent_framework.foundry import FoundryLocalClient
+from foundry_local.models import DeviceType
 
 @tool
 def word_count(text: str) -> int:
@@ -287,7 +288,7 @@ def word_count(text: str) -> int:
 async def main():
     client = FoundryLocalClient(
         model="phi-4-mini",
-        device="gpu",
+        device=DeviceType.GPU,
         prepare_model=True,
     )
     agent = Agent(client=client, tools=[word_count])
@@ -511,12 +512,18 @@ All are `str` class attributes — use them to avoid typos:
 
 ### `GeneratedEvaluatorRef`
 
-A reference to a previously generated rubric-based evaluator stored in Foundry:
+A reference to a rubric evaluator already stored in a Foundry project. Pass instances to
+`FoundryEvals(evaluators=[...])` to score with a pre-existing rubric; the SDK does not
+create or modify the evaluator definition, only references it by name.
 
 ```
 GeneratedEvaluatorRef(
-    eval_id: str,   # ID returned by a previous FoundryEvals.create_generated_evaluator() call
+    name: str,                  # evaluator name as stored in Foundry, e.g. "reservation-policy-rubric"
+    version: str | None = None, # pinned version; None resolves to latest (emits a warning)
+    display_name: str | None = None,  # human-readable label in result summaries
 )
+# Convenience factory for explicit latest-resolution (discouraged in CI):
+GeneratedEvaluatorRef.latest(name: str, *, display_name: str | None = None)
 ```
 
 ### Key behaviours
@@ -532,21 +539,24 @@ GeneratedEvaluatorRef(
 
 ```python
 import asyncio
-from agent_framework import Agent, evaluate_agent, EvalItem
+from agent_framework import Agent, evaluate_agent
 from agent_framework.foundry import FoundryEvals, FoundryChatClient
 
 async def main():
     client = FoundryChatClient(model="gpt-4o")
     agent = Agent(client=client, instructions="You are a helpful assistant.")
 
-    queries = [
-        EvalItem(input="What is 2+2?", expected_output="4"),
-        EvalItem(input="Capital of France?", expected_output="Paris"),
-    ]
-
+    # evaluate_agent accepts plain strings for queries and expected_output
     evals = FoundryEvals(client=client)  # uses relevance + coherence + task_adherence
-    results = await evaluate_agent(agent=agent, queries=queries, evaluators=evals)
-    print(f"Overall score: {results.aggregate_score:.2f}")
+    results = await evaluate_agent(
+        agent=agent,
+        queries=["What is 2+2?", "Capital of France?"],
+        expected_output=["4", "Paris"],
+        evaluators=evals,
+    )
+    # evaluate_agent returns list[EvalResults]; one entry per evaluator provider
+    for r in results:
+        print(f"{r.provider}: passed={r.passed} failed={r.failed} total={r.total}")
 
 asyncio.run(main())
 ```
@@ -555,14 +565,12 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, evaluate_agent, EvalItem
+from agent_framework import Agent, evaluate_agent
 from agent_framework.foundry import FoundryEvals, FoundryChatClient
 
 async def main():
     client = FoundryChatClient(model="gpt-4o")
     agent = Agent(client=client)
-
-    queries = [EvalItem(input="Tell me about climate change.", expected_output="...")]
 
     evals = FoundryEvals(
         client=client,
@@ -575,9 +583,16 @@ async def main():
         poll_interval=3.0,
         timeout=120.0,
     )
-    results = await evaluate_agent(agent=agent, queries=queries, evaluators=evals)
-    for score in results.scores:
-        print(f"  {score.name}: {score.score:.2f}")
+    results = await evaluate_agent(
+        agent=agent,
+        queries=["Tell me about climate change."],
+        evaluators=evals,
+    )
+    for r in results:
+        print(f"{r.provider}: {r.passed}/{r.total}")
+        if r.per_evaluator:
+            for eval_name, counts in r.per_evaluator.items():
+                print(f"  {eval_name}: {counts}")
 
 asyncio.run(main())
 ```
@@ -586,7 +601,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, tool, evaluate_agent, EvalItem
+from agent_framework import Agent, tool, evaluate_agent
 from agent_framework.foundry import FoundryEvals, FoundryChatClient
 
 @tool
@@ -598,13 +613,6 @@ async def main():
     client = FoundryChatClient(model="gpt-4o")
     agent = Agent(client=client, tools=[get_stock_price])
 
-    queries = [
-        EvalItem(
-            input="What is the stock price of MSFT?",
-            expected_output="42.0",
-        ),
-    ]
-
     evals = FoundryEvals(
         client=client,
         evaluators=[
@@ -613,8 +621,14 @@ async def main():
             FoundryEvals.TOOL_INPUT_ACCURACY,
         ],
     )
-    results = await evaluate_agent(agent=agent, queries=queries, evaluators=evals)
-    print(f"Tool call accuracy: {results.aggregate_score:.2f}")
+    results = await evaluate_agent(
+        agent=agent,
+        queries=["What is the stock price of MSFT?"],
+        expected_output=["42.0"],
+        evaluators=evals,
+    )
+    for r in results:
+        print(f"Tool call eval — {r.provider}: {r.passed}/{r.total}")
 
 asyncio.run(main())
 ```
@@ -883,7 +897,8 @@ async def main():
     results = await embedding_client.get_embeddings(
         ["The project deadline is June 30.", "Budget is $50k."]
     )
-    print(f"Embedded {len(results.embeddings)} strings, dim={len(results.embeddings[0].vector)}")
+    # GeneratedEmbeddings subclasses list[Embedding] — index directly, no .embeddings attribute
+    print(f"Embedded {len(results)} strings, dim={len(results[0].vector)}")
 
     # Pair with file-backed persistent memory (MemoryFileStore, not a vector store)
     file_store = MemoryFileStore(
