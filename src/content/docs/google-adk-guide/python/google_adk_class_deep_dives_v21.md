@@ -654,7 +654,13 @@ def check_response_length(
     overall_score = total_score / count if count else 0.0
     # overall_eval_status must be set explicitly; the default NOT_EVALUATED causes
     # LocalEvalService to silently skip the metric when deciding pass/fail.
-    threshold = eval_metric.threshold if eval_metric.threshold is not None else 1.0
+    # _CustomMetricEvaluator sets eval_metric.threshold=None before calling this
+    # function, so read the threshold from the criterion instead.
+    threshold = (
+        eval_metric.criterion.threshold
+        if eval_metric.criterion is not None
+        else 1.0
+    )
     return EvaluationResult(
         overall_score=overall_score,
         overall_eval_status=EvalStatus.PASSED if overall_score >= threshold else EvalStatus.FAILED,
@@ -806,6 +812,7 @@ tool_quality_rubrics = [
 response_quality_evaluator = RubricBasedEvaluator(
     eval_metric=EvalMetric(
         metric_name="response_quality_score",
+        threshold=0.8,  # LlmAsJudge reads eval_metric.threshold for get_eval_status
         criterion=RubricsBasedCriterion(
             threshold=0.8,
             rubrics=response_quality_rubrics,
@@ -821,6 +828,7 @@ response_quality_evaluator = RubricBasedEvaluator(
 tool_quality_evaluator = RubricBasedEvaluator(
     eval_metric=EvalMetric(
         metric_name="tool_quality_score",
+        threshold=1.0,
         criterion=RubricsBasedCriterion(
             threshold=1.0,
             rubrics=tool_quality_rubrics,
