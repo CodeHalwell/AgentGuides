@@ -47,8 +47,8 @@ that have never been documented in any previous volume.
 6. [`BedrockEmbeddingClient` + `BedrockEmbeddingOptions` + `BedrockEmbeddingSettings`](#6-bedrockembeddingclient)
 7. [`MagenticManagerBase`](#7-magenticmanagerbase)
 8. [`BaseGroupChatOrchestrator` + `GroupChatRequestSentEvent` + `GroupChatResponseReceivedEvent`](#8-basegroupchatorchestrator-and-events)
-9. [`AgentRequestInfoResponse` + `CacheProvider`](#9-agentrequestitnforesponse-and-cacheprovider)
-10. [Purview exception hierarchy + `acquire_token`](#10-purview-exception-hierarchy-and-acquire_token)
+9. [`AgentRequestInfoResponse` + `CacheProvider`](#9-agentrequestinforesponse-cacheprovider)
+10. [Purview exception hierarchy + `acquire_token`](#10-purview-exception-hierarchy-acquire_token)
 
 ---
 
@@ -1456,7 +1456,6 @@ from agent_framework.microsoft import (
     PurviewSettings,
 )
 from agent_framework.foundry import FoundryChatClient
-import asyncio
 
 async def main():
     settings = PurviewSettings(
