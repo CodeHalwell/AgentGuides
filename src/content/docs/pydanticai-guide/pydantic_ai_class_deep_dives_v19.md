@@ -1450,8 +1450,8 @@ if __name__ == '__main__':
 ```python
 import asyncio
 from dataclasses import dataclass
-from typing import Annotated
-from pydantic_graph import Graph, BaseNode, End, FullStatePersistence
+from pydantic_graph import Graph, BaseNode, End
+from pydantic_graph.persistence.in_mem import FullStatePersistence
 from pydantic_graph.persistence import NodeSnapshot, EndSnapshot
 
 
@@ -1514,7 +1514,6 @@ from pydantic_graph.exceptions import (
     GraphNodeStatusError,
     GraphValidationError,
 )
-from pydantic_graph.persistence import NodeSnapshot, SnapshotStatus
 
 
 def demonstrate_node_status_check() -> None:
