@@ -110,6 +110,7 @@ if __name__ == '__main__':
 
 ```python
 import asyncio
+import os
 from pydantic_ai import Agent
 from pydantic_ai.models.bedrock import BedrockConverseModel, BedrockModelSettings
 from pydantic_ai.providers.bedrock import BedrockProvider
@@ -121,7 +122,7 @@ model = BedrockConverseModel('us.amazon.nova-pro-v1:0', provider=provider)
 # bedrock_performance_configuration sets latency mode to 'optimized' for faster responses.
 settings: BedrockModelSettings = {
     'bedrock_guardrail_config': {
-        'guardrailIdentifier': os.environ['BEDROCK_GUARDRAIL_ID'],
+        'guardrailIdentifier': os.environ.get('BEDROCK_GUARDRAIL_ID', 'test-id'),
         'guardrailVersion': 'DRAFT',
         'trace': 'enabled',
     },
@@ -141,8 +142,6 @@ async def main() -> None:
     result = await agent.run('Tell me about AWS security best practices.')
     print(result.output)
 
-
-import os
 
 if __name__ == '__main__':
     asyncio.run(main())
@@ -1149,7 +1148,7 @@ async def main() -> None:
     agent_test = Agent(TestModel())
     result = await agent_test.run(
         'Solve this step by step: 15 * 17',
-        # Per-run thinking level override
+        capabilities=[Thinking(effort='high')],  # Per-run thinking level override
     )
     print(result.output)
 
