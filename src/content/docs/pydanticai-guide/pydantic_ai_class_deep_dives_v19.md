@@ -83,7 +83,7 @@ model = BedrockConverseModel('us.anthropic.claude-sonnet-4-6', provider=provider
 # Cache the system prompt for 5 min and the last user message turn.
 # Together they consume 2 of Bedrock's 4 available cache-point slots.
 settings: BedrockModelSettings = {
-    'bedrock_cache_instructions': True,   # 'True' == '5m' TTL
+    'bedrock_cache_instructions': True,   # True == '5m' TTL
     'bedrock_cache_messages': True,
 }
 
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
-### Example 2 — Custom `BedrockModelProfile` via `update()`
+### Example 2 — Custom `BedrockModelProfile` via `dataclasses.replace()`
 
 ```python
 import asyncio
@@ -681,7 +681,7 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
-### Example 2 — Inspecting `capability_id` on tool definitions
+### Example 2 — Inspecting registered capabilities via `run.ctx.capabilities`
 
 ```python
 import asyncio
