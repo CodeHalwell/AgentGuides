@@ -250,7 +250,8 @@ provider = BedrockProvider(region_name='us-east-1')
 base_profile = bedrock_anthropic_model_profile('claude-sonnet-4-6')
 custom_profile = replace(
     base_profile,
-    # Enable explicit 1-hour tool caching for this deployment.
+    # Enable tool-caching capability for this deployment
+    # (bedrock_supports_tool_caching is a boolean flag, not a TTL).
     bedrock_supports_tool_caching=True,
 )
 
@@ -586,18 +587,21 @@ FEATURE_FLAGS: dict[str, bool] = {
 
 def feature_flagged_toolset(ctx: RunContext[None]):
     ts = FunctionToolset()
+    registered = 0
 
     if FEATURE_FLAGS.get('beta_summarise'):
         @ts.tool
         async def summarise(ctx: RunContext[None], text: str) -> str:
             return f'Summary: {text[:50]}...'
+        registered += 1
 
     if FEATURE_FLAGS.get('experimental_translate'):
         @ts.tool
         async def translate(ctx: RunContext[None], text: str, lang: str) -> str:
             return f'[{lang}] {text}'
+        registered += 1
 
-    return ts if ts._tools else None  # type: ignore[attr-defined]
+    return ts if registered else None
 
 
 dynamic = DynamicToolset(feature_flagged_toolset)
@@ -842,8 +846,6 @@ app = create_api_app(
 ### Example 3 — Testing the `/configure` and `/health` endpoints
 
 ```python
-import json
-import pytest
 from starlette.testclient import TestClient
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
@@ -1097,7 +1099,7 @@ The unified `thinking` setting works because each model provider's request build
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.thinking import Thinking
-from pydantic_ai.models.test import TestModel, TestModelCustomStream
+from pydantic_ai.models.test import TestModel
 
 # In real use, replace TestModel with an actual model that supports thinking,
 # e.g. AnthropicModel('claude-sonnet-4-6') or OpenAIModel('o3').
