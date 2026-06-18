@@ -40,7 +40,7 @@ Source-verified against **google-adk==2.2.0** (installed from PyPI, June 2026). 
 | Session state keys | Recording mode is activated by setting `_adk_recordings_config` in session state; replay mode by `_adk_replay_config`. Both accept the same dict schema: `{dir, user_message_index, streaming_mode}`. |
 | Dual pending structures | `RecordingsPlugin` tracks LLM recordings in `pending_llm_recordings: dict[str, Recording]` (keyed by `agent_name`) and tool recordings in `pending_tool_recordings: dict[str, Recording]` (keyed by `function_call_id`), with `pending_recordings_order: list[Recording]` preserving chronological sequence. |
 | Output file naming | Streaming mode `NONE` → `generated-recordings.yaml`; mode `SSE` → `generated-recordings-sse.yaml`. |
-| Replay short-circuits execution | `ReplayPlugin.before_tool_callback` returns the recorded `tool_response.response` dict directly, preventing real network calls. `AgentTool` instances are skipped (they have no side effects to mock). |
+| Replay executes and overrides | `ReplayPlugin.before_tool_callback` verifies the call against the recording, then still calls `await tool.run_async(...)` for every non-`AgentTool` (side effects such as network writes **do** occur), and finally returns the recorded `tool_response.response` dict as the result. `AgentTool` instances are not executed — only their replay index is advanced. |
 | Per-agent replay index | `_InvocationReplayState.agent_tool_replay_indices: dict[str, int]` tracks how many tools each agent has consumed, enabling correct sequential matching when multiple agents run in the same invocation. |
 
 ### Example 1 — capturing a golden run via session state
@@ -625,10 +625,10 @@ finally:
 # can import it as "mypackage.metrics.check_response_length".
 
 from typing import Optional
-from google.adk.evaluation.eval_metrics import EvalMetric
+from google.adk.evaluation.eval_metrics import EvalMetric, EvalStatus
 from google.adk.evaluation.evaluator import EvaluationResult
 from google.adk.evaluation.eval_case import Invocation
-from google.adk.evaluation.conversation_scenario import ConversationScenario
+from google.adk.evaluation.conversation_scenarios import ConversationScenario
 
 
 def check_response_length(
@@ -646,8 +646,13 @@ def check_response_length(
             score = 1.0 if len(text) <= 500 else max(0.0, 1.0 - (len(text) - 500) / 1000)
             total_score += score
             count += 1
+    overall_score = total_score / count if count else 0.0
+    # overall_eval_status must be set explicitly; the default NOT_EVALUATED causes
+    # LocalEvalService to silently skip the metric when deciding pass/fail.
+    threshold = eval_metric.threshold if eval_metric.threshold is not None else 1.0
     return EvaluationResult(
-        overall_score=total_score / count if count else 0.0,
+        overall_score=overall_score,
+        overall_eval_status=EvalStatus.PASSED if overall_score >= threshold else EvalStatus.FAILED,
     )
 
 
@@ -657,7 +662,7 @@ async def check_response_length_async(
     expected_invocations: Optional[list[Invocation]],
     conversation_scenario: Optional[ConversationScenario],
 ) -> EvaluationResult:
-    """Async variant — identical logic; _CustomMetricEvaluator detects coroutines."""
+    """Async variant — same logic; _CustomMetricEvaluator detects async via inspect.isasyncgenfunction."""
     return check_response_length(
         eval_metric, actual_invocations, expected_invocations, conversation_scenario
     )
@@ -682,7 +687,7 @@ async def check_response_length_async(
 | Verdict parsing | `DefaultAutoRaterResponseParser` extracts three fields with regex: `(?<=Property: )(.*)`, `(?<=Rationale: )(.*)`, `(?<=Verdict: )(.*)`. `"yes"` (case-insensitive) → 1.0; `"no"` → 0.0; anything else → `None`. |
 | Majority vote aggregation | `MajorityVotePerInvocationResultsAggregator` collects multiple LLM samples per rubric per invocation and takes the majority verdict, reducing noise from single-sample LLM judgments. |
 | Mean summarisation | `MeanInvocationResultsSummarizer` computes the arithmetic mean of per-invocation scores for the final `EvaluationResult`. |
-| `rubric_type` filtering | When `rubric_type` is set on `RubricBasedEvaluator`, only `Rubric` instances whose `type` field matches are included in evaluation, enabling per-dimension scoring. |
+| `rubric_type` filtering | When `rubric_type` is set, `create_effective_rubrics_list` applies the filter only to **invocation-level rubrics** passed at call time — all rubrics embedded in the criterion at construction are always included unchanged. To get clean per-dimension scoring, put only the relevant rubrics in each evaluator's `RubricsBasedCriterion`. |
 | Normalised rubric map | `_normalized_rubric_to_id_map` lowercases and strips whitespace from rubric text before building the lookup map, ensuring minor whitespace differences don't break matching. |
 | `RubricBasedEvaluator` is `@experimental` | The constructor's `criterion_type` parameter, aggregator, and summarizer can all be replaced to customise the evaluation pipeline. |
 
@@ -1125,8 +1130,9 @@ async def build_gmail_agent():
     gmail_toolset = GoogleApiToolset(
         api_name="gmail",
         api_version="v1",
-        # Scopes limit which OAuth flows are included in the security scheme
-        scopes=["https://www.googleapis.com/auth/gmail.readonly"],
+        # additional_scopes are appended to the default discovery scope;
+        # GoogleApiToolset derives the primary scope from the Discovery doc itself.
+        additional_scopes=["https://www.googleapis.com/auth/gmail.readonly"],
     )
 
     tools = await gmail_toolset.get_tools()
