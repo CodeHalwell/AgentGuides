@@ -662,7 +662,7 @@ async def check_response_length_async(
     expected_invocations: Optional[list[Invocation]],
     conversation_scenario: Optional[ConversationScenario],
 ) -> EvaluationResult:
-    """Async variant — same logic; _CustomMetricEvaluator detects async via inspect.isasyncgenfunction."""
+    """Async coroutine variant — _CustomMetricEvaluator dispatches via inspect.iscoroutinefunction."""
     return check_response_length(
         eval_metric, actual_invocations, expected_invocations, conversation_scenario
     )
