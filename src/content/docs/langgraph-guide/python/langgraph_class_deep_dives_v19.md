@@ -762,7 +762,7 @@ Exception
 │   ├── GraphInterrupt     — raised when interrupt() is called
 │   │   └── NodeInterrupt  — deprecated alias (v0.x)
 │   ├── ParentCommand      — Command.PARENT bubbled up through subgraph
-│   └── GraphDrained       — all tasks exhausted (streaming/internal use)
+│   └── GraphDrained       — cooperative drain: RunControl.request_drain() stopped the run at a superstep boundary (e.g. SIGTERM); checkpoint saved, run is resumable
 ├── GraphRecursionError    — recursion_limit exceeded
 ├── InvalidUpdateError     — concurrent conflicting channel writes
 ├── NodeCancelledError     — node was cancelled
@@ -1198,7 +1198,7 @@ print(result["messages"][-1].content)  # Reply: hi
 
 Both manage task lifecycle flags: `__cancel_on_exit__` (cancel if not started when the context exits) and `__reraise_on_exit__` (propagate the first task exception on exit). The `__next_tick__` flag defers execution to the next event loop tick.
 
-On context exit, both executors re-raise the first exception from any task still in `self.tasks` that is flagged with `reraise=True`, swallowing only `CancelledError`. `GraphBubbleUp` exceptions are handled specially: the `done()` callback (registered via `add_done_callback` in `submit()`) catches `GraphBubbleUp` and removes the task from `self.tasks` immediately. By the time `__exit__`/`__aexit__` copies `self.tasks`, those tasks are already gone, so `GraphBubbleUp` is effectively suppressed — it will not propagate out of the context manager.
+On context exit, both executors re-raise the first exception from any task in their local snapshot that is flagged with `reraise=True`, swallowing only `CancelledError`. `GraphBubbleUp` exceptions are handled by the `done()` callback (registered via `add_done_callback` in `submit()`): when a task completes with `GraphBubbleUp`, `done()` catches it and removes the task from `self.tasks`. **Whether this suppresses the exception depends on timing.** If the task has already completed before `__exit__`/`__aexit__` copies `self.tasks` (the normal case for interrupt and ParentCommand), it is absent from the local copy and is never re-raised — effectively suppressed. However, if the task is still running when `__exit__` copies the dict, it will be in the local snapshot; after `concurrent.futures.wait` drains it, `done()` removes it from `self.tasks` but not from the local copy, so `task.result()` will still re-raise `GraphBubbleUp`. In practice, LangGraph's own interrupt and ParentCommand tasks complete synchronously before the surrounding `with` block exits, so suppression is reliable in normal usage.
 
 ### `Submit` protocol
 
