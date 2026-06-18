@@ -86,6 +86,7 @@ class TasksTransformer(StreamTransformer):
 ### Example 1 — audit trail with CheckpointsTransformer
 
 ```python
+import asyncio
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.stream.transformers import CheckpointsTransformer
@@ -112,19 +113,24 @@ graph = builder.compile(checkpointer=InMemorySaver())
 
 config = {"configurable": {"thread_id": "audit-1"}}
 
-# v3 streaming API with CheckpointsTransformer
+# v3 streaming API: astream_events(version="v3") returns an AsyncGraphRunStream.
+# Pass transformers= to register projection handlers; stream_mode is derived
+# automatically from the transformer mux — do NOT pass it explicitly.
 async def run_with_checkpoint_audit():
-    async with graph.astream(
+    run = await graph.astream_events(
         {"count": 1, "messages": []},
         config=config,
-        stream_mode="checkpoints",
         version="v3",
-    ) as run:
-        # CheckpointsTransformer adds run.checkpoints automatically
+        transformers=[CheckpointsTransformer],
+    )
+    async with run:
+        # CheckpointsTransformer exposes run.checkpoints
         async for checkpoint in run.checkpoints:
             print(f"Checkpoint at step {checkpoint.get('metadata', {}).get('step', '?')}:")
             print(f"  values: {checkpoint.get('values')}")
             print(f"  next: {checkpoint.get('next')}")
+
+asyncio.run(run_with_checkpoint_audit())
 ```
 
 ### Example 2 — task-level execution tracing with TasksTransformer
@@ -157,11 +163,12 @@ builder.add_edge("worker", END)
 graph = builder.compile()
 
 async def trace_tasks():
-    async with graph.astream(
+    run = await graph.astream_events(
         {"items": ["a", "b", "c"], "results": []},
-        stream_mode="tasks",
         version="v3",
-    ) as run:
+        transformers=[TasksTransformer],
+    )
+    async with run:
         async for task_event in run.tasks:
             task_type = task_event.get("type")
             if task_type == "task":
@@ -206,14 +213,18 @@ async def full_audit():
     checkpoints = []
     tasks = []
 
-    async with graph.astream(
+    # astream_events(version="v3") returns an AsyncGraphRunStream.
+    # Both transformers are registered before the pump starts, so
+    # asyncio.gather correctly drives both projections concurrently —
+    # the pump's asyncio.Condition serialises pump steps while letting
+    # multiple consumers observe each event.
+    run = await graph.astream_events(
         {"step": 0, "log": []},
         config=config,
-        # both modes must be enabled
-        stream_mode=["checkpoints", "tasks"],
         version="v3",
-    ) as run:
-        # Drain both projections concurrently
+        transformers=[CheckpointsTransformer, TasksTransformer],
+    )
+    async with run:
         async def collect_checkpoints():
             async for cp in run.checkpoints:
                 checkpoints.append(cp)
@@ -222,6 +233,8 @@ async def full_audit():
             async for t in run.tasks:
                 tasks.append(t)
 
+        # Subscribe both channels before driving the pump so each
+        # channel buffers its events as the graph executes.
         await asyncio.gather(collect_checkpoints(), collect_tasks())
 
     print(f"Checkpoints: {len(checkpoints)}")
@@ -335,7 +348,7 @@ async def classify(state: State) -> dict:
 
 async def answer(state: State) -> dict:
     # This LLM call IS surfaced (no TAG_NOSTREAM)
-    return {"messages": [HumanMessage(content="I'll answer that!", id="ans-1")]}
+    return {"messages": [AIMessage(content="I'll answer that!", id="ans-1")]}
 
 builder = StateGraph(State)
 builder.add_node("classify", classify)
@@ -713,14 +726,15 @@ class State(TypedDict):
     items: list[str]
     count: int
 
-# ChannelRead is a Runnable — pipe it into other runnables
+# ChannelRead is a Runnable — pipe it directly into other runnables.
+# The channel name ("items") is read from Pregel state and the mapper
+# transforms the value before passing it downstream.
 count_reader = ChannelRead("items", mapper=len)
 
-def record_count(state: State) -> dict:
-    return {"count": len(state["items"])}
-
 builder = StateGraph(State)
-builder.add_node("record", record_count)
+# Use count_reader as the node: reads items channel → maps to int →
+# RunnableLambda wraps it in the expected state-update dict.
+builder.add_node("record", count_reader | RunnableLambda(lambda count: {"count": count}))
 builder.add_edge(START, "record")
 builder.add_edge("record", END)
 graph = builder.compile()
@@ -969,12 +983,13 @@ class State(TypedDict):
 def fake_llm(state: State) -> dict:
     """Simulate an LLM that generates a tool call."""
     # In a real app this would be: llm.bind_tools([ExtractNumber]).invoke(...)
+    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
     # First attempt: send -5 (invalid) to trigger re-prompting
     if len(state["messages"]) == 1:
-        tool_call = ToolCall(name="ExtractNumber", args={"value": -5}, id="tc-1")
+        tool_call = {"name": "ExtractNumber", "args": {"value": -5}, "id": "tc-1", "type": "tool_call"}
         return {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
     # Second attempt: send valid value
-    tool_call = ToolCall(name="ExtractNumber", args={"value": 42}, id="tc-2")
+    tool_call = {"name": "ExtractNumber", "args": {"value": 42}, "id": "tc-2", "type": "tool_call"}
     return {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
 
 def should_validate(state: State) -> Literal["validation", "__end__"]:
@@ -1354,19 +1369,20 @@ def propose_command(state: State) -> dict:
     return {"command": cmd}
 
 def request_approval(state: State) -> dict:
-    request = HumanInterrupt(
-        action_request=ActionRequest(
-            action="execute_command",
-            args={"command": state["command"]},
-        ),
-        config=HumanInterruptConfig(
-            allow_ignore=True,
-            allow_respond=True,
-            allow_edit=True,
-            allow_accept=True,
-        ),
-        description=f"About to run: `{state['command']}`. Approve?",
-    )
+    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
+    request: HumanInterrupt = {
+        "action_request": {
+            "action": "execute_command",
+            "args": {"command": state["command"]},
+        },
+        "config": {
+            "allow_ignore": True,
+            "allow_respond": True,
+            "allow_edit": True,
+            "allow_accept": True,
+        },
+        "description": f"About to run: `{state['command']}`. Approve?",
+    }
     # Suspend execution; resume with HumanResponse
     response: HumanResponse = interrupt(request)
 
@@ -1447,19 +1463,20 @@ def draft_node(state: State) -> dict:
     return {"draft": "Subject: Meeting\n\nHi team, please join tomorrow's standup."}
 
 def edit_and_approve(state: State) -> dict:
-    request = HumanInterrupt(
-        action_request=ActionRequest(
-            action="review_email",
-            args={"draft": state["draft"]},
-        ),
-        config=HumanInterruptConfig(
-            allow_ignore=False,
-            allow_respond=False,
-            allow_edit=True,
-            allow_accept=True,
-        ),
-        description="Review the draft email before sending.",
-    )
+    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
+    request: HumanInterrupt = {
+        "action_request": {
+            "action": "review_email",
+            "args": {"draft": state["draft"]},
+        },
+        "config": {
+            "allow_ignore": False,
+            "allow_respond": False,
+            "allow_edit": True,
+            "allow_accept": True,
+        },
+        "description": "Review the draft email before sending.",
+    }
     response: HumanResponse = interrupt(request)
 
     if response["type"] == "accept":
@@ -1492,7 +1509,7 @@ async def run():
     # Phase 2: human edits the email
     edited = "Subject: Meeting Tomorrow\n\nHi team, standup at 10am. Please be on time!"
     result = await graph.ainvoke(
-        Command(resume={"type": "edit", "args": {"args": {"draft": edited}}}),
+        Command(resume={"type": "edit", "args": {"action": "review_email", "args": {"draft": edited}}}),
         config=config,
     )
     print(f"Final email sent: {result['final'][:40]}...")
@@ -1515,9 +1532,14 @@ def build_response(
     config: HumanInterruptConfig,
     choice: str,
     text: str | None = None,
+    action_name: str = "unknown_action",
     edited_args: dict | None = None,
 ) -> HumanResponse:
-    """Build a HumanResponse respecting the config constraints."""
+    """Build a HumanResponse respecting the config constraints.
+
+    For "edit" responses, action_name should match the original ActionRequest.action
+    that the interrupt requested — it identifies which action is being edited.
+    """
     allowed = {
         "accept": config["allow_accept"],
         "ignore": config["allow_ignore"],
@@ -1527,17 +1549,18 @@ def build_response(
     if not allowed.get(choice, False):
         raise ValueError(f"Action '{choice}' is not permitted by this interrupt config")
 
+    # Use dict literals — TypedDict keyword-arg syntax fails on Python 3.10.
     if choice in ("accept", "ignore"):
-        return HumanResponse(type=choice, args=None)
+        return {"type": choice, "args": None}
     elif choice == "response":
-        return HumanResponse(type="response", args=text or "")
-    else:  # edit
-        return HumanResponse(type="edit", args={"action": "edit", "args": edited_args or {}})
+        return {"type": "response", "args": text or ""}
+    else:  # edit — args must be an ActionRequest carrying the (edited) action + args
+        return {"type": "edit", "args": {"action": action_name, "args": edited_args or {}}}
 
-# Example usage
-cfg = HumanInterruptConfig(
-    allow_ignore=True, allow_respond=True, allow_edit=True, allow_accept=True
-)
+# Example usage — dict literal for Python 3.10 compatibility
+cfg: HumanInterruptConfig = {
+    "allow_ignore": True, "allow_respond": True, "allow_edit": True, "allow_accept": True
+}
 
 accept = build_response(cfg, "accept")
 print(accept)  # {'type': 'accept', 'args': None}
@@ -1545,8 +1568,8 @@ print(accept)  # {'type': 'accept', 'args': None}
 respond = build_response(cfg, "response", text="Looks good, but change the subject")
 print(respond)  # {'type': 'response', 'args': 'Looks good...'}
 
-edit = build_response(cfg, "edit", edited_args={"command": "ls -la"})
-print(edit)  # {'type': 'edit', 'args': {'action': 'edit', 'args': {'command': 'ls -la'}}}
+edit = build_response(cfg, "edit", action_name="execute_command", edited_args={"command": "ls -la"})
+print(edit)  # {'type': 'edit', 'args': {'action': 'execute_command', 'args': {'command': 'ls -la'}}}
 ```
 
 ---
@@ -1608,8 +1631,8 @@ builder = StateGraph(State)
 builder.add_node(
     "my_node",
     my_node,
-    retry=RetryPolicy(max_attempts=3),
-    cache=CachePolicy(ttl=60.0),
+    retry_policy=RetryPolicy(max_attempts=3),
+    cache_policy=CachePolicy(ttl=60.0),
     timeout=TimeoutPolicy(run_timeout=5.0),
     metadata={"owner": "team-infra", "version": "2"},
 )
@@ -1644,7 +1667,7 @@ builder = StateGraph(State)
 builder.add_node(
     "counter",
     counter_node,
-    retry=RetryPolicy(max_attempts=2),
+    retry_policy=RetryPolicy(max_attempts=2),
     timeout=TimeoutPolicy(run_timeout=3.0),
 )
 builder.add_edge(START, "counter")
@@ -1701,9 +1724,10 @@ if spec:
     print(f"error_handler_node: {spec.error_handler_node}")
     print(f"is_error_handler: {spec.is_error_handler}")
 
-# Build graph with proper error routing via add_node's error_handler param
+# Build graph with proper error routing: pass the callable directly,
+# not a string. add_node creates/marks the error-handler node internally.
 builder2 = StateGraph(State)
-builder2.add_node("risky", risky_operation, error_handler="error_handler")
+builder2.add_node("risky", risky_operation, error_handler=error_handler)
 builder2.add_node("error_handler", error_handler)
 builder2.add_edge(START, "risky")
 builder2.add_edge("risky", END)
