@@ -55,6 +55,7 @@ from google.adk.tools.google_search_agent_tool import (
     GoogleSearchAgentTool,
     create_google_search_agent,
 )
+from google.genai import types
 
 # 1. Build the dedicated search sub-agent.
 search_agent = create_google_search_agent(model="gemini-2.5-flash")
@@ -84,10 +85,11 @@ async def main():
     session = await runner.session_service.create_session(
         app_name="multi_tool_demo", user_id="u1"
     )
+    # new_message must be types.Content — use UserContent for convenience.
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="What's the weather in Paris and what are the top tourist spots there?",
+        new_message=types.UserContent("What's the weather in Paris and what are the top tourist spots there?"),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -106,6 +108,7 @@ from google.adk.tools.google_search_agent_tool import (
     GoogleSearchAgentTool,
     create_google_search_agent,
 )
+from google.genai import types
 
 # Use a lightweight model for the search sub-agent to minimise cost.
 # The parent uses a more capable model for synthesis.
@@ -134,7 +137,7 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="Research the history of the internet and save a report titled 'Internet History'",
+        new_message=types.UserContent("Research the history of the internet and save a report titled 'Internet History'"),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -153,6 +156,7 @@ from google.adk.tools.google_search_agent_tool import (
     GoogleSearchAgentTool,
     create_google_search_agent,
 )
+from google.genai import types
 
 search_tool = GoogleSearchAgentTool(agent=create_google_search_agent("gemini-2.5-flash"))
 
@@ -172,7 +176,7 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="What is the current version of Python?",
+        new_message=types.UserContent("What is the current version of Python?"),
     ):
         # Grounding metadata is surfaced via event.grounding_metadata
         # because propagate_grounding_metadata=True is set on the tool.
@@ -835,7 +839,7 @@ from google.adk.workflow._errors import NodeTimeoutError
 
 @node(
     timeout=5.0,  # Node must complete within 5 seconds.
-    retry_config=RetryConfig(max_retries=3, initial_delay=1.0, backoff_factor=2.0),
+    retry_config=RetryConfig(max_attempts=3, initial_delay=1.0, backoff_factor=2.0),
 )
 async def slow_api_call(ctx):
     """Calls an external API that may time out."""
@@ -1411,17 +1415,22 @@ print(connection_map.model_dump_json(indent=2))
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from google.adk.tools.environment_simulation.tool_connection_map import (
     ToolConnectionMap,
     StatefulParameter,
 )
 from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
+    ToolSimulationConfig,
 )
-from google.genai import types as genai_types
 
-# Pre-build the connection map to skip the LLM analysis phase.
-# This is the recommended approach when tool dependencies are well-understood.
+# Pre-build the connection map (produced by ToolConnectionAnalyzer, or hand-coded).
+# The map is consumed internally by ToolSpecMockStrategy; it is NOT a field on
+# EnvironmentSimulationConfig itself.
 connection_map = ToolConnectionMap(
     stateful_parameters=[
         StatefulParameter(
@@ -1432,16 +1441,29 @@ connection_map = ToolConnectionMap(
     ]
 )
 
-# EnvironmentSimulationConfig accepts the connection_map so ToolSpecMockStrategy
-# can use it to maintain state across mocked tool calls.
+# EnvironmentSimulationConfig requires tool_simulation_configs (non-empty list).
+# Each ToolSimulationConfig maps a tool name to a mock strategy.
 simulation_config = EnvironmentSimulationConfig(
-    llm_name="gemini-2.5-flash",
-    llm_config=genai_types.GenerateContentConfig(temperature=0.0),
-    tool_connection_map=connection_map,
+    simulation_model="gemini-2.5-flash",
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="make_reservation",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="get_reservation",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="cancel_reservation",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+    ],
 )
 
-print("Simulation config built with pre-analyzed connection map")
+print("Simulation config built successfully")
 print("Creating tools for reservation_id:", connection_map.stateful_parameters[0].creating_tools)
 # make_reservation creates the ID; cancel_reservation and get_reservation consume it.
-# ToolSpecMockStrategy will update state_store['reservation_id'] after make_reservation.
+# Pass connection_map to EnvironmentSimulationEngine (not to EnvironmentSimulationConfig)
+# so ToolSpecMockStrategy can maintain state_store['reservation_id'] across calls.
 ```
