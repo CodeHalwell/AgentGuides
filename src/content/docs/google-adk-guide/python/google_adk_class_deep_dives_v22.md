@@ -1392,13 +1392,16 @@ connection_map = ToolConnectionMap(
     stateful_parameters=[
         StatefulParameter(
             parameter_name="order_id",
-            creating_tools=["create_order", "clone_order"],
-            consuming_tools=["get_order", "cancel_order", "list_orders"],
+            # Mutating operations (cancel changes order state) belong in creating_tools
+            # so ToolSpecMockStrategy writes the updated state back to state_store.
+            creating_tools=["create_order", "clone_order", "cancel_order"],
+            consuming_tools=["get_order", "list_orders"],
         ),
         StatefulParameter(
             parameter_name="user_id",
-            creating_tools=["create_user"],
-            consuming_tools=["get_user", "list_user_orders", "delete_user"],
+            # delete_user mutates state — it must be a creating tool, not consuming.
+            creating_tools=["create_user", "delete_user"],
+            consuming_tools=["get_user", "list_user_orders"],
         ),
     ]
 )
