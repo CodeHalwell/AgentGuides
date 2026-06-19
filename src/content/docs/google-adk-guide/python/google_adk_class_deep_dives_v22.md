@@ -802,8 +802,8 @@ print("RedisCredentialService defined — use as drop-in for SessionStateCredent
 Three distinct exception types form the workflow framework's internal error taxonomy, each with a specific base class that governs how it interacts with user code and retry logic:
 
 - **`NodeInterruptedError(BaseException)`** — raised exclusively by `ctx.run_node()` when a dynamic child node has unresolved HITL interrupt IDs. Extends `BaseException` deliberately — `except Exception` will **not** catch it, ensuring the interrupt propagates up to the framework's `NodeRunner` rather than being accidentally swallowed by user-level error handling.
-- **`NodeTimeoutError(Exception)`** — raised when a node exceeds its configured `timeout` seconds. Extends `Exception` (not `BaseException`) so it **is** catchable by `retry_config` — a timed-out node can be automatically retried. Constructor: `NodeTimeoutError(node_name: str, timeout: float)` → message `"Node 'X' timed out after Y seconds."`.
-- **`DynamicNodeFailError(Exception)`** — raised when a dynamic node fails; wraps the underlying exception and carries `error: Exception` and `error_node_path: str` attributes. Caught by the parent node's `NodeRunner` to propagate the child's failure upward.
+- **`NodeTimeoutError(Exception)`** — raised when a node exceeds its configured `timeout` seconds. Extends `Exception` (not `BaseException`) so it **is** catchable by `retry_config` — a timed-out node can be automatically retried. Constructor uses keyword-only args: `NodeTimeoutError(node_name="X", timeout=5.0)` → message `"Node 'X' timed out after 5.0 seconds."`.
+- **`DynamicNodeFailError(Exception)`** — raised when a **dynamic** node (one invoked via `ctx.run_node()`) fails; wraps the underlying exception and carries `error: Exception` and `error_node_path: str` attributes. Not raised for static Workflow graph nodes — those propagate the original exception directly.
 
 ### Key behaviours
 
@@ -858,9 +858,10 @@ async def main():
         # Workflow uses edges, not a nodes list — use ("START", node) tuple syntax.
         edges=[("START", slow_api_call)],
     )
-    # NodeTimeoutError is raised internally, caught by retry_config, and
-    # the node is retried up to 3 times before propagating as
-    # DynamicNodeFailError to the parent.
+    # NodeTimeoutError is raised internally and caught by retry_config.
+    # After 3 failed attempts, NodeTimeoutError propagates directly to the
+    # caller — DynamicNodeFailError only wraps failures from ctx.run_node()
+    # dynamic children, not from static Workflow graph edges.
     print("Workflow defined — NodeTimeoutError triggers retry_config automatically")
 
 
