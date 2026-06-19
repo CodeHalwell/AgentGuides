@@ -223,6 +223,7 @@ import asyncio
 from agent_framework import Agent, AgentSession, tool
 from agent_framework import ToolApprovalMiddleware, ToolApprovalState
 from agent_framework import create_always_approve_tool_response
+from agent_framework.foundry import FoundryChatClient
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
@@ -243,7 +244,6 @@ async def main():
     # In a real UI you would pass the actual request Content object here.
     # create_always_approve_tool_response sets scope "tool" — all future send_email
     # calls are auto-approved for this session without prompting again.
-    from agent_framework.foundry import FoundryChatClient  # noqa: re-import for clarity
 
     # Demonstrate serialisation round-trip of ToolApprovalState
     state = ToolApprovalState(rules=[], queued_approval_requests=[], collected_approval_responses=[])
