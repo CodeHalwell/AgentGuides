@@ -99,7 +99,7 @@ graph = builder.compile()
 
 for ns, mode, payload in graph.stream(
     {"messages": []},
-    stream_mode="tools",
+    stream_mode=["tools"],
 ):
     print(f"[{mode}] {payload['event']}: {payload.get('tool_name', payload.get('tool_call_id'))}")
     if payload.get("output"):
@@ -133,7 +133,7 @@ agent = create_react_agent("anthropic:claude-sonnet-4-6", [stream_analysis])
 # Consume deltas in real-time
 for ns, mode, payload in agent.stream(
     {"messages": [{"role": "user", "content": "Analyse AI trends"}]},
-    stream_mode="tools",
+    stream_mode=["tools"],
 ):
     if payload["event"] == "tool-output-delta":
         print(f"Delta: {payload['delta']}")
@@ -181,7 +181,7 @@ builder.add_edge("router", "tools")
 builder.add_edge("tools", END)
 graph = builder.compile()
 
-events = [p["event"] for _, _, p in graph.stream({"results": []}, stream_mode="tools")]
+events = [p["event"] for _, _, p in graph.stream({"results": []}, stream_mode=["tools"])]
 # Only visible_tool events appear; hidden_tool is suppressed
 assert "tool-started" in events  # from visible_tool
 print("Events seen:", events)
@@ -313,7 +313,6 @@ print(f"Results: {result['results']}")  # [2, 4, 6]
 
 ```python
 from langgraph._internal._replay import ReplayState
-from langgraph._internal._constants import NS_END
 
 # Demonstrate namespace stripping manually
 rs = ReplayState(checkpoint_id="cp_abc123")
@@ -369,22 +368,19 @@ class PregelScratchpad:
 ### Example 1 — read `IsLastStep` / `RemainingSteps` (which read the scratchpad)
 
 ```python
-from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.managed.is_last_step import IsLastStep, RemainingSteps
 
 class State(TypedDict):
     messages: list[str]
+    is_last: IsLastStep        # managed: scratchpad.step == scratchpad.stop - 1
+    remaining: RemainingSteps  # managed: scratchpad.stop - scratchpad.step
 
-def check_limits(
-    state: State,
-    is_last: IsLastStep,       # reads scratchpad.step == scratchpad.stop - 1
-    remaining: RemainingSteps, # reads scratchpad.stop - scratchpad.step
-) -> dict:
-    if is_last:
-        return {"messages": state["messages"] + [f"LAST STEP (0 remaining)"]}
-    return {"messages": state["messages"] + [f"{remaining} steps remain"]}
+def check_limits(state: State) -> dict:
+    if state["is_last"]:
+        return {"messages": state["messages"] + ["LAST STEP (0 remaining)"]}
+    return {"messages": state["messages"] + [f"{state['remaining']} steps remain"]}
 
 def loop_control(state: State) -> str:
     return "check" if len(state["messages"]) < 3 else END
@@ -719,7 +715,6 @@ for h in history:
 ### Example 3 — `DeltaChannel` snapshot frequency
 
 ```python
-import operator
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
@@ -791,7 +786,6 @@ def chain_future(source: AnyFuture, destination: AnyFuture) -> AnyFuture:
 
 ```python
 import asyncio
-import concurrent.futures
 from langgraph._internal._future import run_coroutine_threadsafe
 
 async def slow_task(n: int) -> int:
@@ -973,7 +967,6 @@ except ValueError:
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.pregel._validate import validate_graph, validate_keys
 from typing_extensions import TypedDict
 
 class State(TypedDict):
@@ -1048,9 +1041,7 @@ def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
 
 ```python
 from langgraph.channels.last_value import LastValue
-from langgraph.channels.topic import Topic
 from langgraph.pregel._io import read_channel, read_channels
-from langgraph._internal._typing import MISSING
 
 # Build a minimal channels dict
 messages_ch = LastValue(list)
@@ -1223,8 +1214,12 @@ from langgraph.types import Send
 class State(TypedDict):
     results: Annotated[list[str], operator.add]
 
-def fan_out(state: State) -> list[Send]:
-    # Send to worker nodes concurrently
+def fan_out(state: State) -> dict:
+    # Regular node: signals that fan-out should proceed
+    return {}
+
+def route_workers(state: State) -> list[Send]:
+    # Conditional edge function: returns Send objects to dispatch parallel workers
     return [Send("worker", {"results": [], "id": i}) for i in range(3)]
 
 def worker(state: dict) -> dict:
@@ -1236,7 +1231,7 @@ builder = StateGraph(State)
 builder.add_node("fan_out", fan_out)
 builder.add_node("worker", worker)
 builder.add_edge(START, "fan_out")
-builder.add_conditional_edges("fan_out", lambda s: s, {})  # auto-routes Sends
+builder.add_conditional_edges("fan_out", route_workers)
 builder.add_edge("worker", END)
 graph = builder.compile()
 
