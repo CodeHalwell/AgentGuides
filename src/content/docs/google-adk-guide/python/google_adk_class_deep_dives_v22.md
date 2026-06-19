@@ -254,13 +254,22 @@ class ApiKeyRotatingExchanger(BaseCredentialExchanger):
 
 ```python
 import asyncio
-from google.adk.auth.auth_credential import AuthCredential, HttpCredentials
+from google.adk.auth.auth_credential import (
+    AuthCredential,
+    AuthCredentialTypes,
+    HttpAuth,
+    HttpCredentials,
+)
 from google.adk.auth.exchanger.base_credential_exchanger import ExchangeResult
 
 
 async def demonstrate_exchange_result():
     # ExchangeResult is a NamedTuple — can unpack or use named attributes.
-    fake_cred = AuthCredential(http=HttpCredentials(token="old-token"))
+    # auth_type is required; http must wrap HttpCredentials in HttpAuth.
+    fake_cred = AuthCredential(
+        auth_type=AuthCredentialTypes.HTTP,
+        http=HttpAuth(scheme="bearer", credentials=HttpCredentials(token="old-token")),
+    )
     result = ExchangeResult(credential=fake_cred, was_exchanged=False)
 
     credential, was_exchanged = result  # NamedTuple unpacking
@@ -280,7 +289,12 @@ asyncio.run(demonstrate_exchange_result())
 ```python
 import asyncio
 from typing import Optional
-from google.adk.auth.auth_credential import AuthCredential, HttpCredentials
+from google.adk.auth.auth_credential import (
+    AuthCredential,
+    AuthCredentialTypes,
+    HttpAuth,
+    HttpCredentials,
+)
 from google.adk.auth.auth_schemes import AuthScheme
 from google.adk.auth.exchanger.base_credential_exchanger import (
     BaseCredentialExchanger,
@@ -310,8 +324,12 @@ class ServiceAccountTokenExchanger(BaseCredentialExchanger):
                 f"Failed to mint service account token: {exc}"
             ) from exc
 
+        # http expects HttpAuth, not a raw HttpCredentials or dict.
         updated = auth_credential.model_copy(
-            update={"http": HttpCredentials(token=token), "service_account": None}
+            update={
+                "http": HttpAuth(scheme="bearer", credentials=HttpCredentials(token=token)),
+                "service_account": None,
+            }
         )
         return ExchangeResult(updated, True)
 
@@ -321,7 +339,8 @@ class ServiceAccountTokenExchanger(BaseCredentialExchanger):
 
 async def main():
     exchanger = ServiceAccountTokenExchanger()
-    cred = AuthCredential(api_key="placeholder")
+    # auth_type is required on AuthCredential.
+    cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY, api_key="placeholder")
     try:
         result = await exchanger.exchange(cred)
         print("Exchanged:", result.was_exchanged)
@@ -656,16 +675,16 @@ agent = LlmAgent(
 )
 
 session_service = InMemorySessionService()
-# Attach SessionStateCredentialService to the App-level credential service.
+# App uses root_agent (extra="forbid" — no agent/credential_service fields).
+# credential_service belongs on Runner, not App.
 app = App(
     name="calendar_app",
-    agent=agent,
-    credential_service=SessionStateCredentialService(),
+    root_agent=agent,
 )
 runner = Runner(
-    agent=agent,
-    app_name="calendar_app",
+    app=app,
     session_service=session_service,
+    credential_service=SessionStateCredentialService(),
 )
 print("App configured with SessionStateCredentialService")
 ```
@@ -1121,6 +1140,7 @@ import asyncio
 from pathlib import Path
 from google.adk.cli.conformance.adk_web_server_client import AdkWebServerClient
 from google.adk.cli.adk_web_server import RunAgentRequest
+from google.genai import types
 
 
 async def run_conformance_replay(test_case_dir: str, user_message_index: int):
@@ -1134,11 +1154,15 @@ async def run_conformance_replay(test_case_dir: str, user_message_index: int):
         )
         print("Created session:", session.id)
 
+        # new_message is typed as types.Content, not a raw string.
         request = RunAgentRequest(
             app_name="research_app",
             user_id="conformance_tester",
             session_id=session.id,
-            new_message="What is the capital of France?",
+            new_message=types.Content(
+                role="user",
+                parts=[types.Part(text="What is the capital of France?")],
+            ),
             streaming=False,
         )
 
@@ -1173,6 +1197,7 @@ print("AdkWebServerClient example defined — start 'adk web' before running")
 import asyncio
 from google.adk.cli.conformance.adk_web_server_client import AdkWebServerClient
 from google.adk.cli.adk_web_server import RunAgentRequest
+from google.genai import types
 
 
 async def record_golden_run(output_dir: str):
@@ -1189,11 +1214,14 @@ async def record_golden_run(output_dir: str):
         ]
 
         for index, message in enumerate(user_messages):
+            # new_message is types.Content — wrap each string turn.
             request = RunAgentRequest(
                 app_name="research_app",
                 user_id="golden_recorder",
                 session_id=session.id,
-                new_message=message,
+                new_message=types.Content(
+                    role="user", parts=[types.Part(text=message)]
+                ),
                 streaming=False,
             )
             # mode="record" injects _adk_recordings_config into state_delta.
@@ -1219,6 +1247,7 @@ print("Record example defined — requires running 'adk web' server")
 import asyncio
 from google.adk.cli.conformance.adk_web_server_client import AdkWebServerClient
 from google.adk.cli.adk_web_server import RunAgentRequest
+from google.genai import types
 
 
 async def multi_turn_with_state_update():
@@ -1244,7 +1273,9 @@ async def multi_turn_with_state_update():
             app_name="stateful_app",
             user_id="test_user",
             session_id=session.id,
-            new_message="Check my account status",
+            new_message=types.Content(
+                role="user", parts=[types.Part(text="Check my account status")]
+            ),
             streaming=False,
         )
         async for event in client.run_agent(request):
