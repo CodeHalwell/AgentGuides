@@ -855,7 +855,8 @@ async def slow_api_call(ctx):
 async def main():
     workflow = Workflow(
         name="timeout_demo",
-        nodes=[slow_api_call],
+        # Workflow uses edges, not a nodes list — use ("START", node) tuple syntax.
+        edges=[("START", slow_api_call)],
     )
     # NodeTimeoutError is raised internally, caught by retry_config, and
     # the node is retried up to 3 times before propagating as
@@ -1466,7 +1467,9 @@ simulation_config = EnvironmentSimulationConfig(
 
 print("Simulation config built successfully")
 print("Creating tools for reservation_id:", connection_map.stateful_parameters[0].creating_tools)
-# make_reservation creates the ID; cancel_reservation and get_reservation consume it.
-# Pass connection_map to EnvironmentSimulationEngine (not to EnvironmentSimulationConfig)
-# so ToolSpecMockStrategy can maintain state_store['reservation_id'] across calls.
+# NOTE: EnvironmentSimulationEngine.__init__ only accepts EnvironmentSimulationConfig.
+# There is no public argument to inject a prebuilt ToolConnectionMap — the engine
+# builds its own map internally by running ToolConnectionAnalyzer on first use.
+# The connection_map above illustrates the data structure and can be used for
+# unit testing ToolConnectionAnalyzer outputs, but cannot be wired into the engine.
 ```
