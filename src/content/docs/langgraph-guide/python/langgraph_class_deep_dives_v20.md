@@ -100,6 +100,7 @@ graph = builder.compile()
 for ns, mode, payload in graph.stream(
     {"messages": []},
     stream_mode=["tools"],
+    subgraphs=True,
 ):
     print(f"[{mode}] {payload['event']}: {payload.get('tool_name', payload.get('tool_call_id'))}")
     if payload.get("output"):
@@ -134,6 +135,7 @@ agent = create_react_agent("anthropic:claude-sonnet-4-6", [stream_analysis])
 for ns, mode, payload in agent.stream(
     {"messages": [{"role": "user", "content": "Analyse AI trends"}]},
     stream_mode=["tools"],
+    subgraphs=True,
 ):
     if payload["event"] == "tool-output-delta":
         print(f"Delta: {payload['delta']}")
@@ -157,10 +159,12 @@ def visible_tool(x: int) -> int:
     """This tool appears in stream_mode='tools'."""
     return x * 2
 
-@tool(tags=[TAG_NOSTREAM])
+@tool
 def hidden_tool(x: int) -> int:
     """This tool is silently suppressed from stream_mode='tools'."""
     return x * 3
+
+hidden_tool.tags = [TAG_NOSTREAM]  # @tool() does not accept tags=; set after creation
 
 class State(TypedDict):
     results: Annotated[list, operator.add]
@@ -181,7 +185,7 @@ builder.add_edge("router", "tools")
 builder.add_edge("tools", END)
 graph = builder.compile()
 
-events = [p["event"] for _, _, p in graph.stream({"results": []}, stream_mode=["tools"])]
+events = [p["event"] for _, _, p in graph.stream({"results": []}, stream_mode=["tools"], subgraphs=True)]
 # Only visible_tool events appear; hidden_tool is suppressed
 assert "tool-started" in events  # from visible_tool
 print("Events seen:", events)
@@ -742,7 +746,7 @@ graph = builder.compile()
 # The DeltaChannel stores MISSING in checkpoint blobs (not the actual value)
 # and reconstructs by replaying ancestor writes — until snapshot_frequency
 # is reached, at which point a _DeltaSnapshot(value) blob is saved.
-result = graph.invoke({"log": []})
+result = graph.invoke({})  # omit log — passing [] as initial write corrupts the reducer
 print(f"Log length: {len(result['log'])}")  # 1
 
 # After 5 updates, delta_channels_to_snapshot() includes this channel
@@ -988,7 +992,7 @@ def lint_graph(builder: StateGraph) -> list[str]:
         issues.append("Graph compiled OK")
 
         # Additional custom checks
-        state_fields = list(builder.schema.__annotations__.keys())
+        state_fields = list(builder.state_schema.__annotations__.keys())
         if len(state_fields) == 0:
             issues.append("WARNING: State has no fields")
         else:
