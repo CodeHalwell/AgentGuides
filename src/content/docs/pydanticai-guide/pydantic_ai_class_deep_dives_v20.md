@@ -93,6 +93,7 @@ async def audit_search(ctx: RunContext, *, call, tool_def, args):
 @hooks.on.after_tool_execute(tools=['search'])
 async def log_search_result(ctx, *, call, tool_def, args, result):
     print(f"Search returned: {result!r}")
+    return result  # must return result to preserve the tool output
 
 async def search(ctx: RunContext, query: str) -> str:
     return f"Results for: {query}"
@@ -236,16 +237,17 @@ These three exports provide a layered concurrency-limiting API for controlling h
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.concurrency import ConcurrencyLimiter
+from pydantic_ai.concurrency import ConcurrencyLimiter, get_concurrency_context
 
-# At most 3 simultaneous model requests; up to 10 queued
+# At most 3 simultaneous model requests; up to 10 queued before ConcurrencyLimitExceeded
 limiter = ConcurrencyLimiter(max_running=3, max_queued=10, name='my-agent')
 
 agent = Agent('openai:gpt-4o')
 
 async def run_batch(prompts: list[str]):
     async def _run(prompt: str):
-        async with limiter._limiter:  # low-level usage; agent integration via model settings
+        # get_concurrency_context routes through acquire() — enforces max_queued and records OTel spans
+        async with get_concurrency_context(limiter, prompt):
             return await agent.run(prompt)
 
     results = await asyncio.gather(*(_run(p) for p in prompts))
