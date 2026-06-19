@@ -66,7 +66,7 @@ async def log_response(ctx, response, request_context):
 agent = Agent('openai:gpt-4o', capabilities=[hooks])
 
 async def main():
-    result = await agent.run('Say hello', api_key='test')
+    result = await agent.run('Say hello')
     print(result.output)
 
 # asyncio.run(main())
@@ -594,9 +594,8 @@ class ReportDeps:
     author: str
 
 
-template = TemplateStr(
+template = TemplateStr[ReportDeps](
     'Report for {{report_date}} by {{author}}.',
-    deps_type=ReportDeps,
 )
 
 rendered = template.render(ReportDeps(report_date='2026-06-19', author='Alice'))
@@ -1028,12 +1027,12 @@ class RestrictedModelProfile(ModelProfile):
 restricted = RestrictedModelProfile(
     supports_tools=False,
     supports_json_object_output=True,
-    default_structured_output_mode='json',
+    default_structured_output_mode='prompted',
     thinking_always_enabled=False,
 )
 
 print(restricted.supports_tools)               # False
-print(restricted.default_structured_output_mode)  # 'json'
+print(restricted.default_structured_output_mode)  # 'prompted'
 ```
 
 ### Example 3 — profile factory function (`ModelProfileSpec`)
