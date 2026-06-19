@@ -405,12 +405,12 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent, AgentSession, AgentLoopMiddleware
-from agent_framework import TodoContextProvider, background_tasks_running
+from agent_framework import TodoProvider, background_tasks_running
 from agent_framework.foundry import FoundryChatClient
 
 async def main():
     client = FoundryChatClient(model="gpt-4o")
-    todo_provider = TodoContextProvider()
+    todo_provider = TodoProvider()
 
     loop_mw = AgentLoopMiddleware(
         should_continue=lambda *, last_result, **_: (
