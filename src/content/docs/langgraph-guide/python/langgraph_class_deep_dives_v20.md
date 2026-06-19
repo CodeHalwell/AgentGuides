@@ -525,7 +525,8 @@ with warnings.catch_warnings(record=True) as w:
     lg_warnings = [x for x in w if issubclass(x.category, LangGraphDeprecationWarning)]
     for warning in lg_warnings:
         print(f"Warning: {warning.message.args[0]}")
-        print(f"  since=v{warning.category.since if hasattr(warning.category, 'since') else '?'}")
+        # since/expected_removal are instance attributes set in __init__, not class attrs
+        print(f"  since=v{warning.message.since}")
 ```
 
 ### Example 2 — filter by version range in tests
