@@ -175,7 +175,7 @@ def router(state: State) -> dict:
 
 builder = StateGraph(State)
 builder.add_node("router", router)
-builder.add_node("tools", ToolNode([visible_tool, hidden_tool]))
+builder.add_node("tools", ToolNode([visible_tool, hidden_tool], messages_key="results"))
 builder.add_edge(START, "router")
 builder.add_edge("router", "tools")
 builder.add_edge("tools", END)
@@ -721,6 +721,7 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import StateGraph, START, END
 
 def list_reducer(current: list, updates: list) -> list:
+    # updates = batch of raw write values for this superstep; each is a scalar
     return current + updates
 
 class State(TypedDict):
@@ -728,7 +729,9 @@ class State(TypedDict):
     log: Annotated[list, DeltaChannel(list_reducer, snapshot_frequency=5)]
 
 def append_entry(state: State) -> dict:
-    return {"log": [f"entry-{len(state['log'])}"]}
+    # Return a scalar string, not a list — DeltaChannel wraps it in [write]
+    # before passing to reducer, so reducer receives (current, ["entry-N"])
+    return {"log": f"entry-{len(state['log'])}"}
 
 builder = StateGraph(State)
 builder.add_node("append", append_entry)
@@ -826,7 +829,7 @@ def sync_consumer():
     async def bridge():
         async_fut = asyncio.ensure_future(async_producer())
         # chain: when async_fut completes, sync_fut gets the result
-        chain_future(async_fut, asyncio.wrap_future(sync_fut))
+        chain_future(async_fut, sync_fut)
         await async_fut
 
     loop.run_until_complete(bridge())
@@ -1046,19 +1049,22 @@ from langgraph.pregel._io import read_channel, read_channels
 # Build a minimal channels dict
 messages_ch = LastValue(list)
 counter_ch = LastValue(int)
+empty_ch = LastValue(str)  # never updated → EmptyChannelError on .get()
 
 # Populate channels manually for demonstration
 messages_ch.update([[1, 2, 3]])
 counter_ch.update([42])
+# empty_ch is intentionally left unset
 
-channels = {"messages": messages_ch, "counter": counter_ch}
+channels = {"messages": messages_ch, "counter": counter_ch, "empty": empty_ch}
 
 # read_channel: single channel
 print(read_channel(channels, "messages"))  # [1, 2, 3]
 print(read_channel(channels, "counter"))   # 42
 
-# Missing channel with catch=True returns None
-print(read_channel(channels, "missing_key", catch=True))  # None
+# catch=True converts EmptyChannelError (existing but unset channel) to None
+# Note: a truly missing key raises KeyError regardless of catch=True
+print(read_channel(channels, "empty", catch=True))  # None
 
 # read_channels: multiple
 result = read_channels(channels, ["messages", "counter"])
