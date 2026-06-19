@@ -274,45 +274,36 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict
 
-class InnerState(TypedDict):
+class State(TypedDict):
     value: int
 
-class OuterState(TypedDict):
-    results: list[int]
-
-def inner_node(state: InnerState) -> dict:
+def double_node(state: State) -> dict:
     return {"value": state["value"] * 2}
 
-inner_checkpointer = MemorySaver()
-inner_builder = StateGraph(InnerState)
-inner_builder.add_node("double", inner_node)
+# Inner graph compiled WITHOUT its own checkpointer — the parent's checkpointer
+# manages all state, so replay config and ReplayState propagate correctly.
+inner_builder = StateGraph(State)
+inner_builder.add_node("double", double_node)
 inner_builder.add_edge(START, "double")
 inner_builder.add_edge("double", END)
-inner_graph = inner_builder.compile(checkpointer=inner_checkpointer)
+inner_graph = inner_builder.compile()
 
-def outer_node(state: OuterState) -> dict:
-    for i in range(3):
-        result = inner_graph.invoke(
-            {"value": i + 1},
-            {"configurable": {"thread_id": f"inner-{i}"}}
-        )
-        state["results"].append(result["value"])
-    return {"results": state["results"]}
+# Embed the compiled inner graph as a node — this is a true subgraph invocation.
+# Pregel will propagate the parent's replay config into the inner graph's
+# execution context, and ReplayState._is_first_visit() will strip the
+# task-id suffix from the subgraph's checkpoint namespace on replay.
+outer_builder = StateGraph(State)
+outer_builder.add_node("subgraph", inner_graph)
+outer_builder.add_edge(START, "subgraph")
+outer_builder.add_edge("subgraph", END)
+outer_graph = outer_builder.compile(checkpointer=MemorySaver())
 
-outer_checkpointer = MemorySaver()
-outer_builder = StateGraph(OuterState)
-outer_builder.add_node("process", outer_node)
-outer_builder.add_edge(START, "process")
-outer_builder.add_edge("process", END)
-outer_graph = outer_builder.compile(checkpointer=outer_checkpointer)
+config = {"configurable": {"thread_id": "nested-demo"}}
+result = outer_graph.invoke({"value": 3}, config)
+print(f"Result: {result['value']}")  # 6 (3 × 2)
 
-outer_config = {"configurable": {"thread_id": "outer-demo"}}
-result = outer_graph.invoke({"results": []}, outer_config)
-print(f"Results: {result['results']}")  # [2, 4, 6]
-
-# When replaying the outer graph, ReplayState._is_first_visit() strips the
-# task-id suffix from inner subgraph namespaces, so each inner invocation
-# in a loop is correctly identified as the "same" subgraph on first visit.
+history = list(outer_graph.get_state_history(config))
+print(f"Checkpoints: {len(history)}")
 ```
 
 ### Example 3 — inspecting `ReplayState` via config
@@ -626,6 +617,7 @@ Checkpoint = TypedDict("Checkpoint", {
     "channel_values": dict[str, Any],      # serialised channel state
     "channel_versions": dict[str, Any],    # monotonic version per channel
     "versions_seen": dict[str, dict[str, Any]],  # last version each node saw
+    "updated_channels": list[str] | None, # channels written in this step; None if unknown
 })
 ```
 
@@ -640,6 +632,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_values={},
         channel_versions={},
         versions_seen={},
+        updated_channels=None,         # no channels written yet
     )
 ```
 
