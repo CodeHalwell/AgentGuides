@@ -82,15 +82,15 @@ from pydantic_ai.capabilities.hooks import Hooks, HookTimeoutError
 hooks = Hooks()
 
 @hooks.on.before_tool_execute(tools=['search'], timeout=2.0)
-async def audit_search(ctx: RunContext, tool_def, validated_args):
+async def audit_search(ctx: RunContext, *, call, tool_def, args):
     """Runs only for the 'search' tool; raises HookTimeoutError after 2 s."""
     import asyncio
     await asyncio.sleep(0)  # simulate a quick async check
-    print(f"Auditing search call with args: {validated_args}")
-    return validated_args  # must return validated_args
+    print(f"Auditing search call with args: {args}")
+    return args  # must return args (ValidatedToolArgs)
 
 @hooks.on.after_tool_execute(tools=['search'])
-async def log_search_result(ctx, result, tool_def, validated_args):
+async def log_search_result(ctx, *, call, tool_def, args, result):
     print(f"Search returned: {result!r}")
 
 async def search(ctx: RunContext, query: str) -> str:
@@ -104,22 +104,19 @@ agent = Agent('openai:gpt-4o', tools=[search], capabilities=[hooks])
 ```python
 import asyncio
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.hooks import Hooks
 
 hooks = Hooks()
 
 @hooks.on.run
-@asynccontextmanager
-async def time_run(ctx, handler):
-    """'run' hook is a context manager that wraps the full agent run."""
+async def time_run(ctx, *, handler):
+    """'run' hook wraps the full agent run; must await handler and return its result."""
     start = time.perf_counter()
     try:
         result = await handler(ctx)
         elapsed = time.perf_counter() - start
-        print(f"Run completed in {elapsed:.3f}s, steps={ctx.run_step}")
+        print(f"Run completed in {elapsed:.3f}s")
         return result
     except Exception as exc:
         elapsed = time.perf_counter() - start
@@ -254,17 +251,16 @@ async def run_batch(prompts: list[str]):
     return results
 ```
 
-### Example 2 — per-model concurrency via `ModelSettings`
+### Example 2 — per-agent concurrency via `max_concurrency`
 
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.concurrency import ConcurrencyLimit
-from pydantic_ai.settings import ModelSettings
 
-# Pass via ModelSettings — agent uses this when constructing the model
+# Limit the agent to 5 concurrent runs; excess calls wait in a bounded queue
 agent = Agent(
     'openai:gpt-4o',
-    model_settings=ModelSettings(concurrency_limit=ConcurrencyLimit(max_running=5)),
+    max_concurrency=ConcurrencyLimit(max_running=5),
 )
 ```
 
@@ -662,7 +658,7 @@ class FunctionSchema:
 
 ```python
 from pydantic_ai._function_schema import function_schema
-from pydantic_ai._json_schema import GenerateJsonSchema
+from pydantic.json_schema import GenerateJsonSchema
 
 
 def get_weather(city: str, unit: str = 'celsius') -> dict:
@@ -692,7 +688,7 @@ print(schema.is_async)       # False
 ```python
 from pydantic_ai import RunContext
 from pydantic_ai._function_schema import function_schema
-from pydantic_ai._json_schema import GenerateJsonSchema
+from pydantic.json_schema import GenerateJsonSchema
 
 
 async def search_db(ctx: RunContext, query: str, limit: int = 10) -> list[str]:
@@ -716,7 +712,7 @@ print(list(schema.json_schema['properties'].keys()))  # ['query', 'limit']
 ```python
 from pydantic import BaseModel
 from pydantic_ai._function_schema import function_schema
-from pydantic_ai._json_schema import GenerateJsonSchema
+from pydantic.json_schema import GenerateJsonSchema
 
 
 class SearchQuery(BaseModel):
