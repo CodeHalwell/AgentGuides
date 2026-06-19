@@ -329,8 +329,11 @@ class ServiceAccountTokenExchanger(BaseCredentialExchanger):
             ) from exc
 
         # http expects HttpAuth, not a raw HttpCredentials or dict.
+        # Also update auth_type — model_copy preserves the original value
+        # (SERVICE_ACCOUNT), which would misdirect downstream dispatchers.
         updated = auth_credential.model_copy(
             update={
+                "auth_type": AuthCredentialTypes.HTTP,
                 "http": HttpAuth(scheme="bearer", credentials=HttpCredentials(token=token)),
                 "service_account": None,
             }
@@ -363,7 +366,7 @@ asyncio.run(main())
 
 `CredentialExchangerRegistry` is an `@experimental` registry that maps `AuthCredentialTypes` enum values to `BaseCredentialExchanger` instances. Its internal store is a plain `dict[AuthCredentialTypes, BaseCredentialExchanger]` (`_exchangers`). The two public methods are `register(credential_type, exchanger_instance)` and `get_exchanger(credential_type) -> Optional[BaseCredentialExchanger]`.
 
-The registry pattern decouples exchange logic selection from the auth pipeline: the pipeline asks the registry for an exchanger by credential type and, if one is found, delegates to it — without needing to know which concrete exchanger handles each type. Build one registry per application and inject it into the credential manager.
+The registry pattern decouples exchange logic selection from the auth pipeline: the pipeline asks the registry for an exchanger by credential type and, if one is found, delegates to it — without needing to know which concrete exchanger handles each type. `CredentialManager` builds its own internal registry; register custom exchangers on a manager instance via `manager.register_credential_exchanger(credential_type, exchanger_instance)` — there is no public API to inject an externally built registry.
 
 ### Key behaviours
 
@@ -655,11 +658,11 @@ The source carries a prominent docstring caveat: **storing credentials in sessio
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-import asyncio
+from fastapi.openapi.models import HTTPBearer as HTTPBearerScheme
 from google.adk.agents import LlmAgent
 from google.adk.apps.app import App
-from google.adk.auth.auth_credential import AuthCredential, OAuth2Auth
-from google.adk.auth.auth_schemes import OAuthGrantType
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+from google.adk.auth.auth_tool import AuthConfig
 from google.adk.auth.credential_service.session_state_credential_service import (
     SessionStateCredentialService,
 )
@@ -668,17 +671,31 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
 
 
-def get_calendar_events(auth_token: str) -> list:
-    """Fetch calendar events using the provided auth token."""
-    # In production: call Google Calendar API with auth_token.
-    return [{"title": "Team meeting", "time": "10:00"}]
+def get_calendar_events(credential: AuthCredential) -> list:
+    """Fetch calendar events using the injected credential."""
+    # ADK injects the resolved credential as the 'credential' argument.
+    token = credential.http.credentials.token if credential.http else None
+    return [{"title": "Team meeting", "time": "10:00", "token_used": token}]
 
+
+# Wrap in AuthenticatedFunctionTool so the Runner calls the credential service.
+# A plain function passed to tools=[...] is never authenticated by the pipeline.
+calendar_tool = AuthenticatedFunctionTool(
+    func=get_calendar_events,
+    auth_config=AuthConfig(
+        auth_scheme=HTTPBearerScheme(),
+        raw_auth_credential=AuthCredential(
+            auth_type=AuthCredentialTypes.HTTP,
+            http=HttpAuth(scheme="bearer", credentials=HttpCredentials(token="")),
+        ),
+    ),
+)
 
 agent = LlmAgent(
     name="calendar_agent",
     model="gemini-2.5-flash",
     instruction="Help manage calendar events.",
-    tools=[get_calendar_events],
+    tools=[calendar_tool],
 )
 
 session_service = InMemorySessionService()
@@ -693,7 +710,7 @@ runner = Runner(
     session_service=session_service,
     credential_service=SessionStateCredentialService(),
 )
-print("App configured with SessionStateCredentialService")
+print("App configured with SessionStateCredentialService and AuthenticatedFunctionTool")
 ```
 
 ### Example 2 — manually testing load/save via a mock CallbackContext
