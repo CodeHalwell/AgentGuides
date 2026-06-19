@@ -658,10 +658,10 @@ The source carries a prominent docstring caveat: **storing credentials in sessio
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-from fastapi.openapi.models import HTTPBearer as HTTPBearerScheme
+from fastapi.openapi.models import OAuth2, OAuthFlows, OAuthFlowAuthorizationCode
 from google.adk.agents import LlmAgent
 from google.adk.apps.app import App
-from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
 from google.adk.auth.auth_tool import AuthConfig
 from google.adk.auth.credential_service.session_state_credential_service import (
     SessionStateCredentialService,
@@ -672,21 +672,34 @@ from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTo
 
 
 def get_calendar_events(credential: AuthCredential) -> list:
-    """Fetch calendar events using the injected credential."""
-    # ADK injects the resolved credential as the 'credential' argument.
-    token = credential.http.credentials.token if credential.http else None
+    """Fetch calendar events using the injected OAuth2 credential."""
+    # ADK injects the exchanged credential as the 'credential' argument.
+    token = credential.oauth2.access_token if credential.oauth2 else None
     return [{"title": "Team meeting", "time": "10:00", "token_used": token}]
 
 
-# Wrap in AuthenticatedFunctionTool so the Runner calls the credential service.
-# A plain function passed to tools=[...] is never authenticated by the pipeline.
+# Use OAuth2 so CredentialManager actually consults the credential service.
+# HTTP/API_KEY credentials are treated as "ready" immediately and bypass
+# load_credential/save_credential entirely.
+oauth2_scheme = OAuth2(
+    flows=OAuthFlows(
+        authorizationCode=OAuthFlowAuthorizationCode(
+            authorizationUrl="https://accounts.google.com/o/oauth2/auth",
+            tokenUrl="https://oauth2.googleapis.com/token",
+        )
+    )
+)
+
 calendar_tool = AuthenticatedFunctionTool(
     func=get_calendar_events,
     auth_config=AuthConfig(
-        auth_scheme=HTTPBearerScheme(),
+        auth_scheme=oauth2_scheme,
         raw_auth_credential=AuthCredential(
-            auth_type=AuthCredentialTypes.HTTP,
-            http=HttpAuth(scheme="bearer", credentials=HttpCredentials(token="")),
+            auth_type=AuthCredentialTypes.OAUTH2,
+            oauth2=OAuth2Auth(
+                client_id="YOUR_CLIENT_ID",
+                client_secret="YOUR_CLIENT_SECRET",
+            ),
         ),
     ),
 )
@@ -710,7 +723,7 @@ runner = Runner(
     session_service=session_service,
     credential_service=SessionStateCredentialService(),
 )
-print("App configured with SessionStateCredentialService and AuthenticatedFunctionTool")
+print("App configured with SessionStateCredentialService and OAuth2 AuthenticatedFunctionTool")
 ```
 
 ### Example 2 — manually testing load/save via a mock CallbackContext
@@ -1377,16 +1390,17 @@ tools = [
     FunctionTool(func=list_user_tickets),
 ]
 
-# In production: analyzer calls the LLM to detect that ticket_id is a
-# stateful parameter created by create_ticket and consumed by get/cancel.
+# In production: analyzer calls the LLM to detect stateful parameters.
+# cancel_ticket mutates ticket state, so a well-tuned LLM should classify
+# it as a creating tool (writes back to state_store), not consuming.
 # analyzer = ToolConnectionAnalyzer(
 #     llm_name="gemini-2.5-flash",
 #     llm_config=genai_types.GenerateContentConfig(temperature=0),
 # )
 # connection_map = await analyzer.analyze(tools)
 # print(connection_map.stateful_parameters[0].parameter_name)  # ticket_id
-# print(connection_map.stateful_parameters[0].creating_tools)  # ['create_ticket']
-# print(connection_map.stateful_parameters[0].consuming_tools)  # ['get_ticket', 'cancel_ticket', 'list_user_tickets']
+# print(connection_map.stateful_parameters[0].creating_tools)  # ['create_ticket', 'cancel_ticket']
+# print(connection_map.stateful_parameters[0].consuming_tools)  # ['get_ticket', 'list_user_tickets']
 
 print("ToolConnectionAnalyzer example defined — requires Gemini API key to run")
 print("Tools:", [t.name for t in tools])
