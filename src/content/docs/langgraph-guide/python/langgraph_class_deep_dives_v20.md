@@ -729,13 +729,15 @@ def list_reducer(current: list, updates: list) -> list:
     return current + updates
 
 class State(TypedDict):
+    seed: str  # required input — a DeltaChannel-only graph rejects empty initial input
     # DeltaChannel with snapshot every 5 updates (for demo; default is 1000)
     log: Annotated[list, DeltaChannel(list_reducer, snapshot_frequency=5)]
 
 def append_entry(state: State) -> dict:
-    # Return a scalar string, not a list — DeltaChannel wraps it in [write]
-    # before passing to reducer, so reducer receives (current, ["entry-N"])
-    return {"log": f"entry-{len(state['log'])}"}
+    # log may be absent on first call (DeltaChannel starts MISSING);
+    # use .get() so index counts from 0 on the very first invocation
+    current = state.get("log", [])
+    return {"log": f"entry-{len(current)}"}
 
 builder = StateGraph(State)
 builder.add_node("append", append_entry)
@@ -746,7 +748,7 @@ graph = builder.compile()
 # The DeltaChannel stores MISSING in checkpoint blobs (not the actual value)
 # and reconstructs by replaying ancestor writes — until snapshot_frequency
 # is reached, at which point a _DeltaSnapshot(value) blob is saved.
-result = graph.invoke({})  # omit log — passing [] as initial write corrupts the reducer
+result = graph.invoke({"seed": "start"})
 print(f"Log length: {len(result['log'])}")  # 1
 
 # After 5 updates, delta_channels_to_snapshot() includes this channel
