@@ -239,30 +239,32 @@ class State(TypedDict):
 def increment(state: State) -> dict:
     return {"counter": state["counter"] + 1}
 
+def should_continue(state: State) -> str:
+    return "increment" if state["counter"] < 3 else END
+
 checkpointer = MemorySaver()
 builder = StateGraph(State)
 builder.add_node("increment", increment)
 builder.add_edge(START, "increment")
-builder.add_edge("increment", END)
+builder.add_conditional_edges("increment", should_continue)
 graph = builder.compile(checkpointer=checkpointer)
 
 config = {"configurable": {"thread_id": "replay-demo"}}
 
-# Run 3 steps
-for i in range(3):
-    result = graph.invoke({"counter": 0} if i == 0 else None, config)
-    print(f"Step {i+1}: counter={result['counter']}")
+# Single invoke loops 3 times → 4+ checkpoints (one per superstep)
+result = graph.invoke({"counter": 0}, config)
+print(f"Final: counter={result['counter']}")  # 3
 
 # List all checkpoints
 history = list(graph.get_state_history(config))
-print(f"Checkpoints saved: {len(history)}")
+print(f"Checkpoints saved: {len(history)}")  # 4 (start + 3 increments)
 
-# Time-travel: replay from the first checkpoint
+# Time-travel: replay from the very first checkpoint (counter=0)
 first_checkpoint_id = history[-1].config["configurable"]["checkpoint_id"]
 replay_config = {**config, "configurable": {**config["configurable"], "checkpoint_id": first_checkpoint_id}}
 replayed = graph.invoke(None, replay_config)
 # ReplayState ensures subgraphs restore their pre-replay checkpoints first
-print(f"Replayed from step 1: counter={replayed['counter']}")
+print(f"Replayed from step 1: counter={replayed['counter']}")  # 3 (re-runs from counter=0)
 ```
 
 ### Example 2 — `ReplayState` with nested subgraphs
@@ -514,7 +516,7 @@ class LangGraphDeprecatedSinceV11(LangGraphDeprecationWarning):
 | `MessageGraph` | `LangGraphDeprecatedSinceV10` | v1.0 | v2.0 |
 | `ValidationNode` (standalone) | `LangGraphDeprecatedSinceV10` | v1.0 | v2.0 |
 | `langgraph.prebuilt.interrupt.HumanInterrupt` re-export | `LangGraphDeprecatedSinceV10` | v1.0 | v2.0 |
-| `StateGraph.compile(interrupt_before=...)` old patterns | `LangGraphDeprecatedSinceV11` | v1.1 | v3.0 |
+| `GraphOutput` dict/key access (`output["key"]`, `"key" in output`) | `LangGraphDeprecatedSinceV11` | v1.1 | v3.0 |
 
 ### Example 1 — catch and inspect deprecation warnings
 
