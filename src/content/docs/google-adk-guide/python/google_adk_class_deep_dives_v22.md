@@ -486,17 +486,20 @@ print(type(exchanger).__name__)  # MockOAuth2Exchanger — the latest register()
 `OAuth2CredentialExchanger` is the built-in `@experimental` implementation of `BaseCredentialExchanger` for OAuth2 and OIDC credentials. It handles two grant types — `client_credentials` and `authorization_code` — and requires `authlib` to be installed (gracefully skips with a warning if not available).
 
 The `exchange()` method performs these steps in order:
-1. **No-op check** — if `auth_credential.oauth2.access_token` is already set, return immediately with `was_exchanged=False`.
-2. **Grant type detection** — inspects the `auth_scheme.flows` (for `OAuth2` schemes) or `auth_scheme.grant_types_supported` (for `OpenIdConnectWithConfig`); defaults OIDC to `authorization_code` unless `client_credentials` is explicitly supported.
-3. **Client credentials exchange** — calls `client.fetch_token(token_endpoint, grant_type=OAuthGrantType.CLIENT_CREDENTIALS)` via `authlib`.
-4. **Auth code exchange** — calls `client.fetch_token(token_endpoint, authorization_response=..., code=..., grant_type=...)` with optional `code_verifier` for PKCE; strips a trailing `#` from `auth_response_uri` before passing to `authlib` (which can add extraneous trailing hashes).
+1. **Scheme check** — raises `CredentialExchangeError` immediately if `auth_scheme` is `None`; a scheme is always required.
+2. **authlib guard** — if `authlib` is not installed, returns `ExchangeResult(credential, False)` with a warning — never raises.
+3. **No-op check** — if `auth_credential.oauth2.access_token` is already set, return immediately with `was_exchanged=False`.
+4. **Grant type detection** — inspects the `auth_scheme.flows` (for `OAuth2` schemes) or `auth_scheme.grant_types_supported` (for `OpenIdConnectWithConfig`); defaults OIDC to `authorization_code` unless `client_credentials` is explicitly supported.
+5. **Client credentials exchange** — calls `client.fetch_token(token_endpoint, grant_type=OAuthGrantType.CLIENT_CREDENTIALS)` via `authlib`.
+6. **Auth code exchange** — calls `client.fetch_token(token_endpoint, authorization_response=..., code=..., grant_type=...)` with optional `code_verifier` for PKCE; strips a trailing `#` from `auth_response_uri` before passing to `authlib` (which can add extraneous trailing hashes).
 
 ### Key behaviours
 
 | Behaviour | Detail |
 |---|---|
-| authlib guard | If `authlib` is not installed, returns `ExchangeResult(credential, False)` after a warning — never raises. |
-| Short-circuit on existing token | Checks `auth_credential.oauth2.access_token` presence first — avoids redundant token fetches on repeat invocations. |
+| Scheme required | `auth_scheme` must not be `None` — the method raises `CredentialExchangeError` before any other check. |
+| authlib guard | If `authlib` is not installed, returns `ExchangeResult(credential, False)` after a warning — checked after scheme validation. |
+| Short-circuit on existing token | Checks `auth_credential.oauth2.access_token` presence after scheme/authlib checks — avoids redundant token fetches on repeat invocations. |
 | PKCE via `code_verifier` | If `auth_credential.oauth2.code_verifier` is set, it is forwarded to `fetch_token()` as `code_verifier=` keyword arg. |
 | Trailing `#` strip | `_normalize_auth_uri()` drops a trailing `#` from `auth_response_uri` — works around an `authlib` edge case. |
 | Error handling | Logs errors but returns `ExchangeResult(credential, False)` on exchange failure — callers can still use the original credential. |
@@ -1312,7 +1315,7 @@ These three classes form the analysis layer of ADK's `@experimental(FeatureName.
 | LLM-driven analysis | `analyze()` calls `self._llm.generate_content_async(request)` with `response_mime_type="application/json"` — forces JSON-only output. |
 | Tool schema extraction | Calls `tool._get_declaration().model_dump(exclude_none=True)` per tool — any tool without a declaration is silently skipped. |
 | Markdown fence stripping | `re.sub(r"^```[a-zA-Z]*\n", "", text)` + `re.sub(r"\n```$", "", text)` — handles LLMs that wrap JSON in code blocks. |
-| Graceful degradation | On `json.JSONDecodeError`, logs a warning and returns `ToolConnectionMap(stateful_parameters=[])` — analysis is non-fatal. |
+| Graceful degradation | On `json.JSONDecodeError`, the handler intends to log a warning and return `ToolConnectionMap(stateful_parameters=[])`. **Bug in ADK 2.3.0:** the `except` clause omits `as e`, so the log call references an unbound name and a `NameError` escapes instead — treat JSON parse failures as fatal until this is patched upstream. |
 | Creating vs consuming | A "creating" tool generates or modifies a resource; a "consuming" tool only reads it. `ToolSpecMockStrategy` uses this to update `state_store` only after creating tool calls. |
 | Feature flag guard | `@experimental(FeatureName.ENVIRONMENT_SIMULATION)` — emits `UserWarning` on import. |
 
