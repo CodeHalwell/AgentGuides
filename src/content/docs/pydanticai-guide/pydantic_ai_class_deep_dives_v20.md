@@ -62,6 +62,7 @@ async def log_request(ctx, request_context):
 @hooks.on.after_model_request
 async def log_response(ctx, response, request_context):
     print(f"[after_model_request] parts={len(response.parts)}")
+    return response  # must return the (potentially modified) response
 
 agent = Agent('openai:gpt-4o', capabilities=[hooks])
 
@@ -114,7 +115,7 @@ async def time_run(ctx, *, handler):
     """'run' hook wraps the full agent run; must await handler and return its result."""
     start = time.perf_counter()
     try:
-        result = await handler(ctx)
+        result = await handler()
         elapsed = time.perf_counter() - start
         print(f"Run completed in {elapsed:.3f}s")
         return result
@@ -488,7 +489,7 @@ payment_tool = ToolDefinition(
 
 external = ExternalToolset(tool_defs=[payment_tool], id='payment-service')
 agent = Agent('openai:gpt-4o', toolsets=[external])
-# Results injected later via agent.run(..., tool_results=[...])
+# Results injected later via agent.run(..., deferred_tool_results=[...])
 ```
 
 ### Example 3 — combining approval and external toolsets
@@ -927,16 +928,12 @@ async def run_with_capability_check(agent: Agent, prompt: str) -> str:
 ### Example 3 — build a deferred capability (lazy native tool)
 
 ```python
+from pydantic_ai import Agent
 from pydantic_ai.capabilities.capability import Capability
 from pydantic_ai.toolsets import FunctionToolset
 
 
-# A capability marked defer_loading=True registers its tool only after
-# the model explicitly calls load_capability('heavy-nlp').
-heavy_toolset = FunctionToolset(
-    id='heavy-nlp',
-    defer_loading=True,
-)
+heavy_toolset = FunctionToolset()
 
 
 @heavy_toolset.tool
@@ -946,8 +943,16 @@ async def nlp_analyse(text: str) -> dict:
     return {'sentiment': 'positive', 'entities': []}
 
 
-# The agent will only include nlp_analyse in the context after the model
-# calls load_capability({'id': 'heavy-nlp'}).
+# Wrap in a Capability with defer_loading=True.
+# The model calls load_capability({'id': 'heavy-nlp'}) to load it;
+# only then does nlp_analyse become visible in the context.
+heavy_capability = Capability(
+    id='heavy-nlp',
+    defer_loading=True,
+    toolsets=[heavy_toolset],
+)
+
+agent = Agent('openai:gpt-4o', capabilities=[heavy_capability])
 ```
 
 ---
