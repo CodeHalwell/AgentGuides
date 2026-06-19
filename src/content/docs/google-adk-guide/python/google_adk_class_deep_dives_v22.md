@@ -280,7 +280,7 @@ asyncio.run(demonstrate_exchange_result())
 ```python
 import asyncio
 from typing import Optional
-from google.adk.auth.auth_credential import AuthCredential
+from google.adk.auth.auth_credential import AuthCredential, HttpCredentials
 from google.adk.auth.auth_schemes import AuthScheme
 from google.adk.auth.exchanger.base_credential_exchanger import (
     BaseCredentialExchanger,
@@ -311,7 +311,7 @@ class ServiceAccountTokenExchanger(BaseCredentialExchanger):
             ) from exc
 
         updated = auth_credential.model_copy(
-            update={"http": {"token": token}, "service_account": None}
+            update={"http": HttpCredentials(token=token), "service_account": None}
         )
         return ExchangeResult(updated, True)
 
