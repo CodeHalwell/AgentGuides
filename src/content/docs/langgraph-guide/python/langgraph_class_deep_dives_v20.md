@@ -691,8 +691,11 @@ print(f"Empty checkpoint v={ec['v']}")  # v=4
 print(f"Empty ID: {ec['id']}")
 print(f"Values empty: {ec['channel_values'] == {}}")  # True
 
-# uuid6(clock_seq=-2) means the empty checkpoint ID is always the "oldest"
-# This is why get_state_history() with before=empty_checkpoint returns everything
+# uuid6(clock_seq=-2) makes the empty checkpoint ID sort before all real checkpoint
+# IDs — it represents "no checkpoint yet / before any run".
+# Note: do NOT use it as the before= arg to get_state_history(); since before=
+# is an exclusive upper bound, the "oldest" ID would filter out every real
+# checkpoint and return an empty history.
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict
@@ -1443,14 +1446,17 @@ print(f"XXHash speedup: {sha_ms/xx_ms:.1f}x")
 
 ---
 
-## Summary: what changed in 1.2.6
+## Summary: execution engine internals covered
 
-LangGraph 1.2.6 (the version this volume is verified against) is a patch release over 1.2.5. The public API surface is unchanged; these internal modules were present in 1.2.5 but have been polished:
+All code examples in this volume are verified against **`langgraph==1.2.6`**. The symbols documented here existed in prior releases; 1.2.6 itself is a patch release focused on bug fixes (nested subgraph checkpoint namespace handling and v3 stream abort). This volume provides the first detailed source-verified documentation of these previously undocumented internals:
 
-- `pregel._tools`: `StreamToolCallHandler._ns_for_emit()` now mirrors `StreamMessagesHandler` namespace derivation exactly
-- `_internal._future`: `EAGER_NOT_SUPPORTED` guard updated for Python 3.12+ compatibility
-- `pregel._checkpoint`: `delta_channels_to_snapshot()` extracted as a standalone function (was inline in 1.2.5)
-- `pregel._algo`: `LazyAtomicCounter` double-checked locking added for thread-safety on the first call
-- `warnings`: `LangGraphDeprecatedSinceV11` class added (expected_removal bumped to `(3, 0)` vs V10's `(2, 0)`)
-
-All code examples in this volume are runnable against `langgraph==1.2.6`.
+- `pregel._tools` — `StreamToolCallHandler` lifecycle, `_tool_call_writer` ContextVar, `TAG_NOSTREAM` suppression
+- `_internal._replay` — `ReplayState._is_first_visit()` and NS_END namespace stripping
+- `_internal._scratchpad` — `PregelScratchpad` (all 7 fields) and `IsLastStep`/`RemainingSteps` managed values
+- `warnings` — `LangGraphDeprecationWarning` versioned hierarchy and `expected_removal` contract
+- `pregel._checkpoint` — `empty_checkpoint()`, `create_checkpoint()`, `delta_channels_to_snapshot()` pipeline
+- `_internal._future` — `chain_future`, `run_coroutine_threadsafe`, `_ensure_future` cross-loop bridge
+- `pregel._validate` — all compile-time graph validation rules
+- `pregel._io` — `read_channel`, `map_input`, `map_command` I/O layer
+- `pregel._algo` — `should_interrupt`, `apply_writes`, `prepare_next_tasks` core Pregel algorithm
+- `pregel._algo` — `LazyAtomicCounter`, `task_path_str`, `_uuid5_str`/`_xxhash_str` task identity utilities
