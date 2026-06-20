@@ -131,8 +131,8 @@ print(len(eval_set_empty.eval_cases))  # 0
 
 ```python
 from google.adk.evaluation.gcs_eval_set_results_manager import GcsEvalSetResultsManager
-from google.adk.evaluation.eval_result import EvalCaseResult, EvalMetricResult
-from google.adk.evaluation.eval_metrics import EvalStatus
+from google.adk.evaluation.eval_result import EvalCaseResult
+from google.adk.evaluation.eval_metrics import EvalMetricResult, EvalStatus
 
 results_manager = GcsEvalSetResultsManager(bucket_name="my-adk-evals-bucket")
 
@@ -141,13 +141,15 @@ case_results = [
         eval_set_id="basic_queries",
         eval_id="ask_temperature",
         final_eval_status=EvalStatus.PASSED,
-        eval_metric_results={
-            "tool_trajectory_avg_score": EvalMetricResult(
+        overall_eval_metric_results=[
+            EvalMetricResult(
                 metric_name="tool_trajectory_avg_score",
                 score=1.0,
                 eval_status=EvalStatus.PASSED,
             )
-        },
+        ],
+        eval_metric_result_per_invocation=[],
+        session_id="session-001",
     )
 ]
 
@@ -292,8 +294,8 @@ print(inv.intermediate_data.tool_uses[0].name)          # get_weather
 import os
 import tempfile
 from google.adk.evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
-from google.adk.evaluation.eval_result import EvalCaseResult, EvalMetricResult
-from google.adk.evaluation.eval_metrics import EvalStatus
+from google.adk.evaluation.eval_result import EvalCaseResult
+from google.adk.evaluation.eval_metrics import EvalMetricResult, EvalStatus
 
 agents_dir = tempfile.mkdtemp()
 os.makedirs(os.path.join(agents_dir, "my_agent"), exist_ok=True)
@@ -308,13 +310,15 @@ case_results = [
         eval_set_id="smoke_tests",
         eval_id="greeting_test",
         final_eval_status=EvalStatus.PASSED,
-        eval_metric_results={
-            "response_match_score": EvalMetricResult(
+        overall_eval_metric_results=[
+            EvalMetricResult(
                 metric_name="response_match_score",
                 score=0.95,
                 eval_status=EvalStatus.PASSED,
             )
-        },
+        ],
+        eval_metric_result_per_invocation=[],
+        session_id="session-001",
     )
 ]
 results_manager.save_eval_set_result("my_agent", "smoke_tests", case_results)
@@ -614,16 +618,19 @@ from google.adk.evaluation.eval_metrics import (
     PrebuiltMetrics,
     RubricsBasedCriterion,
 )
-from google.adk.evaluation.eval_case import Invocation, Rubric, RubricContent
+from google.adk.evaluation.eval_case import Invocation, Rubric
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="FINAL_RESPONSE_QUALITY",
         rubrics=[
             Rubric(
+                rubric_id="r1",
                 rubric_content=RubricContent(
                     text_property="The final answer includes the city name the user asked about."
                 )
@@ -664,7 +671,8 @@ from google.adk.evaluation.eval_metrics import (
     PrebuiltMetrics,
     RubricsBasedCriterion,
 )
-from google.adk.evaluation.eval_case import Invocation, Rubric, RubricContent
+from google.adk.evaluation.eval_case import Invocation, Rubric
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.adk.evaluation.app_details import AppDetails, AgentDetails
 from google.genai import types
 import time
@@ -672,9 +680,11 @@ import time
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="FINAL_RESPONSE_QUALITY",
         rubrics=[
             Rubric(
+                rubric_id="r1",
                 rubric_content=RubricContent(
                     text_property=(
                         "The final answer calls the get_weather tool before"
@@ -723,7 +733,8 @@ from google.adk.evaluation.eval_metrics import (
     PrebuiltMetrics,
     RubricsBasedCriterion,
 )
-from google.adk.evaluation.eval_case import Invocation, Rubric, RubricContent
+from google.adk.evaluation.eval_case import Invocation, Rubric
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
@@ -732,13 +743,16 @@ import time
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="FINAL_RESPONSE_QUALITY",
         rubrics=[
             Rubric(
+                rubric_id="r1",
                 rubric_content=RubricContent(text_property="Rubric A — correct type"),
                 type="FINAL_RESPONSE_QUALITY",
             ),
             Rubric(
+                rubric_id="r2",
                 rubric_content=RubricContent(text_property="Rubric B — wrong type, will be skipped"),
                 type="TOOL_USE_QUALITY",
             ),
@@ -794,22 +808,25 @@ from google.adk.evaluation.eval_case import (
     Invocation,
     IntermediateData,
     Rubric,
-    RubricContent,
 )
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_TOOL_USE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="TOOL_USE_QUALITY",
         rubrics=[
             Rubric(
+                rubric_id="r1",
                 rubric_content=RubricContent(
                     text_property="The agent calls geocode_city before calling get_weather."
                 )
             ),
             Rubric(
+                rubric_id="r2",
                 rubric_content=RubricContent(
                     text_property="The get_weather tool is called with the latitude from the geocode_city response."
                 )
@@ -856,17 +873,19 @@ from google.adk.evaluation.eval_case import (
     Invocation,
     IntermediateData,
     Rubric,
-    RubricContent,
 )
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_TOOL_USE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="TOOL_USE_QUALITY",
         rubrics=[
             Rubric(
+                rubric_id="r1",
                 rubric_content=RubricContent(
                     text_property="Does the agent call the 'search_docs' tool?"
                 )
@@ -904,7 +923,8 @@ from google.adk.evaluation.eval_metrics import (
     PrebuiltMetrics,
     RubricsBasedCriterion,
 )
-from google.adk.evaluation.eval_case import Invocation, Rubric, RubricContent
+from google.adk.evaluation.eval_case import Invocation, Rubric
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
@@ -925,18 +945,20 @@ def make_invocation() -> Invocation:
 tool_metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_TOOL_USE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="TOOL_USE_QUALITY",
         rubrics=[
-            Rubric(rubric_content=RubricContent(text_property="Agent calls get_stock_price.")),
+            Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Agent calls get_stock_price.")),
         ],
     ),
 )
 final_metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="FINAL_RESPONSE_QUALITY",
         rubrics=[
-            Rubric(rubric_content=RubricContent(text_property="Response includes a dollar amount.")),
+            Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Response includes a dollar amount.")),
         ],
     ),
 )
@@ -978,26 +1000,31 @@ from google.adk.evaluation.eval_metrics import (
     PrebuiltMetrics,
     RubricsBasedCriterion,
 )
-from google.adk.evaluation.eval_case import Invocation, Rubric, RubricContent
+from google.adk.evaluation.eval_case import Invocation, Rubric
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_MULTI_TURN_TRAJECTORY_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="TRAJECTORY_QUALITY",
         rubrics=[
             Rubric(
+                rubric_id="r1",
                 rubric_content=RubricContent(
                     text_property="The agent greeted the user in Turn 1."
                 )
             ),
             Rubric(
+                rubric_id="r2",
                 rubric_content=RubricContent(
                     text_property="The agent correctly answered the question in Turn 2."
                 )
             ),
             Rubric(
+                rubric_id="r3",
                 rubric_content=RubricContent(
                     text_property="The agent asked a clarifying follow-up in Turn 3."
                 )
@@ -1046,7 +1073,8 @@ from google.adk.evaluation.eval_metrics import (
     RubricsBasedCriterion,
     EvalStatus,
 )
-from google.adk.evaluation.eval_case import Invocation, Rubric, RubricContent
+from google.adk.evaluation.eval_case import Invocation, Rubric
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.adk.evaluation.evaluator import EvaluationResult, PerInvocationResult
 from google.genai import types
 import time
@@ -1054,8 +1082,9 @@ import time
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_MULTI_TURN_TRAJECTORY_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="TRAJECTORY_QUALITY",
-        rubrics=[Rubric(rubric_content=RubricContent(text_property="Property A"))],
+        rubrics=[Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Property A"))],
     ),
 )
 evaluator = RubricBasedMultiTurnTrajectoryEvaluator(eval_metric=metric)
@@ -1110,8 +1139,8 @@ from google.adk.evaluation.eval_case import (
     Invocation,
     InvocationEvents,
     Rubric,
-    RubricContent,
 )
+from google.adk.evaluation.eval_rubrics import RubricContent
 from google.adk.events.event import Event
 from google.genai import types
 import time
@@ -1119,8 +1148,9 @@ import time
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_MULTI_TURN_TRAJECTORY_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
+        threshold=0.5,
         rubric_type="TRAJECTORY_QUALITY",
-        rubrics=[Rubric(rubric_content=RubricContent(text_property="Calls get_weather"))],
+        rubrics=[Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Calls get_weather"))],
     ),
 )
 evaluator = RubricBasedMultiTurnTrajectoryEvaluator(eval_metric=metric)
