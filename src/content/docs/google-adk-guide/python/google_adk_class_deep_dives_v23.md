@@ -956,6 +956,7 @@ tool_metric = EvalMetric(
             Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Agent calls get_stock_price.")),
         ],
     ),
+    threshold=0.5,
 )
 final_metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
@@ -966,6 +967,7 @@ final_metric = EvalMetric(
             Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Response includes a dollar amount.")),
         ],
     ),
+    threshold=0.5,
 )
 
 tool_eval = RubricBasedToolUseV1Evaluator(eval_metric=tool_metric)
@@ -1507,7 +1509,8 @@ print(result.output)      # User approved
 ```python
 import asyncio
 from google.adk.utils.streaming_utils import StreamingResponseAggregator
-from google.adk.features import FeatureName, temporary_feature_override
+from google.adk.features import FeatureName
+from google.adk.features._feature_registry import temporary_feature_override
 from google.genai import types
 
 async def aggregate_chunks():
@@ -1589,7 +1592,8 @@ print(flushed.function_call.args)   # {'city': 'London', 'units': 'metric'}
 ```python
 import asyncio
 from google.adk.utils.streaming_utils import StreamingResponseAggregator
-from google.adk.features import FeatureName, temporary_feature_override
+from google.adk.features import FeatureName
+from google.adk.features._feature_registry import temporary_feature_override
 from google.genai import types
 
 async def aggregate_legacy():
