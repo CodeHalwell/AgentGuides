@@ -305,9 +305,11 @@ async def build_provider():
 | `write_file` | `(path, content, *, overwrite=True)` | Write string content to path |
 | `read_file` | `(path) → str \| None` | Read content or `None` if absent |
 | `delete_file` | `(path) → bool` | Delete file; returns `True` if deleted |
+| `file_exists` | `(path) → bool` | Check whether a file exists |
+| `create_directory` | `(path)` | Create a directory (and any parents) |
 | `list_files` | `(directory="") → list[str]` | Direct child file names |
 | `list_directories` | `(directory="") → list[str]` | Direct child subdirectory names |
-| `search_files` | `(pattern, *, glob_filter=None, max_results=20)` | Regex search across all files |
+| `search_files` | `(directory, regex_pattern, file_pattern=None, *, recursive=False) → list[FileSearchResult]` | Regex search; optionally scoped to a sub-directory and filtered by filename glob |
 
 ```python
 import asyncio
@@ -399,6 +401,13 @@ class AzureBlobFileStore(AgentFileStore):
         names = [b.name for b in container_client.list_blobs(name_starts_with=prefix)]
         return [n.removeprefix(prefix) for n in names if "/" not in n.removeprefix(prefix)]
 
+    async def file_exists(self, path: str) -> bool:
+        blob = self._client.get_blob_client(container=self._container, blob=path)
+        return await blob.exists()
+
+    async def create_directory(self, path: str) -> None:
+        pass  # Azure Blob Storage uses virtual directories; no explicit creation needed
+
     async def list_directories(self, directory: str = "") -> list[str]:
         prefix = f"{directory}/" if directory else ""
         container_client = self._client.get_container_client(self._container)
@@ -409,7 +418,14 @@ class AzureBlobFileStore(AgentFileStore):
                 dirs.add(rest.split("/")[0])
         return sorted(dirs)
 
-    async def search_files(self, pattern: str, *, glob_filter: str | None = None, max_results: int = 20):
+    async def search_files(
+        self,
+        directory: str,
+        regex_pattern: str,
+        file_pattern: str | None = None,
+        *,
+        recursive: bool = False,
+    ) -> list:
         raise NotImplementedError("Use Azure AI Search for full-text search over blob storage.")
 ```
 
