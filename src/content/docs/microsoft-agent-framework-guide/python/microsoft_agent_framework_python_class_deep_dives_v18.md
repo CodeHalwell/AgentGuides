@@ -1207,8 +1207,10 @@ async def evaluate_geography_agent():
         queries=queries,
         evaluators=evaluator,
     )
-    print(f"Pass rate: {results.pass_rate:.0%}")
-    for item_result in results.items:
+    # evaluate_agent returns a list of results, one per evaluator
+    eval_result = results[0]
+    print(f"Pass rate: {eval_result.pass_rate:.0%}")
+    for item_result in eval_result.items:
         status_icon = "✓" if item_result.status == "pass" else "✗"
         print(f"  {status_icon} {item_result.item_id}")
 

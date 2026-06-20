@@ -195,7 +195,6 @@ def delete_record(record_id: str) -> str:
 
 def auto_approve_reads(content) -> bool:
     """Auto-approve all get_record calls; require manual approval for delete_record."""
-    rule = ToolApprovalRule(tool_name="get_record")  # None arguments = approve any call
     # Match by checking tool name from content's function call properties
     return getattr(getattr(content, "function_call", None), "name", None) == "get_record"
 
