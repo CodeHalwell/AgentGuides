@@ -249,7 +249,6 @@ print(sets)  # ['smoke_tests']
 ### Example 2 — migrate legacy JSON format using `convert_eval_set_to_pydantic_schema`
 
 ```python
-import json
 import os
 import tempfile
 from google.adk.evaluation.local_eval_sets_manager import (
