@@ -176,7 +176,6 @@ asyncio.run(main())
 ```python
 # 2 — Async FunctionModel that calls the first available tool
 import asyncio
-import json
 from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
@@ -211,7 +210,6 @@ asyncio.run(main())
 ```python
 # 3 — Inspect AgentInfo to assert tool schema in tests
 import asyncio
-import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelResponse, TextPart
@@ -307,7 +305,6 @@ asyncio.run(main())
 ```python
 # 2 — Streaming a tool call incrementally via DeltaToolCalls
 import asyncio
-import json
 from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel, AgentInfo, DeltaToolCall
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
@@ -359,7 +356,6 @@ agent = Agent(FunctionModel(stream_function=thinking_stream))
 
 async def main():
     async with agent.run_stream('What is the capital of France?') as r:
-        all_parts = []
         async for event in r.stream_response():
             pass
         response = await r.get_output()
@@ -966,7 +962,6 @@ import asyncio
 from collections.abc import Sequence
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ToolSearch
-from pydantic_ai.native_tools._tool_search import ToolSearchFunc
 from pydantic_ai._run_context import RunContext
 from pydantic_ai.tools import ToolDefinition
 
@@ -1079,7 +1074,6 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ToolSearch
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.native_tools._tool_search import ToolSearchTool
 
 agent = Agent(
     'anthropic:claude-sonnet-4-5',
