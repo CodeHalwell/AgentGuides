@@ -7,8 +7,6 @@ sidebar:
   order: 41
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 # Microsoft Agent Framework Python — Class Deep Dives Vol. 18
 
 Verified against **agent-framework 1.9.0** (installed June 2026). Every constructor
@@ -582,13 +580,13 @@ async def background_delegation_demo():
         ],
     )
 
-    async for event in coordinator.run(
+    # Agent.run(stream=True) yields AgentResponseUpdate chunks directly
+    async for chunk in coordinator.run(
         "Research async patterns in Python AND write a simple asyncio example. "
         "Run both tasks in parallel and then present the combined result.",
         stream=True,
     ):
-        if event.type == "agent_response_update":
-            print(event.update.text or "", end="", flush=True)
+        print(chunk.text or "", end="", flush=True)
     print()
 
 asyncio.run(background_delegation_demo())
