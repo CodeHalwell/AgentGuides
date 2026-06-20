@@ -152,7 +152,7 @@ builder.add_edge("a", "b")
 builder.add_edge("b", END)
 graph = builder.compile()
 
-result = graph.invoke({"message": "start", "call_count": 0})
+result = graph.invoke({"message": "start"})
 print(result["call_count"])  # 2 — both nodes incremented
 ```
 
@@ -475,7 +475,7 @@ class State(TypedDict):
     # One of the parallel branches gets to set this; no ordering guarantee
     winner: Annotated[str, UntrackedValue(str, guard=False)]
 
-def branch(state: State, item: str) -> dict:
+def branch(item: str) -> dict:
     return {"items": [item], "winner": item}
 
 def fan_out(state: State):
@@ -603,20 +603,12 @@ unregister = register_serde_event_listener(my_listener)
 unregister()  # Remove the listener cleanly
 ```
 
-### Example 2 — allowlist builder: discover unknown types in your checkpoint store
+### Example 2 — observe deserialization events when loading checkpointed state
 
 ```python
 from collections import defaultdict
 from langgraph.checkpoint.serde.event_hooks import register_serde_event_listener, SerdeEvent
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-
-class MyData:
-    """A custom class that JsonPlusSerializer doesn't know about by default."""
-    def __init__(self, v: int):
-        self.v = v
 
 type_report: dict[str, list[str]] = defaultdict(list)
 
@@ -626,18 +618,22 @@ def collector(event: SerdeEvent) -> None:
 
 unregister = register_serde_event_listener(collector)
 
-# Trigger serialization of a MyData object
+# Serde events fire during loads_typed (deserialization), not dumps_typed.
+# The msgpack ext-hook emits events when it encounters types that are either
+# unregistered (allowed by policy) or blocked.
 serde = JsonPlusSerializer()
-try:
-    serde.dumps_typed(MyData(42))
-except Exception:
-    pass  # May fail if type is blocked
+
+# Serialize standard state to bytes, then load it back
+type_str, data = serde.dumps_typed({"items": [1, 2, 3], "value": "hello"})
+result = serde.loads_typed((type_str, data))
 
 unregister()
 
-print("Unregistered types encountered:")
-for t in type_report.get("unregistered", []):
-    print(f"  {t}")
+print(f"Deserialized: {result}")
+# Standard dict/list types produce no events; custom or unknown msgpack ext
+# types would appear under type_report["msgpack_unregistered_allowed"]
+# or type_report["msgpack_blocked"] during loads_typed.
+print(f"Events (standard types generate none): {dict(type_report)}")
 ```
 
 ### Example 3 — per-thread listener with context isolation
@@ -941,14 +937,60 @@ asyncio.run(safe_pattern())
 
 ### Example 3 — `_ensure_task` and task restart on cancellation
 
+`InMemoryStore` is a plain `BaseStore` and does not have `_task` or `_ensure_task`.
+This example uses `DictStore`, the `AsyncBatchedBaseStore` subclass defined in Example 1
+(re-stated here in condensed form for self-containment):
+
 ```python
-import asyncio
-from langgraph.store.memory import InMemoryStore
+import asyncio, weakref
+from typing import Any, Iterator
+from langgraph.store.base.batch import AsyncBatchedBaseStore
+from langgraph.store.base import (
+    GetOp, PutOp, SearchOp, ListNamespacesOp,
+    Item, Op, Result,
+)
+
+async def _run(queue, store_ref):
+    while (store := store_ref()) is not None:
+        fut, op = await queue.get()
+        result = store.batch([op])
+        fut.set_result(result[0])
+
+class DictStore(AsyncBatchedBaseStore):
+    def __init__(self):
+        super().__init__()
+        self._data: dict = {}
+
+    def batch(self, ops: Iterator[Op]) -> list[Result]:
+        results = []
+        for op in ops:
+            if isinstance(op, GetOp):
+                results.append(self._data.get(op.namespace, {}).get(op.key))
+            elif isinstance(op, PutOp):
+                if op.value is None:
+                    self._data.get(op.namespace, {}).pop(op.key, None)
+                else:
+                    ns = self._data.setdefault(op.namespace, {})
+                    ns[op.key] = Item(
+                        value=op.value, key=op.key, namespace=op.namespace,
+                        created_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+                        updated_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+                    )
+                results.append(None)
+            elif isinstance(op, SearchOp):
+                results.append(list(self._data.get(op.namespace_prefix, {}).values()))
+            elif isinstance(op, ListNamespacesOp):
+                results.append(list(self._data.keys()))
+        return results
+
+    async def abatch(self, ops: Iterator[Op]) -> list[Result]:
+        return self.batch(ops)
+
 
 async def demonstrate_task_restart():
-    store = InMemoryStore()
+    store = DictStore()
 
-    # The background task starts automatically on __init__
+    # The background drainer task starts automatically on __init__
     print(f"task running: {not store._task.done()}")  # True
 
     # Cancel the background drainer
@@ -956,7 +998,7 @@ async def demonstrate_task_restart():
     await asyncio.sleep(0)  # yield to let cancellation propagate
     print(f"task cancelled: {store._task.done()}")  # True
 
-    # _ensure_task is called before any aget — restarts the drainer
+    # _ensure_task is called internally before any aget — restarts the drainer
     await store.aput(("ns",), "k", {"v": 1})
     print(f"task restarted: {not store._task.done()}")  # True
 
@@ -1378,8 +1420,8 @@ for field, typ in hints.items():
     print(f"  {field}: {label}")
 
 # name: required (Ellipsis)  — Required overrides total=False
-# count: required (Ellipsis)  — int is not Optional
-# tags:  required (Ellipsis)  — list is not Optional
+# count: default=None  — total=False makes it optional; int is not None-able but field is
+# tags:  default=None  — total=False makes it optional
 # description: default=None  — Optional[str] gives None default
 ```
 
@@ -1433,13 +1475,13 @@ output = AgentOutput(message="Hello world")
 print(f"model_fields_set: {output.model_fields_set}")
 # {'message'}
 
-# get_update_as_tuples returns only the changed fields
+# get_update_as_tuples returns every non-None attribute, not only model_fields_set
 keys = list(AgentOutput.model_fields.keys())
 updates = get_update_as_tuples(output, keys)
 print(updates)
-# [('message', 'Hello world')]
-# 'score' and 'metadata' are at default — omitted from updates
-# This prevents unnecessary reducer calls for unchanged fields
+# [('message', 'Hello world'), ('score', 0.0), ('metadata', {})]
+# score=0.0 and metadata={} are non-None so they are included even though
+# they were not explicitly set; only fields whose value is None are omitted
 ```
 
 ---
