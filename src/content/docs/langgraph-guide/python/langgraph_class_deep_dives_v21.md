@@ -894,8 +894,8 @@ class DictStore(AsyncBatchedBaseStore):
                         value=op.value,
                         key=op.key,
                         namespace=op.namespace,
-                        created_at=__import__("datetime").datetime.utcnow(),
-                        updated_at=__import__("datetime").datetime.utcnow(),
+                        created_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+                        updated_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
                     )
                 results.append(None)
             elif isinstance(op, SearchOp):
@@ -1218,7 +1218,7 @@ def agent(state: State) -> dict:
     return {"messages": [*state["messages"], "step"]}
 
 def router(state: State) -> str:
-    if "FINAL" in state["messages"] or state["is_last"]:
+    if "FINAL" in state["messages"]:
         return END
     return "agent"
 
@@ -1596,8 +1596,8 @@ builder.add_edge(START, "n")
 builder.add_edge("n", END)
 local_graph = builder.compile()
 
-# isinstance check works because PregelProtocol is a Runnable subclass,
-# not a @runtime_checkable Protocol — use type() or duck-typing instead
+# isinstance check does not work because PregelProtocol is a Protocol
+# without @runtime_checkable — use type() or duck-typing instead
 print(type(local_graph).__name__)    # CompiledStateGraph
 print(hasattr(local_graph, "get_state"))  # True
 print(hasattr(local_graph, "get_state_history"))  # True
