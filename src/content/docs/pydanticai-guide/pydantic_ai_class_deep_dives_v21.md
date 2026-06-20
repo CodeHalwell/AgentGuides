@@ -180,7 +180,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 
-agent = Agent('placeholder', system_prompt='You are a calculator.')
+agent = Agent(None, system_prompt='You are a calculator.')  # model provided at run time
 
 @agent.tool_plain
 def multiply(a: int, b: int) -> int:
@@ -214,7 +214,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelResponse, TextPart
 
-agent = Agent('placeholder')
+agent = Agent(None)  # model provided at run time via model=FunctionModel(...)
 
 @agent.tool_plain
 def search(query: str, limit: int = 10) -> list[str]:
@@ -309,7 +309,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.function import FunctionModel, AgentInfo, DeltaToolCall
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
-agent = Agent('placeholder')
+agent = Agent(None)  # model provided at run time via model=FunctionModel(...)
 
 @agent.tool_plain
 def calculate(expression: str) -> float:
@@ -536,13 +536,13 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool
 
 agent = Agent(
-    'google-gla:gemini-3-pro-image-preview',  # image-generation model required
+    'google-cloud:gemini-3-pro-image-preview',  # google-cloud prefix required for Vertex-only options
     capabilities=[
         NativeTool(ImageGenerationTool(
             size='2K',               # Google-only: 2048px
             aspect_ratio='3:4',      # Portrait orientation
-            output_format='jpeg',
-            output_compression=85,
+            output_format='jpeg',    # Vertex AI only
+            output_compression=85,   # Vertex AI only
         ))
     ],
 )
