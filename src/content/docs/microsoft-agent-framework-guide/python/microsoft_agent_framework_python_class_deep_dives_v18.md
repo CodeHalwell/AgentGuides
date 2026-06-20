@@ -396,7 +396,9 @@ class AzureBlobFileStore(AgentFileStore):
     async def list_files(self, directory: str = "") -> list[str]:
         prefix = f"{directory}/" if directory else ""
         container_client = self._client.get_container_client(self._container)
-        names = [b.name for b in container_client.list_blobs(name_starts_with=prefix)]
+        names = []
+        async for blob in container_client.list_blobs(name_starts_with=prefix):
+            names.append(blob.name)
         return [n.removeprefix(prefix) for n in names if "/" not in n.removeprefix(prefix)]
 
     async def file_exists(self, path: str) -> bool:
@@ -816,12 +818,12 @@ from agent_framework._workflows._edge import SingleEdgeGroup
 from agent_framework._workflows._function_executor import FunctionExecutor
 from agent_framework import WorkflowContext
 
-# Build two simple executors to test the validator
-async def step_a(ctx: WorkflowContext[str]) -> int:
-    return len(ctx.message)
+# FunctionExecutor functions: first param is the input message; WorkflowContext is optional second
+async def step_a(msg: str) -> int:
+    return len(msg)
 
-async def step_b(ctx: WorkflowContext[int]) -> str:
-    return f"Length was {ctx.message}"
+async def step_b(msg: int) -> str:
+    return f"Length was {msg}"
 
 exec_a = FunctionExecutor(step_a, id="step_a")
 exec_b = FunctionExecutor(step_b, id="step_b")
