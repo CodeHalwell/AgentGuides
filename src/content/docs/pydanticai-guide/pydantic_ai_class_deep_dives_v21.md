@@ -358,7 +358,6 @@ async def main():
     async with agent.run_stream('What is the capital of France?') as r:
         async for event in r.stream_response():
             pass
-        response = await r.get_output()
     # Check the full message history for thinking parts
     for msg in r.all_messages():
         if hasattr(msg, 'parts'):
@@ -1089,7 +1088,7 @@ from pydantic_ai.models.test import TestModel
 
 agent = Agent(
     'anthropic:claude-sonnet-4-5',
-    capabilities=[ToolSearch(strategy='bm25')],
+    capabilities=[ToolSearch()],  # strategy=None — uses local search_tools fallback on TestModel
 )
 
 @agent.tool_plain(defer_loading=True)
