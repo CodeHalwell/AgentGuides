@@ -507,7 +507,7 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[
         NativeTool(ImageGenerationTool(
             model='gpt-image-2',
@@ -536,7 +536,7 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool
 
 agent = Agent(
-    'google-gla:gemini-2.0-flash',
+    'google-gla:gemini-3-pro-image-preview',  # image-generation model required
     capabilities=[
         NativeTool(ImageGenerationTool(
             size='2K',               # Google-only: 2048px
@@ -574,8 +574,8 @@ def make_image_agent(model_name: str, ratio: ImageAspectRatio = '1:1'):
     )
 
 # OpenAI maps '2:3' → '1024x1536'; Google uses '2:3' natively
-openai_agent = make_image_agent('openai:gpt-4o', ratio='2:3')
-google_agent = make_image_agent('google-gla:gemini-2.0-flash', ratio='2:3')
+openai_agent = make_image_agent('openai-responses:gpt-4o', ratio='2:3')
+google_agent = make_image_agent('google-gla:gemini-3-pro-image-preview', ratio='2:3')
 
 import asyncio
 async def main():
@@ -659,17 +659,19 @@ asyncio.run(main())
 ```
 
 ```python
-# 3 — Combining WebFetchTool with safe_download for SSRF protection
+# 3 — Domain blocklist with citations for research fetching
 import asyncio
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import WebFetchTool
 
-# Block known malicious domains while enabling citations
+# Provider-side domain blocking — note: SSRF protection (safe_download) applies
+# to PydanticAI's local fetch tools, not provider-native WebFetchTool.
 research_agent = Agent(
     'anthropic:claude-sonnet-4-5',
     capabilities=[
         NativeTool(WebFetchTool(
-            blocked_domains=['evil.example.com', 'malware.example.org'],
+            blocked_domains=['ads.example.com', 'tracker.example.org'],
             enable_citations=True,
             max_content_tokens=8192,
         ))
@@ -722,7 +724,7 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import MCPServerTool
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[
         NativeTool(MCPServerTool(
             id='github-mcp',
@@ -750,7 +752,7 @@ from pydantic_ai.native_tools import MCPServerTool
 import os
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[
         NativeTool(MCPServerTool(
             id='internal-tools',
@@ -780,7 +782,7 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import MCPServerTool
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[
         NativeTool(MCPServerTool(
             id='slack',
@@ -840,7 +842,7 @@ from pydantic_ai.native_tools import FileSearchTool
 
 # Assumes a vector store has been created and files uploaded via the OpenAI API
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_abc123xyz']))],
     system_prompt='You are a document Q&A assistant. Use the file search tool to find relevant information.',
 )
@@ -861,7 +863,7 @@ from pydantic_ai.native_tools import FileSearchTool
 
 # Search across multiple vector stores simultaneously
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[
         NativeTool(FileSearchTool(
             file_store_ids=[
