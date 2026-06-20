@@ -1398,7 +1398,7 @@ history = CosmosHistoryProvider(
 from agent_framework import Agent
 from agent_framework.azure import CosmosHistoryProvider, AzureAISearchContextProvider
 
-search = AzureAISearchContextProvider(source_id="my_search", ...)
+search = AzureAISearchContextProvider(source_id="my_search", endpoint="...")
 
 history = CosmosHistoryProvider(
     endpoint="...",
