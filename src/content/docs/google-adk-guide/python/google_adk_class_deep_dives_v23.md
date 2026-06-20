@@ -702,6 +702,7 @@ evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 app_details = AppDetails(
     agent_details={
         "weather_agent": AgentDetails(
+            name="weather_agent",
             instructions="You are a weather assistant. Always call get_weather before answering.",
         )
     }
@@ -738,8 +739,9 @@ from google.adk.evaluation.eval_rubrics import RubricContent
 from google.genai import types
 import time
 
-# RUBRIC_TYPE="FINAL_RESPONSE_QUALITY" — rubrics with a different type
-# are filtered out by create_effective_rubrics_list() in the parent class.
+# rubric_type="FINAL_RESPONSE_QUALITY" — criterion rubrics are ALWAYS
+# included; only invocation-level rubrics are filtered by type.
+# To demonstrate filtering, put the wrong-type rubric in invocation.rubrics.
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
     criterion=RubricsBasedCriterion(
@@ -751,25 +753,28 @@ metric = EvalMetric(
                 rubric_content=RubricContent(text_property="Rubric A — correct type"),
                 type="FINAL_RESPONSE_QUALITY",
             ),
-            Rubric(
-                rubric_id="r2",
-                rubric_content=RubricContent(text_property="Rubric B — wrong type, will be skipped"),
-                type="TOOL_USE_QUALITY",
-            ),
         ],
     ),
 )
 evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 
+# Invocation carries an extra rubric with wrong type — this one is filtered
 invocation = Invocation(
     invocation_id="inv-003",
     user_content=types.Content(
         parts=[types.Part.from_text("Test")], role="user"
     ),
     creation_timestamp=time.time(),
+    rubrics=[
+        Rubric(
+            rubric_id="r2",
+            rubric_content=RubricContent(text_property="Rubric B — wrong type, filtered out"),
+            type="TOOL_USE_QUALITY",
+        ),
+    ],
 )
 evaluator.create_effective_rubrics_list(invocation.rubrics)
-print(len(evaluator._effective_rubrics_list))  # 1 (only Rubric A passes the filter)
+print(len(evaluator._effective_rubrics_list))  # 1 (Rubric B filtered; only Rubric A from criterion)
 print(evaluator._effective_rubrics_list[0].rubric_content.text_property)
 # Rubric A — correct type
 ```
@@ -1242,7 +1247,6 @@ evaluator = PerTurnUserSimulatorQualityV1(eval_metric=metric)
 scenario = ConversationScenario(
     starting_prompt="I need help with my order.",
     conversation_plan="User wants to check order status, then cancel.",
-    user_persona="Frustrated customer.",
 )
 
 # Exact match with starting_prompt → score 1.0
@@ -1317,7 +1321,7 @@ from google.adk.evaluation.eval_case import Invocation
 from google.genai import types
 import time
 
-criterion = LlmBackedUserSimulatorCriterion(stop_signal="[DONE]")
+criterion = LlmBackedUserSimulatorCriterion(stop_signal="[DONE]", threshold=0.5)
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.PER_TURN_USER_SIMULATOR_QUALITY_V1.value,
     criterion=criterion,
@@ -1503,7 +1507,7 @@ print(result.output)      # User approved
 ```python
 import asyncio
 from google.adk.utils.streaming_utils import StreamingResponseAggregator
-from google.adk.features import FeatureName, override_feature_enabled
+from google.adk.features import FeatureName, temporary_feature_override
 from google.genai import types
 
 async def aggregate_chunks():
@@ -1525,7 +1529,7 @@ async def aggregate_chunks():
     chunks = [make_response("Hello, "), make_response("world!")]
 
     all_responses = []
-    with override_feature_enabled(FeatureName.PROGRESSIVE_SSE_STREAMING, True):
+    with temporary_feature_override(FeatureName.PROGRESSIVE_SSE_STREAMING, True):
         for chunk in chunks:
             async for response in aggregator.process_response(chunk):
                 all_responses.append(response)
@@ -1585,7 +1589,7 @@ print(flushed.function_call.args)   # {'city': 'London', 'units': 'metric'}
 ```python
 import asyncio
 from google.adk.utils.streaming_utils import StreamingResponseAggregator
-from google.adk.features import FeatureName, override_feature_enabled
+from google.adk.features import FeatureName, temporary_feature_override
 from google.genai import types
 
 async def aggregate_legacy():
@@ -1603,7 +1607,7 @@ async def aggregate_legacy():
         )
 
     # Non-progressive path: text chunks mark partial=True and accumulate
-    with override_feature_enabled(FeatureName.PROGRESSIVE_SSE_STREAMING, False):
+    with temporary_feature_override(FeatureName.PROGRESSIVE_SSE_STREAMING, False):
         for chunk in [text_response("The "), text_response("answer is 42.")]:
             async for r in aggregator.process_response(chunk):
                 print(f"partial={r.partial}")  # True for text accumulation
