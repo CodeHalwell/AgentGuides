@@ -83,7 +83,7 @@ class SubprocessRunner:
         script: FileSkillScript,
         args: dict | list | None = None,
     ):
-        cmd = ["python", str(script.path)]
+        cmd = ["python", str(script.full_path)]
         if isinstance(args, dict):
             cmd += ["--args", json.dumps(args)]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -108,7 +108,7 @@ async def describe_skill(skill: Skill) -> None:
     # Inspect a named resource if present
     schema_res = await skill.get_resource("schema")
     if schema_res:
-        print(f"Resource 'schema': {await schema_res.get_content()}")
+        print(f"Resource 'schema': {await schema_res.read()}")
 ```
 
 ---
@@ -172,7 +172,7 @@ async def use_inline_skill():
     # Retrieve a script by name
     explain_script = await sql_skill.get_script("explain_query")
     if explain_script:
-        result = await explain_script.run({"sql": "SELECT * FROM orders WHERE status='pending'"})
+        result = await explain_script.run(sql_skill, {"sql": "SELECT * FROM orders WHERE status='pending'"})
         print(result)
 
 asyncio.run(use_inline_skill())
@@ -825,8 +825,8 @@ async def step_a(msg: str) -> int:
 async def step_b(msg: int) -> str:
     return f"Length was {msg}"
 
-exec_a = FunctionExecutor(step_a, id="step_a")
-exec_b = FunctionExecutor(step_b, id="step_b")
+exec_a = FunctionExecutor(step_a, id="step_a", output=int)
+exec_b = FunctionExecutor(step_b, id="step_b", workflow_output=str)
 
 # Create an edge group A → B
 edge_group = SingleEdgeGroup(source=exec_a, target=exec_b)
@@ -1150,8 +1150,9 @@ async def run_local_eval():
     ]
 
     results = await evaluator.evaluate(items, eval_name="Geography Eval")
-    print(f"Passed : {results.passed_count}/{results.total_count}")
-    print(f"Pass % : {results.pass_rate:.0%}")
+    print(f"Passed : {results.passed}/{results.total}")
+    pct = results.passed / results.total if results.total else 0
+    print(f"Pass % : {pct:.0%}")
     for item_result in results.items:
         print(f"  Item {item_result.item_id}: {item_result.status}")
         for score in item_result.scores:
@@ -1225,7 +1226,8 @@ async def evaluate_geography_agent():
     )
     # evaluate_agent returns a list of results, one per evaluator
     eval_result = results[0]
-    print(f"Pass rate: {eval_result.pass_rate:.0%}")
+    pct = eval_result.passed / eval_result.total if eval_result.total else 0
+    print(f"Pass rate: {pct:.0%}")
     for item_result in eval_result.items:
         status_icon = "✓" if item_result.status == "pass" else "✗"
         print(f"  {status_icon} {item_result.item_id}")
