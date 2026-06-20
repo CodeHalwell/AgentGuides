@@ -426,7 +426,8 @@ from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelMessage
 
 async def empty_stream(messages: list[ModelMessage], info: AgentInfo):
-    return  # yields nothing
+    return
+    yield  # unreachable — makes this an async generator so PeekableAsyncStream can peek it
 
 agent = Agent(FunctionModel(stream_function=empty_stream))
 
@@ -502,12 +503,13 @@ asyncio.run(main())
 ```python
 # 1 — OpenAI high-quality PNG with streaming partial images
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool
 
 agent = Agent(
     'openai:gpt-4o',
-    native_tools=[
-        ImageGenerationTool(
+    capabilities=[
+        NativeTool(ImageGenerationTool(
             model='gpt-image-2',
             quality='high',
             output_format='png',
@@ -515,7 +517,7 @@ agent = Agent(
             partial_images=2,   # 2 previews during streaming
             input_fidelity='high',  # preserve uploaded face/style closely
             size='1024x1024',
-        )
+        ))
     ],
 )
 
@@ -530,17 +532,18 @@ asyncio.run(main())
 ```python
 # 2 — Google Gemini portrait image with aspect_ratio and large size
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool
 
 agent = Agent(
     'google-gla:gemini-2.0-flash',
-    native_tools=[
-        ImageGenerationTool(
+    capabilities=[
+        NativeTool(ImageGenerationTool(
             size='2K',               # Google-only: 2048px
             aspect_ratio='3:4',      # Portrait orientation
             output_format='jpeg',
             output_compression=85,
-        )
+        ))
     ],
 )
 
@@ -555,17 +558,18 @@ asyncio.run(main())
 ```python
 # 3 — Cross-provider portable config using aspect_ratio (maps to closest size on OpenAI)
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool, ImageAspectRatio
 
 def make_image_agent(model_name: str, ratio: ImageAspectRatio = '1:1'):
     return Agent(
         model_name,
-        native_tools=[
-            ImageGenerationTool(
+        capabilities=[
+            NativeTool(ImageGenerationTool(
                 aspect_ratio=ratio,
                 quality='medium',
                 optional=True,   # silently skip if provider doesn't support it
-            )
+            ))
         ],
     )
 
@@ -610,11 +614,12 @@ asyncio.run(main())
 ```python
 # 1 — Basic WebFetchTool with citation support
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import WebFetchTool
 
 agent = Agent(
     'anthropic:claude-sonnet-4-5',
-    native_tools=[WebFetchTool(enable_citations=True)],
+    capabilities=[NativeTool(WebFetchTool(enable_citations=True))],
 )
 
 async def main():
@@ -628,17 +633,18 @@ asyncio.run(main())
 ```python
 # 2 — Intranet-only fetcher with token budget
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import WebFetchTool
 
 intranet_agent = Agent(
     'anthropic:claude-sonnet-4-5',
-    native_tools=[
-        WebFetchTool(
+    capabilities=[
+        NativeTool(WebFetchTool(
             allowed_domains=['internal.corp.example.com', 'docs.corp.example.com'],
             max_content_tokens=4096,  # Cap each fetch at 4k tokens
             max_uses=3,               # Fetch at most 3 URLs per run
             enable_citations=True,
-        )
+        ))
     ],
 )
 
@@ -661,12 +667,12 @@ from pydantic_ai.native_tools import WebFetchTool
 # Block known malicious domains while enabling citations
 research_agent = Agent(
     'anthropic:claude-sonnet-4-5',
-    native_tools=[
-        WebFetchTool(
+    capabilities=[
+        NativeTool(WebFetchTool(
             blocked_domains=['evil.example.com', 'malware.example.org'],
             enable_citations=True,
             max_content_tokens=8192,
-        )
+        ))
     ],
     system_prompt='You are a research assistant. Always cite your sources.',
 )
@@ -712,18 +718,19 @@ asyncio.run(main())
 ```python
 # 1 — Basic MCPServerTool with authorization
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import MCPServerTool
 
 agent = Agent(
     'openai:gpt-4o',
-    native_tools=[
-        MCPServerTool(
+    capabilities=[
+        NativeTool(MCPServerTool(
             id='github-mcp',
             url='https://mcp.github.com/',
             authorization_token='ghp_YOUR_TOKEN_HERE',
             allowed_tools=['list_repos', 'create_issue', 'search_code'],
             description='GitHub MCP server for repository management',
-        )
+        ))
     ],
 )
 
@@ -738,13 +745,14 @@ asyncio.run(main())
 ```python
 # 2 — MCPServerTool with custom headers for tracing and auth
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import MCPServerTool
 import os
 
 agent = Agent(
     'openai:gpt-4o',
-    native_tools=[
-        MCPServerTool(
+    capabilities=[
+        NativeTool(MCPServerTool(
             id='internal-tools',
             url='https://tools.corp.example.com/mcp',
             headers={
@@ -753,7 +761,7 @@ agent = Agent(
                 'X-Team': 'platform-engineering',
             },
             allowed_tools=['deploy', 'rollback', 'get_metrics'],
-        )
+        ))
     ],
 )
 
@@ -768,21 +776,22 @@ asyncio.run(main())
 ```python
 # 3 — Multiple MCPServerTools with connector_id for stored OpenAI connectors
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import MCPServerTool
 
 agent = Agent(
     'openai:gpt-4o',
-    native_tools=[
-        MCPServerTool(
+    capabilities=[
+        NativeTool(MCPServerTool(
             id='slack',
             url='x-openai-connector:conn_slack_abc123',  # stored connector
             allowed_tools=['send_message', 'list_channels'],
-        ),
-        MCPServerTool(
+        )),
+        NativeTool(MCPServerTool(
             id='jira',
             url='x-openai-connector:conn_jira_def456',
             allowed_tools=['create_ticket', 'search_issues'],
-        ),
+        )),
     ],
 )
 
@@ -826,14 +835,13 @@ asyncio.run(main())
 ```python
 # 1 — OpenAI vector store search
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import FileSearchTool
 
 # Assumes a vector store has been created and files uploaded via the OpenAI API
 agent = Agent(
     'openai:gpt-4o',
-    native_tools=[
-        FileSearchTool(file_store_ids=['vs_abc123xyz'])
-    ],
+    capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_abc123xyz']))],
     system_prompt='You are a document Q&A assistant. Use the file search tool to find relevant information.',
 )
 
@@ -848,19 +856,20 @@ asyncio.run(main())
 ```python
 # 2 — Multi-store search across different knowledge bases
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import FileSearchTool
 
 # Search across multiple vector stores simultaneously
 agent = Agent(
     'openai:gpt-4o',
-    native_tools=[
-        FileSearchTool(
+    capabilities=[
+        NativeTool(FileSearchTool(
             file_store_ids=[
                 'vs_technical_docs',
                 'vs_customer_feedback',
                 'vs_internal_wiki',
             ]
-        )
+        ))
     ],
 )
 
@@ -878,14 +887,15 @@ asyncio.run(main())
 ```python
 # 3 — xAI collections search
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import FileSearchTool
 
 agent = Agent(
     'xai:grok-3',
-    native_tools=[
-        FileSearchTool(
+    capabilities=[
+        NativeTool(FileSearchTool(
             file_store_ids=['col_research_papers_ml', 'col_internal_reports'],
-        )
+        ))
     ],
     system_prompt='Search across our research paper collection and internal reports.',
 )
