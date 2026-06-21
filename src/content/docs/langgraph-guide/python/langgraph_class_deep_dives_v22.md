@@ -172,7 +172,7 @@ class ModerationTransformer(StreamTransformer):
 
 
 # Usage:
-# async with await graph.astream_events(input, version="v3",
+# async with graph.astream_events(input, version="v3",
 #                factories=[lambda s: ModerationTransformer(s)]) as run:
 #     async for flag in run.moderation_flags:
 #         print("flagged:", flag)
@@ -331,7 +331,7 @@ async def monitor(run) -> None:
         display(branch_b, "auditor"),
     )
 
-# async with await graph.astream_events(input, version="v3") as run:
+# async with graph.astream_events(input, version="v3") as run:
 #     await monitor(run)
 ```
 
@@ -629,7 +629,7 @@ graph = (
 )
 
 async def main() -> None:
-    async with await graph.astream_events(
+    async with graph.astream_events(
         {"steps": 0}, version="v3"
     ) as run:
         # Consume values until we've seen 1 snapshot, then abort
@@ -738,7 +738,7 @@ outer_graph = outer_builder.compile()
 import asyncio
 
 async def watch_subgraphs(graph, input_data):
-    async with await graph.astream_events(
+    async with graph.astream_events(
         input_data, version="v3", subgraphs=True
     ) as run:
         async for handle in run.subgraphs:
