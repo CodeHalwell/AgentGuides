@@ -203,7 +203,7 @@ workflow = ConcurrentBuilder(
 ).build()
 
 async def main() -> None:
-    async for event in workflow.stream("Future of quantum computing"):
+    async for event in workflow.run("Future of quantum computing", stream=True):
         if event.type == "output":
             print(f"[OUTPUT from {event.source}]", event.data)
         elif event.type == "intermediate":
@@ -330,7 +330,7 @@ workflow = (
 )
 
 async def main() -> None:
-    async for event in workflow.stream("Write a product launch announcement"):
+    async for event in workflow.run("Write a product launch announcement", stream=True):
         print(event.type, getattr(event, "data", ""))
 
 asyncio.run(main())
@@ -410,9 +410,9 @@ from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import HandoffBuilder
 
 client   = OpenAIChatClient("gpt-4o")
-triage   = client.as_agent(name="triage",   instructions="Route the customer to the right department.", description="General routing")
-billing  = client.as_agent(name="billing",  instructions="Handle billing and payment queries.", description="Billing specialist")
-support  = client.as_agent(name="support",  instructions="Handle technical support queries.", description="Tech support")
+triage   = client.as_agent(name="triage",   instructions="Route the customer to the right department.", description="General routing",  require_per_service_call_history_persistence=True)
+billing  = client.as_agent(name="billing",  instructions="Handle billing and payment queries.", description="Billing specialist", require_per_service_call_history_persistence=True)
+support  = client.as_agent(name="support",  instructions="Handle technical support queries.", description="Tech support",          require_per_service_call_history_persistence=True)
 
 # No add_handoff() calls → all agents can hand off to all others (mesh)
 workflow = (
@@ -422,7 +422,7 @@ workflow = (
 )
 
 async def main() -> None:
-    async for event in workflow.stream("I was double-charged last month"):
+    async for event in workflow.run("I was double-charged last month", stream=True):
         print(event.type, getattr(event, "data", ""))
 
 asyncio.run(main())
@@ -435,10 +435,10 @@ import asyncio
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import HandoffBuilder
 
-client      = OpenAIChatClient("gpt-4o-mini")
-orchestrator = client.as_agent(name="orchestrator",  description="Initial triage")
-researcher  = client.as_agent(name="researcher",    description="Deep research specialist")
-writer      = client.as_agent(name="writer",        description="Report writer")
+client       = OpenAIChatClient("gpt-4o-mini")
+orchestrator = client.as_agent(name="orchestrator", description="Initial triage",            require_per_service_call_history_persistence=True)
+researcher   = client.as_agent(name="researcher",   description="Deep research specialist",  require_per_service_call_history_persistence=True)
+writer       = client.as_agent(name="writer",       description="Report writer",             require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(participants=[orchestrator, researcher, writer])
@@ -471,8 +471,8 @@ from agent_framework_orchestrations import HandoffBuilder
 
 storage = FileCheckpointStorage("./handoff_cp")
 client  = OpenAIChatClient("gpt-4o")
-a = client.as_agent(name="agent_a", description="Specialist A")
-b = client.as_agent(name="agent_b", description="Specialist B")
+a = client.as_agent(name="agent_a", description="Specialist A", require_per_service_call_history_persistence=True)
+b = client.as_agent(name="agent_b", description="Specialist B", require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(
@@ -484,7 +484,7 @@ workflow = (
 )
 
 async def main() -> None:
-    async for event in workflow.stream("Begin task"):
+    async for event in workflow.run("Begin task", stream=True):
         if event.type == "handoff_sent":
             # event.data is a HandoffSentEvent dataclass
             print(f"Handoff: {event.data.source} → {event.data.target}")
@@ -540,8 +540,8 @@ from agent_framework_orchestrations import HandoffBuilder
 from agent_framework_orchestrations._handoff import HandoffAgentUserRequest
 
 client  = OpenAIChatClient("gpt-4o")
-analyst = client.as_agent(name="analyst",  description="Data analyst")
-advisor = client.as_agent(name="advisor",  description="Investment advisor")
+analyst = client.as_agent(name="analyst", description="Data analyst",       require_per_service_call_history_persistence=True)
+advisor = client.as_agent(name="advisor", description="Investment advisor", require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(participants=[analyst, advisor])
@@ -588,8 +588,8 @@ from agent_framework_orchestrations import HandoffBuilder
 from agent_framework_orchestrations._handoff import HandoffAgentUserRequest
 
 client = OpenAIChatClient("gpt-4o-mini")
-a = client.as_agent(name="a", description="Specialist A")
-b = client.as_agent(name="b", description="Specialist B")
+a = client.as_agent(name="a", description="Specialist A", require_per_service_call_history_persistence=True)
+b = client.as_agent(name="b", description="Specialist B", require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(participants=[a, b])
@@ -683,8 +683,8 @@ from agent_framework_orchestrations._orchestration_state import OrchestrationSta
 
 storage = FileCheckpointStorage("./orch_cp")
 client  = OpenAIChatClient("gpt-4o")
-a = client.as_agent(name="agent_a", description="Specialist A")
-b = client.as_agent(name="agent_b", description="Specialist B")
+a = client.as_agent(name="agent_a", description="Specialist A", require_per_service_call_history_persistence=True)
+b = client.as_agent(name="agent_b", description="Specialist B", require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(
@@ -1482,7 +1482,7 @@ from agent_framework_orchestrations._magentic import StandardMagenticManager
 MEDICAL_PLAN_PROMPT = """
 You are coordinating a medical literature review task.
 Task: {task}
-Participants: {participants}
+Team: {team}
 
 Create a structured research plan that:
 1. Identifies key search terms and databases
@@ -1494,12 +1494,12 @@ Create a structured research plan that:
 MEDICAL_PROGRESS_PROMPT = """
 Assess the current progress of the medical literature review.
 Return ONLY valid JSON:
-{
+{{
   "is_complete": false,
   "next_speaker": "name_of_next_participant",
   "instruction": "specific instruction for next participant",
   "is_stalled": false
-}
+}}
 """
 
 client  = OpenAIChatClient("gpt-4o")
@@ -1542,7 +1542,7 @@ workflow = MagenticBuilder(participants=[worker], manager=manager).build()
 
 async def main() -> None:
     reset_count = 0
-    async for event in workflow.stream("Complete a complex multi-step research task"):
+    async for event in workflow.run("Complete a complex multi-step research task", stream=True):
         if event.type == "magentic_orchestrator":
             from agent_framework_orchestrations._magentic import MagenticOrchestratorEventType
             if event.data.event_type == MagenticOrchestratorEventType.REPLANNED:
