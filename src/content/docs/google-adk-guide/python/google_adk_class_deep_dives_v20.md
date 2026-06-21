@@ -819,6 +819,7 @@ import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 agent = LlmAgent(name="streamer", model="gemini-2.5-flash",
                  instruction="Write concise essays.")
@@ -833,7 +834,7 @@ async def stream_response(query: str):
 
     async for event in runner.run_async(
         user_id="u1", session_id="s1",
-        new_message={"role": "user", "parts": [{"text": query}]},
+        new_message=types.Content(role="user", parts=[types.Part(text=query)]),
         run_config=config,
     ):
         if event.content and event.content.parts:
@@ -1404,7 +1405,7 @@ app = App(
     name="cached-app",
     root_agent=root_agent,
     context_cache_config=ContextCacheConfig(
-        cache_intervals=[0, 10, 50],   # cache content at turn 0, 10, 50
+        cache_intervals=10,            # refresh cache every 10 invocations
         ttl_seconds=3600,              # cache lives for 1 hour
         min_tokens=4096,               # only cache if > 4K prompt tokens
     ),
@@ -1489,7 +1490,6 @@ from google.genai import types
 
 async def save_report(content: str, tool_context: ToolContext) -> str:
     """Save a generated report as an artifact."""
-    report_part = types.Part.from_text(content)
     version = await tool_context.save_artifact(
         filename="report.txt",
         artifact=types.Part(
