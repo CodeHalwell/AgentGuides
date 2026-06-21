@@ -2189,13 +2189,16 @@ async def introspect(ctx: RunContext[None]) -> str:
 `AgentSpec` enables loading agent configuration from YAML or JSON files, enabling configuration-driven deployments:
 
 ```python
-from pydantic_ai import AgentSpec
+from pydantic_ai import Agent, AgentSpec
 
-# Load from file
+# Load from file — Agent.from_file is the one-step shortcut
+agent = Agent.from_file('agents/support.yaml')
+
+# Or load via the data model first, then construct
 spec = AgentSpec.from_file('agents/support.yaml')
-agent = spec.to_agent()
+agent = Agent.from_spec(spec)
 
-# Or parse inline YAML
+# Or parse inline YAML into a spec and construct
 spec = AgentSpec.from_text("""
 model: openai:gpt-4o
 name: support-agent
@@ -2204,7 +2207,7 @@ model_settings:
   temperature: 0.3
 retries: 3
 """)
-agent = spec.to_agent()
+agent = Agent.from_spec(spec)
 ```
 
 ### `TemplateStr` — Handlebars System Prompts

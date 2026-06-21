@@ -588,14 +588,16 @@ limiter = ConcurrencyLimiter.from_limit(
 )
 
 async def safe_acquire(task_id: str) -> None:
+    acquired = False
     try:
         await limiter.acquire(source=f'task:{task_id}')
+        acquired = True  # slot held — must release in finally
         print(f'Task {task_id} running ({limiter.running_count} active)')
         await asyncio.sleep(0.1)
     except ConcurrencyLimitExceeded as e:
         print(f'Task {task_id} rejected: {e}')
     finally:
-        if limiter.running_count > 0:
+        if acquired:
             limiter.release()
 
 async def main() -> None:
@@ -1022,13 +1024,17 @@ from pydantic_ai import AgentSpec
 
 ### Class methods
 
+`AgentSpec` is a **data model** — it does not construct agents directly. Use `Agent.from_spec()` or `Agent.from_file()` to get a runnable `Agent`.
+
 | Method | Description |
 |---|---|
-| `AgentSpec.from_file(path, fmt=None)` | Load from YAML or JSON file |
-| `AgentSpec.from_text(text, fmt='yaml')` | Parse from a YAML/JSON string |
-| `AgentSpec.from_dict(data)` | Validate from a Python dict |
-| `spec.to_file(path, fmt=None, schema_path=...)` | Save to file with optional JSON schema |
-| `AgentSpec.model_json_schema_with_capabilities(...)` | Generate schema for editor autocomplete |
+| `Agent.from_file(path, ...)` | One-step load: parse YAML/JSON and construct `Agent` |
+| `Agent.from_spec(spec, ...)` | Construct an `Agent` from an `AgentSpec` instance or dict |
+| `AgentSpec.from_file(path, fmt=None)` | Load an `AgentSpec` data model from YAML or JSON |
+| `AgentSpec.from_text(text, fmt='yaml')` | Parse `AgentSpec` from a YAML/JSON string |
+| `AgentSpec.from_dict(data)` | Validate `AgentSpec` from a Python dict |
+| `spec.to_file(path, fmt=None, schema_path=...)` | Serialise spec back to file with optional JSON schema sidecar |
+| `AgentSpec.model_json_schema_with_capabilities(...)` | Generate JSON schema for YAML editor autocomplete |
 
 ### Example 1 — Load from YAML and instantiate
 
@@ -1048,10 +1054,14 @@ end_strategy: early
 
 ```python
 import asyncio
-from pydantic_ai import AgentSpec, Agent
+from pydantic_ai import Agent, AgentSpec
 
+# One-step shortcut: load YAML and construct Agent directly
+agent = Agent.from_file('agent_config.yaml')
+
+# Or two-step: load the data model first, then construct
 spec = AgentSpec.from_file('agent_config.yaml')
-agent = spec.to_agent()  # Returns a fully configured Agent
+agent = Agent.from_spec(spec)
 
 async def main() -> None:
     result = await agent.run('How do I reset my password?')
@@ -1072,7 +1082,7 @@ spec = AgentSpec.from_dict({
     'retries': 2,
 })
 
-agent = spec.to_agent()
+agent = Agent.from_spec(spec)
 
 async def main() -> None:
     # deps can populate the TemplateStr at runtime
@@ -1109,7 +1119,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert loaded_spec.model == spec.model
     assert loaded_spec.retries == spec.retries
 
-    agent = loaded_spec.to_agent()
+    agent = Agent.from_spec(loaded_spec)
     print(f'Agent: {agent.name}')
 ```
 
