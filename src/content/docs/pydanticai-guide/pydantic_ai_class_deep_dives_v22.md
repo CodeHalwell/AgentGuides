@@ -490,16 +490,19 @@ agent: Agent[None, DeferredToolRequests | str] = Agent(
 
 ```python
 import asyncio
-from pydantic_ai import Agent, DeferredToolRequests, ApprovalRequired, ToolApproved, ToolDenied
+from pydantic_ai import Agent, RunContext, DeferredToolRequests, ApprovalRequired, ToolApproved, ToolDenied
 
 agent: Agent[None, DeferredToolRequests | str] = Agent(
     'openai:gpt-4o',
     output_type=[DeferredToolRequests, str],  # type: ignore[arg-type]
 )
 
-@agent.tool_plain
-def drop_table(table_name: str) -> str:
-    raise ApprovalRequired
+@agent.tool
+def drop_table(ctx: RunContext[None], table_name: str) -> str:
+    # Only raise ApprovalRequired on the first call; execute normally after approval
+    if not ctx.tool_call_approved:
+        raise ApprovalRequired
+    return f'Table {table_name} dropped.'
 
 async def main() -> None:
     result = await agent.run('Drop the temp_cache table.')
