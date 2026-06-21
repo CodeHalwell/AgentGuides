@@ -139,8 +139,8 @@ workflow = ConcurrentBuilder(
 
 async def main() -> None:
     result = await workflow.run("Explain asyncio task cancellation in Python 3.12")
-    # result contains one AgentResponse with three assistant messages (one per participant)
-    for msg in result.messages:
+    # get_outputs()[0] is the aggregated AgentResponse — one message per participant
+    for msg in result.get_outputs()[0].messages:
         print(msg.contents[0])
 
 asyncio.run(main())
@@ -274,7 +274,7 @@ workflow = SequentialBuilder(participants=[research, draft, review]).build()
 async def main() -> None:
     result = await workflow.run("What caused the 2008 financial crisis?")
     # result is the reviewer's AgentResponse — the final refined report
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(main())
 ```
@@ -298,7 +298,7 @@ workflow = SequentialBuilder(
 
 async def main() -> None:
     result = await workflow.run("Write a function to compute Fibonacci numbers iteratively.")
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(main())
 ```
@@ -456,7 +456,7 @@ workflow = (
 
 async def main() -> None:
     result = await workflow.run("Research and write a report on battery technology trends.")
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(main())
 ```
@@ -543,22 +543,38 @@ client  = OpenAIChatClient("gpt-4o")
 analyst = client.as_agent(name="analyst",  description="Data analyst")
 advisor = client.as_agent(name="advisor",  description="Investment advisor")
 
-workflow = HandoffBuilder(participants=[analyst, advisor]).build()
+workflow = (
+    HandoffBuilder(participants=[analyst, advisor])
+    .with_start_agent(analyst)
+    .build()
+)
 
 async def interactive_loop(prompt: str) -> None:
-    """Drive the workflow interactively, responding to HandoffAgentUserRequest events."""
-    async for event in workflow.stream(prompt):
-        if event.type == "request_info":
+    """Drive the workflow interactively, resuming with responses for each request_info pause."""
+    result = await workflow.run(prompt)
+
+    while True:
+        # Collect any pending HITL requests from this run
+        pending = result.get_request_info_events()
+        if not pending:
+            # Workflow completed — print all outputs
+            for output in result.get_outputs():
+                print("Final output:", output)
+            break
+
+        # Ask the human for each paused request, then resume in one call
+        responses: dict[str, list] = {}
+        for event in pending:
             request: HandoffAgentUserRequest = event.data
-            # Show the agent's turn to the user
             print("Agent said:", request.agent_response.messages[-1].contents[0])
             user_input = input("Your reply (or blank to terminate): ").strip()
-            if not user_input:
-                await event.respond(HandoffAgentUserRequest.terminate())
-            else:
-                await event.respond(HandoffAgentUserRequest.create_response(user_input))
-        elif event.type == "output":
-            print("Final output:", event.data)
+            responses[event.request_id] = (
+                HandoffAgentUserRequest.terminate()
+                if not user_input
+                else HandoffAgentUserRequest.create_response(user_input)
+            )
+
+        result = await workflow.run(responses=responses)
 
 asyncio.run(interactive_loop("Analyse the S&P 500 trend and advise on portfolio allocation."))
 ```
@@ -575,24 +591,37 @@ client = OpenAIChatClient("gpt-4o-mini")
 a = client.as_agent(name="a", description="Specialist A")
 b = client.as_agent(name="b", description="Specialist B")
 
-workflow = HandoffBuilder(participants=[a, b]).build()
+workflow = (
+    HandoffBuilder(participants=[a, b])
+    .with_start_agent(a)
+    .build()
+)
 
 SCRIPTED_RESPONSES = [
     "Please dig deeper into the cost implications.",
     "That's enough, please wrap up.",
 ]
-response_iter = iter(SCRIPTED_RESPONSES)
 
 async def automated() -> None:
-    async for event in workflow.stream("Analyse pricing strategies"):
-        if event.type == "request_info":
+    response_iter = iter(SCRIPTED_RESPONSES)
+    result = await workflow.run("Analyse pricing strategies")
+
+    while True:
+        pending = result.get_request_info_events()
+        if not pending:
+            for output in result.get_outputs():
+                print("Done:", output)
+            break
+
+        responses: dict[str, list] = {}
+        for event in pending:
             try:
                 reply = next(response_iter)
-                await event.respond(HandoffAgentUserRequest.create_response(reply))
+                responses[event.request_id] = HandoffAgentUserRequest.create_response(reply)
             except StopIteration:
-                await event.respond(HandoffAgentUserRequest.terminate())
-        elif event.type == "output":
-            print("Done:", event.data)
+                responses[event.request_id] = HandoffAgentUserRequest.terminate()
+
+        result = await workflow.run(responses=responses)
 
 asyncio.run(automated())
 ```
@@ -657,10 +686,14 @@ client  = OpenAIChatClient("gpt-4o")
 a = client.as_agent(name="agent_a", description="Specialist A")
 b = client.as_agent(name="agent_b", description="Specialist B")
 
-workflow = HandoffBuilder(
-    participants=[a, b],
-    checkpoint_storage=storage,
-).build()
+workflow = (
+    HandoffBuilder(
+        participants=[a, b],
+        checkpoint_storage=storage,
+    )
+    .with_start_agent(a)
+    .build()
+)
 
 async def main() -> None:
     result = await workflow.run("Discuss distributed systems trade-offs")
@@ -913,7 +946,7 @@ async def ui_driver() -> None:
 
     # Execute phase: agent receives a notification message that mode changed
     result = await agent.run("Proceed with implementation.", session=session)
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(ui_driver())
 ```
@@ -1327,7 +1360,7 @@ async def main() -> None:
 
     # Execution phase: agent works autonomously, marks todos done
     result = await agent.run("Begin the migration.", session=session)
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(main())
 ```
@@ -1432,7 +1465,7 @@ workflow = MagenticBuilder(participants=[worker_a, worker_b], manager=manager).b
 
 async def main() -> None:
     result = await workflow.run("Build and test a Python script that downloads the top 10 Hacker News stories")
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(main())
 ```
@@ -1486,7 +1519,7 @@ workflow = MagenticBuilder(participants=[specialist_a, specialist_b], manager=ma
 
 async def main() -> None:
     result = await workflow.run("Review RCT evidence for metformin in type 2 diabetes prevention")
-    print(result.messages[-1].contents[0])
+    print(result.get_outputs()[-1].messages[-1].contents[0])
 
 asyncio.run(main())
 ```
