@@ -397,7 +397,6 @@ class HandoffBuilder:
         prompts: dict[str, str] | None = None,
         turn_limits: dict[str, int] | None = None,
     ) -> "HandoffBuilder": ...
-    def with_request_info(self) -> "HandoffBuilder": ...
     def build(self) -> Workflow: ...
 ```
 
@@ -416,7 +415,11 @@ billing  = client.as_agent(name="billing",  instructions="Handle billing and pay
 support  = client.as_agent(name="support",  instructions="Handle technical support queries.", description="Tech support")
 
 # No add_handoff() calls → all agents can hand off to all others (mesh)
-workflow = HandoffBuilder(participants=[triage, billing, support]).build()
+workflow = (
+    HandoffBuilder(participants=[triage, billing, support])
+    .with_start_agent(triage)
+    .build()
+)
 
 async def main() -> None:
     async for event in workflow.stream("I was double-charged last month"):
@@ -471,10 +474,14 @@ client  = OpenAIChatClient("gpt-4o")
 a = client.as_agent(name="agent_a", description="Specialist A")
 b = client.as_agent(name="agent_b", description="Specialist B")
 
-workflow = HandoffBuilder(
-    participants=[a, b],
-    checkpoint_storage=storage,
-).build()
+workflow = (
+    HandoffBuilder(
+        participants=[a, b],
+        checkpoint_storage=storage,
+    )
+    .with_start_agent(a)
+    .build()
+)
 
 async def main() -> None:
     async for event in workflow.stream("Begin task"):
@@ -1421,11 +1428,7 @@ manager = StandardMagenticManager(
     max_round_count=20,
 )
 
-workflow = (
-    MagenticBuilder(participants=[worker_a, worker_b])
-    .with_manager(manager)
-    .build()
-)
+workflow = MagenticBuilder(participants=[worker_a, worker_b], manager=manager).build()
 
 async def main() -> None:
     result = await workflow.run("Build and test a Python script that downloads the top 10 Hacker News stories")
@@ -1479,7 +1482,7 @@ manager = StandardMagenticManager(
     progress_ledger_retry_count=5,  # medical prompts may need more retries
 )
 
-workflow = MagenticBuilder(participants=[specialist_a, specialist_b]).with_manager(manager).build()
+workflow = MagenticBuilder(participants=[specialist_a, specialist_b], manager=manager).build()
 
 async def main() -> None:
     result = await workflow.run("Review RCT evidence for metformin in type 2 diabetes prevention")
@@ -1501,7 +1504,7 @@ mgr_agent = client.as_agent(name="mgr", instructions="Orchestrate the task.")
 worker    = client.as_agent(name="worker", description="General purpose worker")
 
 manager  = StandardMagenticManager(agent=mgr_agent, max_stall_count=1)
-workflow = MagenticBuilder(participants=[worker]).with_manager(manager).build()
+workflow = MagenticBuilder(participants=[worker], manager=manager).build()
 
 async def main() -> None:
     reset_count = 0
