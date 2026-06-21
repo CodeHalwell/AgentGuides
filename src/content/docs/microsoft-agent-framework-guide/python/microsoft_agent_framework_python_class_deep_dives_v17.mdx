@@ -165,9 +165,10 @@ async def main():
     # First run — the framework raises an approval request before executing the tool
     result = await agent.run("Delete record ABC-123.", session=session)
 
-    # Inspect what is waiting for approval
+    # session.state["tool_approval"] is stored as a serialized dict — rehydrate it
     from agent_framework import ToolApprovalState
-    state: ToolApprovalState = session.state.get("tool_approval")
+    raw = session.state.get("tool_approval")
+    state = ToolApprovalState.from_dict(raw) if isinstance(raw, dict) else raw
     if state and state.queued_approval_requests:
         print(f"{len(state.queued_approval_requests)} request(s) queued for approval.")
     print(result.text)
@@ -195,9 +196,8 @@ def delete_record(record_id: str) -> str:
 
 def auto_approve_reads(content) -> bool:
     """Auto-approve all get_record calls; require manual approval for delete_record."""
-    rule = ToolApprovalRule(tool_name="get_record")  # None arguments = approve any call
-    # Match by checking tool name from content's function call properties
-    return getattr(getattr(content, "function_call", None), "name", None) == "get_record"
+    # The callback receives the function-call Content directly; check .name
+    return content.name == "get_record"
 
 async def main():
     middleware = ToolApprovalMiddleware(
