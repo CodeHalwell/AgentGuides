@@ -349,7 +349,8 @@ async def main() -> None:
         approvals: dict[str, bool] = {}
         for call in output.approvals:
             meta = output.metadata.get(call.tool_call_id, {})
-            approvals[call.tool_call_id] = call.args.get('record_id') != 10  # deny record 10
+            # args_as_dict() safely handles both JSON-string and dict-form args
+            approvals[call.tool_call_id] = call.args_as_dict().get('record_id') != 10  # deny record 10
         results = output.build_results(approvals=approvals)
         resumed = await agent.run(
             None,
@@ -475,7 +476,7 @@ def needs_approval(ctx: RunContext[None], tool_def: ToolDefinition, args: dict) 
     return tool_def.name.startswith('delete_')
 
 approved_toolset = ApprovalRequiredToolset(
-    toolset=inner,
+    wrapped=inner,                          # WrapperToolset field is 'wrapped', not 'toolset'
     approval_required_func=needs_approval,
 )
 
