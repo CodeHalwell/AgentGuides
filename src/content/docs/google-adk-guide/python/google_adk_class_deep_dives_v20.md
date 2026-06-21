@@ -573,7 +573,8 @@ research_agent = LlmAgent(
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.planners import PlanReActPlanner
-from google.adk.tools import FunctionTool, google_search
+from google.adk.tools import FunctionTool
+from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.runners import InMemoryRunner
 
 import ast
@@ -606,7 +607,7 @@ agent = LlmAgent(
     name="analyst",
     model="gemini-2.5-flash",
     instruction="Combine search results with calculations to answer questions.",
-    tools=[google_search, FunctionTool(func=calculate)],
+    tools=[GoogleSearchTool(bypass_multi_tools_limit=True), FunctionTool(func=calculate)],
     planner=PlanReActPlanner(),
 )
 
@@ -845,14 +846,14 @@ async def stream_response(query: str):
             text_parts = [p.text or "" for p in event.content.parts if p.text]
             chunk = "".join(text_parts)
             if event.partial and chunk:
-                # Option A: display incremental chunks only
-                new_text = chunk[len(displayed):]
-                print(new_text, end="", flush=True)
-                displayed = chunk
+                # Each partial event carries an incremental chunk — print and accumulate
+                print(chunk, end="", flush=True)
+                displayed += chunk
             elif not event.partial and event.is_final_response():
-                # Option A: skip final text if already displayed
-                if chunk != displayed:
-                    print(chunk[len(displayed):], end="")
+                # Final event: print any text not yet shown, then add newline
+                remaining = chunk[len(displayed):]
+                if remaining:
+                    print(remaining, end="")
                 print()  # newline after completion
 
 asyncio.run(stream_response("Write a short essay on entropy."))
@@ -1346,6 +1347,7 @@ app = App(
 ```python
 from google.adk.apps.base_events_summarizer import BaseEventsSummarizer
 from google.adk.events.event import Event
+from google.adk.events.event_actions import EventActions, EventCompaction
 from google.genai import types
 from typing import Optional
 
@@ -1355,6 +1357,8 @@ class BulletSummarizer(BaseEventsSummarizer):
     async def maybe_summarize_events(
         self, *, events: list[Event]
     ) -> Optional[Event]:
+        if not events:
+            return None
         lines = []
         for ev in events:
             if ev.author == "user" and ev.content and ev.content.parts:
@@ -1368,12 +1372,19 @@ class BulletSummarizer(BaseEventsSummarizer):
         if not lines:
             return None
         summary_text = "\n".join(lines)
+        compacted_content = types.Content(
+            role="model",
+            parts=[types.Part(text=summary_text)],
+        )
+        compaction = EventCompaction(
+            start_timestamp=events[0].timestamp,
+            end_timestamp=events[-1].timestamp,
+            compacted_content=compacted_content,
+        )
         return Event(
-            author="summarizer",
-            content=types.Content(
-                role="model",
-                parts=[types.Part(text=summary_text)],
-            ),
+            author="user",
+            actions=EventActions(compaction=compaction),
+            invocation_id=Event.new_id(),
         )
 
 from google.adk.apps._configs import EventsCompactionConfig
