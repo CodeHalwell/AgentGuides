@@ -565,16 +565,13 @@ from pydantic_ai.concurrency import ConcurrencyLimiter
 
 limiter = ConcurrencyLimiter(max_running=3, name='my-agent')
 
-agent = Agent(
-    'openai:gpt-4o',
-    # Wrap the model so at most 3 calls run simultaneously
-    model_settings={'extra_headers': {}},
-)
+# limit_model_concurrency wraps the model — pass the wrapped model to Agent
+limited_model = limit_model_concurrency('openai:gpt-4o', limiter)
+agent = Agent(limited_model)
 
 async def process_batch(prompts: list[str]) -> list[str]:
-    async with limit_model_concurrency(limiter):
-        tasks = [agent.run(p) for p in prompts]
-        results = await asyncio.gather(*tasks)
+    tasks = [agent.run(p) for p in prompts]
+    results = await asyncio.gather(*tasks)
     return [r.output for r in results]
 ```
 
@@ -627,15 +624,15 @@ class RedisLimiter(AbstractConcurrencyLimiter):
     def release(self) -> None:
         self._held = False
 
-# Use with limit_model_concurrency
+# limit_model_concurrency wraps the model — it calls limiter.acquire/release internally
 from pydantic_ai import limit_model_concurrency, Agent
 
 redis_limiter = RedisLimiter('redis://localhost:6379', 'my-agent-lock', max_running=10)
-agent = Agent('openai:gpt-4o')
+limited_model = limit_model_concurrency('openai:gpt-4o', redis_limiter)
+agent = Agent(limited_model)
 
 async def run_with_redis_limit(prompt: str) -> str:
-    async with limit_model_concurrency(redis_limiter):
-        result = await agent.run(prompt)
+    result = await agent.run(prompt)
     return result.output
 ```
 
@@ -666,23 +663,26 @@ When `SkipModelRequest` is raised in `before_model_request`, message history mod
 
 ```python
 import asyncio
-from pydantic_ai import Agent, SkipModelRequest
-from pydantic_ai.messages import ModelResponse, TextPart
 from datetime import datetime
+from pydantic_ai import Agent, SkipModelRequest
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.messages import ModelResponse, TextPart
 
 _cache: dict[str, str] = {}
 
-agent = Agent('openai:gpt-4o')
-
-@agent.before_model_request
-async def check_cache(ctx, messages, model_settings):
-    # Use the last user prompt as a cache key
-    last_user = next(
+def _last_user_prompt(messages) -> str | None:
+    return next(
         (p.content for m in reversed(messages)
          for p in getattr(m, 'parts', [])
          if hasattr(p, 'content') and hasattr(p, 'part_kind') and p.part_kind == 'user-prompt'),
         None,
     )
+
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def check_cache(ctx, request_context, /):
+    last_user = _last_user_prompt(ctx.messages)
     if last_user and last_user in _cache:
         raise SkipModelRequest(
             ModelResponse(
@@ -691,18 +691,17 @@ async def check_cache(ctx, messages, model_settings):
                 model_name='cached',
             )
         )
+    return request_context
 
-@agent.after_model_request
-async def populate_cache(ctx, messages, response, model_settings):
-    last_user = next(
-        (p.content for m in reversed(messages)
-         for p in getattr(m, 'parts', [])
-         if hasattr(p, 'content') and hasattr(p, 'part_kind') and p.part_kind == 'user-prompt'),
-        None,
-    )
+@hooks.on.after_model_request
+async def populate_cache(ctx, /, *, request_context, response):
+    last_user = _last_user_prompt(ctx.messages)
     text_parts = [p for p in response.parts if hasattr(p, 'content')]
     if last_user and text_parts:
         _cache[last_user] = text_parts[0].content
+    return response  # must return response; returning None overwrites it with None
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
 ```
 
 ### Example 2 — Sandbox dry-run via `SkipToolExecution`
@@ -728,16 +727,20 @@ async def write_file(ctx: RunContext[None], path: str, content: str) -> str:
 
 ```python
 from pydantic_ai import Agent, RunContext, SkipToolValidation
+from pydantic_ai.capabilities import Hooks
 
-agent = Agent('openai:gpt-4o')
+hooks = Hooks()
 
-@agent.before_tool_validate
-async def normalize_args(ctx: RunContext[None], tool_name: str, raw_args: dict) -> None:
-    if tool_name == 'search_products':
+@hooks.on.before_tool_validate
+async def normalize_args(ctx: RunContext[None], /, *, call, tool_def, args: dict) -> dict:
+    if tool_def.name == 'search_products':
         # Normalize the query before Pydantic validates it
-        if 'query' in raw_args and isinstance(raw_args['query'], str):
-            normalized = raw_args['query'].lower().strip()
-            raise SkipToolValidation(validated_args={**raw_args, 'query': normalized})
+        if 'query' in args and isinstance(args['query'], str):
+            normalized = args['query'].lower().strip()
+            raise SkipToolValidation(validated_args={**args, 'query': normalized})
+    return args  # must return args; returning None replaces validated args with None
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
 
 @agent.tool
 async def search_products(ctx: RunContext[None], query: str, max_results: int = 10) -> list[str]:
