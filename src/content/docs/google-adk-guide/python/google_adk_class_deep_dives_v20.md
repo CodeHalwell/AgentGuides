@@ -1001,12 +1001,12 @@ from google.adk.agents.context import Context
 from typing import Optional
 from google.genai import types
 
-def before_model(ctx: Context, request) -> Optional[types.GenerateContentConfig]:
+def before_model(callback_context: Context, llm_request) -> Optional[types.GenerateContentConfig]:
     """Log every LLM call with its invocation ID."""
-    print(f"[{ctx.invocation_id}] LLM call by {ctx.agent_name}")
-    print(f"  session: {ctx.session.id}, user: {ctx.user_id}")
+    print(f"[{callback_context.invocation_id}] LLM call by {callback_context.agent_name}")
+    print(f"  session: {callback_context.session.id}, user: {callback_context.user_id}")
     # Access the underlying InvocationContext:
-    inv_ctx = ctx._invocation_context
+    inv_ctx = callback_context._invocation_context
     print(f"  end_invocation: {inv_ctx.end_invocation}")
     print(f"  compaction_checked: {inv_ctx.token_compaction_checked}")
     return None   # no change to the request
@@ -1576,7 +1576,8 @@ async def search_memory(query: str, tool_context: ToolContext) -> str:
 
 ```python
 from google.adk.tools.tool_context import ToolContext
-from google.adk.auth.auth_schemes import OAuth2Auth, OAuthGrantType
+from google.adk.auth.auth_credential import OAuth2Auth
+from google.adk.auth.auth_schemes import OAuthGrantType
 
 async def call_github_api(repo: str, tool_context: ToolContext) -> str:
     """Fetch GitHub repo info with OAuth2 credential."""
@@ -1634,14 +1635,14 @@ from google.adk.agents.context import Context
 from typing import Optional
 from google.genai import types
 
-async def before_agent_cb(ctx: Context) -> Optional[types.Content]:
+async def before_agent_cb(callback_context: Context) -> Optional[types.Content]:
     """Enrich agent context before each agent call."""
     # Read current state
-    turns = ctx.state.get("turn_count", 0)
-    ctx.state["turn_count"] = turns + 1
+    turns = callback_context.state.get("turn_count", 0)
+    callback_context.state["turn_count"] = turns + 1
 
     # Load user preferences from persistent state
-    lang = ctx.state.get("user:preferred_language", "en")
+    lang = callback_context.state.get("user:preferred_language", "en")
 
     # Optionally skip this agent by returning content directly
     if turns >= 100:

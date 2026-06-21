@@ -145,7 +145,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 ## What's new in v2.3.0 (June 2026)
 
 - **v2.3.0 (June 2026) — minor feature release.** Install with `pip install google-adk`. New in this release:
-  - **`RunConfig.translation_config`** — real-time speech-to-speech translation via models like `gemini-3.5-live-translate-preview`; pair with `source_language` / `target_language`.
+  - **`RunConfig.translation_config`** — real-time speech-to-speech translation via models like `gemini-3.5-live-translate-preview`; set `target_language_code` (BCP-47, e.g. `"es"`) and optionally `echo_target_language`.
   - **`RunConfig.enable_affective_dialog`** — the model detects user emotions and adapts tone and style accordingly.
   - **`RunConfig.proactivity`** (`types.ProactivityConfig`) — configures whether the model responds proactively or ignores irrelevant live input.
   - **`RunConfig.session_resumption`** (`types.SessionResumptionConfig`) — transparent session resumption for live bidirectional sessions.
