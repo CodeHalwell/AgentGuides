@@ -147,8 +147,8 @@ Use a `ToolPredicate` callable when you need dynamic filtering logic:
 from google.adk.tools.base_toolset import ToolPredicate
 from google.adk.agents.readonly_context import ReadonlyContext
 
-def only_read_tools(tool_name: str, tool: object, ctx: ReadonlyContext) -> bool:
-    return "read" in tool_name.lower() or "list" in tool_name.lower()
+def only_read_tools(tool: object, readonly_context: ReadonlyContext = None) -> bool:
+    return "read" in tool.name.lower() or "list" in tool.name.lower()
 
 toolset = McpToolset(
     connection_params=StdioConnectionParams(
@@ -193,20 +193,24 @@ from google.adk.tools.mcp_tool.mcp_tool import ProgressCallbackFactory
 from google.adk.agents.context import Context
 
 def build_progress_cb(
-    tool_name: str, callback_ctx: Context, **kwargs
+    tool_name: str,
+    *,
+    callback_context: Context | None = None,
+    **kwargs,
 ):
     """ProgressCallbackFactory: called once per tool; returns a ProgressFnT."""
     async def on_progress(
         progress: float, total: Optional[float], message: Optional[str]
     ) -> None:
         pct = (progress / total * 100) if total else None
-        callback_ctx.state["last_progress"] = {
-            "tool": tool_name,
-            "progress": progress,
-            "total": total,
-            "pct": pct,
-            "message": message,
-        }
+        if callback_context:
+            callback_context.state["last_progress"] = {
+                "tool": tool_name,
+                "progress": progress,
+                "total": total,
+                "pct": pct,
+                "message": message,
+            }
     return on_progress
 
 toolset = McpToolset(
@@ -907,8 +911,7 @@ translator = LlmAgent(
 live_config = RunConfig(
     response_modalities=["AUDIO"],
     translation_config=types.TranslationConfig(
-        target_language="es",      # translate to Spanish
-        source_language="en",      # from English
+        target_language_code="es",   # translate to Spanish (BCP-47 code)
     ),
 )
 ```
@@ -1343,14 +1346,15 @@ app = App(
 ```python
 from google.adk.apps.base_events_summarizer import BaseEventsSummarizer
 from google.adk.events.event import Event
-from google.adk.sessions.session import Session
+from google.genai import types
+from typing import Optional
 
 class BulletSummarizer(BaseEventsSummarizer):
     """Summarizes events as simple bullet points without an LLM call."""
 
-    async def summarize_events(
-        self, session: Session, events: list[Event]
-    ) -> str:
+    async def maybe_summarize_events(
+        self, *, events: list[Event]
+    ) -> Optional[Event]:
         lines = []
         for ev in events:
             if ev.author == "user" and ev.content and ev.content.parts:
@@ -1361,7 +1365,16 @@ class BulletSummarizer(BaseEventsSummarizer):
                 text = " ".join(p.text or "" for p in ev.content.parts)
                 if text.strip():
                     lines.append(f"• Agent replied: {text.strip()[:80]}")
-        return "\n".join(lines) if lines else "No conversation."
+        if not lines:
+            return None
+        summary_text = "\n".join(lines)
+        return Event(
+            author="summarizer",
+            content=types.Content(
+                role="model",
+                parts=[types.Part(text=summary_text)],
+            ),
+        )
 
 from google.adk.apps._configs import EventsCompactionConfig
 
@@ -1391,7 +1404,7 @@ app = App(
 )
 
 # DatabaseSessionService uses SQLAlchemy; supports SQLite, PostgreSQL, MySQL, Spanner.
-session_svc = DatabaseSessionService(db_url="sqlite:///sessions.db")
+session_svc = DatabaseSessionService(db_url="sqlite+aiosqlite:///sessions.db")
 runner = Runner(app=app, session_service=session_svc)
 ```
 
@@ -1520,12 +1533,19 @@ async def load_pinned_report(version: int, tool_context: ToolContext) -> str:
 
 ```python
 from google.adk.tools.tool_context import ToolContext
-from google.adk.memory.memory_entry import MemoryEntry
+from google.adk.memory.base_memory_service import MemoryEntry
+from google.genai import types
 
 async def remember_fact(fact: str, tool_context: ToolContext) -> str:
     """Add a fact to long-term memory."""
     await tool_context.add_memory(
-        memories=[MemoryEntry(content=fact, source="tool")]
+        memories=[MemoryEntry(
+            content=types.Content(
+                role="user",
+                parts=[types.Part(text=fact)],
+            ),
+            author="tool",
+        )]
     )
     return f"Remembered: {fact}"
 
@@ -1534,7 +1554,11 @@ async def search_memory(query: str, tool_context: ToolContext) -> str:
     result = await tool_context.search_memory(query=query)
     if not result.memories:
         return "Nothing found."
-    return "\n".join(m.content for m in result.memories)
+    texts = []
+    for m in result.memories:
+        if m.content and m.content.parts:
+            texts.append(" ".join(p.text or "" for p in m.content.parts))
+    return "\n".join(texts) if texts else "Nothing found."
 ```
 
 ### Auth: requesting and reading credentials
