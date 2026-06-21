@@ -224,7 +224,7 @@ toolset = McpToolset(
 ### Example 5 — OAuth2 auth for a protected MCP server
 
 ```python
-from google.adk.auth.auth_schemes import OAuthGrantType, OpenIdConnectWithConfig
+from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
 
 toolset = McpToolset(
@@ -232,7 +232,7 @@ toolset = McpToolset(
     auth_scheme=OpenIdConnectWithConfig(
         authorization_endpoint="https://auth.example.com/authorize",
         token_endpoint="https://auth.example.com/token",
-        grant_type=OAuthGrantType.CLIENT_CREDENTIALS,
+        grant_types_supported=["client_credentials"],
         scopes=["mcp:tools"],
     ),
     auth_credential=AuthCredential(
@@ -368,8 +368,8 @@ result = CodeExecutionResult(
 |---|---|---|---|
 | Runtime | Gemini model sandbox | Spawned subprocess | Vertex AI managed |
 | Model requirement | Gemini 2.0+ | Any | Any |
-| `stateful` | ✓ (model maintains kernel) | ✗ (always false) | ✓ |
-| `optimize_data_file` | ✓ | ✗ | ✓ |
+| `stateful` | ✗ (field inherited, ignored) | ✗ (frozen false) | ✓ |
+| `optimize_data_file` | ✗ (field inherited, ignored) | ✗ | ✓ |
 | Output files | ✓ (model returns) | ✓ | ✓ |
 | Timeout control | Model-side | `timeout_seconds` | `timeout_seconds` |
 | GCP billing | Included in Gemini call | None | Separate |
