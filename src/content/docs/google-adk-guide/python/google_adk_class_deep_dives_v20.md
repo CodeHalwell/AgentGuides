@@ -572,13 +572,31 @@ from google.adk.planners import PlanReActPlanner
 from google.adk.tools import FunctionTool, google_search
 from google.adk.runners import InMemoryRunner
 
+import ast
+import operator as _op
+
+_SAFE_OPS = {
+    ast.Add: _op.add, ast.Sub: _op.sub,
+    ast.Mult: _op.mul, ast.Div: _op.truediv,
+    ast.USub: _op.neg,
+}
+
+def _eval_node(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_eval_node(node.operand))
+    raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
 def calculate(expression: str) -> float:
-    """Evaluate a mathematical expression.
+    """Evaluate an arithmetic expression (+, -, *, /).
 
     Args:
-      expression: A safe Python math expression like '1.2 + 3.4 * 2'.
+      expression: A simple arithmetic expression e.g. '1.2 + 3.4 * 2'.
     """
-    return eval(expression, {"__builtins__": {}}, {})
+    return _eval_node(ast.parse(expression, mode='eval').body)
 
 agent = LlmAgent(
     name="analyst",
@@ -1193,9 +1211,9 @@ async def stream_with_events():
         new_message=msg,
         run_config=config,
     ):
-        if event.partial:
+        if event.partial and event.content and event.content.parts:
             # Partial SSE chunk — could be text or function call arguments
-            for part in (event.content.parts or []):
+            for part in event.content.parts:
                 if part.text and not part.function_call:
                     print(part.text, end="", flush=True)
         else:
@@ -1419,18 +1437,29 @@ ctx.invocation_id     # str — unique to this run_async() call
 ctx.agent_name        # str — currently running agent's name
 ctx.user_id           # str — from session
 ctx.session           # Session — current session
-ctx.state             # MappingProxyType — current session state (read-only view)
+# NOTE: ctx.state below is READ-ONLY when accessed from ReadonlyContext
+# (returned as MappingProxyType). In the full Context subclass (callbacks
+# and tools), state is overridden to return a mutable State object that
+# tracks deltas — see "State mutations" below.
+ctx.state             # MappingProxyType (ReadonlyContext) — immutable snapshot
 ctx.user_content      # types.Content | None — message that started this invocation
 ctx.run_config        # RunConfig | None — per-invocation config
 ctx.get_credential(key)  # AuthCredential | None
 ```
 
-### State mutations (write)
+### State mutations (write — `Context` subclass only)
+
+`Context` overrides the `state` property to return a `State` object (from
+`google.adk.sessions.state`). `State.__setitem__` writes to an in-memory
+`state_delta` dict that is flushed to the session when the event is appended.
+Direct `__setitem__` on a bare `ReadonlyContext.state` (a `MappingProxyType`)
+raises `TypeError` — mutations are only valid inside callbacks and tools that
+receive a full `Context`.
 
 ```python
-# In a callback — ctx is a Context instance:
+# In a callback — ctx is a Context instance (not ReadonlyContext):
 ctx.state["shopping_cart"] = ["item1", "item2"]   # writes to state delta
-ctx.state["session_count"] += 1
+ctx.state["session_count"] = ctx.state.get("session_count", 0) + 1
 
 # In a tool — tool_context is also a Context:
 from google.adk.tools.tool_context import ToolContext
