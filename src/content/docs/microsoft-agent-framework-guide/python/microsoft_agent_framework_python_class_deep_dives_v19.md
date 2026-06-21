@@ -205,9 +205,9 @@ workflow = ConcurrentBuilder(
 async def main() -> None:
     async for event in workflow.run("Future of quantum computing", stream=True):
         if event.type == "output":
-            print(f"[OUTPUT from {event.source}]", event.data)
+            print(f"[OUTPUT from {event.executor_id}]", event.data)
         elif event.type == "intermediate":
-            print(f"[INTERMEDIATE from {event.source}]", event.data)
+            print(f"[INTERMEDIATE from {event.executor_id}]", event.data)
 
 asyncio.run(main())
 ```
@@ -909,7 +909,7 @@ async def main() -> None:
 
     # External switch to synthesise
     from agent_framework._harness._mode import set_agent_mode
-    set_agent_mode(session, "synthesise", source_id="agent_mode")
+    set_agent_mode(session, "synthesise", source_id="agent_mode", available_modes=MODES.keys())
 
     # Next turn: agent is now in "synthesise" mode
     report = await agent.run("Now write the final report.", session=session)
