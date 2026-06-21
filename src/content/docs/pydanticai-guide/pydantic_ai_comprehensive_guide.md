@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.104.0 (May 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 1.107.0 (June 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.104.0 | Updated: May 29, 2026
+Latest: 1.107.0 | Updated: June 21, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.104.0 (May 2026)  
+**Version:** 1.107.0 (June 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -2155,10 +2155,114 @@ Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed uncha
 
 ---
 
+## Pydantic AI 1.107.0 — What's New
+
+### `RunContext` Additions
+
+`RunContext` now exposes several new fields for advanced capability and tool-search workflows:
+
+- **`capabilities`** — `dict[str, AbstractCapability]`: all registered capabilities for the current run (including deferred ones).
+- **`loaded_capability_ids`** — `set[str]`: IDs of deferred capabilities the model has explicitly loaded via the `load_capability` tool.
+- **`discovered_tool_names`** — `set[str]`: tool names revealed via tool-search return parts; controls which deferred tools are visible this step.
+- **`model_settings`** — resolved merged model settings (populated before each model request, `None` in tool hooks).
+- **`metadata`** — arbitrary metadata passed via `Agent.run(..., metadata=...)`.
+- **`tool_call_metadata`** — populated from `DeferredToolResults.metadata` for the current tool call.
+
+```python
+from pydantic_ai import Agent, RunContext
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool
+async def introspect(ctx: RunContext[None]) -> str:
+    return (
+        f'run_id={ctx.run_id}, '
+        f'conversation_id={ctx.conversation_id}, '
+        f'step={ctx.run_step}, '
+        f'retry={ctx.retry}/{ctx.max_retries}, '
+        f'last_attempt={ctx.last_attempt}'
+    )
+```
+
+### `AgentSpec` YAML/JSON Agent Configuration
+
+`AgentSpec` enables loading agent configuration from YAML or JSON files, enabling configuration-driven deployments:
+
+```python
+from pydantic_ai import AgentSpec
+
+# Load from file
+spec = AgentSpec.from_file('agents/support.yaml')
+agent = spec.to_agent()
+
+# Or parse inline YAML
+spec = AgentSpec.from_text("""
+model: openai:gpt-4o
+name: support-agent
+instructions: You are a helpful support agent. Respond in {{language}}.
+model_settings:
+  temperature: 0.3
+retries: 3
+""")
+agent = spec.to_agent()
+```
+
+### `TemplateStr` — Handlebars System Prompts
+
+`TemplateStr` renders Handlebars templates against `RunContext.deps` at runtime:
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, TemplateStr
+
+@dataclass
+class Deps:
+    username: str
+    language: str
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=Deps,
+    instructions=TemplateStr('Assist {{username}} in {{language}}.', deps_type=Deps),
+)
+```
+
+### `DeferredToolRequests` / `CallDeferred` — Async Human-in-the-Loop
+
+Tools can now raise `CallDeferred` to pause execution and yield pending calls to the caller for external processing:
+
+```python
+from pydantic_ai import Agent, DeferredToolRequests, CallDeferred
+
+agent: Agent[None, DeferredToolRequests | str] = Agent(
+    'openai:gpt-4o',
+    output_type=[DeferredToolRequests, str],  # type: ignore[arg-type]
+)
+
+@agent.tool_plain
+def approve_payment(amount: float, recipient: str) -> str:
+    raise CallDeferred(metadata={'amount': amount, 'recipient': recipient})
+```
+
+### Hook Short-Circuit Exceptions
+
+Three new exceptions enable short-circuiting the normal execution pipeline from within hooks:
+
+- **`SkipModelRequest(response)`** — skip the model call and use a synthetic `ModelResponse`.
+- **`SkipToolExecution(result)`** — skip tool function execution and return `result` directly.
+- **`SkipToolValidation(validated_args)`** — skip Pydantic arg validation and use `validated_args` directly.
+
+### `ConcurrencyLimiter` Enhancements
+
+`ConcurrencyLimiter` now tracks `waiting_count`, `running_count`, and `available_count` as live properties, and the `acquire()` method creates OTel spans while waiting for a slot.
+
+---
+
 ## Revision History
 
 | Version | Date | Changes | Reviewer |
 |---------|------|----------|----------|
+| 1.107.0 | June 21, 2026 | Version bumped 1.104.0 → 1.107.0 (three minor releases: 1.105.0, 1.106.0, 1.107.0). New features documented: `RunContext` additions (capabilities, loaded_capability_ids, discovered_tool_names, model_settings, metadata, tool_call_metadata); `AgentSpec` YAML/JSON agent configuration; `TemplateStr` Handlebars system prompts; `DeferredToolRequests`/`CallDeferred` async human-in-the-loop; `SkipModelRequest`/`SkipToolExecution`/`SkipToolValidation` hook short-circuits; `ConcurrencyLimiter` observability enhancements. New Vol. 22 class deep dives added covering 10 class groups verified against installed pydantic-ai 1.107.0. All top-level exports confirmed; no DeprecationWarnings. | Claude routine |
 | 1.104.0 | May 29, 2026 | Version bumped 1.102.0 → 1.104.0 (two minor releases: 1.103.0, 1.104.0); `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.104.0` (`.routine-envs/check-0529-pydantic`); all PASS. 178 top-level exports confirmed. | Claude routine |
 | 1.102.0 | May 23, 2026 | Version bumped 1.101.0 → 1.102.0; `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.102.0` (`.routine-envs/check-0523-pydantic`); all PASS. 179 top-level exports confirmed; API surface unchanged from 1.101.0. | Claude routine |
 | 1.101.0 | May 22, 2026 | Version bumped 1.99.0 → 1.101.0 (two minor releases: 1.100.0, 1.101.0); `Latest:` header and `**Version:**` prose updated; `Installed` comments in snippets updated; revision history entry added. All core guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `limit_model_concurrency`, `ConcurrencyLimiter`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.101.0` (`.routine-envs/check-0522-pydantic`); all PASS. | Claude routine |
