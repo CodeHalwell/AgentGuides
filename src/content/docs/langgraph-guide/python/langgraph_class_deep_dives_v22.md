@@ -130,7 +130,7 @@ graph = builder.compile()
 # Use with stream_events v3
 # from langgraph.stream.transformers import ValuesTransformer
 # run = graph.stream_events(input={"messages":[]}, version="v3",
-#                           factories=[lambda scope: TokenCountTransformer(scope)])
+#                           transformers=[lambda scope: TokenCountTransformer(scope)])
 # for count in run.token_counts:
 #     print(count)
 ```
@@ -173,7 +173,7 @@ class ModerationTransformer(StreamTransformer):
 
 # Usage:
 # async with graph.astream_events(input, version="v3",
-#                factories=[lambda s: ModerationTransformer(s)]) as run:
+#                transformers=[lambda s: ModerationTransformer(s)]) as run:
 #     async for flag in run.moderation_flags:
 #         print("flagged:", flag)
 ```
@@ -290,7 +290,7 @@ g = graph.compile()
 
 # Consume timings projection
 # with g.stream_events({"value": 0}, version="v3",
-#                      factories=[lambda s: LatencyTransformer(s)]) as run:
+#                      transformers=[LatencyTransformer]) as run:
 #     for timing in run.timings:
 #         print(f"{timing['node']} took {timing['ms']}ms")
 ```
@@ -576,6 +576,7 @@ from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.config import get_stream_writer
+from langgraph.stream.transformers import CustomTransformer
 
 class State(TypedDict):
     messages: Annotated[list, operator.add]
@@ -594,10 +595,12 @@ graph = (
     .compile()
 )
 
+# CustomTransformer is not in the default v3 set; register it via transformers=
+# (stream_mode= is rejected by v3 — modes are derived from registered transformers)
 with graph.stream_events(
     {"messages": []},
     version="v3",
-    stream_mode=["values", "custom"],
+    transformers=[CustomTransformer],
 ) as run:
     for name, item in run.interleave("values", "custom"):
         print(f"[{name}]", item)
@@ -661,8 +664,8 @@ class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
     path: tuple[str, ...]           # namespace path of the subgraph
     graph_name: str | None          # optional display name
     trigger_call_id: str | None     # which Send/task triggered this subgraph
-    status: SubgraphStatus          # "started" | "error" | "complete"
-    error: str | None               # error message if status == "error"
+    status: SubgraphStatus          # "started" | "completed" | "failed" | "interrupted" | "drained"
+    error: str | None               # error message if status == "failed"
 
 class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
     # Same attributes; async pump delegates to parent _apump_fn
@@ -715,8 +718,10 @@ outer_graph = outer_builder.compile()
 
 ```python
 # SubgraphRunStream.status transitions:
-#   "started"  ->  "complete"  (normal exit)
-#   "started"  ->  "error"     (exception in the subgraph)
+#   "started"  ->  "completed"   (normal exit)
+#   "started"  ->  "failed"      (exception in the subgraph)
+#   "started"  ->  "interrupted" (graph interrupted mid-subgraph)
+#   "started"  ->  "drained"     (cooperative drain completed)
 #
 # Status is updated in place by SubgraphTransformer as lifecycle events
 # arrive in the main event log. You can inspect it after draining:
@@ -788,6 +793,7 @@ import operator
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langgraph.stream.transformers import UpdatesTransformer
 
 class State(TypedDict):
     items: Annotated[list, operator.add]
@@ -808,19 +814,18 @@ graph = (
     .compile()
 )
 
-with graph.stream_events(
-    {"items": []},
-    version="v3",
-    stream_mode=["values", "updates"],
-) as run:
+# ValuesTransformer is built-in; run.values works without extra transformers=
+with graph.stream_events({"items": []}, version="v3") as run:
     print("=== values (full state after each super-step) ===")
     for snapshot in run.values:
         print(snapshot)
 
+# UpdatesTransformer is NOT built-in — register it explicitly
+# (stream_mode= is rejected under version="v3"; use transformers= instead)
 with graph.stream_events(
     {"items": []},
     version="v3",
-    stream_mode=["updates"],
+    transformers=[UpdatesTransformer],
 ) as run:
     print("=== updates (per-node delta each step) ===")
     for delta in run.updates:
@@ -854,10 +859,12 @@ graph = (
     .compile()
 )
 
+from langgraph.stream.transformers import CustomTransformer
+
 with graph.stream_events(
     {"value": 0},
     version="v3",
-    stream_mode=["custom"],
+    transformers=[CustomTransformer],   # not in the default v3 set
 ) as run:
     for event in run.custom:
         print("progress:", event["progress"], "—", event["msg"])
@@ -871,7 +878,7 @@ with graph.stream_events(
 with graph.stream_events(
     {"value": 0},
     version="v3",
-    stream_mode=["values", "custom"],
+    transformers=[CustomTransformer],   # adds run.custom alongside the built-in run.values
 ) as run:
     for channel, item in run.interleave("values", "custom"):
         if channel == "custom":
