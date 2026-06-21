@@ -263,8 +263,6 @@ the model handles the sandbox.
 from google.adk.code_executors import BuiltInCodeExecutor
 
 executor = BuiltInCodeExecutor(
-    optimize_data_file=False,       # extract CSV files and attach to executor
-    stateful=False,                 # maintain a persistent kernel between calls
     error_retry_attempts=2,         # retry on consecutive code errors
     code_block_delimiters=[         # delimiters to identify code blocks
         ('```tool_code\n', '\n```'),
@@ -274,6 +272,12 @@ executor = BuiltInCodeExecutor(
     timeout_seconds=None,           # no timeout (model enforces its own)
 )
 ```
+
+> **Note:** `optimize_data_file` and `stateful` are inherited from `BaseCodeExecutor`
+> but are **ignored** by `BuiltInCodeExecutor`. Its `process_llm_request` only appends
+> `types.Tool(code_execution=types.ToolCodeExecution())` and returns immediately —
+> CSV pre-processing and persistent kernel sessions require a non-built-in executor
+> such as `VertexAiCodeExecutor`.
 
 ### Attaching to an `LlmAgent`
 
@@ -289,7 +293,6 @@ data_analyst = LlmAgent(
         "it. Show your work. Use pandas and matplotlib."
     ),
     code_executor=BuiltInCodeExecutor(
-        optimize_data_file=True,     # parses CSVs from user messages for the model
         error_retry_attempts=3,      # retry up to 3 times on code errors
     ),
 )
@@ -297,9 +300,13 @@ data_analyst = LlmAgent(
 
 ### Example — stateful session for iterative analysis
 
+For persistent kernel sessions (variables survive across turns) use
+`VertexAiCodeExecutor`, which honours `stateful=True`. `BuiltInCodeExecutor`
+ignores this flag — each Gemini built-in execution is independent.
+
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.code_executors import BuiltInCodeExecutor
+from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
 from google.adk.runners import InMemoryRunner
 import asyncio
 
@@ -307,7 +314,7 @@ agent = LlmAgent(
     name="notebook",
     model="gemini-2.5-pro",
     instruction="Act as a Python REPL. Maintain state between messages.",
-    code_executor=BuiltInCodeExecutor(stateful=True),
+    code_executor=VertexAiCodeExecutor(stateful=True),
 )
 
 async def run_notebook():
@@ -889,7 +896,9 @@ from google.genai import types
 config = RunConfig(
     context_window_compression=types.ContextWindowCompressionConfig(
         trigger_tokens=100_000,       # compress when prompt exceeds 100K tokens
-        target_tokens=50_000,         # aim to reduce to 50K
+        sliding_window=types.SlidingWindow(
+            target_tokens=50_000,     # aim to reduce to 50K (must be < trigger_tokens)
+        ),
     ),
 )
 ```
