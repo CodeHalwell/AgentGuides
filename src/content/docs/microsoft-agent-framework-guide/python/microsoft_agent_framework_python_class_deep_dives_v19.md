@@ -150,7 +150,6 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import AgentResponse, Message
 from agent_framework.openai import OpenAIChatClient
 from agent_framework._workflows._agent_executor import AgentExecutorResponse
 from agent_framework_orchestrations import ConcurrentBuilder
@@ -184,7 +183,7 @@ asyncio.run(main())
 **Example 3 — Per-participant intermediate streaming + checkpoint**
 
 ```python
-import asyncio, json
+import asyncio
 from agent_framework.openai import OpenAIChatClient
 from agent_framework._workflows._checkpoint import FileCheckpointStorage
 from agent_framework_orchestrations import ConcurrentBuilder
@@ -465,7 +464,6 @@ asyncio.run(main())
 import asyncio
 from agent_framework.openai import OpenAIChatClient
 from agent_framework._workflows._checkpoint import FileCheckpointStorage
-from agent_framework._workflows._events import WorkflowEvent
 from agent_framework_orchestrations import HandoffBuilder
 
 storage = FileCheckpointStorage("./handoff_cp")
@@ -530,7 +528,6 @@ class HandoffAgentUserRequest:
 
 ```python
 import asyncio
-from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import HandoffBuilder
 from agent_framework_orchestrations._handoff import HandoffAgentUserRequest
@@ -563,7 +560,6 @@ asyncio.run(interactive_loop("Analyse the S&P 500 trend and advise on portfolio 
 
 ```python
 import asyncio
-from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import HandoffBuilder
 from agent_framework_orchestrations._handoff import HandoffAgentUserRequest
@@ -643,7 +639,7 @@ class OrchestrationState:
 **Example 1 — Inspect checkpoint state after a run**
 
 ```python
-import asyncio, json
+import asyncio
 from agent_framework.openai import OpenAIChatClient
 from agent_framework._workflows._checkpoint import FileCheckpointStorage
 from agent_framework_orchestrations import HandoffBuilder
@@ -677,7 +673,6 @@ asyncio.run(main())
 **Example 2 — Build a custom checkpoint for resumption**
 
 ```python
-from agent_framework._types import Message
 from agent_framework_orchestrations._orchestration_state import OrchestrationState
 
 # Reconstruct an orchestration state from stored data
@@ -811,7 +806,6 @@ The `instructions` string can contain two placeholders:
 
 ```python
 import asyncio
-from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework._harness._mode import AgentModeProvider
 
@@ -1500,7 +1494,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import MagenticBuilder
-from agent_framework_orchestrations._magentic import StandardMagenticManager, MagenticResetSignal
+from agent_framework_orchestrations._magentic import StandardMagenticManager
 
 client = OpenAIChatClient("gpt-4o")
 mgr_agent = client.as_agent(name="mgr", instructions="Orchestrate the task.")
