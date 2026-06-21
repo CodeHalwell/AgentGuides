@@ -696,16 +696,15 @@ workflow = (
 )
 
 async def main() -> None:
-    result = await workflow.run("Discuss distributed systems trade-offs")
+    await workflow.run("Discuss distributed systems trade-offs")
 
-    # Load and inspect the saved checkpoint
-    checkpoints = await storage.list_checkpoints(workflow.id)
-    for cp_id in checkpoints:
-        raw = await storage.load(workflow.id, cp_id)
-        state = OrchestrationState.from_dict(raw)
-        print(f"Round index: {state.round_index}")
-        print(f"Messages in history: {len(state.conversation)}")
-        print(f"Metadata keys: {list(state.metadata.keys())}")
+    # List saved checkpoints — list_checkpoints takes a keyword-only workflow_name
+    checkpoints = await storage.list_checkpoints(workflow_name=workflow.name)
+    for cp in checkpoints:
+        # cp is a WorkflowCheckpoint dataclass — state is a dict[str, Any]
+        print(f"Checkpoint: {cp.checkpoint_id} @ {cp.timestamp}")
+        print(f"Message threads: {list(cp.messages.keys())}")
+        print(f"State keys: {list(cp.state.keys())}")
 
 asyncio.run(main())
 ```
@@ -945,8 +944,9 @@ async def ui_driver() -> None:
     print(f"Switched to: {get_agent_mode(session)}")  # "execute"
 
     # Execute phase: agent receives a notification message that mode changed
+    # agent.run() returns AgentResponse directly (not WorkflowRunResult)
     result = await agent.run("Proceed with implementation.", session=session)
-    print(result.get_outputs()[-1].messages[-1].contents[0])
+    print(result.messages[-1].contents[0])
 
 asyncio.run(ui_driver())
 ```
@@ -1359,8 +1359,9 @@ async def main() -> None:
     set_agent_mode(session, "execute")
 
     # Execution phase: agent works autonomously, marks todos done
+    # agent.run() returns AgentResponse directly (not WorkflowRunResult)
     result = await agent.run("Begin the migration.", session=session)
-    print(result.get_outputs()[-1].messages[-1].contents[0])
+    print(result.messages[-1].contents[0])
 
 asyncio.run(main())
 ```
