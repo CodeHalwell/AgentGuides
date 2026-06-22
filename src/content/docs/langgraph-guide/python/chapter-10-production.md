@@ -171,7 +171,7 @@ def expensive_embedding_node(state: State) -> dict:
 builder.add_node(
     "embed",
     expensive_embedding_node,
-    cache=CachePolicy(ttl=3600),   # cache hits valid for 1 hour
+    cache_policy=CachePolicy(ttl=3600),   # cache hits valid for 1 hour
 )
 
 # Wire up the cache store at compile time
@@ -193,7 +193,7 @@ def query_cache_key(state: State) -> str:
 builder.add_node(
     "llm_lookup",
     llm_node,
-    cache=CachePolicy(
+    cache_policy=CachePolicy(
         key_func=query_cache_key,
         ttl=600,   # 10 minutes
     ),
@@ -204,31 +204,29 @@ builder.add_node(
 
 ## `Durability` — Checkpoint Write Timing
 
-The `Durability` type controls *when* a checkpoint is persisted to the saver relative to the next step. Pass it as `durability` when compiling the graph:
+The `Durability` type controls *when* a checkpoint is persisted to the saver relative to the next step. Pass it as `durability` on `invoke()`, `stream()`, `ainvoke()`, or `astream()` — **not** on `compile()`:
 
 ```python
-from langgraph.types import Durability
+from langgraph.checkpoint.memory import InMemorySaver
 
-# "sync" (default): checkpoint is written and confirmed before the next step starts.
-# Safest but adds latency equal to one checkpoint write per step.
-graph_sync = builder.compile(
-    checkpointer=checkpointer,
-    durability="sync",
-)
+graph = builder.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "my-thread"}}
 
-# "async": checkpoint is written in the background while the next step executes.
-# Faster throughput; tiny window where a crash could lose the last checkpoint.
-graph_async = builder.compile(
-    checkpointer=checkpointer,
-    durability="async",
-)
+# "sync" (default): checkpoint confirmed before the next step starts.
+# Safest; adds one checkpoint-write round-trip of latency per step.
+result = graph.invoke(input, cfg, durability="sync")
 
-# "exit": checkpoint is written only when the graph exits (or raises).
+# "async": checkpoint written in the background while the next step executes.
+# Higher throughput; tiny window where a crash could lose the last checkpoint.
+result = graph.invoke(input, cfg, durability="async")
+
+# "exit": checkpoint written only when the graph exits (or raises).
 # Fastest; only safe when you don't need per-step recovery.
-graph_exit = builder.compile(
-    checkpointer=checkpointer,
-    durability="exit",
-)
+result = graph.invoke(input, cfg, durability="exit")
+
+# Works identically with stream / ainvoke / astream:
+for event in graph.stream(input, cfg, durability="async", stream_mode="updates"):
+    print(event)
 ```
 
 Choose `"sync"` for human-in-the-loop flows (required for `interrupt()`), `"async"` for autonomous pipelines where max throughput matters, and `"exit"` for batch jobs that simply need a final snapshot.
