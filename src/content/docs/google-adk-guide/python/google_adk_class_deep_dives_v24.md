@@ -143,6 +143,7 @@ Default is `"default"` — includes the full session history up to the context w
 ### Model callbacks
 
 ```python
+from datetime import datetime, timezone
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.agents.callback_context import CallbackContext
@@ -152,8 +153,9 @@ def inject_system_info(
 ) -> LlmRequest | None:
     # Mutate the request before it reaches the model
     if llm_request.config:
+        current_time = datetime.now(timezone.utc).isoformat()
         llm_request.config.system_instruction = (
-            f"Server time: {get_utc_time()}\n"
+            f"Server time: {current_time}\n"
             + (llm_request.config.system_instruction or "")
         )
     return None   # None = proceed with mutated request; return Content to skip model call
@@ -369,6 +371,8 @@ session = await svc.create_session(
 )
 
 # Load with event limit (combine with RunConfig.get_session_config)
+from google.adk.sessions.base_session_service import GetSessionConfig
+
 session = await svc.get_session(
     app_name="my-app", user_id="u1", session_id="s1",
     config=GetSessionConfig(num_recent_events=20),
@@ -655,7 +659,7 @@ class EventActions(BaseModel):
     end_of_agent: bool | None = None         # internal; set by ADK workflow
     agent_state: dict[str, Any] | None = None
     rewind_before_invocation_id: str | None = None
-    route: str | int | bool | list[...] | None = None   # workflow edge routing
+    route: str | int | bool | list[Any] | None = None   # workflow edge routing
     render_ui_widgets: list[UiWidget] | None = None
     set_model_response: Any | None = None
 ```
@@ -682,11 +686,14 @@ def escalate_issue(reason: str, tool_context) -> str:
 ### Rendering UI widgets
 
 ```python
+import json
+import urllib.parse
 from google.adk.events.ui_widget import UiWidget
 
 def show_chart(data: dict, tool_context) -> str:
+    encoded_data = urllib.parse.quote(json.dumps(data))
     widget = UiWidget(
-        iframe_url="https://charts.example.com/embed?data=" + encode(data),
+        iframe_url="https://charts.example.com/embed?data=" + encoded_data,
         title="Analytics Chart",
     )
     if tool_context.actions.render_ui_widgets is None:
