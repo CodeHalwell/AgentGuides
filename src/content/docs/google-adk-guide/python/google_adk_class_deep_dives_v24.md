@@ -781,18 +781,25 @@ def log_before_model(callback_context: CallbackContext, llm_request):
 
 ```python
 from google.adk.plugins.base_plugin import BasePlugin
-from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.agents.invocation_context import InvocationContext
 
 class MetricsPlugin(BasePlugin):
-    async def on_run_start(
+    async def before_run_callback(
         self,
         *,
-        invocation_context,
-        readonly_context: ReadonlyContext,
+        invocation_context: InvocationContext,
     ) -> None:
-        # read-only — safe to inspect but not mutate
-        print(f"Invocation {readonly_context.invocation_id} started for {readonly_context.user_id}")
+        # invocation_context provides read-only access to session, user, config
+        print(f"Invocation {invocation_context.invocation_id} started for {invocation_context.session.user_id}")
 ```
+
+The three dispatched `BasePlugin` lifecycle hooks and their signatures (source-verified):
+
+| Hook | Signature | When called |
+|---|---|---|
+| `before_run_callback(self, *, invocation_context)` | `InvocationContext` | Before the agent processes the turn |
+| `on_event_callback(self, *, invocation_context, event)` | `InvocationContext`, `Event` | After each event is emitted |
+| `after_run_callback(self, *, invocation_context)` | `InvocationContext` | After the agent finishes the turn |
 
 ---
 

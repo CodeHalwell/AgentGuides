@@ -1414,7 +1414,7 @@ Spin up `McpToolset` at runtime (e.g. per-tenant filesystem); pass `tool_name_pr
 
 ## Gotchas
 
-- Don't set `output_schema=` on an `LlmAgent` that also has `tools=` — setting `output_schema` disables tool use entirely.
+- In ADK 2.3.0 `output_schema=` and `tools=` can be used together on an `LlmAgent` — tools run during the thought loop and the schema is enforced only on the final reply.
 - `tool_context` is injected by parameter name (`tool_context`) **or** type (`ToolContext`). Any other parameter of type `ToolContext` would also be treated as the context slot.
 - `FunctionTool` treats the first sentence of the docstring as the tool description. Keep it focused — the model obeys it.
 - Built-in Gemini tools (`google_search`, `url_context`, `google_maps_grounding`) cannot coexist freely. ADK tries to wrap them, but if you hit `400 INVALID_ARGUMENT` try `bypass_multi_tools_limit=True` where available.
