@@ -830,22 +830,23 @@ Use `agent.iter()` to get an `AgentRun` that supports mid-run injection:
 ```python
 import asyncio
 from pydantic_ai import Agent
+from pydantic_graph import End
 
 agent = Agent('openai:gpt-4o')
 
 async def main():
     async with agent.iter('Start processing') as agent_run:
-        async for node in agent_run:
-            pass  # let the agent complete its first response
-
-        # Inject an additional question after the model has responded
-        agent_run.enqueue(
-            'What are the risks of this approach?',
-            priority='asap',
-        )
-        # The agent continues with the injected message
-        async for node in agent_run:
-            pass
+        node = await agent_run.__anext__()
+        injected = False
+        while not isinstance(node, End):
+            # Enqueue while the run is still live — before passing the next node
+            if not injected:
+                agent_run.enqueue(
+                    'What are the risks of this approach?',
+                    priority='asap',
+                )
+                injected = True
+            node = await agent_run.next(node)
 
     print(agent_run.result.output)
 
@@ -1351,7 +1352,7 @@ class EndMarker(Generic[OutputT]):
     def value(self) -> OutputT: ...
 ```
 
-`EndMarker` signals that the graph has completed with a final value. The `GraphRun` produces an `EndMarker` as its last item, carrying the agent's final output. It wraps the value in a property to work around a mypy bug with generic dataclasses.
+`EndMarker` is an **internal** signal that the graph has completed. The `GraphRun` uses it internally but converts it to `pydantic_graph.End(data=...)` before yielding from `__aiter__`. Similarly, `AgentRun.__anext__` converts `EndMarker` into `End(FinalResult(...))`. In practice you check `isinstance(node, End)` rather than `isinstance(node, EndMarker)` in iteration loops.
 
 ### Example 1 — Observing Graph Task Flow
 
@@ -1376,13 +1377,12 @@ graph = Graph(nodes=[CollectNode])
 async def main():
     state = State(items=[])
     async with graph.iter(CollectNode(), state=state) as run:
-        # Each iteration yields a NodeStep or the final End
-        async for step in run:
-            from pydantic_ai.run import EndMarker
-            if isinstance(step.node, EndMarker):
-                print(f'Graph finished with: {step.node.value}')
+        # Each iteration yields a BaseNode subclass or End directly
+        async for node in run:
+            if isinstance(node, End):
+                print(f'Graph finished with: {node.data}')
             else:
-                print(f'Executing node: {type(step.node).__name__}')
+                print(f'Executing node: {type(node).__name__}')
 
 asyncio.run(main())
 ```
@@ -1426,30 +1426,33 @@ class TransformB(BaseNode[PipelineState]):
 # GraphTaskRequest is created for each branch independently
 ```
 
-### Example 3 — Inspecting `EndMarker` Value in `AgentRun`
+### Example 3 — Detecting `End` in `AgentRun`
+
+`AgentRun.__anext__` converts the internal graph `EndMarker` into a `pydantic_graph.End`
+wrapping a `FinalResult` before yielding it, so the final item has `.data.output`, not `.value`.
 
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.run import EndMarker
+from pydantic_graph import End
 
 agent = Agent('openai:gpt-4o')
 
 async def main():
     async with agent.iter('Explain dependency injection in one sentence') as agent_run:
         async for node in agent_run:
-            # The last node in the iteration is an EndMarker
-            if hasattr(node, 'value'):
-                print(f'Final output captured from EndMarker: {node.value[:60]}...')
-    # agent_run.result contains the final AgentRunResult
+            if isinstance(node, End):
+                print(f'Final output: {node.data.output[:60]}...')
+    # agent_run.result contains the same data after the loop
     print(f'Full result: {agent_run.result.output}')
 
 asyncio.run(main())
 ```
 
-### Example 4 — Custom Graph Persistence Using EndMarker
+### Example 4 — Custom Graph Persistence with All Required Methods
 
-When implementing `BaseStatePersistence`, you intercept `EndMarker` to record the final state:
+When implementing `BaseStatePersistence`, all six abstract methods must be provided.
+`snapshot_end` receives the `End` value and records the final state:
 
 ```python
 from dataclasses import dataclass, field
@@ -1468,8 +1471,12 @@ class RedisStatePersistence(BaseStatePersistence):
             snapshot.model_dump_json(),
         )
 
+    async def snapshot_node_if_new(self, state: Any, next_node: Any) -> None:
+        key = f'run:{self.run_id}:current'
+        if not await self.redis_client.exists(key):
+            await self.snapshot_node(state, next_node)
+
     async def snapshot_end(self, state: Any, end: Any) -> None:
-        # `end` is the value from EndMarker
         snapshot = EndSnapshot(state=state, result=end)
         await self.redis_client.set(
             f'run:{self.run_id}:final',
@@ -1477,12 +1484,19 @@ class RedisStatePersistence(BaseStatePersistence):
         )
         await self.redis_client.expire(f'run:{self.run_id}:final', 86400)
 
+    async def record_run(self, run_id: str) -> None:
+        await self.redis_client.rpush('runs', run_id)
+
     async def load_next(self) -> tuple[Any, Any] | None:
         data = await self.redis_client.get(f'run:{self.run_id}:current')
         if data:
             snapshot = NodeSnapshot.model_validate_json(data)
             return snapshot.state, snapshot.node
         return None
+
+    async def load_all(self) -> list[Any]:
+        data = await self.redis_client.get(f'run:{self.run_id}:current')
+        return [NodeSnapshot.model_validate_json(data)] if data else []
 ```
 
 ---
