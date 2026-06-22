@@ -232,7 +232,9 @@ suitable for dependency injection and type-checked callers.
 
 ```python
 from collections.abc import Sequence, Awaitable
-from typing import Protocol, runtime_checkable, TypeVar, Any
+from typing import Protocol, runtime_checkable, Any
+from typing_extensions import TypeVar
+from agent_framework._types import GeneratedEmbeddings
 
 EmbeddingInputContraT = TypeVar("EmbeddingInputContraT", contravariant=True, default="str")
 EmbeddingT = TypeVar("EmbeddingT", default="list[float]")
@@ -423,9 +425,13 @@ the framework.
 ### Class signatures (1.9.0)
 
 ```python
-from typing import TypedDict, TypeVar, Generic, Any
+from typing import TypedDict, Generic, Any
+from typing_extensions import TypeVar
 from datetime import datetime
 from collections.abc import Iterable
+
+EmbeddingT = TypeVar("EmbeddingT", default="list[float]")
+EmbeddingOptionsT = TypeVar("EmbeddingOptionsT", default="EmbeddingGenerationOptions")
 
 class EmbeddingGenerationOptions(TypedDict, total=False):
     """Common request settings for embedding generation (all fields optional)."""
@@ -447,8 +453,6 @@ class Embedding(Generic[EmbeddingT]):
     dimensions: int
     created_at: datetime | None
     additional_properties: dict[str, Any] | None
-
-EmbeddingOptionsT = TypeVar("EmbeddingOptionsT", default="EmbeddingGenerationOptions")
 
 class GeneratedEmbeddings(list[Embedding[EmbeddingT]], Generic[EmbeddingT, EmbeddingOptionsT]):
     def __init__(
@@ -662,26 +666,21 @@ class SubWorkflowRequestMessage:
 ### Example 1 — parent workflow handling a sub-workflow HITL request
 
 ```python
-from agent_framework._workflows._workflow_executor import (
-    SubWorkflowRequestMessage,
-    SubWorkflowResponseMessage,
-)
-from agent_framework._workflows._executor import Executor
+from agent_framework._workflows._workflow_executor import SubWorkflowRequestMessage
+from agent_framework._workflows._executor import Executor, handler
 from agent_framework._workflows._workflow_context import WorkflowContext
-from agent_framework._workflows._request_info_mixin import response_handler
 
 
 class ParentExecutor(Executor):
-    @response_handler
+    @handler
     async def handle_subworkflow_request(
         self,
-        original_request: SubWorkflowRequestMessage,
-        response: SubWorkflowResponseMessage,
+        request: SubWorkflowRequestMessage,
         ctx: WorkflowContext[None],
     ) -> None:
         # The sub-workflow sent us a request — reply with the right data
-        print(f"Sub-workflow {original_request.executor_id} needs: {original_request.source_event.type}")
-        reply = original_request.create_response(data={"answer": "Paris"})
+        print(f"Sub-workflow {request.executor_id} needs: {request.source_event.type}")
+        reply = request.create_response(data={"answer": "Paris"})
         await ctx.send_message(reply)
 ```
 
