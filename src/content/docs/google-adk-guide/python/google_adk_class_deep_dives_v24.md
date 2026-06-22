@@ -232,7 +232,7 @@ print(cfg.ttl_string)   # "900s"  — passed directly to CachedContent.create()
 
 **Source:** `google.adk.sessions.state`
 
-`State` is a delta-aware dict proxy that tracks both the committed session state (`_value`) and uncommitted pending changes (`_delta`). It is the type of `ctx.state` in both `Context` and `ReadonlyContext`.
+`State` is a delta-aware dict proxy that tracks both the committed session state (`_value`) and uncommitted pending changes (`_delta`). It is the type of `ctx.state` in writable `Context` and `ToolContext`. In `ReadonlyContext`, `ctx.state` returns a `MappingProxyType` — a plain read-only dict proxy without `has_delta()`, `_delta`, or schema validation. The patterns below apply to writable `Context`/`ToolContext` only.
 
 ### Key prefixes
 
@@ -841,7 +841,7 @@ class InvocationContext(BaseModel):
 
     # Live mode
     live_request_queue: LiveRequestQueue | None
-    active_streaming_tool: ActiveStreamingTool | None
+    active_streaming_tools: dict[str, ActiveStreamingTool] | None   # keyed by tool name
 ```
 
 ### How `Runner` builds `InvocationContext`
