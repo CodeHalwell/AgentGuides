@@ -676,7 +676,7 @@ class ParentExecutor(Executor):
     async def handle_subworkflow_request(
         self,
         request: SubWorkflowRequestMessage,
-        ctx: WorkflowContext[None],
+        ctx: WorkflowContext[SubWorkflowResponseMessage],
     ) -> None:
         # The sub-workflow sent us a request — reply with the right data
         print(f"Sub-workflow {request.executor_id} needs: {request.source_event.type}")
@@ -805,13 +805,24 @@ class ApprovalExecutor(Executor):
 ### Example 2 — explicit type mode for forward references
 
 ```python
+from dataclasses import dataclass
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._request_info_mixin import response_handler
 from agent_framework._workflows._workflow_context import WorkflowContext
 
 
+@dataclass
+class DataRequest:
+    query: str
+
+
+@dataclass
+class DataResponse:
+    processed_value: str
+
+
 class DataPipelineExecutor(Executor):
-    @response_handler(request="DataRequest", response="DataResponse", output=str)
+    @response_handler(request=DataRequest, response=DataResponse, output=str)
     async def handle_data(self, original_request, response, ctx: WorkflowContext[str]):
         await ctx.send_message(response.processed_value)
 ```
@@ -1025,12 +1036,12 @@ class EdgeGroupDeliveryStatus(Enum):
 ### Example 1 — interpreting delivery status in a custom OTel exporter
 
 ```python
-from agent_framework.observability import EdgeGroupDeliveryStatus
+from agent_framework.observability import EdgeGroupDeliveryStatus, OtelAttr
 from opentelemetry.sdk.trace import ReadableSpan
 
 
 def summarise_delivery(span: ReadableSpan) -> str:
-    raw = span.attributes.get("agent_framework.edge.delivery_status")
+    raw = span.attributes.get(OtelAttr.EDGE_GROUP_DELIVERY_STATUS)
     if raw is None:
         return "no delivery info"
     status = EdgeGroupDeliveryStatus(raw)
@@ -1053,7 +1064,7 @@ def summarise_delivery(span: ReadableSpan) -> str:
 
 ```python
 from collections import Counter
-from agent_framework.observability import EdgeGroupDeliveryStatus
+from agent_framework.observability import EdgeGroupDeliveryStatus, OtelAttr
 from opentelemetry.sdk.trace import SpanProcessor, ReadableSpan
 
 
@@ -1062,7 +1073,7 @@ class EdgeDropCounter(SpanProcessor):
         self.counts: Counter = Counter()
 
     def on_end(self, span: ReadableSpan) -> None:
-        raw = span.attributes.get("agent_framework.edge.delivery_status")
+        raw = span.attributes.get(OtelAttr.EDGE_GROUP_DELIVERY_STATUS)
         if raw:
             self.counts[raw] += 1
 
@@ -1080,11 +1091,11 @@ class EdgeDropCounter(SpanProcessor):
 ### Example 3 — alert on exception delivery in production
 
 ```python
-from agent_framework.observability import EdgeGroupDeliveryStatus
+from agent_framework.observability import EdgeGroupDeliveryStatus, OtelAttr
 
 
 def alert_on_exception_delivery(span) -> None:
-    status_raw = span.attributes.get("agent_framework.edge.delivery_status")
+    status_raw = span.attributes.get(OtelAttr.EDGE_GROUP_DELIVERY_STATUS)
     if status_raw == EdgeGroupDeliveryStatus.EXCEPTION.value:
         executor_id = span.attributes.get("agent_framework.executor.id", "unknown")
         print(f"ALERT: Exception during edge delivery in executor {executor_id}")
@@ -1254,29 +1265,26 @@ async def run_and_inspect(agent, user_message: str) -> None:
 ### Example 5 — per-item embedded label in a tool result
 
 ```python
-from agent_framework import tool
+from agent_framework import tool, Content
 from agent_framework.security import ContentLabel, IntegrityLabel, ConfidentialityLabel
 
 
 @tool
-async def mixed_integrity_search(query: str) -> list[dict]:
+async def mixed_integrity_search(query: str) -> list[Content]:
     return [
-        {
-            "text": "Internal report summary",
-            "additional_properties": {
+        Content.from_text(
+            "Internal report summary",
+            additional_properties={
                 "security_label": ContentLabel(
                     integrity=IntegrityLabel.TRUSTED,
                     confidentiality=ConfidentialityLabel.PUBLIC,
-                ).to_dict() if hasattr(ContentLabel, "to_dict") else {
-                    "integrity": "trusted",
-                    "confidentiality": "public",
-                },
+                ).to_dict(),
             },
-        },
-        {
-            "text": "Content scraped from external site",
-            # no security_label → falls back to tier 2/3
-        },
+        ),
+        Content.from_text(
+            "Content scraped from external site",
+            # no security_label → LabelTrackingFunctionMiddleware falls back to default label
+        ),
     ]
 ```
 
