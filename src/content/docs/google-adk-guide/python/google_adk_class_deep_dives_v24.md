@@ -120,7 +120,7 @@ analyst = LlmAgent(
     name="analyst",
     model="gemini-2.5-flash",
     instruction="Analyse the text and return structured output.",
-    output_schema=AnalysisResult,   # enforces JSON schema; disables tool use by default
+    output_schema=AnalysisResult,   # enforces JSON schema on final output; tools still work in 2.3.0
     output_key="analysis",          # writes result to session.state["analysis"]
 )
 ```
@@ -417,7 +417,7 @@ VertexAiSessionService(
 
 Requires `pip install google-adk[gcp]` (provides `google-cloud-aiplatform`).
 
-Pass just the short engine ID (e.g. `"456"`), not the full resource path. Passing a full path emits a warning and the service extracts the trailing component.
+Pass only the short engine ID (e.g. `"456"`), not the full resource path. Unlike `VertexAiMemoryBankService`, **`VertexAiSessionService` does not extract or warn on full paths** — the constructor stores `agent_engine_id` unchanged, so passing `"projects/.../reasoningEngines/456"` would produce malformed API paths at runtime.
 
 ### Production setup
 
@@ -501,30 +501,35 @@ runner = Runner(
 
 ### Ingestion API selection
 
-The service automatically routes to `ingest_events` vs `generate_memories` based on `custom_metadata` keys passed to `RunConfig`:
+`runner.run_async()` does **not** automatically ingest events into memory. You call `add_events_to_memory` explicitly after a run. The service routes to `ingest_events` vs `generate_memories` based on the `custom_metadata` keys you pass **directly to that method** — `RunConfig.custom_metadata` does not flow here.
+
+Keys exclusive to `GenerateMemories` (not recognised by `IngestEvents`) trigger the batch summarisation path. Keys exclusive to `IngestEvents` (`stream_id`, `force_flush`, `generation_trigger_config`) keep the streaming path. All other keys default to `ingest_events`.
 
 ```python
-from google.adk.agents.run_config import RunConfig
+# After a run: load the session to access its events
+session = await runner.session_service.get_session(
+    app_name="memory-app", user_id="u1", session_id="s1"
+)
 
 # Default path: ingest_events (streaming, low-latency)
-async for event in runner.run_async(
-    user_id="u1", session_id="s1",
-    new_message={"role": "user", "parts": [{"text": "Remember this fact."}]},
-):
-    ...
+await memory_svc.add_events_to_memory(
+    app_name="memory-app",
+    user_id="u1",
+    events=session.events[-2:],   # last user + model turn
+)
 
 # Force generate_memories path (batch summarisation)
-async for event in runner.run_async(
-    user_id="u1", session_id="s1",
-    new_message={"role": "user", "parts": [{"text": "Summarise everything."}]},
-    run_config=RunConfig(
-        custom_metadata={
-            "disable_consolidation": False,  # generate_memories-only key → forces that path
-            "ttl": "86400s",
-        }
-    ),
-):
-    ...
+# Any key from _GENERATE_MEMORIES_CONFIG_FALLBACK_KEYS that is absent from
+# _INGEST_EVENTS_CONFIG_FALLBACK_KEYS triggers the generate path.
+await memory_svc.add_events_to_memory(
+    app_name="memory-app",
+    user_id="u1",
+    events=session.events[-2:],
+    custom_metadata={
+        "disable_consolidation": False,  # generate_memories-exclusive key → forces that path
+        "ttl": "86400s",                 # memory TTL (generate_memories only)
+    },
+)
 ```
 
 ### Searching memory from a tool
