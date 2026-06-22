@@ -150,7 +150,7 @@ from google.adk.agents.callback_context import CallbackContext
 
 def inject_system_info(
     callback_context: CallbackContext, llm_request: LlmRequest
-) -> LlmRequest | None:
+) -> LlmResponse | None:
     # Mutate the request before it reaches the model
     if llm_request.config:
         current_time = datetime.now(timezone.utc).isoformat()
@@ -158,7 +158,7 @@ def inject_system_info(
             f"Server time: {current_time}\n"
             + (llm_request.config.system_instruction or "")
         )
-    return None   # None = proceed with mutated request; return Content to skip model call
+    return None   # None = proceed with mutated request; return LlmResponse to skip model call
 
 agent = LlmAgent(
     name="time_aware",
@@ -586,18 +586,26 @@ async for event in runner.run_async(...):
             print("Node output:", event.output)
 ```
 
-Source definition (verified):
+Source definition (verified, `events/event.py:275-290`):
 
 ```python
 def is_final_response(self) -> bool:
+    # Early-return True for special event types
+    if self.actions.skip_summarization or self.long_running_tool_ids:
+        return True
     return (
         not self.get_function_calls()
         and not self.get_function_responses()
         and not self.partial
+        and not self.has_trailing_code_execution_result()
     )
 ```
 
-It returns `True` when there are no pending function calls/responses and `partial` is falsy — i.e., it's a complete model response, not a streaming chunk.
+Two early-return cases return `True` unconditionally:
+- `actions.skip_summarization` — a function-response event marked to skip LLM summarisation
+- `long_running_tool_ids` — the event carries long-running tool completion IDs
+
+Otherwise, it returns `True` only when there are no pending function calls/responses, `partial` is falsy (not a streaming chunk), and the last content part is not a code-execution result.
 
 ### Extracting function calls and responses
 
