@@ -666,7 +666,7 @@ class SubWorkflowRequestMessage:
 ### Example 1 — parent workflow handling a sub-workflow HITL request
 
 ```python
-from agent_framework._workflows._workflow_executor import SubWorkflowRequestMessage
+from agent_framework._workflows._workflow_executor import SubWorkflowRequestMessage, SubWorkflowResponseMessage
 from agent_framework._workflows._executor import Executor, handler
 from agent_framework._workflows._workflow_context import WorkflowContext
 
@@ -794,7 +794,7 @@ class ApprovalExecutor(Executor):
         self,
         original_request: ApprovalRequest,
         response: bool,          # True = approved, False = rejected
-        ctx: WorkflowContext[str],
+        ctx: WorkflowContext[None, str],  # second param = workflow_output type for yield_output
     ) -> None:
         if response:
             await ctx.yield_output(f"Approved: {original_request.action}")
