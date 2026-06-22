@@ -46,7 +46,7 @@ builder = StateGraph(State)
 builder.add_node(
     "api_call",
     flaky_api_call,
-    retry=RetryPolicy(
+    retry_policy=RetryPolicy(
         initial_interval=0.5,    # seconds before first retry
         backoff_factor=2.0,      # multiply interval by this after each attempt
         max_interval=30.0,       # cap interval at 30 seconds
@@ -75,7 +75,7 @@ def should_retry(exc: Exception) -> bool:
 builder.add_node(
     "llm_call",
     my_llm_node,
-    retry=RetryPolicy(
+    retry_policy=RetryPolicy(
         max_attempts=4,
         initial_interval=1.0,
         retry_on=should_retry,    # callable: receives the exception, returns bool
@@ -86,7 +86,7 @@ builder.add_node(
 builder.add_node(
     "db_write",
     my_db_node,
-    retry=RetryPolicy(
+    retry_policy=RetryPolicy(
         max_attempts=3,
         retry_on=(ConnectionError, OSError),   # tuple of types
     ),
@@ -599,9 +599,9 @@ graph.invoke(input, config={"recursion_limit": 100})
 
 | Feature | Import | How to add |
 |---|---|---|
-| Retry with backoff | `RetryPolicy` from `langgraph.types` | `add_node(..., retry=RetryPolicy(...))` |
+| Retry with backoff | `RetryPolicy` from `langgraph.types` | `add_node(..., retry_policy=RetryPolicy(...))` |
 | Hard / idle timeout | `TimeoutPolicy` from `langgraph.types` | `add_node(..., timeout=TimeoutPolicy(...))` |
-| Result caching | `CachePolicy` from `langgraph.types` | `add_node(..., cache=CachePolicy(...))` + `compile(cache=...)` |
+| Result caching | `CachePolicy` from `langgraph.types` | `add_node(..., cache_policy=CachePolicy(...))` + `compile(cache=...)` |
 | Loop safeguard | `IsLastStep`, `RemainingSteps` from `langgraph.managed` | Add as state fields; auto-injected |
 | Send with timeout | `Send` from `langgraph.types` | `Send(node, arg, timeout=30.0)` |
 | Checkpoint timing | `Durability` from `langgraph.types` | `compile(..., durability="async")` |
