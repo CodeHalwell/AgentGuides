@@ -7,7 +7,7 @@ sidebar:
   order: 80
 ---
 
-Verified against google-adk==2.1.0 (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`).
+Verified against google-adk==2.3.0 (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`).
 
 This guide covers the full credential story for ADK agents deployed on Google Cloud: which IAM roles each service needs, how to create and bind a service account, how to inject secrets via Secret Manager, and how to wire OAuth2 / API-key auth into your tools with `AuthenticatedFunctionTool`.
 

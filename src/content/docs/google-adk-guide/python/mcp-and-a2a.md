@@ -7,7 +7,7 @@ sidebar:
   order: 70
 ---
 
-Verified against google-adk==2.1.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`).
+Verified against google-adk==2.3.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`).
 
 ADK supports both **Model Context Protocol** (Anthropic's tool-server protocol) and **Agent-to-Agent** (Google's cross-framework agent-handoff protocol). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
 

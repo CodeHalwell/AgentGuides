@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.1.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`).
+Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`).
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 

@@ -7,7 +7,7 @@ sidebar:
   order: 80
 ---
 
-Verified against google-adk==2.1.0 (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`).
+Verified against google-adk==2.3.0 (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`).
 
 ## Planners
 
