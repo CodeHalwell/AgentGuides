@@ -555,7 +555,7 @@ assert result[0].dimensions == 4
 **Import:** `from agent_framework._workflows._events import WorkflowEventSource`
 
 `WorkflowEventSource` is a two-member `str` enum that tags every `WorkflowEvent` with its
-origin. It travels inside `WorkflowEvent.source` and is surfaced to OTel spans and
+origin. It travels inside `WorkflowEvent.origin` and is surfaced to OTel spans and
 `EdgeGroupDeliveryStatus` log records.
 
 ### Class signature (1.9.0)
@@ -564,17 +564,17 @@ origin. It travels inside `WorkflowEvent.source` and is surfaced to OTel spans a
 from enum import Enum
 
 class WorkflowEventSource(str, Enum):
-    EXECUTOR  = "executor"   # event raised by an Executor (AgentExecutor, FunctionExecutor, WorkflowExecutor, …)
-    FRAMEWORK = "framework"  # event raised by the framework itself (routing, fan-in, checkpoint, …)
+    EXECUTOR  = "EXECUTOR"   # event raised by an Executor (AgentExecutor, FunctionExecutor, WorkflowExecutor, …)
+    FRAMEWORK = "FRAMEWORK"  # event raised by the framework itself (routing, fan-in, checkpoint, …)
 ```
 
 ### Key facts
 
-- All `WorkflowEvent` objects carry a `.source` field typed as `WorkflowEventSource`.
+- All `WorkflowEvent` objects carry an `.origin` field typed as `WorkflowEventSource`.
 - `EXECUTOR` events originate from user-authored executors; `FRAMEWORK` events come from
   the runner, edge delivery, or the orchestration layer.
 - Because it extends `str` you can compare with plain string literals:
-  `event.source == "executor"` works without importing the enum.
+  `event.origin == "EXECUTOR"` works without importing the enum.
 
 ### Example 1 — filtering events by source in an observer
 
@@ -583,8 +583,8 @@ from agent_framework._workflows._events import WorkflowEvent, WorkflowEventSourc
 
 
 def log_executor_events(event: WorkflowEvent) -> None:
-    if event.source == WorkflowEventSource.EXECUTOR:
-        print(f"Executor event: {event.type} from {event.source_id}")
+    if event.origin == WorkflowEventSource.EXECUTOR:
+        print(f"Executor event: {event.type} from {event.executor_id}")
 ```
 
 ### Example 2 — branching on event source in an EdgeRunner callback
@@ -594,7 +594,7 @@ from agent_framework._workflows._events import WorkflowEvent, WorkflowEventSourc
 
 
 async def handle_event(event: WorkflowEvent) -> None:
-    match event.source:
+    match event.origin:
         case WorkflowEventSource.EXECUTOR:
             await route_to_agent(event)
         case WorkflowEventSource.FRAMEWORK:
@@ -612,7 +612,7 @@ tracer = trace.get_tracer("my_app")
 
 def trace_event(event) -> None:
     with tracer.start_as_current_span("workflow.event") as span:
-        span.set_attribute("event.source", str(event.source.value))
+        span.set_attribute("event.origin", str(event.origin.value))
         span.set_attribute("event.type", event.type)
 ```
 
@@ -928,18 +928,18 @@ from agent_framework._workflows._agent import WorkflowAgent
 raw_tool_call_args = {
     "request_id": "req-abc123",
     "request_event": {
-        "type": "DataRequest",
-        "source_id": "data_executor",
-        "source": "executor",
-        "request_id": "req-abc123",
-        "response_type": "str",
+        "type": "request_info",
         "data": {"question": "What is the capital of France?"},
+        "request_id": "req-abc123",
+        "source_executor_id": "data_executor",
+        "request_type": "builtins.dict",
+        "response_type": "builtins.str",
     },
 }
 
 args = WorkflowAgent.RequestInfoFunctionArgs.from_dict(raw_tool_call_args)
 print(args.request_id)         # "req-abc123"
-print(args.request_event.type) # "DataRequest"
+print(args.request_event.type) # "request_info"
 ```
 
 ### Example 2 — serializing for checkpoint storage
@@ -949,13 +949,11 @@ from agent_framework._workflows._agent import WorkflowAgent
 from agent_framework._workflows._events import WorkflowEvent, WorkflowEventSource
 
 
-event = WorkflowEvent(
-    type="ApprovalRequest",
-    source_id="approval_executor",
-    source=WorkflowEventSource.EXECUTOR,
+event = WorkflowEvent.request_info(
     request_id="req-xyz789",
+    source_executor_id="approval_executor",
+    request_data={"action": "deploy_to_production"},
     response_type=bool,
-    data={"action": "deploy_to_production"},
 )
 
 args = WorkflowAgent.RequestInfoFunctionArgs(
@@ -1005,12 +1003,12 @@ an OTel span attribute by the telemetry layers.
 from enum import Enum
 
 class EdgeGroupDeliveryStatus(Enum):
-    DELIVERED             = "delivered"
-    BUFFERED              = "buffered"
-    DROPPED_TYPE_MISMATCH = "dropped_type_mismatch"
-    DROPPED_CONDITION_FALSE = "dropped_condition_false"
-    DROPPED_TARGET_MISMATCH = "dropped_target_mismatch"
-    EXCEPTION             = "exception"
+    DELIVERED               = "delivered"
+    BUFFERED                = "buffered"
+    DROPPED_TYPE_MISMATCH   = "dropped type mismatch"
+    DROPPED_CONDITION_FALSE = "dropped condition evaluated to false"
+    DROPPED_TARGET_MISMATCH = "dropped target mismatch"
+    EXCEPTION               = "exception"
 ```
 
 ### Member semantics
@@ -1210,10 +1208,11 @@ async def search_web(query: str) -> str:
 
 
 config = SecureAgentConfig(auto_hide_untrusted=True, block_on_violation=True)
-agent = config.create_agent(
+agent = Agent(
     client=OpenAIChatClient(model="gpt-4o"),
     name="safe-agent",
     tools=[search_web],
+    context_providers=[config],
 )
 ```
 
@@ -1227,11 +1226,11 @@ async def multi_turn_loop(agent, turns: list[str]) -> list[str]:
     tracker = agent.middleware[0]  # assume LabelTrackingFunctionMiddleware is first
     responses = []
     for turn in turns:
-        response = await agent.run(messages=[{"role": "user", "content": turn}])
+        response = await agent.run(turn)
         label = tracker.get_context_label()
         print(f"Turn integrity: {label.integrity}")
         tracker.reset_context_label()   # reset for next turn
-        responses.append(response.messages[-1].content[0].text)
+        responses.append(response.messages[-1].text)
     return responses
 ```
 
@@ -1400,10 +1399,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-async def run_with_convergence_guard(agent: Agent, messages: list) -> str | None:
+async def run_with_convergence_guard(agent: Agent, prompt: str) -> str | None:
     try:
-        response = await agent.run(messages=messages)
-        return response.messages[-1].content[0].text
+        response = await agent.run(prompt)
+        return response.messages[-1].text
     except WorkflowConvergenceException as exc:
         logger.warning(
             "Agent did not converge: %s — inner: %s",
