@@ -174,8 +174,8 @@ async def run_creative_agent(prompt: str) -> str:
         tools.append(client.get_image_generation_tool())
 
     agent = Agent(client=client, name="creative", tools=tools)
-    response = await agent.run(messages=[{"role": "user", "content": prompt}])
-    return response.messages[-1].content[0].text
+    response = await agent.run(prompt)
+    return response.messages[-1].text
 ```
 
 ### Example 4 — writing a custom client that satisfies multiple protocols
@@ -982,7 +982,7 @@ class RequestInfoInterceptorMiddleware(FunctionMiddleware):
         context: FunctionInvocationContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
-        if context.function_name == WorkflowAgent.REQUEST_INFO_FUNCTION_NAME:
+        if context.function.name == WorkflowAgent.REQUEST_INFO_FUNCTION_NAME:
             args = WorkflowAgent.RequestInfoFunctionArgs.from_dict(context.arguments)
             print(f"HITL request intercepted: id={args.request_id}")
         await call_next()
@@ -1360,15 +1360,15 @@ class RateLimitMiddleware(FunctionMiddleware):
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
         now = time.monotonic()
-        calls = self._calls[context.function_name]
+        calls = self._calls[context.function.name]
         # drop timestamps older than 60 s
-        self._calls[context.function_name] = [t for t in calls if now - t < 60]
-        if len(self._calls[context.function_name]) >= self._limit:
+        self._calls[context.function.name] = [t for t in calls if now - t < 60]
+        if len(self._calls[context.function.name]) >= self._limit:
             raise MiddlewareTermination(
-                f"Rate limit exceeded for {context.function_name}",
+                f"Rate limit exceeded for {context.function.name}",
                 result={"error": "rate_limit_exceeded"},
             )
-        self._calls[context.function_name].append(now)
+        self._calls[context.function.name].append(now)
         await call_next()
 ```
 
@@ -1429,10 +1429,10 @@ class BlocklistMiddleware(FunctionMiddleware):
         context: FunctionInvocationContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
-        if context.function_name in BLOCKED_TOOLS:
+        if context.function.name in BLOCKED_TOOLS:
             raise MiddlewareTermination(
-                f"Tool '{context.function_name}' is blocked by security policy.",
-                result={"error": "tool_blocked", "tool": context.function_name},
+                f"Tool '{context.function.name}' is blocked by security policy.",
+                result={"error": "tool_blocked", "tool": context.function.name},
             )
         await call_next()
 ```
