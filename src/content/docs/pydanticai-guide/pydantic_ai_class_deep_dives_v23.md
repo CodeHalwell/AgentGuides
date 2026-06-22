@@ -650,14 +650,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic_ai import Agent
 
-executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix='pydantic-ai')
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Install globally for all agents
-    with Agent.using_thread_executor(executor):
-        yield
-    # Executor is shut down when the context exits
+    # Create, install, and shut down the executor within the lifespan
+    with ThreadPoolExecutor(max_workers=32, thread_name_prefix='pydantic-ai') as executor:
+        with Agent.using_thread_executor(executor):
+            yield
+        # ThreadPoolExecutor.__exit__ calls executor.shutdown(wait=True) here
 
 app = FastAPI(lifespan=lifespan)
 agent = Agent('openai:gpt-4o')
@@ -783,7 +782,7 @@ async def fetch_and_maybe_followup(ctx: RunContext[Deps], query: str) -> str:
 
     if ctx.deps.extra_data:
         # Inject an additional user turn before the next model step
-        await ctx.enqueue(
+        ctx.enqueue(
             f'Also consider this: {ctx.deps.extra_data}',
             priority='asap',
         )
@@ -813,7 +812,7 @@ async def complete_task(ctx: RunContext[Deps], task: str) -> str:
 
     if ctx.deps.notify_when_done:
         # This message is only delivered after the agent would normally finish
-        await ctx.enqueue(
+        ctx.enqueue(
             'The task above is now complete. Please summarize what was accomplished.',
             priority='when_idle',
         )
@@ -840,7 +839,7 @@ async def main():
             pass  # let the agent complete its first response
 
         # Inject an additional question after the model has responded
-        await agent_run.enqueue(
+        agent_run.enqueue(
             'What are the risks of this approach?',
             priority='asap',
         )
