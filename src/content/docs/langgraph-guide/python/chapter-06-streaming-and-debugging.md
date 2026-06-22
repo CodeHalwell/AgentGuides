@@ -139,7 +139,10 @@ asyncio.run(stream_tokens())
 To stream only content chunks and skip metadata noise:
 
 ```python
-async for chunk, metadata in graph.astream(messages_input, stream_mode="messages"):
+async for chunk, metadata in graph.astream(
+    {"messages": [{"role": "user", "content": "Write a haiku about graphs"}]},
+    stream_mode="messages",
+):
     # AIMessageChunk has .content — skip empty tool-call chunks
     if hasattr(chunk, "content") and chunk.content:
         print(chunk.content, end="", flush=True)
@@ -415,7 +418,7 @@ for i, snap in enumerate(history):
 ```python
 # Take the second-most-recent snapshot and re-run from there
 old_snap = history[1]
-result = graph_cp.invoke({"messages": [], "step_count": 0}, config=old_snap.config)
+result = graph_cp.invoke(None, config=old_snap.config)  # None = resume from checkpoint as-is
 ```
 
 ### Inject state between runs (`update_state`)
@@ -427,9 +430,9 @@ graph_cp.update_state(
     as_node="a",          # attribute the update to node "a"
 )
 
-# Continue from the patched state
-result = graph_cp.invoke({"messages": [], "step_count": 0}, cfg)
-print(result["step_count"])   # 100 (99 + 1 from node_a)
+# Continue from the patched state (pass None so the patched value isn't overwritten)
+result = graph_cp.invoke(None, cfg)
+print(result["step_count"])   # 100 (99 + 1 from node_b)
 ```
 
 ---
