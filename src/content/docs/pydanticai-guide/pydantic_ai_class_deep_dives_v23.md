@@ -548,11 +548,11 @@ def summarise(text: str) -> str:
 pipeline = SetMetadataToolset(
     PrefixedToolset(
         RenamedToolset(base, name_map={'find': 'search'}),
-        prefix='nlp_',
+        prefix='nlp',
     ),
     metadata={'team': 'nlp', 'tier': 'premium'},
 )
-# Model sees tool name: 'nlp_find'
+# Model sees tool name: 'nlp_find'  (PrefixedToolset builds f'{prefix}_{name}')
 agent = Agent('openai:gpt-4o', toolsets=[pipeline])
 ```
 
@@ -1144,7 +1144,7 @@ from pydantic_ai.messages import AudioUrl
 agent = Agent('openai:gpt-4o-audio-preview')
 
 result = agent.run_sync([
-    AudioUrl(url='https://example.com/question.mp3', media_type='audio/mp3'),
+    AudioUrl(url='https://example.com/question.mp3', media_type='audio/mpeg'),
     'Please transcribe and answer the question in the audio.',
 ])
 
@@ -1455,48 +1455,67 @@ When implementing `BaseStatePersistence`, all six abstract methods must be provi
 `snapshot_end` receives the `End` value and records the final state:
 
 ```python
-from dataclasses import dataclass, field
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
-from pydantic_graph.persistence import BaseStatePersistence, NodeSnapshot, EndSnapshot
+import pydantic
+from pydantic_graph.persistence import (
+    BaseStatePersistence,
+    NodeSnapshot,
+    EndSnapshot,
+    build_snapshot_list_type_adapter,
+)
 
 @dataclass
-class RedisStatePersistence(BaseStatePersistence):
+class RedisStatePersistence(BaseStatePersistence[Any, Any]):
     redis_client: Any  # your Redis client
     run_id: str
+    _adapter: pydantic.TypeAdapter | None = None
+
+    # Called by Graph before the run starts so we can build a typed serializer
+    def should_set_types(self) -> bool:
+        return self._adapter is None
+
+    def set_types(self, state_type: type, run_end_type: type) -> None:
+        self._adapter = build_snapshot_list_type_adapter(state_type, run_end_type)
 
     async def snapshot_node(self, state: Any, next_node: Any) -> None:
         snapshot = NodeSnapshot(state=state, node=next_node)
-        await self.redis_client.set(
-            f'run:{self.run_id}:current',
-            snapshot.model_dump_json(),
-        )
+        data = self._adapter.dump_json([snapshot])
+        await self.redis_client.set(f'run:{self.run_id}:current', data)
 
-    async def snapshot_node_if_new(self, state: Any, next_node: Any) -> None:
+    async def snapshot_node_if_new(self, snapshot_id: str, state: Any, next_node: Any) -> None:
         key = f'run:{self.run_id}:current'
         if not await self.redis_client.exists(key):
             await self.snapshot_node(state, next_node)
 
     async def snapshot_end(self, state: Any, end: Any) -> None:
         snapshot = EndSnapshot(state=state, result=end)
-        await self.redis_client.set(
-            f'run:{self.run_id}:final',
-            snapshot.model_dump_json(),
-        )
+        data = self._adapter.dump_json([snapshot])
+        await self.redis_client.set(f'run:{self.run_id}:final', data)
         await self.redis_client.expire(f'run:{self.run_id}:final', 86400)
 
-    async def record_run(self, run_id: str) -> None:
-        await self.redis_client.rpush('runs', run_id)
+    @asynccontextmanager
+    async def record_run(self, snapshot_id: str):
+        # record_run must be a regular method returning an async context manager
+        try:
+            yield
+        except Exception:
+            raise
 
-    async def load_next(self) -> tuple[Any, Any] | None:
+    async def load_next(self) -> NodeSnapshot | None:
         data = await self.redis_client.get(f'run:{self.run_id}:current')
         if data:
-            snapshot = NodeSnapshot.model_validate_json(data)
-            return snapshot.state, snapshot.node
+            snapshots = self._adapter.validate_json(data)
+            return next(
+                (s for s in snapshots if isinstance(s, NodeSnapshot) and s.status == 'created'),
+                None,
+            )
         return None
 
-    async def load_all(self) -> list[Any]:
+    async def load_all(self) -> list:
         data = await self.redis_client.get(f'run:{self.run_id}:current')
-        return [NodeSnapshot.model_validate_json(data)] if data else []
+        return self._adapter.validate_json(data) if data else []
 ```
 
 ---
