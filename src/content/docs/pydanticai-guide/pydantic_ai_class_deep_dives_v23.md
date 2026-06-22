@@ -691,10 +691,8 @@ def blocking_io(path: str) -> str:
 
 async def handle_request(user_query: str) -> str:
     with ThreadPoolExecutor(max_workers=4) as pool:
-        result = await agent.run(
-            user_query,
-            capabilities=[__import__('pydantic_ai').capabilities.ThreadExecutor(pool)],
-        )
+        with Agent.using_thread_executor(pool):
+            result = await agent.run(user_query)
     return result.output
 ```
 
@@ -827,6 +825,9 @@ result = agent.run_sync('Analyse dataset', deps=Deps(notify_when_done=True))
 
 ### Example 3 — Enqueue From AgentRun (Outside a Tool)
 
+`enqueue` is only available on `AgentRun` (from `agent.iter()`), not on `StreamedRunResult`.
+Use `agent.iter()` to get an `AgentRun` that supports mid-run injection:
+
 ```python
 import asyncio
 from pydantic_ai import Agent
@@ -834,15 +835,20 @@ from pydantic_ai import Agent
 agent = Agent('openai:gpt-4o')
 
 async def main():
-    async with agent.run_stream('Start processing') as stream:
-        async for chunk in stream.stream_text():
-            print(chunk, end='', flush=True)
+    async with agent.iter('Start processing') as agent_run:
+        async for node in agent_run:
+            pass  # let the agent complete its first response
 
         # Inject an additional question after the model has responded
-        await stream.enqueue(
+        await agent_run.enqueue(
             'What are the risks of this approach?',
             priority='asap',
         )
+        # The agent continues with the injected message
+        async for node in agent_run:
+            pass
+
+    print(agent_run.result.output)
 
 asyncio.run(main())
 ```
