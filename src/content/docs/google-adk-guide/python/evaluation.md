@@ -7,7 +7,7 @@ sidebar:
   order: 75
 ---
 
-Verified against google-adk==2.1.0 (`google/adk/evaluation/`).
+Verified against google-adk==2.3.0 (`google/adk/evaluation/`).
 
 ADK ships a first-class evaluation framework built around three concepts: **`EvalCase`** (a single conversation to run), **`EvalSet`** (a collection of cases), and **`AgentEvaluator`** (the engine that runs cases against a live agent and scores the results). The framework integrates with `pytest` and supports custom metrics.
 
@@ -245,7 +245,7 @@ ToolTrajectoryCriterion(threshold=1.0, match_type=ToolTrajectoryCriterion.MatchT
 
 ## `AgentEvaluator`
 
-The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (source-verified for google-adk==2.1.0).
+The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (source-verified for google-adk==2.3.0).
 
 ### `evaluate_eval_set` — programmatic, in-memory
 

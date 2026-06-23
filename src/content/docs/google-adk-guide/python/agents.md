@@ -7,7 +7,7 @@ sidebar:
   order: 20
 ---
 
-Verified against google-adk==2.1.0 (`google/adk/agents/`).
+Verified against google-adk==2.3.0 (`google/adk/agents/`).
 
 ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](./workflows/).
 
@@ -71,7 +71,7 @@ agent = LlmAgent(
     description="Answers research questions with web search.",
     instruction="You are a research assistant. Cite the URLs you consulted.",
     tools=[google_search],
-    output_schema=Reply,                 # optional; forbids tools when set
+    output_schema=Reply,                 # optional; tools still work alongside output_schema in 2.3.0
     output_key="latest_reply",           # writes final text to session.state[key]
     include_contents="default",          # or "none" to wipe history
     disallow_transfer_to_parent=False,
@@ -84,14 +84,14 @@ agent = LlmAgent(
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `name` | `str` | required | Identifier; used for agent-transfer routing |
-| `model` | `str \| BaseLlm` | `""` | Empty inherits; built-in default is `gemini-2.5-flash` (`DEFAULT_MODEL`) |
+| `model` | `str \| BaseLlm` | `""` | Empty inherits; built-in default is `gemini-3.5-flash` (`DEFAULT_MODEL`) |
 | `instruction` | `str \| InstructionProvider` | `""` | Supports `{state_key}` placeholders resolved from session state |
 | `global_instruction` | same | `""` | **Deprecated** → use `GlobalInstructionPlugin` |
 | `static_instruction` | `types.ContentUnion` | `None` | For context-cache friendly prefixes |
 | `tools` | `list[Callable \| BaseTool \| BaseToolset]` | `[]` | Callables are auto-wrapped as `FunctionTool` |
 | `generate_content_config` | `types.GenerateContentConfig` | `None` | Temperature, safety, thinking, etc. |
 | `mode` | `'chat' \| 'task' \| 'single_turn' \| None` | `None` | Root `LlmAgent` must have `mode='chat'` |
-| `input_schema` / `output_schema` | Pydantic model / schema | `None` | Setting `output_schema` disables tool use |
+| `input_schema` / `output_schema` | Pydantic model / schema | `None` | `output_schema` and `tools` can be used together in 2.3.0 |
 | `output_key` | `str` | `None` | Writes final text to `session.state[key]` |
 | `include_contents` | `'default' \| 'none'` | `'default'` | `'none'` → stateless single-turn |
 | `planner` | `BasePlanner` | `None` | `BuiltInPlanner` forwards `thinking_config` to the model |
@@ -141,7 +141,7 @@ thinking_agent = LlmAgent(
 
 ### Model resolution
 
-A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("gemini-2.5-pro")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-2.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
+A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("gemini-2.5-pro")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-3.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
 
 ```python
 from google.adk.models import Gemini, LiteLlm
@@ -353,7 +353,7 @@ fanout = Workflow(name="fanout", edges=[(START, (algo_a, algo_b))])
 Set `sub_agents=[a, b]` on a parent `LlmAgent` to get `transfer_to_agent` routing. Disable `disallow_transfer_to_peers` on specialists so they can bounce between one another without returning to root.
 
 ### 2 — Produce → Validate with `output_schema`
-An `LlmAgent` with `output_schema=MyPydanticModel` can't use tools but emits a validated structured reply. Wire it downstream of a tool-enabled agent via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
+An `LlmAgent` with `output_schema=MyPydanticModel` emits a validated structured reply. In 2.3.0, `tools` can be used alongside `output_schema` — the ADK exposes tools during the thought loop and enforces the schema only on the final output. Wire structured-output agents downstream via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
 
 ### 3 — ReAct via `BuiltInPlanner`
 
@@ -611,11 +611,11 @@ root = LlmAgent(
 
 ## Gotchas
 
-- Setting `output_schema` **disables tool use** for that agent, including sub-agent transfer (`llm_agent.py:348-372`).
+- `output_schema` and `tools` can be used together in 2.3.0 — tools run during the thought loop and the schema is enforced on the final reply only (`llm_agent.py:368-372`).
 - `global_instruction` is deprecated at the agent level; use `GlobalInstructionPlugin` at the `App` level.
 - A root `LlmAgent` must have `mode='chat'` or the runner auto-sets it; other modes are only valid inside a `Workflow`.
 - `LoopAgent.run_live` is **not implemented** — `ParallelAgent.run_live` also raises `NotImplementedError`.
-- When a sub-agent has no `model`, it inherits from the nearest ancestor `LlmAgent`. If the root also omits `model`, the default is resolved via `LlmAgent._default_model` (`gemini-2.5-flash`).
+- When a sub-agent has no `model`, it inherits from the nearest ancestor `LlmAgent`. If the root also omits `model`, the default is resolved via `LlmAgent._default_model` (`gemini-3.5-flash` in 2.3.0).
 - Callables passed to `tools=` are wrapped as `FunctionTool(func=callable)` automatically. Pass an explicit `FunctionTool` only when you need `require_confirmation=`.
 - `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
 - `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
