@@ -238,8 +238,7 @@ async def chat(state: State) -> dict:
 # A node that never emits any LangChain event would time out in 10 s.
 graph = (
     StateGraph(State)
-    .add_node("chat", chat, retry=None,
-              metadata={"timeout": TimeoutPolicy(idle_timeout=10.0)})
+    .add_node("chat", chat, timeout=TimeoutPolicy(idle_timeout=10.0))
     .add_edge(START, "chat")
     .compile()
 )
