@@ -655,13 +655,11 @@ from pydantic_ai.tools import RunContext
 async def main():
     agent = Agent("openai:gpt-4o-mini")
 
-    @agent.tool(
-        args_validator_func=lambda ctx, url: (
-            None if url.startswith("https://") else (_ for _ in ()).throw(
-                ModelRetry("URL must use HTTPS")
-            )
-        )
-    )
+    def validate_url(ctx: RunContext[None], url: str) -> None:
+        if not url.startswith("https://"):
+            raise ModelRetry("URL must use HTTPS")
+
+    @agent.tool(args_validator_func=validate_url)
     async def fetch_url(ctx: RunContext[None], url: str) -> str:
         """Fetch the content at a URL."""
         return f"Fetched: {url}"
@@ -1289,7 +1287,8 @@ from pydantic_ai.tools import RunContext
 async def main():
     agent = Agent("openai:gpt-4o-mini", output_type=str)
 
-    async def validate_json_output(ctx: RunContext[None], value: str) -> str | None:
+    @agent.output_validator
+    async def validate_json_output(ctx: RunContext[None], value: str) -> str:
         if ctx.partial_output:
             # Skip validation while streaming — wait for the complete output
             return value
