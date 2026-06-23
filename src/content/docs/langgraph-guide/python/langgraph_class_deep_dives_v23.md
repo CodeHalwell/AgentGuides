@@ -357,7 +357,7 @@ class AuditHandler(GraphCallbackHandler):
 # Attach via config["callbacks"]
 from typing import TypedDict
 from langgraph.graph import StateGraph, START
-from langgraph.types import interrupt
+from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import MemorySaver
 
 class State(TypedDict):
