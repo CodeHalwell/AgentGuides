@@ -741,7 +741,7 @@ from google.genai import types
 from google.adk.runners import Runner
 from google.adk.apps.app import App
 from google.adk.agents import LlmAgent
-from google.adk.runners.run_config import RunConfig, StreamingMode
+from google.adk.agents.run_config import RunConfig, StreamingMode
 
 agent = LlmAgent(name="streamer", model="gemini-2.5-flash", instruction="Respond verbosely.")
 app = App(name="stream-demo", root_agent=agent)
@@ -1771,27 +1771,30 @@ class PrivateDataTool(BaseAuthenticatedTool):
 
 ```python
 from typing import Any
+from fastapi.openapi.models import HTTPBearer
 from google.adk.tools.base_authenticated_tool import BaseAuthenticatedTool  # @experimental
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_credential import (
-    AuthCredential, AuthCredentialTypes, ServiceAccount, ServiceAccountCredential,
-)
-from google.adk.auth.auth_schemes import CustomAuthScheme
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, ServiceAccount
 from google.adk.tools.tool_context import ToolContext
 
 # Service account auth config — use with BigQuery, Cloud Storage APIs, etc.
-# auth_scheme must be an AuthScheme (OpenAPI SecurityScheme or CustomAuthScheme);
-# ServiceAccount belongs in raw_auth_credential.service_account, not auth_scheme.
+#
+# auth_scheme must be a concrete OpenAPI SecurityScheme (SecurityBase subclass);
+# CustomAuthScheme is NOT appropriate here because CredentialManager will try to
+# rehydrate it and raise ValueError if no matching subclass is registered.
+# ServiceAccountCredentialExchanger ignores auth_scheme and reads only
+# raw_auth_credential.service_account, so HTTPBearer() is the correct stand-in.
+#
+# use_default_credential=True uses Application Default Credentials (ADC):
+# gcloud auth application-default login, GOOGLE_APPLICATION_CREDENTIALS env var,
+# or the attached service account in Cloud Run / GCE.
 sa_auth_config = AuthConfig(
-    auth_scheme=CustomAuthScheme(type="serviceAccount"),
+    auth_scheme=HTTPBearer(),
     raw_auth_credential=AuthCredential(
         auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
         service_account=ServiceAccount(
+            use_default_credential=True,
             scopes=["https://www.googleapis.com/auth/bigquery.readonly"],
-            service_account_credential=ServiceAccountCredential(
-                # In production, load from environment or Secret Manager
-                service_account_json="{...}",
-            ),
         ),
     ),
 )
