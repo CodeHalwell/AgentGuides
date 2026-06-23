@@ -1446,7 +1446,7 @@ EventStreamHandler: TypeAlias = Callable[
     Awaitable[None],
 ]
 # A terminal sink: receives RunContext + event stream, returns nothing.
-# Used with Agent(event_stream_handler=...) to process all streaming events.
+# Used with agent.run(..., event_stream_handler=...) to process all streaming events.
 
 EventStreamProcessor: TypeAlias = Callable[
     [RunContext[AgentDepsT], AsyncIterable[AgentStreamEvent]],
