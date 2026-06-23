@@ -121,11 +121,11 @@ def transfer_funds(
     # This function is only reached after confirmation is approved.
     return {"status": "ok", "transferred": amount}
 
-def needs_confirmation(args: dict) -> bool:
-    # require_confirmation callable receives the resolved args dict
-    # (with tool_context already injected — filter it before inspection)
+def needs_confirmation(**kwargs) -> bool:
+    # FunctionTool._invoke_callable expands args as **kwargs, not a single dict.
+    # tool_context is also injected, so use .get() / kwargs directly.
     try:
-        amount = float(args.get("amount", 0))
+        amount = float(kwargs.get("amount", 0))
     except (ValueError, TypeError):
         amount = 0.0
     return amount > 500.0   # require confirmation for transfers > $500
@@ -134,7 +134,7 @@ transfer_tool = FunctionTool(
     func=transfer_funds,
     require_confirmation=needs_confirmation,
 )
-# For a $1000 transfer: FunctionTool calls needs_confirmation({...amount: 1000...})
+# For a $1000 transfer: FunctionTool calls needs_confirmation(from_account=..., amount=1000, ...)
 # → returns True → tool_context.request_confirmation() is called
 # → returns {'error': 'This tool call requires confirmation...'} to the agent
 # → agent surfaces it to the user for approval
@@ -1767,19 +1767,25 @@ class PrivateDataTool(BaseAuthenticatedTool):
 from typing import Any
 from google.adk.tools.base_authenticated_tool import BaseAuthenticatedTool  # @experimental
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_credential import AuthCredential, ServiceAccount, ServiceAccountCredential
+from google.adk.auth.auth_credential import (
+    AuthCredential, AuthCredentialTypes, ServiceAccount, ServiceAccountCredential,
+)
+from google.adk.auth.auth_schemes import CustomAuthScheme
 from google.adk.tools.tool_context import ToolContext
 
 # Service account auth config — use with BigQuery, Cloud Storage APIs, etc.
+# auth_scheme must be an AuthScheme (OpenAPI SecurityScheme or CustomAuthScheme);
+# ServiceAccount belongs in raw_auth_credential.service_account, not auth_scheme.
 sa_auth_config = AuthConfig(
-    auth_scheme=ServiceAccount(
-        scopes=["https://www.googleapis.com/auth/bigquery.readonly"]
-    ),
+    auth_scheme=CustomAuthScheme(type="serviceAccount"),
     raw_auth_credential=AuthCredential(
-        auth_type="service_account",
-        service_account=ServiceAccountCredential(
-            # In production, load from environment or Secret Manager
-            service_account_json="{...}",
+        auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
+        service_account=ServiceAccount(
+            scopes=["https://www.googleapis.com/auth/bigquery.readonly"],
+            service_account_credential=ServiceAccountCredential(
+                # In production, load from environment or Secret Manager
+                service_account_json="{...}",
+            ),
         ),
     ),
 )
@@ -2057,9 +2063,17 @@ class BidiConnection(BaseLlmConnection):
         self._session_url = session_url
         self._closed = False
 
+    async def send_history(self, history: list[types.Content]) -> None:
+        """Send conversation history right after opening the connection."""
+        print(f"[BidiConnection] Sending history ({len(history)} turns)")
+
     async def send_content(self, content: types.Content) -> None:
         """Send user content to the model mid-stream."""
         print(f"[BidiConnection] Sending to {self._session_url}: {content}")
+
+    async def send_realtime(self, blob: types.Blob) -> None:
+        """Send an audio chunk or video frame for realtime voice/video input."""
+        print(f"[BidiConnection] Realtime blob: mime={blob.mime_type} size={len(blob.data or b'')}")
 
     async def receive(self) -> AsyncGenerator[LlmResponse, None]:
         """Receive streaming responses from the model."""
