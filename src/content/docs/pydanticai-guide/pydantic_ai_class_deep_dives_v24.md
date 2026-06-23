@@ -151,8 +151,8 @@ async def main():
     print(response.parts)        # [TextPart(content='The answer is 42.')]
     print(response.model_name)   # 'openai:gpt-4o-mini'
 
-    # _get_event_iterator yields nothing — the stream was already consumed
-    events = [e async for e in await completed._get_event_iterator()]
+    # _get_event_iterator is an async generator — iterate directly, no await
+    events = [e async for e in completed._get_event_iterator()]
     print(events)  # []
 
 asyncio.run(main())
@@ -762,15 +762,17 @@ async def main():
         return f"Hello, {name}!"
 
     async with agent.iter("Greet Alice") as run:
-        # The tool manager built at agent construction holds ToolsetTool instances
-        tm = run.ctx.tool_manager
-        if tm:
-            for tool_name, toolset_tool in tm.toolset_tools.items():
+        # run.ctx is a GraphRunContext; ToolManager is at run.ctx.deps.tool_manager
+        # tools is populated per run step — check after the first node executes
+        async for _ in run:
+            pass
+        tm = run.ctx.deps.tool_manager
+        # .tools is dict[str, ToolsetTool] keyed by tool name
+        if tm and tm.tools:
+            for tool_name, toolset_tool in tm.tools.items():
                 print(f"Tool: {tool_name}")
                 print(f"  max_retries: {toolset_tool.max_retries}")
                 print(f"  has args_validator_func: {toolset_tool.args_validator_func is not None}")
-        async for _ in run:
-            pass
 
 asyncio.run(main())
 ```
@@ -1316,27 +1318,35 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.capabilities import ApprovalRequired
+from pydantic_ai.toolsets import ApprovalRequiredToolset
 from pydantic_ai.tools import RunContext
 
 
 async def main():
-    agent = Agent(
-        "openai:gpt-4o-mini",
-        capabilities=[ApprovalRequired(tools=["delete_file"])],
-    )
+    agent = Agent("openai:gpt-4o-mini")
 
     @agent.tool
     async def delete_file(ctx: RunContext[None], path: str) -> str:
         """Delete a file at the given path."""
-        # ctx.tool_call_approved is True when the user approved via HITL
+        # ctx.tool_call_approved: True on the second run after human approval
         if ctx.tool_call_approved:
-            # ctx.tool_call_metadata contains the metadata from DeferredToolResults.metadata
+            # ctx.tool_call_metadata: populated from DeferredToolResults.metadata[tool_call_id]
+            # — arbitrary metadata the approval layer attached when responding
             meta = ctx.tool_call_metadata or {}
             approved_by = meta.get("approved_by", "unknown")
             return f"Deleted {path} (approved by: {approved_by})"
         return f"Approval required for: {path}"
 
+    # HITL gating uses ApprovalRequiredToolset (from pydantic_ai.toolsets), not a capability.
+    # approval_required_func(ctx, tool_def, validated_args) → bool
+    # True → call is deferred; agent returns DeferredToolRequests to the caller.
+    # On the second run, pass DeferredToolResults(metadata={"approved_by": "Alice"})
+    # and ctx.tool_call_approved=True, ctx.tool_call_metadata={"approved_by": "Alice"}
+    # will be set for the re-executed tool call.
+    #   approval_ts = ApprovalRequiredToolset(
+    #       toolset,
+    #       approval_required_func=lambda ctx, tool_def, args: tool_def.name == "delete_file",
+    #   )
     result = await agent.run("Delete /tmp/old_log.txt")
     print(result.output)
 
@@ -1349,17 +1359,19 @@ asyncio.run(main())
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
+from pydantic_ai.models import ModelRequestContext
 from pydantic_ai.tools import RunContext
-from pydantic_ai.messages import ModelRequest
 
 
 async def main():
-    async def log_settings(ctx: RunContext[None], request: ModelRequest) -> None:
-        # model_settings is populated before each model request
+    # before_model_request protocol: (ctx, request_context) -> ModelRequestContext
+    # Must return request_context (the agent replaces it with the return value).
+    async def log_settings(ctx: RunContext[None], request_context: ModelRequestContext) -> ModelRequestContext:
         if ctx.model_settings:
             print(f"Step {ctx.run_step}: temperature={ctx.model_settings.get('temperature')}")
         else:
             print(f"Step {ctx.run_step}: no model settings")
+        return request_context  # always return it — returning None would crash the agent
 
     hooks = Hooks(before_model_request=log_settings)
     agent = Agent(
