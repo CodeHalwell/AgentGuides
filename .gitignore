@@ -73,3 +73,6 @@ main.py
 
 # Docs-refresh routine virtual environments
 .routine-envs/
+
+# Claude Code internal state
+.claude/
