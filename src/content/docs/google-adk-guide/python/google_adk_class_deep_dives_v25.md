@@ -410,15 +410,16 @@ class ConfigurableApiToolset(BaseToolset):
 
     @classmethod
     def from_config(cls, config, config_abs_path: str):
-        # config is a ToolArgsConfig dict-like object produced by the YAML loader
+        # config is a ToolArgsConfig Pydantic model produced by the YAML loader,
+        # not a dict — use getattr() or attribute access, not .get().
         # Example YAML:
         #   toolset:
         #     type: ConfigurableApiToolset
         #     base_url: "https://api.example.com"
         #     api_key: "${ENV_API_KEY}"
         return cls(
-            base_url=config.get("base_url", ""),
-            api_key=config.get("api_key", ""),
+            base_url=getattr(config, "base_url", ""),
+            api_key=getattr(config, "api_key", ""),
         )
 ```
 
@@ -740,6 +741,7 @@ from google.genai import types
 from google.adk.runners import Runner
 from google.adk.apps.app import App
 from google.adk.agents import LlmAgent
+from google.adk.runners.run_config import RunConfig, StreamingMode
 
 agent = LlmAgent(name="streamer", model="gemini-2.5-flash", instruction="Respond verbosely.")
 app = App(name="stream-demo", root_agent=agent)
@@ -752,12 +754,15 @@ async def stream_response():
 
     accumulated_text = ""
 
+    # StreamingMode.SSE is required to receive partial=True intermediate events;
+    # the default StreamingMode.NONE only emits the final response event.
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
         new_message=types.Content(
             role="user", parts=[types.Part(text="Tell me about the solar system.")]
         ),
+        run_config=RunConfig(streaming_mode=StreamingMode.SSE),
     ):
         if event.partial:
             # Intermediate chunk — accumulate text
@@ -1118,6 +1123,7 @@ Semconv alignment:
 ### Example 1: Reading the current OTel span inside a custom node
 
 ```python
+from typing import Any, AsyncGenerator
 from opentelemetry import trace
 from google.adk.workflow._base_node import BaseNode
 from google.adk.agents.context import Context
@@ -1125,24 +1131,24 @@ from google.adk.agents.context import Context
 class InstrumentedNode(BaseNode):
     """A custom node that adds custom attributes to the current OTel span."""
 
-    async def _run_impl(self, context: Context):
-        # The OTel span for this node was started by start_as_current_node_span()
-        # before _run_impl is called. Access it via the standard OTel API.
+    async def _run_impl(self, *, ctx: Context, node_input: Any) -> AsyncGenerator[Any, None]:
+        # _run_impl must be an async generator (yield, not return); BaseNode.run()
+        # consumes it with `async for`. ctx/node_input are passed as kwargs.
         span = trace.get_current_span()
 
         if span.is_recording():
-            span.set_attribute("custom.node.input_length", len(str(context.user_content)))
-            span.set_attribute("custom.node.session_id", context.session.id)
+            span.set_attribute("custom.node.input_length", len(str(node_input)))
+            span.set_attribute("custom.node.session_id", ctx.session.id)
 
-        # Perform node logic
-        result = await self._do_work(context)
+        # Perform node logic, then yield output so BaseNode.run() wraps it in Event
+        result = await self._do_work(ctx, node_input)
 
         if span.is_recording():
             span.set_attribute("custom.node.output_length", len(str(result)))
 
-        return result
+        yield result
 
-    async def _do_work(self, context: Context):
+    async def _do_work(self, ctx: Context, node_input: Any):
         return {"processed": True}
 ```
 
@@ -1190,19 +1196,19 @@ from google.adk.agents.context import Context
 class TimedNode(BaseNode):
     """Wraps node execution with timing attributes on the OTel span."""
 
-    async def _run_impl(self, context: Context):
+    async def _run_impl(self, *, ctx: Context, node_input: Any) -> AsyncGenerator[Any, None]:
         span = trace.get_current_span()
         start_ns = time.perf_counter_ns()
 
         try:
-            result = await self._execute(context)
+            result = await self._execute(ctx, node_input)
             elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000
 
             if span.is_recording():
                 span.set_attribute("node.duration_ms", round(elapsed_ms, 2))
                 span.set_attribute("node.success", True)
 
-            return result
+            yield result
 
         except Exception as exc:
             elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000
@@ -1213,7 +1219,7 @@ class TimedNode(BaseNode):
                 span.record_exception(exc)
             raise
 
-    async def _execute(self, context: Context):
+    async def _execute(self, ctx: Context, node_input: Any):
         # Subclass-specific logic goes here
         return {"result": "ok"}
 ```
