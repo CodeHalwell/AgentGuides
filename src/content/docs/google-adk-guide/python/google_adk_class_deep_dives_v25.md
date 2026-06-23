@@ -124,8 +124,11 @@ def transfer_funds(
 def needs_confirmation(args: dict) -> bool:
     # require_confirmation callable receives the resolved args dict
     # (with tool_context already injected — filter it before inspection)
-    amount = args.get("amount", 0)
-    return float(amount) > 500.0   # require confirmation for transfers > $500
+    try:
+        amount = float(args.get("amount", 0))
+    except (ValueError, TypeError):
+        amount = 0.0
+    return amount > 500.0   # require confirmation for transfers > $500
 
 transfer_tool = FunctionTool(
     func=transfer_funds,
@@ -1635,14 +1638,15 @@ class GitHubIssueTool(BaseAuthenticatedTool):
 
         owner = args.get("owner", "")
         repo = args.get("repo", "")
-        # Use token in the Authorization header
-        import urllib.request, json
-        req = urllib.request.Request(
-            f"https://api.github.com/repos/{owner}/{repo}/issues?state=open",
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"},
-        )
-        with urllib.request.urlopen(req) as resp:
-            issues = json.loads(resp.read())
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}/issues?state=open",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            issues = resp.json()
         return {"issues": [{"number": i["number"], "title": i["title"]} for i in issues[:10]]}
 ```
 
@@ -1888,10 +1892,15 @@ class OllamaLlm(BaseLlm):
         # Build Ollama-style prompt from contents
         messages = []
         if llm_request.config and llm_request.config.system_instruction:
-            messages.append({
-                "role": "system",
-                "content": llm_request.config.system_instruction,
-            })
+            sys_inst = llm_request.config.system_instruction
+            if not isinstance(sys_inst, str):
+                parts = getattr(sys_inst, "parts", []) or []
+                sys_inst = " ".join(p.text for p in parts if getattr(p, "text", None))
+            if sys_inst:
+                messages.append({
+                    "role": "system",
+                    "content": sys_inst,
+                })
         for content in llm_request.contents:
             text = " ".join(p.text for p in (content.parts or []) if p.text)
             messages.append({"role": content.role or "user", "content": text})
@@ -1919,6 +1928,7 @@ class OllamaLlm(BaseLlm):
                     "POST", f"{self.base_url}/api/chat",
                     json=payload, timeout=120.0
                 ) as resp:
+                    resp.raise_for_status()
                     accumulated = ""
                     async for line in resp.aiter_lines():
                         if not line:
