@@ -150,6 +150,7 @@ class WorkflowContext(Generic[OutT, W_OutT]):
 
 ```python
 import asyncio
+from typing import Any
 from agent_framework._workflows._executor import Executor, handler
 from agent_framework._workflows._workflow_context import WorkflowContext
 
@@ -171,7 +172,7 @@ class CountingExecutor(Executor):
     async def on_text(
         self,
         message: str,
-        ctx: WorkflowContext[int],  # OutT=int
+        ctx: WorkflowContext[int, Any],  # OutT=int
     ) -> None:
         await ctx.send_message(len(message))
 
@@ -814,6 +815,7 @@ if caught:
 ### Example 4 — re-registering conditions after deserialization
 
 ```python
+from collections.abc import Callable
 from agent_framework._workflows._edge import (
     SwitchCaseEdgeGroup,
     SwitchCaseEdgeGroupCase,
@@ -821,7 +823,7 @@ from agent_framework._workflows._edge import (
 
 
 # Condition registry — keyed by condition_name
-CONDITION_REGISTRY: dict[str, callable] = {
+CONDITION_REGISTRY: dict[str, Callable] = {
     "is_vip": lambda msg: msg.get("tier") == "vip",
     "is_trial": lambda msg: msg.get("tier") == "trial",
 }
@@ -1459,7 +1461,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework._workflows._functional import step, workflow, FunctionalWorkflowAgent
-from agent_framework._compaction import InMemoryCheckpointStorage
+from agent_framework import InMemoryCheckpointStorage
 from agent_framework.openai import OpenAIChatClient
 
 
