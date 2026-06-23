@@ -314,7 +314,9 @@ async def main():
     agent = Agent(model)
     try:
         await agent.run("Hello")
-    except* FallbackExceptionGroup as eg:
+    except FallbackExceptionGroup as eg:
+        # FallbackExceptionGroup is itself an ExceptionGroup subclass — use plain
+        # except (not except*) to avoid TypeError at the catch site.
         for exc in eg.exceptions:
             if isinstance(exc, ResponseRejected):
                 print(f"Responses rejected: {exc}")   # ResponseRejected: 1 model response(s) rejected
@@ -439,7 +441,7 @@ async def stream_response(sdk_version: int = 6):
         TextDeltaChunk(id="text_0", delta="answer is "),
         TextDeltaChunk(id="text_0", delta="Paris."),
         TextEndChunk(id="text_0"),
-        FinishChunk(finish_reason="stop", usage={"prompt_tokens": 10, "completion_tokens": 5}),
+        FinishChunk(finish_reason="stop"),  # FinishChunk only has finish_reason + message_metadata
         DoneChunk(),
     ]
     for chunk in chunks:
@@ -466,17 +468,18 @@ from pydantic_ai.ui.vercel_ai.request_types import (
 )
 
 # Server side: signal that a tool needs approval (SDK v6+)
+# ToolApprovalRequestChunk only accepts approval_id + tool_call_id
 approval_request = ToolApprovalRequestChunk(
+    approval_id="appr_001",
     tool_call_id="call_abc123",
-    tool_name="delete_file",
 )
 print(approval_request.encode(sdk_version=6))
 
-# Client side: user responds
+# Client side: user responds via ToolApprovalResponded (id = approval_id, approved = bool)
 approved = ToolApprovalResponded(
-    type="tool-approval-responded",
-    tool_call_id="call_abc123",
-    result="approved",
+    id="appr_001",
+    approved=True,
+    reason="Confirmed safe to execute",
 )
 print(approved.model_dump_json(by_alias=True))
 
@@ -494,7 +497,8 @@ print(output_chunk.encode(sdk_version=6))
 from pydantic_ai.ui.vercel_ai.request_types import SubmitMessage, TextUIPart
 
 raw = {
-    "type": "submit-message",
+    "trigger": "submit-message",   # discriminator field — not "type"
+    "id": "chat_session_001",      # required top-level chat ID
     "messages": [
         {
             "id": "msg_1",
@@ -817,7 +821,8 @@ async def main():
     async def analyse_data(ctx: RunContext[None], data: str) -> str:
         """Analyse the given data and enqueue a follow-up question."""
         # Inject an 'asap' follow-up so the agent processes it next
-        await ctx.enqueue("Now summarise your analysis in one sentence.", priority="asap")
+        # enqueue() is synchronous — do not await it
+        ctx.enqueue("Now summarise your analysis in one sentence.", priority="asap")
         return f"Analysis: {data} contains {len(data)} characters."
 
     result = await agent.run("Analyse 'Hello World'")
@@ -856,7 +861,7 @@ async def main():
             parts=[ToolReturnPart(tool_name="get_weather", content="Sunny, 22°C", tool_call_id="tc_1")]
         )
         # Inject both as a complete exchange — ModelResponse then ModelRequest
-        await ctx.enqueue(fake_response, fake_request, priority="when_idle")
+        ctx.enqueue(fake_response, fake_request, priority="when_idle")
         return f"Current weather in {city}: partly cloudy, 18°C."
 
     result = await agent.run(f"What's the weather in Paris?")
@@ -907,7 +912,7 @@ async def main():
         # when_idle: only fires when the agent would otherwise terminate.
         # Multiple when_idle enqueues accumulate; they all fire before the run exits.
         if step_count["n"] == 1:
-            await ctx.enqueue(
+            ctx.enqueue(
                 "Provide a one-sentence summary of everything you just did.",
                 priority="when_idle",
             )
@@ -1265,11 +1270,13 @@ class WeatherOutput(BaseModel):
 
 
 async def main():
-    agent = Agent("openai:gpt-4o-mini", output_type=WeatherOutput)
-    result = await agent.run(
-        "Give a weather report for London",
+    # validation_context is an Agent constructor param, not a run() kwarg
+    agent = Agent(
+        "openai:gpt-4o-mini",
+        output_type=WeatherOutput,
         validation_context={"unit": "celsius"},
     )
+    result = await agent.run("Give a weather report for London")
     print(result.output)
 
 asyncio.run(main())
@@ -1501,7 +1508,7 @@ import asyncio
 from collections.abc import AsyncIterable
 from pydantic_ai import Agent
 from pydantic_ai.agent.abstract import EventStreamHandler
-from pydantic_ai.messages import AgentStreamEvent, TextPartDeltaEvent
+from pydantic_ai.messages import AgentStreamEvent, PartDeltaEvent, TextPartDelta
 from pydantic_ai.tools import RunContext
 
 
@@ -1511,7 +1518,7 @@ async def my_stream_handler(
 ) -> None:
     """Collect all events and print text deltas as they arrive."""
     async for event in events:
-        if isinstance(event, TextPartDeltaEvent):
+        if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
             print(event.delta.content_delta, end="", flush=True)
     print()  # newline at end
 
@@ -1535,7 +1542,7 @@ import asyncio
 from collections.abc import AsyncIterable, AsyncIterator
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessEventStream
-from pydantic_ai.messages import AgentStreamEvent, TextPartDeltaEvent
+from pydantic_ai.messages import AgentStreamEvent, PartDeltaEvent, TextPartDelta
 from pydantic_ai.tools import RunContext
 
 
@@ -1545,9 +1552,8 @@ async def uppercase_text_events(
 ) -> AsyncIterator[AgentStreamEvent]:
     """Transform text delta events to uppercase; pass all other events through."""
     async for event in events:
-        if isinstance(event, TextPartDeltaEvent):
+        if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
             from dataclasses import replace
-            from pydantic_ai.messages import TextPartDelta
             upper_delta = TextPartDelta(content_delta=event.delta.content_delta.upper())
             yield replace(event, delta=upper_delta)
         else:
