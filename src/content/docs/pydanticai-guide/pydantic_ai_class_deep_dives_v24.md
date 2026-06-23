@@ -110,8 +110,9 @@ class PromptInjectModel(WrapperModel):
         if messages and isinstance(messages[0], ModelRequest):
             first = messages[0]
             new_parts = injected + list(first.parts)
-            from pydantic_ai.messages import ModelRequest as MR
-            messages = [MR(parts=new_parts)] + messages[1:]
+            import dataclasses
+            # replace() preserves run_id, conversation_id, instructions, etc.
+            messages = [dataclasses.replace(first, parts=new_parts)] + messages[1:]
         # Delegate to the wrapped model's prepare_messages so provider-specific
         # normalization (e.g. tool-history reordering) still applies.
         return super().prepare_messages(messages)
@@ -1534,12 +1535,9 @@ async def my_stream_handler(
 
 
 async def main():
-    agent = Agent(
-        "openai:gpt-4o-mini",
-        event_stream_handler=my_stream_handler,
-    )
-    # event_stream_handler fires instead of the normal streaming path
-    result = await agent.run("Count to five slowly")
+    agent = Agent("openai:gpt-4o-mini")
+    # event_stream_handler is a per-run keyword — pass it to run(), not Agent().
+    result = await agent.run("Count to five slowly", event_stream_handler=my_stream_handler)
     print("\nFinal:", result.output)
 
 asyncio.run(main())
