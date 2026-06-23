@@ -112,7 +112,9 @@ class PromptInjectModel(WrapperModel):
             new_parts = injected + list(first.parts)
             from pydantic_ai.messages import ModelRequest as MR
             messages = [MR(parts=new_parts)] + messages[1:]
-        return messages
+        # Delegate to the wrapped model's prepare_messages so provider-specific
+        # normalization (e.g. tool-history reordering) still applies.
+        return super().prepare_messages(messages)
 
 
 async def main():
@@ -556,8 +558,8 @@ async def main():
     agent = Agent(
         "openai:gpt-4o",
         capabilities=[
-            WebSearch(defer_loading=True),
-            WebFetch(defer_loading=True),
+            WebSearch(defer_loading=True, id="web_search"),
+            WebFetch(defer_loading=True, id="web_fetch"),
         ],
     )
     # On every single request the model receives the full catalog:
@@ -584,7 +586,7 @@ from pydantic_ai.capabilities import WebSearch
 async def main():
     agent = Agent(
         "openai:gpt-4o",
-        capabilities=[WebSearch(defer_loading=True)],
+        capabilities=[WebSearch(defer_loading=True, id="web_search")],
     )
     async with agent.iter("Search for news about Python 4") as agent_run:
         async for node in agent_run:
@@ -1318,6 +1320,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic_ai import Agent
+from pydantic_ai.output import DeferredToolRequests
 from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
 from pydantic_ai.tools import RunContext
 
@@ -1336,19 +1339,37 @@ async def delete_file(ctx: RunContext[None], path: str) -> str:
 
 
 async def main():
-    # FunctionToolset holds the function; ApprovalRequiredToolset adds HITL gating.
-    # approval_required_func(ctx, tool_def, validated_args) → bool
-    # True → call deferred; agent returns DeferredToolRequests to caller.
-    # Run 2: pass DeferredToolResults(metadata={"approved_by": "Alice"})
-    #   → ctx.tool_call_approved=True, ctx.tool_call_metadata={"approved_by": "Alice"}
     base_ts = FunctionToolset([delete_file])
     approval_ts = ApprovalRequiredToolset(
         base_ts,
         approval_required_func=lambda ctx, tool_def, args: tool_def.name == "delete_file",
     )
-    agent = Agent("openai:gpt-4o-mini", toolsets=[approval_ts])
-    result = await agent.run("Delete /tmp/old_log.txt")
-    print(result.output)
+    # Include DeferredToolRequests in output_type so run 1 can return pending approvals.
+    agent = Agent("openai:gpt-4o-mini", toolsets=[approval_ts], output_type=[str, DeferredToolRequests])
+
+    # Run 1: model calls delete_file → ApprovalRequired raised → returns DeferredToolRequests.
+    result1 = await agent.run("Delete /tmp/old_log.txt")
+    assert isinstance(result1.output, DeferredToolRequests)
+    pending = result1.output
+    print(f"Pending approvals: {[c.tool_name for c in pending.approvals]}")
+
+    # Human-in-the-loop: reviewer approves and supplies per-call metadata.
+    # build_results() keys metadata by tool_call_id so the agent can populate
+    # ctx.tool_call_metadata on the second run.
+    tool_call_id = pending.approvals[0].tool_call_id
+    tool_results = pending.build_results(
+        approve_all=True,
+        metadata={tool_call_id: {"approved_by": "Alice"}},
+    )
+
+    # Run 2: deferred_tool_results supplies the approval → ctx.tool_call_approved=True,
+    # ctx.tool_call_metadata={"approved_by": "Alice"} → delete_file executes fully.
+    result2 = await agent.run(
+        None,
+        deferred_tool_results=tool_results,
+        message_history=result1.new_messages(),
+    )
+    print(result2.output)  # "Deleted /tmp/old_log.txt (approved by: Alice)"
 
 asyncio.run(main())
 ```
