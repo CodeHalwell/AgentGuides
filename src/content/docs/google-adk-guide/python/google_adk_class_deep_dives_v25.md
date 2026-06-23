@@ -1189,6 +1189,7 @@ app = App(name="traced-app", root_agent=agent)
 
 ```python
 import time
+from typing import Any, AsyncGenerator
 from opentelemetry import trace
 from google.adk.workflow._base_node import BaseNode
 from google.adk.agents.context import Context
@@ -1918,7 +1919,9 @@ class OllamaLlm(BaseLlm):
                 })
         for content in llm_request.contents:
             text = " ".join(p.text for p in (content.parts or []) if p.text)
-            messages.append({"role": content.role or "user", "content": text})
+            # ADK uses "model" for assistant turns; Ollama expects "assistant"
+            role = "assistant" if content.role == "model" else (content.role or "user")
+            messages.append({"role": role, "content": text})
 
         payload = {
             "model": self.model.removeprefix("ollama/"),
