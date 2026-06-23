@@ -646,7 +646,7 @@ class ToolsetTool(Generic[AgentDepsT]):
     args_validator_func: Callable[..., Any] | None = None
 ```
 
-`args_validator_func` runs **after** schema validation but **before** tool execution. It receives the schema-validated kwargs, must have the same typed parameters as the tool function with `RunContext` as the first argument, and should raise `ModelRetry` on failure. The function returns `None` on success.
+`args_validator_func` runs **after** schema validation but **before** tool execution. It receives the schema-validated kwargs, must have the same typed parameters as the tool function with `RunContext` as the first argument, and should raise `ModelRetry` on failure. The function returns `None` on success. Pass it to `@agent.tool(args_validator=...)` — the public decorator keyword is `args_validator`; `args_validator_func` is the name of the internal `ToolsetTool` dataclass field that stores it.
 
 ### 5.1 Post-Schema Validation with `args_validator_func`
 
@@ -663,7 +663,7 @@ async def main():
         if not url.startswith("https://"):
             raise ModelRetry("URL must use HTTPS")
 
-    @agent.tool(args_validator_func=validate_url)
+    @agent.tool(args_validator=validate_url)   # public kwarg is args_validator
     async def fetch_url(ctx: RunContext[None], url: str) -> str:
         """Fetch the content at a URL."""
         return f"Fetched: {url}"
@@ -693,7 +693,7 @@ def validate_amount(ctx: RunContext[None], amount: float, currency: str) -> None
 async def main():
     agent = Agent("openai:gpt-4o-mini")
 
-    @agent.tool(args_validator_func=validate_amount)
+    @agent.tool(args_validator=validate_amount)   # public kwarg is args_validator
     async def convert_currency(ctx: RunContext[None], amount: float, currency: str) -> str:
         """Convert amount in the given currency to USD."""
         return f"Converted {amount} {currency} to USD"
@@ -1318,35 +1318,35 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.toolsets import ApprovalRequiredToolset
+from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
 from pydantic_ai.tools import RunContext
 
 
+async def delete_file(ctx: RunContext[None], path: str) -> str:
+    """Delete a file at the given path."""
+    if ctx.tool_call_approved:
+        # ctx.tool_call_metadata is populated from DeferredToolResults.metadata[tool_call_id]
+        # — the metadata dict the approval layer attached on the second run
+        meta = ctx.tool_call_metadata or {}
+        approved_by = meta.get("approved_by", "unknown")
+        return f"Deleted {path} (approved by: {approved_by})"
+    # ApprovalRequiredToolset intercepts before this line on run 1 (when approval
+    # is required), so this path only runs when approval_required_func returns False.
+    return f"Approval not required for: {path}"
+
+
 async def main():
-    agent = Agent("openai:gpt-4o-mini")
-
-    @agent.tool
-    async def delete_file(ctx: RunContext[None], path: str) -> str:
-        """Delete a file at the given path."""
-        # ctx.tool_call_approved: True on the second run after human approval
-        if ctx.tool_call_approved:
-            # ctx.tool_call_metadata: populated from DeferredToolResults.metadata[tool_call_id]
-            # — arbitrary metadata the approval layer attached when responding
-            meta = ctx.tool_call_metadata or {}
-            approved_by = meta.get("approved_by", "unknown")
-            return f"Deleted {path} (approved by: {approved_by})"
-        return f"Approval required for: {path}"
-
-    # HITL gating uses ApprovalRequiredToolset (from pydantic_ai.toolsets), not a capability.
+    # FunctionToolset holds the function; ApprovalRequiredToolset adds HITL gating.
     # approval_required_func(ctx, tool_def, validated_args) → bool
-    # True → call is deferred; agent returns DeferredToolRequests to the caller.
-    # On the second run, pass DeferredToolResults(metadata={"approved_by": "Alice"})
-    # and ctx.tool_call_approved=True, ctx.tool_call_metadata={"approved_by": "Alice"}
-    # will be set for the re-executed tool call.
-    #   approval_ts = ApprovalRequiredToolset(
-    #       toolset,
-    #       approval_required_func=lambda ctx, tool_def, args: tool_def.name == "delete_file",
-    #   )
+    # True → call deferred; agent returns DeferredToolRequests to caller.
+    # Run 2: pass DeferredToolResults(metadata={"approved_by": "Alice"})
+    #   → ctx.tool_call_approved=True, ctx.tool_call_metadata={"approved_by": "Alice"}
+    base_ts = FunctionToolset([delete_file])
+    approval_ts = ApprovalRequiredToolset(
+        base_ts,
+        approval_required_func=lambda ctx, tool_def, args: tool_def.name == "delete_file",
+    )
+    agent = Agent("openai:gpt-4o-mini", toolsets=[approval_ts])
     result = await agent.run("Delete /tmp/old_log.txt")
     print(result.output)
 
@@ -1451,57 +1451,34 @@ class AbstractAgent(Generic[AgentDepsT, OutputDataT], ABC):
     async def system_prompt_parts(self, *, deps, model, ...) -> list[SystemPromptPart]: ...
 ```
 
-### 10.1 Custom `AbstractAgent` Subclass — Proxy with Rate Limiting
+### 10.1 `WrapperAgent` Subclass — Proxy with Rate Limiting
+
+`AbstractAgent` has 11 abstract methods; for proxy patterns use `WrapperAgent` as the base — it delegates everything to `self.wrapped` and leaves no abstract methods unimplemented.
 
 ```python
 import asyncio
 from typing import Any
 from pydantic_ai import Agent
-from pydantic_ai.agent.abstract import AbstractAgent, EventStreamHandler
-from pydantic_ai.models import KnownModelName
-from pydantic_ai.output import OutputSpec
+from pydantic_ai.agent import WrapperAgent
 
 
-class RateLimitedAgent(AbstractAgent):
-    """An agent wrapper that enforces a maximum number of runs per minute."""
+class RateLimitedAgent(WrapperAgent):
+    """An agent wrapper that enforces a maximum number of runs per minute.
+
+    WrapperAgent delegates all AbstractAgent abstract methods to self.wrapped,
+    so only the run() override is needed here.
+    """
 
     def __init__(self, inner: Agent, max_per_minute: int = 10):
-        self._inner = inner
+        super().__init__(inner)          # sets self.wrapped = inner
         self._max_per_minute = max_per_minute
         self._run_count = 0
-
-    @property
-    def model(self): return self._inner.model
-
-    @property
-    def name(self): return self._inner.name
-
-    @name.setter
-    def name(self, value): self._inner.name = value
-
-    @property
-    def description(self): return self._inner.description
-
-    @description.setter
-    def description(self, value): self._inner.description = value
-
-    @property
-    def deps_type(self): return self._inner.deps_type
-
-    @property
-    def output_type(self): return self._inner.output_type
-
-    @property
-    def event_stream_handler(self): return self._inner.event_stream_handler
-
-    @property
-    def toolsets(self): return self._inner.toolsets
 
     async def run(self, prompt: str, **kwargs: Any):
         if self._run_count >= self._max_per_minute:
             raise RuntimeError(f"Rate limit exceeded: {self._max_per_minute} runs/min")
         self._run_count += 1
-        return await self._inner.run(prompt, **kwargs)
+        return await self.wrapped.run(prompt, **kwargs)
 
 
 async def main():
