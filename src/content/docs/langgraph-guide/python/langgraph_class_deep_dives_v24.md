@@ -855,7 +855,7 @@ builder = StateGraph(State)
 builder.add_node(
     "lookup",
     expensive_lookup,
-    cache=CachePolicy(ttl=timedelta(minutes=5)),  # → CacheKey(ns=..., key=hash, ttl=300)
+    cache_policy=CachePolicy(ttl=timedelta(minutes=5)),  # → CacheKey(ns=..., key=hash, ttl=300)
 )
 builder.add_edge(START, "lookup")
 builder.add_edge("lookup", END)
@@ -890,7 +890,7 @@ builder2 = StateGraph(State)
 builder2.add_node(
     "lookup",
     expensive_lookup,
-    cache=CachePolicy(ttl=60, key_func=semantic_key),
+    cache_policy=CachePolicy(ttl=60, key_func=semantic_key),
 )
 builder2.add_edge(START, "lookup")
 builder2.add_edge("lookup", END)
@@ -933,13 +933,15 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
 
 ### Using `ToolCallRequest.override()` in a `ToolNode` interceptor
 
-The `handle_tool_errors` parameter of `ToolNode` accepts a callable `(ToolCallRequest) -> ToolCallRequest`. This is the recommended way to sanitise or transform tool calls before execution without monkey-patching:
+The `wrap_tool_call` parameter of `ToolNode` accepts a `ToolCallWrapper` — a callable with signature `(request: ToolCallRequest, execute: Callable[[ToolCallRequest], ToolMessage | Command]) -> ToolMessage | Command`. The wrapper receives the request *before* execution and must call `execute(req)` (or `execute(req.override(...))`) to complete the tool call. This is the correct way to sanitise or transform tool calls before execution:
 
 ```python
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
-from langchain_core.tools import tool, BaseTool
-from langchain_core.messages import ToolCall
+from langchain_core.tools import tool
+from langchain_core.messages import ToolCall, ToolMessage
+from langgraph.types import Command
+from typing import Callable
 
 @tool
 def safe_eval(expression: str) -> float:
@@ -952,23 +954,24 @@ def safe_eval(expression: str) -> float:
         raise ValueError(f"Unsupported: {node}")
     return _eval(ast.parse(expression, mode="eval").body)
 
-def sanitise_interceptor(req: ToolCallRequest) -> ToolCallRequest:
+def sanitise_interceptor(
+    req: ToolCallRequest,
+    execute: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
     """Strip unsafe characters from expression before evaluation."""
     if req.tool_call["name"] == "safe_eval":
         expr = req.tool_call.get("args", {}).get("expression", "")
-        # Remove any non-arithmetic characters
         clean = "".join(c for c in expr if c in "0123456789+-*/.(). ")
         if clean != expr:
-            # Create a new ToolCall with cleaned args using override()
             new_tc = ToolCall(
                 name=req.tool_call["name"],
                 args={"expression": clean},
                 id=req.tool_call["id"],
             )
-            return req.override(tool_call=new_tc)
-    return req
+            return execute(req.override(tool_call=new_tc))
+    return execute(req)
 
-node = ToolNode([safe_eval], handle_tool_errors=sanitise_interceptor)
+node = ToolNode([safe_eval], wrap_tool_call=sanitise_interceptor)
 ```
 
 ### Overriding the tool itself
@@ -978,8 +981,14 @@ node = ToolNode([safe_eval], handle_tool_errors=sanitise_interceptor)
 ```python
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt.tool_node import ToolCallRequest
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
+from typing import Callable
 
-def mock_interceptor(req: ToolCallRequest) -> ToolCallRequest:
+def mock_interceptor(
+    req: ToolCallRequest,
+    execute: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
     """Redirect all tool calls to a mock during tests."""
     import os
     if os.environ.get("TESTING"):
@@ -987,8 +996,8 @@ def mock_interceptor(req: ToolCallRequest) -> ToolCallRequest:
             func=lambda **kwargs: "mock_result",
             name=req.tool_call["name"],
         )
-        return req.override(tool=stub)
-    return req
+        return execute(req.override(tool=stub))
+    return execute(req)
 ```
 
 ### Overriding the state
@@ -997,8 +1006,14 @@ def mock_interceptor(req: ToolCallRequest) -> ToolCallRequest:
 
 ```python
 from langgraph.prebuilt.tool_node import ToolCallRequest
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
+from typing import Callable
 
-def enrich_state_interceptor(req: ToolCallRequest) -> ToolCallRequest:
+def enrich_state_interceptor(
+    req: ToolCallRequest,
+    execute: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
     """Add runtime context to the state seen by tools."""
     import datetime
     enriched = {
@@ -1006,7 +1021,7 @@ def enrich_state_interceptor(req: ToolCallRequest) -> ToolCallRequest:
         "request_time": datetime.datetime.now().isoformat(),
         "request_id": "req-12345",
     }
-    return req.override(state=enriched)
+    return execute(req.override(state=enriched))
 ```
 
 ---
