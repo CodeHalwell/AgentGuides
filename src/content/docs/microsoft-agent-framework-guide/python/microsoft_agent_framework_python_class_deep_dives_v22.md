@@ -929,7 +929,7 @@ class AgentExternalInputRequest:
 class AgentExternalInputResponse:
     user_input: str
     messages: list[Message] = []
-    function_results: dict[str, Content] = {}  # Tool results to inject on resume
+    function_results: dict[str, Content] = {}  # reserved field — not read by the executor in 1.9.0
 ```
 
 ### Key facts
@@ -939,7 +939,7 @@ class AgentExternalInputResponse:
 | `ExternalInputRequest` | `Question` / `RequestExternalInput` YAML executor | `ExternalInputResponse` |
 | `AgentExternalInputRequest` | `externalLoop.when` condition in agent executor | `AgentExternalInputResponse` |
 | `request_id` | Auto-generated UUID by the executor | Must match when constructing the response |
-| `AgentExternalInputResponse.function_results` | Dict of `{function_call_id: Content}` | Lets caller inject tool results without re-running the tool |
+| `AgentExternalInputResponse.function_results` | Dict of `{function_call_id: Content}` | Reserved field — the 1.9.0 executor reads only `user_input`; setting this has no effect |
 
 ### Example 1 — resuming a paused workflow question
 
@@ -995,14 +995,13 @@ async def handle_agent_hitl(request: AgentExternalInputRequest) -> AgentExternal
     for fc in request.function_calls:
         print(f"  Pending function call: {fc}")
 
-    # Simulate user approval — inject a function result
+    # Simulate user approval — only user_input is consumed by the executor in 1.9.0
     user_says = "Proceed with the plan."
     return AgentExternalInputResponse(
         user_input=user_says,
         messages=[
             Message(role="user", contents=[user_says]),
         ],
-        function_results={},  # empty = let agent re-call the tool
     )
 
 # In a real declarative YAML workflow the AgentExecutor calls this automatically
