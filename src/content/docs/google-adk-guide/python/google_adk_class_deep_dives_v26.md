@@ -689,7 +689,7 @@ agent = LlmAgent(
 
 # Enable context caching: cache refreshes every 5 invocations, lives for 1 hour
 app = App(
-    agent=agent,
+    root_agent=agent,
     name="my_app",
     context_cache_config=ContextCacheConfig(
         cache_intervals=5,
@@ -708,7 +708,7 @@ from google.genai import types
 # Google API doesn't block the entire request — on timeout the agent
 # falls back to processing without a cache.
 app = App(
-    agent=agent,
+    root_agent=agent,
     name="my_app",
     context_cache_config=ContextCacheConfig(
         ttl_seconds=1800,
@@ -721,11 +721,11 @@ app = App(
 
 ```python
 # No ContextCacheConfig → caching disabled entirely
-app_no_cache = App(agent=agent, name="my_app")
+app_no_cache = App(root_agent=agent, name="my_app")
 
 # Or: set a high min_tokens so most sessions skip the cache
 app_selective = App(
-    agent=agent,
+    root_agent=agent,
     name="my_app",
     context_cache_config=ContextCacheConfig(
         min_tokens=16_384,  # only cache when prior request > 16k tokens
@@ -831,13 +831,13 @@ summariser_llm = Gemini(model="gemini-2.0-flash-lite")
 summariser = LlmEventSummarizer(llm=summariser_llm)
 
 app = App(
-    agent=agent,
+    root_agent=agent,
     name="long_conv_app",
     events_compaction_config=EventsCompactionConfig(
-        compaction_invocation_threshold=20,  # compact after 20 invocations
-        overlap_size=3,                      # keep 3 most recent invocations after compaction
+        summarizer=summariser,               # LlmEventSummarizer drives the compaction
+        compaction_interval=20,              # compact after 20 user-initiated invocations
+        overlap_size=3,                      # retain 3 preceding invocations for context
     ),
-    events_summarizer=summariser,
 )
 ```
 
@@ -1358,13 +1358,19 @@ from pathlib import Path
 from google.adk.artifacts.file_artifact_service import FileArtifactService
 from google.adk.apps import App
 from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 
-artifact_service = FileArtifactService(root_dir=Path("~/.adk/artifacts"))
-
+# artifact_service belongs on Runner, not App — App has no such field
 app = App(
-    agent=LlmAgent(name="assistant", model="gemini-2.0-flash"),
+    root_agent=LlmAgent(name="assistant", model="gemini-2.0-flash"),
     name="my_app",
-    artifact_service=artifact_service,
+)
+
+runner = Runner(
+    app=app,
+    artifact_service=FileArtifactService(root_dir=Path("~/.adk/artifacts")),
+    session_service=InMemorySessionService(),
 )
 ```
 
