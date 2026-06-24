@@ -144,7 +144,7 @@ async def main():
     async for event in runner.run_async(
         session_id=session.id,
         user_id="u1",
-        new_message=types.Content(role="user", parts=[types.Part.from_text("What is 2+2?")]),
+        new_message=types.Content(role="user", parts=[types.Part.from_text(text="What is 2+2?")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -302,7 +302,7 @@ pubsub_toolset = PubSubToolset(
 agent = LlmAgent(
     name="pubsub_agent",
     model="gemini-2.0-flash",
-    toolsets=[pubsub_toolset],
+    tools=[pubsub_toolset],
     instruction=(
         "You can publish and consume Pub/Sub messages. "
         "Pull at most 5 messages from a subscription and "
@@ -460,7 +460,7 @@ spanner_toolset = SpannerToolset(
 agent = LlmAgent(
     name="spanner_analyst",
     model="gemini-2.0-flash",
-    toolsets=[spanner_toolset],
+    tools=[spanner_toolset],
     instruction=(
         "You are a Spanner analyst. Project: my-project, "
         "Instance: my-instance, Database: my-db. "
@@ -698,7 +698,7 @@ agent = LlmAgent(
     model="gemini-2.0-flash",
     instruction="You are a helpful assistant with access to a large document corpus.",
     static_instruction=genai_types.Content(
-        parts=[genai_types.Part.from_text(LARGE_DOCUMENT_TEXT)],
+        parts=[genai_types.Part.from_text(text=LARGE_DOCUMENT_TEXT)],
     ),
 )
 
@@ -888,12 +888,12 @@ async def test_compaction():
         Event(
             author="user",
             invocation_id="inv1",
-            content=types.Content(role="user", parts=[types.Part.from_text("Search for ADK docs")]),
+            content=types.Content(role="user", parts=[types.Part.from_text(text="Search for ADK docs")]),
         ),
         Event(
             author="assistant",
             invocation_id="inv1",
-            content=types.Content(role="model", parts=[types.Part.from_text("Found 5 results...")]),
+            content=types.Content(role="model", parts=[types.Part.from_text(text="Found 5 results...")]),
         ),
     ]
 
@@ -1086,7 +1086,7 @@ toolbox = ToolboxToolset(server_url="http://localhost:5000")
 agent = LlmAgent(
     name="db_agent",
     model="gemini-2.0-flash",
-    toolsets=[toolbox],
+    tools=[toolbox],
     instruction="You have access to database tools. Answer questions by querying the database.",
 )
 ```
