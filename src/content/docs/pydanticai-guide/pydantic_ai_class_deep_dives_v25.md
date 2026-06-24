@@ -481,7 +481,7 @@ from pydantic_ai.messages import TextPartDelta, PartDeltaEvent
 
 
 async def main():
-    async with await model_request_stream(
+    async with model_request_stream(
         'openai:gpt-4o-mini',
         [ModelRequest.user_text_prompt('Count to five.')],
     ) as stream:
@@ -758,14 +758,13 @@ from pydantic_ai.common_tools.tavily import tavily_search_tool, TavilySearchResu
 async def main():
     tavily_client = AsyncTavilyClient(api_key="tvly-...")
 
-    # tavily_search_tool(tavily_client, max_results=None, *, search_depth='basic',
-    #                    topic='general', include_domains=None, exclude_domains=None,
-    #                    include_answer=False, include_raw_content=False)
+    # tavily_search_tool(api_key, *, client=..., max_results=None, search_depth=...,
+    #                    topic=..., time_range=..., include_domains=..., exclude_domains=...)
     agent = Agent(
         'openai:gpt-4o-mini',
         tools=[
             tavily_search_tool(
-                tavily_client=tavily_client,
+                client=tavily_client,
                 max_results=5,
                 # search_depth and topic are passed through to each individual call
             )
@@ -788,10 +787,9 @@ from pydantic_ai.common_tools.exa import ExaToolset
 
 
 async def main():
-    exa_client = AsyncExa(api_key="exa-...")
-
+    # ExaToolset takes api_key and creates the shared AsyncExa client internally
     # ExaToolset wraps four tools: exa_search, exa_find_similar, exa_get_contents, exa_answer
-    toolset = ExaToolset(client=exa_client)
+    toolset = ExaToolset(api_key="exa-...")
 
     agent = Agent('openai:gpt-4o-mini', toolsets=[toolset])
     result = await agent.run(
@@ -815,10 +813,10 @@ from pydantic_ai.common_tools.exa import exa_search_tool
 async def main():
     exa = AsyncExa(api_key="exa-...")
 
-    # exa_search_tool wraps only the exa_search function as a standalone Tool
+    # exa_search_tool: pass pre-created client via keyword-only `client=`, count via `num_results`
     agent = Agent(
         'openai:gpt-4o-mini',
-        tools=[exa_search_tool(exa, max_results=5)],
+        tools=[exa_search_tool(client=exa, num_results=5)],
     )
     result = await agent.run("Search for recent advances in retrieval-augmented generation")
     print(result.output)
