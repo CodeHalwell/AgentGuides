@@ -1524,8 +1524,9 @@ agent = Agent('openai:gpt-4o-mini', instructions="Be concise.")
 
 async def main():
     async with agent.iter("What is 2+2?") as run:
-        # Manually drive the graph one node at a time
-        node = await run.__anext__()   # UserPromptNode
+        # Start from run.next_node and drive every node through run.next() so that
+        # before_node_run / wrap_node_run / after_node_run hooks fire on every step.
+        node = run.next_node
         print("First node:", type(node).__name__)
 
         while not Agent.is_end_node(node):
