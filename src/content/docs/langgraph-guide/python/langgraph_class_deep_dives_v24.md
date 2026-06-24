@@ -67,8 +67,8 @@ DebugPayload = (
 ### Consuming `stream_mode="debug"`
 
 ```python
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages, MessagesState
+from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
@@ -343,8 +343,8 @@ def task_path_str(tup: str | int | tuple) -> str:
 ### Practical: inspecting task IDs
 
 ```python
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages, MessagesState
+from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.graph.message import add_messages
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
@@ -752,10 +752,11 @@ class _DeltaSnapshot(NamedTuple):
 
 A `DeltaChannel` stores only the writes from each superstep (deltas), not the full accumulated value. To reconstruct the full value at any checkpoint you walk backwards through ancestor checkpoints and replay deltas. With large histories this walk becomes expensive.
 
-Setting `snapshot_frequency=N` causes `DeltaChannel` to write a `_DeltaSnapshot` blob every `N` steps. `get_delta_channel_history` stops the walk when it encounters a `_DeltaSnapshot` — it reconstructs the value directly from `.value` without replaying further deltas.
+Setting `snapshot_frequency=N` causes `DeltaChannel` to write a `_DeltaSnapshot` blob every `N` steps. When the checkpointer walks ancestors to reconstruct a `DeltaChannel` value it stops as soon as it sees a `_DeltaSnapshot` — that blob contains the fully accumulated value at that point.
+
+> **Note on `StateGraph`:** `StateGraph` backs `Annotated[Type, reducer]` fields with `BinaryOperatorAggregate`, not `DeltaChannel`. `DeltaChannel` is an internal channel type used in low-level `Pregel` instances; it does not appear automatically when you use `StateGraph`. The serialiser support for `_DeltaSnapshot` is demonstrated below using the serialiser directly and via `get_state_history` for a regular `StateGraph`.
 
 ```python
-from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from typing import Annotated, TypedDict
@@ -764,11 +765,11 @@ def append_reducer(existing: list, new: list) -> list:
     return (existing or []) + new
 
 class EventState(TypedDict):
-    # DeltaChannel-backed key: only deltas stored per step
+    # Backed by BinaryOperatorAggregate in StateGraph (not DeltaChannel)
     events: Annotated[list[str], append_reducer]
 
 def add_event(state: EventState) -> dict:
-    return {"events": [f"event_{len(state['events'])+1}"]}
+    return {"events": [f"event_{len(state['events']) + 1}"]}
 
 builder = StateGraph(EventState)
 builder.add_node("add", add_event)
@@ -782,9 +783,12 @@ config = {"configurable": {"thread_id": "delta_t1"}}
 for _ in range(5):
     graph.invoke({"events": []}, config=config)
 
-# get_delta_channel_history internally uses _DeltaSnapshot markers
-history = graph.get_delta_channel_history(config, channel="events")
-print(f"History entries: {len(list(history))}")
+# walk checkpoint history via the standard StateGraph API
+history = list(graph.get_state_history(config))
+print(f"Checkpoint count: {len(history)}")
+for snap in history[:3]:
+    step = snap.metadata.get("step", "?")
+    print(f"  step {step}: events={snap.values.get('events', [])}")
 ```
 
 ### Inspecting `_DeltaSnapshot` in checkpoint blobs
@@ -977,6 +981,7 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 
 def mock_interceptor(req: ToolCallRequest) -> ToolCallRequest:
     """Redirect all tool calls to a mock during tests."""
+    import os
     if os.environ.get("TESTING"):
         stub = StructuredTool.from_function(
             func=lambda **kwargs: "mock_result",
