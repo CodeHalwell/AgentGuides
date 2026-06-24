@@ -895,7 +895,7 @@ asyncio.run(test_compaction())
 
 **Source:** `google.adk.tools.tool_confirmation`
 
-`ToolConfirmation` is a small Pydantic model representing a request for human confirmation before a tool completes its action. When a tool function returns a `ToolConfirmation` instead of a normal result, the framework pauses execution and waits for the user to confirm or reject the action.
+`ToolConfirmation` is a small Pydantic model carrying confirmation state for a HITL (human-in-the-loop) tool call. The interrupt mechanism lives in `FunctionTool` and `ToolContext`, not in the return value of the tool function itself — returning a `ToolConfirmation` directly from a plain function has no special effect.
 
 It is decorated with `@experimental(FeatureName.TOOL_CONFIRMATION)`.
 
@@ -924,66 +924,91 @@ The camelCase alias generator means the model serialises as `{"hint": "...", "co
 
 ### How it works
 
-1. A tool function returns `ToolConfirmation(hint="...", confirmed=False, payload={...})`.
-2. The framework detects the `ToolConfirmation` return type and emits a `RequestInput` interrupt.
-3. The human reviews the `hint` and `payload`, then resumes with `confirmed=True`.
-4. The framework calls the tool again; the second call proceeds normally.
+There are two source-verified patterns for triggering a confirmation interrupt:
 
-### Example 1 — simple approval gate
+**Pattern A — `FunctionTool(func, require_confirmation=...)`** (recommended)
 
-```python
-from google.adk.tools.tool_confirmation import ToolConfirmation
+1. Wrap the tool with `FunctionTool(func, require_confirmation=True)` (or a predicate callable).
+2. On the first call, `FunctionTool.run_async` sees no `tool_context.tool_confirmation` set and calls `tool_context.request_confirmation(hint=...)`, returning an error response to prevent execution.
+3. The framework emits a `RequestInput` event; the human approves (sends `confirmed=True`) or rejects.
+4. On the resumed call, `tool_context.tool_confirmation.confirmed` is `True` and the tool function actually runs.
 
-async def delete_user_account(user_id: str) -> dict | ToolConfirmation:
-    """Delete a user account. Requires explicit confirmation."""
-    # Always return ToolConfirmation on the first call
-    return ToolConfirmation(
-        hint=f"Are you sure you want to permanently delete user '{user_id}'?",
-        confirmed=False,
-        payload={"user_id": user_id, "action": "delete"},
-    )
-```
+**Pattern B — `tool_context.request_confirmation(hint=..., payload=...)` directly**
 
-### Example 2 — conditional confirmation (confirm only for high-risk actions)
+Call this inside a tool function that accepts a `ToolContext` parameter to manually control the hint and payload. Check `tool_context.tool_confirmation` to branch on first-call vs. resumed call.
 
-```python
-SENSITIVE_TABLES = {"payments", "user_credentials", "audit_log"}
-
-async def run_sql(query: str, tool_context: ToolContext) -> dict | ToolConfirmation:
-    """Execute a SQL query. Requires confirmation for writes to sensitive tables."""
-    is_write = any(kw in query.upper() for kw in ("DELETE", "DROP", "TRUNCATE", "UPDATE"))
-    touches_sensitive = any(t in query.lower() for t in SENSITIVE_TABLES)
-
-    if is_write and touches_sensitive:
-        return ToolConfirmation(
-            hint=f"This query modifies a sensitive table. Query: {query[:200]}",
-            confirmed=False,
-            payload={"query": query},
-        )
-
-    # Safe query — execute directly
-    return await execute_query_impl(query)
-```
-
-### Example 3 — using `ToolConfirmation` with `FunctionTool`
+### Example 1 — simple approval gate (`FunctionTool` + `require_confirmation`)
 
 ```python
 from google.adk.tools.function_tool import FunctionTool
-from google.adk.tools.tool_confirmation import ToolConfirmation
 from google.adk.agents import LlmAgent
 
-async def send_email(to: str, subject: str, body: str) -> dict | ToolConfirmation:
+async def delete_user_account(user_id: str) -> dict:
+    """Delete a user account. Requires explicit confirmation before running."""
+    # This body only executes after the human confirms
+    return {"status": "deleted", "user_id": user_id}
+
+# FunctionTool intercepts the first call and emits the confirmation interrupt
+delete_tool = FunctionTool(delete_user_account, require_confirmation=True)
+
+agent = LlmAgent(
+    name="admin_agent",
+    model="gemini-2.0-flash",
+    tools=[delete_tool],
+    instruction="Help manage user accounts. Always confirm destructive actions.",
+)
+```
+
+### Example 2 — conditional confirmation (predicate callable)
+
+```python
+from google.adk.tools.function_tool import FunctionTool
+
+SENSITIVE_TABLES = {"payments", "user_credentials", "audit_log"}
+
+async def run_sql(query: str) -> dict:
+    """Execute a SQL query."""
+    return await execute_query_impl(query)
+
+def needs_confirmation(query: str) -> bool:
+    """Only require confirmation for destructive writes to sensitive tables."""
+    is_write = any(kw in query.upper() for kw in ("DELETE", "DROP", "TRUNCATE", "UPDATE"))
+    touches_sensitive = any(t in query.lower() for t in SENSITIVE_TABLES)
+    return is_write and touches_sensitive
+
+# require_confirmation accepts a callable with the same signature as the tool
+sql_tool = FunctionTool(run_sql, require_confirmation=needs_confirmation)
+```
+
+### Example 3 — manual confirmation via `tool_context.request_confirmation`
+
+```python
+from google.adk.tools.function_tool import FunctionTool
+from google.adk.tools.tool_context import ToolContext
+from google.adk.agents import LlmAgent
+
+async def send_email(to: str, subject: str, body: str, tool_context: ToolContext) -> dict:
     """Send an email. Always requires confirmation before sending."""
-    return ToolConfirmation(
-        hint=f"Send email to '{to}' with subject '{subject}'?",
-        confirmed=False,
-        payload={"to": to, "subject": subject, "body_preview": body[:100]},
-    )
+    if not tool_context.tool_confirmation:
+        # First call — request confirmation with a rich hint and payload
+        tool_context.request_confirmation(
+            hint=f"Send email to '{to}' with subject '{subject}'?",
+            payload={"to": to, "subject": subject, "body_preview": body[:100]},
+        )
+        return {"pending": "Awaiting confirmation before sending."}
+
+    if not tool_context.tool_confirmation.confirmed:
+        return {"error": "Email send rejected by user."}
+
+    # Confirmed — perform the actual send
+    return {"status": "sent", "to": to, "subject": subject}
+
+email_tool = FunctionTool(send_email)
 
 agent = LlmAgent(
     name="email_agent",
     model="gemini-2.0-flash",
-    tools=[send_email],
+    tools=[email_tool],
     instruction=(
         "Draft and send emails on behalf of the user. "
         "Always confirm before actually sending."
