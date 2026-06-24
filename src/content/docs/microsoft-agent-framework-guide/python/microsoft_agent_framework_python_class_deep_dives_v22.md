@@ -425,14 +425,13 @@ def setup_telemetry(env: str) -> None:
     if env == "production":
         # Emit spans and metrics but strip message payloads
         enable_instrumentation(enable_sensitive_data=False)
-        configure_otel_providers(
-            tracer_exporter=...,  # OTLP or Azure Monitor exporter
-            meter_exporter=...,
-        )
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+        configure_otel_providers(exporters=[OTLPSpanExporter(), OTLPMetricExporter()])
     elif env == "development":
-        # Full payload capture for local debugging
+        # Full payload capture + console output for local debugging
         enable_sensitive_telemetry()
-        configure_otel_providers(tracer_exporter=...)
+        configure_otel_providers(enable_console_exporters=True)
     elif env == "test":
         # No OTel at all — keep tests deterministic
         disable_instrumentation()
@@ -712,8 +711,8 @@ state = WorkflowState(inputs={"task": "translate"})
 state.set_agent_result(
     text="The translation is: Bonjour le monde.",
     messages=[
-        Message(role="user", content="Translate 'Hello world' to French."),
-        Message(role="assistant", content="Bonjour le monde."),
+        Message(role="user", contents=["Translate 'Hello world' to French."]),
+        Message(role="assistant", contents=["Bonjour le monde."]),
     ],
 )
 
@@ -1001,7 +1000,7 @@ async def handle_agent_hitl(request: AgentExternalInputRequest) -> AgentExternal
     return AgentExternalInputResponse(
         user_input=user_says,
         messages=[
-            Message(role="user", content=user_says),
+            Message(role="user", contents=[user_says]),
         ],
         function_results={},  # empty = let agent re-call the tool
     )
