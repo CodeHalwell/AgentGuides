@@ -104,6 +104,7 @@ import asyncio
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.agents.langgraph_agent import LangGraphAgent
 from google.adk.runners import InMemoryRunner
@@ -1069,14 +1070,14 @@ toolbox = ToolboxToolset(
 ### Example 3 — with auth token getter for secured server
 
 ```python
-import google.auth
-import google.auth.transport.requests
+from google.auth.transport.requests import Request
+from google.oauth2 import id_token
 
 def get_google_id_token() -> str:
-    """Get an OIDC token for authenticating to the Toolbox server."""
-    credentials, _ = google.auth.default()
-    credentials.refresh(google.auth.transport.requests.Request())
-    return credentials.token
+    """Get an OIDC ID token for authenticating to the Toolbox server on Cloud Run."""
+    audience = "https://toolbox.my-project.run.app"
+    auth_req = Request()
+    return id_token.fetch_id_token(auth_req, audience)
 
 toolbox = ToolboxToolset(
     server_url="https://toolbox.my-project.run.app",
@@ -1161,7 +1162,7 @@ __call__():
 ### Example 1 — calling `ctx.run_node()` inside a workflow node
 
 ```python
-from google.adk.workflow import Workflow
+from google.adk.workflow import Workflow, node
 from google.adk.agents import LlmAgent
 
 researcher = LlmAgent(name="researcher", model="gemini-2.0-flash",
@@ -1169,7 +1170,7 @@ researcher = LlmAgent(name="researcher", model="gemini-2.0-flash",
 writer = LlmAgent(name="writer", model="gemini-2.0-flash",
                   instruction="Write a blog post based on the provided research.")
 
-@workflow.node
+@node
 async def orchestrate(ctx):
     # Run researcher and writer sequentially as dynamic nodes
     research_ctx = await ctx.run_node(researcher, node_input="quantum computing")
@@ -1187,7 +1188,7 @@ workflow = Workflow(nodes=[orchestrate], name="article_workflow")
 ```python
 import asyncio
 
-@workflow.node
+@node
 async def parallel_research(ctx):
     topics = ["LLMs", "Agents", "RAG", "MCP"]
     # Schedule all researcher nodes concurrently
@@ -1212,7 +1213,7 @@ async def parallel_research(ctx):
 ### Example 4 — resuming across turns (HITL)
 
 ```python
-@workflow.node
+@node
 async def approval_step(ctx):
     # Raises NodeInterruptedError when a RequestInput is returned by a tool
     # On resume (next ADK invocation with same session_id), DynamicNodeScheduler
