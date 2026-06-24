@@ -704,7 +704,7 @@ The `common_tools` package provides ready-made `Tool` and `FunctionToolset` fact
 
 ```python
 import asyncio
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 
@@ -727,7 +727,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool, DuckDuckGoSearchTool
 
