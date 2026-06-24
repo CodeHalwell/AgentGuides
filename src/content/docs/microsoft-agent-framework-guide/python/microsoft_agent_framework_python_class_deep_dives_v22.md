@@ -570,10 +570,8 @@ async def instrumented_run(agent: Agent, prompt: str) -> str:
 ### Example 3 — `create_mcp_client_span()` for custom MCP transport instrumentation
 
 ```python
-from agent_framework.observability import create_mcp_client_span, get_tracer
+from agent_framework.observability import create_mcp_client_span
 from opentelemetry import trace
-
-tracer = get_tracer("my_mcp_wrapper")
 
 async def call_mcp_tool_instrumented(server_url: str, tool_name: str, args: dict) -> dict:
     """Wraps an MCP tool call with consistent span naming."""
@@ -774,26 +772,33 @@ class DefaultHttpRequestHandler:
 ```python
 import asyncio
 from urllib.parse import urlparse
-from agent_framework_declarative import HttpRequestHandler, HttpRequestInfo, HttpRequestResult  # type: ignore
+from agent_framework_declarative import (  # type: ignore
+    HttpRequestHandler,
+    HttpRequestInfo,
+    HttpRequestResult,
+    DefaultHttpRequestHandler,
+)
 
 ALLOWED_HOSTS = {"api.internal.mycompany.com", "data.internal.mycompany.com"}
 
 class AllowlistHttpHandler:
     """Production HTTP handler with host allowlist (SSRF guard)."""
 
+    def __init__(self) -> None:
+        self._handler = DefaultHttpRequestHandler()
+
     async def send(self, info: HttpRequestInfo) -> HttpRequestResult:
         host = urlparse(info.url).hostname or ""
         if host not in ALLOWED_HOSTS:
-            # Do not make the request; return a synthetic error result
             return HttpRequestResult(
                 status_code=403,
                 is_success_status_code=False,
                 body=f"Blocked: host '{host}' not in allowlist.",
             )
-        # Delegate to the default handler for allowed hosts
-        from agent_framework_declarative import DefaultHttpRequestHandler  # type: ignore
-        handler = DefaultHttpRequestHandler()
-        return await handler.send(info)
+        return await self._handler.send(info)
+
+    async def aclose(self) -> None:
+        await self._handler.aclose()
 ```
 
 ### Example 2 — `DefaultHttpRequestHandler` mode 3 (per-request client with auth)
@@ -1090,11 +1095,18 @@ async def mcp_approval_handler(request: MCPToolApprovalRequest) -> bool:
 ```python
 import asyncio
 from urllib.parse import urlparse
-from agent_framework_declarative import MCPToolInvocation, MCPToolResult  # type: ignore
+from agent_framework_declarative import (  # type: ignore
+    MCPToolInvocation,
+    MCPToolResult,
+    DefaultMCPToolHandler,
+)
 
 ALLOWED_MCP_HOSTS = {"mcp.internal.mycompany.com"}
 
 class SafeMCPHandler:
+    def __init__(self) -> None:
+        self._handler = DefaultMCPToolHandler()
+
     async def invoke(self, inv: MCPToolInvocation) -> MCPToolResult:
         host = urlparse(inv.server_url).hostname or ""
         if host not in ALLOWED_MCP_HOSTS:
@@ -1102,13 +1114,10 @@ class SafeMCPHandler:
                 is_error=True,
                 error_message=f"MCP server '{host}' not in allowlist.",
             )
-        # Delegate to the default handler
-        from agent_framework_declarative import DefaultMCPToolHandler  # type: ignore
-        handler = DefaultMCPToolHandler()
-        try:
-            return await handler.invoke(inv)
-        finally:
-            await handler.aclose()
+        return await self._handler.invoke(inv)
+
+    async def aclose(self) -> None:
+        await self._handler.aclose()
 ```
 
 ### Example 3 — parsing `MCPToolResult` outputs
