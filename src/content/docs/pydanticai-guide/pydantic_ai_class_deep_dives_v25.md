@@ -704,7 +704,6 @@ The `common_tools` package provides ready-made `Tool` and `FunctionToolset` fact
 
 ```python
 import asyncio
-from duckduckgo_search import DDGS
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 
@@ -727,7 +726,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from duckduckgo_search import DDGS
+from ddgs.ddgs import DDGS  # primary package; duckduckgo_search is the legacy fallback
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool, DuckDuckGoSearchTool
 
@@ -931,7 +930,7 @@ return_part = LoadCapabilityReturnPart(
 )
 
 print(return_part.tool_kind)                      # 'capability-load'
-print(return_part.capability_instructions)         # 'Use the web_search tool...'
+print(return_part.instructions)                    # 'Use the web_search tool...'
 ```
 
 ### 6.4 Filter Capability-Load Parts from Message History
@@ -987,7 +986,12 @@ def build_registry(
 ) -> Mapping[str, type[T]]: ...
 
 def load_from_registry(
-    spec: NamedSpec, registry: Mapping[str, type[T]]
+    registry: Mapping[str, type[T]],
+    spec: NamedSpec,
+    *,
+    label: str,
+    custom_types_param: str,
+    context: str | None = None,
 ) -> T: ...
 ```
 
@@ -1043,12 +1047,13 @@ registry = build_registry(
 )
 
 # Load from a bare name — calls WebSearch()
-ws = load_from_registry(NamedSpec.model_validate('WebSearch'), registry)
+ws = load_from_registry(registry, NamedSpec.model_validate('WebSearch'),
+                        label='capability', custom_types_param='custom_types')
 print(type(ws).__name__)   # 'WebSearch'
 
 # Load from kwargs spec — calls WebFetch(max_content_tokens=4096)
 spec = NamedSpec.model_validate({'WebFetch': {'max_content_tokens': 4096}})
-wf = load_from_registry(spec, registry)
+wf = load_from_registry(registry, spec, label='capability', custom_types_param='custom_types')
 print(type(wf).__name__)   # 'WebFetch'
 ```
 
@@ -1193,11 +1198,11 @@ from pydantic_ai.output import StructuredOutputMode
 
 
 # 'tool'     → model calls an output tool to return structured data (most capable)
-# 'json'     → model uses JSON mode / response_format=json_object
+# 'native'   → model uses native JSON-schema output / response_format=json_schema
 # 'prompted' → model is instructed to return JSON via a system prompt
 
 profile_tool: ModelProfile     = {'default_structured_output_mode': 'tool'}
-profile_json: ModelProfile     = {'default_structured_output_mode': 'json'}
+profile_native: ModelProfile   = {'default_structured_output_mode': 'native'}
 profile_prompted: ModelProfile = {'default_structured_output_mode': 'prompted'}
 ```
 
@@ -1494,8 +1499,12 @@ async def get_data(ctx: RunContext[None], key: str) -> str:
 
 async def main():
     async with agent.iter("What is the temperature?") as run:
-        async for node in run:
-            pass   # let the agent run to completion
+        # Use run.next() so `when_idle` enqueued messages are properly drained.
+        # Bare `async for node in run` raises UndrainedPendingMessagesError when
+        # a tool enqueues a follow-up with priority='when_idle'.
+        node = run.next_node
+        while not Agent.is_end_node(node):
+            node = await run.next(node)
         print(run.result.output)
 
 
@@ -1552,8 +1561,9 @@ async def main():
             pass
 
     # output_tool_return_content replaces the output tool return value in the JSON
-    # — useful when serialising history for storage or multi-turn replay
-    history_bytes = run.all_messages_json(output_tool_return_content="<omitted>")
+    # — use run.result (AgentRunResult), not run (AgentRun): AgentRun.all_messages_json
+    #   accepts the kwarg but ignores it; AgentRunResult.all_messages_json applies it.
+    history_bytes = run.result.all_messages_json(output_tool_return_content="<omitted>")
     history = json.loads(history_bytes)
     print(json.dumps(history, indent=2)[:400])
 
