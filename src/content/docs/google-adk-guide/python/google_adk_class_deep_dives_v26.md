@@ -516,7 +516,7 @@ metadata_only_toolset = SpannerToolset(
     spanner_tool_settings=SpannerToolSettings(
         capabilities=[],  # empty list removes execute_sql and similarity_search
     ),
-    tool_filter=["spanner_list_table_names", "spanner_get_table_schema"],
+    tool_filter=["list_table_names", "get_table_schema"],
 )
 ```
 
@@ -1210,15 +1210,14 @@ researcher = LlmAgent(name="researcher", model="gemini-2.0-flash",
 writer = LlmAgent(name="writer", model="gemini-2.0-flash",
                   instruction="Write a blog post based on the provided research.")
 
-@node
+@node(rerun_on_resume=True)  # required: ctx.run_node() raises ValueError without this
 async def orchestrate(ctx):
-    # Run researcher and writer sequentially as dynamic nodes
-    research_ctx = await ctx.run_node(researcher, node_input="quantum computing")
-    summary = research_ctx.output
+    # Run researcher and writer sequentially; run_node() returns the output directly
+    summary = await ctx.run_node(researcher, node_input="quantum computing")
 
     # Pass summary to writer
-    article_ctx = await ctx.run_node(writer, node_input=summary)
-    return article_ctx.output
+    article = await ctx.run_node(writer, node_input=summary)
+    return article
 
 workflow = Workflow(nodes=[orchestrate], name="article_workflow")
 ```
@@ -1228,16 +1227,16 @@ workflow = Workflow(nodes=[orchestrate], name="article_workflow")
 ```python
 import asyncio
 
-@node
+@node(rerun_on_resume=True)
 async def parallel_research(ctx):
     topics = ["LLMs", "Agents", "RAG", "MCP"]
-    # Schedule all researcher nodes concurrently
+    # Use run_id (not node_name) for deterministic tracking; run_node() returns output directly
     tasks = [
-        ctx.run_node(researcher, node_input=topic, node_name=f"research_{topic}")
+        ctx.run_node(researcher, node_input=topic, run_id=f"research_{topic}")
         for topic in topics
     ]
     results = await asyncio.gather(*tasks)
-    return [r.output for r in results]
+    return results  # each element is the output directly, not a Context object
 ```
 
 ### Example 3 — transfer_to_agent handling
@@ -1253,18 +1252,17 @@ async def parallel_research(ctx):
 ### Example 4 — resuming across turns (HITL)
 
 ```python
-@node
+@node(rerun_on_resume=True)  # decorator flag; NOT a ctx.run_node() kwarg
 async def approval_step(ctx):
-    # Raises NodeInterruptedError when a RequestInput is returned by a tool
+    # Raises NodeInterruptedError when a RequestInput is returned by a tool.
     # On resume (next ADK invocation with same session_id), DynamicNodeScheduler
-    # rehydrates the node's state from session events, detects that the interrupt
-    # was resolved, and re-runs the node with resume_inputs populated.
+    # rehydrates state from session events, detects the interrupt was resolved,
+    # and re-runs this node. rerun_on_resume=True on the @node decorator allows it.
     result = await ctx.run_node(
         approval_agent,
         node_input={"document": ctx.node_input},
-        rerun_on_resume=True,  # re-execute the node after HITL approval
     )
-    return result.output
+    return result  # run_node() returns the output directly
 ```
 
 ---
