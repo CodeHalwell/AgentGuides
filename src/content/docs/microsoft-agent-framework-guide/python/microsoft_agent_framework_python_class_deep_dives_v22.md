@@ -575,7 +575,8 @@ from opentelemetry import trace
 
 async def call_mcp_tool_instrumented(server_url: str, tool_name: str, args: dict) -> dict:
     """Wraps an MCP tool call with consistent span naming."""
-    with create_mcp_client_span(server_url=server_url, tool_name=tool_name) as span:
+    # method_name is the MCP protocol method; tool_name is the low-cardinality target
+    with create_mcp_client_span("tools/call", target=tool_name, attributes={"server.url": server_url}) as span:
         try:
             result = await _raw_mcp_call(server_url, tool_name, args)
             span.set_attribute("mcp.tool.success", True)
@@ -825,15 +826,23 @@ import asyncio
 import httpx
 from agent_framework_declarative import DefaultHttpRequestHandler, HttpRequestInfo  # type: ignore
 
+# One shared client per logical connection — created once and reused across requests.
+# DefaultHttpRequestHandler.aclose() only closes the handler's *owned* client, not
+# provider-returned clients, so callers must manage their lifetime explicitly.
+_azure_client: httpx.AsyncClient | None = None
+
 async def client_provider(info: HttpRequestInfo) -> httpx.AsyncClient | None:
-    """Return a pre-authenticated client for known connection names."""
+    """Return a cached, pre-authenticated client for known connection names."""
+    global _azure_client
     if info.connection_name == "azure_foundry":
-        token = await get_azure_token()
-        return httpx.AsyncClient(
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=30.0,
-        )
-    return None  # Fall back to the default owned client
+        if _azure_client is None:
+            token = await get_azure_token()
+            _azure_client = httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=30.0,
+            )
+        return _azure_client
+    return None  # Fall back to the handler's default owned client
 
 handler = DefaultHttpRequestHandler(client_provider=client_provider)
 
@@ -848,6 +857,13 @@ async def call_api() -> str:
     if result.is_success_status_code:
         return result.body
     raise RuntimeError(f"HTTP {result.status_code}: {result.body}")
+
+async def shutdown() -> None:
+    """Call at process exit to release the cached connection pool."""
+    global _azure_client
+    if _azure_client is not None:
+        await _azure_client.aclose()
+        _azure_client = None
 
 async def get_azure_token() -> str:
     return "token-placeholder"  # Use azure-identity in production
