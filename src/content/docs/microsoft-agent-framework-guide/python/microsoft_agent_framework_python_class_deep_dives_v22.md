@@ -607,8 +607,7 @@ optional PowerFx expression evaluation when the `powerfx` package is installed.
 class WorkflowState:
     def __init__(
         self,
-        inputs: dict[str, Any] | None = None,
-        conversation_id: str | None = None,
+        inputs: Mapping[str, Any] | None = None,
     ) -> None:
         # Namespaces:
         #   Workflow.Inputs.*  — read-only after init
@@ -619,13 +618,31 @@ class WorkflowState:
         #   Conversation.*     — history and messages
         ...
 
-    def get(self, key: str, default: Any = None) -> Any: ...
-    def set(self, key: str, value: Any) -> None: ...
-    def append(self, key: str, item: Any) -> None: ...
+    # Properties (read access)
+    @property
+    def inputs(self) -> Mapping[str, Any]: ...
+    @property
+    def outputs(self) -> dict[str, Any]: ...
+    @property
+    def local(self) -> dict[str, Any]: ...
+    @property
+    def agent(self) -> dict[str, Any]: ...
+
+    # State manipulation
+    def get(self, path: str, default: Any = None) -> Any: ...
+    def set(self, path: str, value: Any) -> None: ...
+    def append(self, path: str, item: Any) -> None: ...
     def eval(self, expression: str) -> Any: ...  # PowerFx or plain string pass-through
-    def set_agent_result(self, text: str, messages: list, ...) -> None: ...
-    def get_outputs(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def set_agent_result(
+        self,
+        text: str | None = None,
+        messages: list | None = None,
+        tool_calls: list | None = None,
+        **kwargs: Any,
+    ) -> None: ...
+    def reset_local(self) -> None: ...
+    def reset_agent(self) -> None: ...
+    def clone(self) -> WorkflowState: ...
 ```
 
 ### Key facts
@@ -636,8 +653,8 @@ class WorkflowState:
 | `Workflow.Outputs.*` | Mutable via `set()` | Values returned from the workflow |
 | `Local.*` | Mutable via `set()` / `append()` | Variables that persist across actions in one turn |
 | `System.ConversationId` | Read-only | Auto-set from `conversation_id` constructor param |
-| `Agent.Response` | Set by `set_agent_result()` | The last agent invocation's text response |
-| `Agent.Messages` | Set by `set_agent_result()` | The last agent's message history |
+| `Agent.text` | Set by `set_agent_result()` | The last agent invocation's text response |
+| `Agent.messages` | Set by `set_agent_result()` | The last agent's message history |
 
 ### Example 1 — basic namespace access
 
@@ -659,7 +676,7 @@ findings = state.get("Local.results")  # ["First finding", "Second finding"]
 
 # Set workflow output
 state.set("Workflow.Outputs.summary", "Completed summary.")
-print(state.get_outputs())  # {"summary": "Completed summary."}
+print(state.outputs)  # {"summary": "Completed summary."}
 ```
 
 ### Example 2 — PowerFx expression evaluation
@@ -699,9 +716,9 @@ state.set_agent_result(
     ],
 )
 
-# Subsequent YAML actions can reference Agent.Response
-agent_reply = state.get("Agent.Response")  # "The translation is: Bonjour le monde."
-agent_msgs  = state.get("Agent.Messages")  # list of Message objects
+# Subsequent YAML actions can reference Agent.text / Agent.messages
+agent_reply = state.get("Agent.text")     # "The translation is: Bonjour le monde."
+agent_msgs  = state.get("Agent.messages") # list of Message objects
 
 # Store agent output to Local for later use
 state.set("Local.translation", agent_reply)
@@ -1037,25 +1054,22 @@ class MCPToolResult:
     is_error: bool = False
     error_message: str | None = None
 
-@dataclass
-class MCPToolApprovalRequest:
-    request_id: str
-    tool_name: str
-    server_url: str
-    server_label: str | None
-    arguments: dict[str, Any]
-    header_names: list[str] = []        # Names only — values NOT exposed for security
-    connection_name: str | None = None
-    metadata: dict[str, Any] = {}
+@runtime_checkable
+class MCPToolHandler(Protocol):
+    async def invoke_tool(self, invocation: MCPToolInvocation) -> MCPToolResult: ...
 
 class DefaultMCPToolHandler:
-    """httpx-backed MCP tool handler — no SSRF protection."""
+    """httpx-backed MCP tool handler with LRU client cache — no SSRF protection."""
+
+    LIST_TOOLS_TOOL_NAME: ClassVar[str] = "tools/list"  # reserved name for tool discovery
+
     def __init__(
         self,
         *,
-        client: httpx.AsyncClient | None = None,
+        client_provider: Callable[[MCPToolInvocation], Awaitable[httpx.AsyncClient | None]] | None = None,
+        cache_max_size: int = 32,
     ) -> None: ...
-    async def invoke(self, invocation: MCPToolInvocation) -> MCPToolResult: ...
+    async def invoke_tool(self, invocation: MCPToolInvocation) -> MCPToolResult: ...
     async def aclose(self) -> None: ...
 ```
 
@@ -1063,31 +1077,41 @@ class DefaultMCPToolHandler:
 
 | Fact | Detail |
 |---|---|
-| `header_names` in approval request | Header *names* only — actual values never exposed to approval handler (security) |
-| `MCPToolResult.is_error` | Set `True` + `error_message` instead of raising — executor maps to `Content.text` error |
-| `DefaultMCPToolHandler` | No allowlist / SSRF protection — wrap for production |
-| `connection_name` | Passed through to client_provider if registered, same pattern as HTTP handler |
+| `MCPToolResult.is_error` | Return `is_error=True` + `error_message` instead of raising — lets the workflow store the error in `output.result` |
+| `DefaultMCPToolHandler` | No allowlist / SSRF protection — wrap for production; back-ended by an LRU cache of MCP sessions (default 32 entries) |
+| `LIST_TOOLS_TOOL_NAME` | Reserved `tool_name` value `"tools/list"` — triggers server-side tool discovery instead of a real call |
+| `client_provider` | Async callback `(MCPToolInvocation) → httpx.AsyncClient \| None`; return `None` to use the handler's own client pool |
+| `connection_name` | Forwarded to `client_provider` so you can dispatch multiple logical connections through one handler |
 
-### Example 1 — custom approval gate for MCP tool calls
+### Example 1 — discover a server's tool catalog via `LIST_TOOLS_TOOL_NAME`
 
 ```python
-import asyncio
-from agent_framework_declarative import MCPToolApprovalRequest  # type: ignore
+import asyncio, json
+from agent_framework_declarative import (  # type: ignore
+    DefaultMCPToolHandler,
+    MCPToolInvocation,
+)
 
-APPROVED_TOOLS = {"list_files", "read_file"}
-BLOCKED_TOOLS = {"delete_file", "execute_shell"}
+async def list_available_tools(server_url: str) -> list[dict]:
+    """Return the tool catalog exposed by an MCP server."""
+    async with DefaultMCPToolHandler() as handler:
+        inv = MCPToolInvocation(
+            server_url=server_url,
+            tool_name=DefaultMCPToolHandler.LIST_TOOLS_TOOL_NAME,
+            arguments={},
+        )
+        result = await handler.invoke_tool(inv)
+        if result.is_error:
+            raise RuntimeError(f"Discovery failed: {result.error_message}")
+        # The handler returns a single TextContent item containing JSON
+        raw_json = result.outputs[0].text  # type: ignore[attr-defined]
+        catalog = json.loads(raw_json)
+        return catalog["tools"]
 
-async def mcp_approval_handler(request: MCPToolApprovalRequest) -> bool:
-    """Return True to proceed, False to block."""
-    if request.tool_name in BLOCKED_TOOLS:
-        print(f"BLOCKED MCP tool: {request.tool_name} on {request.server_url}")
-        return False
-    if request.tool_name in APPROVED_TOOLS:
-        return True
-    # Unknown tool — require explicit user confirmation
-    print(f"Unknown MCP tool '{request.tool_name}' requested with args: {request.arguments}")
-    user_input = input("Approve? (y/n): ").strip().lower()
-    return user_input == "y"
+if __name__ == "__main__":
+    tools = asyncio.run(list_available_tools("http://localhost:8080/mcp"))
+    for t in tools:
+        print(f"  {t['name']}: {t.get('description', '')}")
 ```
 
 ### Example 2 — custom `MCPToolHandler` with SSRF protection
@@ -1107,14 +1131,14 @@ class SafeMCPHandler:
     def __init__(self) -> None:
         self._handler = DefaultMCPToolHandler()
 
-    async def invoke(self, inv: MCPToolInvocation) -> MCPToolResult:
+    async def invoke_tool(self, inv: MCPToolInvocation) -> MCPToolResult:
         host = urlparse(inv.server_url).hostname or ""
         if host not in ALLOWED_MCP_HOSTS:
             return MCPToolResult(
                 is_error=True,
                 error_message=f"MCP server '{host}' not in allowlist.",
             )
-        return await self._handler.invoke(inv)
+        return await self._handler.invoke_tool(inv)
 
     async def aclose(self) -> None:
         await self._handler.aclose()
@@ -1133,7 +1157,7 @@ async def call_mcp_list_files(server_url: str) -> list[str]:
         tool_name="list_files",
         arguments={"path": "/data"},
     )
-    result = await handler.invoke(inv)
+    result = await handler.invoke_tool(inv)
     await handler.aclose()
 
     if result.is_error:
