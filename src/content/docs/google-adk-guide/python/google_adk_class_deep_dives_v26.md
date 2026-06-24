@@ -607,19 +607,34 @@ agent = LlmAgent(
 )
 ```
 
-### Example 2 — combining with `ToolConfirmation`
+### Example 2 — combining with HITL confirmation
+
+`LongRunningFunctionTool` inherits `FunctionTool` but its `__init__` does not forward
+`require_confirmation`, so the only way to add a confirmation gate is to call
+`tool_context.request_confirmation()` directly inside the function (Pattern B).
 
 ```python
-from google.adk.tools.tool_confirmation import ToolConfirmation
+from google.adk.tools.long_running_tool import LongRunningFunctionTool
+from google.adk.tools.tool_context import ToolContext
 
-async def deploy_to_production(service_name: str, version: str) -> dict | ToolConfirmation:
-    """Deploy a service to production. Requires human confirmation first."""
-    # Return ToolConfirmation to pause and request human approval
-    return ToolConfirmation(
-        hint=f"Confirm deployment of {service_name} v{version} to production?",
-        confirmed=False,
-        payload={"service": service_name, "version": version},
-    )
+async def deploy_to_production(
+    service_name: str, version: str, tool_context: ToolContext
+) -> dict:
+    """Deploy a service to production. Pauses for human approval before starting."""
+    if not tool_context.tool_confirmation:
+        # First call — request confirmation with deployment details
+        tool_context.request_confirmation(
+            hint=f"Confirm deployment of {service_name} v{version} to production?",
+            payload={"service": service_name, "version": version},
+        )
+        return {"status": "pending_confirmation"}
+
+    if not tool_context.tool_confirmation.confirmed:
+        return {"status": "rejected", "reason": "Deployment rejected by operator."}
+
+    # Confirmed — kick off the long-running deploy
+    job_id = await start_deployment_job(service_name, version)
+    return {"status": "running", "job_id": job_id}
 
 deploy_tool = LongRunningFunctionTool(deploy_to_production)
 ```
