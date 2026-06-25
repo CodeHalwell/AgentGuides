@@ -171,7 +171,9 @@ class ConstrainedSearch(NativeOrLocalTool[AgentDepsT]):
 
 async def main() -> None:
     cap = ConstrainedSearch(blocked_domains=['spam.example.com'])
-    agent = Agent('openai:gpt-4o-mini', capabilities=[cap])
+    # openai-responses: provider is required for native WebSearch on OpenAI;
+    # openai: (Chat Completions) does not support WebSearchTool.
+    agent = Agent('openai-responses:gpt-4o-mini', capabilities=[cap])
     result = await agent.run("Search for safe content")
     print(result.output)
 
@@ -273,13 +275,14 @@ from pydantic_ai.capabilities import WebSearch
 async def main() -> None:
     # blocked_domains triggers _requires_native() → True,
     # so the local DuckDuckGo fallback is suppressed entirely.
+    # Use blocked_domains OR allowed_domains — providers accept only one, not both.
+    # openai-responses: is required for native WebSearch on OpenAI.
     cap = WebSearch(
         blocked_domains=['reddit.com', 'twitter.com'],
-        allowed_domains=['arxiv.org', 'openreview.net', 'papers.nips.cc'],
         max_uses=5,
     )
 
-    agent = Agent('openai:gpt-4o-mini', capabilities=[cap])
+    agent = Agent('openai-responses:gpt-4o-mini', capabilities=[cap])
     result = await agent.run("Find recent transformer architecture papers")
     print(result.output)
 
