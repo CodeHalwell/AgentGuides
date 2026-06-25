@@ -380,7 +380,12 @@ init_action = {
     "itemName": "result",        # exposed as Local.result; key is "itemName", not "item"
     "indexName": "idx",          # exposed as Local.idx (optional); key is "indexName", not "index"
 }
-next_action = {"kind": "ForeachNext", "id": "iterateResults_next"}
+next_action = {
+    "kind": "ForeachNext",
+    "id": "iterateResults_next",
+    "itemName": "result",   # must match init_action — handle_action rebinds from its own action_def
+    "indexName": "idx",     # omit if init_action has no indexName
+}
 break_action = {"kind": "Break", "id": "earlyExit"}
 
 init_exec = ForeachInitExecutor(init_action, id="iterateResults")
@@ -1014,23 +1019,30 @@ print(tool.approvalMode.alwaysRequireApprovalTools)  # ['browser_navigate', 'bro
 **Example 2 — Simplified string approval mode**
 
 ```python
-from agent_framework_declarative._models import McpTool, McpServerToolAlwaysRequireApprovalMode, McpServerToolNeverRequireApprovalMode
+# String shortcuts ("always"/"never") are handled by McpTool.__init__ via
+# McpServerApprovalMode.from_dict({"kind": value}). Because McpServerApprovalMode
+# has no kind-dispatch in its from_dict, this produces a base McpServerApprovalMode
+# instance with .kind set — NOT a named subclass.
+# For a named subclass, use direct construction (see Example 1 and Example 3).
+from agent_framework_declarative._models import McpTool
 
 always_tool = McpTool.from_dict({
     "kind": "mcp",
     "name": "fileSystem",
     "serverName": "filesystem",
-    "approvalMode": "always",   # string shortcut → McpServerToolAlwaysRequireApprovalMode
+    "approvalMode": "always",
 })
-print(type(always_tool.approvalMode).__name__)  # McpServerToolAlwaysRequireApprovalMode
+print(type(always_tool.approvalMode).__name__)  # McpServerApprovalMode  (base class)
+print(always_tool.approvalMode.kind)            # always
 
 never_tool = McpTool.from_dict({
     "kind": "mcp",
     "name": "readOnlySearch",
     "serverName": "search",
-    "approvalMode": "never",    # string shortcut → McpServerToolNeverRequireApprovalMode
+    "approvalMode": "never",
 })
-print(type(never_tool.approvalMode).__name__)   # McpServerToolNeverRequireApprovalMode
+print(type(never_tool.approvalMode).__name__)   # McpServerApprovalMode  (base class)
+print(never_tool.approvalMode.kind)             # never
 ```
 
 **Example 3 — Compose McpTool with Connection and Bindings**
@@ -1220,8 +1232,9 @@ class AgentExternalInputRequest:
 
 @dataclass
 class AgentExternalInputResponse:
-    user_input: str           # Text to inject as the next user turn
-    function_results: list[Any] = field(default_factory=list)  # unused in 1.9.0
+    user_input: str                                        # Text to inject as the next user turn
+    messages: list[Message] = field(default_factory=list)  # Additional context messages
+    function_results: dict[str, Content] = field(default_factory=dict)  # Tool results keyed by call ID
 ```
 
 ### `_extract_json_from_response()`
