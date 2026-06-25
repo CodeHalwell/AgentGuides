@@ -443,7 +443,7 @@ Resolves a variable path from two YAML styles:
 | `SetVariableExecutor` | `SetVariable` | `variable`, `value` | Same but resolves path via `_get_variable_path()` |
 | `CreateConversationExecutor` | `CreateConversation` | `conversationId` | Generates UUID, writes to `conversationId` path, initialises `System.conversations[id]` |
 | `SetMultipleVariablesExecutor` | `SetMultipleVariables` | `assignments` (list of `{variable, value}`) | Evaluates and sets each variable in the list |
-| `SendActivityExecutor` | `SendActivity` | `activity` / `text` / `value` | Sends text content to the conversation |
+| `SendActivityExecutor` | `SendActivity` | `activity` (string or `{text: ...}` mapping) | Sends text content; reads only `activity` key — top-level `text`/`value` are ignored |
 | `ParseValueExecutor` | `ParseValue` | `value`, `variable` | Stringifies an evaluated expression and stores it |
 
 ### Examples
@@ -1253,7 +1253,7 @@ Parses JSON from agent responses that may contain markdown code fences or mixed 
 
 The external-loop pattern pauses a workflow mid-execution waiting for user input:
 
-1. `InvokeAzureAgentExecutor` evaluates `externalLoop.when` condition against current state
+1. `InvokeAzureAgentExecutor` evaluates `input.externalLoop.when` against current state (`externalLoop` must be nested under `input:`, not at the top-level action — `_get_input_config()` reads `self._action_def["input"]["externalLoop"]`)
 2. When `True`, it calls `ctx.request_info(AgentExternalInputRequest(...))` — this **yields** the workflow
 3. The caller supplies an `AgentExternalInputResponse` via the `request_handler` callback (or `ExternalInputResponse` at workflow level)
 4. The executor **resumes** with the user-supplied input injected as a new user message
@@ -1326,7 +1326,11 @@ from agent_framework_declarative._workflows._executors_agents import (
 )
 from agent_framework_declarative import WorkflowFactory
 
-# The workflow YAML must define externalLoop.when on the InvokeAzureAgent action.
+# The workflow YAML must nest externalLoop under the input: block of the InvokeAzureAgent action:
+#   input:
+#     externalLoop:
+#       when: =Local.needsMoreInput
+# (A top-level externalLoop on the action is NOT read by _get_input_config.)
 # This example shows how to wire up the request_handler on the caller side.
 
 async def human_review_handler(request: AgentExternalInputRequest) -> AgentExternalInputResponse:
