@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 23"
-description: "Source-verified deep dives into 10 class groups from agent-framework-declarative: DeclarativeActionExecutor+DeclarativeWorkflowState+DeclarativeEnvConfig+discover_env_references() (PowerFx graph-node base layer — Env allowlist, dot-path get/set, eval() expression engine, discover_env_references() YAML scanner); ConditionGroupEvaluatorExecutor+IfConditionEvaluatorExecutor+ConditionResult (declarative branching graph nodes — first-match semantics, ELSE_BRANCH_INDEX=-1, branch_index routing); ForeachInitExecutor+ForeachNextExecutor+BreakLoopExecutor+ContinueLoopExecutor+LoopIterationResult+LoopControl (declarative loop nodes — LOOP_STATE_KEY in State, current_item/current_index, break/continue signals); SetValueExecutor+SetVariableExecutor+CreateConversationExecutor+SetMultipleVariablesExecutor+SendActivityExecutor+ParseValueExecutor (declarative variable and messaging graph nodes); AgentManifest+AgentDefinition+PromptAgent+EnvironmentVariable+agent_schema_dispatch() (declarative schema types — manifest/template/parameters/resources, PowerFx-evaluated fields, kind-dispatched factory); Property+ArrayProperty+ObjectProperty+PropertySchema (declarative property schema layer — from_dict dispatch, to_json_schema() conversion); Connection hierarchy+ReferenceConnection+RemoteConnection+ApiKeyConnection+AnonymousConnection (declarative connection specs — kind-based dispatch, PowerFx-safe field eval); McpTool+McpServerApprovalMode+McpServerToolAlwaysRequireApprovalMode+McpServerToolNeverRequireApprovalMode+McpServerToolSpecifyApprovalMode (declarative MCP tool with approval gating); Template+Format+Parser+Model+ModelOptions (declarative model and template configuration types); InvokeAzureAgentExecutor+AgentResult+ExternalLoopState+AgentExternalInputRequest+AgentExternalInputResponse (declarative Azure AI Foundry agent invocation with HITL external-loop support)."
+description: "Source-verified deep dives into 10 class groups from agent-framework-declarative: DeclarativeActionExecutor+DeclarativeWorkflowState+DeclarativeEnvConfig+discover_env_references() (PowerFx graph-node base layer — Env allowlist, dot-path get/set, eval() expression engine, discover_env_references() YAML scanner); ConditionGroupEvaluatorExecutor+IfConditionEvaluatorExecutor+ConditionResult (declarative branching graph nodes — first-match semantics, ELSE_BRANCH_INDEX=-1, branch_index routing); ForeachInitExecutor+ForeachNextExecutor+BreakLoopExecutor+ContinueLoopExecutor+LoopIterationResult+LoopControl (declarative loop nodes — LOOP_STATE_KEY in State, current_item/current_index, break/continue signals); SetValueExecutor+SetVariableExecutor+CreateConversationExecutor+SetMultipleVariablesExecutor+SendActivityExecutor+ParseValueExecutor (declarative variable and messaging graph nodes); AgentManifest+AgentDefinition+PromptAgent+EnvironmentVariable+agent_schema_dispatch() (declarative schema types — manifest/template/parameters/resources, PowerFx-evaluated fields, kind-dispatched factory); Property+ArrayProperty+ObjectProperty+PropertySchema (declarative property schema layer — from_dict dispatch, to_json_schema() conversion); Connection hierarchy+ReferenceConnection+RemoteConnection+ApiKeyConnection+AnonymousConnection (declarative connection specs — kind-based dispatch, PowerFx-safe field eval); McpTool+McpServerApprovalMode+McpServerToolAlwaysRequireApprovalMode+McpServerToolNeverRequireApprovalMode+McpServerToolSpecifyApprovalMode (declarative MCP tool with approval gating); Template+Format+Parser+Model+ModelOptions (declarative model and template configuration types); InvokeAzureAgentExecutor+AgentResult+AgentExternalInputRequest+AgentExternalInputResponse (declarative Azure AI Foundry agent invocation with HITL external-loop support)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -28,7 +28,7 @@ This volume covers **ten class groups** from the `agent_framework_declarative` s
 | 7 | `Connection` · `ReferenceConnection` · `RemoteConnection` · `ApiKeyConnection` · `AnonymousConnection` | `_models` |
 | 8 | `McpTool` · `McpServerApprovalMode` · `McpServerToolAlwaysRequireApprovalMode` · `McpServerToolNeverRequireApprovalMode` · `McpServerToolSpecifyApprovalMode` | `_models` |
 | 9 | `Template` · `Format` · `Parser` · `Model` · `ModelOptions` | `_models` |
-| 10 | `InvokeAzureAgentExecutor` · `AgentResult` · `ExternalLoopState` · `AgentExternalInputRequest` · `AgentExternalInputResponse` | `_executors_agents` |
+| 10 | `InvokeAzureAgentExecutor` · `AgentResult` · `AgentExternalInputRequest` · `AgentExternalInputResponse` | `_executors_agents` |
 
 ---
 
@@ -393,7 +393,7 @@ print(init_exec.id, next_exec.id, break_exec.id)
 **Example 3 — Inspect LoopIterationResult and LoopControl**
 
 ```python
-from agent_framework_declarative._workflows._declarative_base import (
+from agent_framework_declarative._workflows._executors_control_flow import (
     LoopControl,
     LoopIterationResult,
 )
@@ -1090,7 +1090,7 @@ class Model(SerializationMixin):
         id: str | None = None,          # PowerFx-evaluated — model identifier
         provider: str | None = None,    # PowerFx-evaluated — e.g. "openai", "azure"
         apiType: str | None = None,     # PowerFx-evaluated — e.g. "chat"
-        connection: Connections | None = None,   # auto-deserialized
+        connection: Connection | None = None,   # auto-deserialized; accepts any Connection subclass
         options: ModelOptions | None = None,     # auto-deserialized
     ) -> None: ...
 
@@ -1189,7 +1189,7 @@ print(opts.additionalProperties)  # {'response_format': {...}, 'user': 'session-
 
 ---
 
-## 10 · `InvokeAzureAgentExecutor` · `AgentResult` · `ExternalLoopState` · `AgentExternalInputRequest` · `AgentExternalInputResponse`
+## 10 · `InvokeAzureAgentExecutor` · `AgentResult` · `AgentExternalInputRequest` · `AgentExternalInputResponse`
 
 **Module:** `agent_framework_declarative._workflows._executors_agents`
 
