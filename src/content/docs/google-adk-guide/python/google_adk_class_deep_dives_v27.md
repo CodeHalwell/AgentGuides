@@ -247,7 +247,7 @@ from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 class MyCustomAuthProvider(BaseAuthProvider):
     @property
     def supported_auth_schemes(self):
-        return [MyCustomScheme]
+        return [CustomAuthScheme]
 
     async def get_auth_credential(self, auth_config, context):
         # Fetch credential from custom secret store
@@ -977,6 +977,7 @@ from google.adk.agents import LlmAgent
 from google.adk.apps.app import App
 from google.adk.apps.compaction import EventsCompactionConfig
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
+from google.adk.models.google_llm import Gemini
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 
@@ -986,8 +987,7 @@ compaction_cfg = EventsCompactionConfig(
     token_threshold=8192,           # Compact when context > 8192 tokens
     compaction_overlap=512,         # Keep last 512 tokens of pre-compaction context
     summarizer=LlmEventSummarizer(
-        model="gemini-2.0-flash",
-        max_tool_content_chars=2000,
+        llm=Gemini(model="gemini-2.0-flash"),
     ),
 )
 
