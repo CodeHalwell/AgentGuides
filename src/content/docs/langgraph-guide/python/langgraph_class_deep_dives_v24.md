@@ -262,7 +262,7 @@ node = ToolNode([get_user_prefs, count_messages, lookup_memory])
 
 # Inspect the built injection maps (internal, for debugging)
 for tool_obj in node.tools_by_name.values():
-    injected = node._injected_args_by_name.get(tool_obj.name)
+    injected = node._injected_args.get(tool_obj.name)
     if injected:
         print(f"{tool_obj.name}: state={injected.state}, store={injected.store}, runtime={injected.runtime}")
 ```
@@ -838,7 +838,6 @@ from langgraph.types import CachePolicy
 from langgraph.cache.memory import InMemoryCache
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict
-from datetime import timedelta
 
 class State(TypedDict):
     query: str
@@ -855,7 +854,7 @@ builder = StateGraph(State)
 builder.add_node(
     "lookup",
     expensive_lookup,
-    cache_policy=CachePolicy(ttl=timedelta(minutes=5)),  # → CacheKey(ns=..., key=hash, ttl=300)
+    cache_policy=CachePolicy(ttl=300),  # → CacheKey(ns=..., key=hash, ttl=300)
 )
 builder.add_edge(START, "lookup")
 builder.add_edge("lookup", END)

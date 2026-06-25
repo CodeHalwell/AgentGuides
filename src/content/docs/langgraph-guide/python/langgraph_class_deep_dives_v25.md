@@ -365,8 +365,8 @@ builder.add_edge(START, "my_node")
 builder.add_edge("my_node", END)
 graph = builder.compile()
 
-# Access the compiled StateNodeSpec
-spec = graph.nodes["my_node"]
+# Access the StateNodeSpec from the builder (before compilation)
+spec = builder.nodes["my_node"]
 print(type(spec))                 # <class 'StateNodeSpec'>
 print(spec.retry_policy)          # RetryPolicy(max_attempts=3)
 print(spec.cache_policy)          # CachePolicy(...)
