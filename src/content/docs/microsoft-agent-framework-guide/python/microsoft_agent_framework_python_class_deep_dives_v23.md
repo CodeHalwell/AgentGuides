@@ -376,16 +376,16 @@ from agent_framework_declarative._workflows._executors_control_flow import (
 init_action = {
     "kind": "Foreach",
     "id": "iterateResults",
-    "items": "=Local.results",   # PowerFx expression
-    "item": "result",            # exposed as Local.result
-    "index": "idx",              # exposed as Local.idx (optional)
+    "source": "=Local.results",  # PowerFx expression; key is "source", not "items"
+    "itemName": "result",        # exposed as Local.result; key is "itemName", not "item"
+    "indexName": "idx",          # exposed as Local.idx (optional); key is "indexName", not "index"
 }
 next_action = {"kind": "ForeachNext", "id": "iterateResults_next"}
 break_action = {"kind": "Break", "id": "earlyExit"}
 
 init_exec = ForeachInitExecutor(init_action, id="iterateResults")
-next_exec = ForeachNextExecutor(next_action, id="iterateResults_next")
-break_exec = BreakLoopExecutor(break_action, id="earlyExit")
+next_exec = ForeachNextExecutor(next_action, "iterateResults", id="iterateResults_next")   # init_executor_id required
+break_exec = BreakLoopExecutor(break_action, "iterateResults_next", id="earlyExit")        # loop_next_executor_id required
 
 print(init_exec.id, next_exec.id, break_exec.id)
 ```
@@ -437,7 +437,7 @@ Resolves a variable path from two YAML styles:
 | `SetValueExecutor` | `SetValue` | `path`, `value` | Evaluates `value` (PowerFx if starts with `=`), sets at `path` |
 | `SetVariableExecutor` | `SetVariable` | `variable`, `value` | Same but resolves path via `_get_variable_path()` |
 | `CreateConversationExecutor` | `CreateConversation` | `conversationId` | Generates UUID, writes to `conversationId` path, initialises `System.conversations[id]` |
-| `SetMultipleVariablesExecutor` | `SetMultipleVariables` | `variables` (list of `{variable, value}`) | Evaluates and sets each variable in the list |
+| `SetMultipleVariablesExecutor` | `SetMultipleVariables` | `assignments` (list of `{variable, value}`) | Evaluates and sets each variable in the list |
 | `SendActivityExecutor` | `SendActivity` | `activity` / `text` / `value` | Sends text content to the conversation |
 | `ParseValueExecutor` | `ParseValue` | `value`, `variable` | Stringifies an evaluated expression and stores it |
 
@@ -986,23 +986,25 @@ The `approvalMode` field accepts a simplified string shortcut (`"always"` / `"ne
 
 ### Examples
 
-**Example 1 — McpTool with approval gating**
+**Example 1 — McpTool with per-tool approval gating**
 
 ```python
 from agent_framework_declarative._models import McpTool, McpServerToolSpecifyApprovalMode
 
-tool = McpTool.from_dict({
-    "kind": "mcp",
-    "name": "browserTools",
-    "serverName": "playwright",
-    "url": "http://localhost:8931/sse",
-    "approvalMode": {
-        "kind": "specify",
-        "alwaysRequireApprovalTools": ["browser_navigate", "browser_click"],
-        "neverRequireApprovalTools": ["browser_screenshot"],
-    },
-    "allowedTools": ["browser_navigate", "browser_click", "browser_screenshot"],
-})
+# McpTool.from_dict() cannot dispatch a dict approvalMode to the correct subclass
+# (McpServerApprovalMode.from_dict uses the base class and ignores "kind").
+# Construct the approval mode directly and pass it to McpTool().
+approval = McpServerToolSpecifyApprovalMode(
+    alwaysRequireApprovalTools=["browser_navigate", "browser_click"],
+    neverRequireApprovalTools=["browser_screenshot"],
+)
+tool = McpTool(
+    name="browserTools",
+    serverName="playwright",
+    url="http://localhost:8931/sse",
+    approvalMode=approval,
+    allowedTools=["browser_navigate", "browser_click", "browser_screenshot"],
+)
 
 print(tool.serverName)                          # playwright
 print(type(tool.approvalMode).__name__)         # McpServerToolSpecifyApprovalMode
@@ -1253,10 +1255,12 @@ The external-loop pattern pauses a workflow mid-execution waiting for user input
 #     messages:
 #       - role: user
 #         content: "=Workflow.Inputs.document"
+#   resultProperty: Local.summary       # raw string response (top-level key)
 #   output:
-#     variable: Local.summary
-#     responseObject: Local.summaryJson
+#     responseObject: Local.summaryJson # full response as parsed object
 
+# _get_output_config() reads: output.messages, output.responseObject, output.property,
+# and top-level resultProperty. It does NOT read output.variable.
 from agent_framework_declarative._workflows._executors_agents import InvokeAzureAgentExecutor
 
 action_def = {
@@ -1267,9 +1271,9 @@ action_def = {
     "input": {
         "messages": [{"role": "user", "content": "=Workflow.Inputs.document"}],
     },
+    "resultProperty": "Local.summary",      # raw string response stored here
     "output": {
-        "variable": "Local.summary",
-        "responseObject": "Local.summaryJson",
+        "responseObject": "Local.summaryJson",  # full JSON response stored here
     },
 }
 executor = InvokeAzureAgentExecutor(action_def, id="callSummarizer")
