@@ -358,8 +358,8 @@ builder = StateGraph(State)
 builder.add_node(
     "my_node",
     my_node,
-    retry=RetryPolicy(max_attempts=3),
-    cache=CachePolicy(),
+    retry_policy=RetryPolicy(max_attempts=3),
+    cache_policy=CachePolicy(),
 )
 builder.add_edge(START, "my_node")
 builder.add_edge("my_node", END)
@@ -482,7 +482,7 @@ builder = StateGraph(State)
 builder.add_node(
     "search",
     expensive_search,
-    cache=CachePolicy(key_func=user_scoped_key),
+    cache_policy=CachePolicy(key_func=user_scoped_key),
 )
 builder.add_edge(START, "search")
 builder.add_edge("search", END)
@@ -720,6 +720,7 @@ for part in graph.stream(
     {"messages": [{"role": "user", "content": "Hi"}]},
     config=config,
     stream_mode="values",
+    version="v2",
 ):
     # Each part is a StreamPart dict; convert to v3 protocol envelope
     event = convert_to_protocol_event(part)
