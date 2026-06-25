@@ -910,7 +910,8 @@ CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")      # subgraph namespace
 ```python
 from typing import TypedDict
 from langchain_core.runnables import RunnableConfig
-from langgraph._internal._constants import CONFIG_KEY_CHECKPOINT_NS, CONF
+from langgraph._internal._constants import CONFIG_KEY_CHECKPOINT_NS
+from langgraph.constants import CONF
 from langgraph.graph import StateGraph, START, END
 
 class State(TypedDict):
@@ -968,7 +969,8 @@ audit_pending_writes(writes)
 ```python
 from typing import TypedDict
 from langchain_core.runnables import RunnableConfig
-from langgraph._internal._constants import CONFIG_KEY_SEND, CONF
+from langgraph._internal._constants import CONFIG_KEY_SEND
+from langgraph.constants import CONF
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
