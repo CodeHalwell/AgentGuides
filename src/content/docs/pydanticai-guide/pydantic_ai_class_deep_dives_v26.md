@@ -112,6 +112,8 @@ class MySearch(NativeOrLocalTool[AgentDepsT]):
         return WebSearchTool.kind
 
     def _resolve_local_strategy(self, name: str | bool) -> Tool[AgentDepsT]:
+        # This local strategy requires the duckduckgo extra:
+        # pip install "pydantic-ai-slim[duckduckgo]"
         async def duck_search(query: str) -> str:
             from duckduckgo_search import DDGS
             results = DDGS().text(query, max_results=3)
