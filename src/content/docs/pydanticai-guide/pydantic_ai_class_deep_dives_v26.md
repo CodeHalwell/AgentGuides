@@ -249,7 +249,6 @@ async def main() -> None:
     cap = WebSearch(
         search_context_size='high',       # more retrieved context per search
         user_location=WebSearchUserLocation(
-            type='approximate',
             city='London',
             country='GB',
         ),
@@ -1231,14 +1230,24 @@ def keep_last_n_exchanges(n: int = 5):
     """Return a HistoryProcessor that keeps only the last n request/response pairs."""
 
     def processor(messages: list[ModelMessage]) -> list[ModelMessage]:
-        # Separate request/response pairs and keep only the last n
+        # The processor always receives the current ModelRequest as the final item.
+        # Separate it from the completed request/response pairs so it is never dropped.
+        pending: ModelRequest | None = None
+        history = list(messages)
+        if history and isinstance(history[-1], ModelRequest):
+            pending = history[-1]
+            history = history[:-1]
+
         pairs: list[tuple[ModelRequest, ModelResponse]] = []
-        for i in range(0, len(messages) - 1, 2):
-            if isinstance(messages[i], ModelRequest) and isinstance(messages[i + 1], ModelResponse):
-                pairs.append((messages[i], messages[i + 1]))
+        for i in range(0, len(history) - 1, 2):
+            if isinstance(history[i], ModelRequest) and isinstance(history[i + 1], ModelResponse):
+                pairs.append((history[i], history[i + 1]))
 
         kept = pairs[-n:]
-        return [msg for pair in kept for msg in pair]
+        result = [msg for pair in kept for msg in pair]
+        if pending is not None:
+            result.append(pending)
+        return result
 
     return processor
 
