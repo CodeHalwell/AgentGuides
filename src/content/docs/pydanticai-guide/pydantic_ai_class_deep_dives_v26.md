@@ -151,9 +151,9 @@ class ConstrainedSearch(NativeOrLocalTool[AgentDepsT]):
 
     def __init__(self, *, blocked_domains: list[str] | None = None) -> None:
         self.blocked_domains = blocked_domains
-        # With blocked_domains set, _requires_native() returns True,
-        # so local=True is silently suppressed; native=False would raise UserError.
-        super().__init__(native=True, local=True)
+        # local=False because this subclass has no _resolve_local_strategy() override;
+        # passing local=True without one raises UserError in __post_init__.
+        super().__init__(native=True, local=False)
 
     def _default_native(self) -> WebSearchTool:
         kwargs = {}
@@ -377,7 +377,8 @@ async def main() -> None:
         max_uses=3,                 # native-only: limits total fetch calls per run
     )
 
-    agent = Agent('openai:gpt-4o-mini', capabilities=[cap])
+    # Native WebFetchTool is supported by Anthropic and Google only, not OpenAI.
+    agent = Agent('anthropic:claude-opus-4-8', capabilities=[cap])
     result = await agent.run(
         "Fetch https://arxiv.org/abs/2502.11157 and summarise the key contributions"
     )
@@ -669,37 +670,39 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 6.3 Custom ProcessPoolExecutor for CPU-Bound Sync Tools
+### 6.3 Bounded ThreadPoolExecutor for Sync Tools
 
 ```python
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ThreadExecutor
-from pydantic_ai.tools import RunContext
 
 
-def heavy_computation(n: int) -> int:
-    """CPU-intensive work that benefits from a separate process."""
+def heavy_io_work(n: int) -> int:
+    """I/O-bound work that benefits from thread parallelism."""
     return sum(i * i for i in range(n))
 
 
 async def main() -> None:
-    # ProcessPoolExecutor avoids the GIL for CPU-bound sync tools.
-    proc_pool = ProcessPoolExecutor(max_workers=4)
+    # ThreadExecutor wraps a concurrent.futures.Executor.
+    # Use ThreadPoolExecutor here — ProcessPoolExecutor is incompatible because
+    # pydantic-ai passes a contextvars.Context via run_in_executor, which cannot
+    # be pickled across process boundaries (TypeError at runtime).
+    thread_pool = ThreadPoolExecutor(max_workers=4)
     agent = Agent(
         'openai:gpt-4o-mini',
-        capabilities=[ThreadExecutor(proc_pool)],
+        capabilities=[ThreadExecutor(thread_pool)],
     )
 
     @agent.tool_plain
     def compute_squares(n: int) -> int:
         """Sum the squares of integers from 0 to n."""
-        return heavy_computation(n)
+        return heavy_io_work(n)
 
     result = await agent.run("What is the sum of squares from 0 to 10000?")
     print(result.output)
-    proc_pool.shutdown(wait=True)
+    thread_pool.shutdown(wait=True)
 
 
 asyncio.run(main())
@@ -1188,7 +1191,7 @@ HistoryProcessor = (
 )
 ```
 
-Attach a `HistoryProcessor` to an agent via `Agent(history_processors=[my_processor])`.
+Attach a `HistoryProcessor` to an agent via the `ProcessHistory` capability: `Agent(capabilities=[ProcessHistory(my_processor)])`. There is no `history_processors` constructor kwarg in v2.0.0.
 
 ### 10.1 Parsing Embedded Thinking Tags from DeepSeek
 
@@ -1220,6 +1223,7 @@ for part in parts:
 ```python
 import asyncio
 from pydantic_ai import Agent
+from pydantic_ai.capabilities.process_history import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
 
 
@@ -1240,9 +1244,10 @@ def keep_last_n_exchanges(n: int = 5):
 
 
 async def main() -> None:
+    # Attach via ProcessHistory capability — Agent has no history_processors kwarg.
     agent = Agent(
         'openai:gpt-4o-mini',
-        history_processors=[keep_last_n_exchanges(3)],
+        capabilities=[ProcessHistory(keep_last_n_exchanges(3))],
     )
 
     # Simulate a long conversation — only the last 3 exchanges reach each call
@@ -1261,6 +1266,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic_ai import Agent
+from pydantic_ai.capabilities.process_history import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, TextPart
 from pydantic_ai.tools import RunContext
 
@@ -1284,9 +1290,10 @@ async def inject_user_profile(
 
 
 async def main() -> None:
+    # Attach via ProcessHistory capability — Agent has no history_processors kwarg.
     agent = Agent(
         'openai:gpt-4o-mini',
-        history_processors=[inject_user_profile],
+        capabilities=[ProcessHistory(inject_user_profile)],
         deps_type=dict,
     )
 
