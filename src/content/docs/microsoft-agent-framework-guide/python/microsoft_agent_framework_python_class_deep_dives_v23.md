@@ -803,28 +803,30 @@ print(json_schema["required"])  # ['name', 'email']
 print(list(json_schema["properties"].keys()))  # ['name', 'age', 'email']
 ```
 
-**Example 3 — Nested schema with ArrayProperty**
+**Example 3 — Flat schema and `to_json_schema()` limitation**
 
 ```python
-from agent_framework_declarative._models import ArrayProperty, Property, PropertySchema
+from agent_framework_declarative._models import Property, PropertySchema
+
+# to_json_schema() only transforms the top-level properties list:
+# it renames 'kind' → 'type' and drops 'name'/'empty enum' per property.
+# It does NOT recurse into nested types (e.g. ArrayProperty.items retains
+# its internal serialised form with 'kind', 'name', 'enum' fields).
+# Use flat schemas or post-process nested output before passing to response_format.
 
 schema = PropertySchema(
     properties=[
-        ArrayProperty(
-            name="results",
-            kind="array",
-            description="Search results",
-            required=True,
-            items=Property(name="item", kind="string"),
-        ),
-        Property(name="totalCount", kind="integer"),
+        Property(name="query",   kind="string",  required=True),
+        Property(name="topK",    kind="integer"),
+        Property(name="verbose", kind="boolean"),
     ]
 )
 
 js = schema.to_json_schema()
-print(js["properties"]["results"]["type"])       # array
-print(js["properties"]["results"]["items"])      # {'type': 'string', ...}
-print(js.get("required"))                        # ['results']
+print(js["type"])                        # object
+print(js.get("required"))                # ['query']
+print(list(js["properties"].keys()))     # ['query', 'topK', 'verbose']
+print(js["properties"]["query"]["type"]) # string
 ```
 
 ---
@@ -898,23 +900,25 @@ for c in conns:
 # AnonymousConnection anonymous
 ```
 
-**Example 2 — ApiKeyConnection with PowerFx env reference**
+**Example 2 — ApiKeyConnection with literal and expression keys**
 
 ```python
 import os
 from agent_framework_declarative._models import ApiKeyConnection
 
-os.environ["OPENAI_KEY"] = "sk-test-1234"
-
-# When powerfx package is installed and the value starts with '=':
-conn = ApiKeyConnection.from_dict({
-    "kind": "key",
-    "endpoint": "https://api.openai.com/v1",
-    "key": "=Env.OPENAI_KEY",   # evaluated at construction time
-})
-# conn.apiKey == "sk-test-1234"  (if PowerFx engine available)
-# otherwise conn.apiKey == "=Env.OPENAI_KEY"  (expression string preserved)
+# Safest approach: pass the key value directly — no PowerFx needed.
+conn = ApiKeyConnection(
+    endpoint="https://api.openai.com/v1",
+    apiKey=os.environ.get("OPENAI_KEY", ""),
+)
 print(conn.endpoint)  # https://api.openai.com/v1
+print(bool(conn.apiKey))  # True (if env var set)
+
+# Note: '=Env.NAME' expressions in action_def fields only resolve when safe mode
+# is disabled by the WorkflowFactory/execution layer (which injects the env
+# allowlist). Outside that context, _safe_mode_context defaults to True and
+# _try_powerfx_eval() evaluates without the Env symbol, leaving the expression
+# string unresolved (conn.apiKey == "=Env.OPENAI_KEY").
 ```
 
 **Example 3 — Embed a Connection inside a Model**
