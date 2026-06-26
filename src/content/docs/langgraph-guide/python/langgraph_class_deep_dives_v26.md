@@ -91,7 +91,7 @@ import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import interrupt
+from langgraph.types import interrupt, Command
 from langgraph.callbacks import (
     GraphCallbackHandler,
     GraphInterruptEvent,
@@ -156,8 +156,8 @@ except Exception:
 print("After pause:", logger.events)
 # After pause: ['INTERRUPTED  checkpoint=<id>  status=interrupt_before  payloads=[{...}]']
 
-# Resume — human approves
-graph.invoke({"approved": True}, config)  # Command(resume=True) equivalent via invoke
+# Resume — human approves; Command(resume=value) supplies the value back to interrupt()
+graph.invoke(Command(resume=True), config)
 print("After resume:", logger.events[-1])
 # After resume: 'RESUMED      checkpoint=<id>  status=interrupt_before'
 ```
@@ -798,7 +798,7 @@ Key design decisions:
 |--------|--------|
 | `ends` | `None` = open routing (return value is the node name); `dict` = maps return values to node names |
 | Schema inference | `_get_branch_path_input_schema()` inspects `path`'s first parameter type hint; only types that themselves have type hints (i.e. TypedDict / dataclass) are used — bare `str`, `int`, etc. are ignored |
-| `from_path` list coercion | When `path_map` is a `list[str]`, it's zipped with `range(len(list))` to produce a `{0: "node0", 1: "node1", …}` dict — the routing function must return an integer index |
+| `from_path` list coercion | When `path_map` is a `list[str]`, it becomes `{name: name for name in path_map}` — each name maps to itself, so the routing function must return the node name string directly (same as open routing) |
 | `path` wrapping | The raw callable is wrapped in `RunnableCallable` so LangGraph can call it with or without a `RunnableConfig` argument |
 
 ### Example 1 — Reading BranchSpec from a compiled graph
@@ -1385,7 +1385,8 @@ class State(TypedDict):
 
 
 def security_check(state: State) -> dict:
-    dest: Destination = "skip" if "malicious" in str(state["payload"]) else "db"
+    # Blocked payloads → skip; safe payloads → cache (matches size_check for small inputs)
+    dest: Destination = "skip" if "malicious" in str(state["payload"]) else "cache"
     return {"destination": dest}
 
 
@@ -1429,8 +1430,9 @@ builder.add_edge("cache", END)
 builder.add_edge("skip", END)
 graph = builder.compile()
 
-result = graph.invoke({"payload": {"key": "small"}, "destination": "db", "processed": False})
-print(f"Destination: {result['destination']}")   # cache
+# Both analyzers agree: small non-malicious payload → "cache"
+result = graph.invoke({"payload": {"key": "small"}, "destination": "cache", "processed": False})
+print(f"Destination: {result['destination']}")   # cache — both writers agreed
 print(f"Processed: {result['processed']}")        # True
 ```
 
