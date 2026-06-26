@@ -739,13 +739,14 @@ from agent_framework._types import Message, Content
 from agent_framework.orchestrations import clean_conversation_for_handoff
 
 # Simulate a conversation that includes function_call artifacts
+# Always use the Content factory methods — the constructor doesn't accept dicts for these types
 text_msg = Message(role="user", contents=["What's the weather?"])
 tool_msg = Message(role="assistant", contents=[
-    Content(type="function_call", function_call={"name": "get_weather", "arguments": "{}"}),
-    Content(type="text", text="The weather is sunny."),
+    Content.from_function_call("call_1", "get_weather", arguments="{}"),
+    Content.from_text("The weather is sunny."),
 ])
 tool_result_msg = Message(role="tool", contents=[
-    Content(type="function_result", function_result={"result": "sunny"}),
+    Content.from_function_result("call_1", result="sunny"),
 ])
 
 full_convo = [text_msg, tool_msg, tool_result_msg]
@@ -1024,12 +1025,12 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework_foundry import evaluate_traces, FoundryEvals, RawFoundryChatClient
+from agent_framework_foundry import evaluate_traces, FoundryEvals, FoundryChatClient
 from azure.identity import DefaultAzureCredential
 
 async def main():
-    # RawFoundryChatClient also uses project_endpoint + credential
-    client = RawFoundryChatClient(
+    # evaluate_traces only unwraps FoundryChatClient (not RawFoundryChatClient)
+    client = FoundryChatClient(
         model="gpt-4o",
         project_endpoint="https://my-project.openai.azure.com",
         credential=DefaultAzureCredential(),
