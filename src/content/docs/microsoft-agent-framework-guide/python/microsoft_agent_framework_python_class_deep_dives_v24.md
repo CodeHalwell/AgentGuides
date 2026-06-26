@@ -846,8 +846,8 @@ Because of this stateful reset, `MagenticAgentExecutor` does **not** support cus
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework import MagenticBuilder
 from agent_framework.orchestrations import (
+    MagenticBuilder,
     MagenticOrchestratorEvent,
     MagenticOrchestratorEventType,
     MagenticProgressLedger,
@@ -888,7 +888,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import Agent
 from agent_framework.orchestrations import MagenticAgentExecutor
-from agent_framework._workflows._executor import AgentExecutor
+from agent_framework import AgentExecutor  # lives in agent_framework._workflows._agent_executor
 from agent_framework.openai import OpenAIChatClient
 
 # MagenticAgentExecutor is what MagenticBuilder registers automatically.
@@ -910,8 +910,8 @@ print(isinstance(coder_exec, AgentExecutor))           # True
 
 ```python
 import asyncio
-from agent_framework import Agent, MagenticBuilder
-from agent_framework.orchestrations import MagenticOrchestratorEvent, MagenticOrchestratorEventType
+from agent_framework import Agent
+from agent_framework.orchestrations import MagenticBuilder, MagenticOrchestratorEvent, MagenticOrchestratorEventType
 from agent_framework.openai import OpenAIChatClient
 
 replan_count = 0
@@ -1020,7 +1020,7 @@ async def main():
             model="gpt-4o",
         )
         print(f"Eval status: {eval_result.status}")
-        print(f"Pass: {eval_result.pass_count}, Fail: {eval_result.fail_count}")
+        print(f"Pass: {eval_result.passed}, Fail: {eval_result.failed}")
 
 asyncio.run(main())
 ```
@@ -1050,8 +1050,8 @@ async def main():
         eval_name="Nightly quality gate",
         timeout=300.0,
     )
-    print(f"Total evaluated: {results.total_count}")
-    print(f"Portal link: {results.portal_link}")
+    print(f"Total evaluated: {results.total}")
+    print(f"Report URL: {results.report_url}")
 
 asyncio.run(main())
 ```
