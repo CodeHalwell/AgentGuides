@@ -545,8 +545,8 @@ def expensive_llm(state: State) -> dict:
 
 
 builder = StateGraph(State)
-# cache=CachePolicy() means cache by (node_name, state_hash) with no TTL
-builder.add_node("llm", expensive_llm, cache=CachePolicy())
+# cache_policy= enables per-node caching; compile(cache=...) provides the backend
+builder.add_node("llm", expensive_llm, cache_policy=CachePolicy())
 builder.add_edge(START, "llm")
 builder.add_edge("llm", END)
 
@@ -1283,6 +1283,7 @@ Key design decisions:
 ### Example 1 — AnyValue in a parallel fan-in graph
 
 ```python
+import operator
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -1293,7 +1294,8 @@ class State(TypedDict):
     input: str
     # All parallel paths compute the same category — AnyValue accepts any writer
     category: Annotated[str, AnyValue(str)]
-    results: list[str]
+    # operator.add reducer merges parallel list writes (required for parallel nodes)
+    results: Annotated[list[str], operator.add]
 
 
 def classifier_a(state: State) -> dict:
@@ -1555,11 +1557,10 @@ builder = StateGraph(State)
 builder.add_node("fetch", fetch)
 builder.add_node("validate", validate)
 builder.add_node("process", process)
-# fetch and validate run in parallel; both must complete before process
+# fetch and validate run in parallel; list edge waits for BOTH before scheduling process
 builder.add_edge(START, "fetch")
 builder.add_edge(START, "validate")
-builder.add_edge("fetch", "process")
-builder.add_edge("validate", "process")
+builder.add_edge(["fetch", "validate"], "process")
 builder.add_edge("process", END)
 graph = builder.compile()
 

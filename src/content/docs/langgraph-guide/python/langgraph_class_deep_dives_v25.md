@@ -139,7 +139,7 @@ def expensive_node(state: State) -> dict:
     return {"value": state["value"] * 2}
 
 builder = StateGraph(State)
-builder.add_node("expensive", expensive_node, cache=CachePolicy())
+builder.add_node("expensive", expensive_node, cache_policy=CachePolicy())
 builder.add_edge(START, "expensive")
 builder.add_edge("expensive", END)
 graph = builder.compile(cache=cache)
