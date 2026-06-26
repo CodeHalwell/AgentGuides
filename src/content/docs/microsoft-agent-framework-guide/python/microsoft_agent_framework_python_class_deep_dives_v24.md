@@ -549,11 +549,11 @@ Custom callback used by `ToolApprovalMiddleware` to accept or reject a tool call
 ### Helper factories
 
 ```python
-create_always_approve_tool_response(tool_name: str, scope: ToolApprovalScope) -> Content
-create_always_approve_tool_with_arguments_response(tool_name: str, arguments: dict, scope: ToolApprovalScope) -> Content
+create_always_approve_tool_response(request: Content, *, reason: str | None = None) -> Content
+create_always_approve_tool_with_arguments_response(request: Content, *, reason: str | None = None) -> Content
 ```
 
-These build the `Content` objects that the middleware injects as fake function-call responses when the agent signals it wants to add a standing approval rule.
+Both take the pending `function_approval_request` Content as their first positional argument; the scope (tool vs tool-with-arguments) is determined by which helper you call, not a parameter. An optional `reason` string is stored in `additional_properties` on the returned `function_approval_response`. These build the `Content` objects the middleware injects when the agent signals it wants to add a standing approval rule.
 
 **Example 1 — `ToolApprovalScope` in action with `ToolApprovalRule`:**
 
@@ -602,16 +602,19 @@ from agent_framework.openai import OpenAIChatClient
 import asyncio
 
 async def main():
+    # AgentSession is a plain dataclass — no async context manager protocol
+    session = AgentSession()
     agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), middleware=[ToolApprovalMiddleware()])
+    # Pass the session so ToolApprovalMiddleware can store approval state in it
+    await agent.run("List available tools.", session=session)
 
-    async with AgentSession(agent) as session:
-        # After a run that triggered approvals, the state is stored at:
-        state_dict = session.state.get(DEFAULT_TOOL_APPROVAL_SOURCE_ID)
-        print("Standing rules:", state_dict)
+    # After the run, approval state is stored under this key:
+    state_dict = session.state.get(DEFAULT_TOOL_APPROVAL_SOURCE_ID)
+    print("Standing rules:", state_dict)
 
-        # Tool names the framework injects to let the LLM request standing approval:
-        print("Scope='tool' function:", ALWAYS_APPROVE_TOOL)
-        print("Scope='tool_with_arguments' function:", ALWAYS_APPROVE_TOOL_WITH_ARGUMENTS)
+    # Tool names the framework injects to let the LLM request standing approval:
+    print("Scope='tool' function:", ALWAYS_APPROVE_TOOL)
+    print("Scope='tool_with_arguments' function:", ALWAYS_APPROVE_TOOL_WITH_ARGUMENTS)
 
 asyncio.run(main())
 ```
@@ -620,7 +623,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, tool
+from agent_framework import Agent, AgentSession, tool
 from agent_framework._harness._tool_approval import ToolApprovalRuleCallback
 from agent_framework import ToolApprovalMiddleware
 from agent_framework._types import Content
@@ -630,8 +633,9 @@ SAFE_TOOLS = {"read_file", "list_dir"}
 
 def my_pre_check(content: Content) -> bool:
     """Pre-approve tools in the safe list without human review."""
-    # content.function_call.name holds the tool name in function_call Content
-    fn = getattr(getattr(content, "function_call", None), "name", None)
+    # auto_approval_rules receive the extracted function_call Content directly;
+    # the tool name is on .name (not .function_call.name)
+    fn = getattr(content, "name", None)
     return fn in SAFE_TOOLS
 
 @tool
@@ -642,7 +646,9 @@ def read_file(path: str) -> str:
 async def main():
     mw = ToolApprovalMiddleware(auto_approval_rules=[my_pre_check])
     agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), tools=[read_file], middleware=[mw])
-    result = await agent.run("Read /etc/hostname")
+    # ToolApprovalMiddleware stores state in session — session is required
+    session = AgentSession()
+    result = await agent.run("Read /etc/hostname", session=session)
     print(result.messages[-1].contents[0].text)
 
 asyncio.run(main())
