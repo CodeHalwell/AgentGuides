@@ -834,7 +834,7 @@ class CacheKey(NamedTuple):
 
 ### How `CachePolicy` produces `CacheKey`
 
-When `CachePolicy` is set on a node or `@task`, the Pregel loop calls `CachePolicy.key_func(task_input)` (default: `default_cache_key`) to produce a `str | bytes` key. That key is then wrapped in a `CacheKey(ns=checkpoint_ns, key=..., ttl=policy.ttl)`.
+When `CachePolicy` is set on a node or `@task`, the Pregel loop calls `CachePolicy.key_func(task_input)` (default: `default_cache_key`) to produce a `str | bytes` key. That key is then hashed with `xxh3_128_hexdigest` and stored as `CacheKey.key`. The `ns` is built by Pregel — NOT from the checkpoint namespace — as `(CACHE_NS_WRITES, identifier(proc), node_name)` for graph nodes, where `CACHE_NS_WRITES = "__pregel_ns_writes"` and `identifier` returns `module.qualname` of the node callable (or `"__dynamic__"` for lambdas/closures).
 
 ```python
 from langgraph.types import CachePolicy
@@ -857,7 +857,7 @@ builder = StateGraph(State)
 builder.add_node(
     "lookup",
     expensive_lookup,
-    cache_policy=CachePolicy(ttl=300),  # → CacheKey(ns=..., key=hash, ttl=300)
+    cache_policy=CachePolicy(ttl=300),  # → CacheKey(ns=("__pregel_ns_writes", id, "lookup"), key=hash, ttl=300)
 )
 builder.add_edge(START, "lookup")
 builder.add_edge("lookup", END)
@@ -906,15 +906,39 @@ print(r["result"])
 
 ### `CacheKey` namespace scoping
 
-The `ns` field mirrors the checkpoint namespace. For a flat graph, `ns = ("",)`. For a subgraph, it is the full nested path, e.g. `("", "sub_agent", "0")`. This means a cached task result from step 1 of a subgraph is never accidentally used in step 2 or a sibling subgraph:
+The `ns` field is built by Pregel from three components (for graph nodes):
+
+| Component | Source | Example |
+|-----------|--------|---------|
+| `CACHE_NS_WRITES` | Fixed sentinel `"__pregel_ns_writes"` | `"__pregel_ns_writes"` |
+| Callable identity | `module.qualname` of the node function (or `"__dynamic__"` for lambdas) | `"__main__.expensive_lookup"` |
+| Node name | The string name passed to `add_node()` | `"lookup"` |
+
+Two nodes that use the same function but different node names produce different `ns` tuples — so they never share cache entries even when their inputs hash identically:
 
 ```python
 from langgraph.types import CacheKey
 
-# Two tasks from different namespaces — distinct CacheKeys
-k1 = CacheKey(ns=("", "sub1", "0"), key="abc123", ttl=60)
-k2 = CacheKey(ns=("", "sub2", "0"), key="abc123", ttl=60)
-print(k1 == k2)   # False — different ns despite same key
+# Same callable, different node names → different ns → no cross-node cache pollution
+k1 = CacheKey(
+    ns=("__pregel_ns_writes", "__main__.expensive_lookup", "lookup_v1"),
+    key="abc123",
+    ttl=60,
+)
+k2 = CacheKey(
+    ns=("__pregel_ns_writes", "__main__.expensive_lookup", "lookup_v2"),
+    key="abc123",
+    ttl=60,
+)
+print(k1 == k2)   # False — different node names despite same callable and content key
+
+# Same node name + same callable + same input → cache hit
+k3 = CacheKey(
+    ns=("__pregel_ns_writes", "__main__.expensive_lookup", "lookup_v1"),
+    key="abc123",
+    ttl=60,
+)
+print(k1 == k3)   # True — identical ns + key → cache hit
 ```
 
 ---
