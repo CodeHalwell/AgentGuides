@@ -816,7 +816,7 @@ def my_retry_on(exc: Exception) -> bool:
     return default_retry_on(exc)
 
 builder = StateGraph(State)
-builder.add_node("flaky", flaky_node, retry=RetryPolicy(
+builder.add_node("flaky", flaky_node, retry_policy=RetryPolicy(
     max_attempts=5,
     retry_on=my_retry_on,
     initial_interval=0.01,  # fast for demo

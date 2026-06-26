@@ -1151,11 +1151,13 @@ builder.add_edge(START, "model")
 graph = builder.compile(transformers=[ToolCallTransformer])
 
 async def main():
-    async with graph.astream(
+    # astream_events(version="v3") returns AsyncGraphRunStream — await it, then use as context manager
+    run = await graph.astream_events(
         {"messages": [HumanMessage(content="Search for LangGraph")]},
-        stream_mode=["tools", "values"],
-    ) as run:
-        # Iterate tool_calls as they stream in
+        version="v3",
+    )
+    async with run:
+        # run.tool_calls is exposed as a direct attribute because ToolCallTransformer._native = True
         async for tool_stream in run.tool_calls:
             print(f"Tool started: {tool_stream.tool_name!r} id={tool_stream.tool_call_id[:8]}")
             async for delta in tool_stream.output_deltas:
