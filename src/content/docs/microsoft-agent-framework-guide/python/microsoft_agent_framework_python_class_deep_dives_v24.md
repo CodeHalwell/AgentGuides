@@ -300,6 +300,7 @@ The core loop:
 import asyncio
 from agent_framework import Agent, WorkflowBuilder, tool
 from agent_framework._workflows._events import WorkflowEvent
+from agent_framework.openai import OpenAIChatClient
 
 @tool
 def add(a: int, b: int) -> int:
@@ -307,10 +308,10 @@ def add(a: int, b: int) -> int:
     return a + b
 
 async def main() -> None:
-    agent = Agent(model="gpt-4o-mini", tools=[add])
+    agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), tools=[add])
     workflow = WorkflowBuilder().add_agent(agent, output_type=str).build()
 
-    async for event in workflow.run_stream("What is 3 + 4?"):
+    async for event in workflow.run("What is 3 + 4?", stream=True):
         # WorkflowEvent uses .type as the discriminator; superstep number is on .iteration
         if event.type == "superstep_started":
             print(f"Superstep {event.iteration} started")
@@ -323,9 +324,10 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent, WorkflowBuilder, WorkflowConvergenceException
+from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
-    agent = Agent(model="gpt-4o-mini")
+    agent = Agent(OpenAIChatClient(model="gpt-4o-mini"))
     # max_iterations is a WorkflowBuilder constructor arg — not a run() parameter
     workflow = WorkflowBuilder(max_iterations=3).add_agent(agent, output_type=str).build()
 
@@ -415,6 +417,7 @@ Declare only the keywords you need; use `**kwargs` to ignore the rest.
 import asyncio
 from agent_framework import Agent
 from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework.openai import OpenAIChatClient
 
 async def quality_gate(*, last_result, iteration, **kwargs):
     """Return (continue?, feedback) tuple — feedback flows into next_message via 'progress'."""
@@ -432,13 +435,12 @@ async def build_next(*, progress, **kwargs):
     return f"Previous feedback: {note}. Continue and refine your answer."
 
 async def main() -> None:
-    agent = Agent(model="gpt-4o-mini")
     loop_mw = AgentLoopMiddleware(
         should_continue=quality_gate,
         next_message=build_next,
         max_iterations=10,
     )
-    agent.add_middleware(loop_mw)
+    agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), middleware=[loop_mw])
     result = await agent.run("Draft a research summary on quantum computing.")
     print(result.messages[-1].contents[0].text)
 
@@ -455,23 +457,23 @@ from agent_framework._harness._loop import (
     DEFAULT_JUDGE_INSTRUCTIONS,
     CRITERIA_PLACEHOLDER,
 )
+from agent_framework.openai import OpenAIChatClient
 
 # Inspect the template to understand how CRITERIA_PLACEHOLDER is substituted
 print(DEFAULT_JUDGE_INSTRUCTIONS)
 # "... Set 'answered' to true if ... {{criteria}}"
 
-# with_judge replaces {{criteria}} with your criteria string
-custom_criteria = " Additionally, the answer must include at least one code example."
+# with_judge replaces {{criteria}} with your criteria list
+custom_criteria = "The answer must include at least one code example."
 
 async def main() -> None:
-    agent = Agent(model="gpt-4o-mini")
-    judge_client = agent.chat_client  # reuse the same model as judge
+    oai_client = OpenAIChatClient(model="gpt-4o-mini")
     loop_mw = AgentLoopMiddleware.with_judge(
-        judge_client,                        # positional: SupportsChatGetResponse
+        oai_client,                          # positional: SupportsChatGetResponse
         criteria=[custom_criteria],          # Sequence[str], not a bare string
         max_iterations=4,
     )
-    agent.add_middleware(loop_mw)
+    agent = Agent(oai_client, middleware=[loop_mw])
     result = await agent.run("Explain Python decorators.")
     print(result.messages[-1].contents[0].text)
 
@@ -484,6 +486,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import Agent, AgentSession
 from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework.openai import OpenAIChatClient
 
 feedback_log: list[str] = []
 
@@ -495,14 +498,13 @@ def record_feedback_fn(*, last_result, iteration, **kwargs) -> str | None:
     return note
 
 async def main() -> None:
-    agent = Agent(model="gpt-4o-mini")
     mw = AgentLoopMiddleware(
         should_continue=lambda *, iteration, **kw: iteration < 3,
         record_feedback=record_feedback_fn,
         max_iterations=3,
         return_final_only=True,
     )
-    agent.add_middleware(mw)
+    agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), middleware=[mw])
     result = await agent.run("Write a haiku about distributed systems.")
     print(result.messages[-1].contents[0].text)
     print("Feedback log:", feedback_log)
@@ -596,11 +598,11 @@ from agent_framework._harness._tool_approval import (
     ALWAYS_APPROVE_TOOL_WITH_ARGUMENTS,
 )
 from agent_framework import ToolApprovalMiddleware
+from agent_framework.openai import OpenAIChatClient
 import asyncio
 
 async def main():
-    agent = Agent(model="gpt-4o-mini")
-    agent.add_middleware(ToolApprovalMiddleware())
+    agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), middleware=[ToolApprovalMiddleware()])
 
     async with AgentSession(agent) as session:
         # After a run that triggered approvals, the state is stored at:
@@ -622,6 +624,7 @@ from agent_framework import Agent, tool
 from agent_framework._harness._tool_approval import ToolApprovalRuleCallback
 from agent_framework import ToolApprovalMiddleware
 from agent_framework._types import Content
+from agent_framework.openai import OpenAIChatClient
 
 SAFE_TOOLS = {"read_file", "list_dir"}
 
@@ -637,9 +640,8 @@ def read_file(path: str) -> str:
     return open(path).read()
 
 async def main():
-    agent = Agent(model="gpt-4o-mini", tools=[read_file])
     mw = ToolApprovalMiddleware(auto_approval_rules=[my_pre_check])
-    agent.add_middleware(mw)
+    agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), tools=[read_file], middleware=[mw])
     result = await agent.run("Read /etc/hostname")
     print(result.messages[-1].contents[0].text)
 
@@ -840,10 +842,11 @@ from agent_framework.orchestrations import (
     MagenticOrchestratorEventType,
     MagenticProgressLedger,
 )
+from agent_framework.openai import OpenAIChatClient
 
 async def main():
-    researcher = Agent(name="researcher", model="gpt-4o-mini")
-    writer = Agent(name="writer", model="gpt-4o-mini")
+    researcher = Agent(OpenAIChatClient(model="gpt-4o-mini"), name="researcher")
+    writer = Agent(OpenAIChatClient(model="gpt-4o-mini"), name="writer")
 
     workflow = (
         MagenticBuilder()
@@ -855,15 +858,14 @@ async def main():
     plan_events = []
     ledger_updates = []
 
-    async for event in workflow.run_stream("Research and summarize Python 3.13 features."):
-        data = event.data
-        if isinstance(data, dict) and "event_type" in data:
-            orch_event = data.get("magentic_event")
-            if isinstance(orch_event, MagenticOrchestratorEvent):
-                if orch_event.event_type == MagenticOrchestratorEventType.PLAN_CREATED:
-                    plan_events.append(orch_event.content)
-                elif orch_event.event_type == MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
-                    ledger_updates.append(orch_event.content)
+    # stream=True — workflow.run() yields WorkflowEvents; no run_stream() method
+    async for event in workflow.run("Research and summarize Python 3.13 features.", stream=True):
+        # event.data IS a MagenticOrchestratorEvent directly (no dict wrapper)
+        if isinstance(event.data, MagenticOrchestratorEvent):
+            if event.data.event_type == MagenticOrchestratorEventType.PLAN_CREATED:
+                plan_events.append(event.data.content)
+            elif event.data.event_type == MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
+                ledger_updates.append(event.data.content)
 
     print(f"Plans created: {len(plan_events)}, Ledger updates: {len(ledger_updates)}")
 
@@ -877,11 +879,12 @@ import asyncio
 from agent_framework import Agent
 from agent_framework.orchestrations import MagenticAgentExecutor
 from agent_framework._workflows._executor import AgentExecutor
+from agent_framework.openai import OpenAIChatClient
 
 # MagenticAgentExecutor is what MagenticBuilder registers automatically.
 # Use it directly when building a custom Magentic-like workflow.
-coder = Agent(name="coder", model="gpt-4o-mini")
-reviewer = Agent(name="reviewer", model="gpt-4o-mini")
+coder = Agent(OpenAIChatClient(model="gpt-4o-mini"), name="coder")
+reviewer = Agent(OpenAIChatClient(model="gpt-4o-mini"), name="reviewer")
 
 coder_exec = MagenticAgentExecutor(coder)
 reviewer_exec = MagenticAgentExecutor(reviewer)
@@ -899,18 +902,19 @@ print(isinstance(coder_exec, AgentExecutor))           # True
 import asyncio
 from agent_framework import Agent, MagenticBuilder
 from agent_framework.orchestrations import MagenticOrchestratorEvent, MagenticOrchestratorEventType
+from agent_framework.openai import OpenAIChatClient
 
 replan_count = 0
 
 async def main():
     global replan_count
-    agents = [Agent(name=f"agent{i}", model="gpt-4o-mini") for i in range(3)]
+    agents = [Agent(OpenAIChatClient(model="gpt-4o-mini"), name=f"agent{i}") for i in range(3)]
     builder = MagenticBuilder()
     for a in agents:
         builder.add_agent(a)
     workflow = builder.build()
 
-    async for event in workflow.run_stream("Complete a complex multi-step research task."):
+    async for event in workflow.run("Complete a complex multi-step research task.", stream=True):
         # MagenticOrchestrator sets event.data directly to a MagenticOrchestratorEvent
         if isinstance(event.data, MagenticOrchestratorEvent):
             if event.data.event_type == MagenticOrchestratorEventType.REPLANNED:
@@ -983,14 +987,16 @@ import asyncio
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
 from agent_framework_foundry import evaluate_traces, FoundryEvals
+from azure.identity import DefaultAzureCredential
 
 async def main():
+    # FoundryChatClient takes project_endpoint + credential, NOT endpoint/api_key
     client = FoundryChatClient(
         model="gpt-4o",
-        endpoint="https://my-project.openai.azure.com",
-        api_key="...",
+        project_endpoint="https://my-project.openai.azure.com",
+        credential=DefaultAzureCredential(),
     )
-    agent = Agent(model=client)
+    agent = Agent(client)
     result = await agent.run("What are the key trends in AI for 2026?")
 
     # Evaluate the response that was just generated
@@ -1013,12 +1019,14 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework_foundry import evaluate_traces, FoundryEvals, RawFoundryChatClient
+from azure.identity import DefaultAzureCredential
 
 async def main():
+    # RawFoundryChatClient also uses project_endpoint + credential
     client = RawFoundryChatClient(
         model="gpt-4o",
-        endpoint="https://my-project.openai.azure.com",
-        api_key="...",
+        project_endpoint="https://my-project.openai.azure.com",
+        credential=DefaultAzureCredential(),
     )
 
     # Evaluate all activity for agent "my-agent-id" in the past 6 hours
@@ -1053,7 +1061,8 @@ async def main():
     )
 
     # Mixed batch: 2 text items + 1 image item
-    image_content = Content(type="image_url", image_url={"url": "https://example.com/chart.png"})
+    # Content.from_uri() is the correct factory for image inputs (no image_url= kwarg)
+    image_content = Content.from_uri("https://example.com/chart.png", media_type="image/png")
     inputs = [
         "Revenue grew 15% year-over-year",
         image_content,
@@ -1167,7 +1176,7 @@ async def main():
         async_client=shared_oai,   # INJECTABLE — bypasses internal client creation
     )
     messages = [Message(role="user", contents=["What is 7 * 8?"])]
-    response = await raw.complete(messages)
+    response = await raw.get_response(messages)
     print(response.messages[-1].contents[0].text)   # 56
 
 asyncio.run(main())
@@ -1224,8 +1233,8 @@ from agent_framework._types import Message, Content
 msgs = normalize_messages_input("Analyze this report")
 print(msgs[0].role, msgs[0].contents[0])  # "user" "Analyze this report"
 
-# Content input (e.g. an image)
-image = Content(type="image_url", image_url={"url": "https://example.com/chart.png"})
+# Content input (e.g. an image) — use Content.from_uri(), not the type/image_url kwargs
+image = Content.from_uri("https://example.com/chart.png", media_type="image/png")
 msgs = normalize_messages_input(image)
 print(msgs[0].contents[0].type)  # "image_url"
 
