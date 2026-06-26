@@ -252,20 +252,12 @@ sub_builder.add_edge(START, "sub_node")
 sub_builder.add_edge("sub_node", END)
 subgraph = sub_builder.compile()
 
-
-class RootState(TypedDict):
-    done: bool
-
-
-def root_node(state: RootState) -> dict:
-    subgraph.invoke({"sub_done": False})
-    return {"done": True}
-
-
-root_builder = StateGraph(RootState)
-root_builder.add_node("root_node", root_node)
-root_builder.add_edge(START, "root_node")
-root_builder.add_edge("root_node", END)
+# Add the compiled subgraph directly as a node — LangGraph propagates
+# config (including callbacks and checkpointer) automatically.
+root_builder = StateGraph(SubState)
+root_builder.add_node("sub", subgraph)
+root_builder.add_edge(START, "sub")
+root_builder.add_edge("sub", END)
 
 checkpointer = InMemorySaver()
 graph = root_builder.compile(checkpointer=checkpointer)
@@ -273,10 +265,10 @@ graph = root_builder.compile(checkpointer=checkpointer)
 tracker = NamespaceTracker()
 config = {"configurable": {"thread_id": "ns-test"}, "callbacks": [tracker]}
 try:
-    graph.invoke({"done": False}, config)
+    graph.invoke({"sub_done": False}, config)
 except Exception:
     pass
-# [subgraph] interrupt  ns=('root_node:...',)  status=interrupt_before
+# [subgraph] interrupt  ns=('sub:...',)  status=interrupt_before
 ```
 
 ---
@@ -943,8 +935,8 @@ class JsonPlusSerializer(SerializerProtocol):
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]: ...
     def loads_typed(self, data: tuple[str, bytes]) -> Any: ...
 
-    def with_allowed_modules(
-        self, allowed_msgpack_modules: AllowedMsgpackModules | Literal[True] | None
+    def with_msgpack_allowlist(
+        self, extra_allowlist: Iterable[tuple[str, ...] | type]
     ) -> "JsonPlusSerializer": ...
 ```
 
@@ -992,7 +984,7 @@ print(type(restored).__name__, restored.content)  # HumanMessage Hello
 
 ### Example 2 — LANGGRAPH_STRICT_MSGPACK allowlist mode
 
-In strict mode, only types in the built-in allowlist can be deserialized. Unknown types raise `InvalidModuleError`. Use `with_allowed_modules()` to extend the allowlist without modifying the environment.
+In strict mode, only types in the built-in allowlist can be deserialized. Unknown types raise `InvalidModuleError`. Use `with_msgpack_allowlist([MyClass])` to extend the allowlist — accepts type objects or `(module, qualname)` tuples — without modifying the environment.
 
 ```python
 import os
@@ -1031,9 +1023,9 @@ except Exception as e:
     print(f"Blocked: {type(e).__name__}: {e}")
     # Blocked: InvalidModuleError: ...
 
-# Extend allowlist to include the module containing MyResult
-module_name = MyResult.__module__
-extended = strict_serde.with_allowed_modules({module_name})
+# Extend allowlist to include MyResult; with_msgpack_allowlist accepts type objects
+# or (module, qualname) tuples — passing the class directly is simplest.
+extended = strict_serde.with_msgpack_allowlist([MyResult])
 restored2 = extended.loads_typed((enc3, data3))
 print(f"Allowed: score={restored2.score}")  # Allowed: score=0.92
 ```

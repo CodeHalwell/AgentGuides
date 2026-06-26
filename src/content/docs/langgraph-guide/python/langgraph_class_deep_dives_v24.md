@@ -105,8 +105,8 @@ for event in graph.stream(
     elif kind == "task_result":
         payload = event["payload"]
         err = payload.get("error")
-        writes = payload.get("result", [])
-        print(f"[step {step}] task FINISHED: {payload['name']} — writes={[w[0] for w in writes]}"
+        writes: dict = payload.get("result", {})
+        print(f"[step {step}] task FINISHED: {payload['name']} — writes={list(writes.keys())}"
               + (f" ERROR: {err}" if err else ""))
     elif kind == "checkpoint":
         payload = event["payload"]
