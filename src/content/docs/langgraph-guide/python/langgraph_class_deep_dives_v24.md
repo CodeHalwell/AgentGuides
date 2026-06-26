@@ -393,13 +393,16 @@ class LangGraphDeprecationWarning(DeprecationWarning):
         )
 
 class LangGraphDeprecatedSinceV05(LangGraphDeprecationWarning):
-    # since=(0,5), expected_removal=(2,0)  — removal at major v2
+    since = (0, 5)
+    expected_removal = (2, 0)  # removal at major v2
 
 class LangGraphDeprecatedSinceV10(LangGraphDeprecationWarning):
-    # since=(1,0), expected_removal=(2,0)  — removal at major v2
+    since = (1, 0)
+    expected_removal = (2, 0)  # removal at major v2
 
 class LangGraphDeprecatedSinceV11(LangGraphDeprecationWarning):  # NEW in 1.2.6
-    # since=(1,1), expected_removal=(3,0)  — removal at major v3
+    since = (1, 1)
+    expected_removal = (3, 0)  # removal at major v3
 ```
 
 The `V11` sentinel is new in 1.2.6. It carries `expected_removal=(3, 0)` — removal is deferred until v3.0, giving a longer deprecation window than `V05`/`V10` (both target removal at v2.0).

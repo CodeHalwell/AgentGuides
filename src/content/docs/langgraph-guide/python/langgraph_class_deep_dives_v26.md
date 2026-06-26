@@ -414,7 +414,10 @@ print(f"Restored via replay: {ch3.get()}")  # 60
 
 ### Example 3 — Overwrite reset inside DeltaChannel
 
-`DeltaChannel` respects the `Overwrite` sentinel: the last `Overwrite` in a write batch becomes the new base, and only subsequent writes are passed to the reducer.
+`DeltaChannel` respects the `Overwrite` sentinel, but the semantics differ between same-step writes (`update()`) and ancestor replay (`replay_writes()`):
+
+- **`update()`** — at most one `Overwrite` per step (two raises). The overwrite value becomes the new base; ALL other values in the batch (before and after the overwrite index) are passed to the reducer as `remaining`.
+- **`replay_writes()`** — multiple overwrites are allowed; the **last** overwrite becomes the base, and only writes that appear **after** it are passed to the reducer (earlier writes are dropped).
 
 ```python
 from langgraph.channels.delta import DeltaChannel
