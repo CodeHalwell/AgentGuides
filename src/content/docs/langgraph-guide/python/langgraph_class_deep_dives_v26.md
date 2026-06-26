@@ -340,11 +340,12 @@ class State(TypedDict):
 
 
 def step_a(state: State) -> dict:
-    return {"log": ["step-a done"], "step": state["step"] + 1}
+    # Write a scalar string — the reducer receives ["step-a done"] as the writes batch
+    return {"log": "step-a done", "step": state["step"] + 1}
 
 
 def step_b(state: State) -> dict:
-    return {"log": ["step-b done"], "step": state["step"] + 1}
+    return {"log": "step-b done", "step": state["step"] + 1}
 
 
 builder = StateGraph(State)
@@ -619,6 +620,8 @@ print(cache.get([key_alice, key_bob]))
 # Signatures (langgraph/channels/last_value.py)
 class LastValue(BaseChannel[Value, Value, Value]):
     def update(self, values: Sequence[Value]) -> bool:
+        if len(values) == 0:
+            return False                   # no write this superstep — no-op
         if len(values) != 1:
             raise InvalidUpdateError(...)  # INVALID_CONCURRENT_GRAPH_UPDATE
         self.value = values[-1]
@@ -1556,7 +1559,9 @@ builder.add_edge(["fetch", "validate"], "process")
 builder.add_edge("process", END)
 graph = builder.compile()
 
-result = graph.invoke({"data": "my-data", "ready": None, "result": ""})
+# Do not seed "ready" — NamedBarrierValue validates writes against names={"fetch","validate"}
+# and raises InvalidUpdateError on any other value (including None).
+result = graph.invoke({"data": "my-data", "result": ""})
 print(result["result"])   # Processed: my-data
 ```
 
