@@ -74,19 +74,22 @@ from temporalio import workflow, activity
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 
+# Agents and TemporalAgent must be at module level so Temporal workers can
+# import them by name during replay.
+agent = Agent("openai:gpt-4.1-mini", system_prompt="You are a helpful assistant.")
+temporal_agent = TemporalAgent(agent)
+
 
 @workflow.defn
 class MyWorkflow:
     @workflow.run
     async def run(self, question: str) -> str:
         # TemporalAgent.run() serialises the request to a Temporal activity automatically
-        return await self.agent.run(question)
+        result = await temporal_agent.run(question)
+        return result.output
 
 
 async def main():
-    agent = Agent("openai:gpt-4.1-mini", system_prompt="You are a helpful assistant.")
-    temporal_agent = TemporalAgent(agent)
-
     async with await Client.connect("localhost:7233") as client:
         # Register TemporalModel's activities with the worker
         async with Worker(
@@ -113,35 +116,37 @@ from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 from pydantic_ai.models.openai import OpenAIModel
 
+# Module-level agent and temporal_agent — required for Temporal worker import and replay safety.
+_agent = Agent("openai:gpt-4.1-mini")
+_temporal_agent = TemporalAgent(
+    _agent,
+    models={
+        # Registered by ID — 'default' is reserved for the primary model
+        "powerful": OpenAIModel("gpt-4.1"),
+        "cheap": OpenAIModel("gpt-4.1-nano"),
+    },
+)
+
+
+# Workflow class must be at module level so Temporal workers can import it by name.
+@workflow.defn
+class AdaptiveWorkflow:
+    @workflow.run
+    async def run(self, task: str) -> str:
+        # Cheap model for classification
+        with _temporal_agent.model.using_model("cheap"):
+            complexity = await _temporal_agent.run(f"Is this task complex? {task}")
+
+        # Switch to powerful model only when needed
+        model_id = "powerful" if "yes" in complexity.output.lower() else "cheap"
+        with _temporal_agent.model.using_model(model_id):
+            result = await _temporal_agent.run(task)
+            return result.output
+
 
 async def demonstrate_multi_model():
-    # 'default' model for most calls; register a larger model for complex tasks
-    agent = Agent("openai:gpt-4.1-mini")
-    temporal_agent = TemporalAgent(
-        agent,
-        models={
-            # Registered by ID — 'default' is reserved for the primary model
-            "powerful": OpenAIModel("gpt-4.1"),
-            "cheap": OpenAIModel("gpt-4.1-nano"),
-        },
-    )
-
-    # Inside a workflow, switch models per step:
-    @workflow.defn
-    class AdaptiveWorkflow:
-        @workflow.run
-        async def run(self, task: str) -> str:
-            # Cheap model for classification
-            with temporal_agent.model.using_model("cheap"):
-                complexity = await temporal_agent.run(f"Is this task complex? {task}")
-
-            # Switch to powerful model only when needed
-            model_id = "powerful" if "yes" in complexity.lower() else "cheap"
-            with temporal_agent.model.using_model(model_id):
-                return await temporal_agent.run(task)
-
     print("Multi-model temporal agent configured.")
-    print(f"Registered model IDs: {list(temporal_agent.model._models_by_id.keys())}")
+    print(f"Registered model IDs: {list(_temporal_agent.model._models_by_id.keys())}")
 ```
 
 ### 1.3 `TemporalProviderFactory` — Dynamic Providers per Run Context
@@ -465,7 +470,7 @@ demo = _CachingBehaviourDemo(cache_tools=True)
 demo.get_tools()  # fetch #1
 demo.get_tools()  # cache hit
 demo.get_tools()  # cache hit
-print(f"Server fetches with cache_tools=True: {demo.fetch_count}")  # 1
+print(f"Server fetches with cache_tools=True: {demo._fetch_count}")  # 1
 
 demo2 = _CachingBehaviourDemo(cache_tools=False)
 demo2.get_tools()
