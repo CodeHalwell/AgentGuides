@@ -317,7 +317,7 @@ class E2BEnvironment(BaseEnvironment):
 
 - **TTL keepalive**: every `execute()`, `read_file()`, `write_file()` call that finds a still-running sandbox invokes `sandbox.set_timeout(self._timeout)` to extend its life.
 - **Auto-reconnect**: if `is_running()` returns `False`, a fresh sandbox is created transparently — workspace state (installed packages, files) is lost.
-- **Path traversal safety**: `_resolve_path()` uses `PurePosixPath(_SANDBOX_HOME) / path` — absolute paths pass through unchanged; relative paths are anchored under `/home/user`.
+- **Path resolution**: `_resolve_path()` uses `PurePosixPath(_SANDBOX_HOME) / path` — relative paths are anchored under `/home/user`, but absolute paths pass through unchanged (e.g. `"/etc/passwd"` resolves to `/etc/passwd`). Do not rely on this as a traversal guard for user-supplied absolute paths.
 - **Working directory**: always `Path("/home/user")`.
 
 ### Example 1 — basic file write and execute
@@ -984,10 +984,9 @@ async def test_greeting_agent():
     scripted = make_text_response("Hello, Alice! How can I help you?")
     model = MockModel(responses=[scripted])
 
-    # Patch the agent's model for offline testing
-    agent = LlmAgent(name="greeter", model="mock",
+    # Pass the MockModel instance directly so the scripted responses are used
+    agent = LlmAgent(name="greeter", model=model,
                      instruction="Greet the user by name.")
-    agent.canonical_model = "mock"
 
     session_service = InMemorySessionService()
     runner = Runner(agent=agent, app_name="test_app",
