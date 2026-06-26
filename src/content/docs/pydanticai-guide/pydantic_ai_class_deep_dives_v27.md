@@ -560,13 +560,17 @@ def _default_setup_logfire() -> Logfire:
 import asyncio
 from temporalio.client import Client
 from pydantic_ai.durable_exec.temporal._logfire import LogfirePlugin
+from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 async def main():
-    # LogfirePlugin is passed as a plugin at client construction time.
-    # It calls setup_logfire() inside connect_service_client() before the connection completes.
+    # Both plugins are required together:
+    # - PydanticAIPlugin: installs Pydantic payload converters and agent activity registration
+    # - LogfirePlugin: adds OTel TracingInterceptor and Logfire metrics
+    # Using only LogfirePlugin omits the Pydantic data converter, causing payload
+    # serialization failures when model/activity payloads execute inside workflows.
     client = await Client.connect(
         "localhost:7233",
-        plugins=[LogfirePlugin()],   # default: metrics=True, auto-configure logfire
+        plugins=[PydanticAIPlugin(), LogfirePlugin()],
     )
     print("Connected with Logfire OTel tracing and metrics.")
     # Every Temporal workflow/activity call now emits OTel spans to Logfire.
@@ -578,6 +582,7 @@ async def main():
 ```python
 from temporalio.client import Client
 from pydantic_ai.durable_exec.temporal._logfire import LogfirePlugin
+from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 
 
 def my_setup_logfire():
@@ -594,11 +599,12 @@ def my_setup_logfire():
 
 
 async def main():
-    plugin = LogfirePlugin(
+    logfire_plugin = LogfirePlugin(
         setup_logfire=my_setup_logfire,
         metrics=True,   # Export Temporal metrics to Logfire OTLP endpoint
     )
-    client = await Client.connect("localhost:7233", plugins=[plugin])
+    # PydanticAIPlugin must always be included — it registers Pydantic data converters.
+    client = await Client.connect("localhost:7233", plugins=[PydanticAIPlugin(), logfire_plugin])
     print("Connected with custom Logfire setup.")
 ```
 
