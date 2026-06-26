@@ -382,7 +382,7 @@ print("slow_api_call: wrapped as Temporal activity")
 
 **Source**: `pydantic_ai/durable_exec/temporal/_mcp_toolset.py`
 
-`TemporalMCPToolset` wraps an `MCPToolset` so that `get_tools` and `call_tool` execute as Temporal activities. Its key optimisation is `_cached_tool_defs`: when the wrapped `MCPToolset.cache_tools` is `True`, tool definitions from the first `get_tools` activity are stored and reused across subsequent steps — avoiding redundant MCP `tools/list` round-trips for every workflow replay.
+`TemporalMCPToolset` wraps an `MCPToolset` so that `get_tools` and `call_tool` execute as Temporal activities. Its key optimisation is `_cached_tool_defs`: when the wrapped `MCPToolset.cache_tools` is `True`, tool definitions from the first `get_tools` activity are stored on the `TemporalMCPToolset` instance and reused for all subsequent workflows on the same worker process — avoiding redundant MCP `tools/list` round-trips. **Important**: the cache is worker-scoped, not workflow-scoped, and is never invalidated by `tools/list_changed` notifications. If the MCP server's tool list can change between workflow runs, use `cache_tools=False`.
 
 ```python
 # Key signatures from source:
@@ -424,7 +424,10 @@ from pydantic_ai.durable_exec.temporal import TemporalAgent
 async def main():
     # MCPToolset accepts an MCPToolsetClient — use StdioTransport (or a URL string
     # for SSE/StreamableHttp). A raw dict is NOT accepted in v2.0.0.
-    # cache_tools=True (default): tool list fetched once per workflow, cached thereafter
+    # cache_tools=True: tool list fetched on the FIRST get_tools call and cached on the
+    # TemporalMCPToolset instance for the lifetime of the worker process — NOT per-workflow.
+    # All subsequent workflows reuse the same cached list until the worker restarts.
+    # If the MCP server's tool list can change between runs, use cache_tools=False.
     mcp_toolset = MCPToolset(
         StdioTransport(
             command="npx",
@@ -1128,9 +1131,16 @@ merged = base_config | per_tool_overrides  # Python dict merge (right wins)
 print(f"Merged config: {merged}")
 # {'retries': 5, 'retry_delay_seconds': 1.0, 'timeout_seconds': 30}
 
-# When per-tool config is None, the tool bypasses task wrapping completely:
-print(f"default_task_config: {default_task_config}")  # {}
-# {} | None would fail — None is checked explicitly before the merge.
+# default_task_config is NOT empty — it carries real defaults that apply to every
+# tool unless explicitly overridden. An omitted per-tool config still gets these.
+print(f"default_task_config: {default_task_config}")
+# TaskConfig(retries=0, retry_delay_seconds=1.0, persist_result=True,
+#            log_prints=False, cache_policy=DEFAULT_PYDANTIC_AI_CACHE_POLICY)
+# Notably persist_result=True means task results are cached by default —
+# side-effecting tools should set persist_result=False explicitly.
+
+# When per-tool config is None, the tool bypasses task wrapping completely
+# (runs as a plain async call, no Prefect task overhead).
 ```
 
 ---
