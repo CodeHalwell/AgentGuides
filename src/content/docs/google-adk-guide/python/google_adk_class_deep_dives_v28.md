@@ -431,9 +431,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from google.adk.memory import InMemoryMemoryService
-from google.adk.memory.memory_entry import MemoryEntry
 from google.adk.sessions import InMemorySessionService
-from google.adk.sessions.session import Session
 from google.genai import types
 from google.adk.events.event import Event
 
@@ -577,8 +575,6 @@ from pydantic import BaseModel
 from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 from google.adk.flows.llm_flows._output_schema_processor import _OutputSchemaRequestProcessor
-from google.adk.models.llm_request import LlmRequest
-from google.adk.agents.invocation_context import InvocationContext
 
 class Summary(BaseModel):
     title: str
@@ -772,7 +768,6 @@ asyncio.run(main())
 ### Example 3 — verifying thought-stripping with a custom planner
 
 ```python
-from google.adk.planners.plan_re_act_planner import PlanReActPlanner
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 
