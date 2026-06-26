@@ -158,8 +158,14 @@ from pydantic_ai import Agent
 from pydantic_ai.tools import RunContext
 
 
-def my_provider_factory(ctx: RunContext, model_id: str):
-    """Return different providers based on run context — e.g. per-tenant API keys."""
+def my_provider_factory(ctx: RunContext, provider_name: str):
+    """Return different providers based on run context — e.g. per-tenant API keys.
+
+    The second argument is the *provider name* extracted from the model string
+    (e.g. "openai" from "openai:gpt-4.1-mini"), NOT the full model ID.
+    TemporalModel calls models.infer_model(model_id, provider_factory=partial(factory, ctx)),
+    and infer_model passes only the provider prefix to the factory.
+    """
     # ctx.deps could carry tenant info
     tenant_api_key = getattr(ctx.deps, "api_key", None) or "default-key"
     return OpenAIProvider(api_key=tenant_api_key)
@@ -170,7 +176,7 @@ temporal_agent = TemporalAgent(
     agent,
     provider_factory=my_provider_factory,
     # Any model ID string not in _models_by_id falls through to _infer_model(),
-    # which calls my_provider_factory(run_context, "openai:gpt-4.1") to build the model.
+    # which calls my_provider_factory(run_context, "openai") — the provider prefix only.
 )
 
 print("Provider factory registered.")
@@ -265,14 +271,22 @@ async def main():
     toolset = FunctionToolset([get_weather, get_forecast], id="weather-tools")
     agent = Agent("openai:gpt-4.1-mini", toolsets=[toolset])
 
-    default_config = ActivityConfig(start_to_close_timeout=30)
+    # TemporalAgent activity config hierarchy:
+    #   activity_config          — base for ALL activities (model + toolsets)
+    #   toolset_activity_config  — override per toolset ID (merged with base)
+    #   tool_activity_config     — {toolset_id: {tool_name: ActivityConfig | False}}
     temporal_agent = TemporalAgent(
         agent,
+        activity_config=ActivityConfig(start_to_close_timeout=30),  # base for everything
+        toolset_activity_config={
+            "weather-tools": ActivityConfig(start_to_close_timeout=30),  # default for this toolset
+        },
         tool_activity_config={
             "weather-tools": {
-                "activity_config": default_config,
-                # per-tool overrides: give forecast more time
-                "tool_activity_config": {"get_forecast": ActivityConfig(start_to_close_timeout=60)},
+                # per-tool override — give forecast more time
+                "get_forecast": ActivityConfig(start_to_close_timeout=60),
+                # set to False to run a tool directly (async only, no Temporal activity)
+                # "get_weather": False,
             }
         },
     )
