@@ -356,8 +356,9 @@ from agent_framework._workflows._edge import (
     SwitchCaseEdgeGroup,
 )
 
-# Demonstrate the dispatch (need real executor dicts in production)
-print(runner_type_for.__doc__)  # illustrative—requires populated executors
+# runner_type_for has no docstring; demonstrate the dispatch with a real edge group:
+# group = SingleEdgeGroup(source="agent", target="executor")
+# print(runner_type_for(group))  # → "SingleEdgeRunner"
 ```
 
 ---
@@ -910,10 +911,11 @@ async def main():
         # Monitor for replan signals — indicates the orchestrator revised its plan
         raw = getattr(event, "data", {})
         if isinstance(raw, dict):
-            evt_type = raw.get("event_type")
-            if evt_type == MagenticOrchestratorEventType.REPLANNED:
-                replan_count += 1
-                print(f"Replan #{replan_count} detected")
+            orch_event = raw.get("magentic_event")
+            if isinstance(orch_event, MagenticOrchestratorEvent):
+                if orch_event.event_type == MagenticOrchestratorEventType.REPLANNED:
+                    replan_count += 1
+                    print(f"Replan #{replan_count} detected")
 
 asyncio.run(main())
 ```
@@ -1060,7 +1062,7 @@ async def main():
 
     # get_embeddings returns list[float] aligned to the input order
     embeddings = await client.get_embeddings(inputs)
-    print(f"Got {len(embeddings)} embeddings, first dim: {len(embeddings[0].vector)}")
+    print(f"Got {len(embeddings)} embeddings, first dim: {len(embeddings[0])}")
 
 asyncio.run(main())
 ```
