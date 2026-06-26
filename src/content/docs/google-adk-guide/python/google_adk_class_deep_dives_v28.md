@@ -691,7 +691,7 @@ These two module-level `BaseLlmRequestProcessor` / `BaseLlmResponseProcessor` si
 
 ### Response processor behaviour
 
-- For `BuiltInPlanner`: extracts thought/plan parts from the response and stores them as a planning artefact on `InvocationContext`.
+- For `BuiltInPlanner`: `process_planning_response` is a no-op (returns `None`); the thinking content is already embedded in the model's response parts by Gemini's extended-thinking feature — no additional extraction or artefact storage occurs.
 - For `PlanReActPlanner`: validates that the model followed the plan format (plan prefix required).
 
 ### Example 1 — agent with BuiltInPlanner (thinking-based planning)
@@ -898,7 +898,8 @@ app = get_fast_api_app(
     web=True,
     a2a=True,                               # Agent-to-Agent protocol
     trigger_sources=["pubsub", "eventarc"], # batch trigger endpoints
-    express_mode=True,                       # Vertex AI Express Mode auth
+    # express_mode requires gemini_enterprise_app_name; omit unless deploying
+    # to Vertex AI Agent Engine with a GOOGLE_API_KEY in the environment.
 )
 
 if __name__ == "__main__":
@@ -1138,7 +1139,7 @@ print(db_tool.custom_metadata[GCP_MCP_SERVER_DESTINATION_ID])
 
 **Module:** `google.adk.utils._serialized_base_model`
 
-`SerializedBaseModel` is a thin `pydantic.BaseModel` subclass that enforces camelCase JSON serialisation across all ADK types exposed to the web server and storage layer. It is the base class for `Event`, `Session`, and many API response models.
+`SerializedBaseModel` is a thin `pydantic.BaseModel` subclass that enforces camelCase JSON serialisation across ADK API response models. Note: `Event` (subclasses `LlmResponse → BaseModel`) and `Session` (subclasses `BaseModel` directly) do **not** inherit from `SerializedBaseModel` — their `model_dump_json()` does not default to `by_alias=True`. Use `SerializedBaseModel` for custom web-facing or storage models where automatic camelCase output is needed.
 
 ### Class definition
 
