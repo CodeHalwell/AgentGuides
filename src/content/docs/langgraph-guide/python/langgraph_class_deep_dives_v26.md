@@ -377,9 +377,9 @@ def sum_reducer(state: int, writes: list[int]) -> int:
 ch = DeltaChannel(sum_reducer, int, snapshot_frequency=3)
 ch.key = "running_total"
 
-# Start from empty checkpoint
+# Start from empty checkpoint — from_checkpoint(MISSING) sets value to self.typ() = int() = 0
 ch = ch.from_checkpoint(MISSING)
-print(f"Initial value (MISSING? {ch.value is MISSING})")  # True — start empty
+print(f"Initial value: {ch.value}")  # 0 — typ() initializes to zero, not MISSING
 
 # Simulate 3 updates — would trigger snapshot on 3rd in real Pregel loop
 ch.update([10])
