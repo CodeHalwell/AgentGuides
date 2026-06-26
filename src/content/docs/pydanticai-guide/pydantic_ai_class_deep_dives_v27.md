@@ -72,11 +72,12 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 from temporalio import workflow, activity
 from pydantic_ai import Agent
-from pydantic_ai.durable_exec.temporal import TemporalAgent
+from pydantic_ai.durable_exec.temporal import TemporalAgent, PydanticAIPlugin
 
 # Agents and TemporalAgent must be at module level so Temporal workers can
 # import them by name during replay.
-agent = Agent("openai:gpt-4.1-mini", system_prompt="You are a helpful assistant.")
+# name= is required: TemporalAgent raises UserError if the wrapped Agent has no name.
+agent = Agent("openai:gpt-4.1-mini", system_prompt="You are a helpful assistant.", name="basic-agent")
 temporal_agent = TemporalAgent(agent)
 
 
@@ -91,7 +92,8 @@ class MyWorkflow:
 
 async def main():
     # Client.connect() returns a Client, not an async context manager.
-    client = await Client.connect("localhost:7233")
+    # PydanticAIPlugin registers Pydantic data converters for type-safe payload handling.
+    client = await Client.connect("localhost:7233", plugins=[PydanticAIPlugin()])
     # Worker is the async context manager.
     async with Worker(
         client,
@@ -118,7 +120,7 @@ from pydantic_ai.durable_exec.temporal import TemporalAgent
 from pydantic_ai.models.openai import OpenAIModel
 
 # Module-level agent and temporal_agent — required for Temporal worker import and replay safety.
-_agent = Agent("openai:gpt-4.1-mini")
+_agent = Agent("openai:gpt-4.1-mini", name="multi-model-agent")
 _temporal_agent = TemporalAgent(
     _agent,
     models={
@@ -172,7 +174,7 @@ def my_provider_factory(ctx: RunContext, provider_name: str):
     return OpenAIProvider(api_key=tenant_api_key)
 
 
-agent = Agent("openai:gpt-4.1-mini")
+agent = Agent("openai:gpt-4.1-mini", name="factory-agent")
 temporal_agent = TemporalAgent(
     agent,
     provider_factory=my_provider_factory,
@@ -251,6 +253,7 @@ class TemporalWrapperToolset(WrapperToolset[AgentDepsT], ABC):
 ### 2.1 `TemporalFunctionToolset` — Registering a FunctionToolset with Temporal
 
 ```python
+from datetime import timedelta
 from temporalio import activity, workflow
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -270,7 +273,8 @@ def get_forecast(city: str, days: int) -> str:
 
 async def main():
     toolset = FunctionToolset([get_weather, get_forecast], id="weather-tools")
-    agent = Agent("openai:gpt-4.1-mini", toolsets=[toolset])
+    # name= is required: TemporalAgent raises UserError if the wrapped Agent has no name.
+    agent = Agent("openai:gpt-4.1-mini", toolsets=[toolset], name="weather-agent")
 
     # TemporalAgent activity config hierarchy:
     #   activity_config          — base for ALL activities (model + toolsets)
@@ -278,14 +282,15 @@ async def main():
     #   tool_activity_config     — {toolset_id: {tool_name: ActivityConfig | False}}
     temporal_agent = TemporalAgent(
         agent,
-        activity_config=ActivityConfig(start_to_close_timeout=30),  # base for everything
+        # start_to_close_timeout requires a timedelta, not a plain integer.
+        activity_config=ActivityConfig(start_to_close_timeout=timedelta(seconds=30)),
         toolset_activity_config={
-            "weather-tools": ActivityConfig(start_to_close_timeout=30),  # default for this toolset
+            "weather-tools": ActivityConfig(start_to_close_timeout=timedelta(seconds=30)),
         },
         tool_activity_config={
             "weather-tools": {
                 # per-tool override — give forecast more time
-                "get_forecast": ActivityConfig(start_to_close_timeout=60),
+                "get_forecast": ActivityConfig(start_to_close_timeout=timedelta(seconds=60)),
                 # set to False to run a tool directly (async only, no Temporal activity)
                 # "get_weather": False,
             }
@@ -329,6 +334,7 @@ print(approval_result.metadata)         # {'risk': 'high', 'tool': 'delete_recor
 ### 2.3 Per-Tool Activity Config Override — Disabling Task Wrapping
 
 ```python
+from datetime import timedelta
 from temporalio.workflow import ActivityConfig
 from pydantic_ai import Agent, FunctionToolset
 from pydantic_ai.durable_exec.temporal import TemporalAgent
@@ -347,25 +353,27 @@ async def slow_api_call(endpoint: str) -> str:
 
 
 toolset = FunctionToolset([fast_lookup, slow_api_call], id="mixed-tools")
-agent = Agent("openai:gpt-4.1-mini", toolsets=[toolset])
+# name= is required: TemporalAgent raises UserError if the wrapped Agent has no name.
+agent = Agent("openai:gpt-4.1-mini", toolsets=[toolset], name="mixed-agent")
 
+# tool_activity_config shape: {toolset_id: {tool_name: ActivityConfig | False}}
+# Use activity_config= (top-level) for the per-toolset default; tool_activity_config=
+# only maps individual tool names to their overrides.
 temporal_agent = TemporalAgent(
     agent,
+    activity_config=ActivityConfig(start_to_close_timeout=timedelta(seconds=30)),
     tool_activity_config={
         "mixed-tools": {
-            "activity_config": ActivityConfig(start_to_close_timeout=30),
-            "tool_activity_config": {
-                # False → skip activity wrapping; fast_lookup runs inline in the workflow
-                "fast_lookup": False,
-                # slow_api_call uses the default activity_config above
-            },
+            # False → skip activity wrapping; fast_lookup runs inline in the workflow.
+            # MUST be async — non-async tools run in threads, which are not
+            # supported outside a Temporal activity.
+            "fast_lookup": False,
+            # slow_api_call inherits the top-level activity_config (30 s timeout).
         }
     },
 )
 print("fast_lookup: inline (no activity)")
 print("slow_api_call: wrapped as Temporal activity")
-# Note: False-disabled tools MUST be async; non-async functions run in threads,
-# which are not supported outside of an activity.
 ```
 
 ---
@@ -406,6 +414,7 @@ class TemporalMCPToolset(TemporalMCPToolsetBase[AgentDepsT]):
 ### 3.1 Attaching a Cached MCP Toolset to a Temporal Agent
 
 ```python
+from datetime import timedelta
 from temporalio.workflow import ActivityConfig
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset, StdioTransport
@@ -424,13 +433,15 @@ async def main():
         id="filesystem-mcp",
         cache_tools=True,
     )
-    agent = Agent("openai:gpt-4.1-mini", toolsets=[mcp_toolset])
+    # name= is required: TemporalAgent raises UserError if the wrapped Agent has no name.
+    agent = Agent("openai:gpt-4.1-mini", toolsets=[mcp_toolset], name="mcp-agent")
 
     temporal_agent = TemporalAgent(
         agent,
         # toolset_activity_config sets the default ActivityConfig for "filesystem-mcp" toolset.
+        # start_to_close_timeout requires a timedelta, not a plain integer.
         toolset_activity_config={
-            "filesystem-mcp": ActivityConfig(start_to_close_timeout=30),
+            "filesystem-mcp": ActivityConfig(start_to_close_timeout=timedelta(seconds=30)),
         },
     )
 
@@ -673,7 +684,8 @@ async def my_durable_workflow(question: str) -> str:
     return result.output
 
 async def main():
-    result = await DBOS.execute_workflow_async(my_durable_workflow, "What is 2+2?")
+    # Call the DBOS workflow directly — await it like a regular async function.
+    result = await my_durable_workflow("What is 2+2?")
     print(result)
 ```
 
