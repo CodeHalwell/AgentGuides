@@ -88,7 +88,9 @@ reconstructed = deserialize_type(serialized)
 assert reconstructed is TaskState
 
 # Multiple concrete types also round-trip — serialize each member individually
-for t in [str, int, float, type(None)]:
+# NOTE: type(None) is excluded — builtins.NoneType is not exported by Python, so
+# deserialize_type("builtins.NoneType") raises AttributeError at runtime.
+for t in [str, int, float]:
     assert deserialize_type(serialize_type(t)) is t
 
 # NOTE: serialize_type only supports concrete types (uses t.__qualname__).
@@ -309,7 +311,8 @@ def add(a: int, b: int) -> int:
 
 async def main() -> None:
     agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), tools=[add])
-    workflow = WorkflowBuilder().add_agent(agent, output_type=str).build()
+    # WorkflowBuilder requires start_executor= at construction; no add_agent() method
+    workflow = WorkflowBuilder(start_executor=agent).build()
 
     async for event in workflow.run("What is 3 + 4?", stream=True):
         # WorkflowEvent uses .type as the discriminator; superstep number is on .iteration
@@ -329,7 +332,7 @@ from agent_framework.openai import OpenAIChatClient
 async def main() -> None:
     agent = Agent(OpenAIChatClient(model="gpt-4o-mini"))
     # max_iterations is a WorkflowBuilder constructor arg — not a run() parameter
-    workflow = WorkflowBuilder(max_iterations=3).add_agent(agent, output_type=str).build()
+    workflow = WorkflowBuilder(max_iterations=3, start_executor=agent).build()
 
     try:
         result = await workflow.run("Enumerate all prime numbers.")
