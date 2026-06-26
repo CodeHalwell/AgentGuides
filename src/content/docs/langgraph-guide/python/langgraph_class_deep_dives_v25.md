@@ -80,7 +80,7 @@ Key design decisions:
 | Aspect | Detail |
 |--------|--------|
 | `FullKey` | A `(Namespace, str)` tuple. `Namespace` is itself a tuple of strings that acts like a path prefix, enabling per-task and per-user isolation without separate cache instances. |
-| `ValueT` (bytes) | The concrete type parameter for built-ins is `bytes`. The cache stores serialized blobs; `BaseCache.serde` handles serialization so the storage layer stays format-agnostic. |
+| `ValueT` | The type parameter for the **public** `get`/`set` API — the Python value nodes produce or consume. Built-in caches serialize internally (via `self.serde`) before storing `(enc, bytes, expiry)` triples; custom backends receive Python objects from LangGraph and should store them directly or apply their own serde, not expect raw bytes. |
 | `set` value tuple | `(ValueT, int | None)` — the second element is a TTL in seconds, or `None` for no expiry. |
 | Sync/async symmetry | Both lanes are required. In-memory backends implement async as trivial wrappers; production backends (Redis, Memcached) implement the async path natively. |
 
