@@ -87,11 +87,12 @@ print(serialized)  # e.g. "__main__:TaskState"
 reconstructed = deserialize_type(serialized)
 assert reconstructed is TaskState
 
-# Union types round-trip correctly
-union_ser = serialize_type(str | int | None)
-union_back = deserialize_type(union_ser)
-from typing import get_args
-assert set(get_args(union_back)) == {str, int, type(None)}
+# Multiple concrete types also round-trip — serialize each member individually
+for t in [str, int, float, type(None)]:
+    assert deserialize_type(serialize_type(t)) is t
+
+# NOTE: serialize_type only supports concrete types (uses t.__qualname__).
+# Union types (str | int | None) are NOT supported and raise AttributeError.
 ```
 
 **Example 3 — normalising annotations for generic executor output validation:**
@@ -148,7 +149,7 @@ These two functions implement the complete checkpoint serde layer used by `FileC
 | `str`, `int`, `float`, `bool`, `None` | Pass-through unchanged (JSON-native) |
 | `dict` | Recurse — values encoded individually |
 | `list` | Recurse — elements encoded individually |
-| Anything else (dataclass, datetime, Pydantic model, …) | `pickle` → base64 string, tagged with an internal `_PICKLE_MARKER` |
+| Anything else (dataclass, datetime, Pydantic model, …) | `{"__pickled__": "<base64>", "__type__": "<module:qualname>"}` marker dict |
 
 ### Decoding security: `allowed_types`
 
@@ -173,9 +174,12 @@ assert encode_checkpoint_value(None) is None
 # Dict values are recursed
 import datetime
 encoded = encode_checkpoint_value({"ts": datetime.datetime(2026, 1, 1), "count": 7})
-# "ts" is non-JSON so it becomes a base64 string; "count" stays 7
-print(type(encoded["ts"]))   # str (base64-pickled)
-print(encoded["count"])      # 7
+# "ts" is non-JSON so it becomes {"__pickled__": "<base64>", "__type__": "datetime:datetime"}
+# "count" stays 7 (JSON-native)
+print(type(encoded["ts"]))            # dict
+print(encoded["ts"].keys())           # dict_keys(['__pickled__', '__type__'])
+print(encoded["ts"]["__type__"])      # "datetime:datetime"
+print(encoded["count"])               # 7
 
 # Round-trip
 decoded = decode_checkpoint_value(encoded)
@@ -536,10 +540,10 @@ Custom callback used by `ToolApprovalMiddleware` to accept or reject a tool call
 | Constant | Value | Purpose |
 |---|---|---|
 | `DEFAULT_TOOL_APPROVAL_SOURCE_ID` | `"tool_approval"` | Session state key under which `ToolApprovalState` is stored |
-| `ALWAYS_APPROVE_TOOL` | `"always_approve_tool"` | Function name injected into the conversation when scope is `'tool'` |
-| `ALWAYS_APPROVE_TOOL_WITH_ARGUMENTS` | `"always_approve_tool_with_arguments"` | Function name injected when scope is `'tool_with_arguments'` |
-| `ALWAYS_APPROVE_PROPERTY` | `"tool_name"` | JSON key in the LLM-facing approval function schema |
-| `ALWAYS_APPROVE_SCOPE_PROPERTY` | `"scope"` | JSON key carrying `ToolApprovalScope` |
+| `ALWAYS_APPROVE_TOOL` | `"tool"` | `ToolApprovalScope` value — approve this tool name only |
+| `ALWAYS_APPROVE_TOOL_WITH_ARGUMENTS` | `"tool_with_arguments"` | `ToolApprovalScope` value — approve this tool with these exact arguments |
+| `ALWAYS_APPROVE_PROPERTY` | `"tool_approval"` | `additional_properties` key where standing-approval metadata is stored on a `Content` response |
+| `ALWAYS_APPROVE_SCOPE_PROPERTY` | `"always_approve"` | Key inside the `ALWAYS_APPROVE_PROPERTY` metadata dict that carries the scope string |
 
 ### Helper factories
 
@@ -635,7 +639,7 @@ def read_file(path: str) -> str:
 
 async def main():
     agent = Agent(model="gpt-4o-mini", tools=[read_file])
-    mw = ToolApprovalMiddleware(pre_approval_callback=my_pre_check)
+    mw = ToolApprovalMiddleware(auto_approval_rules=[my_pre_check])
     agent.add_middleware(mw)
     result = await agent.run("Read /etc/hostname")
     print(result.messages[-1].contents[0].text)
@@ -908,14 +912,11 @@ async def main():
     workflow = builder.build()
 
     async for event in workflow.run_stream("Complete a complex multi-step research task."):
-        # Monitor for replan signals — indicates the orchestrator revised its plan
-        raw = getattr(event, "data", {})
-        if isinstance(raw, dict):
-            orch_event = raw.get("magentic_event")
-            if isinstance(orch_event, MagenticOrchestratorEvent):
-                if orch_event.event_type == MagenticOrchestratorEventType.REPLANNED:
-                    replan_count += 1
-                    print(f"Replan #{replan_count} detected")
+        # MagenticOrchestrator sets event.data directly to a MagenticOrchestratorEvent
+        if isinstance(event.data, MagenticOrchestratorEvent):
+            if event.data.event_type == MagenticOrchestratorEventType.REPLANNED:
+                replan_count += 1
+                print(f"Replan #{replan_count} detected")
 
 asyncio.run(main())
 ```
