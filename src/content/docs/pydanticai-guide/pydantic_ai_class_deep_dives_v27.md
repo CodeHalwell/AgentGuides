@@ -90,21 +90,22 @@ class MyWorkflow:
 
 
 async def main():
-    async with await Client.connect("localhost:7233") as client:
-        # Register TemporalModel's activities with the worker
-        async with Worker(
-            client,
+    # Client.connect() returns a Client, not an async context manager.
+    client = await Client.connect("localhost:7233")
+    # Worker is the async context manager.
+    async with Worker(
+        client,
+        task_queue="my-task-queue",
+        workflows=[MyWorkflow],
+        activities=temporal_agent.temporal_activities,  # <-- _model.request_activity etc.
+    ):
+        result = await client.execute_workflow(
+            MyWorkflow.run,
+            "What is the speed of light?",
+            id="my-workflow-1",
             task_queue="my-task-queue",
-            workflows=[MyWorkflow],
-            activities=temporal_agent.temporal_activities,  # <-- _model.request_activity etc.
-        ):
-            result = await client.execute_workflow(
-                MyWorkflow.run,
-                "What is the speed of light?",
-                id="my-workflow-1",
-                task_queue="my-task-queue",
-            )
-            print(result)
+        )
+        print(result)
 ```
 
 ### 1.2 Multi-Model Registry — `models=` and `using_model()`
@@ -615,7 +616,7 @@ async def main():
 
 **Source**: `pydantic_ai/durable_exec/dbos/_agent.py`
 
-`DBOSAgent` wraps any `AbstractAgent` with DBOS's durable step semantics. It uses `@DBOS.dbos_class()` (a DBOS class-level step registry decorator) and `DBOSConfiguredInstance` (the DBOS instance base class) to register itself with the DBOS runtime. Model requests and MCP server calls are automatically wrapped as `@DBOS.step()` functions; tool calls from `FunctionToolset` are also wrapped individually.
+`DBOSAgent` wraps any `AbstractAgent` with DBOS's durable step semantics. It uses `@DBOS.dbos_class()` (a DBOS class-level step registry decorator) and `DBOSConfiguredInstance` (the DBOS instance base class) to register itself with the DBOS runtime. Model requests and MCP server calls are automatically wrapped as `@DBOS.step()` functions. **`FunctionToolset` tool functions are NOT automatically wrapped** — they run as plain async/sync calls. Any tool with side effects (I/O, external APIs) must be independently decorated with `@DBOS.step()` to gain checkpoint/replay protection.
 
 ```python
 # Key signatures from source:
@@ -1047,7 +1048,8 @@ tool_config: dict[str, TaskConfig | None] = {
 
 prefect_agent = PrefectAgent(
     agent,
-    tool_task_config_by_name={"helpers": tool_config},
+    # tool_task_config_by_name is keyed by tool name, NOT toolset ID.
+    tool_task_config_by_name=tool_config,
 )
 
 print("Each tool call appears as a separate Prefect task run named 'Call Tool: <name>'.")
@@ -1082,7 +1084,8 @@ tool_config: dict[str, TaskConfig | None] = {
 
 prefect_agent = PrefectAgent(
     agent,
-    tool_task_config_by_name={"mixed": tool_config},
+    # Flat dict keyed by tool name — NOT nested under toolset ID.
+    tool_task_config_by_name=tool_config,
 )
 print("in_memory_lookup: direct call (no Prefect task overhead)")
 print("send_notification: Prefect task with retries")
