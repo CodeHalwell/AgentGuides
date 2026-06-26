@@ -117,7 +117,7 @@ import asyncio
 from temporalio import workflow
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 
 # Module-level agent and temporal_agent — required for Temporal worker import and replay safety.
 _agent = Agent("openai:gpt-4.1-mini", name="multi-model-agent")
@@ -125,8 +125,8 @@ _temporal_agent = TemporalAgent(
     _agent,
     models={
         # Registered by ID — 'default' is reserved for the primary model
-        "powerful": OpenAIModel("gpt-4.1"),
-        "cheap": OpenAIModel("gpt-4.1-nano"),
+        "powerful": OpenAIChatModel("gpt-4.1"),
+        "cheap": OpenAIChatModel("gpt-4.1-nano"),
     },
 )
 
@@ -796,11 +796,11 @@ class DBOSModel(WrapperModel):
 ### 6.1 Standalone `DBOSModel` Construction
 
 ```python
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.durable_exec.dbos._model import DBOSModel
 from pydantic_ai.durable_exec.dbos import StepConfig
 
-model = OpenAIModel("gpt-4.1-mini")
+model = OpenAIChatModel("gpt-4.1-mini")
 
 step_config: StepConfig = {
     "retries_allowed": True,
@@ -827,11 +827,11 @@ print(f"Retries: {step_config['max_attempts']} attempts, {step_config['interval_
 # from inside an already-running DBOS step (e.g. a nested tool call).
 
 from pydantic_ai.durable_exec.dbos._model import DBOSModel
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from dbos import DBOS
 
 model = DBOSModel(
-    OpenAIModel("gpt-4.1-mini"),
+    OpenAIChatModel("gpt-4.1-mini"),
     step_name_prefix="test",
     step_config={},
 )
@@ -1334,12 +1334,16 @@ ctx = baggage.set_baggage(AGENT_NAME_BAGGAGE_KEY, "my-agent")
 ctx = baggage.set_baggage(RUN_ID_BAGGAGE_KEY, "run-abc123", context=ctx)
 ctx = baggage.set_baggage(CONVERSATION_ID_BAGGAGE_KEY, "conv-xyz", context=ctx)
 
-with context.use_context(ctx):
+# opentelemetry.context uses attach/detach — there is no use_context context manager.
+token = context.attach(ctx)
+try:
     attrs = get_agent_run_baggage_attributes()
     print(attrs)
     # {'gen_ai.agent.name': 'my-agent', 'gen_ai.agent.call.id': 'run-abc123',
     #  'gen_ai.conversation.id': 'conv-xyz'}
     # These attributes are stamped onto every model request span automatically.
+finally:
+    context.detach(token)
 ```
 
 ### 10.2 `TOKEN_HISTOGRAM_BOUNDARIES` — Custom OTel Metrics Setup
