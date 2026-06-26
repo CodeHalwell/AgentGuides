@@ -1151,8 +1151,12 @@ print(f"Merged config: {merged}")
 print(f"default_task_config: {default_task_config}")
 # TaskConfig(retries=0, retry_delay_seconds=1.0, persist_result=True,
 #            log_prints=False, cache_policy=DEFAULT_PYDANTIC_AI_CACHE_POLICY)
-# Notably persist_result=True means task results are cached by default —
-# side-effecting tools should set persist_result=False explicitly.
+#
+# persist_result=True is generally the SAFER default for side-effecting tools:
+# the DEFAULT_PYDANTIC_AI_CACHE_POLICY scopes results by RUN_ID, so a persisted
+# result won't be reused across unrelated flow runs, but WILL be reused if the
+# same flow is retried after a later step fails — preventing the tool from being
+# called twice and duplicating notifications, writes, or external API calls.
 
 # When per-tool config is None, the tool bypasses task wrapping completely
 # (runs as a plain async call, no Prefect task overhead).
