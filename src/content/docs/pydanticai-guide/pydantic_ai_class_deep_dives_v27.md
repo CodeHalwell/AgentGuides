@@ -408,14 +408,19 @@ class TemporalMCPToolset(TemporalMCPToolsetBase[AgentDepsT]):
 ```python
 from temporalio.workflow import ActivityConfig
 from pydantic_ai import Agent
-from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.mcp import MCPToolset, StdioTransport
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 
 
 async def main():
+    # MCPToolset accepts an MCPToolsetClient — use StdioTransport (or a URL string
+    # for SSE/StreamableHttp). A raw dict is NOT accepted in v2.0.0.
     # cache_tools=True (default): tool list fetched once per workflow, cached thereafter
     mcp_toolset = MCPToolset(
-        {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]},
+        StdioTransport(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        ),
         id="filesystem-mcp",
         cache_tools=True,
     )
@@ -423,11 +428,9 @@ async def main():
 
     temporal_agent = TemporalAgent(
         agent,
-        tool_activity_config={
-            "filesystem-mcp": {
-                "activity_config": ActivityConfig(start_to_close_timeout=30),
-                "tool_activity_config": {},
-            }
+        # toolset_activity_config sets the default ActivityConfig for "filesystem-mcp" toolset.
+        toolset_activity_config={
+            "filesystem-mcp": ActivityConfig(start_to_close_timeout=30),
         },
     )
 
@@ -439,12 +442,12 @@ async def main():
 ### 3.2 Disabling Cache for Dynamic Tool Sets
 
 ```python
-from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.mcp import MCPToolset, StdioTransport
 
 # Use cache_tools=False when the MCP server's tool list can change mid-workflow.
 # Example: a plugin system where tools are registered at runtime.
 dynamic_toolset = MCPToolset(
-    {"command": "python", "args": ["-m", "my_dynamic_mcp_server"]},
+    StdioTransport(command="python", args=["-m", "my_dynamic_mcp_server"]),
     id="dynamic-mcp",
     cache_tools=False,  # Every get_tools call re-fetches from the MCP server
 )
