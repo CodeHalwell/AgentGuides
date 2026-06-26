@@ -558,6 +558,7 @@ Both take the pending `function_approval_request` Content as their first positio
 **Example 1 — `ToolApprovalScope` in action with `ToolApprovalRule`:**
 
 ```python
+import json
 from agent_framework import Agent, AgentSession
 from agent_framework._harness._tool_approval import (
     ToolApprovalRule,
@@ -570,10 +571,12 @@ from agent_framework import ToolApprovalMiddleware
 # A rule with arguments=None covers any invocation of the tool (scope='tool')
 broad_rule = ToolApprovalRule(tool_name="read_file")          # scope: 'tool'
 
-# A rule with arguments= covers only matching arguments (scope='tool_with_arguments')
+# A rule with arguments= covers only matching arguments (scope='tool_with_arguments').
+# IMPORTANT: argument values must be JSON-serialised strings — the middleware compares
+# against _serialize_arguments() output (json.dumps per value, sort_keys=True).
 narrow_rule = ToolApprovalRule(
     tool_name="write_file",
-    arguments={"path": "/tmp/safe.txt"},
+    arguments={"path": json.dumps("/tmp/safe.txt")},  # '"/tmp/safe.txt"', not '/tmp/safe.txt'
 )
 
 # Inspect serialized form
@@ -581,7 +584,7 @@ print(broad_rule.to_dict())
 # {'tool_name': 'read_file', 'type': 'ToolApprovalRule'}
 
 print(narrow_rule.to_dict())
-# {'tool_name': 'write_file', 'type': 'ToolApprovalRule', 'arguments': {'path': '/tmp/safe.txt'}}
+# {'tool_name': 'write_file', 'type': 'ToolApprovalRule', 'arguments': {'path': '"/tmp/safe.txt"'}}
 
 # Pre-populate a session with standing rules so the middleware doesn't ask
 state = ToolApprovalState(rules=[broad_rule, narrow_rule])
@@ -671,7 +674,7 @@ class GroupChatRequestMessage:
     metadata: dict[str, Any] | None = None
 ```
 
-Sent from an orchestrator executor to a participant executor's `WorkflowContext`. An `AgentExecutor` unwraps `additional_instruction` and prepends it to the agent's prompt. `metadata` carries arbitrary orchestrator-scoped annotations.
+The orchestrator's internal request envelope. The built-in `BaseGroupChatOrchestrator` converts `additional_instruction` to an executor-specific request before forwarding it to each participant — standard `AgentExecutor` participants do not receive `GroupChatRequestMessage` directly. Use `GroupChatRequestMessage` when building **custom executors** that read from the workflow context themselves, or for debugging orchestrator dispatch. `metadata` carries arbitrary orchestrator-scoped annotations.
 
 ### `ORCH_MSG_KIND_*` constants
 
@@ -854,13 +857,13 @@ from agent_framework.openai import OpenAIChatClient
 async def main():
     researcher = Agent(OpenAIChatClient(model="gpt-4o-mini"), name="researcher")
     writer = Agent(OpenAIChatClient(model="gpt-4o-mini"), name="writer")
-
-    workflow = (
-        MagenticBuilder()
-        .add_agent(researcher)
-        .add_agent(writer)
-        .build()
-    )
+    # MagenticBuilder requires participants= and a manager config in the constructor;
+    # there is no add_agent() fluent method
+    manager = Agent(OpenAIChatClient(model="gpt-4o"), name="manager")
+    workflow = MagenticBuilder(
+        participants=[researcher, writer],
+        manager_agent=manager,
+    ).build()
 
     plan_events = []
     ledger_updates = []
@@ -916,10 +919,11 @@ replan_count = 0
 async def main():
     global replan_count
     agents = [Agent(OpenAIChatClient(model="gpt-4o-mini"), name=f"agent{i}") for i in range(3)]
-    builder = MagenticBuilder()
-    for a in agents:
-        builder.add_agent(a)
-    workflow = builder.build()
+    manager = Agent(OpenAIChatClient(model="gpt-4o"), name="manager")
+    workflow = MagenticBuilder(
+        participants=agents,
+        manager_agent=manager,
+    ).build()
 
     async for event in workflow.run("Complete a complex multi-step research task.", stream=True):
         # MagenticOrchestrator sets event.data directly to a MagenticOrchestratorEvent
@@ -1102,7 +1106,7 @@ The docstring is explicit:
 3. ChatTelemetryLayer        — per-call telemetry (must stay inside ChatMiddlewareLayer)
 ```
 
-Use `OpenAIChatCompletionClient` instead if you want all layers pre-applied.
+`ChatTelemetryLayer` (from `agent_framework.observability`) is a **cooperative mixin** — it uses `super().get_response()` via Python's MRO. Compose it through subclassing, not by wrapping an existing instance (e.g. `ChatTelemetryLayer(raw_client)` calls `object.__init__` and breaks). Use `OpenAIChatCompletionClient` instead if you want all layers pre-applied.
 
 ### Constructor (abbreviated)
 
@@ -1148,15 +1152,19 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework_openai import RawOpenAIChatCompletionClient
-from agent_framework._middleware import ChatTelemetryLayer
+from agent_framework.observability import ChatTelemetryLayer  # cooperative MRO mixin
 from agent_framework._types import Message
 
+# ChatTelemetryLayer is a cooperative mixin — compose it via subclassing (MRO),
+# NOT by wrapping: ChatTelemetryLayer(raw_instance) calls object.__init__ and breaks.
+# This mirrors how OpenAIChatCompletionClient stacks its layers.
+class TelemetryOnlyClient(ChatTelemetryLayer, RawOpenAIChatCompletionClient):
+    pass
+
 async def main():
-    raw = RawOpenAIChatCompletionClient(model="gpt-4o-mini", api_key="sk-...")
-    # Apply only telemetry — useful for custom function invocation implementations
-    with_telemetry = ChatTelemetryLayer(raw)
+    client = TelemetryOnlyClient(model="gpt-4o-mini", api_key="sk-...")
     messages = [Message(role="user", contents=["Summarize the water cycle in 2 sentences."])]
-    response = await with_telemetry.get_response(messages)
+    response = await client.get_response(messages)
     print(response.messages[-1].contents[0].text)
 
 asyncio.run(main())
