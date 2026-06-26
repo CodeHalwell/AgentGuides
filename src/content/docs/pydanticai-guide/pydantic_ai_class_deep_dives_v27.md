@@ -665,7 +665,15 @@ from dbos import DBOS
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.dbos import DBOSAgent
 
-# Requires: pip install "pydantic-ai[dbos]" and DBOS configured
+# ── DBOS initialization (must happen before any workflow is invoked) ──────────
+# Typical application entrypoint:
+#
+#   dbos = DBOS(config=DBOSConfig(name="my-app", database_url="postgresql://..."))
+#   DBOS.launch()   # starts the workflow/step registry and recovery runtime
+#
+# The agent and workflow registrations below must be at module level so that
+# DBOS can discover them before launch(). See DBOS docs for the full setup.
+# ─────────────────────────────────────────────────────────────────────────────
 
 agent = Agent(
     "openai:gpt-4.1-mini",
@@ -680,13 +688,14 @@ dbos_agent = DBOSAgent(
     # mcp_step_config defaults to {} — same defaults for MCP server steps
 )
 
-# Use inside a DBOS workflow:
+# Workflows must be defined at module level — DBOS registers them at import time.
 @DBOS.workflow()
 async def my_durable_workflow(question: str) -> str:
     result = await dbos_agent.run(question)
     return result.output
 
 async def main():
+    # DBOS.launch() must have been called before this point.
     # Call the DBOS workflow directly — await it like a regular async function.
     result = await my_durable_workflow("What is 2+2?")
     print(result)
