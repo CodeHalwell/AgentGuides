@@ -702,7 +702,7 @@ class MetricsTransformer(_TasksLifecycleBase):
         trigger_call_id: str | None,
     ) -> None:
         import datetime
-        self._started_at[ns] = datetime.datetime.now().isoformat()
+        self._started_at[ns] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     def _on_terminal(
         self,
@@ -716,7 +716,7 @@ class MetricsTransformer(_TasksLifecycleBase):
             "namespace": "/".join(ns),
             "status": status,
             "started_at": started,
-            "finished_at": datetime.datetime.now().isoformat(),
+            "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "error": error,
         }
         self._log.push(entry)
@@ -1017,7 +1017,7 @@ def enrich_state_interceptor(
     import datetime
     enriched = {
         **(req.state or {}),
-        "request_time": datetime.datetime.now().isoformat(),
+        "request_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "request_id": "req-12345",
     }
     return execute(req.override(state=enriched))

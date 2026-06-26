@@ -1529,7 +1529,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 class State(TypedDict):
     data: str
     # Barrier: both "fetch" and "validate" must run before "process" can start
-    ready: Annotated[None, NamedBarrierValue(type(None), names={"fetch", "validate"})]
+    ready: Annotated[None, NamedBarrierValue(str, names={"fetch", "validate"})]
     result: str
 
 
@@ -1716,7 +1716,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 class State(TypedDict):
     messages: list[str]
     # Ephemeral signal: True when a new user message arrives; auto-clears after
-    new_message: Annotated[bool | None, EphemeralValue(type(None))]
+    new_message: Annotated[bool | None, EphemeralValue(bool)]
     summary: str
 
 
