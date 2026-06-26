@@ -204,11 +204,11 @@ class SlackRunner:
 ### Session ID convention
 
 ```
-session_id = f"{channel_id}-{thread_ts}"   # if thread exists
-session_id = channel_id                     # DMs without a thread
+thread_ts = event.get("thread_ts") or event.get("ts")
+session_id = f"{channel_id}-{thread_ts}"
 ```
 
-This means each Slack channel thread gets its own isolated ADK session, preserving conversation history per thread.
+Every Slack message event carries a `ts` field, so `thread_ts` is always set and the session ID is always `f"{channel_id}-{thread_ts}"`. Threaded replies use the parent message's `thread_ts`; top-level messages use their own `ts`. This gives each thread (or unthreaded message) its own isolated ADK session.
 
 ### "Thinking..." placeholder pattern
 
@@ -838,11 +838,14 @@ def get_fast_api_app(
 
 | URI scheme | Backend |
 |---|---|
-| `memory://` or `None` | In-memory (dev) |
-| `sqlite:///path.db` | SQLite via `aiosqlite` |
+| `memory://` | In-memory (explicitly ephemeral) |
+| `None` (default) | Local SQLite under `.adk/` when disk is writable; falls back to in-memory on Cloud Run / read-only FS |
+| `sqlite:///path.db` | SQLite at an explicit path via `aiosqlite` |
 | `postgresql://...` | PostgreSQL via SQLAlchemy async |
 | `agentengine://resource-id` | Vertex AI Agent Engine |
-| GCS bucket path | GCS artifact service |
+| `gs://bucket/prefix` | GCS artifact service |
+
+> **Note:** Passing `session_service_uri=None` does **not** guarantee an in-memory backend — on a local dev machine with a writable working directory, ADK will persist sessions to `.adk/`. Use `memory://` explicitly if you need an ephemeral dev backend.
 
 ### Example 1 — minimal server (for tests or local dev)
 
@@ -869,7 +872,7 @@ from google.adk.cli.fast_api import get_fast_api_app
 app = get_fast_api_app(
     agents_dir="./agents",
     session_service_uri="sqlite:///data/sessions.db",
-    artifact_service_uri="./artifacts",
+    artifact_service_uri="file://./artifacts",
     allow_origins=["https://myapp.example.com"],
     web=True,
     trace_to_cloud=True,    # send OTel traces to Google Cloud Trace
