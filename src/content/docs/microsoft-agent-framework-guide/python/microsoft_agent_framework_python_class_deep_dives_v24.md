@@ -311,9 +311,9 @@ async def main() -> None:
     workflow = WorkflowBuilder().add_agent(agent, output_type=str).build()
 
     async for event in workflow.run_stream("What is 3 + 4?"):
-        # WorkflowEvent wraps every superstep_started, executor output, etc.
-        if event.event_type == "superstep_started":
-            print(f"Superstep {event.data['iteration']} started")
+        # WorkflowEvent uses .type as the discriminator; superstep number is on .iteration
+        if event.type == "superstep_started":
+            print(f"Superstep {event.iteration} started")
 
 asyncio.run(main())
 ```
@@ -326,12 +326,11 @@ from agent_framework import Agent, WorkflowBuilder, WorkflowConvergenceException
 
 async def main() -> None:
     agent = Agent(model="gpt-4o-mini")
-    # Build a workflow with a tight iteration cap for testing
-    workflow = WorkflowBuilder().add_agent(agent, output_type=str).build()
+    # max_iterations is a WorkflowBuilder constructor arg — not a run() parameter
+    workflow = WorkflowBuilder(max_iterations=3).add_agent(agent, output_type=str).build()
 
     try:
-        # Runner's max_iterations is set via WorkflowBuilder
-        result = await workflow.run("Enumerate all prime numbers.", max_iterations=3)
+        result = await workflow.run("Enumerate all prime numbers.")
         print(result.output)
     except WorkflowConvergenceException as exc:
         print(f"Stopped after max iterations: {exc}")
@@ -404,8 +403,8 @@ Declare only the keywords you need; use `**kwargs` to ignore the rest.
 | `DEFAULT_JUDGE_INSTRUCTIONS` | Multi-line prompt with `{{criteria}}` placeholder |
 | `CRITERIA_PLACEHOLDER` | `"{{criteria}}"` |
 | `DEFAULT_NEXT_MESSAGE` | `"Continue working on the task. If it is complete, say so."` |
-| `JUDGE_VERDICT_DONE` | `"DONE"` |
-| `JUDGE_VERDICT_MORE` | `"MORE"` |
+| `JUDGE_VERDICT_DONE` | `"VERDICT: DONE"` |
+| `JUDGE_VERDICT_MORE` | `"VERDICT: MORE"` |
 | `DEFAULT_JUDGE_MAX_ITERATIONS` | (source-verified int) |
 
 `CRITERIA_PLACEHOLDER` is interpolated into `DEFAULT_JUDGE_INSTRUCTIONS` when you pass `criteria=` to `with_judge(...)`.
@@ -468,8 +467,8 @@ async def main() -> None:
     agent = Agent(model="gpt-4o-mini")
     judge_client = agent.chat_client  # reuse the same model as judge
     loop_mw = AgentLoopMiddleware.with_judge(
-        client=judge_client,
-        criteria=custom_criteria,
+        judge_client,                        # positional: SupportsChatGetResponse
+        criteria=[custom_criteria],          # Sequence[str], not a bare string
         max_iterations=4,
     )
     agent.add_middleware(loop_mw)
@@ -899,7 +898,7 @@ print(isinstance(coder_exec, AgentExecutor))           # True
 ```python
 import asyncio
 from agent_framework import Agent, MagenticBuilder
-from agent_framework.orchestrations import MagenticOrchestratorEventType
+from agent_framework.orchestrations import MagenticOrchestratorEvent, MagenticOrchestratorEventType
 
 replan_count = 0
 
@@ -1061,9 +1060,10 @@ async def main():
         "Customer satisfaction reached an all-time high",
     ]
 
-    # get_embeddings returns list[float] aligned to the input order
+    # get_embeddings returns GeneratedEmbeddings (list[Embedding[list[float]]])
+    # Each entry is an Embedding object; access the vector via .vector
     embeddings = await client.get_embeddings(inputs)
-    print(f"Got {len(embeddings)} embeddings, first dim: {len(embeddings[0])}")
+    print(f"Got {len(embeddings)} embeddings, first dim: {len(embeddings[0].vector)}")
 
 asyncio.run(main())
 ```
@@ -1121,7 +1121,7 @@ async def main():
         api_key="sk-...",
     )
     messages = [Message(role="user", contents=["Say hello in one sentence."])]
-    response = await raw.complete(messages)
+    response = await raw.get_response(messages)
     print(response.messages[-1].contents[0].text)
 
 asyncio.run(main())
@@ -1140,7 +1140,7 @@ async def main():
     # Apply only telemetry — useful for custom function invocation implementations
     with_telemetry = ChatTelemetryLayer(raw)
     messages = [Message(role="user", contents=["Summarize the water cycle in 2 sentences."])]
-    response = await with_telemetry.complete(messages)
+    response = await with_telemetry.get_response(messages)
     print(response.messages[-1].contents[0].text)
 
 asyncio.run(main())
