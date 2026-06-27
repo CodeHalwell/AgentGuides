@@ -1724,15 +1724,16 @@ actions:
     source: =Workflow.Inputs.batches
     itemName: batch
     actions:
-      # IMPORTANT: save the loop item BEFORE clearing — ClearAllVariables wipes
-      # Local.batch (and any other Local.* set by Foreach itemName/indexName).
+      # IMPORTANT: save the loop item to a NON-Local namespace BEFORE clearing.
+      # ClearAllVariables replaces state_data["Local"] with {}, so any value
+      # saved under Local.* (including the loop item itself) is gone afterward.
       - kind: SetValue
-        path: Local.currentBatch
-        value: =Local.batch
-      - kind: ClearAllVariables   # wipes Local.* including Local.batch
+        path: Workflow.Outputs.currentBatch
+        value: =Local.batch           # Workflow.Outputs is NOT wiped by ClearAllVariables
+      - kind: ClearAllVariables       # wipes Local.* only; Workflow.Outputs untouched
       - kind: SetValue
         path: Local.batchData
-        value: =Local.currentBatch   # use the saved copy
+        value: =Workflow.Outputs.currentBatch   # read from non-Local saved copy
       - kind: InvokeAzureAgent
         agent: ProcessorAgent
         input: =Local.batchData
