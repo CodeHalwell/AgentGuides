@@ -1220,7 +1220,7 @@ AsyncToolCallWrapper = Callable[
 
 - **`ToolCallRequest` is a `dataclass`** with a custom `__setattr__` that emits a `DeprecationWarning` when attributes are set directly. Always use `.override()`.
 - **`execute` can be called multiple times** — the `execute` callable passed to a wrapper is stateless; calling it twice runs the tool twice. This enables retry patterns.
-- **`tool=None`** — when the model requests a tool that is not in `ToolNode._tools_by_name`, the request is passed to the wrapper with `tool=None`. If the wrapper calls `execute()`, validation raises an error for the unknown tool.
+- **`tool=None`** — when the model requests a tool that is not in `ToolNode._tools_by_name`, the request is passed to the wrapper with `tool=None`. Calling `execute()` does **not** raise; `ToolNode` returns an invalid-tool `ToolMessage` instead. Wrappers should branch on `request.tool is None` before calling `execute()` to handle this case explicitly rather than relying on an exception that never comes.
 - **`wrap_tool_call` / `awrap_tool_call`** are passed to `ToolNode.__init__`. The async wrapper falls back to the sync wrapper if `awrap_tool_call` is not provided.
 
 ### Example 1 — passthrough wrapper for observability
@@ -1454,9 +1454,12 @@ async def async_node(state: State) -> dict:
     raise asyncio.CancelledError("simulated external cancel")
 
 
-async def cancel_handler(state: State, error: NodeCancelledError) -> Command:
-    """The error_handler receives NodeCancelledError, not asyncio.CancelledError."""
-    return Command(update={"status": f"cancelled: {error.node} — {error}"})
+async def cancel_handler(state: State, error) -> Command:
+    """error_handler always receives NodeError; the inner NodeCancelledError is error.error."""
+    from langgraph.errors import NodeError, NodeCancelledError
+    assert isinstance(error, NodeError)
+    assert isinstance(error.error, NodeCancelledError)
+    return Command(update={"status": f"cancelled: {error.node} — {error.error}"})
 
 
 async def main():
