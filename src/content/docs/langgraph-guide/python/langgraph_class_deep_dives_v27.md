@@ -1059,10 +1059,10 @@ RemainingSteps = Annotated[int, RemainingStepsManager]
 
 **Key implementation facts:**
 
-- **`scratchpad.stop`** equals the `recursion_limit` from the run config (default 25). Confirmed from `PregelScratchpad` source: `stop` is set to `recursion_limit` at the start of each `invoke()` / `ainvoke()`.
-- **`scratchpad.step`** starts at 0 and increments by 1 after each super-step completes.
+- **`scratchpad.stop`** is an **absolute step cutoff**, not the raw `recursion_limit`. Pregel sets it as `checkpoint_metadata["step"] + 1 + recursion_limit + 1`. For a fresh run starting at step 0 the value is `recursion_limit + 1`, but after an interrupt/resume it is offset by the checkpoint's step counter. Always derive the remaining budget from `stop - step`, not from `config["recursion_limit"]`.
+- **`scratchpad.step`** starts at 0 and increments by 1 after each super-step completes. On resume it is restored from the checkpoint and incremented, so `step` reflects the absolute position in the run history.
 - **`IsLastStep` is `True` exactly once** — when `step == stop - 1`. At that point the graph will raise `GraphRecursionError` on the *next* step, so `IsLastStep` gives a one-step warning window.
-- **`RemainingSteps` counts down from `stop`** to 0. At `step=0` it equals the full `recursion_limit`. When `IsLastStep` is `True`, `RemainingSteps` is exactly `1`.
+- **`RemainingSteps` counts down** as `stop - step`. When `IsLastStep` is `True`, `RemainingSteps` is exactly `1`.
 - Both aliases are exported from `langgraph.managed.is_last_step`. They are **not** re-exported from `langgraph.prebuilt`; always import from the managed module.
 
 ### Example 1 — graceful early return on recursion limit
