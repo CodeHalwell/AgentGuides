@@ -71,7 +71,7 @@ connection types, model types, `McpTool`, and loop/condition executors, see [Vol
 ## 1 · `FunctionTool` + `OpenApiTool` + `WebSearchTool` + `FileSearchTool` + `CodeInterpreterTool` + `Binding`
 
 **Sub-package:** `agent_framework_declarative._models`  
-**Install:** `pip install agent-framework`
+**Install:** `pip install agent-framework-declarative`
 
 Five tool subclasses that extend the `Tool` base (plus `Binding`, which wires tool arguments to
 workflow state at runtime). `McpTool` is covered in [Vol. 23 §8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v23/).
@@ -352,7 +352,7 @@ tools:
 ## 2 · `AgentFactory` + `DeclarativeLoaderError` + `ProviderLookupError` + `ProviderTypeMapping`
 
 **Sub-package:** `agent_framework_declarative._loader`  
-**Install:** `pip install agent-framework`
+**Install:** `pip install agent-framework-declarative`
 
 `AgentFactory` converts a declarative YAML agent definition into a fully-configured
 `Agent` instance. It resolves the model provider via a built-in lookup table that maps
@@ -494,7 +494,7 @@ custom_mapping: dict[str, ProviderTypeMapping] = {
         endpoint_field="endpoint",
         api_key_field="api_key",
     ),
-    "Mistral.chat": ProviderTypeMapping(
+    "Mistral.Chat": ProviderTypeMapping(
         package="my_mistral_adapter",
         name="MistralChatClient",
         model_field="model",
@@ -558,7 +558,7 @@ except DeclarativeLoaderError as e:
 ## 3 · `WorkflowFactory` + `DeclarativeWorkflowBuilder`
 
 **Sub-package:** `agent_framework_declarative._workflows._factory` / `._declarative_builder`  
-**Install:** `pip install agent-framework`
+**Install:** `pip install agent-framework-declarative`
 
 `WorkflowFactory` is the high-level API — it parses a YAML workflow definition and returns
 an executable `Workflow` object. `DeclarativeWorkflowBuilder` is the lower-level graph
