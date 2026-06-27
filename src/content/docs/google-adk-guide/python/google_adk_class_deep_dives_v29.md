@@ -514,7 +514,9 @@ async def handle_auth_response(state, user_response):
     # Format 3: plain string (API key shortcut)
     else:
         await process_auth_resume(str(user_response), auth_config, state)
-    # Credential is now in state[auth_config.credential_key]
+    # AuthHandler stores under "temp:" + auth_config.credential_key, so:
+    #   state["temp:" + auth_config.credential_key]  ← actual key
+    # Use has_auth_credential(auth_config, state) to check without KeyError.
 ```
 
 ---
@@ -616,7 +618,10 @@ async def demo_auth_round_trip():
     # State.__init__ requires value and delta dicts.
     state = State({}, {})
     await process_auth_resume("my-secret-api-key-123", auth_config, state)
-    # Credential is now stored in state under auth_config.credential_key
+    # Credential is stored under "temp:" + auth_config.credential_key
+    # (confirmed in auth_handler.py:70 — parse_and_store_auth_response uses
+    # credential_key = "temp:" + self.auth_config.credential_key)
+    # Use has_auth_credential(auth_config, state) to check without KeyError.
 ```
 
 ### Example 3 — custom AuthenticatedFunctionTool that relies on the processor
