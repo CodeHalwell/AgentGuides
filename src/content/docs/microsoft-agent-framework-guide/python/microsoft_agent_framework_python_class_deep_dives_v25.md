@@ -288,32 +288,48 @@ ci = CodeInterpreterTool(
 print(ci.kind, ci.fileIds)   # code_interpreter ['file-abc123', 'file-def456']
 ```
 
-### `Binding` — wire tool arguments from workflow state
+### `Binding` — select a registered callable for a tool
 
-`Binding` is the mechanism that resolves a tool argument's value from a PowerFx
-expression against the current `DeclarativeWorkflowState` at action execution time,
-rather than baking a literal into the YAML.
+`Binding` links a `FunctionTool` definition to a Python callable registered in
+`AgentFactory(bindings=…)`. When `AgentFactory._parse_tool()` processes a
+`FunctionTool`, it iterates the tool's `bindings` list and looks up each
+`binding.name` in the `AgentFactory.bindings` dict — the **first match** becomes
+the callable attached to the tool.
+
+> **Important:** `Binding.input` has no runtime effect in `AgentFactory`. The
+> field exists on the data model but is never evaluated or passed to the callable.
+> Do not use it expecting PowerFx expression evaluation — `AgentFactory` ignores
+> it completely.
 
 ```python
+from agent_framework_declarative import AgentFactory
 from agent_framework_declarative._models import FunctionTool, Binding
 
-# The "query" argument reads its value from Local.userQuery at runtime.
-# The "top_k" argument is a static literal (no = prefix).
+def my_search(query: str, top_k: int = 5) -> list[str]:
+    return [f"result_{i}" for i in range(top_k)]
+
+# Register callables by name in AgentFactory
+factory = AgentFactory(
+    bindings={"search": my_search},
+    safe_mode=False,
+)
+
+# FunctionTool.bindings[n].name must match a key in AgentFactory.bindings.
+# AgentFactory picks the FIRST binding whose name is found in the dict.
+# The "input" field is present on the model but AgentFactory does not read it.
 search_tool = FunctionTool(
     name="search",
     description="Search for information",
     parameters={"properties": {"query": {"type": "string"},
                                "top_k": {"type": "integer"}}},
     bindings=[
-        Binding(name="query",  input="=Local.userQuery"),
-        Binding(name="top_k",  input="5"),
-        Binding(name="market", input="=Env.SEARCH_MARKET"),  # from env config
+        Binding(name="search"),   # selects my_search from factory.bindings
     ],
 )
 ```
 
 ```yaml
-# Equivalent YAML representation
+# Equivalent YAML — only "name" matters to AgentFactory
 tools:
   - kind: function
     name: search
@@ -323,12 +339,7 @@ tools:
         query: {type: string}
         top_k: {type: integer}
     bindings:
-      - name: query
-        input: =Local.userQuery
-      - name: top_k
-        input: "5"
-      - name: market
-        input: =Env.SEARCH_MARKET
+      - name: search   # must match a key in AgentFactory(bindings={…})
 ```
 
 ---
@@ -423,6 +434,15 @@ asyncio.run(main())
 
 ### Create agent from an inline YAML string
 
+`AgentFactory` defaults to `safe_mode=True`, which **blocks** all `=Env.*`
+PowerFx expressions. If your YAML uses `=Env.OPENAI_API_KEY` (or any other
+`Env.*` reference) you must either:
+
+- Pass `safe_mode=False` — only do this when you fully trust the YAML source.
+- Write the key directly into the YAML string (fine for tests, never for production).
+- Use `env_file_path` to point `load_dotenv` at a `.env` file and then set
+  `safe_mode=False` so the resolved values flow through.
+
 ```python
 import asyncio
 from agent_framework_declarative import AgentFactory
@@ -440,7 +460,9 @@ model:
     apiKey: =Env.OPENAI_API_KEY
 """
 
-factory = AgentFactory()
+# safe_mode=False is required for =Env.* expressions to resolve.
+# Only use this when you control and trust the YAML content.
+factory = AgentFactory(safe_mode=False)
 agent = factory.create_agent_from_yaml(yaml_content)
 
 async def main():
@@ -500,9 +522,11 @@ factory_trusted = AgentFactory(safe_mode=False)
 
 # Note: path traversal is NOT blocked by safe_mode.
 # Validate the path yourself before passing it to create_agent_from_yaml_path.
-import os
+# Use Path.resolve().is_relative_to() — os.path.abspath().startswith() is unsafe
+# because abspath strips the trailing slash, so "agents_evil/" shares the prefix.
+from pathlib import Path
 user_path = "agents/assistant.yaml"
-if not os.path.abspath(user_path).startswith(os.path.abspath("agents/")):
+if not Path(user_path).resolve().is_relative_to(Path("agents").resolve()):
     raise ValueError("Path outside allowed directory")
 agent = factory_safe.create_agent_from_yaml_path(user_path)
 ```
@@ -1254,20 +1278,36 @@ event that the caller must respond to before the tool is invoked.
 
 ```python
 import asyncio
+from agent_framework import WorkflowEvent
 from agent_framework_declarative._workflows._executors_tools import (
     ToolApprovalRequest, ToolApprovalResponse,
 )
 
 async def main():
+    pending: ToolApprovalRequest | None = None
+
+    # First run: stream until the workflow pauses at the approval gate.
+    # The ToolApprovalRequest arrives as a request_info WorkflowEvent
+    # (event.type == "request_info", event.data == ToolApprovalRequest).
     async for event in workflow.run({"city": "Seattle"}, stream=True):
-        if isinstance(event, ToolApprovalRequest):
-            print(f"Approve calling {event.function_name!r}?")
-            print(f"  Args: {event.arguments}")
-            approved = input("y/n: ").lower() == "y"
-            await workflow.respond(
-                ToolApprovalResponse(approved=approved,
-                                     reason=None if approved else "User declined")
-            )
+        if event.type == "request_info" and isinstance(event.data, ToolApprovalRequest):
+            pending = event.data  # workflow has yielded; record the request
+
+    if pending:
+        print(f"Approve calling {pending.function_name!r}?")
+        print(f"  Args: {pending.arguments}")
+        approved = input("y/n: ").lower() == "y"
+        # Resume: there is no workflow.respond() — re-call workflow.run()
+        # with responses keyed by the request_id from the event.
+        result = await workflow.run(
+            responses={
+                pending.request_id: ToolApprovalResponse(
+                    approved=approved,
+                    reason=None if approved else "User declined",
+                )
+            }
+        )
+        print(result)
 
 asyncio.run(main())
 ```
@@ -1846,15 +1886,18 @@ This volume filled **ten previously uncovered class groups** from the declarativ
 workflow sub-system, complementing the foundation laid in [Vol. 23](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v23/):
 
 - **Tool variety beyond MCP** — `FunctionTool`, `OpenApiTool`, `WebSearchTool`, `FileSearchTool`,
-  and `CodeInterpreterTool` each serve distinct integration patterns; `Binding` wires
-  their arguments to workflow state via PowerFx expressions at run time.
+  and `CodeInterpreterTool` each serve distinct integration patterns; `Binding.name`
+  selects a registered Python callable from `AgentFactory(bindings=…)` (the `input`
+  field is a data-model artifact that `AgentFactory` does not evaluate at call time).
 - **Factory layer** — `AgentFactory` and `WorkflowFactory` are the entry points that
   convert YAML into live `Agent` and `Workflow` instances; `ProviderTypeMapping` lets you
   extend the built-in provider table with custom client adapters.
 - **Human-in-the-loop** — `QuestionExecutor` / `RequestExternalInputExecutor` pause the
-  graph and yield `ExternalInputRequest`; callers resume via `workflow.respond()`. The
-  same yield/resume pattern appears in `InvokeMcpToolActionExecutor` (via
-  `MCPToolApprovalRequest`) and `BaseToolExecutor` (via `ToolApprovalRequest`).
+  graph and yield `ExternalInputRequest` as a `request_info` `WorkflowEvent`; callers
+  resume by calling `workflow.run(responses={request_id: ExternalInputResponse(…)})` —
+  there is no `workflow.respond()` method. The same yield/resume pattern applies to
+  `InvokeMcpToolActionExecutor` (via `MCPToolApprovalRequest`) and `BaseToolExecutor`
+  (via `ToolApprovalRequest`).
 - **Termination nodes** — `EndWorkflowExecutor`, `EndConversationExecutor`,
   `CancelDialogExecutor`, and `CancelAllDialogsExecutor` stop execution by deliberately
   not sending `ActionComplete`; `JoinExecutor` does the opposite — it always continues.
