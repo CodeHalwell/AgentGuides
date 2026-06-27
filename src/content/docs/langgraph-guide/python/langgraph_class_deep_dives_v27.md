@@ -380,7 +380,7 @@ graph.invoke({"user_input": "Hello", "cached_embedding": []})
 # Searching with embedding of dim 3
 ```
 
-### Example 2 — nonce flag that resets on each run
+### Example 2 — nonce flag that resets between super-steps
 
 ```python
 from typing import Annotated
@@ -392,33 +392,35 @@ from langgraph.graph import StateGraph, START, END
 
 class State(TypedDict):
     count: int
-    # A per-run flag: True if this super-step modified count, False otherwise.
-    # Never checkpointed, so on resume it defaults to MISSING/absent.
+    # A per-super-step flag: True when "inc" ran this step, absent otherwise.
+    # UntrackedValue never writes this to the checkpoint, so it resets each step.
     modified_this_step: Annotated[bool, UntrackedValue(bool)]
 
 
 def increment(state: State) -> dict:
+    before = state.get("modified_this_step", "ABSENT")
+    print(f"  modified_this_step at start of step: {before}")
     return {"count": state["count"] + 1, "modified_this_step": True}
+
+
+def should_continue(state: State) -> str:
+    return "inc" if state["count"] < 2 else END
 
 
 builder = StateGraph(State)
 builder.add_node("inc", increment)
 builder.add_edge(START, "inc")
-builder.add_edge("inc", END)
+builder.add_conditional_edges("inc", should_continue)
 
 checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 
 cfg = {"configurable": {"thread_id": "t1"}}
-r1 = graph.invoke({"count": 0, "modified_this_step": False}, cfg)
-print(r1["count"])                # 1
-print(r1["modified_this_step"])   # True  (set this run)
-
-# Resume: modified_this_step is NOT in the checkpoint, so it will be absent
-# until increment() sets it again.
-r2 = graph.invoke(None, cfg)
-print(r2["count"])                # 2
-print(r2["modified_this_step"])   # True  (set again this run)
+result = graph.invoke({"count": 0, "modified_this_step": False}, cfg)
+# Step 1 prints: modified_this_step at start of step: False  (from input)
+# Step 2 prints: modified_this_step at start of step: ABSENT (never checkpointed)
+print(result["count"])              # 2
+print(result["modified_this_step"]) # True  (set on the final step)
 ```
 
 ### Example 3 — `guard=False` for last-write-wins from parallel workers
