@@ -432,7 +432,7 @@ agent = factory.create_agent_from_yaml_path("agents/assistant.yaml")
 
 async def main():
     result = await agent.run("What is the capital of France?")
-    print(result.content)
+    print(result.text)
 
 asyncio.run(main())
 ```
@@ -472,7 +472,7 @@ agent = factory.create_agent_from_yaml(yaml_content)
 
 async def main():
     result = await agent.run("A very long article about AI...")
-    print(result.content)
+    print(result.text)
 
 asyncio.run(main())
 ```
@@ -635,8 +635,8 @@ workflow = factory.create_workflow_from_yaml_path("research_workflow.yaml")
 
 async def main():
     async for event in workflow.run({"query": "Latest AI benchmarks"}, stream=True):
-        if hasattr(event, "text"):
-            print(event.text, end="", flush=True)
+        if event.type == "output" and hasattr(event.data, "text"):
+            print(event.data.text, end="", flush=True)
 
 asyncio.run(main())
 ```
