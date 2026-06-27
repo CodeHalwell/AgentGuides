@@ -276,6 +276,7 @@ class WrapperAgent(AbstractAgent[AgentDepsT, OutputDataT]):
 
 ```python
 import asyncio
+from contextlib import asynccontextmanager
 from pydantic_ai import Agent
 from pydantic_ai.agent.wrapper import WrapperAgent
 from pydantic_ai.agent.abstract import AbstractAgent
@@ -289,6 +290,7 @@ class AuditAgent(WrapperAgent):
         super().__init__(wrapped)
         self._audit_log = audit_log
 
+    @asynccontextmanager
     async def iter(self, user_prompt=None, **kwargs):
         self._audit_log.append({"prompt": user_prompt, "status": "started"})
         try:
@@ -319,6 +321,7 @@ asyncio.run(main())
 ```python
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from pydantic_ai import Agent
 from pydantic_ai.agent.wrapper import WrapperAgent
 from pydantic_ai.models.test import TestModel
@@ -332,6 +335,7 @@ class RateLimitedAgent(WrapperAgent):
         self._min_interval = min_interval_seconds
         self._last_run_time: float = 0.0
 
+    @asynccontextmanager
     async def iter(self, user_prompt=None, **kwargs):
         now = time.monotonic()
         wait = self._min_interval - (now - self._last_run_time)
@@ -444,13 +448,13 @@ async def main():
 asyncio.run(main())
 ```
 
-### 4.3 Stream events from a node using `AgentStream`
+### 4.3 Stream response events from a `CallToolsNode`
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, CallToolsNode
 from pydantic_ai.models.test import TestModel
-from pydantic_ai._agent_graph import CallToolsNode
+from pydantic_graph import End
 
 
 async def main():
@@ -458,12 +462,14 @@ async def main():
 
     async with agent.iter("Explain async/await in Python.") as run:
         async for node in run:
-            # CallToolsNode carries the model response; stream its output
-            if isinstance(node, CallToolsNode):
-                async with node.stream(run._graph_run.ctx) as agent_stream:
-                    async for text in agent_stream.stream_text(delta=True):
-                        print(text, end="", flush=True)
-                    print()  # newline after streaming finishes
+            if isinstance(node, End):
+                print("Final output:", node.data.output)
+            elif isinstance(node, CallToolsNode):
+                # node.stream() yields an AsyncIterator[HandleResponseEvent]
+                # run.ctx is the public GraphRunContext for this run
+                async with node.stream(run.ctx) as event_iter:
+                    async for event in event_iter:
+                        print(f"  event: {type(event).__name__}")
 
 asyncio.run(main())
 ```
