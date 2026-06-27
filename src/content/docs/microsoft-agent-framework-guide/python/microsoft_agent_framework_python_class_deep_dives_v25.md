@@ -372,7 +372,7 @@ class AgentFactory:
         client_kwargs: Mapping[str, Any] | None = None,
         additional_mappings: Mapping[str, ProviderTypeMapping] | None = None,
         default_provider: str = "Foundry",   # used when YAML omits model.provider
-        safe_mode: bool = True,              # block absolute/traversal paths
+        safe_mode: bool = True,              # block os.environ access in PowerFx
         env_file_path: str | None = None,
         env_file_encoding: str | None = None,
     ) -> None: ...
@@ -386,14 +386,21 @@ class ProviderLookupError(DeclarativeLoaderError): ... # unknown provider/apiTyp
 
 ### Built-in provider mapping
 
+Source-verified from `PROVIDER_TYPE_OBJECT_MAPPING` in `agent_framework_declarative._loader`
+(declarative 1.0.0rc2). Keys are matched by `"provider"` or `"provider.apiType"` from the YAML `model` block.
+
 | Lookup key | Client class | Package |
 |---|---|---|
-| `"AzureOpenAI"` / `"AzureOpenAI.chat"` | `FoundryChatClient` | `agent_framework_foundry` |
-| `"OpenAI"` / `"OpenAI.chat"` | `OpenAIChatCompletionClient` | `agent_framework_openai` |
-| `"Anthropic"` | `AnthropicClient` | `agent_framework_anthropic` |
-| `"Ollama"` | `OllamaChatClient` | `agent_framework_ollama` |
-| `"Bedrock"` | `BedrockChatClient` | `agent_framework_bedrock` |
-| `"Foundry"` (default) | `FoundryChatClient` | `agent_framework_foundry` |
+| `"AzureOpenAI"` / `"AzureOpenAI.Responses"` | `OpenAIChatClient` | `agent_framework.openai` |
+| `"AzureOpenAI.Chat"` | `OpenAIChatCompletionClient` | `agent_framework.openai` |
+| `"OpenAI"` / `"OpenAI.Responses"` | `OpenAIChatClient` | `agent_framework.openai` |
+| `"OpenAI.Chat"` | `OpenAIChatCompletionClient` | `agent_framework.openai` |
+| `"Foundry"` / `"Foundry.Chat"` (default) | `FoundryChatClient` | `agent_framework.foundry` |
+| `"Anthropic.Chat"` | `AnthropicChatClient` | `agent_framework.anthropic` |
+
+> **Note:** `Ollama` and `Bedrock` are **not** built-in keys in declarative 1.0.0rc2. Register them via `additional_mappings` (see below).
+
+The `endpoint_field` for `AzureOpenAI.*` keys is `azure_endpoint`; for `OpenAI.*` keys it is `base_url`.
 
 ### Create agent from a YAML file
 
@@ -403,7 +410,7 @@ from agent_framework_declarative import AgentFactory
 
 factory = AgentFactory(
     default_provider="AzureOpenAI",   # fallback when YAML omits model.provider
-    safe_mode=True,                    # reject ../traversal paths
+    safe_mode=True,                    # block Env.* reads in PowerFx (default)
 )
 agent = factory.create_agent_from_yaml_path("agents/assistant.yaml")
 
@@ -473,24 +480,31 @@ factory = AgentFactory(additional_mappings=custom_mapping)
 # YAML can now use: model: {id: "mistral-large", provider: "Mistral"}
 ```
 
-### Using `safe_mode` to restrict file paths
+### Using `safe_mode` to restrict PowerFx `Env.*` access
+
+`safe_mode` controls whether PowerFx expressions inside the YAML can read
+`os.environ` via `Env.VAR_NAME`. It does **not** restrict which file paths
+`create_agent_from_yaml_path` will open — path validation is left to the caller.
 
 ```python
 from agent_framework_declarative import AgentFactory
-from agent_framework_declarative._loader import DeclarativeLoaderError
 
-# safe_mode=True (default) blocks absolute paths and traversal
+# safe_mode=True (default): Env.* always evaluates to empty string in PowerFx.
+# Use this when the YAML comes from an untrusted source so it cannot exfiltrate
+# environment variables such as API keys.
 factory_safe = AgentFactory(safe_mode=True)
 
-try:
-    # This raises DeclarativeLoaderError — traversal blocked
-    agent = factory_safe.create_agent_from_yaml_path("../../secrets/agent.yaml")
-except DeclarativeLoaderError as e:
-    print(f"Blocked: {e}")
+# safe_mode=False: PowerFx expressions can read os.environ values.
+# Only use this when you fully trust the YAML source.
+factory_trusted = AgentFactory(safe_mode=False)
 
-# safe_mode=False allows any resolvable path (use only in trusted environments)
-factory_open = AgentFactory(safe_mode=False)
-agent = factory_open.create_agent_from_yaml_path("/abs/path/to/agent.yaml")
+# Note: path traversal is NOT blocked by safe_mode.
+# Validate the path yourself before passing it to create_agent_from_yaml_path.
+import os
+user_path = "agents/assistant.yaml"
+if not os.path.abspath(user_path).startswith(os.path.abspath("agents/")):
+    raise ValueError("Path outside allowed directory")
+agent = factory_safe.create_agent_from_yaml_path(user_path)
 ```
 
 ### Error handling
@@ -550,7 +564,7 @@ class WorkflowFactory:
     def register_tool(self, name: str, func: Any) -> "WorkflowFactory": ...
     def create_workflow_from_yaml_path(self, path: str | Path) -> Workflow: ...
     def create_workflow_from_yaml(self, yaml_content: str) -> Workflow: ...
-    def create_workflow_from_dict(self, workflow_def: dict[str, Any]) -> Workflow: ...
+    def create_workflow_from_definition(self, workflow_def: dict[str, Any]) -> Workflow: ...
 
 class DeclarativeWorkflowBuilder:
     def __init__(
