@@ -54,6 +54,7 @@ class BaseNode(BaseModel):
 @final
 async def run(self, *, ctx: Context, node_input: Any) -> AsyncGenerator[Event, None]:
     node_input = self._validate_input_data(node_input)
+    # Aclosing is google.adk.utils.context_utils.Aclosing, not contextlib.aclosing
     async with Aclosing(self._run_impl(ctx=ctx, node_input=node_input)) as agen:
         async for item in agen:
             if item is None:
@@ -142,13 +143,14 @@ class CollectorNode(BaseNode):
     name: str = "collector"
     wait_for_output: bool = True   # stays WAITING until all branches deliver
 
-    _received: list = []
-
     async def _run_impl(self, *, ctx: Context, node_input):
-        self._received.append(node_input)
-        if len(self._received) >= 3:         # wait for 3 upstream branches
-            combined = " | ".join(self._received)
-            self._received.clear()
+        # Use ctx.state so the list survives HITL resumes and is isolated per
+        # workflow execution (not a shared class-level attribute).
+        received = ctx.state.setdefault("received_inputs", [])
+        received.append(node_input)
+        if len(received) >= 3:               # wait for 3 upstream branches
+            combined = " | ".join(received)
+            ctx.state["received_inputs"] = []
             yield combined                   # only now does the node emit output
         # else: yields nothing → stays in WAITING state
 ```
@@ -423,19 +425,27 @@ from google.adk.workflow.utils._workflow_hitl_utils import (
 class ApprovalNode(BaseNode):
     name: str = "approval"
     description: str = "Pauses execution for human approval."
+    # rerun_on_resume=True: _run_impl is called again on resume with the
+    # human's response as node_input, so we can branch on it at the top.
+    rerun_on_resume: bool = True
 
     async def _run_impl(self, *, ctx: Context, node_input):
-        # Yield a RequestInput — BaseNode.run() converts it to an interrupt Event
+        # On resume node_input is the human's response — handle it first.
+        if isinstance(node_input, dict) and "approved" in node_input:
+            if node_input.get("approved"):
+                yield f"Approved: {node_input}"
+            else:
+                yield "Rejected by human."
+            return
+
+        # First run: request human input with a STABLE, deterministic interrupt_id.
+        # A random UUID would break workflow replay because a different ID would be
+        # generated each time the node is replayed/rehydrated.
         yield RequestInput(
-            interrupt_id=str(uuid.uuid4()),
+            interrupt_id=f"{self.name}_approval",
             message=f"Approve this action? Input: {node_input}",
             response_schema={"type": "object", "properties": {"approved": {"type": "boolean"}}},
         )
-        # On resume, node_input contains the user's response (via rerun_on_resume=False)
-        if isinstance(node_input, dict) and node_input.get("approved"):
-            yield f"Approved: {node_input}"
-        else:
-            yield "Rejected by human."
 ```
 
 ### Example 2 — generating and consuming auth request events
