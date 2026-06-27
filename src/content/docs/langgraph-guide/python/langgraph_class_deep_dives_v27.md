@@ -898,7 +898,7 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
 - **Static `get(scratchpad)`** — the method is `@staticmethod`, meaning it receives only the scratchpad and nothing else. The class is never instantiated.
 - **`PregelScratchpad`** — holds `step: int` and `stop: int` (the recursion limit) and is created fresh for each graph invocation.
 - **Read-only by design** — node returns that include managed-value keys are silently ignored. The graph, not the node, controls the values.
-- **Custom managed values** — you can implement your own by subclassing `ManagedValue` and annotating a field with the subclass. The scratchpad also carries `config`, `store`, and other runtime attributes accessible to custom managers.
+- **Custom managed values** — you can implement your own by subclassing `ManagedValue` and annotating a field with the subclass. The `get()` method receives only the scratchpad; for richer runtime context, wire values in via `functools.partial` or graph config rather than reading fields that don't exist on the scratchpad.
 
 ### Example 1 — implementing a custom managed value
 
@@ -962,7 +962,8 @@ print(is_managed_value(42))                    # False
 
 # The ManagedValueSpec alias is just `type[ManagedValue]` — the class itself
 spec: type[ManagedValue] = IsLastStepManager
-print(spec.get.__func__)  # <function IsLastStepManager.get at ...>
+# get is a @staticmethod: class access returns the function directly (no __func__)
+print(spec.get)  # <function IsLastStepManager.get at ...>
 ```
 
 ### Example 3 — sharing scratchpad context between a managed value and a node
