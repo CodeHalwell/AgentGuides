@@ -833,16 +833,17 @@ async def main():
     if not request_events:
         return  # workflow completed without needing input
 
-    req: ExternalInputRequest = request_events[0].data
+    req_event = request_events[0]
+    req: ExternalInputRequest = req_event.data
     print(f"[Q] {req.message}")
     choices = req.metadata.get("choices", [])
     if choices:
         print(f"    Options: {[c['value'] for c in choices]}")
     answer = input("Your answer: ")
 
-    # Phase 2 — resume with the response keyed by request_id
+    # Phase 2 — resume keyed by WorkflowEvent.request_id (NOT ExternalInputRequest.request_id)
     result = await workflow.run(
-        responses={req.request_id: ExternalInputResponse(user_input=answer)}
+        responses={req_event.request_id: ExternalInputResponse(user_input=answer)}
     )
 
 asyncio.run(main())
@@ -865,12 +866,13 @@ actions:
 ```python
 # Resume with a structured response keyed by the request_id from the paused run
 result = await workflow.run({"document": contract_text})
-req = result.get_request_info_events()[0].data
+req_event = result.get_request_info_events()[0]
+req = req_event.data
 response = ExternalInputResponse(
     user_input="Approved",
     value={"approved": True, "comments": "Looks good, no changes needed."},
 )
-result = await workflow.run(responses={req.request_id: response})
+result = await workflow.run(responses={req_event.request_id: response})
 ```
 
 ### Building an interactive CLI loop
@@ -897,7 +899,8 @@ async def run_interactive(workflow_path: str, inputs: dict) -> None:
         if not request_events:
             break  # workflow completed — no more input needed
 
-        req: ExternalInputRequest = request_events[0].data
+        req_event = request_events[0]
+        req: ExternalInputRequest = req_event.data
         print(f"\n[QUESTION] {req.message}")
         choices = req.metadata.get("choices", [])
         for i, c in enumerate(choices):
@@ -910,7 +913,7 @@ async def run_interactive(workflow_path: str, inputs: dict) -> None:
             answer = choices[idx]["value"] if 0 <= idx < len(choices) else raw
         else:
             answer = raw
-        responses = {req.request_id: ExternalInputResponse(user_input=answer, value=answer)}
+        responses = {req_event.request_id: ExternalInputResponse(user_input=answer, value=answer)}
 
 asyncio.run(run_interactive("qa_workflow.yaml", {"subject": "Python packaging"}))
 ```
@@ -1711,10 +1714,15 @@ actions:
     source: =Workflow.Inputs.batches
     itemName: batch
     actions:
-      - kind: ClearAllVariables   # wipes Local.* before processing each batch
+      # IMPORTANT: save the loop item BEFORE clearing — ClearAllVariables wipes
+      # Local.batch (and any other Local.* set by Foreach itemName/indexName).
+      - kind: SetValue
+        path: Local.currentBatch
+        value: =Local.batch
+      - kind: ClearAllVariables   # wipes Local.* including Local.batch
       - kind: SetValue
         path: Local.batchData
-        value: =Local.batch
+        value: =Local.currentBatch   # use the saved copy
       - kind: InvokeAzureAgent
         agent: ProcessorAgent
         input: =Local.batchData
