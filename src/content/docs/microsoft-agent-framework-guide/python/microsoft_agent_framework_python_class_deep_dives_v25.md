@@ -784,6 +784,10 @@ actions:
 
 ### Resuming the workflow from an `ExternalInputRequest`
 
+HITL resume uses `workflow.run(responses={request_id: response})` — there is no
+`workflow.respond()` method. The workflow must complete its current run (stream exhausted
+or `await` returned) before the next run can be started.
+
 ```python
 import asyncio
 from agent_framework.declarative import WorkflowFactory
@@ -795,14 +799,23 @@ factory = WorkflowFactory(agents={"WriterAgent": writer_agent})
 workflow = factory.create_workflow_from_yaml_path("workflow.yaml")
 
 async def main():
-    async for event in workflow.run({"topic": "AI safety"}, stream=True):
-        if isinstance(event, ExternalInputRequest):
-            print(f"[Q] {event.message}")
-            choices = event.metadata.get("choices", [])
-            if choices:
-                print(f"    Options: {[c['value'] for c in choices]}")
-            answer = input("Your answer: ")
-            await workflow.respond(ExternalInputResponse(user_input=answer))
+    # Phase 1 — run until the workflow pauses for input
+    result = await workflow.run({"topic": "AI safety"})
+    request_events = result.get_request_info_events()
+    if not request_events:
+        return  # workflow completed without needing input
+
+    req: ExternalInputRequest = request_events[0].data
+    print(f"[Q] {req.message}")
+    choices = req.metadata.get("choices", [])
+    if choices:
+        print(f"    Options: {[c['value'] for c in choices]}")
+    answer = input("Your answer: ")
+
+    # Phase 2 — resume with the response keyed by request_id
+    result = await workflow.run(
+        responses={req.request_id: ExternalInputResponse(user_input=answer)}
+    )
 
 asyncio.run(main())
 ```
@@ -823,12 +836,14 @@ actions:
 ```
 
 ```python
-# Resume with a structured response
+# Resume with a structured response keyed by the request_id from the paused run
+result = await workflow.run({"document": contract_text})
+req = result.get_request_info_events()[0].data
 response = ExternalInputResponse(
     user_input="Approved",
     value={"approved": True, "comments": "Looks good, no changes needed."},
 )
-await workflow.respond(response)
+result = await workflow.run(responses={req.request_id: response})
 ```
 
 ### Building an interactive CLI loop
@@ -844,27 +859,31 @@ async def run_interactive(workflow_path: str, inputs: dict) -> None:
     factory = WorkflowFactory()
     workflow = factory.create_workflow_from_yaml_path(workflow_path)
 
-    async for event in workflow.run(inputs, stream=True):
-        if isinstance(event, ExternalInputRequest):
-            # Show question and any structured choices
-            print(f"\n[QUESTION] {event.message}")
-            choices = event.metadata.get("choices", [])
-            for i, c in enumerate(choices):
-                print(f"  {i + 1}. {c.get('label', c['value'])}")
-            allow_free = event.metadata.get("allow_free_text", True)
-            prompt = "Choice or text" if allow_free else "Choice number"
-            raw = input(f"{prompt}: ").strip()
-            # Map number to choice value if applicable
-            if choices and raw.isdigit():
-                idx = int(raw) - 1
-                answer = choices[idx]["value"] if 0 <= idx < len(choices) else raw
-            else:
-                answer = raw
-            await workflow.respond(ExternalInputResponse(
-                user_input=answer, value=answer
-            ))
-        elif hasattr(event, "text") and event.text:
-            print(event.text)
+    message: dict | None = inputs
+    responses: dict | None = None
+
+    while True:
+        result = await workflow.run(message=message, responses=responses)
+        message = None  # only pass on first call
+
+        request_events = result.get_request_info_events()
+        if not request_events:
+            break  # workflow completed — no more input needed
+
+        req: ExternalInputRequest = request_events[0].data
+        print(f"\n[QUESTION] {req.message}")
+        choices = req.metadata.get("choices", [])
+        for i, c in enumerate(choices):
+            print(f"  {i + 1}. {c.get('label', c['value'])}")
+        allow_free = req.metadata.get("allow_free_text", True)
+        prompt = "Choice or text" if allow_free else "Choice number"
+        raw = input(f"{prompt}: ").strip()
+        if choices and raw.isdigit():
+            idx = int(raw) - 1
+            answer = choices[idx]["value"] if 0 <= idx < len(choices) else raw
+        else:
+            answer = raw
+        responses = {req.request_id: ExternalInputResponse(user_input=answer, value=answer)}
 
 asyncio.run(run_interactive("qa_workflow.yaml", {"subject": "Python packaging"}))
 ```
@@ -1775,10 +1794,11 @@ actions:
     itemName: doc
     indexName: i
     actions:
-      - kind: ClearAllVariables    # wipe intermediate vars from prior iteration
-      - kind: SetValue
-        path: Local.doc
-        value: =Local.doc          # re-bind after ClearAllVariables (Foreach rebinds itemName)
+      # Foreach binds Local.doc and Local.i before entering the body.
+      # Do NOT use ClearAllVariables here — it would wipe those loop variables.
+      # Use ResetVariable to clear only specific intermediates from prior iterations.
+      - kind: ResetVariable
+        path: Local.summary
 
       - kind: InvokeAzureAgent
         agent: SummaryAgent
