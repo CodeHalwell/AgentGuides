@@ -555,8 +555,9 @@ store.put(("users", "bob"), "prefs", {"theme": "light"})
 namespaces = store.list_namespaces(prefix=("docs",))
 print(namespaces)  # [('docs', 'blog'), ('docs', 'research')]
 
-# Search within "docs" with a filter
-results = store.search(("docs",), filter={"year": {"$gte": 2024}})
+# Search within "docs/research" with a filter (restrict prefix so every item
+# under it has a "year" field — avoids TypeError on items missing the key)
+results = store.search(("docs", "research"), filter={"year": {"$gte": 2024}})
 for r in results:
     print(r.key, r.value["title"])  # paper1  LLM survey
 
@@ -665,18 +666,23 @@ from langgraph.store.base import PutOp, GetOp
 
 store = InMemoryStore()
 
-# Atomic batch: write two items and read one in a single call
-ops = [
+# InMemoryStore.batch() resolves GetOps from pre-existing data before applying
+# PutOps in the same call, so writes and reads must be in separate batches.
+
+# First batch: writes
+store.batch([
     PutOp(namespace=("session", "s1"), key="token", value={"jwt": "abc123"}),
     PutOp(namespace=("session", "s1"), key="meta",  value={"ip": "10.0.0.1"}),
+])
+
+# Second batch: reads (items are now visible in _data)
+results = store.batch([
     GetOp(namespace=("session", "s1"), key="token"),
-]
-results = store.batch(ops)
-# results[0] -> None  (PutOp returns None)
-# results[1] -> None  (PutOp returns None)
-# results[2] -> Item  (GetOp returns Item)
-item = results[2]
-print(item.value)  # {'jwt': 'abc123'}
+    GetOp(namespace=("session", "s1"), key="meta"),
+])
+# results[0] -> Item, results[1] -> Item
+print(results[0].value)  # {'jwt': 'abc123'}
+print(results[1].value)  # {'ip': '10.0.0.1'}
 ```
 
 ### Example 2 — SearchOp with operator-based filters
@@ -1047,7 +1053,7 @@ RemainingSteps = Annotated[int, RemainingStepsManager]
 - **`scratchpad.step`** starts at 0 and increments by 1 after each super-step completes.
 - **`IsLastStep` is `True` exactly once** — when `step == stop - 1`. At that point the graph will raise `GraphRecursionError` on the *next* step, so `IsLastStep` gives a one-step warning window.
 - **`RemainingSteps` counts down from `stop`** to 0. At `step=0` it equals the full `recursion_limit`. When `IsLastStep` is `True`, `RemainingSteps` is exactly `1`.
-- Both aliases are exported directly from `langgraph.managed.is_last_step`. They are also re-exported from `langgraph.prebuilt` for convenience.
+- Both aliases are exported from `langgraph.managed.is_last_step`. They are **not** re-exported from `langgraph.prebuilt`; always import from the managed module.
 
 ### Example 1 — graceful early return on recursion limit
 
