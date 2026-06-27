@@ -1041,19 +1041,47 @@ class ExecutorContext:
 
 ### Usage context
 
-`ExecutorContext` is passed to `A2aAgentExecutor.execute_interceptors` before the main `runner.run_async()` call. Interceptors can read it to log, validate, or transform the request without access to the raw `RequestContext`.
+`ExecutorContext` is created inside `A2aAgentExecutor` after the runner is
+resolved and passed to the `after_event` and `after_agent` hooks of each
+`ExecuteInterceptor`. The `before_agent` hook runs earlier and receives the
+raw `RequestContext` instead — `ExecutorContext` is not yet available there.
 
-### Example 1 — inspect ExecutorContext in an interceptor
+`ExecuteInterceptor` is a **dataclass** (from `google.adk.a2a.executor.config`)
+whose fields are optional async callables, not a base class to inherit from.
+
+```
+before_agent(RequestContext)  → RequestContext        # request inspection/mutation
+after_event(ExecutorContext, A2AEvent, Event) → A2AEvent | list | None
+after_agent(ExecutorContext, TaskStatusUpdateEvent)   → TaskStatusUpdateEvent
+```
+
+### Example 1 — `ExecuteInterceptor` dataclass with all three hooks
 
 ```python
+from a2a.server.agent_execution.context import RequestContext
+from a2a.types import TaskStatusUpdateEvent
+from google.adk.a2a.executor.config import ExecuteInterceptor, A2aAgentExecutorConfig
 from google.adk.a2a.executor.executor_context import ExecutorContext
-from google.adk.a2a.executor.interceptors import ExecuteInterceptor
 
-class LoggingInterceptor:
-    async def before_agent(self, ctx: ExecutorContext) -> None:
-        print(f"[A2A] app={ctx.app_name} user={ctx.user_id} session={ctx.session_id}")
-        # Runner stores the resolved App on runner.app (not runner._app)
-        print(f"      root_agent={ctx.runner.app.root_agent.name}")
+async def log_before(ctx: RequestContext) -> RequestContext:
+    # before_agent receives RequestContext, not ExecutorContext
+    print(f"[A2A] incoming task_id={ctx.task_id}")
+    return ctx  # must return RequestContext to continue
+
+async def log_after_agent(
+    exec_ctx: ExecutorContext,
+    event: TaskStatusUpdateEvent,
+) -> TaskStatusUpdateEvent:
+    # after_agent IS where ExecutorContext is available
+    print(f"[A2A] done app={exec_ctx.app_name} user={exec_ctx.user_id}")
+    print(f"      root_agent={exec_ctx.runner.app.root_agent.name}")
+    return event  # must return the event
+
+interceptor = ExecuteInterceptor(
+    before_agent=log_before,
+    after_agent=log_after_agent,
+)
+config = A2aAgentExecutorConfig(execute_interceptors=[interceptor])
 ```
 
 ### Example 2 — build ExecutorContext for testing
