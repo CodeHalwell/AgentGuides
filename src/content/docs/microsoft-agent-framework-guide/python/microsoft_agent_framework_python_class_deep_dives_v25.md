@@ -188,8 +188,10 @@ print(search_tool.parameters.to_json_schema()["required"])  # ['query']
 
 ### `OpenApiTool` pointing to a spec file
 
+> **Data-model only:** `AgentFactory._parse_tool()` has no `OpenApiTool` branch — passing an `openapi`-kind tool in an agent YAML raises `ValueError("Unsupported tool kind: openapi")`. The YAML and Python examples below show construction and inspection of the data model; they cannot be loaded as live agent tools via `AgentFactory`.
+
 ```yaml
-# agent.yaml — tool section
+# OpenApiTool data-model shape — NOT usable inside an AgentFactory agent YAML
 tools:
   - kind: openapi
     name: weather_api
@@ -251,16 +253,19 @@ print(fs.scoreThreshold, fs.ranker)   # 0.65 semantic
 
 ### `WebSearchTool` with provider options
 
+> **`connection` is data-model only:** `AgentFactory._parse_tool()` for `web_search` tools ignores `tool_resource.connection` entirely. It only propagates `options` into the hosted `{"type": "web_search_preview", ...options}` dict that is sent to the provider. The `connection.endpoint`/`connection.key` fields shown below are available on the data model but are never read at tool-dispatch time.
+
 ```yaml
 tools:
   - kind: web_search
     name: bing_search
     description: Search the web using Bing
+    # connection block is stored on the data model but ignored by AgentFactory._parse_tool()
     connection:
       kind: key
       endpoint: https://api.bing.microsoft.com
       key: =Env.BING_API_KEY
-    options:
+    options:                # these ARE passed through to the provider
       count: 10
       market: en-US
       safeSearch: Moderate
@@ -1255,7 +1260,7 @@ actions:
       unit: F
     output:
       result: Local.weatherData       # raw return value
-      messages: Local.toolMessages    # Tool-role Message for conversation
+      messages: Local.toolMessages    # list [assistant tool-call Message, tool-result Message]
       autoSend: true
 ```
 
