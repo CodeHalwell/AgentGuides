@@ -380,7 +380,13 @@ graph.invoke({"user_input": "Hello", "cached_embedding": []})
 # Searching with embedding of dim 3
 ```
 
-### Example 2 — nonce flag that resets between super-steps
+### Example 2 — ephemeral flag that does not survive checkpoint restore
+
+`UntrackedValue` is never written to the checkpoint. The in-memory value
+persists across super-steps *within* a single `invoke()`, but disappears when
+the graph is resumed from a stored checkpoint between separate `invoke()` calls.
+The demo below uses `interrupt_before` to force a genuine checkpoint save+restore
+cycle so the reset is observable.
 
 ```python
 from typing import Annotated
@@ -392,35 +398,37 @@ from langgraph.graph import StateGraph, START, END
 
 class State(TypedDict):
     count: int
-    # A per-super-step flag: True when "inc" ran this step, absent otherwise.
-    # UntrackedValue never writes this to the checkpoint, so it resets each step.
-    modified_this_step: Annotated[bool, UntrackedValue(bool)]
+    # Ephemeral flag — never checkpointed, so absent after every resume.
+    modified_this_invocation: Annotated[bool, UntrackedValue(bool)]
 
 
 def increment(state: State) -> dict:
-    before = state.get("modified_this_step", "ABSENT")
-    print(f"  modified_this_step at start of step: {before}")
-    return {"count": state["count"] + 1, "modified_this_step": True}
-
-
-def should_continue(state: State) -> str:
-    return "inc" if state["count"] < 2 else END
+    before = state.get("modified_this_invocation", "ABSENT")
+    print(f"  modified_this_invocation on entry: {before}")
+    return {"count": state["count"] + 1, "modified_this_invocation": True}
 
 
 builder = StateGraph(State)
 builder.add_node("inc", increment)
 builder.add_edge(START, "inc")
-builder.add_conditional_edges("inc", should_continue)
+builder.add_edge("inc", END)
 
 checkpointer = InMemorySaver()
-graph = builder.compile(checkpointer=checkpointer)
+# interrupt_before so the second invoke() has a pending task to resume
+graph = builder.compile(checkpointer=checkpointer, interrupt_before=["inc"])
 
 cfg = {"configurable": {"thread_id": "t1"}}
-result = graph.invoke({"count": 0, "modified_this_step": False}, cfg)
-# Step 1 prints: modified_this_step at start of step: False  (from input)
-# Step 2 prints: modified_this_step at start of step: ABSENT (never checkpointed)
-print(result["count"])              # 2
-print(result["modified_this_step"]) # True  (set on the final step)
+
+# Invoke 1: passes modified_this_invocation=True, then pauses before "inc".
+# UntrackedValue saves MISSING to the checkpoint — not True.
+graph.invoke({"count": 0, "modified_this_invocation": True}, cfg)
+
+# Invoke 2 (resume): loads checkpoint → from_checkpoint(MISSING) → channel is ABSENT
+# Even though input had True, the checkpoint had MISSING.
+r = graph.invoke(None, cfg)
+# prints: modified_this_invocation on entry: ABSENT
+print(r["count"])                        # 1
+print(r["modified_this_invocation"])     # True  (set by increment this invoke)
 ```
 
 ### Example 3 — `guard=False` for last-write-wins from parallel workers
@@ -1110,36 +1118,44 @@ class State(TypedDict):
 
 def planner(state: State) -> dict:
     steps_left = state["remaining"]
-    # Budget: reserve 1 step for the final summary
-    affordable = state["plan"][: steps_left - 1]
+    # steps_left includes the current (planner) step.
+    # Reserve 1 step for planner + 1 step for the final summarize node = -2.
+    affordable = state["plan"][: steps_left - 2]
     return {"plan": affordable}
 
 
 def executor(state: State) -> dict:
-    if not state["plan"]:
-        return {"done": state["done"]}
     task = state["plan"][0]
     print(f"Executing: {task} ({state['remaining']} steps left)")
     return {"plan": state["plan"][1:], "done": state["done"] + [task]}
 
 
+def summarize(state: State) -> dict:
+    print(f"Summary: completed {len(state['done'])} tasks — {state['done']}")
+    return {}
+
+
 def route(state: State) -> str:
-    return END if not state["plan"] else "executor"
+    return "summarize" if not state["plan"] else "executor"
 
 
 builder = StateGraph(State)
 builder.add_node("planner", planner)
 builder.add_node("executor", executor)
+builder.add_node("summarize", summarize)
 builder.add_edge(START, "planner")
 builder.add_edge("planner", "executor")
 builder.add_conditional_edges("executor", route)
+builder.add_edge("summarize", END)
 
 tasks = ["fetch_data", "clean_data", "train_model", "evaluate", "deploy"]
 graph = builder.compile()
 result = graph.invoke({"plan": tasks, "done": [], "remaining": 0}, {"recursion_limit": 5})
+# Executing: fetch_data (4 steps left)
+# Executing: clean_data (3 steps left)
+# Executing: train_model (2 steps left)
+# Summary: completed 3 tasks — ['fetch_data', 'clean_data', 'train_model']
 print("Completed:", result["done"])
-# Executing: fetch_data (5 steps left)
-# ...
 ```
 
 ### Example 3 — combining both in a single state for rich step awareness
