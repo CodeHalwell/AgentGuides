@@ -225,7 +225,6 @@ wf = Workflow(
 
 ```python
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.tools.agent_tool import AgentTool
 
 researcher = LlmAgent(
     model="gemini-2.5-flash",
@@ -248,8 +247,11 @@ coordinator = LlmAgent(
         "Use the 'researcher' tool first, then pass results to 'writer'. "
         "Produce a final report."
     ),
-    mode="chat",    # outer dispatch loop; re-enters after each task FC
-    tools=[AgentTool(agent=researcher), AgentTool(agent=writer)],
+    mode="chat",        # outer dispatch loop; re-enters after each task FC
+    # sub_agents, NOT tools=[AgentTool(...)]: model_post_init wraps each
+    # sub_agent as _TaskAgentTool, which is the only type that triggers the
+    # _dispatch_task_fc / run_id idempotency path in run_llm_agent_as_node.
+    sub_agents=[researcher, writer],
 )
 ```
 
@@ -616,21 +618,30 @@ async def demo_auth_round_trip():
 
 ```python
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import APIKey
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
+from fastapi.openapi.models import APIKey, APIKeyIn
 
-async def fetch_weather(city: str, credential: str) -> str:
-    """Fetch weather for a city using an API key."""
-    # In production this would call a weather API with the credential
-    return f"Sunny in {city} (key: {credential[:4]}...)"
+async def fetch_weather(city: str, credential: AuthCredential) -> str:
+    """Fetch weather for a city using an API key.
 
+    `credential` is an AuthCredential object, not a raw string.
+    Read the field that matches the auth_type (api_key for API_KEY).
+    """
+    api_key = credential.api_key or ""
+    return f"Sunny in {city} (key: {api_key[:4]}...)"
+
+raw_cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY)
 weather_tool = AuthenticatedFunctionTool(
     func=fetch_weather,
-    auth_config=AuthConfig(auth_scheme=APIKey(name="weather-api-key")),
+    auth_config=AuthConfig(
+        auth_scheme=APIKey(**{"in": APIKeyIn.header, "name": "weather-api-key"}),
+        raw_auth_credential=raw_cred,
+    ),
     # When the tool runs without a credential, it emits adk_request_credential.
     # On the next turn the user provides the key.
     # _AuthLlmRequestProcessor detects the response, stores it, and
-    # re-executes fetch_weather — all without the agent code changing.
+    # re-executes fetch_weather with the AuthCredential — without agent changes.
 )
 ```
 
