@@ -73,8 +73,9 @@ connection types, model types, `McpTool`, and loop/condition executors, see [Vol
 **Sub-package:** `agent_framework_declarative._models`  
 **Install:** `pip install agent-framework-declarative`
 
-Five tool subclasses that extend the `Tool` base (plus `Binding`, which wires tool arguments to
-workflow state at runtime). `McpTool` is covered in [Vol. 23 §8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v23/).
+Five tool subclasses that extend the `Tool` base (plus `Binding`, which links a `FunctionTool` to a
+registered Python callable by matching `binding.name` in `AgentFactory(bindings=…)`; `Binding.input`
+is not read at runtime). `McpTool` is covered in [Vol. 23 §8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v23/).
 All dispatch via `Tool.from_dict()` on the YAML `kind` field.
 
 ### Class signatures (1.9.0 / declarative 1.0.0rc2)
@@ -89,7 +90,7 @@ class Binding(SerializationMixin):
     def __init__(
         self,
         name: str | None = None,     # tool argument name
-        input: str | None = None,    # PowerFx expression or literal value
+        input: str | None = None,    # field on data model; NOT evaluated by AgentFactory
     ) -> None: ...
 
 class FunctionTool(Tool):
@@ -818,11 +819,13 @@ or `await` returned) before the next run can be started.
 
 ```python
 import asyncio
-from agent_framework.declarative import WorkflowFactory
+from agent_framework.declarative import AgentFactory, WorkflowFactory
 from agent_framework_declarative._workflows._executors_external_input import (
     ExternalInputRequest, ExternalInputResponse,
 )
 
+agent_factory = AgentFactory()
+writer_agent = agent_factory.create_agent_from_yaml_path("writer.yaml")
 factory = WorkflowFactory(agents={"WriterAgent": writer_agent})
 workflow = factory.create_workflow_from_yaml_path("workflow.yaml")
 
@@ -1303,10 +1306,17 @@ event that the caller must respond to before the tool is invoked.
 
 ```python
 import asyncio
+from agent_framework.declarative import WorkflowFactory
 from agent_framework import WorkflowEvent
 from agent_framework_declarative._workflows._executors_tools import (
     ToolApprovalRequest, ToolApprovalResponse,
 )
+
+def get_weather(location: str, unit: str = "F") -> dict:
+    return {"temp": 72, "unit": unit, "location": location}
+
+factory = WorkflowFactory().register_tool("get_weather", get_weather)
+workflow = factory.create_workflow_from_yaml_path("tool_workflow.yaml")
 
 async def main():
     pending: ToolApprovalRequest | None = None
