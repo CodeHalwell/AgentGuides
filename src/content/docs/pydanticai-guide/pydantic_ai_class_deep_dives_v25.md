@@ -384,6 +384,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
     def result(self) -> AgentRunResult[OutputDataT]: ...
     def all_messages(self) -> list[ModelMessage]: ...
     def new_messages(self) -> list[ModelMessage]: ...
+    @property
     def usage(self) -> RunUsage: ...
     @property
     def is_complete(self) -> bool: ...
@@ -415,7 +416,7 @@ async def main():
 
     print("Run complete:", run.is_complete)
     print("Run ID:", run.run_id)
-    print("Usage:", run.usage())
+    print("Usage:", run.usage)
 
 asyncio.run(main())
 ```
@@ -1059,6 +1060,7 @@ class AgentStream(Generic[AgentDepsT, OutputDataT]):
 
     # Finalisation (call after stream is exhausted):
     async def validate_response_output(self, response, *, allow_partial=False) -> OutputDataT: ...
+    @property
     def usage(self) -> RunUsage: ...
 ```
 
@@ -1099,7 +1101,7 @@ async def main():
         async for chunk in streamed.stream_text(delta=True):
             print(chunk, end="", flush=True)
         print()
-        print("Usage:", streamed.usage())
+        print("Usage:", streamed.usage)
 
 asyncio.run(main())
 ```
