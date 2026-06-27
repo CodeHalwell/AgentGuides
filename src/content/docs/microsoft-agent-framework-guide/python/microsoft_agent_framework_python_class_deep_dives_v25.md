@@ -932,13 +932,14 @@ actions:
       Content-Type: application/json
       Authorization: =Concat("Bearer ", Env.API_TOKEN)   # PowerFx expression
     body:
-      json:
+      kind: json                      # required: "json" | "raw" | "none"
+      content:                        # evaluated against state; serialised as JSON
         text: =Local.userInput
         max_length: 500
     response: Local.summary           # path to write the parsed response body
     responseHeaders: Local.respHdrs   # path to write headers as a dict
     conversationId: =System.ConversationId   # appends response to conversation
-    timeout: 30000                    # milliseconds, optional
+    requestTimeoutInMilliseconds: 30000      # milliseconds, optional
 ```
 
 ### Using `DefaultHttpRequestHandler` (development)
@@ -964,14 +965,14 @@ asyncio.run(main())
 
 ```python
 from agent_framework_declarative._workflows._http_handler import (
-    HttpRequestHandler, HttpRequestInfo, HttpResponse
+    HttpRequestHandler, HttpRequestInfo, HttpRequestResult,
 )
 import httpx
 
 class AllowlistedHttpHandler(HttpRequestHandler):
     ALLOWED_HOSTS = {"api.internal.example.com", "api.partner.example.com"}
 
-    async def send(self, request: HttpRequestInfo) -> HttpResponse:
+    async def send(self, request: HttpRequestInfo) -> HttpRequestResult:
         from urllib.parse import urlparse
         host = urlparse(request.url).hostname
         if host not in self.ALLOWED_HOSTS:
@@ -982,14 +983,14 @@ class AllowlistedHttpHandler(HttpRequestHandler):
                 url=request.url,
                 headers=request.headers,
                 params=request.query_parameters,
-                json=request.body if request.body_content_type == "json" else None,
-                content=request.body if request.body_content_type == "text" else None,
+                content=request.body,
                 timeout=request.timeout_ms / 1000 if request.timeout_ms else 30,
             )
-        return HttpResponse(
+        return HttpRequestResult(
             status_code=resp.status_code,
+            is_success_status_code=resp.is_success,
             body=resp.text,
-            headers=dict(resp.headers),
+            headers={k: [v] for k, v in resp.headers.items()},
         )
 
 factory = WorkflowFactory(http_request_handler=AllowlistedHttpHandler())
@@ -1113,16 +1114,17 @@ continues the workflow. Check the result path in downstream conditions:
 
 ```python
 from agent_framework_declarative._workflows._mcp_handler import (
-    MCPToolHandler, MCPToolRequest, MCPToolResponse
+    MCPToolHandler, MCPToolInvocation, MCPToolResult,
 )
+from agent_framework import Content
 
 class LoggingMCPToolHandler(MCPToolHandler):
-    async def invoke(self, request: MCPToolRequest) -> MCPToolResponse:
-        print(f"[MCP] {request.server_url} → {request.tool_name}({request.arguments})")
+    async def invoke_tool(self, invocation: MCPToolInvocation) -> MCPToolResult:
+        print(f"[MCP] {invocation.server_url} → {invocation.tool_name}({invocation.arguments})")
         result_text = await self._real_mcp_client.call(
-            request.server_url, request.tool_name, request.arguments
+            invocation.server_url, invocation.tool_name, invocation.arguments
         )
-        return MCPToolResponse(content=result_text, is_error=False)
+        return MCPToolResult(outputs=[Content.from_text(result_text)], is_error=False)
 ```
 
 ---
@@ -1308,8 +1310,8 @@ actions:
    state allowing tools to be registered at runtime (useful for dynamic tool sets).
 
 ```python
-# Runtime tool registration via state (advanced pattern)
-FUNCTION_TOOL_REGISTRY_KEY = "_function_tool_registry"
+from agent_framework_declarative._workflows._executors_tools import FUNCTION_TOOL_REGISTRY_KEY
+# FUNCTION_TOOL_REGISTRY_KEY == "_tool_registry"
 
 async def my_executor_pre_action(ctx):
     # Tools registered here are accessible to any InvokeFunctionToolExecutor
