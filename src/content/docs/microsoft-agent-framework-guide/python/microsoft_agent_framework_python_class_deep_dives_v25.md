@@ -308,7 +308,7 @@ the callable attached to the tool.
 > it completely.
 
 ```python
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 from agent_framework_declarative._models import FunctionTool, Binding
 
 def my_search(query: str, top_k: int = 5) -> list[str]:
@@ -366,7 +366,7 @@ is a `TypedDict` you use to type-check custom provider entries.
 ### Class signatures
 
 ```python
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 from agent_framework_declarative._loader import (
     DeclarativeLoaderError, ProviderLookupError, ProviderTypeMapping
 )
@@ -423,7 +423,7 @@ The `endpoint_field` for `AzureOpenAI.*` keys is `azure_endpoint`; for `OpenAI.*
 
 ```python
 import asyncio
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 
 factory = AgentFactory(
     default_provider="AzureOpenAI",   # fallback when YAML omits model.provider
@@ -451,7 +451,7 @@ PowerFx expressions. If your YAML uses `=Env.OPENAI_API_KEY` (or any other
 
 ```python
 import asyncio
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 
 yaml_content = """
 kind: Prompt
@@ -484,7 +484,7 @@ asyncio.run(main())
 string matching `model.provider` (or `"provider.apiType"`) in the YAML.
 
 ```python
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 from agent_framework_declarative._loader import ProviderTypeMapping
 
 custom_mapping: dict[str, ProviderTypeMapping] = {
@@ -515,7 +515,7 @@ factory = AgentFactory(additional_mappings=custom_mapping)
 `create_agent_from_yaml_path` will open — path validation is left to the caller.
 
 ```python
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 
 # safe_mode=True (default): Env.* always evaluates to empty string in PowerFx.
 # Use this when the YAML comes from an untrusted source so it cannot exfiltrate
@@ -540,7 +540,7 @@ agent = factory_safe.create_agent_from_yaml_path(user_path)
 ### Error handling
 
 ```python
-from agent_framework_declarative import AgentFactory
+from agent_framework.declarative import AgentFactory
 from agent_framework_declarative._loader import DeclarativeLoaderError, ProviderLookupError
 
 factory = AgentFactory()
@@ -646,7 +646,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework_openai import OpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 from agent_framework.declarative import WorkflowFactory
 
 client = OpenAIChatClient()
@@ -1862,7 +1862,7 @@ executor = SetTextVariableExecutor(
 
 ```python
 import asyncio
-from agent_framework_openai import OpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 from agent_framework.declarative import WorkflowFactory
 
 yaml_content = """
