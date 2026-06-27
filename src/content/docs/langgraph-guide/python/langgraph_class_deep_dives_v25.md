@@ -80,7 +80,7 @@ Key design decisions:
 | Aspect | Detail |
 |--------|--------|
 | `FullKey` | A `(Namespace, str)` tuple. `Namespace` is itself a tuple of strings that acts like a path prefix, enabling per-task and per-user isolation without separate cache instances. |
-| `ValueT` (bytes) | The concrete type parameter for built-ins is `bytes`. The cache stores serialized blobs; `BaseCache.serde` handles serialization so the storage layer stays format-agnostic. |
+| `ValueT` | The type parameter for the **public** `get`/`set` API — the Python value nodes produce or consume. Built-in caches serialize internally (via `self.serde`) before storing `(enc, bytes, expiry)` triples; custom backends receive Python objects from LangGraph and should store them directly or apply their own serde, not expect raw bytes. |
 | `set` value tuple | `(ValueT, int | None)` — the second element is a TTL in seconds, or `None` for no expiry. |
 | Sync/async symmetry | Both lanes are required. In-memory backends implement async as trivial wrappers; production backends (Redis, Memcached) implement the async path natively. |
 
@@ -93,24 +93,30 @@ from typing import Any
 from langgraph.cache.base import BaseCache, FullKey, Namespace
 
 
-class DictCache(BaseCache[bytes]):
-    """Minimal in-process cache for testing."""
+class DictCache(BaseCache[Any]):
+    """Minimal in-process cache for testing.
+
+    LangGraph passes actual Python values (e.g. the dict returned by a node)
+    to set() and expects get() to return those same values. Built-in caches
+    like InMemoryCache serialize internally via self.serde; this demo cache
+    stores Python objects directly (no serde) to keep the example concise.
+    """
 
     def __init__(self) -> None:
         super().__init__()
-        self._store: dict[FullKey, bytes] = {}
+        self._store: dict[FullKey, Any] = {}
 
-    def get(self, keys: Sequence[FullKey]) -> dict[FullKey, bytes]:
+    def get(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
         return {k: self._store[k] for k in keys if k in self._store}
 
-    async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, bytes]:
+    async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
         return self.get(keys)
 
-    def set(self, pairs: Mapping[FullKey, tuple[bytes, int | None]]) -> None:
+    def set(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         for key, (value, _ttl) in pairs.items():
             self._store[key] = value  # TTL ignored for demo
 
-    async def aset(self, pairs: Mapping[FullKey, tuple[bytes, int | None]]) -> None:
+    async def aset(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         self.set(pairs)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
@@ -139,7 +145,7 @@ def expensive_node(state: State) -> dict:
     return {"value": state["value"] * 2}
 
 builder = StateGraph(State)
-builder.add_node("expensive", expensive_node, cache=CachePolicy())
+builder.add_node("expensive", expensive_node, cache_policy=CachePolicy())
 builder.add_edge(START, "expensive")
 builder.add_edge("expensive", END)
 graph = builder.compile(cache=cache)
@@ -372,7 +378,7 @@ print(spec.retry_policy)          # RetryPolicy(max_attempts=3)
 print(spec.cache_policy)          # CachePolicy(...)
 print(spec.is_error_handler)      # False
 print(spec.defer)                 # False
-print(spec.ends)                  # ('__end__',)
+print(spec.ends)                  # ()  — ends is only set via destinations= in add_node(), not from add_edge()
 ```
 
 ---
@@ -816,7 +822,7 @@ def my_retry_on(exc: Exception) -> bool:
     return default_retry_on(exc)
 
 builder = StateGraph(State)
-builder.add_node("flaky", flaky_node, retry=RetryPolicy(
+builder.add_node("flaky", flaky_node, retry_policy=RetryPolicy(
     max_attempts=5,
     retry_on=my_retry_on,
     initial_interval=0.01,  # fast for demo
@@ -970,7 +976,7 @@ audit_pending_writes(writes)
 ```python
 from typing import TypedDict
 from langchain_core.runnables import RunnableConfig
-from langgraph._internal._constants import CONFIG_KEY_SEND
+from langgraph._internal._constants import CONFIG_KEY_SEND, TASKS, INTERRUPT
 from langgraph.constants import CONF
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
