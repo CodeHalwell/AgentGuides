@@ -819,6 +819,7 @@ class OutputContext:
 
 ```python
 import asyncio
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.output import OutputContext
@@ -826,16 +827,26 @@ from pydantic_ai.tools import RunContext
 from pydantic_ai.models.test import TestModel
 
 
+class Answer(BaseModel):
+    answer: str
+
+
 hooks = Hooks()
 
 
+# before_output_validate fires for structured output, before Pydantic validation.
+# The hook receives the raw value (typically a dict) as the `output` keyword arg.
 @hooks.on.before_output_validate
-async def log_output_context(ctx: RunContext, output_ctx: OutputContext, raw: object) -> object:
-    print(f"[OutputHook] mode={output_ctx.mode!r}  type={output_ctx.output_type}  via_tool={output_ctx.tool_call is not None}")
-    return raw  # pass through unchanged
+async def log_output_context(ctx: RunContext, /, *, output_context: OutputContext, output: object) -> object:
+    print(f"[OutputHook] mode={output_context.mode!r}  type={output_context.output_type}  via_tool={output_context.tool_call is not None}")
+    return output  # pass through unchanged
 
 
-agent = Agent(TestModel(), capabilities=[hooks])
+agent = Agent(
+    TestModel(custom_result_args={"answer": "2"}),
+    output_type=Answer,
+    capabilities=[hooks],
+)
 
 
 async def main():
@@ -865,15 +876,23 @@ class Report(BaseModel):
 hooks = Hooks()
 
 
+# The hook receives the raw dict from the model before Pydantic validates it.
+# This is the right place to sanitise or normalise field values.
 @hooks.on.before_output_validate
-async def strip_markdown_from_text(ctx: RunContext, output_ctx: OutputContext, raw: object) -> object:
-    if output_ctx.mode == "text" and isinstance(raw, str):
-        # Strip common markdown from text-mode output
-        return raw.replace("**", "").replace("*", "").replace("#", "").strip()
-    return raw  # leave structured output unchanged
+async def normalise_report_fields(ctx: RunContext, /, *, output_context: OutputContext, output: object) -> object:
+    if isinstance(output, dict):
+        if "title" in output:
+            output["title"] = str(output["title"]).strip().title()
+        if "body" in output:
+            output["body"] = str(output["body"]).replace("**", "").replace("*", "").strip()
+    return output
 
 
-agent = Agent(TestModel(), capabilities=[hooks])
+agent = Agent(
+    TestModel(custom_result_args={"title": "**hello world**", "body": "**Bold text** here."}),
+    output_type=Report,
+    capabilities=[hooks],
+)
 
 
 async def main():
@@ -1145,28 +1164,29 @@ from pydantic_ai.capabilities import Hooks, HookTimeoutError
 
 ```python
 # Lifecycle hooks available on hooks.on:
-hooks.on.before_run           # (ctx) -> None
-hooks.on.after_run            # (ctx, *, result) -> AgentRunResult
-hooks.on.wrap_run             # (ctx, *, handler) -> AgentRunResult
-hooks.on.on_run_error         # (ctx, *, error) -> AgentRunResult
-hooks.on.before_node_run      # (ctx, *, node) -> AgentNode
-hooks.on.after_node_run       # (ctx, *, node, result) -> NodeResult
-hooks.on.wrap_node_run        # (ctx, *, node, handler) -> NodeResult
-hooks.on.on_node_run_error    # (ctx, *, node, error) -> NodeResult
-hooks.on.wrap_run_event_stream  # (ctx, *, stream) -> AsyncIterable[AgentStreamEvent]
-hooks.on.on_event             # (ctx, event) -> AgentStreamEvent
-hooks.on.before_model_request # (ctx, request_context) -> ModelRequestContext
-hooks.on.after_model_request  # (ctx, *, request_context, response) -> ModelResponse
-hooks.on.wrap_model_request   # (ctx, *, request_context, handler) -> ModelResponse
-hooks.on.on_model_request_error  # (ctx, *, request_context, error) -> ModelResponse
-hooks.on.before_tool_validate # (ctx, tool_call, raw_args) -> RawToolArgs
-hooks.on.after_tool_validate  # (ctx, tool_call, validated_args) -> ValidatedToolArgs
-hooks.on.before_tool_execute  # (ctx, tool_call, validated_args) -> ValidatedToolArgs
-hooks.on.after_tool_execute   # (ctx, tool_call, validated_args, *, result) -> Any
-hooks.on.wrap_tool_execute    # (ctx, tool_call, validated_args, *, handler) -> Any
-hooks.on.on_tool_execute_error  # (ctx, tool_call, validated_args, *, error) -> Any
-hooks.on.before_output_validate  # (ctx, output_ctx, raw) -> Any
-hooks.on.after_output_validate   # (ctx, output_ctx, *, output) -> OutputDataT
+# Note: wrap_X → hooks.on.X  |  on_X_error → hooks.on.X_error  |  before/after stay as-is
+hooks.on.before_run           # (ctx, /) -> None
+hooks.on.after_run            # (ctx, /, *, result) -> AgentRunResult
+hooks.on.run                  # wrap_run: (ctx, /, *, handler) -> AgentRunResult
+hooks.on.run_error            # on_run_error: (ctx, /, *, error) -> AgentRunResult
+hooks.on.before_node_run      # (ctx, /, *, node) -> AgentNode
+hooks.on.after_node_run       # (ctx, /, *, node, result) -> NodeResult
+hooks.on.node_run             # wrap_node_run: (ctx, /, *, node, handler) -> NodeResult
+hooks.on.node_run_error       # on_node_run_error: (ctx, /, *, node, error) -> NodeResult
+hooks.on.run_event_stream     # wrap_run_event_stream: (ctx, /, *, stream) -> AsyncIterable[AgentStreamEvent]
+hooks.on.event                # on_event: (ctx, event, /) -> AgentStreamEvent
+hooks.on.before_model_request # (ctx, request_context, /) -> ModelRequestContext
+hooks.on.after_model_request  # (ctx, /, *, request_context, response) -> ModelResponse
+hooks.on.model_request        # wrap_model_request: (ctx, /, *, request_context, handler) -> ModelResponse
+hooks.on.model_request_error  # on_model_request_error: (ctx, /, *, request_context, error) -> ModelResponse
+hooks.on.before_tool_validate # (ctx, /, *, call, tool_def, args) -> RawToolArgs
+hooks.on.after_tool_validate  # (ctx, /, *, call, tool_def, args) -> ValidatedToolArgs
+hooks.on.before_tool_execute  # (ctx, /, *, call, tool_def, args) -> ValidatedToolArgs
+hooks.on.after_tool_execute   # (ctx, /, *, call, tool_def, args, result) -> Any
+hooks.on.tool_execute         # wrap_tool_execute: (ctx, /, *, call, tool_def, args, handler) -> Any
+hooks.on.tool_execute_error   # on_tool_execute_error: (ctx, /, *, call, tool_def, args, error) -> Any
+hooks.on.before_output_validate  # (ctx, /, *, output_context, output) -> RawOutput
+hooks.on.after_output_validate   # (ctx, /, *, output_context, output) -> Any
 ```
 
 ### 10.1 Request/response timing with timeout
@@ -1223,9 +1243,9 @@ hooks = Hooks()
 _attempt_counts: dict[str, int] = {}
 
 
-@hooks.on.on_tool_execute_error
-async def retry_flaky_tools(ctx, tool_call, validated_args, *, error):
-    tool_name = tool_call.tool_name
+@hooks.on.tool_execute_error
+async def retry_flaky_tools(ctx, /, *, call, tool_def, args, error):
+    tool_name = call.tool_name
     _attempt_counts[tool_name] = _attempt_counts.get(tool_name, 0) + 1
 
     if _attempt_counts[tool_name] < 3 and isinstance(error, (ConnectionError, TimeoutError)):
@@ -1258,8 +1278,8 @@ from pydantic_ai.models.test import TestModel
 hooks = Hooks()
 
 
-@hooks.on.wrap_run
-async def add_trace_context(ctx, *, handler):
+@hooks.on.run
+async def add_trace_context(ctx, /, *, handler):
     trace_id = uuid.uuid4().hex
     print(f"[Trace] Starting trace {trace_id} for run {ctx.run_id}")
     try:
