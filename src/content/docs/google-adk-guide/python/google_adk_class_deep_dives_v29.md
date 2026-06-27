@@ -125,11 +125,16 @@ class SearchNode(BaseNode):
     output_schema: type = OutputModel
     state_schema: type = SearchState
 
-    async def _run_impl(self, *, ctx: Context, node_input: InputModel):
-        # state_schema means ctx.state mutations are validated at runtime
-        ctx.state["last_query"] = node_input.query
+    async def _run_impl(self, *, ctx: Context, node_input):
+        # BaseNode._to_serializable() converts Pydantic models to dicts, so
+        # node_input is a plain dict here — use key access, not attribute access.
+        query = node_input["query"]
+        max_results = node_input.get("max_results", 10)
+        # Rehydrate for type-safe downstream usage if needed:
+        #   typed_input = InputModel.model_validate(node_input)
+        ctx.state["last_query"] = query
         ctx.state["total_searches"] = ctx.state.get("total_searches", 0) + 1
-        results = [f"Result {i} for '{node_input.query}'" for i in range(node_input.max_results)]
+        results = [f"Result {i} for '{query}'" for i in range(max_results)]
         yield {"results": results, "count": len(results)}  # validated against OutputModel
 ```
 
@@ -210,7 +215,9 @@ summariser = LlmAgent(
 
 wf = Workflow(
     name="summary_pipeline",
-    agent=summariser,   # used as root; also the only node here
+    # Workflow has no `agent` field; nodes enter via edges.
+    # LlmAgent satisfies BaseNode so it can appear directly in edges.
+    edges=[(START, summariser)],
 )
 ```
 
@@ -355,9 +362,10 @@ root.sub_agents = [mid]
 mid.sub_agents = [leaf]
 
 # leaf emitting transfer_to_agent="root" (its grandparent):
-# Case 4 logic: leaf.parent_agent.name == "mid", not "root"
-# Falls back to outermost root context walk
-# Returns (root, root_ctx)
+# Case 4 only fires when current_agent.parent_agent.name == target.name,
+# i.e. a DIRECT parent. Here leaf.parent_agent.name == "mid", not "root".
+# So the code falls through to the unrelated fallback and returns (root, None).
+# Only a leaf→mid transfer would trigger Case 4.
 ```
 
 ---
@@ -458,11 +466,14 @@ from google.adk.workflow.utils._workflow_hitl_utils import (
     has_auth_credential,
 )
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import APIKey
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+# APIKey lives in fastapi.openapi.models, not google.adk.auth.auth_schemes
+from fastapi.openapi.models import APIKey, APIKeyIn
 
 # Check if credential already in state (avoids re-requesting)
-api_key_scheme = APIKey(name="x-api-key")
-auth_config = AuthConfig(auth_scheme=api_key_scheme)
+api_key_scheme = APIKey(**{"in": APIKeyIn.header, "name": "x-api-key"})
+raw_cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY)
+auth_config = AuthConfig(auth_scheme=api_key_scheme, raw_auth_credential=raw_cred)
 
 async def maybe_request_auth(ctx, auth_config):
     if has_auth_credential(auth_config, ctx.state):
@@ -479,9 +490,12 @@ async def maybe_request_auth(ctx, auth_config):
 ```python
 from google.adk.workflow.utils._workflow_hitl_utils import process_auth_resume
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import APIKey
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+from fastapi.openapi.models import APIKey, APIKeyIn
 
-auth_config = AuthConfig(auth_scheme=APIKey(name="my-service-key"))
+api_key_scheme = APIKey(**{"in": APIKeyIn.header, "name": "my-service-key"})
+raw_cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY)
+auth_config = AuthConfig(auth_scheme=api_key_scheme, raw_auth_credential=raw_cred)
 
 async def handle_auth_response(state, user_response):
     # Format 1: full AuthConfig dict (web UI OAuth flow)
@@ -569,16 +583,19 @@ print(TOOLSET_AUTH_CREDENTIAL_ID_PREFIX)         # _adk_toolset_auth_
 ```python
 import asyncio
 from google.adk.auth.auth_tool import AuthConfig, AuthToolArguments
-from google.adk.auth.auth_schemes import APIKey
 from google.adk.workflow.utils._workflow_hitl_utils import (
     create_auth_request_event,
     process_auth_resume,
 )
-from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.sessions.state import State
 
 async def demo_auth_round_trip():
-    auth_config = AuthConfig(auth_scheme=APIKey(name="weather-api-key"))
+    from fastapi.openapi.models import APIKey, APIKeyIn
+    from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+
+    api_key_scheme = APIKey(**{"in": APIKeyIn.header, "name": "weather-api-key"})
+    raw_cred = AuthCredential(auth_type=AuthCredentialTypes.API_KEY)
+    auth_config = AuthConfig(auth_scheme=api_key_scheme, raw_auth_credential=raw_cred)
 
     # 1. Interrupt phase: yield auth request event to client
     import uuid
@@ -589,7 +606,8 @@ async def demo_auth_round_trip():
     print(f"Auth request function call: {evt.content.parts[0].function_call.name}")
 
     # 2. Resume phase: client returns user-provided API key
-    state = State()
+    # State.__init__ requires value and delta dicts.
+    state = State({}, {})
     await process_auth_resume("my-secret-api-key-123", auth_config, state)
     # Credential is now stored in state under auth_config.credential_key
 ```
@@ -1034,8 +1052,8 @@ from google.adk.a2a.executor.interceptors import ExecuteInterceptor
 class LoggingInterceptor:
     async def before_agent(self, ctx: ExecutorContext) -> None:
         print(f"[A2A] app={ctx.app_name} user={ctx.user_id} session={ctx.session_id}")
-        # ctx.runner is the live Runner; read agent name from it
-        print(f"      root_agent={ctx.runner._app.agent.name if ctx.runner._app else 'N/A'}")
+        # Runner stores the resolved App on runner.app (not runner._app)
+        print(f"      root_agent={ctx.runner.app.root_agent.name}")
 ```
 
 ### Example 2 — build ExecutorContext for testing
@@ -1048,7 +1066,8 @@ from google.adk.agents.llm_agent import LlmAgent
 
 agent = LlmAgent(model="gemini-2.5-flash", name="test_agent", instruction="Reply briefly.")
 session_svc = InMemorySessionService()
-runner = Runner(agent=agent, session_service=session_svc)
+# app_name is required when agent is provided without an App object
+runner = Runner(agent=agent, app_name="test_app", session_service=session_svc)
 
 ctx = ExecutorContext(
     app_name="test_app",
