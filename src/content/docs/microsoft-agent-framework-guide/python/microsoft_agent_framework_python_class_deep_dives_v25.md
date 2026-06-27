@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 25"
-description: "Source-verified deep dives into 10 class groups from agent-framework-declarative 1.0.0rc2 / agent-framework 1.9.0: FunctionTool+OpenApiTool+WebSearchTool+FileSearchTool+CodeInterpreterTool+Binding (5 non-McpTool kind-dispatched tool subclasses — parameter schema, spec file, score-threshold ranker, fileIds, Binding state-wiring), AgentFactory+DeclarativeLoaderError+ProviderLookupError+ProviderTypeMapping (declarative agent loader — built-in provider table, safe_mode, additional_mappings TypedDict, create_agent_from_yaml/path APIs), WorkflowFactory+DeclarativeWorkflowBuilder (workflow from YAML/string/dict — agent registry, max_iterations precedence table, http+mcp handler build-time guard, checkpointing), QuestionExecutor+RequestExternalInputExecutor+ExternalInputRequest+ExternalInputResponse (declarative HITL — question choices+allowFreeText, requestType discriminator, request_id round-trip, resume via respond()), HttpRequestActionExecutor (HTTP action dispatch — method/url/headers/query/body/timeout from state, JSON-first body parse, 4xx/5xx→DeclarativeActionError, timeout+transport wrapping), InvokeMcpToolActionExecutor+MCPToolApprovalRequest (MCP invocation — requireApproval gate, Tool-role Message output, autoSend, is_error non-raise contract), BaseToolExecutor+InvokeFunctionToolExecutor+ToolApprovalRequest+ToolApprovalResponse+ToolInvocationResult (Python function tool executor — dual registry lookup, async support, approval yield/resume, ToolInvocationResult rejected field), JoinExecutor+EndWorkflowExecutor+EndConversationExecutor+CancelDialogExecutor+CancelAllDialogsExecutor (merge and termination nodes — how the graph rejoins conditional branches and halts execution), ActionComplete+ActionTrigger+DeclarativeStateData+ConversationData (typed inter-executor message contracts — 8-namespace state TypedDict, Conversation messages+history, ActionComplete result carrier), ClearAllVariablesExecutor+EditTableExecutor+ResetVariableExecutor+SetTextVariableExecutor (advanced basic executors — Local scope wipe, table add/remove/clear/insert, variable nil reset, coerced text assignment)."
+description: "Source-verified deep dives into 10 class groups from agent-framework-declarative 1.0.0rc2 / agent-framework 1.9.0: FunctionTool+OpenApiTool+WebSearchTool+FileSearchTool+CodeInterpreterTool+Binding (5 non-McpTool kind-dispatched tool subclasses — parameter schema, spec file, score-threshold ranker, fileIds, Binding.name selects callable (Binding.input not read by AgentFactory)), AgentFactory+DeclarativeLoaderError+ProviderLookupError+ProviderTypeMapping (declarative agent loader — built-in provider table, safe_mode, additional_mappings TypedDict, create_agent_from_yaml/path APIs), WorkflowFactory+DeclarativeWorkflowBuilder (workflow from YAML/string/dict — agent registry, max_iterations precedence table, http+mcp handler build-time guard, checkpointing), QuestionExecutor+RequestExternalInputExecutor+ExternalInputRequest+ExternalInputResponse (declarative HITL — question choices+allowFreeText, requestType discriminator, request_id round-trip, resume via workflow.run(responses={request_id: response})), HttpRequestActionExecutor (HTTP action dispatch — method/url/headers/query/body/timeout from state, JSON-first body parse, 4xx/5xx→DeclarativeActionError, timeout+transport wrapping), InvokeMcpToolActionExecutor+MCPToolApprovalRequest (MCP invocation — requireApproval gate, Tool-role Message output, autoSend, is_error non-raise contract), BaseToolExecutor+InvokeFunctionToolExecutor+ToolApprovalRequest+ToolApprovalResponse+ToolInvocationResult (Python function tool executor — dual registry lookup, async support, approval yield/resume, ToolInvocationResult rejected field), JoinExecutor+EndWorkflowExecutor+EndConversationExecutor+CancelDialogExecutor+CancelAllDialogsExecutor (merge and termination nodes — how the graph rejoins conditional branches and halts execution), ActionComplete+ActionTrigger+DeclarativeStateData+ConversationData (typed inter-executor message contracts — 8-namespace state TypedDict, Conversation messages+history, ActionComplete result carrier), ClearAllVariablesExecutor+EditTableExecutor+ResetVariableExecutor+SetTextVariableExecutor (advanced basic executors — Local scope wipe, table add/remove/clear/insert, variable nil reset, coerced text assignment)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -797,8 +797,7 @@ actions:
       - casual
       - technical
     allowFreeText: false
-    output:
-      property: Local.tone
+    variable: Local.tone
 
   - kind: InvokeAzureAgent
     agent: WriterAgent
@@ -855,8 +854,7 @@ actions:
       - approved
       - comments
     timeout: 86400    # seconds
-    output:
-      property: Local.approvalResult
+    variable: Local.approvalResult
 ```
 
 ```python
@@ -1106,19 +1104,38 @@ actions:
 
 ```python
 import asyncio
-from agent_framework.declarative import WorkflowFactory
+from agent_framework.declarative import WorkflowFactory, DefaultMCPToolHandler
 from agent_framework_declarative._workflows._executors_mcp import MCPToolApprovalRequest
+from agent_framework_declarative._workflows._executors_tools import ToolApprovalResponse
+
+factory = WorkflowFactory(mcp_tool_handler=DefaultMCPToolHandler())
+workflow = factory.create_workflow_from_yaml_path("delete_workflow.yaml")
 
 async def main():
+    pending: MCPToolApprovalRequest | None = None
+
+    # Phase 1 — stream until the workflow pauses at the MCP approval gate.
+    # MCPToolApprovalRequest arrives as event.data on a request_info WorkflowEvent;
+    # the event itself is not an MCPToolApprovalRequest instance.
     async for event in workflow.run({"filePath": "/tmp/old.log"}, stream=True):
-        if isinstance(event, MCPToolApprovalRequest):
-            print(f"Approve calling {event.tool_name!r} on {event.server_url}?")
-            print(f"  Arguments: {event.arguments}")
-            answer = input("y/n: ")
-            if answer.lower() == "y":
-                await workflow.approve(event.request_id)
-            else:
-                await workflow.reject(event.request_id)
+        if event.type == "request_info" and isinstance(event.data, MCPToolApprovalRequest):
+            pending = event.data  # record the request; drain the rest of the stream
+
+    if pending:
+        print(f"Approve calling {pending.tool_name!r} on {pending.server_url}?")
+        print(f"  Arguments: {pending.arguments}")
+        approved = input("y/n: ").lower() == "y"
+        # Phase 2 — resume: no workflow.approve()/workflow.reject() exists.
+        # Re-call workflow.run() with ToolApprovalResponse keyed by request_id.
+        result = await workflow.run(
+            responses={
+                pending.request_id: ToolApprovalResponse(
+                    approved=approved,
+                    reason=None if approved else "User declined",
+                )
+            }
+        )
+        print(result)
 
 asyncio.run(main())
 ```
