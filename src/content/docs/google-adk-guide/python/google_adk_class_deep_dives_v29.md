@@ -335,16 +335,21 @@ parent.sub_agents = [child]
 ```python
 from google.adk.agents.llm_agent import LlmAgent
 
-orchestrator = LlmAgent(model="gemini-2.5-pro", name="orchestrator",
-                        instruction="Route between specialist agents.")
 specialist_a = LlmAgent(model="gemini-2.5-flash", name="specialist_a",
                         instruction="Handle topic A.")
 specialist_b = LlmAgent(model="gemini-2.5-flash", name="specialist_b",
                         instruction="Handle topic B.")
-orchestrator.sub_agents = [specialist_a, specialist_b]
+# sub_agents MUST be passed at construction time so that model_post_init()
+# calls __set_parent_agent_for_sub_agents(), setting specialist_a.parent_agent
+# and specialist_b.parent_agent to orchestrator. Assigning sub_agents after
+# construction skips model_post_init and leaves parent_agent=None on both,
+# causing the sibling check to fall through to the unrelated fallback.
+orchestrator = LlmAgent(model="gemini-2.5-pro", name="orchestrator",
+                        instruction="Route between specialist agents.",
+                        sub_agents=[specialist_a, specialist_b])
 
 # specialist_a emitting transfer_to_agent="specialist_b":
-# Both share orchestrator as parent
+# Both share orchestrator as parent (set by model_post_init above)
 # resolve_and_derive_transfer_context returns (specialist_b, curr_parent_ctx)
 # → specialist_b runs under the same parent context
 ```
@@ -949,22 +954,22 @@ Pass a custom callable to override how A2A requests map to ADK runner arguments.
 
 ```python
 from unittest.mock import MagicMock
-from a2a.types import Message, TextPart, Part, Role
+from a2a.types import TextPart, Part
 from google.adk.a2a.converters.request_converter import (
     convert_a2a_request_to_agent_run_request,
     AgentRunRequest,
     A2A_METADATA_KEY,
 )
 
-# Simulate an incoming A2A request context
+# Use real a2a Part objects — MagicMock has truthy unconfigured attributes
+# (e.g. .metadata) that the part converter treats as real values and passes
+# into the GenAI Part, producing mock objects instead of None/real data.
 request = MagicMock()
 request.call_context = None
 request.context_id = "session-abc-123"
 request.metadata = {"client": "web-ui", "version": "1.0"}
 request.message = MagicMock()
-request.message.parts = [
-    MagicMock(root=MagicMock(spec=TextPart, text="What is 2+2?"))
-]
+request.message.parts = [Part(root=TextPart(text="What is 2+2?"))]
 
 result = convert_a2a_request_to_agent_run_request(request)
 print(result.user_id)     # A2A_USER_session-abc-123 (no auth context)
