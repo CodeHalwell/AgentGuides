@@ -292,7 +292,6 @@ async def safe_download(
 
 ```python
 # Example 1 — basic safe download with domain allowlist
-import asyncio
 from pydantic_ai._ssrf import safe_download
 
 async def fetch_trusted_source(url: str) -> str:
@@ -324,7 +323,6 @@ print(is_private_ip('8.8.8.8'))                  # False
 
 ```python
 # Example 3 — safe download with custom headers (sensitive headers are auto-stripped on redirect)
-import asyncio
 from pydantic_ai._ssrf import safe_download
 
 async def authenticated_fetch(url: str, token: str) -> bytes:
@@ -395,7 +393,6 @@ async def fetch_data(ctx: RunContext[None], resource_id: str) -> str:
 ```python
 # Example 2 — when_idle notification to append context after the run naturally completes
 from pydantic_ai import Agent
-from pydantic_ai.run import AgentRun
 from pydantic_ai.messages import SystemPromptPart
 
 agent = Agent('openai:gpt-5', system_prompt='You are a helpful assistant.')
@@ -796,12 +793,17 @@ from pydantic_ai.capabilities import ThreadExecutor
 agent = Agent('openai:gpt-5')
 
 async def handle_request(user_prompt: str) -> str:
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    import asyncio
+    pool = ThreadPoolExecutor(max_workers=4)
+    try:
         result = await agent.run(
             user_prompt,
             capabilities=[ThreadExecutor(pool)],
         )
-    return result.output
+        return result.output
+    finally:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, pool.shutdown, True)
 ```
 
 ```python
