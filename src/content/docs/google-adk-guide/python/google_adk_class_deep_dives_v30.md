@@ -13,7 +13,7 @@ import { Aside } from "@astrojs/starlight/components";
 <Aside type="note">
 All signatures, constants, and behaviours on this page were verified directly
 against the installed package source at
-`<site-packages>/google/adk/` on
+`~/.local/lib/python3.11/site-packages/google/adk/` on
 **google-adk == 2.3.0**. No documentation or blog posts were used as primary
 sources.
 </Aside>
