@@ -13,9 +13,9 @@ import { Aside } from "@astrojs/starlight/components";
 <Aside type="note">
 All signatures, constants, and behaviours on this page were verified directly
 against the installed package source at
-`~/.local/lib/python3.11/site-packages/google/adk/` on
-**google-adk == 2.3.0**. No documentation or blog posts were used as primary
-sources.
+`<site-packages>/google/adk/` on
+**google-adk == 2.3.0**. Path varies by environment; run `pip show google-adk` to find yours.
+No documentation or blog posts were used as primary sources.
 </Aside>
 
 ## 1 · `GCPSkillRegistry` — Vertex AI skill registry client
