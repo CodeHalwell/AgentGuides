@@ -214,7 +214,7 @@ registry = ApiRegistry(api_registry_project_id="my-project")
 print(list(registry._mcp_servers.keys()))
 ```
 
-### Example: attaching a filtered toolset to an agent
+### Example: attaching a toolset with a tool name prefix
 
 ```python
 from google.adk.integrations.api_registry.api_registry import ApiRegistry
