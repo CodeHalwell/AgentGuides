@@ -243,6 +243,7 @@ def count_message_types(messages):
 ```python
 # Example 3 — detecting a local tool-search return on a ModelRequest
 from pydantic_ai._tool_search import ToolSearchReturnPart
+from pydantic_ai.messages import ModelRequest
 
 def extract_discovered_tools(messages):
     """Collect all tools discovered via local fallback in this history."""
@@ -637,8 +638,9 @@ agent = Agent(
 ```
 
 ```python
-# Example 2 — selective approval based on tool name
-# DeferredToolRequests is not iterable; combine .approvals and .calls explicitly.
+# Example 2 — selective approval based on tool name (approval-only handler)
+# Decline if there are any external-execution calls (.calls): approve_all=True only
+# fills .approvals results, so unresolved .calls would silently bubble up.
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
 
 APPROVED_TOOLS = {'search_web', 'get_weather'}
@@ -646,10 +648,12 @@ APPROVED_TOOLS = {'search_web', 'get_weather'}
 async def selective_approve(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
-    all_pending = [*requests.approvals, *requests.calls]
-    # Decline if any pending tool is not in the allowed set
-    if not all_pending or not all(req.tool_name in APPROVED_TOOLS for req in all_pending):
-        return None          # Bubble up to next handler or as output
+    if requests.calls:
+        return None  # External-execution calls need a separate handler; decline here
+    if not requests.approvals or not all(
+        req.tool_name in APPROVED_TOOLS for req in requests.approvals
+    ):
+        return None  # Bubble up to next handler or as output
     return requests.build_results(approve_all=True)
 ```
 
