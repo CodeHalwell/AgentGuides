@@ -131,9 +131,10 @@ registry = GCPSkillRegistry(
 
 ## 2 · `ApiRegistry` — Cloud API Registry MCP toolset bridge
 
-**Module:** `google.adk.integrations.api_registry.api_registry`
+**Module:** `google.adk.integrations.api_registry.api_registry`  
+**Public re-export:** `google.adk.tools.ApiRegistry`
 
-`ApiRegistry` wraps the Cloud API Registry service and exposes each registered MCP server as an `McpToolset`. On construction it fetches **all** registered servers (with pagination, using `filter: "enabled=false"` which returns both enabled and disabled), then lets callers retrieve individual toolsets by server name.
+`ApiRegistry` wraps the **Cloud API Registry** service and exposes each registered MCP server as an `McpToolset`. On construction it fetches **all** registered servers (with pagination, using `filter: "enabled=false"` which returns both enabled and disabled), then lets callers retrieve individual toolsets by server name.
 
 ### Constructor (verified from source)
 
@@ -362,7 +363,7 @@ orchestrator = LlmAgent(
 
 **Module:** `google.adk.tools.enterprise_search_tool`
 
-`EnterpriseWebSearchTool` is a `BaseTool` that injects Gemini's built-in `EnterpriseWebSearch` capability into the LLM request rather than making external HTTP calls itself. A module-level singleton is exported as `google.adk.tools.enterprise_web_search_tool`.
+`EnterpriseWebSearchTool` is a `BaseTool` that injects Gemini's built-in `EnterpriseWebSearch` capability into the LLM request rather than making external HTTP calls itself. A module-level singleton named `enterprise_web_search_tool` is re-exported from `google.adk.tools` as `enterprise_web_search`.
 
 ### Construction and singleton (verified from source)
 
@@ -374,7 +375,8 @@ class EnterpriseWebSearchTool(BaseTool):
             description="enterprise_web_search",
         )
 
-# Module-level singleton — import and use directly
+# Module-level singleton (internal name); re-exported from google.adk.tools
+# as `enterprise_web_search` (without the _tool suffix)
 enterprise_web_search_tool = EnterpriseWebSearchTool()
 ```
 
@@ -401,12 +403,12 @@ async def process_llm_request(
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.tools import enterprise_web_search_tool  # the singleton
+from google.adk.tools import enterprise_web_search  # public singleton name
 
 agent = LlmAgent(
     name="search_agent",
     model="gemini-2.0-flash",          # must be Gemini 2+
-    tools=[enterprise_web_search_tool],
+    tools=[enterprise_web_search],
     instruction="Search the web for up-to-date information.",
 )
 ```
@@ -415,7 +417,7 @@ agent = LlmAgent(
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.tools import enterprise_web_search_tool
+from google.adk.tools import enterprise_web_search
 from google.adk.tools import FunctionTool
 
 def summarise(text: str) -> str:
@@ -425,8 +427,8 @@ def summarise(text: str) -> str:
 agent = LlmAgent(
     name="search_and_summarise",
     model="gemini-2.0-flash",
-    # enterprise_web_search_tool works alongside custom tools on Gemini 2+
-    tools=[enterprise_web_search_tool, FunctionTool(func=summarise)],
+    # enterprise_web_search works alongside custom tools on Gemini 2+
+    tools=[enterprise_web_search, FunctionTool(func=summarise)],
 )
 ```
 
