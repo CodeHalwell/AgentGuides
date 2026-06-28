@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 26"
-description: "Source-verified deep dives into 10 class groups from agent-framework-durabletask 1.0.0b260521: DurableAIAgentWorker+DurableAIAgentClient (worker registration and external client), DurableAIAgent+DurableAgentExecutor (proxy shim and abstract executor), DurableAIAgentOrchestrationContext (orchestration-context wrapper), AgentEntity+AgentEntityStateProviderMixin (platform-agnostic entity execution and state caching mixin), AgentCallbackContext+AgentResponseCallbackProtocol (streaming and final-response callback protocol), RunRequest (request data model — correlation IDs, role coercion, fire-and-forget mode), AgentSessionId+DurableAgentSession (entity naming, @name@key parse format, session serialization), DurableAgentState+DurableAgentStateData (root state container — schema 1.1.0, from_dict/from_json, try_get_agent_response), DurableAgentStateEntry+Request+Response+Usage (entry hierarchy — $type discriminator, is_error flag, usage token tracking), DurableAgentStateContent hierarchy+DurableStateFields+ContentTypes (9 content type subclasses, from_ai_content factory, camelCase field constants)."
+description: "Source-verified deep dives into 10 class groups from agent-framework-durabletask 1.0.0b260521: DurableAIAgentWorker+DurableAIAgentClient (worker registration and external client), DurableAIAgent+DurableAgentExecutor (proxy shim and abstract executor), DurableAIAgentOrchestrationContext (orchestration-context wrapper), AgentEntity+AgentEntityStateProviderMixin (platform-agnostic entity execution and state caching mixin), AgentCallbackContext+AgentResponseCallbackProtocol (streaming and final-response callback protocol), RunRequest (request data model — correlation IDs, role coercion, fire-and-forget mode), AgentSessionId+DurableAgentSession (entity naming, @name@key parse format, session serialization), DurableAgentState+DurableAgentStateData (root state container — schema 1.1.0, from_dict/from_json, try_get_agent_response), DurableAgentStateEntry+Request+Response+Usage (entry hierarchy — $type discriminator, is_error flag, usage token tracking), DurableAgentStateContent hierarchy+DurableStateFields+ContentTypes (11 content type subclasses, from_ai_content factory, camelCase field constants)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -1105,7 +1105,7 @@ print(sdk_usage.get("cache_read_token_count"))  # 50 — round-tripped via exten
 **Sub-package:** `agent_framework_durabletask._durable_agent_state` · `._constants`  
 **Install:** `pip install agent-framework-durabletask`
 
-The full content type system: one abstract base, nine concrete subclasses, and the two constant classes that define every camelCase field name and `$type` discriminator string used in the JSON schema.
+The full content type system: one abstract base, eleven concrete subclasses, and the two constant classes that define every camelCase field name and `$type` discriminator string used in the JSON schema.
 
 ### Key source facts
 
