@@ -190,6 +190,9 @@ def get_toolset(
     mcp_server_url = server["urls"][0]
     # Auth headers refreshed on every call; header_provider adds per-request extras.
     headers = self._get_auth_headers()
+    # Normalize bare URLs: prepend https:// if no scheme is present.
+    if not mcp_server_url.startswith(("http://", "https://")):
+        mcp_server_url = "https://" + mcp_server_url
     return McpToolset(
         connection_params=StreamableHTTPConnectionParams(
             url=mcp_server_url,
@@ -496,11 +499,8 @@ if model.startswith("gemini-1."):
 ```python
 class MultiTurnTaskSuccessV1Evaluator(Evaluator):
     def __init__(self, eval_metric: EvalMetric):
-        super().__init__()
-        self._facade = _MultiTurnVertexiAiEvalFacade(
-            eval_metric=eval_metric,
-            rubric_type="MULTI_TURN_TASK_SUCCESS",
-        )
+        # Only stores the metric; the facade is created lazily inside evaluate_invocations.
+        self._eval_metric = eval_metric
 ```
 
 ### `evaluate_invocations` — the main entry point
@@ -510,14 +510,16 @@ def evaluate_invocations(
     self,
     actual_invocations: list[Invocation],
     expected_invocations: list[Invocation] | None = None,
-    conversation_scenario: str | None = None,
+    conversation_scenario: ConversationScenario | None = None,
 ) -> EvaluationResult:
-    # Requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION to be set.
-    # Uses the Vertex AI Gen AI Eval SDK (LLM-as-judge approach).
-    return self._facade.evaluate(
-        actual_invocations=actual_invocations,
-        expected_invocations=expected_invocations,
-        conversation_scenario=conversation_scenario,
+    from ..dependencies.vertexai import vertexai
+    # Facade is instantiated per-call with threshold and the MULTI_TURN_TASK_SUCCESS
+    # metric name; requires GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION to be set.
+    return _MultiTurnVertexiAiEvalFacade(
+        threshold=self._eval_metric.threshold,
+        metric_name=vertexai.types.RubricMetric.MULTI_TURN_TASK_SUCCESS,
+    ).evaluate_invocations(
+        actual_invocations, expected_invocations, conversation_scenario
     )
 ```
 
@@ -824,7 +826,7 @@ def _build_basic_request(
         if not agent.tools or can_use_output_schema_with_tools(model):
             llm_request.set_output_schema(agent.output_schema)
 
-    # 4. Live connect fields (all set from agent.live_connect_config):
+    # 4. Live connect fields (all set from invocation_context.run_config):
     #    response_modalities, speech_config, transcription,
     #    affective_dialog (None for Gemini 3.1 Flash Live),
     #    proactivity, session_resumption, history_config,
@@ -1156,20 +1158,23 @@ from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
-criterion = RubricsBasedCriterion(rubrics=[
-    Rubric(
-        rubric_id="conciseness",
-        rubric_content=RubricContent(
-            text_property="The response is concise and avoids unnecessary filler text."
+criterion = RubricsBasedCriterion(
+    threshold=0.7,  # BaseCriterion.threshold is required (Threshold: TypeAlias = float)
+    rubrics=[
+        Rubric(
+            rubric_id="conciseness",
+            rubric_content=RubricContent(
+                text_property="The response is concise and avoids unnecessary filler text."
+            ),
         ),
-    ),
-    Rubric(
-        rubric_id="tool-evidence",
-        rubric_content=RubricContent(
-            text_property="The response correctly uses tool output as evidence."
+        Rubric(
+            rubric_id="tool-evidence",
+            rubric_content=RubricContent(
+                text_property="The response correctly uses tool output as evidence."
+            ),
         ),
-    ),
-])
+    ],
+)
 
 metric = EvalMetric(
     metric_name="final_response_quality",
@@ -1194,11 +1199,14 @@ from google.adk.evaluation.eval_case import Invocation
 os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
-criterion = RubricsBasedCriterion(rubrics=[
-    Rubric(rubric_id="conciseness", rubric_content=RubricContent(
-        text_property="The response is concise and avoids unnecessary filler text."
-    )),
-])
+criterion = RubricsBasedCriterion(
+    threshold=0.7,  # required: BaseCriterion.threshold (TypeAlias = float)
+    rubrics=[
+        Rubric(rubric_id="conciseness", rubric_content=RubricContent(
+            text_property="The response is concise and avoids unnecessary filler text."
+        )),
+    ],
+)
 metric = EvalMetric(metric_name="final_response_quality", criterion=criterion, threshold=0.5)
 evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 
@@ -1226,6 +1234,7 @@ from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 # format_auto_rater_prompt to include intermediate agent messages
 # alongside the final answer, giving the LLM-judge more context.
 criterion = RubricsBasedCriterion(
+    threshold=0.7,  # required: BaseCriterion.threshold (TypeAlias = float)
     include_intermediate_responses_in_final=True,
     rubrics=[
         Rubric(
