@@ -393,21 +393,26 @@ async def fetch_data(ctx: RunContext[None], resource_id: str) -> str:
 
 ```python
 # Example 2 — when_idle notification to append context after the run naturally completes
+# IMPORTANT: bare `async for node in agent_run` skips `after_node_run`, which is where
+# `when_idle` messages drain. Use the next_node/agent_run.next() loop instead to avoid
+# UndrainedPendingMessagesError at End.
 from pydantic_ai import Agent
 from pydantic_ai.messages import SystemPromptPart
+from pydantic_graph import End
 
 agent = Agent('openai:gpt-5', system_prompt='You are a helpful assistant.')
 
 async def run_with_postamble(user_prompt: str) -> str:
-    # enqueue() is on AgentRun (agent.iter()), not on StreamedRunResult (agent.run_stream())
     async with agent.iter(user_prompt) as agent_run:
         # Append a reminder only after the agent is idle (won't interrupt tool calls)
         agent_run.enqueue(
             SystemPromptPart(content='Remember: always cite your sources.'),
             priority='when_idle',
         )
-        async for _node in agent_run:
-            pass
+        # Use next_node/next() so after_node_run fires and drains when_idle messages
+        node = agent_run.next_node
+        while not isinstance(node, End):
+            node = await agent_run.next(node)
     return agent_run.result.output
 ```
 
