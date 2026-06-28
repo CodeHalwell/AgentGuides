@@ -270,13 +270,13 @@ toolset = registry.get_toolset("projects/my-project/locations/global/mcpServers/
 
 `AgentRegistry` connects to `https://agentregistry.googleapis.com/v1alpha` and provides toolset access, endpoint listing, and model-name resolution. When no `auth_scheme` is supplied to `get_mcp_toolset`, the registry auto-resolves the `GcpAuthProviderScheme` from IAM bindings — but credential execution still requires `GcpAuthProvider` to be registered with `CredentialManager` (see example below).
 
-:::note[Prerequisites]
+<Aside type="note" title="Prerequisites">
 `AgentRegistry` unconditionally imports `mcp` at module load time and lazily imports `a2a-sdk` on first use. For IAM-bound MCP servers (where `get_mcp_toolset` auto-resolves a `GcpAuthProviderScheme` from registry bindings), the `agent-identity` extra is also required:
 
 ```bash
 pip install "google-adk[mcp,a2a,agent-identity]"
 ```
-:::
+</Aside>
 
 ### Constructor (verified from source)
 
@@ -1015,12 +1015,12 @@ async def get_screenshot(self, max_retries: int = 3) -> bytes:
 
 ### Example: capturing a screenshot
 
-:::note[Prerequisites]
+<Aside type="note" title="Prerequisites">
 `sandbox` is a `SandboxEnvironment` obtained from the Vertex AI SDK
 (e.g. `vertexai.preview.extensions.create_sandbox(...)`).
 `token` is a short-lived OAuth2 access token (e.g. from
 `google.auth.default()` or `google.oauth2.credentials`).
-:::
+</Aside>
 
 ```python
 import asyncio
