@@ -69,7 +69,7 @@ def patch_configurable(
 
 - **`merge_configs` metadata deep-merge** — the `metadata` key is the only one that merges one level deeper: the `lc_versions` sub-key gets a union of both dicts (so separate LangChain packages each contribute their version strings). All other metadata keys use last-write-wins.
 - **Callbacks union** — when both configs have callbacks, `merge_configs` calls `_merge_callbacks`, which unions `CallbackManager` instances via `.merge()`. A list of handlers on one side gets added to the other side's `CallbackManager` via `.add_handler(cb, inherit=True)`.
-- **`recursion_limit` special rule** — `merge_configs` only writes `recursion_limit` from a config when it differs from `DEFAULT_RECURSION_LIMIT` (10 007 by default). This prevents configs that never explicitly set the limit from accidentally capping custom-set values.
+- **`recursion_limit` special rule** — `merge_configs` only writes `recursion_limit` from a config when it differs from `DEFAULT_RECURSION_LIMIT` (10007 by default). This prevents configs that never explicitly set the limit from accidentally capping custom-set values.
 - **`patch_config` clears run identity** — when you pass `callbacks=...`, `patch_config` deletes both `run_name` and `run_id`. This ensures callbacks passed at a sub-invocation level are not attributed to the parent run's identity.
 - **`patch_configurable` is the cheapest** — it only mutates `config["configurable"]`. Use it when you need to inject a single runtime key (e.g. `thread_id`, `user_id`) without touching callbacks or tags.
 
@@ -192,7 +192,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
 - **Coordinate isolation rule** — If the caller's config contains any key from `_CHECKPOINT_COORDINATE_KEYS` (`thread_id`, `checkpoint_ns`, `checkpoint_id`, `checkpoint_map`) **with a non-empty value** (non-`None`, non-empty list/dict), the ambient `configurable` from the contextvar is **discarded** entirely before merging. A key that is present but `None` or `{}` does **not** trigger the reset — only a truthy coordinate value does. This prevents a child graph from accidentally writing checkpoints under a parent graph's namespace when invoked with its own `thread_id`.
 - **`_PROPAGATE_TO_METADATA`** — after merging, specific configurable values are copied into the `metadata` dict for LangSmith tracing visibility. The propagated keys are: `thread_id`, `checkpoint_id`, `checkpoint_ns`, `task_id`, `run_id`, `assistant_id`, `graph_id`. Values already in metadata are not overwritten.
 - **Sensitive key filtering** — `_exclude_as_metadata` prevents keys containing `key`, `token`, `secret`, `password`, or `auth` from ever being copied to metadata (privacy/security guard).
-- **`recursion_limit` default** — the base `empty` dict starts with `DEFAULT_RECURSION_LIMIT` (10 007), which is the highest safe value. Callers that set a custom limit via their config override this.
+- **`recursion_limit` default** — the base `empty` dict starts with `DEFAULT_RECURSION_LIMIT` (10007), which is the highest safe value. Callers that set a custom limit via their config override this.
 
 ```python
 _CHECKPOINT_COORDINATE_KEYS = frozenset({
@@ -1438,7 +1438,7 @@ NS_END = ":"   # separates node name from task ID within a level
 
 **Key implementation facts:**
 
-- **`DEFAULT_RECURSION_LIMIT` = 10 007** — dramatically higher than LangChain's default of 25. LangGraph sets this high because graphs with many nodes and fan-out patterns can legitimately execute hundreds of steps in a single `invoke()`. Override via `LANGGRAPH_DEFAULT_RECURSION_LIMIT` or per-call via `config={"recursion_limit": N}`.
+- **`DEFAULT_RECURSION_LIMIT` = 10007** — dramatically higher than LangChain's default of 25. LangGraph sets this high because graphs with many nodes and fan-out patterns can legitimately execute hundreds of steps in a single `invoke()`. Override via `LANGGRAPH_DEFAULT_RECURSION_LIMIT` or per-call via `config={"recursion_limit": N}`.
 - **`DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`** — `DeltaChannel` avoids storing the full channel value on every step; instead it stores deltas and periodically writes a full snapshot. This constant is the max supersteps before a forced snapshot regardless of update frequency. Default: 5000. Override via `LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` for very long-lived threads.
 - **`CONFIG_KEY_*` reserved keys** — all `__pregel_*` configurable keys are internal. They carry the `write`, `read`, `call`, `checkpointer`, `stream`, `cache`, `runtime` function/object references that the Pregel runtime injects at execution time. **Never set these manually** — only read them via the provided accessor functions (`get_config()`, `get_store()`, `get_stream_writer()`).
 - **`CONFIG_KEY_RUNTIME`** — the `Runtime` object is injected here, which is how `get_store()` and `get_stream_writer()` work: they call `get_config()[CONF][CONFIG_KEY_RUNTIME].store` etc.
@@ -1572,7 +1572,7 @@ print(cfg_mod.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT) # 5000  — restored
 | 7 | `PendingWrite` + `WRITES_IDX_MAP` + sentinel channels | `langgraph.checkpoint.base` · `serde.types` | PendingWrite = `(task_id, channel, value)` 3-tuple; sentinels use fixed negative indices: ERROR=-1, SCHEDULED=-2, INTERRUPT=-3, RESUME=-4 |
 | 8 | `get_checkpoint_id` + `get_checkpoint_metadata` | `langgraph.checkpoint.base` | Read current checkpoint ID from config; `get_checkpoint_metadata` merges `run_id` into metadata for every saver.put() call |
 | 9 | `build_serde_allowlist` + `STRICT_MSGPACK_ENABLED` + `apply_checkpointer_allowlist` | `langgraph._internal._serde` | Strict msgpack mode; TypedDict/dataclass/Pydantic schemas recursively scanned; `curated_core_allowlist()` always includes all 14 langchain-core message types |
-| 10 | `DEFAULT_RECURSION_LIMIT` + `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` + `CONFIG_KEY_*` | `langgraph._internal._config` · `_constants` | Default limit is 10 007 (not 25); both limits are env-var tunable; `CONFIG_KEY_*` keys carry internal runtime references — never set manually |
+| 10 | `DEFAULT_RECURSION_LIMIT` + `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` + `CONFIG_KEY_*` | `langgraph._internal._config` · `_constants` | Default limit is 10007 (not 25); both limits are env-var tunable; `CONFIG_KEY_*` keys carry internal runtime references — never set manually |
 
 > **Cross-reference:** See also:
 > [Vol. 25](./langgraph_class_deep_dives_v25/) for `BaseCache` + `FullKey` + `default_retry_on` + internal constants deep-dive.
