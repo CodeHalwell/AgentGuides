@@ -94,7 +94,7 @@ call_config = {
 merged = merge_configs(base_config, call_config)
 
 print(merged["tags"])               # ['prod', 'user-request']  — concatenated
-print(merged["metadata"]["app"])    # 'my-agent'                — base wins for unknown keys
+print(merged["metadata"]["app"])    # 'my-agent'                — preserved (call_config didn't set it)
 print(merged["metadata"]["user_id"]) # 'u42'                   — call wins for new keys
 print(merged["metadata"]["lc_versions"])  # {'langchain-core': '1.0.0', 'my-pkg': '0.2.1'}  — deep merged
 print(merged["recursion_limit"])    # 50                         — base custom value preserved
@@ -152,15 +152,15 @@ def my_node(state: dict) -> dict:
         configurable={"model": "gpt-4o-mini"},
     )
 
-    # After setting callbacks=..., run_name and run_id are cleared
-    # so the sub-call has a fresh identity
+    # Passing callbacks= clears any existing run_name and run_id from the config.
+    # Note: if you also pass run_name= in the same call, patch_config applies it
+    # *after* the clear — so don't combine them when you want a fully fresh identity.
     sub_config_fresh = patch_config(
         parent_config,
-        callbacks=[],          # fresh callbacks: run_name/run_id stripped
-        run_name="fresh-call", # this won't appear — cleared by callbacks
+        callbacks=[],   # clears run_name and run_id that were in parent_config
     )
 
-    print("run_name" in sub_config_fresh)  # False — cleared
+    print("run_name" in sub_config_fresh)  # False — cleared by callbacks=
     print(sub_config["configurable"]["model"])  # 'gpt-4o-mini'
     return state
 ```
@@ -208,10 +208,13 @@ _PROPAGATE_TO_METADATA = frozenset({
 ### Example 1 — coordinate isolation for subgraph calls
 
 ```python
+from langchain_core.runnables.config import var_child_runnable_config
 from langgraph._internal._config import ensure_config
 from langgraph._internal._constants import CONF
 
-# Simulated ambient config (what the contextvar would hold for a parent graph)
+# The Pregel runtime sets var_child_runnable_config automatically when
+# a parent graph invokes a child. Here we set it manually to reproduce
+# the isolation behaviour in isolation.
 ambient = {
     "configurable": {
         "thread_id": "parent-thread-99",
@@ -220,16 +223,20 @@ ambient = {
     }
 }
 
-# Child graph called with its own thread_id
-child_explicit = {"configurable": {"thread_id": "child-thread-1"}}
+token = var_child_runnable_config.set(ambient)
+try:
+    # Child graph called with its own thread_id
+    child_explicit = {"configurable": {"thread_id": "child-thread-1"}}
 
-# Because child_explicit contains a coordinate key (thread_id),
-# the ambient configurable is cleared before merging.
-# This is ensure_config's isolation guarantee.
-result = ensure_config(ambient, child_explicit)
-print(result[CONF]["thread_id"])         # 'child-thread-1'
-print(result[CONF].get("checkpoint_ns")) # None — parent coord was discarded
-print(result[CONF].get("user_id"))       # None — ambient stripped with coord
+    # Because child_explicit contains a coordinate key (thread_id),
+    # the ambient configurable (from the contextvar) is cleared entirely
+    # before merging. This is ensure_config's isolation guarantee.
+    result = ensure_config(child_explicit)
+    print(result[CONF]["thread_id"])         # 'child-thread-1'
+    print(result[CONF].get("checkpoint_ns")) # None — parent coord was discarded
+    print(result[CONF].get("user_id"))       # None — ambient stripped with coord
+finally:
+    var_child_runnable_config.reset(token)
 ```
 
 ### Example 2 — metadata propagation
@@ -310,7 +317,7 @@ NodeInputT_contra = TypeVar("NodeInputT_contra", bound=StateLike, contravariant=
 
 ```python
 from typing import Any, Generic, TypeVar
-from typing_extensions import TypedDict
+from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.typing import StateT, ContextT
 
@@ -340,8 +347,14 @@ class Context(TypedDict):
 graph_builder = make_pipeline(MyState, context_schema=Context)
 
 
-def greet(state: MyState, context: Context) -> MyState:
-    print(f"User {context['user_id']} has value {state['value']}")
+from langgraph.runtime import Runtime
+
+
+def greet(state: MyState, *, runtime: Runtime) -> MyState:
+    """In LangGraph 1.2.6, context is injected as `runtime.context`,
+    not as a second positional argument."""
+    ctx = runtime.context
+    print(f"User {ctx['user_id']} has value {state['value']}")
     return state
 
 
@@ -405,7 +418,7 @@ class InternalState(TypedDict):
 
 
 class UserInput(TypedDict):
-    text: str          # what the caller provides
+    raw_text: str      # what the caller provides
 
 
 class UserOutput(TypedDict):
@@ -432,7 +445,7 @@ builder.add_edge("finish", END)
 graph = builder.compile()
 
 # Caller provides UserInput; receives UserOutput
-result = graph.invoke({"text": "hello world from langgraph"})
+result = graph.invoke({"raw_text": "hello world from langgraph"})
 print(result["word_count"])   # 4
 print(result["processed"])    # True
 # raw_text is NOT in the result (filtered by output schema)
@@ -462,7 +475,7 @@ TAG_HIDDEN = sys.intern("langsmith:hidden")
 - **`TAG_NOSTREAM`** — when added to a `ChatModel` invocation via `.with_config({"tags": ["nostream"]})` or `set_node_defaults(tags=["nostream"])`, the model's token stream is NOT forwarded to the parent graph's `messages` channel. The model still runs and returns its final output; only the intermediate token events are suppressed. Useful for background-reasoning nodes you don't want polluting the user-facing message stream.
 - **`TAG_HIDDEN`** — suppresses a node from `stream_mode="debug"` output and hides it from LangSmith's trace view. `map_debug_tasks` (in `langgraph.pregel.debug`) skips any task whose tags include `TAG_HIDDEN`. Used heavily for internal book-keeping nodes like `ChannelWrite` wrappers and the `__start__` input projection node.
 - **`sys.intern`** — both tags are interned strings, so identity comparisons (`tag is TAG_NOSTREAM`) are safe and fast. Use `in tags` for containment checks (which still works because interned strings compare equal by value).
-- **Combining with `set_node_defaults`** — you can apply `TAG_HIDDEN` graph-wide via `builder.set_node_defaults(tags=["langsmith:hidden"])`. More commonly, you annotate individual internal nodes while leaving user-facing nodes untagged.
+- **Per-node tagging via `add_node`** — apply `TAG_HIDDEN` to individual nodes via `builder.add_node("name", fn, tags=[TAG_HIDDEN])`. `set_node_defaults` does not accept `tags` (only `retry_policy`, `cache_policy`, `error_handler`, `timeout`). More commonly, you annotate specific internal nodes while leaving user-facing nodes untagged.
 
 ### Example 1 — `TAG_NOSTREAM` to silence a reasoning node
 
@@ -555,7 +568,7 @@ print("compute" in node_names)  # True
 print("audit" in node_names)    # False  — hidden from debug stream
 ```
 
-### Example 3 — applying `TAG_HIDDEN` via `set_node_defaults`
+### Example 3 — applying `TAG_HIDDEN` to multiple nodes via `add_node`
 
 ```python
 from typing_extensions import TypedDict
@@ -581,12 +594,11 @@ def step_c(state: State) -> dict:
 
 builder = StateGraph(State)
 
-# Apply TAG_HIDDEN to ALL nodes added after this call
-builder.set_node_defaults(tags=[TAG_HIDDEN])
-
-builder.add_node("a", step_a)
-builder.add_node("b", step_b)
-builder.add_node("c", step_c)
+# TAG_HIDDEN is applied per node via add_node — set_node_defaults does not
+# accept tags. Pass tags=[TAG_HIDDEN] on every node you want hidden.
+builder.add_node("a", step_a, tags=[TAG_HIDDEN])
+builder.add_node("b", step_b, tags=[TAG_HIDDEN])
+builder.add_node("c", step_c, tags=[TAG_HIDDEN])
 builder.add_edge(START, "a")
 builder.add_edge("a", "b")
 builder.add_edge("b", "c")
@@ -777,12 +789,14 @@ graph = builder.compile(checkpointer=saver)
 config = {"configurable": {"thread_id": "t1"}}
 
 graph.invoke({"value": 0}, config)
-graph.invoke({"value": 0}, config)  # Second call — state accumulates
+graph.invoke(None, config)  # Second call — continues from previous checkpoint
 
 # Inspect raw storage structure
 thread_storage = saver.storage["t1"]    # thread_id → ns dict
 root_ns = thread_storage[""]            # "" is root graph namespace
-print(f"Checkpoints stored: {len(root_ns)}")  # 2 (one per invoke, plus the initial)
+# Each invoke writes 2 checkpoints (one before nodes run, one after),
+# plus the very first empty checkpoint, so ~5 entries after 2 invokes.
+print(f"Checkpoints stored: {len(root_ns)}")
 
 # Each checkpoint_id maps to (checkpoint_bytes, metadata_bytes, parent_id)
 for ckpt_id, (ckpt_data, meta_data, parent_id) in root_ns.items():
@@ -1117,26 +1131,26 @@ builder.add_edge("double", END)
 graph = builder.compile(checkpointer=saver)
 config = {"configurable": {"thread_id": "t-fork"}}
 
-graph.invoke({"value": 1}, config)  # value=1 → 2
-graph.invoke({"value": 0}, config)  # value=2 → 4  (continues from previous)
+graph.invoke({"value": 1}, config)  # checkpoint saved with value=1; runs double → 2
+graph.invoke(None, config)          # resumes from checkpoint; double(2) → 4
 
-# List all checkpoints to find a specific one
+# List all checkpoints — each invoke writes a "before" and "after" checkpoint
 history = list(graph.get_state_history(config))
 for snapshot in history:
     print(f"  id={snapshot.config['configurable']['checkpoint_id'][:8]}... "
-          f"value={snapshot.values.get('value')}")
+          f"value={snapshot.values.get('value')} next={snapshot.next}")
 
-# Fork from the first checkpoint (value was 2 after step 1)
-first_checkpoint = history[-2]  # second-to-last = after first invoke
+# Fork from the pre-node checkpoint of the first invoke (value=1, 'double' pending)
+fork_point = next(s for s in history if s.values.get("value") == 1 and s.next)
 fork_config = {
     "configurable": {
         "thread_id": "t-fork",
-        "checkpoint_id": first_checkpoint.config["configurable"]["checkpoint_id"],
+        "checkpoint_id": fork_point.config["configurable"]["checkpoint_id"],
     }
 }
-# This re-runs from that point with a modified state
-forked = graph.invoke({"value": 0}, fork_config)
-print(f"forked value: {forked['value']}")  # 2 (re-runs from step 1 state)
+# Replay from that fork point — double(1) = 2
+forked = graph.invoke(None, fork_config)
+print(f"forked value: {forked['value']}")  # 2 (double ran again from value=1)
 ```
 
 ### Example 3 — using `get_checkpoint_metadata` in a custom saver
@@ -1310,21 +1324,20 @@ class State(TypedDict):
     value: int
 
 
-saver = InMemorySaver()
 builder = StateGraph(State)
 builder.add_node("noop", lambda s: s)
 builder.add_edge(START, "noop")
 builder.add_edge("noop", END)
 
-graph = builder.compile(checkpointer=saver)
-
+# Apply the allowlist to the saver *before* compiling so there's no
+# post-compile attribute mutation.
+saver = InMemorySaver()
 if STRICT_MSGPACK_ENABLED:
-    allowlist = build_serde_allowlist(
-        schemas=[State],
-        channels=graph.channels,
-    )
+    allowlist = build_serde_allowlist(schemas=[State], channels={})
     if allowlist:
-        graph.checkpointer = apply_checkpointer_allowlist(saver, allowlist)
+        saver = apply_checkpointer_allowlist(saver, allowlist)
+
+graph = builder.compile(checkpointer=saver)
 ```
 
 ### Example 3 — Pydantic model scanning in allowlist
