@@ -50,7 +50,7 @@ source using `inspect.getsource()`. Sub-packages introspected:
 - [Vol. 24](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v24/) — `_workflows._typing_utils`, `_workflows._checkpoint_encoding`, `_workflows._runner`, `_harness._loop`, `_harness._tool_approval`, orchestrations protocol utils, Magentic observability, Foundry/OpenAI raw clients, `_workflows` message utilities
 - [Vol. 25](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v25/) — `FunctionTool`+`OpenApiTool`+`WebSearchTool`+`FileSearchTool`+`CodeInterpreterTool`+`Binding`, `AgentFactory`+`DeclarativeLoaderError`+`ProviderLookupError`, `WorkflowFactory`+`DeclarativeWorkflowBuilder`, `QuestionExecutor`+`RequestExternalInputExecutor`, `HttpRequestActionExecutor`, `InvokeMcpToolActionExecutor`, `BaseToolExecutor`+`InvokeFunctionToolExecutor`, `JoinExecutor`+termination nodes, `ActionComplete`+`ActionTrigger`+`DeclarativeStateData`, `ClearAllVariablesExecutor`+`EditTableExecutor`+`ResetVariableExecutor`+`SetTextVariableExecutor`
 
-This volume covers **ten class groups** drawn entirely from the **`agent-framework-durabletask`** sub-package — the integration layer that turns any `agent-framework` agent into a long-running Azure Durable Entity. All classes documented here are genuinely new — they have not appeared in any prior volume.
+This volume covers **ten class groups** drawn entirely from the **`agent-framework-durabletask`** sub-package — the integration layer that turns any `agent-framework` agent into a long-running Azure Durable Entity. `DurableAIAgent`, `DurableAIAgentWorker`, and `DurableAIAgentClient` were briefly introduced in [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/); this volume provides the complete source-verified treatment covering the entire sub-package for the first time.
 
 | # | Class / group | Module |
 |---|---|---|
@@ -285,13 +285,15 @@ print(response.text)
 ```python
 from durabletask import TaskHubGrpcClient
 from agent_framework_durabletask import DurableAIAgentClient
+from agent_framework_durabletask._models import AgentSessionId, DurableAgentSession
 
 grpc_client = TaskHubGrpcClient(host_address="localhost:4001")
 agent_client = DurableAIAgentClient(grpc_client)
 agent = agent_client.get_agent("assistant")
 
-# First call — creates a new DurableAgentSession internally
-session = agent_client._executor.get_new_session("assistant")  # type: ignore
+# Build a stable session using the public model types (see §7 for full API)
+sid = AgentSessionId.with_random_key("assistant")
+session = DurableAgentSession.from_session_id(sid)
 
 r1 = agent.run("Hello! My name is Alice.", session=session)
 print(r1.text)
@@ -654,8 +656,8 @@ The canonical request message passed from a client or orchestrator into a durabl
 @dataclass
 class RunRequest:
     message: str
-    request_response_format: str
     correlation_id: str
+    request_response_format: str = "text"  # REQUEST_RESPONSE_FORMAT_TEXT
     role: str = "user"
     response_format: type[BaseModel] | None = None
     enable_tool_calls: bool = True
@@ -664,7 +666,19 @@ class RunRequest:
     orchestration_id: str | None = None
     options: dict[str, Any] = field(default_factory=lambda: {})
 
-    def __init__(self, message: str, correlation_id: str, ...) -> None: ...
+    def __init__(
+        self,
+        message: str,
+        correlation_id: str,
+        request_response_format: str = "text",
+        role: str | None = "user",
+        response_format: type[BaseModel] | None = None,
+        enable_tool_calls: bool = True,
+        wait_for_response: bool = True,
+        created_at: datetime | None = None,
+        orchestration_id: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> None: ...
     def to_dict(self) -> dict[str, Any]: ...
 
     @classmethod
@@ -1008,7 +1022,7 @@ class DurableAgentStateUsage:
     input_token_count: int | None
     output_token_count: int | None
     total_token_count: int | None
-    extensionData: dict[str, Any] | None
+    extensionData: dict[str, Any] | None  # camelCase as written in source; mirrors the JSON wire key
 
     def to_dict(self) -> dict[str, Any]: ...
     def to_usage_details(self) -> UsageDetails: ...
