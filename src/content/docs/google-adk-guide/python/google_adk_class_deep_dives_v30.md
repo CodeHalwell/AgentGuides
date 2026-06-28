@@ -489,23 +489,27 @@ from google.adk.evaluation.eval_metrics import EvalMetric
 from google.adk.evaluation.multi_turn_task_success_evaluator import (
     MultiTurnTaskSuccessV1Evaluator,
 )
-from google.adk.evaluation.eval_case import Invocation
+from google.adk.evaluation.eval_case import Invocation, InvocationEvents
 
 os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
-metric = EvalMetric(metric_name="multi_turn_task_success")
+# threshold required: the facade computes `score >= threshold` for PASSED/FAILED
+metric = EvalMetric(metric_name="multi_turn_task_success", threshold=0.5)
 evaluator = MultiTurnTaskSuccessV1Evaluator(eval_metric=metric)
 
-# Build actual invocations from an agent session
+# Build actual invocations from an agent session.
+# intermediate_data must not be None — the facade iterates invocation_events.
 actual = [
     Invocation(
         user_content=types.Content(role="user", parts=[types.Part(text="Book a flight from London to Paris tomorrow.")]),
         final_response=types.Content(role="model", parts=[types.Part(text="I have booked flight BA304 departing 08:00.")]),
+        intermediate_data=InvocationEvents(invocation_events=[]),
     ),
     Invocation(
         user_content=types.Content(role="user", parts=[types.Part(text="Also add travel insurance.")]),
         final_response=types.Content(role="model", parts=[types.Part(text="Travel insurance has been added to your booking.")]),
+        intermediate_data=InvocationEvents(invocation_events=[]),
     ),
 ]
 
@@ -524,7 +528,8 @@ result = evaluator.evaluate_invocations(
     ),
 )
 for inv_result in result.per_invocation_results:
-    print(f"Turn score: {inv_result.score:.2f} — {inv_result.rationale}")
+    # PerInvocationResult has score, eval_status, rubric_scores — no rationale
+    print(f"Turn score: {inv_result.score}  status: {inv_result.eval_status}")
 ```
 
 ### Example: integrating with `AgentEvaluator`
