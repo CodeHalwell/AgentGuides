@@ -418,7 +418,7 @@ enterprise_web_search_tool = EnterpriseWebSearchTool()
 
 ### `process_llm_request` — injects the built-in tool
 
-`process_llm_request` is called before each LLM invocation. It appends `types.Tool(enterprise_web_search=types.EnterpriseWebSearch())` to `llm_request.config.tools`. On Gemini 1.x models combined with other tools it raises `ValueError` to prevent silent incompatibility.
+`process_llm_request` is called before each LLM invocation. It appends `types.Tool(enterprise_web_search=types.EnterpriseWebSearch())` to `llm_request.config.tools`. On Gemini 1.x models combined with other tools it raises `ValueError`; on non-Gemini models it raises `ValueError` unconditionally. Gemini 1.x models used with `enterprise_web_search` as the only tool are supported.
 
 ```python
 async def process_llm_request(
@@ -443,7 +443,7 @@ from google.adk.tools import enterprise_web_search  # public singleton name
 
 agent = LlmAgent(
     name="search_agent",
-    model="gemini-2.0-flash",          # must be Gemini 2+
+    model="gemini-2.0-flash",          # Gemini 2+ or Gemini 1.x (solo, no other tools)
     tools=[enterprise_web_search],
     instruction="Search the web for up-to-date information.",
 )
@@ -471,11 +471,15 @@ agent = LlmAgent(
 ### Example: guarding against Gemini 1.x incompatibility
 
 ```python
-# This will raise ValueError at call time on Gemini 1.x if other tools exist.
-# Test model compatibility before deploying:
+# Proactive guard: EnterpriseWebSearchTool raises ValueError on Gemini 1.x when
+# combined with other tools. Reject all Gemini 1.x at setup time to prevent the
+# conditional tool-conflict error from appearing later at inference time:
 model = "gemini-1.5-pro"
 if model.startswith("gemini-1."):
-    raise ValueError(f"EnterpriseWebSearchTool requires Gemini 2+, got {model}")
+    raise ValueError(
+        f"EnterpriseWebSearchTool cannot be combined with other tools on {model}; "
+        f"use Gemini 2+ for multi-tool agents."
+    )
 ```
 
 ---
