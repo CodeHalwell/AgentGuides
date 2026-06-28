@@ -165,9 +165,10 @@ class ApiRegistry:
         location: str = "global",
         header_provider: Callable[[ReadonlyContext], dict[str, str]] | None = None,
     ):
-        # Fetches all MCP servers via httpx at construction time (paginated)
-        # filter="enabled=false" is intentional — it includes all servers
-        self._mcp_servers: dict[str, McpServer] = {}
+        # Fetches all MCP servers via httpx at construction time (paginated).
+        # filter="enabled=false" is intentional — it includes all servers.
+        # Values are raw JSON dicts from the API response.
+        self._mcp_servers: dict[str, dict[str, Any]] = {}
         self._header_provider = header_provider
         # ... pagination loop via next_page_token
 ```
@@ -175,18 +176,28 @@ class ApiRegistry:
 ### `get_toolset` — build an MCP toolset from a registered server
 
 ```python
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
+
 def get_toolset(
     self,
     mcp_server_name: str,
     tool_filter: ToolPredicate | list[str] | None = None,
     tool_name_prefix: str | None = None,
 ) -> McpToolset:
-    server = self._mcp_servers[mcp_server_name]
+    server = self._mcp_servers.get(mcp_server_name)
+    if not server:
+        raise ValueError(f"MCP server {mcp_server_name} not found in API Registry.")
+    mcp_server_url = server["urls"][0]
+    # Auth headers refreshed on every call; header_provider adds per-request extras.
+    headers = self._get_auth_headers()
     return McpToolset(
-        connection_params=server.connection_params,
+        connection_params=StreamableHTTPConnectionParams(
+            url=mcp_server_url,
+            headers=headers,
+        ),
         tool_filter=tool_filter,
         tool_name_prefix=tool_name_prefix,
-        header_provider=self._header_provider,  # injected per-request
+        header_provider=self._header_provider,
     )
 ```
 
