@@ -1125,19 +1125,36 @@ evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 ### Example: running the evaluation on an invocation
 
 ```python
+import os
 import google.genai.types as types
+from google.adk.evaluation.eval_metrics import EvalMetric, RubricsBasedCriterion
+from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
+from google.adk.evaluation.rubric_based_final_response_quality_v1 import (
+    RubricBasedFinalResponseQualityV1Evaluator,
+)
 from google.adk.evaluation.eval_case import Invocation
+
+os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
+
+criterion = RubricsBasedCriterion(rubrics=[
+    Rubric(rubric_id="conciseness", rubric_content=RubricContent(
+        text_property="The response is concise and avoids unnecessary filler text."
+    )),
+])
+metric = EvalMetric(metric_name="final_response_quality", criterion=criterion)
+evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 
 invocation = Invocation(
     user_content=types.Content(role="user", parts=[types.Part(text="What is the capital of France?")]),
     final_response=types.Content(role="model", parts=[types.Part(text="The capital of France is Paris.")]),
-    # intermediate_data carries tool call/response pairs for evidence collection
 )
 
 result = evaluator.evaluate_invocations(actual_invocations=[invocation])
 for per_inv in result.per_invocation_results:
-    for rubric_score in per_inv.rubric_scores:
-        print(f"{rubric_score.property_text}")
+    for rubric_score in (per_inv.rubric_scores or []):
+        # RubricScore fields: rubric_id, score, rationale
+        print(f"{rubric_score.rubric_id}")
         print(f"  Score: {rubric_score.score}  Rationale: {rubric_score.rationale}")
 ```
 
