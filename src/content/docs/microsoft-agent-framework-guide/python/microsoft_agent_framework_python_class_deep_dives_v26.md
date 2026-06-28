@@ -115,7 +115,6 @@ class DurableAIAgentClient:
 ### Example 1 — Registering two agents and starting the worker
 
 ```python
-import asyncio
 from durabletask.worker import TaskHubGrpcWorker
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatCompletionClient
@@ -243,7 +242,7 @@ class DurableAgentExecutor(ABC, Generic[TaskT]):
 ### Example 1 — Using the shim from an orchestration (yield pattern)
 
 ```python
-from durabletask import Orchestration, OrchestrationContext
+from durabletask import OrchestrationContext
 from agent_framework_durabletask import DurableAIAgentOrchestrationContext
 
 def research_orchestration(ctx: OrchestrationContext):
@@ -328,7 +327,7 @@ class DurableAIAgentOrchestrationContext(DurableAgentProvider[DurableAgentTask])
 ### Example 1 — Single-agent orchestration
 
 ```python
-from durabletask import Orchestration, OrchestrationContext
+from durabletask import OrchestrationContext
 from agent_framework_durabletask import DurableAIAgentOrchestrationContext
 
 def qa_orchestration(ctx: OrchestrationContext):
@@ -458,11 +457,9 @@ asyncio.run(main())
 ### Example 2 — Inspecting skipped error entries in replay
 
 ```python
-import asyncio
-from agent_framework_durabletask._entities import AgentEntity
 from agent_framework_durabletask._durable_agent_state import (
     DurableAgentState, DurableAgentStateResponse, DurableAgentStateMessage,
-    DurableAgentStateTextContent
+    DurableAgentStateTextContent,
 )
 from datetime import datetime, timezone
 
@@ -606,8 +603,12 @@ class QueuePublishCallback(AgentResponseCallbackProtocol):
         }
         await self._queue.put(json.dumps(payload))
 
-queue: asyncio.Queue = asyncio.Queue()
-callback = QueuePublishCallback(queue)
+async def main() -> None:
+    queue: asyncio.Queue = asyncio.Queue()
+    callback = QueuePublishCallback(queue)
+    # pass callback to DurableAIAgentWorker(worker, callback=callback)
+
+asyncio.run(main())
 ```
 
 ### Example 3 — Inspecting a frozen context object
