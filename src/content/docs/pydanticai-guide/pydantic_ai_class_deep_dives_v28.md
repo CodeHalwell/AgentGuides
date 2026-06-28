@@ -137,7 +137,7 @@ def has_tool_search(response: ModelResponse) -> bool:
 
 ```python
 # Example 2 — safely reading queries from a streaming-partial call part
-from pydantic_ai._tool_search import NativeToolSearchCallPart
+from pydantic_ai.messages import NativeToolSearchCallPart
 
 def handle_streaming_call(part: NativeToolSearchCallPart) -> None:
     # typed_args returns None while the JSON string is still partial
