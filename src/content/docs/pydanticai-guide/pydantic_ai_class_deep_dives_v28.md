@@ -547,13 +547,15 @@ agent = Agent('openai:gpt-5', capabilities=[ProcessEventStream(log_events)])
 
 ```python
 # Example 2 — processor: strip ThinkingPart events from the downstream view
-from pydantic_ai.messages import AgentStreamEvent, ThinkingPartEvent
+# PartStartEvent carries a `part` field; check its type to filter thinking blocks.
+from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPart
 from collections.abc import AsyncIterable, AsyncIterator
 
 async def strip_thinking(ctx, stream: AsyncIterable[AgentStreamEvent]) -> AsyncIterator[AgentStreamEvent]:
     async for event in stream:
-        if not isinstance(event, ThinkingPartEvent):
-            yield event          # Only non-thinking events reach downstream consumers
+        if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
+            continue  # drop thinking-block start events from the downstream view
+        yield event
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessEventStream
@@ -562,16 +564,18 @@ agent = Agent('anthropic:claude-opus-4-8', capabilities=[ProcessEventStream(stri
 ```
 
 ```python
-# Example 3 — injecting a sentinel event after every tool call
-from pydantic_ai.messages import AgentStreamEvent, ToolCallPartEvent, TextPartEvent, TextPart
+# Example 3 — injecting a sentinel event after every function-tool call
+# FunctionToolCallEvent fires when a function tool is about to be invoked.
+# Inject a PartStartEvent(TextPart) afterwards for UI annotation.
+from pydantic_ai.messages import AgentStreamEvent, FunctionToolCallEvent, PartStartEvent, TextPart
 from collections.abc import AsyncIterable, AsyncIterator
 
 async def annotate_tool_calls(ctx, stream: AsyncIterable[AgentStreamEvent]) -> AsyncIterator[AgentStreamEvent]:
     async for event in stream:
         yield event
-        if isinstance(event, ToolCallPartEvent):
-            # Inject a synthetic text event after each tool call for UI annotation
-            yield TextPartEvent(index=999, part=TextPart(content='[tool call detected]'))
+        if isinstance(event, FunctionToolCallEvent):
+            # Inject a synthetic text-part event after each tool call for UI annotation
+            yield PartStartEvent(index=999, part=TextPart(content='[tool call detected]'))
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessEventStream
@@ -640,24 +644,27 @@ async def selective_approve(
 
 ```python
 # Example 3 — async handler with external approval service
+# DeferredToolRequests.approvals is a list[ToolCallPart] — iterate it directly.
+# build_results() takes approvals={tool_call_id: True/False}, not results=.
 import httpx
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
 
 async def remote_approval(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
+    pending = requests.approvals  # list[ToolCallPart] requiring human approval
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             'https://internal.example.com/approve',
-            json=[{'tool': r.tool_name, 'args': r.args} for r in requests],
+            json=[{'tool': r.tool_name, 'args': r.args} for r in pending],
             timeout=10,
         )
         decisions = resp.json()  # [{approved: true/false}, ...]
-    results = {}
-    for req, decision in zip(requests, decisions):
-        if decision['approved']:
-            results[req.tool_call_id] = None  # None → execute normally
-    return requests.build_results(results=results)
+    approvals = {
+        req.tool_call_id: decision['approved']
+        for req, decision in zip(pending, decisions)
+    }
+    return requests.build_results(approvals=approvals)
 ```
 
 ---
