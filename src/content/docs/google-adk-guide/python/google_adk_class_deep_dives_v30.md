@@ -59,9 +59,17 @@ async def get_skill(self, *, name: str) -> models.Skill:
 
 ```python
 async def search_skills(self, *, query: str) -> list[models.Frontmatter]:
-    client = await self._get_or_create_client()
-    response = await client.skills.retrieve(query=query)
-    return [models.Frontmatter(**s.frontmatter) for s in response.skills]
+    response = await self._client.skills.retrieve(query=query)
+    results = []
+    if response.retrieved_skills:
+        for s in response.retrieved_skills:
+            results.append(
+                models.Frontmatter(
+                    name=s.skill_name.split("/")[-1] if s.skill_name else "",
+                    description=s.description or "",
+                )
+            )
+    return results
 ```
 
 ### Example: using `GCPSkillRegistry` inside an agent
@@ -772,10 +780,13 @@ def _build_basic_request(
     # 2. Generation config — deep copy so mutations don't affect agent state
     llm_request.config = copy.deepcopy(agent.generate_content_config)
 
-    # 3. Output schema — only if no tools OR model supports structured output with tools
-    if not llm_request.tools or can_use_output_schema_with_tools(llm_request.model):
-        if not agent.is_task_mode:
-            llm_request.config.response_schema = agent.output_schema
+    # 3. Output schema — skipped in task-mode; only set if agent has no tools,
+    #    OR the model supports structured output alongside tools.
+    #    Uses agent.tools (not llm_request.tools — tools are appended by later
+    #    processors, so llm_request.tools is empty at this point).
+    if getattr(agent, 'mode', None) != 'task' and agent.output_schema:
+        if not agent.tools or can_use_output_schema_with_tools(model):
+            llm_request.set_output_schema(agent.output_schema)
 
     # 4. Live connect fields (all set from agent.live_connect_config):
     #    response_modalities, speech_config, transcription,
