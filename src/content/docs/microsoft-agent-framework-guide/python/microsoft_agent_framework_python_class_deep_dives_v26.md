@@ -159,7 +159,7 @@ from agent_framework import Agent
 from agent_framework.openai import OpenAIChatCompletionClient
 from agent_framework_durabletask import DurableAIAgentWorker
 from agent_framework_durabletask import AgentCallbackContext, AgentResponseCallbackProtocol
-from agent_framework_core._types import AgentResponse, AgentResponseUpdate
+from agent_framework import AgentResponse, AgentResponseUpdate
 
 class AuditCallback(AgentResponseCallbackProtocol):
     async def on_streaming_response_update(
@@ -554,7 +554,7 @@ class AgentResponseCallbackProtocol(Protocol):
 ```python
 import logging
 from agent_framework_durabletask import AgentCallbackContext, AgentResponseCallbackProtocol
-from agent_framework_core._types import AgentResponse, AgentResponseUpdate
+from agent_framework import AgentResponse, AgentResponseUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -584,7 +584,7 @@ class LoggingCallback(AgentResponseCallbackProtocol):
 import json
 import asyncio
 from agent_framework_durabletask import AgentCallbackContext, AgentResponseCallbackProtocol
-from agent_framework_core._types import AgentResponse, AgentResponseUpdate
+from agent_framework import AgentResponse, AgentResponseUpdate
 
 class QueuePublishCallback(AgentResponseCallbackProtocol):
     def __init__(self, queue: asyncio.Queue):
@@ -1152,7 +1152,7 @@ print(DurableStateFields.SCHEMA_VERSION)      # "schemaVersion"
 ### Example 2 — Using from_ai_content factory
 
 ```python
-from agent_framework_core._types import Content
+from agent_framework import Content
 from agent_framework_durabletask._durable_agent_state import (
     DurableAgentStateContent,
     DurableAgentStateTextContent,
