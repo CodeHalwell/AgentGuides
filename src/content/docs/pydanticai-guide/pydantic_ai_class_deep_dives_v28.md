@@ -547,14 +547,23 @@ agent = Agent('openai:gpt-5', capabilities=[ProcessEventStream(log_events)])
 
 ```python
 # Example 2 — processor: strip ThinkingPart events from the downstream view
-# PartStartEvent carries a `part` field; check its type to filter thinking blocks.
-from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPart
+# Track part indexes that started as ThinkingPart to also drop their delta/end events.
+from pydantic_ai.messages import (
+    AgentStreamEvent, PartStartEvent, PartDeltaEvent, PartEndEvent,
+    ThinkingPart, ThinkingPartDelta,
+)
 from collections.abc import AsyncIterable, AsyncIterator
 
 async def strip_thinking(ctx, stream: AsyncIterable[AgentStreamEvent]) -> AsyncIterator[AgentStreamEvent]:
+    skipped: set[int] = set()
     async for event in stream:
         if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
-            continue  # drop thinking-block start events from the downstream view
+            skipped.add(event.index)
+            continue
+        if isinstance(event, (PartDeltaEvent, PartEndEvent)) and event.index in skipped:
+            if isinstance(event, PartEndEvent):
+                skipped.discard(event.index)
+            continue
         yield event
 
 from pydantic_ai import Agent
@@ -629,6 +638,7 @@ agent = Agent(
 
 ```python
 # Example 2 — selective approval based on tool name
+# DeferredToolRequests is not iterable; combine .approvals and .calls explicitly.
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
 
 APPROVED_TOOLS = {'search_web', 'get_weather'}
@@ -636,9 +646,10 @@ APPROVED_TOOLS = {'search_web', 'get_weather'}
 async def selective_approve(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
-    # Only handle requests if ALL tools are in the approved set
-    if not all(req.tool_name in APPROVED_TOOLS for req in requests):
-        return None          # Decline — bubble up to next handler or as output
+    all_pending = [*requests.approvals, *requests.calls]
+    # Decline if any pending tool is not in the allowed set
+    if not all_pending or not all(req.tool_name in APPROVED_TOOLS for req in all_pending):
+        return None          # Bubble up to next handler or as output
     return requests.build_results(approve_all=True)
 ```
 
