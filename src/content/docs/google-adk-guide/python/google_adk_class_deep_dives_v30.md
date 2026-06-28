@@ -168,7 +168,7 @@ def get_toolset(
         connection_params=server.connection_params,
         tool_filter=tool_filter,
         tool_name_prefix=tool_name_prefix,
-        headers=self._header_provider,  # injected per-request
+        header_provider=self._header_provider,  # injected per-request
     )
 ```
 
@@ -243,12 +243,14 @@ AGENT_REGISTRY_BASE_URL = "https://agentregistry.googleapis.com/v1alpha"
 class AgentRegistry:
     def __init__(
         self,
-        project_id: str | None = None,
-        location: str | None = None,
+        project_id: str,    # required — does NOT fall back to env vars
+        location: str,      # required — raises ValueError if either is falsy
         header_provider: Callable[[ReadonlyContext], dict[str, str]] | None = None,
     ):
-        self._project_id = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        self._location = location or os.environ.get("GOOGLE_CLOUD_LOCATION")
+        self.project_id = project_id
+        self.location = location
+        if not self.project_id or not self.location:
+            raise ValueError("project_id and location must be provided")
         self._header_provider = header_provider
 ```
 
@@ -782,7 +784,7 @@ request_processor = _BasicLlmRequestProcessor()
 ### Example: observing the populated request in a custom processor
 
 ```python
-from google.adk.flows.llm_flows.base_llm_request_processor import BaseLlmRequestProcessor
+from google.adk.flows.llm_flows._base_llm_processor import BaseLlmRequestProcessor
 from google.adk.flows.llm_flows.basic import _build_basic_request
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.models.llm_request import LlmRequest
@@ -806,7 +808,7 @@ class DebugRequestProcessor(BaseLlmRequestProcessor):
 ### Example: checking if output schema will be applied
 
 ```python
-from google.adk.models.llm_utils import can_use_output_schema_with_tools
+from google.adk.utils.output_schema_utils import can_use_output_schema_with_tools
 
 model = "gemini-2.0-flash"
 has_tools = True
