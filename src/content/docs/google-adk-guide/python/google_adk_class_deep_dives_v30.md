@@ -13,7 +13,7 @@ import { Aside } from "@astrojs/starlight/components";
 <Aside type="note">
 All signatures, constants, and behaviours on this page were verified directly
 against the installed package source at
-`/root/.local/lib/python3.11/site-packages/google/adk/` on
+`<site-packages>/google/adk/` on
 **google-adk == 2.3.0**. No documentation or blog posts were used as primary
 sources.
 </Aside>
@@ -179,7 +179,9 @@ from google.adk.integrations.api_registry.api_registry import ApiRegistry
 
 registry = ApiRegistry(api_registry_project_id="my-project")
 
-# All server names loaded at construction time
+# All server names loaded at construction time.
+# _mcp_servers is a private implementation detail — use for debugging only,
+# not as stable public API.
 print(list(registry._mcp_servers.keys()))
 ```
 
@@ -316,12 +318,14 @@ from google.adk.integrations.agent_registry.agent_registry import AgentRegistry
 registry = AgentRegistry(project_id="my-project", location="us-central1")
 
 result = registry.list_endpoints(page_size=10)
-for ep in result.get("endpoints", []):
+endpoints = result.get("endpoints", [])
+for ep in endpoints:
     print(ep["name"])
 
 # Resolve to a Gemini model name for use in LlmAgent
-model_name = registry.get_model_name(ep["name"])
-print(f"Model: {model_name}")
+if endpoints:
+    model_name = registry.get_model_name(endpoints[0]["name"])
+    print(f"Model: {model_name}")
 ```
 
 ### Example: A2A agent-to-agent routing via Agent Registry
@@ -427,15 +431,10 @@ agent = LlmAgent(
 ### Example: guarding against Gemini 1.x incompatibility
 
 ```python
-import google.genai.types as genai_types
-from google.adk.tools import enterprise_web_search_tool
-
 # This will raise ValueError at call time on Gemini 1.5 if other tools exist.
 # Test model compatibility before deploying:
-SUPPORTED_MODELS = ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-2.5-flash"]
-
 model = "gemini-1.5-pro"
-if not any(m in model for m in SUPPORTED_MODELS):
+if not model.startswith("gemini-2."):
     raise ValueError(f"EnterpriseWebSearchTool requires Gemini 2+, got {model}")
 ```
 
