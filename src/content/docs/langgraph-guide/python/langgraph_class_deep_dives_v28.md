@@ -422,7 +422,7 @@ def mark_processed(state: InternalState) -> dict:
     return {"processed": True}
 
 
-builder = StateGraph(InternalState, input=UserInput, output=UserOutput)
+builder = StateGraph(InternalState, input_schema=UserInput, output_schema=UserOutput)
 builder.add_node("parse", parse_input)
 builder.add_node("finish", mark_processed)
 builder.add_edge(START, "parse")
@@ -1268,7 +1268,7 @@ class State(TypedDict):
 # Build an allowlist from the schema
 allowlist = build_serde_allowlist(
     schemas=[State, Task],
-    channels={"tasks": LastValue(list), "current_priority": LastValue(str)},
+    channels={"tasks": LastValue(list), "current_priority": LastValue(Priority)},
 )
 
 if allowlist is not None:
