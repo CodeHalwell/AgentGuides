@@ -398,14 +398,16 @@ from pydantic_ai.messages import SystemPromptPart
 agent = Agent('openai:gpt-5', system_prompt='You are a helpful assistant.')
 
 async def run_with_postamble(user_prompt: str) -> str:
-    async with agent.run_stream(user_prompt) as run:
+    # enqueue() is on AgentRun (agent.iter()), not on StreamedRunResult (agent.run_stream())
+    async with agent.iter(user_prompt) as agent_run:
         # Append a reminder only after the agent is idle (won't interrupt tool calls)
-        run.enqueue(
+        agent_run.enqueue(
             SystemPromptPart(content='Remember: always cite your sources.'),
             priority='when_idle',
         )
-        result = await run.get_output()
-    return result
+        async for _node in agent_run:
+            pass
+    return agent_run.result.output
 ```
 
 ```python
