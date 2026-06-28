@@ -225,7 +225,8 @@ registry = ApiRegistry(
     location="us-central1",
 )
 
-# Only expose tools whose names start with "search_"
+# Add "search_" prefix to every tool name from this MCP server (namespacing,
+# not filtering — all tools are exposed, renamed to search_<original_name>)
 search_toolset = registry.get_toolset(
     mcp_server_name="projects/my-project/locations/us-central1/mcpServers/web-search",
     tool_name_prefix="search_",
@@ -730,8 +731,10 @@ async def run_interactions():
         llm_request=request,
         stream=True,
     ):
-        if response.text:
-            print(response.text, end="", flush=True)
+        if response.content and response.content.parts:
+            text = "".join(p.text for p in response.content.parts if p.text)
+            if text:
+                print(text, end="", flush=True)
         if response.interaction_id:
             interaction_id = response.interaction_id
 
@@ -746,7 +749,8 @@ async def run_interactions():
         llm_request=request2,
         stream=True,
     ):
-        print(response.text or "", end="", flush=True)
+        if response.content and response.content.parts:
+            print("".join(p.text for p in response.content.parts if p.text), end="", flush=True)
 
 asyncio.run(run_interactions())
 ```
@@ -776,7 +780,9 @@ async def non_streaming():
         responses.append(response)
 
     # With stream=False the generator typically yields a single response
-    print(responses[-1].text)
+    last = responses[-1]
+    if last.content and last.content.parts:
+        print("".join(p.text for p in last.content.parts if p.text))
 
 asyncio.run(non_streaming())
 ```
@@ -905,7 +911,7 @@ run_config = RunConfig(
         )
     ),
 )
-# Pass run_config to runner.run_async(session=..., run_config=run_config)
+# Pass run_config to runner.run_async(user_id=..., session_id=..., new_message=..., run_config=run_config)
 ```
 
 ---
