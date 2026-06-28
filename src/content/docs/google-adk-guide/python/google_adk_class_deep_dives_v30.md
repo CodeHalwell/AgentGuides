@@ -942,6 +942,13 @@ async def get_screenshot(self, max_retries: int = 3) -> bytes:
 
 ### Example: capturing a screenshot
 
+:::note[Prerequisites]
+`sandbox` is a `SandboxEnvironment` obtained from the Vertex AI SDK
+(e.g. `vertexai.preview.extensions.create_sandbox(...)`).
+`token` is a short-lived OAuth2 access token (e.g. from
+`google.auth.default()` or `google.oauth2.credentials`).
+:::
+
 ```python
 import asyncio
 import vertexai
@@ -949,8 +956,8 @@ from google.adk.integrations.vmaas.sandbox_client import SandboxClient
 
 async def capture():
     client = vertexai.Client(project="my-project", location="us-central1")
-    sandbox = ...  # obtain SandboxEnvironment from vertexai SDK
-    token = ...    # obtain access token
+    sandbox = ...  # SandboxEnvironment — see Prerequisites note above
+    token = ...    # OAuth2 access token — see Prerequisites note above
 
     sandbox_client = SandboxClient(
         vertexai_client=client,
