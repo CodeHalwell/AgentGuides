@@ -316,7 +316,6 @@ NodeInputT_contra = TypeVar("NodeInputT_contra", bound=StateLike, contravariant=
 ### Example 1 — typed graph factory
 
 ```python
-from typing import Any, Generic, TypeVar
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.typing import StateT, ContextT
@@ -472,10 +471,10 @@ TAG_HIDDEN = sys.intern("langsmith:hidden")
 
 **Key implementation facts:**
 
-- **`TAG_NOSTREAM`** — when added to a `ChatModel` invocation via `.with_config({"tags": ["nostream"]})` or `set_node_defaults(tags=["nostream"])`, the model's token stream is NOT forwarded to the parent graph's `messages` channel. The model still runs and returns its final output; only the intermediate token events are suppressed. Useful for background-reasoning nodes you don't want polluting the user-facing message stream.
+- **`TAG_NOSTREAM`** — when added to a `ChatModel` invocation via `.with_config({"tags": ["nostream"]})`, the model's token stream is NOT forwarded to the parent graph's `messages` channel. The model still runs and returns its final output; only the intermediate token events are suppressed. Useful for background-reasoning nodes you don't want polluting the user-facing message stream.
 - **`TAG_HIDDEN`** — suppresses a node from `stream_mode="debug"` output and hides it from LangSmith's trace view. `map_debug_tasks` (in `langgraph.pregel.debug`) skips any task whose tags include `TAG_HIDDEN`. Used heavily for internal book-keeping nodes like `ChannelWrite` wrappers and the `__start__` input projection node.
-- **`sys.intern`** — both tags are interned strings, so identity comparisons (`tag is TAG_NOSTREAM`) are safe and fast. Use `in tags` for containment checks (which still works because interned strings compare equal by value).
-- **Internal-only in 1.2.6** — `TAG_HIDDEN` is applied by LangGraph itself when creating internal nodes during compilation (e.g. the `__start__` input-projection node is built as `PregelNode(tags=[TAG_HIDDEN])`). Passing `tags=[TAG_HIDDEN]` to `add_node` is silently ignored in 1.2.6 — the kwarg goes into `**DeprecatedKwargs` which only handles `retry` and `input`; there is no `tags` storage path in `StateNodeSpec`. The same applies to `set_node_defaults`, which only accepts `retry_policy`, `cache_policy`, `error_handler`, and `timeout`.
+- **`sys.intern`** — both tags are interned strings. Use `== TAG_NOSTREAM` or `TAG_NOSTREAM in tags` for containment checks — do not rely on `is` comparisons, because tags collected from user code are not guaranteed to be interned and identity checks would silently fail.
+- **Internal-only in 1.2.6** — `TAG_HIDDEN` is applied by LangGraph itself when creating internal nodes during compilation (e.g. the `__start__` input-projection node is built as `PregelNode(tags=[TAG_HIDDEN])`). Passing `tags=[TAG_HIDDEN]` to `add_node` is silently ignored in 1.2.6 — the kwarg goes into `**DeprecatedKwargs` which only handles `retry` and `input`; there is no `tags` storage path in `StateNodeSpec`. `set_node_defaults` also does not accept `tags` (it only accepts `retry_policy`, `cache_policy`, `error_handler`, and `timeout`).
 
 ### Example 1 — `TAG_NOSTREAM` to silence a reasoning node
 
@@ -1533,9 +1532,14 @@ importlib.reload(cfg_mod)
 print(cfg_mod.DEFAULT_RECURSION_LIMIT)               # 25000
 print(cfg_mod.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT)   # 1000
 
-# Reset to defaults for the rest of this session
+# Restore defaults: delete the env vars then reload again so the module
+# re-reads its original hard-coded defaults (just deleting env vars is not
+# enough — the module still holds the values set during the previous reload).
 del os.environ["LANGGRAPH_DEFAULT_RECURSION_LIMIT"]
 del os.environ["LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT"]
+importlib.reload(cfg_mod)
+print(cfg_mod.DEFAULT_RECURSION_LIMIT)             # 10007 — restored
+print(cfg_mod.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT) # 20    — restored
 ```
 
 ---
