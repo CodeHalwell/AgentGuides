@@ -374,7 +374,7 @@ class PendingMessage:
 
 ```python
 # Example 1 — enqueueing a follow-up question from inside a tool
-from pydantic_ai import Agent, tool
+from pydantic_ai import Agent
 from pydantic_ai.tools import RunContext
 
 agent = Agent('openai:gpt-5')
