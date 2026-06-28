@@ -1142,8 +1142,8 @@ builder.add_edge("double", END)
 graph = builder.compile(checkpointer=saver)
 config = {"configurable": {"thread_id": "t-fork"}}
 
-graph.invoke({"value": 1}, config)  # checkpoint saved with value=1; runs double → 2
-graph.invoke(None, config)          # resumes from checkpoint; double(2) → 4
+graph.invoke({"value": 1}, config)  # runs double(1) → 2; writes 2 checkpoints
+graph.invoke({"value": 2}, config)  # runs double(2) → 4; writes 2 more checkpoints
 
 # List all checkpoints — each invoke writes a "before" and "after" checkpoint
 history = list(graph.get_state_history(config))
@@ -1260,7 +1260,7 @@ def curated_core_allowlist() -> set[tuple[str, ...]]:
 
 - **`STRICT_MSGPACK_ENABLED` check** — requires two conditions: (1) the optional `langgraph-checkpoint[msgpack]` extra must be installed, **and** (2) the environment variable `LANGGRAPH_STRICT_MSGPACK=true` must be set. The flag is computed as `os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in ("true", "1", "yes")`. Installing the extra alone does not enable strict mode — you must also set the env var.
 - **`build_serde_allowlist` always returns a set** — in 1.2.6 the function is seeded with `curated_core_allowlist()` before scanning user schemas, so it always returns a non-empty `set[tuple[str, ...]]`, never `None`. Arguments are keyword-only (`schemas=`, `channels=`).
-- **`build_serde_allowlist` scanning** — recursively inspects `TypedDict`, `dataclass`, `Pydantic v1/v2 models`, `Enum` subclasses, and `Annotated` types. It uses `_safe_get_type_hints` which catches `NameError` from forward-referenced types. Type variables are unwound through their bounds.
+- **`build_serde_allowlist` scanning** — recursively inspects `dataclass`, `Pydantic v1/v2 models`, `Enum` subclasses, and `Annotated` types. For `TypedDict` schemas it recurses through field type hints (adding the field types) but does **not** add the `TypedDict` class itself to the allowlist. `TypeVar` bounds are also **not** unwound — only concrete types reached via the branches above are added. It uses `_safe_get_type_hints` which catches `NameError` from forward-referenced types.
 - **`curated_core_allowlist`** — always includes all 14 langchain-core message classes (both base and chunk variants, plus `RemoveMessage`). The `entrypoint` decorator merges this with the user's schema when building the graph's allowlist.
 - **Allowlist format** — each entry is a `(module_name, qualified_class_name)` tuple, e.g. `("langchain_core.messages.human", "HumanMessage")`. The msgpack serde only permits types appearing in this set when `STRICT_MSGPACK_ENABLED` is `True`.
 - **`apply_checkpointer_allowlist` fallback** — if the checkpointer does not implement `with_allowlist` (e.g. an older custom saver), the function emits a one-time warning and returns the checkpointer unchanged. The warning is de-duplicated via the `_warned_allowlist_unsupported` module-level flag.
@@ -1301,9 +1301,9 @@ allowlist = build_serde_allowlist(
 
 # allowlist is always a non-empty set — no None check needed
 type_names = {name for _, name in allowlist}
-print("Task" in type_names)      # True
-print("Priority" in type_names)  # True
-print("State" in type_names)     # True
+print("Task" in type_names)      # True — dataclass is added directly
+print("Priority" in type_names)  # True — Enum subclass is added directly
+print("State" in type_names)     # False — TypedDict classes are NOT added (only their field types are)
 
 # Always includes core message types from curated_core_allowlist()
 core = curated_core_allowlist()
