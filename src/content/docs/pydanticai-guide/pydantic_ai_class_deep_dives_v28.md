@@ -581,11 +581,15 @@ from pydantic_ai.messages import AgentStreamEvent, FunctionToolCallEvent, PartSt
 from collections.abc import AsyncIterable, AsyncIterator
 
 async def annotate_tool_calls(ctx, stream: AsyncIterable[AgentStreamEvent]) -> AsyncIterator[AgentStreamEvent]:
+    next_index = 0  # track highest index seen so synthetic events don't collide
     async for event in stream:
+        if hasattr(event, 'index'):
+            next_index = max(next_index, event.index + 1)
         yield event
         if isinstance(event, FunctionToolCallEvent):
             # Inject a synthetic text-part event after each tool call for UI annotation
-            yield PartStartEvent(index=999, part=TextPart(content='[tool call detected]'))
+            yield PartStartEvent(index=next_index, part=TextPart(content='[tool call detected]'))
+            next_index += 1
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessEventStream
