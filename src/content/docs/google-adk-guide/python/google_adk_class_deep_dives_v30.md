@@ -672,12 +672,16 @@ import asyncio
 from google.adk.models.interactions_utils import generate_content_via_interactions
 from google.adk.models.llm_request import LlmRequest
 import google.genai as genai
+import google.genai.types as types
 
 async def run_interactions():
     client = genai.Client()
 
     # First turn — no previous interaction
-    request = LlmRequest(model="gemini-2.0-flash", contents=[...])  # list[types.Content]
+    request = LlmRequest(
+        model="gemini-2.0-flash",
+        contents=[types.Content(role="user", parts=[types.Part(text="Hello!")])],
+    )
     interaction_id = None
 
     async for response in generate_content_via_interactions(
@@ -693,7 +697,7 @@ async def run_interactions():
     # Second turn — only send latest user turn, not full history
     request2 = LlmRequest(
         model="gemini-2.0-flash",
-        contents=[...],  # list[types.Content] — only the new user message
+        contents=[types.Content(role="user", parts=[types.Part(text="Tell me more.")])],
         previous_interaction_id=interaction_id,
     )
     async for response in generate_content_via_interactions(
@@ -713,10 +717,14 @@ import asyncio
 from google.adk.models.interactions_utils import generate_content_via_interactions
 from google.adk.models.llm_request import LlmRequest
 import google.genai as genai
+import google.genai.types as types
 
 async def non_streaming():
     client = genai.Client()
-    request = LlmRequest(model="gemini-2.0-flash", contents=[...])  # list[types.Content]
+    request = LlmRequest(
+        model="gemini-2.0-flash",
+        contents=[types.Content(role="user", parts=[types.Part(text="Summarise the ADK.")])],
+    )
 
     responses = []
     async for response in generate_content_via_interactions(
@@ -958,6 +966,8 @@ asyncio.run(capture())
 ### Example: navigating the browser and sending text input
 
 ```python
+from google.adk.integrations.vmaas.sandbox_client import SandboxClient
+
 async def navigate_and_type(sandbox_client: SandboxClient):
     # Navigate to a URL
     await sandbox_client.make_cdp_request(
@@ -981,6 +991,8 @@ async def navigate_and_type(sandbox_client: SandboxClient):
 ### Example: batching multiple CDP commands
 
 ```python
+from google.adk.integrations.vmaas.sandbox_client import SandboxClient
+
 async def batch_demo(sandbox_client: SandboxClient):
     results = await sandbox_client.make_cdp_batch_request(
         commands=[
@@ -1112,6 +1124,7 @@ for per_inv in result.per_invocation_results:
 
 ```python
 from google.adk.evaluation.eval_metrics import RubricsBasedCriterion
+from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 
 # Setting include_intermediate_responses_in_final=True causes
 # format_auto_rater_prompt to include intermediate agent messages
