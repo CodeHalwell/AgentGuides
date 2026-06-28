@@ -236,6 +236,14 @@ toolset = registry.get_toolset("projects/my-project/locations/global/mcpServers/
 
 `AgentRegistry` connects to `https://agentregistry.googleapis.com/v1alpha` and provides toolset access, endpoint listing, and model-name resolution. When no `auth_scheme` is supplied to `get_mcp_toolset`, the registry auto-resolves authentication from IAM bindings via `GcpAuthProviderScheme`.
 
+:::note[Prerequisites]
+`AgentRegistry` unconditionally imports `mcp` at module load time and lazily imports `a2a-sdk` on first use. Both optional extras must be installed:
+
+```bash
+pip install "google-adk[mcp,a2a]"
+```
+:::
+
 ### Constructor (verified from source)
 
 ```python
@@ -1126,6 +1134,7 @@ evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 ### Example: running the evaluation on an invocation
 
 ```python
+import asyncio
 import os
 import google.genai.types as types
 from google.adk.evaluation.eval_metrics import EvalMetric, RubricsBasedCriterion
@@ -1151,7 +1160,8 @@ invocation = Invocation(
     final_response=types.Content(role="model", parts=[types.Part(text="The capital of France is Paris.")]),
 )
 
-result = evaluator.evaluate_invocations(actual_invocations=[invocation])
+# evaluate_invocations is async (inherited from LlmAsJudge via RubricBasedEvaluator)
+result = asyncio.run(evaluator.evaluate_invocations(actual_invocations=[invocation]))
 for per_inv in result.per_invocation_results:
     for rubric_score in (per_inv.rubric_scores or []):
         # RubricScore fields: rubric_id, score, rationale
