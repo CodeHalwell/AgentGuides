@@ -78,7 +78,7 @@ os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
 registry = GCPSkillRegistry()  # reads env vars automatically
 
-toolset = SkillToolset(skill_registry=registry)
+toolset = SkillToolset(registry=registry)
 
 agent = LlmAgent(
     name="skill_agent",
@@ -530,16 +530,17 @@ for inv_result in result.per_invocation_results:
 ### Example: integrating with `AgentEvaluator`
 
 ```python
+import asyncio
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
-from google.adk.evaluation.eval_metrics import EvalMetric
 
-# AgentEvaluator wires MultiTurnTaskSuccessV1Evaluator when you include
-# the "multi_turn_task_success" metric in your eval set.
-evaluator = AgentEvaluator.evaluate(
+# Metric selection is declared inside the .test.json / EvalConfig files
+# (e.g. "eval_metrics": [{"metric_name": "multi_turn_task_success"}]).
+# AgentEvaluator.evaluate reads those files and wires the right evaluator
+# automatically — there is no eval_metrics kwarg on this method.
+asyncio.run(AgentEvaluator.evaluate(
     agent_module="my_agent.agent",
     eval_dataset_file_path_or_dir="eval_cases/",
-    eval_metrics=[EvalMetric(metric_name="multi_turn_task_success")],
-)
+))
 ```
 
 ---
