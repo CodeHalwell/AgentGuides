@@ -79,7 +79,7 @@ This volume covers **ten class groups** drawn entirely from the **`agent-framewo
 - `add_agent()` validates that the agent has a non-empty `name` and is not already registered; it then calls an inner factory that creates a `ConfiguredAgentEntity` subclass and registers it with `worker.add_entity()`.
 - The dynamically generated entity class name is set to `dafx-{agent_name}` via `__name__` and `__qualname__` so that durabletask uses the prefixed name as the entity key.
 - `DurableAIAgentClient.__init__` clamps `max_poll_retries` to `max(1, value)` and resets `poll_interval_seconds` to its default if ≤ 0.
-- `get_agent()` on both worker and client does **not** validate that the entity exists — validation is deferred to the first `run()` call.
+- `DurableAIAgentClient.get_agent()` does **not** validate that the entity exists — validation is deferred to the first `run()` call. `DurableAIAgentWorker` has no `get_agent()` method; its public surface is `add_agent()`, `start()`, `stop()`, and `registered_agent_names`.
 
 ### Signatures
 
