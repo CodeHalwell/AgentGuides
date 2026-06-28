@@ -599,7 +599,7 @@ agent = Agent('openai:gpt-5', capabilities=[ProcessEventStream(annotate_tool_cal
 
 **Source**: `pydantic_ai/capabilities/deferred_tool_handler.py`
 
-When a tool is decorated with `requires_approval=True` or `deferred=True`, the agent normally pauses and surfaces a `DeferredToolRequests` output. `HandleDeferredToolCalls` intercepts these requests inline, calls the provided handler, and continues the run automatically. The handler may return `None` to decline — the next capability in chain gets a chance, and ultimately the requests bubble up as output if all decline.
+When a tool raises `CallDeferred` (for external execution) or is registered with `requires_approval=True` (for human-in-the-loop approval), the agent pauses and surfaces a `DeferredToolRequests` output. Alternatively, an `ExternalToolset` can define tools whose results are always provided externally. `HandleDeferredToolCalls` intercepts these requests inline, calls the provided handler, and continues the run automatically. The handler may return `None` to decline — the next capability in chain gets a chance, and ultimately the requests bubble up as output if all decline.
 
 ```python
 # Key signature from source:
@@ -623,7 +623,9 @@ class HandleDeferredToolCalls(AbstractCapability[AgentDepsT]):
 ```
 
 ```python
-# Example 1 — auto-approve all deferred tools (dev/testing pattern)
+# Example 1 — auto-approve all approval-gated tools (dev/testing pattern)
+# approve_all=True only resolves requests.approvals; requests.calls (external
+# execution) remain unresolved and bubble up if any are present.
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import HandleDeferredToolCalls
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
