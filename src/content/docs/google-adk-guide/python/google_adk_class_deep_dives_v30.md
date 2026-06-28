@@ -611,7 +611,8 @@ source = "sqlite:///sessions.db"
 dest = "sqlite:///sessions_v2.db"
 
 if source == dest:
-    raise ValueError("Cannot migrate in-place; provide a different dest_db_url.")
+    # upgrade() itself raises RuntimeError for this case; guard early for clarity
+    raise RuntimeError("Cannot migrate in-place; provide a different dest_db_url.")
 
 upgrade(source_db_url=source, dest_db_url=dest)
 ```
@@ -676,7 +677,7 @@ async def run_interactions():
     client = genai.Client()
 
     # First turn — no previous interaction
-    request = LlmRequest(model="gemini-2.0-flash", contents=[...])
+    request = LlmRequest(model="gemini-2.0-flash", contents=[...])  # list[types.Content]
     interaction_id = None
 
     async for response in generate_content_via_interactions(
@@ -692,7 +693,7 @@ async def run_interactions():
     # Second turn — only send latest user turn, not full history
     request2 = LlmRequest(
         model="gemini-2.0-flash",
-        contents=[...],  # only the new user message
+        contents=[...],  # list[types.Content] — only the new user message
         previous_interaction_id=interaction_id,
     )
     async for response in generate_content_via_interactions(
@@ -715,7 +716,7 @@ import google.genai as genai
 
 async def non_streaming():
     client = genai.Client()
-    request = LlmRequest(model="gemini-2.0-flash", contents=[...])
+    request = LlmRequest(model="gemini-2.0-flash", contents=[...])  # list[types.Content]
 
     responses = []
     async for response in generate_content_via_interactions(
