@@ -798,8 +798,13 @@ def _build_basic_request(
     model = agent.canonical_model
     llm_request.model = model if isinstance(model, str) else model.model
 
-    # 2. Generation config — deep copy so mutations don't affect agent state
-    llm_request.config = copy.deepcopy(agent.generate_content_config)
+    # 2. Generation config — model_copy(deep=True) so mutations don't affect agent state;
+    #    falls back to a fresh GenerateContentConfig() when agent has none set.
+    llm_request.config = (
+        agent.generate_content_config.model_copy(deep=True)
+        if agent.generate_content_config
+        else types.GenerateContentConfig()
+    )
 
     # 3. Output schema — skipped in task-mode; only set if agent has no tools,
     #    OR the model supports structured output alongside tools.
@@ -1184,7 +1189,7 @@ criterion = RubricsBasedCriterion(rubrics=[
         text_property="The response is concise and avoids unnecessary filler text."
     )),
 ])
-metric = EvalMetric(metric_name="final_response_quality", criterion=criterion)
+metric = EvalMetric(metric_name="final_response_quality", criterion=criterion, threshold=0.5)
 evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 
 invocation = Invocation(
