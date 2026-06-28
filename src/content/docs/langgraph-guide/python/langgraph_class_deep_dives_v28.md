@@ -834,8 +834,10 @@ except Exception:
 
 # Inspect writes dict to see the INTERRUPT sentinel write
 writes_key = next(iter(saver.writes.keys()))  # (thread_id, ns, checkpoint_id)
-for (task_id, write_idx), (t_id, channel, value, type_str) in saver.writes[writes_key].items():
-    print(f"  write_idx={write_idx}, channel={channel!r}")
+for (task_id, write_idx), (t_id, channel, serde_typed_value, task_path) in saver.writes[writes_key].items():
+    # serde_typed_value is a (type_str, bytes) tuple from serde.dumps_typed()
+    # task_path tracks the subgraph path for nested-graph replay
+    print(f"  write_idx={write_idx}, channel={channel!r}, task_path={task_path!r}")
     # Negative write_idx = sentinel from WRITES_IDX_MAP
     if write_idx < 0:
         sentinels = {v: k for k, v in WRITES_IDX_MAP.items()}
@@ -1538,7 +1540,7 @@ del os.environ["LANGGRAPH_DEFAULT_RECURSION_LIMIT"]
 del os.environ["LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT"]
 importlib.reload(cfg_mod)
 print(cfg_mod.DEFAULT_RECURSION_LIMIT)             # 10007 — restored
-print(cfg_mod.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT) # 20    — restored
+print(cfg_mod.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT) # 5000  — restored
 ```
 
 ---
