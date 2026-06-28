@@ -517,20 +517,13 @@ result = evaluator.evaluate_invocations(actual_invocations=actual)
 print(f"Task success score: {result.overall_score:.2f}")
 ```
 
-### Example: providing a conversation scenario for better context
+### Note: `conversation_scenario` is not used by this evaluator
 
-```python
-result = evaluator.evaluate_invocations(
-    actual_invocations=actual,
-    conversation_scenario=(
-        "The user wants to book a flight and add travel insurance "
-        "in a single multi-turn conversation."
-    ),
-)
-for inv_result in result.per_invocation_results:
-    # PerInvocationResult has score, eval_status, rubric_scores — no rationale
-    print(f"Turn score: {inv_result.score}  status: {inv_result.eval_status}")
-```
+`evaluate_invocations` accepts a `conversation_scenario` parameter in its
+signature, but `_MultiTurnVertexiAiEvalFacade` immediately discards it
+(`del conversation_scenario`) before building the Vertex Eval dataset. It has
+no effect on the judge input for `MultiTurnTaskSuccessV1Evaluator` in
+google-adk 2.3.0.
 
 ### Example: integrating with `AgentEvaluator`
 
@@ -538,10 +531,11 @@ for inv_result in result.per_invocation_results:
 import asyncio
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
 
-# Metric selection is declared inside the .test.json / EvalConfig files
-# (e.g. "eval_metrics": [{"metric_name": "multi_turn_task_success"}]).
-# AgentEvaluator.evaluate reads those files and wires the right evaluator
-# automatically — there is no eval_metrics kwarg on this method.
+# AgentEvaluator.evaluate() reads EvalConfig from a test_config.json file
+# alongside the .test.json data. The config uses a `criteria` dict keyed on
+# prebuilt metric names (tool_trajectory_avg_score, response_evaluation_score,
+# response_match_score, safety_v1). Note: MultiTurnTaskSuccessV1Evaluator is
+# not a valid AgentEvaluator criteria key — use it directly as shown above.
 asyncio.run(AgentEvaluator.evaluate(
     agent_module="my_agent.agent",
     eval_dataset_file_path_or_dir="eval_cases/",
@@ -837,25 +831,32 @@ else:
     print("Output schema suppressed because model has tools and doesn't support it.")
 ```
 
-### Example: live connect config fields on an agent
+### Example: live connect config fields via `RunConfig`
+
+`_build_basic_request` reads `response_modalities`, `speech_config`, and other
+live settings from `invocation_context.run_config` — **not** from
+`agent.generate_content_config`. Pass them via `RunConfig` when calling the
+runner:
 
 ```python
 from google.adk.agents import LlmAgent
+from google.adk.agents.run_config import RunConfig
 from google.genai import types
 
 agent = LlmAgent(
     name="live_agent",
     model="gemini-2.0-flash-live",
-    generate_content_config=types.GenerateContentConfig(
-        response_modalities=["AUDIO"],
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Aoede")
-            )
-        ),
-    ),
-    # _build_basic_request copies all live_connect_config fields into llm_request
 )
+
+run_config = RunConfig(
+    response_modalities=["AUDIO"],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Aoede")
+        )
+    ),
+)
+# Pass run_config to runner.run_async(session=..., run_config=run_config)
 ```
 
 ---
