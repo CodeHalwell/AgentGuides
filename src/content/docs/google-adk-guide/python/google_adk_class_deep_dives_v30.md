@@ -36,9 +36,20 @@ class GCPSkillRegistry(SkillRegistry):
     ):
         # Falls back to os.environ["GOOGLE_CLOUD_PROJECT"] and
         # os.environ["GOOGLE_CLOUD_LOCATION"] when args are None.
-        self._project_id = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        self._location = location or os.environ.get("GOOGLE_CLOUD_LOCATION")
-        self._client: vertexai.AsyncClient | None = None  # lazy init
+        self.project_id = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        self.location = location or os.environ.get("GOOGLE_CLOUD_LOCATION")
+        self._lazy_client: vertexai.AsyncClient | None = None
+
+    @property
+    def _client(self) -> vertexai.AsyncClient:
+        # Lazy-initializes _lazy_client on first access; safe to use in any method.
+        if self._lazy_client is None:
+            self._lazy_client = vertexai.Client(
+                project=self.project_id,
+                location=self.location,
+                http_options={"api_version": "v1beta1"},
+            ).aio
+        return self._lazy_client
 ```
 
 ### `get_skill` — download and unzip a skill
@@ -47,12 +58,10 @@ class GCPSkillRegistry(SkillRegistry):
 
 ```python
 async def get_skill(self, *, name: str) -> models.Skill:
-    client = await self._get_or_create_client()
-    full_name = f"projects/{self._project_id}/locations/{self._location}/skills/{name}"
-    skill_response = await client.skills.get(name=full_name)
-    zipped = base64.b64decode(skill_response.zipped_filesystem)
-    skill = await asyncio.to_thread(_unzip_filesystem, zipped)
-    return skill
+    full_name = f"projects/{self.project_id}/locations/{self.location}/skills/{name}"
+    skill_resource = await self._client.skills.get(name=full_name)
+    zip_bytes = base64.b64decode(skill_resource.zipped_filesystem)
+    return await asyncio.to_thread(_utils._load_skill_from_zip_bytes, zip_bytes)
 ```
 
 ### `search_skills` — discovery via the Vertex AI API
@@ -774,8 +783,9 @@ def _build_basic_request(
 ) -> None:
     agent = invocation_context.agent
 
-    # 1. Model identity
-    llm_request.model = agent.canonical_model
+    # 1. Model identity — canonical_model may be a string or a model object
+    model = agent.canonical_model
+    llm_request.model = model if isinstance(model, str) else model.model
 
     # 2. Generation config — deep copy so mutations don't affect agent state
     llm_request.config = copy.deepcopy(agent.generate_content_config)
