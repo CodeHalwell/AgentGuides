@@ -129,13 +129,13 @@ agent_worker.add_agent(Agent(client=client, name="researcher"))
 
 print(agent_worker.registered_agent_names)  # ['assistant', 'researcher']
 # Entities registered as 'dafx-assistant' and 'dafx-researcher'
-worker.start()
+agent_worker.start()
 ```
 
 ### Example 2 — Calling a durable agent from an external client
 
 ```python
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework_durabletask import DurableAIAgentClient
 
 # Wrap the gRPC client
@@ -181,7 +181,7 @@ agent_worker.add_agent(
     Agent(client=client, name="audited"),
     callback=AuditCallback(),
 )
-worker.start()
+agent_worker.start()
 ```
 
 ---
@@ -242,7 +242,7 @@ class DurableAgentExecutor(ABC, Generic[TaskT]):
 ### Example 1 — Using the shim from an orchestration (yield pattern)
 
 ```python
-from durabletask import OrchestrationContext
+from durabletask.task import OrchestrationContext
 from agent_framework_durabletask import DurableAIAgentOrchestrationContext
 
 def research_orchestration(ctx: OrchestrationContext):
@@ -258,7 +258,7 @@ def research_orchestration(ctx: OrchestrationContext):
 
 ```python
 from pydantic import BaseModel
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework_durabletask import DurableAIAgentClient
 
 class Summary(BaseModel):
@@ -283,7 +283,7 @@ print(response.text)
 ### Example 3 — Reusing a session across calls
 
 ```python
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework_durabletask import DurableAIAgentClient
 from agent_framework_durabletask._models import AgentSessionId, DurableAgentSession
 
@@ -329,7 +329,7 @@ class DurableAIAgentOrchestrationContext(DurableAgentProvider[DurableAgentTask])
 ### Example 1 — Single-agent orchestration
 
 ```python
-from durabletask import OrchestrationContext
+from durabletask.task import OrchestrationContext
 from agent_framework_durabletask import DurableAIAgentOrchestrationContext
 
 def qa_orchestration(ctx: OrchestrationContext):
@@ -342,7 +342,7 @@ def qa_orchestration(ctx: OrchestrationContext):
 ### Example 2 — Sequential multi-agent pipeline
 
 ```python
-from durabletask import OrchestrationContext
+from durabletask.task import OrchestrationContext
 from agent_framework_durabletask import DurableAIAgentOrchestrationContext
 
 def pipeline_orchestration(ctx: OrchestrationContext):
@@ -360,7 +360,7 @@ def pipeline_orchestration(ctx: OrchestrationContext):
 ### Example 3 — Fan-out to multiple agents in parallel
 
 ```python
-from durabletask import OrchestrationContext, when_all
+from durabletask.task import OrchestrationContext, when_all
 from agent_framework_durabletask import DurableAIAgentOrchestrationContext
 
 def parallel_analysis(ctx: OrchestrationContext):
@@ -386,7 +386,7 @@ def parallel_analysis(ctx: OrchestrationContext):
 ### Key source facts
 
 - `AgentEntity.run()` always tries `agent.run(stream=True, ...)` first; it falls back to non-streaming only if the result is not an `AsyncIterator` or if streaming raises an exception — the `TypeError` check inspects the error message for `__aiter__` or `stream`.
-- Error responses are persisted with `DurableAgentStateResponse.is_error = True`, and the next `run()` skips them when reconstructing `chat_messages` via `_is_error_response()`.
+- Error responses are persisted with `DurableAgentStateResponse.is_error = True`, and the next `run()` skips them when reconstructing `chat_messages` via `_is_error_response()`. **Caveat:** `is_error` is an in-memory-only field — it is NOT serialised. After a durable entity is reloaded from storage, `is_error` is reconstructed as `False`, so previously failed responses will re-appear in replay history.
 - `_to_replayable_message()` strips `type == "reasoning"` content items before replaying history into chat clients (prevents thinking tokens being sent back as user context).
 - `AgentEntityStateProviderMixin._state_cache` is a class-level `None` sentinel; the first `state` property access deserialises from `_get_state_dict()` and caches it for the entity's lifetime.
 - `AgentEntityStateProviderMixin.reset()` creates a fresh `DurableAgentState()` and immediately calls `persist_state()`.
@@ -474,7 +474,7 @@ err_response = DurableAgentStateResponse(
         role="assistant",
         contents=[DurableAgentStateTextContent(text="Tool failed.")],
     )],
-    is_error=True,  # will be skipped during replay
+    is_error=True,  # skipped during replay within this entity lifetime; NOT serialised — after reload, is_error is False
 )
 state.data.conversation_history.append(err_response)
 
@@ -727,7 +727,7 @@ req = RunRequest(
     enable_tool_calls=False,
 )
 d = req.to_dict()
-# response_format is serialised as JSON Schema in "response_format" key
+# response_format serialised as Pydantic model metadata: {"__response_schema_type__": "pydantic_model", "module": ..., "qualname": ...}
 print(req.wait_for_response)  # False
 ```
 
@@ -839,7 +839,7 @@ print(restored.durable_session_id.entity_name)  # "dafx-assistant"
 ### Example 3 — Passing a session to maintain conversation context
 
 ```python
-from durabletask import TaskHubGrpcClient
+from durabletask.client import TaskHubGrpcClient
 from agent_framework_durabletask import DurableAIAgentClient
 from agent_framework_durabletask._models import AgentSessionId, DurableAgentSession
 
@@ -1221,7 +1221,7 @@ print(len(chat_msg.contents))  # 2
 | 1 | `DurableAIAgentWorker` + `DurableAIAgentClient` | `_worker` / `_client` | Worker wraps `TaskHubGrpcWorker`; entity named `dafx-{name}`; client clamps poll retries to ≥ 1 |
 | 2 | `DurableAIAgent` + `DurableAgentExecutor` | `_shim` / `_executors` | Shim returns `TaskT` not coroutine; `stream=True` raises `ValueError`; options dict keys extracted in `get_run_request()` |
 | 3 | `DurableAIAgentOrchestrationContext` | `_orchestration_context` | Thin wrapper for `OrchestrationContext`; `get_agent()` returns yield-compatible `DurableAIAgent[DurableAgentTask]` |
-| 4 | `AgentEntity` + `AgentEntityStateProviderMixin` | `_entities` | Streaming-first with non-streaming fallback; error responses marked `is_error` and skipped on replay; reasoning stripped from replayable messages |
+| 4 | `AgentEntity` + `AgentEntityStateProviderMixin` | `_entities` | Streaming-first with non-streaming fallback; `is_error` skips error responses in-memory only (not serialised; resets to `False` on entity reload); reasoning stripped from replayable messages |
 | 5 | `AgentCallbackContext` + `AgentResponseCallbackProtocol` | `_callbacks` | Frozen context dataclass; callbacks catch all exceptions; sync callbacks work at runtime despite Protocol declaring `async` |
 | 6 | `RunRequest` | `_models` | `correlationId` required in `from_dict()`; role coerced to lowercase; fire-and-forget via `wait_for_response=False` |
 | 7 | `AgentSessionId` + `DurableAgentSession` | `_models` | `@name@key` wire format; `entity_name` = `"dafx-{name}"`; `from_dict()` defensive copy prevents key leak |
