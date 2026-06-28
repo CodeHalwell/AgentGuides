@@ -484,6 +484,7 @@ def evaluate_invocations(
 
 ```python
 import os
+import google.genai.types as types
 from google.adk.evaluation.eval_metrics import EvalMetric
 from google.adk.evaluation.multi_turn_task_success_evaluator import (
     MultiTurnTaskSuccessV1Evaluator,
@@ -499,12 +500,12 @@ evaluator = MultiTurnTaskSuccessV1Evaluator(eval_metric=metric)
 # Build actual invocations from an agent session
 actual = [
     Invocation(
-        user_content="Book a flight from London to Paris tomorrow.",
-        final_response="I have booked flight BA304 departing 08:00.",
+        user_content=types.Content(role="user", parts=[types.Part(text="Book a flight from London to Paris tomorrow.")]),
+        final_response=types.Content(role="model", parts=[types.Part(text="I have booked flight BA304 departing 08:00.")]),
     ),
     Invocation(
-        user_content="Also add travel insurance.",
-        final_response="Travel insurance has been added to your booking.",
+        user_content=types.Content(role="user", parts=[types.Part(text="Also add travel insurance.")]),
+        final_response=types.Content(role="model", parts=[types.Part(text="Travel insurance has been added to your booking.")]),
     ),
 ]
 
@@ -641,7 +642,7 @@ async def generate_content_via_interactions(
 ) -> AsyncGenerator[LlmResponse, None]:
     # stream=True  → api_client.aio.interactions.create(..., stream=True)
     # stream=False → api_client.aio.interactions.create(..., stream=False)
-    # Tracks current_interaction_id across SSE events for session continuity.
+    # Tracks interaction_id across SSE events for session continuity.
     ...
 ```
 
@@ -691,8 +692,8 @@ async def run_interactions():
     ):
         if response.text:
             print(response.text, end="", flush=True)
-        if response.current_interaction_id:
-            interaction_id = response.current_interaction_id
+        if response.interaction_id:
+            interaction_id = response.interaction_id
 
     # Second turn — only send latest user turn, not full history
     request2 = LlmRequest(
@@ -1087,12 +1088,18 @@ os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
 criterion = RubricsBasedCriterion(rubrics=[
-    Rubric(rubric_content=RubricContent(
-        text_property="The response is concise and avoids unnecessary filler text."
-    )),
-    Rubric(rubric_content=RubricContent(
-        text_property="The response correctly uses tool output as evidence."
-    )),
+    Rubric(
+        rubric_id="conciseness",
+        rubric_content=RubricContent(
+            text_property="The response is concise and avoids unnecessary filler text."
+        ),
+    ),
+    Rubric(
+        rubric_id="tool-evidence",
+        rubric_content=RubricContent(
+            text_property="The response correctly uses tool output as evidence."
+        ),
+    ),
 ])
 
 metric = EvalMetric(
@@ -1105,11 +1112,12 @@ evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
 ### Example: running the evaluation on an invocation
 
 ```python
+import google.genai.types as types
 from google.adk.evaluation.eval_case import Invocation
 
 invocation = Invocation(
-    user_content="What is the capital of France?",
-    final_response="The capital of France is Paris.",
+    user_content=types.Content(role="user", parts=[types.Part(text="What is the capital of France?")]),
+    final_response=types.Content(role="model", parts=[types.Part(text="The capital of France is Paris.")]),
     # intermediate_data carries tool call/response pairs for evidence collection
 )
 
@@ -1132,9 +1140,12 @@ from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 criterion = RubricsBasedCriterion(
     include_intermediate_responses_in_final=True,
     rubrics=[
-        Rubric(rubric_content=RubricContent(
-            text_property="The agent's reasoning steps are transparent and justified."
-        )),
+        Rubric(
+            rubric_id="transparency",
+            rubric_content=RubricContent(
+                text_property="The agent's reasoning steps are transparent and justified."
+            ),
+        ),
     ],
 )
 ```
