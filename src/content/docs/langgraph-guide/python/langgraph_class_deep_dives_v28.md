@@ -218,7 +218,7 @@ from langgraph._internal._constants import CONF
 ambient = {
     "configurable": {
         "thread_id": "parent-thread-99",
-        "checkpoint_ns": "parent::subgraph",
+        "checkpoint_ns": "parent|subgraph",
         "user_id": "u42",
     }
 }
@@ -618,7 +618,7 @@ Two small but critical string utilities that handle checkpoint namespace hygiene
 def recast_checkpoint_ns(ns: str) -> str:
     """Remove task IDs from checkpoint namespace.
     
-    Checkpoint namespaces include task IDs as suffixes (e.g. 'parent::child:abc123')
+    Checkpoint namespaces include task IDs as suffixes (e.g. 'parent|child:abc123')
     to distinguish concurrent subgraph calls. When reporting or resuming, you often
     want the structural namespace without the ephemeral task ID suffix.
     """
