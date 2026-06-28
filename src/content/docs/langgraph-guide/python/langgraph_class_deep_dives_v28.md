@@ -475,7 +475,7 @@ TAG_HIDDEN = sys.intern("langsmith:hidden")
 - **`TAG_NOSTREAM`** — when added to a `ChatModel` invocation via `.with_config({"tags": ["nostream"]})` or `set_node_defaults(tags=["nostream"])`, the model's token stream is NOT forwarded to the parent graph's `messages` channel. The model still runs and returns its final output; only the intermediate token events are suppressed. Useful for background-reasoning nodes you don't want polluting the user-facing message stream.
 - **`TAG_HIDDEN`** — suppresses a node from `stream_mode="debug"` output and hides it from LangSmith's trace view. `map_debug_tasks` (in `langgraph.pregel.debug`) skips any task whose tags include `TAG_HIDDEN`. Used heavily for internal book-keeping nodes like `ChannelWrite` wrappers and the `__start__` input projection node.
 - **`sys.intern`** — both tags are interned strings, so identity comparisons (`tag is TAG_NOSTREAM`) are safe and fast. Use `in tags` for containment checks (which still works because interned strings compare equal by value).
-- **Per-node tagging via `add_node`** — apply `TAG_HIDDEN` to individual nodes via `builder.add_node("name", fn, tags=[TAG_HIDDEN])`. `set_node_defaults` does not accept `tags` (only `retry_policy`, `cache_policy`, `error_handler`, `timeout`). More commonly, you annotate specific internal nodes while leaving user-facing nodes untagged.
+- **Internal-only in 1.2.6** — `TAG_HIDDEN` is applied by LangGraph itself when creating internal nodes during compilation (e.g. the `__start__` input-projection node is built as `PregelNode(tags=[TAG_HIDDEN])`). Passing `tags=[TAG_HIDDEN]` to `add_node` is silently ignored in 1.2.6 — the kwarg goes into `**DeprecatedKwargs` which only handles `retry` and `input`; there is no `tags` storage path in `StateNodeSpec`. The same applies to `set_node_defaults`, which only accepts `retry_policy`, `cache_policy`, `error_handler`, and `timeout`.
 
 ### Example 1 — `TAG_NOSTREAM` to silence a reasoning node
 
@@ -524,7 +524,7 @@ for chunk in graph.stream(
     print(chunk)
 ```
 
-### Example 2 — `TAG_HIDDEN` to hide a bookkeeping node from debug streams
+### Example 2 — observing `TAG_HIDDEN` on LangGraph's internal `__start__` node
 
 ```python
 from typing_extensions import TypedDict
@@ -534,41 +534,36 @@ from langgraph.constants import TAG_HIDDEN
 
 class State(TypedDict):
     value: int
-    audit_log: list[str]
 
 
 def compute(state: State) -> dict:
     return {"value": state["value"] * 2}
 
 
-def audit(state: State) -> dict:
-    """Internal bookkeeping — should not appear in debug stream or LangSmith."""
-    return {"audit_log": state["audit_log"] + [f"value set to {state['value']}"]}
-
-
 builder = StateGraph(State)
 builder.add_node("compute", compute)
-# Mark the audit node as hidden from debug streams and LangSmith
-builder.add_node("audit", audit, tags=[TAG_HIDDEN])
 builder.add_edge(START, "compute")
-builder.add_edge("compute", "audit")
-builder.add_edge("audit", END)
+builder.add_edge("compute", END)
 
 graph = builder.compile()
 
-debug_chunks = list(graph.stream(
-    {"value": 5, "audit_log": []},
-    stream_mode="debug",
-))
+# LangGraph applies TAG_HIDDEN internally to the '__start__' input-projection
+# node when compiling. Inspect the compiled graph to confirm:
+hidden_nodes = [
+    name for name, node in graph.nodes.items()
+    if TAG_HIDDEN in (node.tags or [])
+]
+print("Hidden nodes:", hidden_nodes)  # ['__start__']
 
-# The "audit" node task does NOT appear in debug_chunks
-node_names = {c.get("payload", {}).get("name") for c in debug_chunks
+# '__start__' is also absent from debug-stream task events:
+debug_chunks = list(graph.stream({"value": 5}, stream_mode="debug"))
+task_names = {c.get("payload", {}).get("name") for c in debug_chunks
               if c.get("type") == "task"}
-print("compute" in node_names)  # True
-print("audit" in node_names)    # False  — hidden from debug stream
+print("compute" in task_names)    # True
+print("__start__" in task_names)  # False — hidden by TAG_HIDDEN
 ```
 
-### Example 3 — applying `TAG_HIDDEN` to multiple nodes via `add_node`
+### Example 3 — auditing which nodes carry `TAG_HIDDEN` in a compiled graph
 
 ```python
 from typing_extensions import TypedDict
@@ -588,25 +583,27 @@ def step_b(state: State) -> dict:
     return {"steps": state["steps"] + ["b"]}
 
 
-def step_c(state: State) -> dict:
-    return {"steps": state["steps"] + ["c"]}
-
-
 builder = StateGraph(State)
-
-# TAG_HIDDEN is applied per node via add_node — set_node_defaults does not
-# accept tags. Pass tags=[TAG_HIDDEN] on every node you want hidden.
-builder.add_node("a", step_a, tags=[TAG_HIDDEN])
-builder.add_node("b", step_b, tags=[TAG_HIDDEN])
-builder.add_node("c", step_c, tags=[TAG_HIDDEN])
+builder.add_node("a", step_a)
+builder.add_node("b", step_b)
 builder.add_edge(START, "a")
 builder.add_edge("a", "b")
-builder.add_edge("b", "c")
-builder.add_edge("c", END)
+builder.add_edge("b", END)
 
 graph = builder.compile()
+
+# After compilation, inspect every PregelNode for TAG_HIDDEN.
+# LangGraph only applies it to its own internal nodes — user nodes never
+# receive it in 1.2.6 even if you pass tags=[TAG_HIDDEN] to add_node.
+for name, node in graph.nodes.items():
+    is_hidden = TAG_HIDDEN in (node.tags or [])
+    print(f"  {name:20s} hidden={is_hidden}")
+# __start__            hidden=True
+# a                    hidden=False
+# b                    hidden=False
+
 result = graph.invoke({"steps": []})
-print(result["steps"])  # ['a', 'b', 'c']  — still executes, just hidden from debug/LangSmith
+print(result["steps"])  # ['a', 'b']
 ```
 
 ---
@@ -759,7 +756,7 @@ class InMemorySaver(BaseCheckpointSaver[str], ...):
 - **`storage` 3-tuple value** — each checkpoint is stored as `(serialized_checkpoint, serialized_metadata, parent_id)`. The serialization uses the saver's `.serde` (defaults to `JsonPlusSerializer`). Fetching a checkpoint requires deserializing both the checkpoint and metadata.
 - **`writes` key** — `(thread_id, ns, checkpoint_id)` maps to a dict of `(task_id, write_idx)` → write record. The `write_idx` is either a positive integer (positional order of writes from `put_writes`) or a negative sentinel from `WRITES_IDX_MAP` (e.g. `-1` for `ERROR`, `-3` for `INTERRUPT`).
 - **`blobs` for channel deduplication** — each channel value is stored once under its version key. When a checkpoint references the same channel version as a previous checkpoint, the blob is shared, not duplicated. This can dramatically reduce memory for long-running threads.
-- **`put_writes` appends without overwriting** — writes for a checkpoint accumulate: calling `put_writes` multiple times for the same `(thread_id, ns, checkpoint_id, task_id)` merges them. Each call uses `WRITES_IDX_MAP.get(channel, len(existing))` to compute the index.
+- **`put_writes` accumulates without duplicating** — writes for a checkpoint accumulate: calling `put_writes` multiple times for the same `(thread_id, ns, checkpoint_id, task_id)` merges them. Positional indices come from `enumerate(writes)`, starting at 0. An existing entry with a non-negative `(task_id, idx)` key is skipped (not overwritten), ensuring idempotent re-delivery. Sentinel channels (negative indices) are always overwritten.
 - **`list()` ordering** — checkpoints are listed newest-first by iterating the inner dict in insertion order and reversing. This matches the contract that `get()` returns the most recent checkpoint.
 
 ### Example 1 — inspecting the raw storage structure
@@ -859,32 +856,45 @@ class State(TypedDict):
     counter: int
 
 
-def increment(state: State) -> dict:
+def step1(state: State) -> dict:
+    return {"counter": state["counter"] + 1}
+
+
+def step2(state: State) -> dict:
+    return {"counter": state["counter"] + 1}
+
+
+def step3(state: State) -> dict:
     return {"counter": state["counter"] + 1}
 
 
 saver = InMemorySaver()
 builder = StateGraph(State)
-builder.add_node("inc", increment)
-builder.add_edge(START, "inc")
-builder.add_edge("inc", END)
+builder.add_node("step1", step1)
+builder.add_node("step2", step2)
+builder.add_node("step3", step3)
+builder.add_edge(START, "step1")
+builder.add_edge("step1", "step2")
+builder.add_edge("step2", "step3")
+builder.add_edge("step3", END)
 
 graph = builder.compile(checkpointer=saver)
 config = {"configurable": {"thread_id": "t-blobs"}}
 
 big_data = {"large": "x" * 10_000}
-for _ in range(5):
-    graph.invoke({"static_data": big_data, "counter": 0}, config)
+graph.invoke({"static_data": big_data, "counter": 0}, config)
+# One invoke creates 5 checkpoints (before __start__, after each of 3 nodes, final).
+# static_data never changes across those checkpoints → only 1 blob is stored.
+# counter changes at each step (0→1→2→3) → 4 blobs.
 
-# Count blobs: static_data channel version doesn't change → only 1 blob stored
 static_blob_count = sum(
     1 for (_, _, ch, _) in saver.blobs if ch == "static_data"
 )
 counter_blob_count = sum(
     1 for (_, _, ch, _) in saver.blobs if ch == "counter"
 )
-print(f"static_data blobs: {static_blob_count}")  # 1 — deduplicated
-print(f"counter blobs:     {counter_blob_count}")  # 5 — new version each step
+print(f"static_data blobs: {static_blob_count}")  # 1 — shared by all 5 checkpoints
+print(f"counter blobs:     {counter_blob_count}")  # 4 — new version per step (0,1,2,3)
 ```
 
 ---
@@ -1063,7 +1073,7 @@ def get_checkpoint_metadata(
 
 **Key implementation facts:**
 
-- **`get_checkpoint_id` source** — reads `config["configurable"]["checkpoint_id"]`. Returns `None` if the config has no `configurable` key or no `checkpoint_id` within it. This is safe to call outside a graph run; it just returns `None`.
+- **`get_checkpoint_id` source** — reads `config["configurable"]["checkpoint_id"]`. If the `configurable` key is absent, it raises `KeyError` — it is **not** safe to call with a bare `{}` config outside a graph run. Only the missing `checkpoint_id` *within* `configurable` is safe (returns `None`). Outside a graph run always call `ensure_config(config)` first, or guard with `config.get("configurable", {}).get("checkpoint_id")`.
 - **`get_checkpoint_metadata`** — used internally by `InMemorySaver.put()` and all production savers to construct the `CheckpointMetadata` dict that goes into storage. It merges caller-provided `metadata` with `run_id` from the config (so every checkpoint records which run created it).
 - **Fork detection** — when building a fork from a specific checkpoint (e.g. time-travel), the `checkpoint_id` in the config identifies the source checkpoint. A custom saver can use `get_checkpoint_id(config)` to determine if it should write a new checkpoint or create a fork.
 - **`get_serializable_checkpoint_metadata`** — a companion function that additionally strips fields that cannot be serialized to JSON. Used by savers that store metadata in plain-text formats.
