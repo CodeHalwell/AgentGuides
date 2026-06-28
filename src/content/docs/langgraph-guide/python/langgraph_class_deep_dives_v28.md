@@ -739,7 +739,7 @@ class InMemorySaver(BaseCheckpointSaver[str], ...):
         tuple[str, str, str],              # (thread_id, checkpoint_ns, checkpoint_id)
         dict[
             tuple[str, int],               # (task_id, write_idx)
-            tuple[str, str, tuple[str, bytes], str]  # (task_id, channel, serde_value, type_str)
+            tuple[str, str, tuple[str, bytes], str]  # (task_id, channel, serde.dumps_typed(value), task_path)
         ]
     ]
 
@@ -1230,19 +1230,21 @@ class LoggingCheckpointer(BaseCheckpointSaver):
 LangGraph ships an optional strict msgpack serialization mode that enforces an explicit allowlist of types that may be serialized into checkpoints. This prevents accidental persistence of unserializable objects and hardens production deployments.
 
 ```python
-# Set at import time by trying to import the _msgpack extension
-STRICT_MSGPACK_ENABLED: bool  # True when langgraph-checkpoint[msgpack] is installed
+# True when the msgpack extra is installed AND LANGGRAPH_STRICT_MSGPACK=true is set
+STRICT_MSGPACK_ENABLED: bool
 
 def build_serde_allowlist(
-    schemas: list[Any],
-    channels: dict[str, BaseChannel],
-) -> set[tuple[str, ...]] | None:
-    """Scan schemas and channel types to build a set of (module, qualname)
-    tuples representing all types that the checkpointer may serialize."""
+    *,
+    schemas: list[Any] | None = None,
+    channels: dict[str, BaseChannel] | None = None,
+) -> set[tuple[str, ...]]:
+    """Scan schemas and channel types and return a set of (module, qualname)
+    tuples representing all types that the checkpointer may serialize.
+    Always returns a non-empty set seeded with curated_core_allowlist()."""
 
 def apply_checkpointer_allowlist(
     checkpointer: Any,
-    allowlist: set[tuple[str, ...]] | None,
+    allowlist: set[tuple[str, ...]],
 ) -> Any:
     """Call checkpointer.with_allowlist(allowlist) if supported, else log a
     warning and return the checkpointer unchanged."""
@@ -1254,10 +1256,11 @@ def curated_core_allowlist() -> set[tuple[str, ...]]:
 
 **Key implementation facts:**
 
-- **`STRICT_MSGPACK_ENABLED` check** — enabled when `from langgraph.checkpoint.serde._msgpack import STRICT_MSGPACK_ENABLED` succeeds. This requires the optional `langgraph-checkpoint[msgpack]` extra. Without it, all serialization falls back to `JsonPlusSerializer` with no type restrictions.
+- **`STRICT_MSGPACK_ENABLED` check** — requires two conditions: (1) the optional `langgraph-checkpoint[msgpack]` extra must be installed, **and** (2) the environment variable `LANGGRAPH_STRICT_MSGPACK=true` must be set. The flag is computed as `os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in ("true", "1", "yes")`. Installing the extra alone does not enable strict mode — you must also set the env var.
+- **`build_serde_allowlist` always returns a set** — in 1.2.6 the function is seeded with `curated_core_allowlist()` before scanning user schemas, so it always returns a non-empty `set[tuple[str, ...]]`, never `None`. Arguments are keyword-only (`schemas=`, `channels=`).
 - **`build_serde_allowlist` scanning** — recursively inspects `TypedDict`, `dataclass`, `Pydantic v1/v2 models`, `Enum` subclasses, and `Annotated` types. It uses `_safe_get_type_hints` which catches `NameError` from forward-referenced types. Type variables are unwound through their bounds.
 - **`curated_core_allowlist`** — always includes all 14 langchain-core message classes (both base and chunk variants, plus `RemoveMessage`). The `entrypoint` decorator merges this with the user's schema when building the graph's allowlist.
-- **Allowlist format** — each entry is a `(module_name, qualified_class_name)` tuple, e.g. `("langchain_core.messages.human", "HumanMessage")`. The msgpack serde only permits types appearing in this set when `STRICT_MSGPACK_ENABLED=True`.
+- **Allowlist format** — each entry is a `(module_name, qualified_class_name)` tuple, e.g. `("langchain_core.messages.human", "HumanMessage")`. The msgpack serde only permits types appearing in this set when `STRICT_MSGPACK_ENABLED` is `True`.
 - **`apply_checkpointer_allowlist` fallback** — if the checkpointer does not implement `with_allowlist` (e.g. an older custom saver), the function emits a one-time warning and returns the checkpointer unchanged. The warning is de-duplicated via the `_warned_allowlist_unsupported` module-level flag.
 
 ### Example 1 — building an allowlist for a custom state schema
@@ -1288,22 +1291,19 @@ class State(TypedDict):
     current_priority: Priority
 
 
-# Build an allowlist from the schema
+# Build an allowlist from the schema (keyword-only args; always returns a set)
 allowlist = build_serde_allowlist(
     schemas=[State, Task],
     channels={"tasks": LastValue(list), "current_priority": LastValue(Priority)},
 )
 
-if allowlist is not None:
-    # Check which types were included
-    type_names = {name for _, name in allowlist}
-    print("Task" in type_names)      # True
-    print("Priority" in type_names)  # True
-    print("State" in type_names)     # True
-else:
-    print("Strict msgpack not enabled — allowlist is None")
+# allowlist is always a non-empty set — no None check needed
+type_names = {name for _, name in allowlist}
+print("Task" in type_names)      # True
+print("Priority" in type_names)  # True
+print("State" in type_names)     # True
 
-# Always include core message types
+# Always includes core message types from curated_core_allowlist()
 core = curated_core_allowlist()
 print(("langchain_core.messages.human", "HumanMessage") in core)  # True
 ```
@@ -1311,22 +1311,25 @@ print(("langchain_core.messages.human", "HumanMessage") in core)  # True
 ### Example 2 — checking whether strict mode is active
 
 ```python
+# STRICT_MSGPACK_ENABLED requires TWO conditions:
+#   1. langgraph-checkpoint[msgpack] extra is installed
+#   2. LANGGRAPH_STRICT_MSGPACK=true env var is set
+# Installing the extra alone leaves STRICT_MSGPACK_ENABLED=False.
 try:
     from langgraph._internal._serde import STRICT_MSGPACK_ENABLED
 except ImportError:
-    STRICT_MSGPACK_ENABLED = False
+    STRICT_MSGPACK_ENABLED = False  # extra not installed
 
 if STRICT_MSGPACK_ENABLED:
     print("Strict msgpack is active — only allowlisted types may be checkpointed")
 else:
-    print("Standard JSON-Plus serialization — all pickle-fallback types permitted")
+    print("Standard JSON-Plus serialization — all types permitted (or extra not installed)")
 
-# Use this flag to conditionally set up an allowlist
+# Apply an allowlist before compiling to harden a strict-mode deployment
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph._internal._serde import build_serde_allowlist, apply_checkpointer_allowlist
-from langgraph.channels.last_value import LastValue
 
 
 class State(TypedDict):
@@ -1338,13 +1341,11 @@ builder.add_node("noop", lambda s: s)
 builder.add_edge(START, "noop")
 builder.add_edge("noop", END)
 
-# Apply the allowlist to the saver *before* compiling so there's no
-# post-compile attribute mutation.
 saver = InMemorySaver()
 if STRICT_MSGPACK_ENABLED:
+    # build_serde_allowlist always returns a non-empty set — no None check needed
     allowlist = build_serde_allowlist(schemas=[State], channels={})
-    if allowlist:
-        saver = apply_checkpointer_allowlist(saver, allowlist)
+    saver = apply_checkpointer_allowlist(saver, allowlist)
 
 graph = builder.compile(checkpointer=saver)
 ```
@@ -1376,13 +1377,11 @@ allowlist = build_serde_allowlist(
     channels={"profile": LastValue(UserProfile)},
 )
 
-if allowlist is not None:
-    type_names = {name for _, name in allowlist}
-    print("UserProfile" in type_names)  # True
-    print("Address" in type_names)      # True — nested model included
-    print(len(allowlist))               # both models + str + optional wrapper types
-else:
-    print("Strict mode not available")
+# allowlist is always a non-empty set
+type_names = {name for _, name in allowlist}
+print("UserProfile" in type_names)  # True
+print("Address" in type_names)      # True — nested model included
+print(len(allowlist))               # both models + core message types + wrapper types
 ```
 
 ---
