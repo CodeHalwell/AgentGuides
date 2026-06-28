@@ -756,7 +756,7 @@ class InMemorySaver(BaseCheckpointSaver[str], ...):
 - **`writes` key** — `(thread_id, ns, checkpoint_id)` maps to a dict of `(task_id, write_idx)` → write record. The `write_idx` is either a positive integer (positional order of writes from `put_writes`) or a negative sentinel from `WRITES_IDX_MAP` (e.g. `-1` for `ERROR`, `-3` for `INTERRUPT`).
 - **`blobs` for channel deduplication** — each channel value is stored once under its version key. When a checkpoint references the same channel version as a previous checkpoint, the blob is shared, not duplicated. This can dramatically reduce memory for long-running threads.
 - **`put_writes` accumulates without duplicating** — writes for a checkpoint accumulate: calling `put_writes` multiple times for the same `(thread_id, ns, checkpoint_id, task_id)` merges them. Positional indices come from `enumerate(writes)`, starting at 0. An existing entry with a non-negative `(task_id, idx)` key is skipped (not overwritten), ensuring idempotent re-delivery. Sentinel channels (negative indices) are always overwritten.
-- **`list()` ordering** — checkpoints are listed newest-first by iterating the inner dict in insertion order and reversing. This matches the contract that `get()` returns the most recent checkpoint.
+- **`list()` ordering** — checkpoints are listed newest-first by sorting the inner dict by checkpoint_id lexicographically in descending order (`sorted(..., key=lambda x: x[0], reverse=True)`). Since checkpoint IDs are UUIDs (time-ordered v4), this effectively gives newest-first ordering.
 
 ### Example 1 — inspecting the raw storage structure
 
@@ -966,10 +966,16 @@ graph.invoke({"value": 3}, config)
 history = list(graph.get_state_history(config))
 latest = history[0]  # most recent
 
-print(f"pending_writes: {latest.next}")
-# After completion, pending_writes is typically empty or has resume markers
-for pw in (latest.tasks or []):
-    print(f"  task={pw.id[:8]}... writes={pw.writes}")
+print(f"pending tasks: {latest.next}")
+# PregelTask has no 'writes' attribute — read pending writes from the saver directly
+ckpt_key = (
+    config["configurable"]["thread_id"],
+    "",  # checkpoint_ns (empty for root)
+    latest.config["configurable"]["checkpoint_id"],
+)
+pending = saver.writes.get(ckpt_key, {})
+for (task_id, write_idx), (t_id, channel, serde_val, task_path) in pending.items():
+    print(f"  task={task_id[:8]}... channel={channel!r}, write_idx={write_idx}")
 ```
 
 ### Example 2 — `WRITES_IDX_MAP` constants for custom saver implementors
@@ -1066,7 +1072,7 @@ def get_checkpoint_id(config: RunnableConfig) -> str | None:
 def get_checkpoint_metadata(
     config: RunnableConfig,
     *,
-    metadata: CheckpointMetadata | None,
+    metadata: CheckpointMetadata,
 ) -> CheckpointMetadata:
     """Build canonical checkpoint metadata by merging the config's run
     context (run_id) with caller-supplied metadata."""
@@ -1210,7 +1216,15 @@ class LoggingCheckpointer(BaseCheckpointSaver):
         )
         print(f"Saved checkpoint: step={full_metadata.get('step')}, "
               f"source={full_metadata.get('source')}")
-        return config
+        # Return a config with the new checkpoint_id so LangGraph can
+        # chain parent → child checkpoint references for history/forks.
+        return {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": config["configurable"].get("checkpoint_ns", ""),
+                "checkpoint_id": checkpoint["id"],
+            }
+        }
 
     def put_writes(
         self,
