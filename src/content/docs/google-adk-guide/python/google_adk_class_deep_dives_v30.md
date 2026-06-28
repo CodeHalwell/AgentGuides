@@ -327,8 +327,9 @@ def get_model_name(self, endpoint_name: str) -> str: ...
 
 ```python
 class AgentRegistrySingleMcpToolset(McpToolset):
-    # Overrides _get_tools_async to add:
+    # Overrides get_tools(readonly_context) to add:
     # tool.custom_metadata["GCP_MCP_SERVER_DESTINATION_ID"] = server_id
+    # after calling super().get_tools(readonly_context)
 ```
 
 ### Example: getting an MCP toolset with auto-IAM auth
@@ -1187,6 +1188,7 @@ criterion = RubricsBasedCriterion(
 
 metric = EvalMetric(
     metric_name="final_response_quality",
+    threshold=0.7,  # required: RubricBasedEvaluator passes this to get_eval_status(score, threshold)
     criterion=criterion,
 )
 evaluator = RubricBasedFinalResponseQualityV1Evaluator(eval_metric=metric)
