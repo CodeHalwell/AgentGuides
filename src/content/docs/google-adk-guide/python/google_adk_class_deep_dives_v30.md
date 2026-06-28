@@ -54,7 +54,7 @@ class GCPSkillRegistry(SkillRegistry):
 
 ### `get_skill` — download and unzip a skill
 
-`get_skill` constructs a full resource name `projects/{project_id}/locations/{location}/skills/{name}`, fetches the skill via `_client.skills.get(name=full_name)`, then decodes the base64 `zipped_filesystem` field and calls `_unzip_filesystem` inside `asyncio.to_thread` to avoid blocking the event loop.
+`get_skill` constructs a full resource name `projects/{project_id}/locations/{location}/skills/{name}`, fetches the skill via `_client.skills.get(name=full_name)`, then decodes the base64 `zipped_filesystem` field and calls `_utils._load_skill_from_zip_bytes` inside `asyncio.to_thread` to avoid blocking the event loop.
 
 ```python
 async def get_skill(self, *, name: str) -> models.Skill:
@@ -471,10 +471,10 @@ agent = LlmAgent(
 ### Example: guarding against Gemini 1.x incompatibility
 
 ```python
-# This will raise ValueError at call time on Gemini 1.5 if other tools exist.
+# This will raise ValueError at call time on Gemini 1.x if other tools exist.
 # Test model compatibility before deploying:
 model = "gemini-1.5-pro"
-if not model.startswith("gemini-2."):
+if model.startswith("gemini-1."):
     raise ValueError(f"EnterpriseWebSearchTool requires Gemini 2+, got {model}")
 ```
 
