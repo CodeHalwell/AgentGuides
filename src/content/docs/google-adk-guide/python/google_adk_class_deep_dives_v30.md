@@ -228,11 +228,13 @@ registry = ApiRegistry(
     location="us-central1",
 )
 
-# Add "search_" prefix to every tool name from this MCP server (namespacing,
-# not filtering — all tools are exposed, renamed to search_<original_name>)
+# Add "search" prefix to every tool name from this MCP server (namespacing,
+# not filtering — all tools are exposed, renamed to search_<original_name>).
+# BaseToolset formats names as f"{prefix}_{tool.name}", so passing "search_"
+# would produce "search__lookup" (double underscore); use "search" instead.
 search_toolset = registry.get_toolset(
     mcp_server_name="projects/my-project/locations/us-central1/mcpServers/web-search",
-    tool_name_prefix="search_",
+    tool_name_prefix="search",
 )
 
 agent = LlmAgent(
@@ -266,13 +268,13 @@ toolset = registry.get_toolset("projects/my-project/locations/global/mcpServers/
 
 **Module:** `google.adk.integrations.agent_registry.agent_registry`
 
-`AgentRegistry` connects to `https://agentregistry.googleapis.com/v1alpha` and provides toolset access, endpoint listing, and model-name resolution. When no `auth_scheme` is supplied to `get_mcp_toolset`, the registry auto-resolves authentication from IAM bindings via `GcpAuthProviderScheme`.
+`AgentRegistry` connects to `https://agentregistry.googleapis.com/v1alpha` and provides toolset access, endpoint listing, and model-name resolution. When no `auth_scheme` is supplied to `get_mcp_toolset`, the registry auto-resolves the `GcpAuthProviderScheme` from IAM bindings — but credential execution still requires `GcpAuthProvider` to be registered with `CredentialManager` (see example below).
 
 :::note[Prerequisites]
-`AgentRegistry` unconditionally imports `mcp` at module load time and lazily imports `a2a-sdk` on first use. Both optional extras must be installed:
+`AgentRegistry` unconditionally imports `mcp` at module load time and lazily imports `a2a-sdk` on first use. For IAM-bound MCP servers (where `get_mcp_toolset` auto-resolves a `GcpAuthProviderScheme` from registry bindings), the `agent-identity` extra is also required:
 
 ```bash
-pip install "google-adk[mcp,a2a]"
+pip install "google-adk[mcp,a2a,agent-identity]"
 ```
 :::
 
@@ -334,13 +336,20 @@ class AgentRegistrySingleMcpToolset(McpToolset):
 ```python
 from google.adk.integrations.agent_registry.agent_registry import AgentRegistry
 from google.adk.agents import LlmAgent
+from google.adk.auth.credential_manager import CredentialManager
+from google.adk.integrations.agent_identity.gcp_auth_provider import GcpAuthProvider
+
+# GcpAuthProvider must be registered globally before the agent executes.
+# get_mcp_toolset auto-resolves GcpAuthProviderScheme from IAM bindings, but
+# CredentialManager.get_auth_credential raises ValueError for any CustomAuthScheme
+# (source: credential_manager.py lines 203-212) if no provider is registered.
+CredentialManager.register_auth_provider(GcpAuthProvider())
 
 registry = AgentRegistry(
     project_id="my-project",
     location="us-central1",
 )
 
-# Auth resolved automatically from IAM bindings
 toolset = registry.get_mcp_toolset(
     mcp_server_name="projects/my-project/locations/us-central1/agents/my-agent/mcpServers/default",
 )
