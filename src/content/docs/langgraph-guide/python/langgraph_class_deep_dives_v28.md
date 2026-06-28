@@ -380,7 +380,7 @@ builder = StateGraph(FullState)
 builder.add_node(
     "processor",
     process_messages,
-    input=NarrowInput,     # node receives NarrowInput, writes back to FullState
+    input_schema=NarrowInput,  # node receives NarrowInput, writes back to FullState
 )
 builder.add_edge(START, "processor")
 builder.add_edge("processor", END)
@@ -1186,6 +1186,15 @@ class LoggingCheckpointer(BaseCheckpointSaver):
         print(f"Saved checkpoint: step={full_metadata.get('step')}, "
               f"source={full_metadata.get('source')}")
         return config
+
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: list[tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
+    ) -> None:
+        pass  # no-op for this logging-only saver
 ```
 
 ---
