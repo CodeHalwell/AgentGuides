@@ -1420,5 +1420,5 @@ asyncio.run(main())
 | `LLMRegistry` | `models.registry` | No | Global model registry; prefix routing; `lru_cache` resolve |
 | `EnvironmentSimulationEngine` | `tools.environment_simulation.…engine` | Yes | Core intercept engine; shared `_state_store`; strategy dispatch |
 | `EnvironmentSimulationFactory` | `tools.environment_simulation.…factory` | Yes | Creates callback or plugin from `EnvironmentSimulationConfig` |
-| `MockStrategy` / `TracingMockStrategy` | `tools.environment_simulation.strategies.base` | Yes | Abstract base; tracing replay variant |
+| `MockStrategy` / `TracingMockStrategy` | `tools.environment_simulation.strategies.base` | Yes | Abstract base; `TracingMockStrategy` deprecated — `mock()` always returns not-implemented |
 | `ToolSpecMockStrategy` | `tools.environment_simulation.strategies.tool_spec_mock_strategy` | Yes | LLM-generated stateful mock responses from tool schema |
