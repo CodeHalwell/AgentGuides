@@ -228,13 +228,13 @@ from google.adk.flows.llm_flows.identity import request_processor
 from unittest.mock import MagicMock
 
 # A task-delegation sub-agent in single_turn mode
+# mode="single_turn" means identity is NOT injected (set in constructor)
 sub_agent = LlmAgent(
     name="summarizer",
     model="gemini-2.0-flash",
     description="Summarizes text.",
-    # mode="single_turn" means identity is NOT injected
+    mode="single_turn",
 )
-sub_agent.mode = "single_turn"
 
 async def check_no_injection():
     llm_request = LlmRequest(model="gemini-2.0-flash")
@@ -1025,11 +1025,10 @@ asyncio.run(test_payment_flow())
 - `@experimental(FeatureName.ENVIRONMENT_SIMULATION)`.
 - All strategies receive `state_store` (shared mutable dict) and `tool_connection_map` (describes which tools create/consume stateful parameters).
 
-**`TracingMockStrategy`**
-- Takes a `tracing: str` parameter containing a JSON-encoded trace from a prior agent run.
-- Parses the trace to find a recorded response for the exact `(tool_name, args)` pair.
-- Falls back to generating a response if no match is found.
-- Useful for deterministic replay testing: record a real run, then replay it without calling external APIs.
+**`TracingMockStrategy`** *(deprecated — `MOCK_STRATEGY_TRACING`)*
+- Constructor takes `llm_name: str` and `llm_config: Optional[GenerateContentConfig]` — **not** a `tracing` parameter.
+- `mock()` always returns `{"status": "error", "error_message": "Not implemented"}` — it does **not** replay recorded traces.
+- Use `MockStrategy.MOCK_STRATEGY_TOOL_SPEC` with `EnvironmentSimulationConfig.tracing=<json>` instead; the engine forwards the trace string to `ToolSpecMockStrategy` as context for the mock-generation prompt.
 
 ### Example 1 — implementing a custom `MockStrategy`
 

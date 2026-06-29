@@ -222,7 +222,8 @@ from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import StdioConnectionParams
 
 async def main():
-    # Only expose read-only tools; prefix all tool names with "fs_"
+    # Only expose read-only tools; ADK prepends the prefix with "_",
+    # so tool_name_prefix="fs" produces "fs_read_file", "fs_list_directory", etc.
     fs_toolset = McpToolset(
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
