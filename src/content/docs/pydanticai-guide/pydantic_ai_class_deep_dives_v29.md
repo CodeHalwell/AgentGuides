@@ -993,7 +993,7 @@ print(type(cap).__name__)  # 'PrefixTools'
 **Key implementation facts (verified from source)**:
 
 - Shared dispatch in `_call_prepare_func`: calls the prepare function, then checks `inspect.isawaitable(result)` and awaits if needed. This lets the callable be sync or async.
-- Result validation: `_utils.check_tools_prepare_func_result(result, prepare_func)` rejects `None` (raises `UserError` — return `[]` to expose no tools) and converts the result to a `list`. It does NOT enforce add/rename guards; that validation lives in `PreparedToolset.get_tools()` for toolset-level prepare functions, not in these capability hooks.
+- Result validation: `_utils.check_tools_prepare_func_result(result, prepare_func)` rejects `None` (raises `UserError` — return `[]` to expose no tools) and converts the result to a `list`. The add/rename guard (`'Prepare function cannot add or rename tools'`) runs in `PreparedToolset.get_tools()` — and `Agent._get_toolset()` wraps the capability's `prepare_tools`/`prepare_output_tools` hook in a `PreparedToolset`, so the guard DOES apply here too. Only filtering and metadata modification are allowed; adding new tool names or renaming existing ones raises `UserError`.
 - `PrepareTools` hooks into `prepare_tools()` (function tool definitions); `PrepareOutputTools` hooks into `prepare_output_tools()` (output tool definitions). The two operate on separate hook chains.
 - In `PrepareOutputTools`, `ctx.retry` and `ctx.max_retries` reflect the **output** retry budget (`max_output_retries`) — matching the output hook lifecycle, not the main tool retry budget.
 - `get_serialization_name()` returns `None` for both — they are not spec-serializable because they wrap a callable at construction time.
