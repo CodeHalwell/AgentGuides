@@ -167,7 +167,7 @@ def get_graph(
 
 - `xray=True` recursively expands **all** nested subgraphs to the leaves (unlimited depth). Integer depths (`xray=1`, `xray=2`, …) limit expansion: `xray=1` recurses one level, `xray=2` two levels, etc. The boolean flag is passed through unchanged at each level, whereas integer values are decremented.
 - `graph.draw_mermaid()` returns a Mermaid markdown string. The `classDef first/last/default` blocks and `graph TD;` header are always included.
-- `graph.draw_mermaid_png()` requires `pillow` and `cairosvg` (or a `MermaidDrawMethod` — currently defaults to `api` which calls the Mermaid.ink API over HTTPS).
+- `graph.draw_mermaid_png()` defaults to `MermaidDrawMethod.API`, which calls the Mermaid.ink service over HTTPS — no local packages needed. For offline/CI rendering pass `draw_method=MermaidDrawMethod.PYPPETEER`, which requires the `pyppeteer` package (`pillow` and `cairosvg` are not used).
 - The `Graph` object is from `langchain_core`, not LangGraph. Its `.nodes` dict maps node IDs to `Node(id, data, metadata)` instances.
 
 ```python
