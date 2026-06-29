@@ -180,7 +180,6 @@ print("Sample:", ids[0])  # e.g. 0197b8a3-1234-7xxx-8xxx-xxxxxxxxxxxx
 ```python
 # Example 2 — UUIDv7 as a tool call ID (time-sortable, unique per call)
 
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai._uuid import uuid7
 
@@ -304,7 +303,6 @@ agent_dual = Agent(
 # Example 2 — _resolved_id for id deduplication and allowed_tools filtering
 
 from pydantic_ai.capabilities.mcp import MCP
-from urllib.parse import urlparse
 
 # Demonstrate _resolved_id derivation from URL (hostname + last path segment)
 cap = MCP(url='https://api.example.com/mcp/sse', native=True)
@@ -381,7 +379,7 @@ print(cap.defer_loading)    # True — model loads capability on demand
 
 **Key implementation facts (verified from source)**:
 
-- `Toolset` is a two-field dataclass (inheriting `AbstractCapability` fields): it stores the `AgentToolset` and returns it from `get_toolset()`. That's the entire implementation — it's deliberately minimal.
+- `Toolset` adds a single `toolset: AgentToolset` field on top of `AbstractCapability`'s existing `id` and `defer_loading` fields: it stores the `AgentToolset` and returns it from `get_toolset()`. That's the entire implementation — it's deliberately minimal.
 - `WrapperCapability.__post_init__`: when `self.id is None`, it copies `self.wrapped.id` and `self.wrapped.defer_loading`. This makes a wrapper transparent: a `WrapperCapability` wrapping a deferred capability is itself deferred without any explicit configuration.
 - `WrapperCapability.apply()`: for a plain leaf wrapped capability, registers `self` as the proxy. For a container wrapped capability (e.g. `CombinedCapability`), it also visits all of the container's leaves so their hooks and toolsets are registered with the correct capability IDs.
 - `WrapperCapability.for_run()`: calls `self.wrapped.for_run(ctx)` and, if it returned a new instance, uses `dataclasses.replace(self, wrapped=new_wrapped)`. If the wrapped instance didn't change, returns `self` unchanged (no allocation).
@@ -395,7 +393,6 @@ print(cap.defer_loading)    # True — model loads capability on demand
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Toolset
 from pydantic_ai.toolsets import FunctionToolset
-from pydantic_ai.tools import Tool
 
 # FunctionToolset holds typed Python functions exposed as LLM tools
 toolset = FunctionToolset()
@@ -427,7 +424,6 @@ agent = Agent(
 ```python
 # Example 2 — WrapperCapability: custom middleware that adds per-call logging
 
-import asyncio
 from dataclasses import dataclass
 from typing import Any
 from pydantic_ai import Agent, RunContext
@@ -546,7 +542,7 @@ This module topologically sorts the capabilities list to satisfy middleware orde
 
 from dataclasses import dataclass
 from pydantic_ai.capabilities.abstract import AbstractCapability, CapabilityOrdering
-from pydantic_ai.capabilities._ordering import sort_capabilities, collect_leaves
+from pydantic_ai.capabilities._ordering import sort_capabilities
 
 @dataclass
 class OuterCap(AbstractCapability):
@@ -643,7 +639,7 @@ except UserError as e:
 
 **Key implementation facts (verified from source)**:
 
-- `tools: ToolSelector` accepts `'all'` (default), `Sequence[str]` (list of tool names), `dict[str, Any]` (metadata match), or `Callable[[ctx, tool_def], bool]` (custom async predicate).
+- `tools: ToolSelector` accepts `'all'` (default), `Sequence[str]` (list of tool names), `dict[str, Any]` (metadata match), or a predicate callable — either sync `Callable[[ctx, tool_def], bool]` or async `Callable[[ctx, tool_def], Awaitable[bool]]`.
 - The guard `if td.include_return_schema is None` means per-tool overrides (`Tool(..., include_return_schema=False)`) are respected — this capability only activates on tools that haven't explicitly opted out. A tool with `include_return_schema=True` is also skipped (already opted in).
 - Implemented as a `get_wrapper_toolset` override that returns a `PreparedToolset` wrapping the original. The inner `_include_return_schemas` async function is a closure over the selector.
 - `get_serialization_name()` returns `'IncludeToolReturnSchemas'` — it IS spec-serializable (no callable in constructor for the `tools='all'` case).
@@ -653,7 +649,6 @@ except UserError as e:
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
-from pydantic_ai.tools import Tool
 from pydantic import BaseModel
 
 class WeatherData(BaseModel):
@@ -687,7 +682,6 @@ agent_openai = Agent(
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
-from pydantic_ai.tools import Tool
 from pydantic import BaseModel
 
 class SearchResult(BaseModel):
@@ -727,7 +721,6 @@ agent = Agent(
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
-from pydantic_ai.tools import Tool
 from pydantic import BaseModel
 
 class SensitiveData(BaseModel):
@@ -976,7 +969,6 @@ print(type(cap).__name__)  # 'PrefixTools'
 ```python
 # Example 1 — role-based tool access using PrepareTools
 
-import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import PrepareTools
@@ -1010,7 +1002,6 @@ async def main():
 ```python
 # Example 2 — feature-flag based tool activation
 
-import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import PrepareTools
@@ -1042,7 +1033,6 @@ agent = Agent(
 ```python
 # Example 3 — PrepareOutputTools to disable output tools on first step
 
-import asyncio
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import PrepareOutputTools
 from pydantic_ai.output import ToolOutput
@@ -1126,11 +1116,8 @@ print(f"model-like: {model.single_field_name}")  # 'params'
 ```python
 # Example 2 — sync vs async function dispatch via run_in_executor
 
-import asyncio
-import threading
 from pydantic.json_schema import GenerateJsonSchema
 from pydantic_ai._function_schema import function_schema
-from pydantic_ai._run_context import RunContext
 
 def blocking_sync_tool(query: str) -> str:
     """Sync tool: runs in thread pool via run_in_executor."""
