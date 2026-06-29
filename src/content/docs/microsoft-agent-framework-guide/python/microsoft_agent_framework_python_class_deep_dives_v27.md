@@ -915,12 +915,12 @@ These four functions handle the validation and conversion side of the chat pipel
 
 ### Key source facts
 
-- `normalize_tools` delegates to `_normalize_tools`, which calls `FunctionTool(callable)` for plain callables via `isinstance(tool, (FunctionTool, ...))` type dispatch.
+- `normalize_tools` delegates to `_normalize_tools` (imported from `agent_framework._tools`), which wraps plain callables via `tool(callable)` (the `@tool` decorator function) after checking known types first (`isinstance(tool_item, FunctionTool)`, then `isinstance(tool_item, dict)`, then `isinstance(tool_item, MCPTool)`) and finally `callable(tool_item)` as the catch-all.
 - `validate_chat_options` makes a shallow copy of the input dict (`result = dict(options)`) before validating; the original is never mutated.
 - `validate_chat_options` returns the copy whether or not any option was invalid (the copy is returned after validation, and invalid options raise before returning).
 - `map_chat_to_agent_update` sets `raw_representation=update` — the `AgentResponseUpdate` therefore holds a reference to its originating `ChatResponseUpdate`, useful for provider-specific attribute access.
 - `add_usage_details(None, usage)` and `add_usage_details(usage, None)` both return the non-None dict **directly** (not a copy) — mutating the returned value will mutate the original. `add_usage_details(None, None)` returns an empty `UsageDetails`.
-- The skip condition in `add_usage_details` is `not isinstance(v, (int | None))` — only non-int, non-`None` values (e.g. a `str` or `float`) cause a key to be dropped. A missing key defaults to `0` (which is `int`), so keys present in only one dict ARE included in the result.
+- The skip condition in `add_usage_details` is `not isinstance(v, (int, type(None)))` — only non-int, non-`None` values (e.g. a `str` or `float`) cause a key to be dropped. A missing key defaults to `0` (which is `int`), so keys present in only one dict ARE included in the result.
 
 **Example 1 — normalising a mix of tools:**
 
