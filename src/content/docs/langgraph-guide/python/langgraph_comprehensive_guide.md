@@ -2441,12 +2441,12 @@ g.add_edge("post", END)
 compiled = g.compile()
 
 # Shallow view — subgraph appears as single "scale" node
-print(list(compiled.get_graph().nodes.keys()))
-# ['__start__', 'scale', 'post', '__end__']
+print(sorted(compiled.get_graph().nodes.keys()))
+# ['__end__', '__start__', 'post', 'scale']
 
 # Deep view — subgraph internals exposed
-print(list(compiled.get_graph(xray=True).nodes.keys()))
-# ['__start__', '__end__', 'scale:sub_op', 'post']
+print(sorted(compiled.get_graph(xray=True).nodes.keys()))
+# ['__end__', '__start__', 'post', 'scale:sub_op']
 
 # Generate Mermaid markdown for documentation
 mermaid_md = compiled.get_graph().draw_mermaid()
@@ -2542,8 +2542,7 @@ g.add_node("summarise", lambda s: {"summary": f"got {s['items']}"}, defer=True)
 
 g.add_edge(START, "worker_a")
 g.add_edge(START, "worker_b")
-g.add_edge("worker_a", "summarise")
-g.add_edge("worker_b", "summarise")
+g.add_edge("worker_a", "summarise")   # only one explicit edge — defer=True waits for worker_b too
 g.add_edge("summarise", END)
 
 result = g.compile().invoke({"items": [], "summary": ""})

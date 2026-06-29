@@ -125,7 +125,7 @@ from langgraph.graph import StateGraph, START, END
 class S(TypedDict):
     phase: str
 
-def pick(s): return s["phase"]
+def pick(s): return "transform" if s["phase"] == "extract" else "load"
 
 g = StateGraph(S)
 for name in ["extract", "transform", "load"]:
@@ -165,8 +165,8 @@ def get_graph(
     """Return a langchain_core Graph object suitable for visualization."""
 ```
 
-- `xray=True` is equivalent to `xray=1` which recurses one level; `xray=2` recurses two levels, etc.
-- `graph.draw_mermaid()` returns a Mermaid markdown string. The `classDef first/last/default` blocks and `flowchart TD` header are always included.
+- `xray=True` recursively expands **all** nested subgraphs to the leaves (unlimited depth). Integer depths (`xray=1`, `xray=2`, …) limit expansion: `xray=1` recurses one level, `xray=2` two levels, etc. The boolean flag is passed through unchanged at each level, whereas integer values are decremented.
+- `graph.draw_mermaid()` returns a Mermaid markdown string. The `classDef first/last/default` blocks and `graph TD;` header are always included.
 - `graph.draw_mermaid_png()` requires `pillow` and `cairosvg` (or a `MermaidDrawMethod` — currently defaults to `api` which calls the Mermaid.ink API over HTTPS).
 - The `Graph` object is from `langchain_core`, not LangGraph. Its `.nodes` dict maps node IDs to `Node(id, data, metadata)` instances.
 
@@ -231,11 +231,11 @@ compiled_main = main.compile()
 shallow = compiled_main.get_graph()
 deep    = compiled_main.get_graph(xray=True)
 
-print("Shallow nodes:", list(shallow.nodes.keys()))
-# ['__start__', 'subgraph', 'post', '__end__']
+print("Shallow nodes:", sorted(shallow.nodes.keys()))
+# ['__end__', '__start__', 'post', 'subgraph']
 
-print("Deep nodes:", list(deep.nodes.keys()))
-# ['__start__', '__end__', 'subgraph:sub_step', 'post']
+print("Deep nodes:", sorted(deep.nodes.keys()))
+# ['__end__', '__start__', 'post', 'subgraph:sub_step']
 ```
 
 ```python
@@ -543,7 +543,8 @@ def get_context_jsonschema(self) -> dict[str, Any]: # LangGraph-specific
 - `get_output_jsonschema()` reflects the `state_schema` (or `output_schema` if set).
 - `get_context_jsonschema()` reflects the `context_schema` passed to `StateGraph(context_schema=...)`.
 - `get_config_jsonschema()` is deprecated since v1.0 — it returns a schema wrapping context in `configurable`, which was the pre-v1.0 mechanism. Use `get_context_jsonschema()` instead.
-- All three return `{}` (empty schema) when the corresponding schema is `Any` or not declared.
+- `get_input_jsonschema()` and `get_output_jsonschema()` return `{}` when the schema is `Any` or not declared.
+- `get_context_jsonschema()` returns `None` — not `{}` — when no `context_schema` was passed to `StateGraph`. Guard with `if schema is not None:` before calling dict methods on the result.
 
 ```python
 # Example 1: generate OpenAPI-compatible schemas from a graph
@@ -604,8 +605,10 @@ g.set_finish_point("price")
 compiled = g.compile()
 
 schema = compiled.get_input_jsonschema()
+_TYPE_MAP = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list}
 InputModel = create_model("InputModel", **{
-    k: (v.get("type", "string"), ...) for k, v in schema.get("properties", {}).items()
+    k: (_TYPE_MAP.get(v.get("type", "string"), str), ...)
+    for k, v in schema.get("properties", {}).items()
 })
 
 try:
@@ -1029,7 +1032,10 @@ Implementation facts drawn from `langgraph.graph.state`:
 - Circular edges among deferred nodes are supported; the super-step guarantee applies to non-deferred nodes only.
 
 ```python
-# Example 1: deferred notification node that runs after all workers
+# Example 1: defer=True waits for all branches with only one explicit edge
+# Without defer=True you would need edges from every worker to notify.
+# With defer=True a single edge from worker_a is enough — notify still sees
+# the fully-accumulated list from all three workers.
 import operator
 from typing import Annotated
 from typing_extensions import TypedDict
@@ -1044,7 +1050,7 @@ def worker_b(s): return {"results": ["result-B"]}
 def worker_c(s): return {"results": ["result-C"]}
 
 def notify(s: PipelineState) -> dict:
-    # Runs after all workers — sees the fully-accumulated list
+    # Runs after ALL workers — sees the fully-accumulated list
     return {"report": f"Pipeline complete: {s['results']}"}
 
 g = StateGraph(PipelineState)
@@ -1056,9 +1062,7 @@ g.add_node("notify",   notify, defer=True)
 g.add_edge(START, "worker_a")
 g.add_edge(START, "worker_b")
 g.add_edge(START, "worker_c")
-g.add_edge("worker_a", "notify")
-g.add_edge("worker_b", "notify")
-g.add_edge("worker_c", "notify")
+g.add_edge("worker_a", "notify")   # only one explicit edge — defer=True waits for b and c too
 g.add_edge("notify", END)
 
 compiled = g.compile()
@@ -1068,36 +1072,39 @@ print("Report:", result["report"])
 ```
 
 ```python
-# Example 2: deferred cleanup node in a data processing pipeline
+# Example 2: deferred audit reads both parallel branches via only one explicit edge
+# fetch_b has no edge to audit, yet defer=True guarantees audit sees both sources.
+import operator
+from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 
 class S(TypedDict):
-    data: list[str]
-    cleaned: list[str]
+    data: Annotated[list[str], operator.add]
     audit_log: str
 
-def ingest(s): return {"data": ["raw1", "  raw2  ", "raw3"]}
-def clean(s):  return {"cleaned": [x.strip() for x in s["data"]]}
+def fetch_a(s): return {"data": ["source-A"]}
+def fetch_b(s): return {"data": ["source-B"]}
 
 def audit(s: S) -> dict:
-    # defer=True ensures this runs after both ingest and clean
-    return {"audit_log": f"Processed {len(s['cleaned'])} items from {len(s['data'])} raw"}
+    # defer=True means audit runs after fetch_a AND fetch_b even though
+    # there is only an explicit edge from fetch_a to audit
+    return {"audit_log": f"Audited {len(s['data'])} items: {s['data']}"}
 
 g = StateGraph(S)
-g.add_node("ingest", ingest)
-g.add_node("clean",  clean)
+g.add_node("fetch_a", fetch_a)
+g.add_node("fetch_b", fetch_b)
 g.add_node("audit",  audit, defer=True)
 
-g.add_edge(START, "ingest")
-g.add_edge("ingest", "clean")
-g.add_edge("clean", "audit")
+g.add_edge(START, "fetch_a")
+g.add_edge(START, "fetch_b")
+g.add_edge("fetch_a", "audit")   # only one explicit edge — defer=True handles the rest
 g.add_edge("audit", END)
 
 compiled = g.compile()
-result = compiled.invoke({"data": [], "cleaned": [], "audit_log": ""})
+result = compiled.invoke({"data": [], "audit_log": ""})
 print("Audit:", result["audit_log"])
-# Audit: Processed 3 items from 3 raw
+# Audit: Audited 2 items: ['source-A', 'source-B']
 ```
 
 ```python
