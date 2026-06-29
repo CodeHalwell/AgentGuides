@@ -1,6 +1,6 @@
 ---
-title: "Class deep dives — volume 31 (10 additional classes)"
-description: "Source-verified deep dives into 10 additional google-adk 2.3.0 classes: _AgentTransferLlmRequestProcessor, _IdentityLlmRequestProcessor, DataFileUtil + _CodeExecutionRequestProcessor + _CodeExecutionResponseProcessor, LLMRegistry, EnvironmentSimulationEngine, EnvironmentSimulationFactory, MockStrategy + TracingMockStrategy, and ToolSpecMockStrategy."
+title: "Class deep dives — volume 31 (11 additional classes)"
+description: "Source-verified deep dives into 11 additional google-adk 2.3.0 classes: _AgentTransferLlmRequestProcessor, _IdentityLlmRequestProcessor, DataFileUtil, _CodeExecutionRequestProcessor, _CodeExecutionResponseProcessor, LLMRegistry, EnvironmentSimulationEngine, EnvironmentSimulationFactory, MockStrategy, TracingMockStrategy, and ToolSpecMockStrategy."
 framework: google-adk
 language: python
 sidebar:
