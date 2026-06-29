@@ -328,8 +328,6 @@ print("Tool schema:", list(search_tool.args_schema.model_fields.keys()))
 ```python
 # Example 2: as_tool with explicit args_schema to expose only the input key
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START, END
@@ -354,11 +352,13 @@ g.add_edge("tokenize", "summarize")
 g.add_edge("summarize", END)
 compiled = g.compile()
 
-tool = compiled.as_tool(
-    args_schema=WorkerInput,
-    name="text_processor",
-    description="Tokenize and summarize text, return token count",
-)
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning)
+    tool = compiled.as_tool(
+        args_schema=WorkerInput,
+        name="text_processor",
+        description="Tokenize and summarize text, return token count",
+    )
 result = tool.invoke({"input_text": "LangGraph is a powerful framework"})
 print("Summary:", result["summary"])
 # Summary: 6 tokens
