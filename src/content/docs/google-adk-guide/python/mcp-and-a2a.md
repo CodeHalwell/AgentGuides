@@ -169,16 +169,29 @@ Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_reques
 ## `A2aRemoteAgentConfig`
 
 ```python
-from google.adk.a2a.agent.config import A2aRemoteAgentConfig, RequestInterceptor
+from google.adk.a2a.agent.config import (
+    A2aRemoteAgentConfig,
+    ParametersConfig,
+    RequestInterceptor,
+)
+from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
+
+# A2aRemoteAgentConfig fields: converter hooks + request_interceptors.
+# There is no top-level `parameters` field — attach metadata via a
+# before_request interceptor that receives and mutates ParametersConfig.
+async def add_auth_header(invocation_context, a2a_message, params: ParametersConfig):
+    params.request_metadata = {"x-tenant-id": "acme", "Authorization": "Bearer tok"}
+    return a2a_message, params
 
 cfg = A2aRemoteAgentConfig(
-    parameters=...,
-    request_interceptors=[RequestInterceptor(...)],
+    request_interceptors=[
+        RequestInterceptor(before_request=add_auth_header),
+    ],
 )
-agent = RemoteA2aAgent(name="r", agent_card="...", config=cfg)
+agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-known/agent.json", config=cfg)
 ```
 
-Interceptors mutate outgoing A2A requests (add tenant headers, signatures, logging). See `a2a/agent/config.py`.
+`ParametersConfig` carries `request_metadata` and `client_call_context` per outgoing message. Modify it inside a `before_request` hook; the return value `(message, params)` is forwarded to the A2A send call. `after_request` receives each incoming `A2AEvent` and can filter or transform it. See `a2a/agent/config.py`.
 
 ## MCP server from ADK agent
 
