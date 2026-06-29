@@ -904,12 +904,12 @@ from pydantic_ai.toolsets import FunctionToolset
 db_tools = FunctionToolset()
 api_tools = FunctionToolset()
 
-@db_tools.tool
+@db_tools.tool_plain
 def search(query: str) -> list:
     """Search the database."""
     return []
 
-@api_tools.tool
+@api_tools.tool_plain
 def search(query: str) -> list:  # type: ignore[override]
     """Search the external API."""
     return []
