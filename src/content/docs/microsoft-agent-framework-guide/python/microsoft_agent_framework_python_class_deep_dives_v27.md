@@ -353,14 +353,15 @@ print("Sensitive telemetry enabled for dev/test")
 
 `create_resource(service_name=None, service_version=None, **attributes)` constructs an OpenTelemetry `Resource` object. It reads `OTEL_SERVICE_NAME` (defaults to `"agent_framework"`), `OTEL_SERVICE_VERSION` (defaults to the installed package version), and `OTEL_RESOURCE_ATTRIBUTES` (parsed as `key=value,key2=value2` pairs) from the environment. Explicit keyword arguments override the env-var values.
 
-`create_metric_views()` returns a list of `View` objects that replace the default OTel histogram boundaries. There are two custom histograms:
+`create_metric_views()` returns a list of **three** `View` objects that allow `agent_framework` and `gen_ai` metrics through and drop everything else. It does **not** configure custom histogram bucket boundaries — those constants exist for callers to wire up their own `ExplicitBucketHistogramAggregation` views if needed.
 
-| Metric | Custom boundaries | Why |
-|---|---|---|
-| `gen_ai.client.token.usage` | `TOKEN_USAGE_BUCKET_BOUNDARIES` (1, 4, 16, … 67_108_864) | Spans 6 orders of magnitude for token distributions |
-| `gen_ai.client.operation.duration` | `OPERATION_DURATION_BUCKET_BOUNDARIES` (0.01s, 0.02s, 0.04s, … 81.92s) | Exponential backoff scale for LLM latency |
+| # | `instrument_name` pattern | Aggregation | Effect |
+|---|---|---|---|
+| 1 | `"agent_framework*"` | default | Passes agent_framework metrics through with OTel defaults |
+| 2 | `"gen_ai*"` | default | Passes gen_ai metrics through with OTel defaults |
+| 3 | `"*"` | `DropAggregation` | Drops all other metrics |
 
-Both boundary tuples use 14 exponentially spaced values and are `Final` module-level constants.
+`TOKEN_USAGE_BUCKET_BOUNDARIES` and `OPERATION_DURATION_BUCKET_BOUNDARIES` are separate `Final` module-level constants. Both use 14 exponentially spaced values.
 
 ### Key source facts
 
@@ -368,7 +369,7 @@ Both boundary tuples use 14 exponentially spaced values and are `Final` module-l
 - `OPERATION_DURATION_BUCKET_BOUNDARIES = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92)` — 14 values; each doubles the previous.
 - `create_resource` uses `Resource.create({...})` from the OTel SDK — the returned resource is directly usable in `TracerProvider`/`MeterProvider` constructors.
 - `OTEL_RESOURCE_ATTRIBUTES` is parsed by `_parse_headers` (a comma-separated `key=value` parser) then merged with explicit `**attributes` — explicit kwargs win.
-- `create_metric_views` uses `InstrumentNameFilter` matching `gen_ai.client.*` to scope the custom boundaries to agent-framework metrics only.
+- `create_metric_views` uses `View(instrument_name="agent_framework*")` and `View(instrument_name="gen_ai*")` to pass those namespaces through, and `View(instrument_name="*", aggregation=DropAggregation())` to suppress everything else. No custom histogram boundaries are applied.
 
 **Example 1 — creating a resource with custom service name:**
 
@@ -396,11 +397,11 @@ from agent_framework.observability import create_resource, create_metric_views
 
 resource = create_resource(service_name="my-agent")
 reader = PeriodicExportingMetricReader(ConsoleMetricExporter(), export_interval_millis=30_000)
-views = create_metric_views()  # returns 2 View objects
+views = create_metric_views()  # returns 3 View objects
 
 provider = MeterProvider(resource=resource, metric_readers=[reader], views=views)
-# Token usage and operation duration histograms now use agent-framework's
-# custom bucket boundaries instead of OTel's default 13-bucket linear scale.
+# agent_framework* and gen_ai* metrics are passed through with OTel default aggregations.
+# All other metrics are dropped (DropAggregation). Custom bucket boundaries are NOT applied here.
 ```
 
 **Example 3 — inspecting the histogram boundaries:**
@@ -598,9 +599,9 @@ print(result)
 | `kind` | Composition rule |
 |---|---|
 | `"system"` | Each `system`-role message is its own single-message group |
-| `"user"` | One or more consecutive `user`-role messages form one group |
-| `"assistant_text"` | One or more consecutive `assistant` messages with no tool calls |
-| `"tool_call"` | An `assistant` message with tool calls plus all following `tool`-role messages |
+| `"user"` | Each `user`-role message is its own single-message group |
+| `"assistant_text"` | Each `assistant` message with no tool calls is its own single-message group |
+| `"tool_call"` | An `assistant` message with tool calls plus all following `tool`-role messages (and any interleaved reasoning-only messages) form one group |
 
 `annotate_message_groups(messages, *, from_index=None, force_reannotate=False, tokenizer=None)` **writes** the span metadata into each message's `additional_properties` dict and returns the ordered list of group IDs. By default it only re-annotates the suffix of the list that contains unannotated messages — existing annotations in the prefix are preserved, and `group_index_offset` is continued from the last known group index to keep ordinal numbering monotone.
 
@@ -800,7 +801,14 @@ These four utility functions are the low-level building blocks that chat clients
 
 `detect_media_type_from_base64(*, data_bytes=None, data_str=None, data_uri=None)` identifies the media type of binary data by examining **magic bytes** at the start of the payload. It accepts raw bytes, a base64 string, or a full data URI. Recognised types include `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `audio/wav`, `audio/ogg`, `video/mp4`, `application/pdf`, and several others. Returns `None` for unrecognised formats — notably it cannot detect text-based formats like JSON or plain text.
 
-`merge_chat_options(base, override)` merges two `dict[str, Any]` option dicts. Override values take precedence for scalar keys. For list values both lists are combined (`base_list + override_list`). For dict values, the dicts are recursively merged. For the special `"instructions"` key the two strings are joined with `"\n"`.
+`merge_chat_options(base, override)` merges two `dict[str, Any]` option dicts. Most keys follow simple override. A small set of keys are treated specially:
+- `"instructions"`: concatenated as `f"{base}\n{override}"`
+- `"tools"`: list-merged with deduplication by identity
+- `"logit_bias"`, `"metadata"`, `"additional_properties"`: shallow dict-merged (`{**base, **override}`)
+- `"tool_choice"`: override wins if truthy, otherwise base is kept
+- `"response_format"`: always replaced by override value
+
+All other keys, including other list and dict values (e.g. `stop`), are simple overrides.
 
 `prepend_instructions_to_messages(messages, instructions, role="system")` creates `Message(role, [instr])` objects for each element in `instructions` (or for a single string) and prepends them to `messages`, returning a new list (the original is not mutated).
 
@@ -930,7 +938,7 @@ assert isinstance(tools[0], FunctionTool)
 tools_none = normalize_tools(None)
 assert tools_none == []
 
-# List of mixed types — FunctionTool requires name= (and optionally func=)
+# List of mixed types — agent_framework.FunctionTool requires name= keyword (positional form not supported)
 another_tool = FunctionTool(name="my_plain_function", func=my_plain_function)
 tools_list = normalize_tools([my_plain_function, another_tool])
 assert len(tools_list) == 2
@@ -991,15 +999,15 @@ print("Total tokens:", total)
 | 1 | `ContentLabel` · `combine_labels` · `check_confidentiality_allowed` | String coercion on construction; `combine_labels` uses priority table `{PUBLIC:0, PRIVATE:1, USER_IDENTITY:2}` + `max()`; `check_confidentiality_allowed` returns `True` when `context ≤ allowed` |
 | 2 | `store_untrusted_content` · `get_security_tools` · `quarantined_llm` · `inspect_variable` | `store_untrusted_content` uses the module-level `_global_variable_store`; `get_security_tools()` returns `[quarantined_llm, inspect_variable]`; `inspect_variable` emits `WARNING`-level audit logs |
 | 3 | `enable_instrumentation` · `disable_instrumentation` · `enable_sensitive_telemetry` | Sticky `_user_disabled` flag set only by `disable_instrumentation`; `force=True` clears it; `OBSERVABILITY_SETTINGS` is the global singleton mutated by all three functions |
-| 4 | `create_resource` · `create_metric_views` · histogram boundaries | 14-bucket `TOKEN_USAGE_BUCKET_BOUNDARIES` (4× scale up to 67 M) and `OPERATION_DURATION_BUCKET_BOUNDARIES` (2× scale 0.01 s–81.92 s); `create_resource` reads `OTEL_SERVICE_NAME` / `OTEL_SERVICE_VERSION` / `OTEL_RESOURCE_ATTRIBUTES` |
+| 4 | `create_resource` · `create_metric_views` · histogram boundaries | `create_metric_views()` returns 3 Views (allow `agent_framework*`, allow `gen_ai*`, drop `*`) — no custom bucket boundaries applied; 14-bucket `TOKEN_USAGE_BUCKET_BOUNDARIES` and `OPERATION_DURATION_BUCKET_BOUNDARIES` are separate constants for callers to wire manually |
 | 5 | `get_tracer` · `get_meter` · context vars | `get_tracer` returns `NoOpTracer` when instrumentation disabled; `INNER_ACCUMULATED_USAGE` + `INNER_RESPONSE_TELEMETRY_CAPTURED_FIELDS` are `contextvars.ContextVar` used to deduplicate nested span usage |
 | 6 | `create_mcp_client_span` · `set_mcp_span_error` | Context-manager delivery; span name = `"{method} {target}"` when target set; `SpanKind.CLIENT`; `record_exception=True` on context-manager exit |
-| 7 | `group_messages` · `annotate_message_groups` | 4 group kinds; `_ensure_message_ids` side-effect; suffix-only re-annotation via `_first_annotation_gaps`; `group_index_offset` continues monotone numbering across appends |
+| 7 | `group_messages` · `annotate_message_groups` | 4 group kinds; each `system`, `user`, `assistant_text` message is its own group (no coalescing); `_ensure_message_ids` side-effect; suffix-only re-annotation via `_first_annotation_gaps` |
 | 8 | `apply_compaction` · `project_included_messages` · `included_messages` · `included_token_count` · `annotate_token_counts` | `apply_compaction` pipeline: annotate → tokenize → strategy → project; `project_included_messages` is an alias for `included_messages`; `force_retokenize=True` re-scans all messages |
-| 9 | `normalize_messages` · `detect_media_type_from_base64` · `merge_chat_options` · `prepend_instructions_to_messages` | `normalize_messages(None)` → `[]`; magic-byte detection only (no text formats); `merge_chat_options` concatenates `instructions` with `"\n"`; `prepend_instructions_to_messages` returns new list |
+| 9 | `normalize_messages` · `detect_media_type_from_base64` · `merge_chat_options` · `prepend_instructions_to_messages` | `normalize_messages(None)` → `[]`; magic-byte detection only; `merge_chat_options` — only `tools` list-merges, only `logit_bias`/`metadata`/`additional_properties` dict-merges, all others simple override; `prepend_instructions_to_messages` returns new list |
 | 10 | `normalize_tools` · `validate_chat_options` · `map_chat_to_agent_update` · `add_usage_details` | `validate_chat_options` is async; `map_chat_to_agent_update` sets `raw_representation=update`; `add_usage_details` skips keys only when a value is non-int and non-`None` — missing keys default to 0 and are included |
 
-## Changelog
+## Revision history
 
 | Date | Version | Notes |
 |---|---|---|
