@@ -202,7 +202,7 @@ ref = store_untrusted_content(external_response, label=label, description="API r
 # ref.type == "variable_reference"
 
 agent = Agent(
-    chat_client=client,
+    client=client,
     instructions="You are a helpful assistant. Summarize the content at the provided variable reference.",
     tools=get_security_tools(),
 )
@@ -908,13 +908,13 @@ These four functions handle the validation and conversion side of the chat pipel
 - `validate_chat_options` returns the copy whether or not any option was invalid (the copy is returned after validation, and invalid options raise before returning).
 - `map_chat_to_agent_update` sets `raw_representation=update` — the `AgentResponseUpdate` therefore holds a reference to its originating `ChatResponseUpdate`, useful for provider-specific attribute access.
 - `add_usage_details(None, usage)` and `add_usage_details(usage, None)` both return a copy of the non-None dict. `add_usage_details(None, None)` returns an empty `UsageDetails`.
-- The skip condition in `add_usage_details` is `not isinstance(v1, int) or not isinstance(v2, int)` — if *either* value is not int the key is dropped.
+- The skip condition in `add_usage_details` is `not isinstance(v, (int | None))` — only non-int, non-`None` values (e.g. a `str` or `float`) cause a key to be dropped. A missing key defaults to `0` (which is `int`), so keys present in only one dict ARE included in the result.
 
 **Example 1 — normalising a mix of tools:**
 
 ```python
+from agent_framework import FunctionTool
 from agent_framework._types import normalize_tools, ToolTypes
-from agent_framework._tools import FunctionTool
 
 def my_plain_function(x: int) -> str:
     return str(x * 2)
@@ -972,8 +972,9 @@ total = add_usage_details(total, usage_turn3)
 
 assert total["input_token_count"] == 650
 assert total["output_token_count"] == 160
-# Non-standard cache key: present in turn3 only — treated as add_usage_details(None-equivalent, 100)
-# Only int+int is summed; if one side is missing the key is present in the result from that side
+# cache_read_input_token_count only in turn3 — missing key defaults to 0, so it IS included
+assert total["cache_read_input_token_count"] == 100
+# A key is dropped only when a value is a non-int, non-None type (e.g. str or float)
 print("Total tokens:", total)
 ```
 
@@ -992,7 +993,7 @@ print("Total tokens:", total)
 | 7 | `group_messages` · `annotate_message_groups` | 4 group kinds; `_ensure_message_ids` side-effect; suffix-only re-annotation via `_first_annotation_gaps`; `group_index_offset` continues monotone numbering across appends |
 | 8 | `apply_compaction` · `project_included_messages` · `included_messages` · `included_token_count` · `annotate_token_counts` | `apply_compaction` pipeline: annotate → tokenize → strategy → project; `project_included_messages` is an alias for `included_messages`; `force_retokenize=True` re-scans all messages |
 | 9 | `normalize_messages` · `detect_media_type_from_base64` · `merge_chat_options` · `prepend_instructions_to_messages` | `normalize_messages(None)` → `[]`; magic-byte detection only (no text formats); `merge_chat_options` concatenates `instructions` with `"\n"`; `prepend_instructions_to_messages` returns new list |
-| 10 | `normalize_tools` · `validate_chat_options` · `map_chat_to_agent_update` · `add_usage_details` | `validate_chat_options` is async; `map_chat_to_agent_update` sets `raw_representation=update`; `add_usage_details` skips keys where either value is non-int |
+| 10 | `normalize_tools` · `validate_chat_options` · `map_chat_to_agent_update` · `add_usage_details` | `validate_chat_options` is async; `map_chat_to_agent_update` sets `raw_representation=update`; `add_usage_details` skips keys only when a value is non-int and non-`None` — missing keys default to 0 and are included |
 
 ## Changelog
 
