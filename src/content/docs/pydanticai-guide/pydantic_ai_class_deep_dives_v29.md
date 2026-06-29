@@ -272,8 +272,6 @@ agent_local = Agent(
 
 # Native-only mode (server runs elsewhere; provider calls it directly)
 # No 'mcp' extra required since local execution is disabled
-from pydantic_ai.native_tools import MCPServerTool
-
 agent_native = Agent(
     'anthropic:claude-opus-4-5',
     capabilities=[
@@ -293,7 +291,7 @@ agent_dual = Agent(
             url='https://my-mcp-server.example.com/sse',
             native=True,
             local=True,   # local=True derives transport from url=
-            authorization_token='Bearer sk-...',
+            authorization_token='Bearer <your-token-here>',
         )
     ]
 )
