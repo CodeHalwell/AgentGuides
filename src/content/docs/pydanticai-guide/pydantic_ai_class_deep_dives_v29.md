@@ -49,7 +49,7 @@ params = ModelRequestParameters(
     ],
     output_tools=[],
     allow_text_output=True,
-    system_prompt_parts=[],
+    instruction_parts=[],
 )
 
 manager = ModelResponsePartsManager(model_request_parameters=params)
@@ -74,7 +74,7 @@ from pydantic_ai.messages import TextPart, ThinkingPart
 
 manager = ModelResponsePartsManager(
     model_request_parameters=ModelRequestParameters(
-        function_tools=[], output_tools=[], allow_text_output=True, system_prompt_parts=[]
+        function_tools=[], output_tools=[], allow_text_output=True, instruction_parts=[]
     )
 )
 
@@ -112,7 +112,7 @@ manager = ModelResponsePartsManager(
         ],
         output_tools=[],
         allow_text_output=True,
-        system_prompt_parts=[],
+        instruction_parts=[],
     )
 )
 
@@ -249,7 +249,7 @@ The `MCP` capability is the v2.0.0 replacement for passing `MCPToolset` directly
 - `_build_local(url)` merges `authorization_token` into headers and constructs an `MCPToolset(url, ...)` — FastMCP infers SSE vs Streamable HTTP from the URL path/scheme.
 - `from_spec` restricts `local=` to `str | bool | None` (JSON-serializable) and requires `url=`. Runtime-only values like `fastmcp.Client` instances can still be passed directly to `MCP(...)` — they just cannot roundtrip through a spec file.
 - `get_toolset()` overrides the parent to apply `allowed_tools` as a `filtered()` predicate after the parent resolves the local toolset.
-- `get_serialization_name()` returns `None` — `MCP` is not spec-serializable in the general case because `local=` accepts non-serializable runtime objects.
+- `get_serialization_name()` returns `'MCP'` (inherited from `AbstractCapability.__name__`) — `MCP` IS spec-serializable. The `from_spec` class method restricts `local=` to `str | bool | None` for the serializable path; passing runtime-only objects like `fastmcp.Client` still works directly via `MCP(...)` but those instances cannot roundtrip through an AgentSpec file.
 
 ```python
 # Example 1 — native + local dual-mode MCP capability
@@ -514,7 +514,10 @@ class NamedWrapper(WrapperCapability):
 
 named = NamedWrapper(wrapped=deferred_toolset_cap, id='wrapper-override')
 print(named.id)            # 'wrapper-override'   (explicit, not inherited)
-print(named.defer_loading) # True                  (still inherited, no explicit defer_loading)
+print(named.defer_loading) # False                 (NOT inherited — __post_init__ only copies when id is None)
+# To keep deferred loading with an explicit id, pass defer_loading=True explicitly:
+named_deferred = NamedWrapper(wrapped=deferred_toolset_cap, id='wrapper-override', defer_loading=True)
+print(named_deferred.defer_loading) # True
 ```
 
 ---
