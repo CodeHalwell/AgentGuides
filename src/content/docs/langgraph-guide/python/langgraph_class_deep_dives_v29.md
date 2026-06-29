@@ -293,11 +293,8 @@ def as_tool(
 ```python
 # Example 1: expose a compiled subgraph as a tool for a parent agent
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import MessagesState
 
 class SubState(TypedDict):
     query: str
@@ -313,13 +310,15 @@ sub.add_edge(START, "search")
 sub.add_edge("search", END)
 compiled_sub = sub.compile()
 
-search_tool = compiled_sub.as_tool(
-    name="web_search",
-    description="Search the web and return relevant results",
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning)
     # Without arg_types, ALL state keys — including output-only 'result' — appear
     # in the schema as required tool arguments. Restrict to input keys only:
-    arg_types={"query": str},
-)
+    search_tool = compiled_sub.as_tool(
+        name="web_search",
+        description="Search the web and return relevant results",
+        arg_types={"query": str},
+    )
 print("Tool name:", search_tool.name)
 print("Tool schema:", list(search_tool.args_schema.model_fields.keys()))
 # Tool name: web_search
@@ -368,13 +367,9 @@ print("Summary:", result["summary"])
 ```python
 # Example 3: embed a graph tool into a ToolNode for multi-agent use
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-
-from typing_extensions import TypedDict, Annotated
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt import ToolNode
-import operator
 
 class PricingState(TypedDict):
     product_id: str
@@ -390,13 +385,15 @@ price_graph.add_edge(START, "lookup")
 price_graph.add_edge("lookup", END)
 compiled_price = price_graph.compile()
 
-price_tool = compiled_price.as_tool(
-    name="get_price",
-    description="Get the price for a product by ID",
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning)
     # arg_types restricts the schema to input-only keys; without it, output-only
     # 'price' appears as a required tool argument the LLM must supply before lookup
-    arg_types={"product_id": str},
-)
+    price_tool = compiled_price.as_tool(
+        name="get_price",
+        description="Get the price for a product by ID",
+        arg_types={"product_id": str},
+    )
 
 # The tool can now be passed to ToolNode, create_react_agent, etc.
 tool_node = ToolNode([price_tool])
@@ -541,7 +538,7 @@ These three methods return standard JSON Schema `dict` objects derived from the 
 ```python
 def get_input_jsonschema(self) -> dict[str, Any]:   # from Runnable base
 def get_output_jsonschema(self) -> dict[str, Any]:  # from Runnable base
-def get_context_jsonschema(self) -> dict[str, Any]: # LangGraph-specific
+def get_context_jsonschema(self) -> dict[str, Any] | None: # LangGraph-specific; None when no context_schema set
 # DEPRECATED: get_config_jsonschema() — use get_context_jsonschema()
 ```
 

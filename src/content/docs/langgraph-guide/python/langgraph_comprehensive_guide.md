@@ -2460,7 +2460,7 @@ print(mermaid_md[:200])
 ```python
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph
 
 class SummaryState(TypedDict):
     text: str
@@ -2476,12 +2476,13 @@ g.set_finish_point("count")
 compiled = g.compile()
 
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-word_count_tool = compiled.as_tool(
-    args_schema=SummaryInput,
-    name="word_count",
-    description="Count words in a piece of text",
-)
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning)
+    word_count_tool = compiled.as_tool(
+        args_schema=SummaryInput,
+        name="word_count",
+        description="Count words in a piece of text",
+    )
 result = word_count_tool.invoke({"text": "LangGraph is great for building agents"})
 print("Word count:", result["word_count"])  # 7
 ```
