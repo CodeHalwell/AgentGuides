@@ -357,16 +357,17 @@ print(cap.url)              # 'https://my-server.example.com/sse'
 print(cap.allowed_tools)    # ['tool_a', 'tool_b']
 print(cap.defer_loading)    # True — model loads capability on demand
 
-# Equivalent YAML spec (for AgentSpec file):
+# Equivalent YAML spec (for AgentSpec file).
+# CapabilitySpec uses NamedSpec short form: {ClassName: {kwargs}} — NOT type: ClassName.
 # capabilities:
-#   - type: MCP
-#     url: https://my-server.example.com/sse
-#     native: true
-#     local: true
-#     authorization_token: Bearer token123
-#     allowed_tools: [tool_a, tool_b]
-#     defer_loading: true
-#     id: my-server
+#   - MCP:
+#       url: https://my-server.example.com/sse
+#       native: true
+#       local: true
+#       authorization_token: Bearer token123
+#       allowed_tools: [tool_a, tool_b]
+#       defer_loading: true
+#       id: my-server
 ```
 
 ---
@@ -936,20 +937,28 @@ agent = Agent(
 
 from pydantic_ai.capabilities.prefix_tools import PrefixTools
 
-# Equivalent to what AgentSpec would parse from:
+# Equivalent to what AgentSpec would parse from (NamedSpec short form: {ClassName: {kwargs}}):
 # capabilities:
-#   - type: PrefixTools
-#     prefix: db
-#     capability:
-#       type: Toolset
-#       ...
+#   - PrefixTools:
+#       prefix: db
+#       capability:
+#         MCP:
+#           url: https://db-mcp.example.com/sse
+#           local: true
 #
-# In code, from_spec accepts a raw capability spec dict:
+# Note: only spec-serializable capabilities can appear nested here.
+# Toolset.get_serialization_name() returns None — it is NOT registered in the spec
+# registry, so it cannot be used as a nested capability in YAML/from_spec.
+# Use Python code (PrefixTools(wrapped=Toolset(...), prefix='db')) for that case.
+#
+# In code, from_spec accepts a raw capability spec dict using NamedSpec short form:
 cap = PrefixTools.from_spec(
     prefix='db',
     capability={
-        'type': 'Toolset',
-        # ... toolset spec fields
+        'MCP': {
+            'url': 'https://db-mcp.example.com/sse',
+            'local': True,
+        }
     },
 )
 print(cap.prefix)          # 'db'
@@ -967,7 +976,7 @@ print(type(cap).__name__)  # 'PrefixTools'
 **Key implementation facts (verified from source)**:
 
 - Shared dispatch in `_call_prepare_func`: calls the prepare function, then checks `inspect.isawaitable(result)` and awaits if needed. This lets the callable be sync or async.
-- Result validation: `_utils.check_tools_prepare_func_result(result, prepare_func)` validates that the returned list doesn't add new tools or rename existing ones — only filtering and metadata modification are allowed.
+- Result validation: `_utils.check_tools_prepare_func_result(result, prepare_func)` rejects `None` (raises `UserError` — return `[]` to expose no tools) and converts the result to a `list`. It does NOT enforce add/rename guards; that validation lives in `PreparedToolset.get_tools()` for toolset-level prepare functions, not in these capability hooks.
 - `PrepareTools` hooks into `prepare_tools()` (function tool definitions); `PrepareOutputTools` hooks into `prepare_output_tools()` (output tool definitions). The two operate on separate hook chains.
 - In `PrepareOutputTools`, `ctx.retry` and `ctx.max_retries` reflect the **output** retry budget (`max_output_retries`) — matching the output hook lifecycle, not the main tool retry budget.
 - `get_serialization_name()` returns `None` for both — they are not spec-serializable because they wrap a callable at construction time.
@@ -1081,7 +1090,7 @@ agent = Agent(
 - `_call_args()` builds `args` (positional list) and `kwargs` (remaining dict). Positional fields are popped from `args_dict` in declaration order. `var_positional_field` (for `*args` parameters) is extended into `args` via `args.extend(...)`.
 - `return_schema` defaults to `{}` (minimum, equivalent to `Any`). Non-trivial return types are resolved at construction time via `get_type_hints` and the Pydantic schema generator.
 - `takes_ctx: bool` is determined by inspecting whether the first parameter is typed as `RunContext[...]` (or its alias `RunContext`). The flag controls whether `ctx` is prepended to `args` in `_call_args`.
-- `json_schema: ObjectJsonSchema` is always a JSON object schema (dict). For single-arg model-like functions the schema wraps the model in a one-property object; for multi-arg functions it's a flat object of all parameters.
+- `json_schema: ObjectJsonSchema` is always a JSON object schema (dict). For single-arg model-like functions (BaseModel, dataclass, TypedDict), the schema exposes the model's **own top-level fields** directly (e.g. `model_arg_tool(params: SearchParams)` → `{query, limit}` in the schema). Validation internally wraps the flat dict back to `{params: value}` via the `single_arg_name` wrap validator. For multi-arg functions the schema is a flat object of all parameters.
 - `validator: SchemaValidator` is a Pydantic-core validator, not a Pydantic model. This avoids Pydantic model overhead for simple tool functions.
 
 ```python
