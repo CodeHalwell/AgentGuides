@@ -288,7 +288,7 @@ def as_tool(
 - Internally delegates to `langchain_core.tools.convert_runnable_to_tool()`.
 - The `name` defaults to the graph's `name` attribute (set automatically from the function name for `@entrypoint` graphs).
 - `arg_types` lets you specify only the relevant keys of a dict-typed input — the rest are ignored by the schema.
-- Calling the returned tool calls `compiled.invoke()` with the tool arguments. The tool is synchronous; use `atool.ainvoke()` for async.
+- Calling the returned tool calls `compiled.invoke()` with the tool arguments. The tool is synchronous; use `tool.ainvoke()` for the async equivalent.
 
 ```python
 # Example 1: expose a compiled subgraph as a tool for a parent agent
@@ -316,11 +316,14 @@ compiled_sub = sub.compile()
 search_tool = compiled_sub.as_tool(
     name="web_search",
     description="Search the web and return relevant results",
+    # Without arg_types, ALL state keys — including output-only 'result' — appear
+    # in the schema as required tool arguments. Restrict to input keys only:
+    arg_types={"query": str},
 )
 print("Tool name:", search_tool.name)
-print("Tool schema:", search_tool.args_schema.model_fields.keys())
+print("Tool schema:", list(search_tool.args_schema.model_fields.keys()))
 # Tool name: web_search
-# Tool schema: dict_keys(['query', 'result'])
+# Tool schema: ['query']
 ```
 
 ```python
@@ -420,7 +423,7 @@ def get_subgraphs(
 - `namespace="some_node"` returns only that named subgraph (and exits early via `return`).
 - `recurse=True` calls `graph.get_subgraphs()` on each discovered subgraph, prepending the parent name.
 - The yielded type is `PregelProtocol` — in practice always a `CompiledStateGraph` or `CompiledGraph`, which exposes `invoke`, `stream`, `get_state`, etc.
-- `aget_subgraphs()` is the `async def` mirror; it delegates to `get_subgraphs()` via `yield from`.
+- `aget_subgraphs()` is an `async def` generator; it iterates over `get_subgraphs()` and `yield`s each `(name, subgraph)` pair individually (`yield from` is invalid inside `async def`).
 
 ```python
 # Example 1: list all immediate subgraphs of a multi-agent graph
