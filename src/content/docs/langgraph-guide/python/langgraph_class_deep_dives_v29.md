@@ -1,6 +1,6 @@
 ---
 title: "Class deep-dives Vol. 29 — graph visualization, compiled-graph APIs, deferred nodes, delta-message reducer & add_messages internals (1.2.6)"
-description: "Source-verified deep dives into 10 previously undocumented class groups in LangGraph 1.2.6: Edge/TriggerEdge/draw_graph (dry-run simulation that discovers conditional edges), get_graph(xray=)/draw_mermaid()/draw_mermaid_png() (visualization API with subgraph depth control), Pregel.as_tool() beta (graph-to-StructuredTool conversion), get_subgraphs()/aget_subgraphs() (recursive namespace traversal), get_input_jsonschema()/get_output_jsonschema()/get_context_jsonschema() (schema introspection for API integration), clear_cache()/aclear_cache() (per-namespace TTL invalidation on compiled graphs), _messages_delta_reducer (batch-safe DeltaChannel message accumulation, batching invariant), _add_messages_wrapper (partial-application decorator enabling format= specialisation), add_node(defer=True) (deferred super-step execution pattern), REMOVE_ALL_MESSAGES sentinel and bulk message deletion patterns."
+description: "Source-verified deep dives into 10 previously undocumented class groups in LangGraph 1.2.6: Edge/TriggerEdge/draw_graph (dry-run simulation that discovers conditional edges), get_graph(xray=)/draw_mermaid()/draw_mermaid_png() (visualization API with subgraph depth control), Pregel.as_tool() beta (graph-to-StructuredTool conversion), get_subgraphs()/aget_subgraphs() (recursive namespace traversal), get_input_jsonschema()/get_output_jsonschema()/get_context_jsonschema() (schema introspection for API integration), clear_cache()/aclear_cache() (per-namespace TTL invalidation on compiled graphs), _messages_delta_reducer (batch-safe DeltaChannel message accumulation, batching invariant), _add_messages_wrapper (partial-application decorator enabling format= specialisation), add_node(defer=True) (deferred end-of-run execution — runs at graph quiescence after all non-deferred work drains), REMOVE_ALL_MESSAGES sentinel and bulk message deletion patterns."
 framework: langgraph
 language: python
 sidebar:
@@ -1302,7 +1302,7 @@ for i in range(6):
 | 6 | `clear_cache()` + `aclear_cache()` | Clears only this graph's namespaces — not the entire `BaseCache`; `nodes=["n"]` for partial clearing |
 | 7 | `_messages_delta_reducer` | Batching-invariant; no UUID auto-assignment; no `REMOVE_ALL_MESSAGES`; fast path skips `convert_to_messages` when state is already typed |
 | 8 | `_add_messages_wrapper` + partial `add_messages` | Zero-arg call returns `functools.partial`; `format=` binds to partial; used as `Annotated[list, add_messages(format="langchain-openai")]` |
-| 9 | `add_node(defer=True)` | Deferred nodes run after all non-deferred nodes in the super-step; still require explicit edges; work naturally with `BinaryOperatorAggregate` fan-in |
+| 9 | `add_node(defer=True)` | Deferred nodes run at graph quiescence (end of run, after all non-deferred work drains — not just the current super-step); still require explicit edges; work naturally with `BinaryOperatorAggregate` fan-in |
 | 10 | `REMOVE_ALL_MESSAGES` + bulk deletion | Sentinel processed in `add_messages` only (not `_messages_delta_reducer`); everything in `left` AND in `right` before the sentinel is discarded |
 
 ### Cross-references

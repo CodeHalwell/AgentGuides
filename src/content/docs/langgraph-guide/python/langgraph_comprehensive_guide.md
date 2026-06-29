@@ -2467,7 +2467,7 @@ class SummaryState(TypedDict):
     word_count: int
 
 class SummaryInput(BaseModel):
-    text: str = Field(description="Text to analyse")
+    text: str = Field(description="Text to analyze")
 
 g = StateGraph(SummaryState)
 g.add_node("count", lambda s: {"word_count": len(s["text"].split())})
@@ -2526,7 +2526,7 @@ print(json.dumps(compiled.get_context_jsonschema(), indent=2))
 
 ### Deferred Nodes
 
-`add_node(defer=True)` ensures a node runs after all non-deferred nodes in the super-step:
+`add_node(defer=True)` ensures a node runs at graph quiescence — after all non-deferred work in the entire run has drained, not just the current super-step:
 
 ```python
 import operator
@@ -2626,7 +2626,7 @@ def reset_conversation(state: ConvState) -> dict:
 | **Reflection** | Quality improvement | Self-critique → Refine loop |
 | **Interrupt** | Human approval | Pause, wait, resume with Command |
 | **Caching** | Performance | Store expensive results |
-| **Deferred nodes** | Post-step aggregation | `add_node(defer=True)` runs after all parallel workers |
+| **Deferred nodes** | End-of-run aggregation | `add_node(defer=True)` runs at quiescence, after all non-deferred work drains |
 | **Graph-as-tool** | Multi-agent composition | `compiled.as_tool()` wraps graph as a StructuredTool |
 | **History reset** | Context window management | `RemoveMessage(id=REMOVE_ALL_MESSAGES)` clears all messages |
 
@@ -2732,7 +2732,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.2.6 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph==1.2.6`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred super-step execution, and `REMOVE_ALL_MESSAGES` bulk history reset. |
+| 1.2.6 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph==1.2.6`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
 | 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `StreamPart`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
 | 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph==1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
 | 1.1.9 | April 22, 2026 | Patch release; six source-verified reference pages added to the guide. |
