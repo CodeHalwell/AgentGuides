@@ -45,7 +45,9 @@ source using `inspect.getsource()`. Sub-packages introspected:
 - [Vol. 25](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v25/) — `FunctionTool`+`OpenApiTool`+`WebSearchTool`+`FileSearchTool`+`CodeInterpreterTool`+`Binding`, `AgentFactory`+`DeclarativeLoaderError`+`ProviderLookupError`, `WorkflowFactory`+`DeclarativeWorkflowBuilder`, `QuestionExecutor`+`RequestExternalInputExecutor`, `HttpRequestActionExecutor`, `InvokeMcpToolActionExecutor`, `BaseToolExecutor`+`InvokeFunctionToolExecutor`, `JoinExecutor`+termination nodes, `ActionComplete`+`ActionTrigger`+`DeclarativeStateData`, `ClearAllVariablesExecutor`+`EditTableExecutor`+`ResetVariableExecutor`+`SetTextVariableExecutor`
 - [Vol. 26](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v26/) — `DurableAIAgentWorker`+`DurableAIAgentClient`, `DurableAIAgent`+`DurableAgentExecutor`, `DurableAIAgentOrchestrationContext`, `AgentEntity`+`AgentEntityStateProviderMixin`, `AgentCallbackContext`+`AgentResponseCallbackProtocol`, `RunRequest`, `AgentSessionId`+`DurableAgentSession`, `DurableAgentState`+`DurableAgentStateData`, entry hierarchy+`DurableAgentStateUsage`, content hierarchy+`DurableStateFields`+`ContentTypes`
 
-This volume covers **ten class groups** from three cross-cutting modules: the FIDES security label system (`agent_framework.security`), the OpenTelemetry lifecycle and setup helpers (`agent_framework.observability`), and the compaction pipeline primitives and message-normalisation utilities (`agent_framework._compaction` / `agent_framework._types`). All are genuinely new — none appear in any prior volume.
+This volume covers **ten class groups** from three cross-cutting modules: the FIDES security label system (`agent_framework.security`), the OpenTelemetry lifecycle and setup helpers (`agent_framework.observability`), and the compaction pipeline primitives and message-normalisation utilities (`agent_framework._compaction` / `agent_framework._types`).
+
+**Coverage note:** Vol. 22 provided higher-level coverage of `enable/disable_instrumentation`, `get_tracer`/`get_meter`, `create_mcp_client_span`, `combine_labels`/`check_confidentiality_allowed`/`store_untrusted_content`, and `quarantined_llm`/`inspect_variable`/`get_security_tools` alongside many other classes. This volume adds source-verified depth for sub-APIs and constants not previously documented — `create_resource`, `create_metric_views`, the histogram boundary constants, `INNER_ACCUMULATED_USAGE`/`INNER_RESPONSE_TELEMETRY_CAPTURED_FIELDS` context vars, the `ContentLabel` string-coercion and round-trip contract, and the middleware-vs-global-store interaction in the security tool stack. Sections 7–10 (compaction internals, `_compaction`, `_types`) are new across all prior volumes.
 
 | # | Class / group | Module |
 |---|---|---|
@@ -591,7 +593,7 @@ print(result)
 
 **Module:** `agent_framework._compaction`
 
-`group_messages(messages, *, id_offset=0, reserved_ids=None)` computes **span descriptors** for a list of messages without mutating them. It first ensures every message has a `message_id` (auto-assigning `msg_0`, `msg_1`, … when absent, avoiding collisions with `reserved_ids`). It then walks the list and emits a span dict per logical group:
+`group_messages(messages, *, id_offset=0, reserved_ids=None)` computes **span descriptors** for a list of messages. It mutates messages that lack a `message_id` (auto-assigning `msg_0`, `msg_1`, … when absent, avoiding collisions with `reserved_ids`), but does not modify message content or roles. It then walks the list and emits a span dict per logical group:
 
 | `kind` | Composition rule |
 |---|---|
@@ -712,7 +714,7 @@ These five functions form the **end-to-end compaction pipeline** that all built-
 
 ```python
 import asyncio
-from agent_framework import SlidingWindowStrategy, CharacterEstimatorTokenizer
+from agent_framework import SlidingWindowStrategy, CharacterEstimatorTokenizer  # CharacterEstimatorTokenizer for apply_compaction
 from agent_framework._compaction import apply_compaction
 from agent_framework._types import Message
 
@@ -720,9 +722,11 @@ messages = [Message("user", [f"Turn {i}"]) for i in range(20)] + \
            [Message("assistant", [f"Response {i}"]) for i in range(20)]
 
 tokenizer = CharacterEstimatorTokenizer()
-strategy = SlidingWindowStrategy(max_token_count=500, tokenizer=tokenizer)
+# SlidingWindowStrategy keeps the last N groups (not token-budget based)
+strategy = SlidingWindowStrategy(keep_last_groups=10)
 
 async def main():
+    # tokenizer= causes apply_compaction to annotate token counts before strategy runs
     kept = await apply_compaction(messages, strategy=strategy, tokenizer=tokenizer)
     print(f"Kept {len(kept)} of {len(messages)} messages")
 
@@ -819,10 +823,10 @@ from agent_framework._types import Message, Content
 # None → empty list
 assert normalize_messages(None) == []
 
-# Bare string → [Message("user", ["hello"])]
+# Bare string → [Message("user", [Content(...)])]
 msgs = normalize_messages("hello")
 assert msgs[0].role == "user"
-assert msgs[0].contents == ["hello"]
+assert msgs[0].text == "hello"          # .text aggregates content; .contents holds Content objects
 
 # Mixed sequence
 result = normalize_messages(["first", Message("system", ["You are helpful"]), "second"])
@@ -926,8 +930,8 @@ assert isinstance(tools[0], FunctionTool)
 tools_none = normalize_tools(None)
 assert tools_none == []
 
-# List of mixed types
-another_tool = FunctionTool(my_plain_function)
+# List of mixed types — FunctionTool requires name= (and optionally func=)
+another_tool = FunctionTool(name="my_plain_function", func=my_plain_function)
 tools_list = normalize_tools([my_plain_function, another_tool])
 assert len(tools_list) == 2
 ```
