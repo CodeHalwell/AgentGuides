@@ -771,7 +771,7 @@ agent = Agent(
 
 - `@dataclass(init=False)` + custom `__init__(**metadata)` lets users write `SetToolMetadata(cache_control='ephemeral', priority=1)` instead of `SetToolMetadata(metadata={'cache_control': 'ephemeral', 'priority': 1})`.
 - Merge logic: `{**(td.metadata or {}), **metadata}` — existing tool metadata is preserved; the capability's metadata is merged on top (capability values win on conflicts).
-- `tools: ToolSelector` defaults to `'all'`. Same selector mechanics as `IncludeToolReturnSchemas`: list of names, metadata dict, or async callable.
+- `tools: ToolSelector` defaults to `'all'`. Same selector mechanics as `IncludeToolReturnSchemas`: list of names, metadata dict, or async callable. When using a metadata-dict selector together with `SetToolMetadata`, list `IncludeToolReturnSchemas` **before** (outer) `SetToolMetadata` in the capabilities list — `CombinedCapability.get_wrapper_toolset` iterates in `reversed()` order so the last-listed capability's wrapper runs first.
 - `get_serialization_name()` returns `'SetToolMetadata'` — spec-serializable when metadata values are JSON-compatible.
 - Downstream: `ToolDefinition.metadata` is read by capabilities (e.g. `IncludeToolReturnSchemas` can filter by `dict[str, Any]` selector matching metadata keys) and custom prepare functions. It is **not** read by the Anthropic (or other built-in) model mappers for provider-level features. Anthropic tool prompt caching is controlled separately via `AnthropicModelSettings(anthropic_cache_tool_definitions=True)`, not via `SetToolMetadata`.
 
@@ -796,14 +796,18 @@ def run_code(code: str) -> str:
 
 # Tag tools with a custom tier. IncludeToolReturnSchemas (or a custom
 # PrepareTools function) can then filter by {'tier': 'premium'}.
+# IMPORTANT: CombinedCapability applies get_wrapper_toolset in reversed order,
+# so the LAST listed capability wraps the toolset first (runs first).
+# IncludeToolReturnSchemas must be listed FIRST (outer) so it runs AFTER
+# SetToolMetadata (inner, listed second) has already set the metadata.
 agent = Agent(
     'openai:gpt-4.1',
     toolsets=[toolset],
     capabilities=[
-        SetToolMetadata(tier='premium', owner='platform-team'),
-        # IncludeToolReturnSchemas with a dict selector: only tools whose
-        # metadata contains {'tier': 'premium'} will get return schemas.
+        # Outer (listed first, runs SECOND): filters by tier='premium' metadata
         IncludeToolReturnSchemas(tools={'tier': 'premium'}),
+        # Inner (listed second, runs FIRST): sets tier='premium' on all tools
+        SetToolMetadata(tier='premium', owner='platform-team'),
     ],
 )
 # Each ToolDefinition.metadata will be {'tier': 'premium', 'owner': 'platform-team'}
@@ -854,23 +858,25 @@ agent = Agent(
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import SetToolMetadata, IncludeToolReturnSchemas
 
-# Capabilities compose: SetToolMetadata merges metadata onto tool definitions,
-# IncludeToolReturnSchemas can then select tools by that metadata dict.
-# The order matters when get_wrapper_toolset middleware chains stack.
+# Capabilities compose: CombinedCapability.get_wrapper_toolset iterates in
+# reversed() order, so the LAST listed capability wraps the toolset first
+# (its prepare function runs first). To use SetToolMetadata-set keys as an
+# IncludeToolReturnSchemas selector, SetToolMetadata must be listed LAST so
+# it runs first and the metadata is present when IncludeToolReturnSchemas runs.
 
 agent = Agent(
     'openai:gpt-4.1',
     capabilities=[
-        # Outer: tags all tools with tier and version
-        SetToolMetadata(tier='premium', version='v2'),
-        # Inner: enable return schemas only for premium-tier tools
+        # Outer (first, runs SECOND): sees metadata already set, filters by it
         IncludeToolReturnSchemas(tools={'tier': 'premium'}),
+        # Inner (second, runs FIRST): sets tier and version on all tools
+        SetToolMetadata(tier='premium', version='v2'),
     ]
 )
 
 # The merged ToolDefinition for a tool will have:
-# - metadata = {'tier': 'premium', 'version': 'v2'}
-# - include_return_schema = True (set by IncludeToolReturnSchemas selector match)
+# - metadata = {'tier': 'premium', 'version': 'v2'}  (set by SetToolMetadata, runs first)
+# - include_return_schema = True  (set by IncludeToolReturnSchemas, runs second, sees the metadata)
 ```
 
 ---
