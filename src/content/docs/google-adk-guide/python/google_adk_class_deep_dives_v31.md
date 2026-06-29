@@ -134,8 +134,6 @@ coordinator = LlmAgent(
 ### Example 3 — inspecting the injected transfer instructions
 
 ```python
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
 from google.adk.flows.llm_flows.agent_transfer import (
     _build_transfer_instruction_body,
     _get_transfer_targets,
@@ -916,7 +914,6 @@ asyncio.run(main())
 
 ```python
 import asyncio
-import pytest
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService

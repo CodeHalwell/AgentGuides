@@ -317,11 +317,12 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.artifacts import FileArtifactService
 from google.adk import App
 from google.adk.tools import FunctionTool, load_artifacts
+from google.adk.tools.tool_context import ToolContext
 
 APP_NAME = "artifact_demo"
 USER_ID = "bob"
 
-async def generate_report(topic: str, tool_context) -> dict:
+async def generate_report(topic: str, tool_context: ToolContext) -> dict:
     """Generates a text report and saves it as an artifact."""
     content = f"# Report: {topic}\n\nThis is an auto-generated report about {topic}."
     part = types.Part(

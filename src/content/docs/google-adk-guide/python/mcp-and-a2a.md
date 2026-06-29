@@ -403,7 +403,6 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from mcp import StdioServerParameters
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService

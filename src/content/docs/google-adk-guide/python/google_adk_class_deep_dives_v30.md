@@ -84,7 +84,6 @@ async def search_skills(self, *, query: str) -> list[models.Frontmatter]:
 ### Example: using `GCPSkillRegistry` inside an agent
 
 ```python
-import asyncio
 import os
 from google.adk.integrations.skill_registry.gcp_skill_registry import GCPSkillRegistry
 from google.adk.agents import LlmAgent
@@ -365,7 +364,6 @@ agent = LlmAgent(
 ### Example: listing and inspecting endpoints
 
 ```python
-import asyncio
 from google.adk.integrations.agent_registry.agent_registry import AgentRegistry
 
 registry = AgentRegistry(project_id="my-project", location="us-central1")
