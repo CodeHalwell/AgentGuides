@@ -357,7 +357,7 @@ print("Sensitive telemetry enabled for dev/test")
 
 | Metric | Custom boundaries | Why |
 |---|---|---|
-| `gen_ai.client.token.usage` | `TOKEN_USAGE_BUCKET_BOUNDARIES` (1, 4, 16, … 67 108 864) | Spans 6 orders of magnitude for token distributions |
+| `gen_ai.client.token.usage` | `TOKEN_USAGE_BUCKET_BOUNDARIES` (1, 4, 16, … 67_108_864) | Spans 6 orders of magnitude for token distributions |
 | `gen_ai.client.operation.duration` | `OPERATION_DURATION_BUCKET_BOUNDARIES` (0.01s, 0.02s, 0.04s, … 81.92s) | Exponential backoff scale for LLM latency |
 
 Both boundary tuples use 14 exponentially spaced values and are `Final` module-level constants.
