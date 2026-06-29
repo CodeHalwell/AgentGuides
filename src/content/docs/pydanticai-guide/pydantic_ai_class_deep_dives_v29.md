@@ -305,14 +305,16 @@ agent_dual = Agent(
 from pydantic_ai.capabilities.mcp import MCP
 
 # Demonstrate _resolved_id derivation from URL (hostname + last path segment)
-cap = MCP(url='https://api.example.com/mcp/sse', native=True)
+# local=False prevents __post_init__ from calling _build_local() which would
+# require the mcp extra; this example only shows _resolved_id derivation.
+cap = MCP(url='https://api.example.com/mcp/sse', native=True, local=False)
 print(cap._resolved_id)   # 'api.example.com-sse'
 
-cap2 = MCP(url='https://other.example.com/mcp/sse', native=True)
+cap2 = MCP(url='https://other.example.com/mcp/sse', native=True, local=False)
 print(cap2._resolved_id)  # 'other.example.com-sse' — distinct despite same path
 
 # Explicit id= overrides the derived value
-cap3 = MCP(url='https://api.example.com/mcp/sse', native=True, id='my-mcp')
+cap3 = MCP(url='https://api.example.com/mcp/sse', native=True, local=False, id='my-mcp')
 print(cap3._resolved_id)  # 'my-mcp'
 
 # allowed_tools restricts which tools are visible to the agent
@@ -398,12 +400,12 @@ from pydantic_ai.toolsets import FunctionToolset
 # FunctionToolset holds typed Python functions exposed as LLM tools
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def get_weather(city: str) -> str:
     """Get the current weather for a city."""
     return f"Sunny in {city}"
 
-@toolset.tool
+@toolset.tool_plain
 def get_time(timezone: str) -> str:
     """Get the current time in a timezone."""
     return f"12:00 {timezone}"
@@ -469,7 +471,7 @@ class LoggingWrapper(WrapperCapability):
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def search(query: str) -> str:
     return f"Results for: {query}"
 
@@ -782,12 +784,12 @@ from pydantic_ai.toolsets import FunctionToolset
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def search_docs(query: str) -> str:
     """Search documentation."""
     return f"Docs for: {query}"
 
-@toolset.tool
+@toolset.tool_plain
 def run_code(code: str) -> str:
     """Execute Python code."""
     return "output"
@@ -812,12 +814,12 @@ from pydantic_ai.toolsets import FunctionToolset
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def expensive_query(sql: str) -> list:
     """Run an expensive database query."""
     return []
 
-@toolset.tool
+@toolset.tool_plain
 def quick_lookup(key: str) -> str:
     """Fast key-value lookup."""
     return ""
