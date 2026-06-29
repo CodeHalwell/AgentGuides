@@ -157,11 +157,11 @@ print(event)  # PartStartEvent(index=0, part=ToolCallPart(tool_name='calculator'
 # Example 1 — generating UUIDv7 values and verifying monotonicity
 
 from pydantic_ai._uuid import uuid7
-import uuid
 
 # Generate a batch — each should be lexicographically ordered (time-sortable)
 ids = [uuid7() for _ in range(5)]
-assert ids == sorted(ids), "UUIDv7 values must be time-sortable"
+strs = [str(uid) for uid in ids]
+assert strs == sorted(strs), "UUIDv7 string forms must be lexicographically time-sortable"
 
 # Version nibble should be 7
 for uid in ids:
