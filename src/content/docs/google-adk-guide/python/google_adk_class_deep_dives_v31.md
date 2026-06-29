@@ -407,20 +407,21 @@ from google.adk.apps import App
 from google.genai import types
 
 async def main():
-    # UnsafeLocalCodeExecutor runs code locally — for dev/testing only!
-    # _CodeExecutionRequestProcessor will:
-    # 1. Extract the CSV inline data, replace it with a filename placeholder
-    # 2. Run explore_df() on the file and append results to the request
-    # 3. After the model responds with code, _CodeExecutionResponseProcessor
-    #    extracts and executes the code block
+    # UnsafeLocalCodeExecutor runs code locally — for dev/testing only.
+    # _CodeExecutionRequestProcessor still pre-processes the message, but
+    # the DataFileUtil CSV optimisation (steps 1-2 of Example 1) is skipped
+    # because optimize_data_file=False is fixed. The inline CSV is forwarded
+    # to the model unchanged; _CodeExecutionResponseProcessor extracts and
+    # runs the model's generated code locally.
+    # UnsafeLocalCodeExecutor always has stateful=False and optimize_data_file=False
+    # (passing either as True raises ValueError). DataFileUtil CSV preprocessing
+    # is therefore NOT triggered here — the inline data reaches the model as-is.
+    # For optimize_data_file support use BuiltInCodeExecutor (see Example 1 above).
     agent = LlmAgent(
         name="local_analyst",
         model="gemini-2.0-flash",
         instruction="Analyse the provided data. Use Python code to answer.",
-        code_executor=UnsafeLocalCodeExecutor(
-            stateful=True,
-            optimize_data_file=True,  # Enables DataFileUtil preprocessing
-        ),
+        code_executor=UnsafeLocalCodeExecutor(),
     )
 
     session_service = InMemorySessionService()
@@ -585,7 +586,7 @@ agent = LlmAgent(
 
 **Module:** `google.adk.tools.environment_simulation.environment_simulation_engine`
 
-`EnvironmentSimulationEngine` is the core engine that intercepts tool calls and replaces them with simulated responses. It maintains a `_state_store` dict shared across a session and picks the right mock strategy based on `MockStrategyEnum`.
+`EnvironmentSimulationEngine` is the core engine that intercepts tool calls and replaces them with simulated responses. It maintains a `_state_store` dict shared across a session and picks the right mock strategy based on `MockStrategy`.
 
 ### Key implementation facts (verified from source)
 
@@ -594,8 +595,8 @@ agent = LlmAgent(
 - **`simulate(tool, args, tool_context)`** is the main entry point, called as a `before_tool_callback`.
   - Returns `None` if the tool is not in the simulation config (letting the real tool run).
   - Lazy-initialises `_tool_connection_map` via `ToolConnectionAnalyzer` on first call.
-  - Picks strategy: `MockStrategyEnum.TOOL_SPEC` → `ToolSpecMockStrategy`; `MockStrategyEnum.TRACING` → `TracingMockStrategy`.
-  - Passes `environment_data` and `tracing` from the config's `InjectionConfig` to the strategy.
+  - Picks strategy: `MockStrategy.MOCK_STRATEGY_TOOL_SPEC` → `ToolSpecMockStrategy`; `MockStrategy.MOCK_STRATEGY_TRACING` → `TracingMockStrategy` (deprecated, returns "Not implemented").
+  - Passes `environment_data` and `tracing` from `EnvironmentSimulationConfig` directly to the strategy.
 - **Shared `_state_store`** — updated by `ToolSpecMockStrategy` after mutative tool calls (creating tools); consumed to generate realistic responses for consuming tools (e.g. returning 404 for unknown IDs).
 
 ### Example 1 — simulating a ticketing tool without calling the real API
@@ -607,10 +608,11 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    EnvironmentSimulationFactory,
 )
 from google.adk.tools import FunctionTool
 
@@ -625,11 +627,17 @@ def get_ticket(ticket_id: str) -> dict:
 
 # Configure which tools to simulate
 config = EnvironmentSimulationConfig(
-    tools=[
-        ToolSimulationConfig(tool_name="create_ticket"),
-        ToolSimulationConfig(tool_name="get_ticket"),
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="create_ticket",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="get_ticket",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
     ],
-    llm_name="gemini-2.0-flash",
+    simulation_model="gemini-2.0-flash",
 )
 
 # Create the before_tool_callback that intercepts real tool calls
@@ -665,10 +673,10 @@ asyncio.run(main())
 ### Example 2 — injecting environment data for realistic simulation
 
 ```python
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    InjectionConfig,
 )
 
 # Provide a database snapshot so the simulator generates consistent IDs
@@ -683,21 +691,28 @@ Products table:
 """
 
 config = EnvironmentSimulationConfig(
-    tools=[
-        ToolSimulationConfig(tool_name="get_user"),
-        ToolSimulationConfig(tool_name="get_product"),
-        ToolSimulationConfig(tool_name="create_order"),
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="get_user",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="get_product",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="create_order",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
     ],
-    llm_name="gemini-2.0-flash",
-    injection_config=InjectionConfig(
-        # The engine passes environment_data to ToolSpecMockStrategy,
-        # which injects it into the mock prompt for consistent responses.
-        environment_data=db_snapshot,
-    ),
+    simulation_model="gemini-2.0-flash",
+    # environment_data is forwarded to ToolSpecMockStrategy.mock() and injected
+    # into the mock-generation prompt so the LLM generates consistent IDs.
+    environment_data=db_snapshot,
 )
 
 print("Config ready with environment data injection")
-print(f"Simulating {len(config.tools)} tools")
+print(f"Simulating {len(config.tool_simulation_configs)} tools")
 ```
 
 ### Example 3 — using the plugin pattern instead of a callback
@@ -709,10 +724,11 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    EnvironmentSimulationFactory,
 )
 
 def send_email(to: str, subject: str, body: str) -> dict:
@@ -720,8 +736,13 @@ def send_email(to: str, subject: str, body: str) -> dict:
     return {"message_id": "REAL-MSG-001", "status": "sent"}
 
 config = EnvironmentSimulationConfig(
-    tools=[ToolSimulationConfig(tool_name="send_email")],
-    llm_name="gemini-2.0-flash",
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="send_email",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+    ],
+    simulation_model="gemini-2.0-flash",
 )
 
 # create_plugin() returns an EnvironmentSimulationPlugin
@@ -783,10 +804,11 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    EnvironmentSimulationFactory,
 )
 
 def book_hotel(hotel_id: str, check_in: str, check_out: str) -> dict:
@@ -798,11 +820,17 @@ def cancel_reservation(reservation_id: str) -> dict:
     return {"status": "cancelled", "refund": "pending"}
 
 config = EnvironmentSimulationConfig(
-    tools=[
-        ToolSimulationConfig(tool_name="book_hotel"),
-        ToolSimulationConfig(tool_name="cancel_reservation"),
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="book_hotel",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="cancel_reservation",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
     ],
-    llm_name="gemini-2.0-flash",
+    simulation_model="gemini-2.0-flash",
 )
 
 # The factory creates one engine and closes over it
@@ -845,10 +873,11 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    EnvironmentSimulationFactory,
 )
 
 def create_order(product_id: str, quantity: int) -> dict:
@@ -864,11 +893,17 @@ def get_order(order_id: str) -> dict:
 # In turn 2: get_order with that ID → engine returns the stored details.
 # This stateful consistency is the key advantage over simple mocking.
 config = EnvironmentSimulationConfig(
-    tools=[
-        ToolSimulationConfig(tool_name="create_order"),
-        ToolSimulationConfig(tool_name="get_order"),
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="create_order",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="get_order",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
     ],
-    llm_name="gemini-2.0-flash",
+    simulation_model="gemini-2.0-flash",
 )
 callback = EnvironmentSimulationFactory.create_callback(config)
 
@@ -916,10 +951,11 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    EnvironmentSimulationFactory,
 )
 
 def charge_card(amount: float, card_token: str) -> dict:
@@ -946,8 +982,13 @@ async def build_test_app(simulation_config: EnvironmentSimulationConfig) -> tupl
 
 async def test_payment_flow():
     config = EnvironmentSimulationConfig(
-        tools=[ToolSimulationConfig(tool_name="charge_card")],
-        llm_name="gemini-2.0-flash",
+        tool_simulation_configs=[
+            ToolSimulationConfig(
+                tool_name="charge_card",
+                mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+            ),
+        ],
+        simulation_model="gemini-2.0-flash",
     )
     runner, session_service = await build_test_app(config)
     session = await session_service.create_session(
@@ -1025,11 +1066,20 @@ class FixedResponseMockStrategy(MockStrategy):
 from google.adk.tools.environment_simulation.environment_simulation_engine import (
     EnvironmentSimulationEngine,
 )
-from google.adk.tools.environment_simulation import EnvironmentSimulationConfig, ToolSimulationConfig
+from google.adk.tools.environment_simulation.environment_simulation_config import (
+    EnvironmentSimulationConfig,
+    MockStrategy,
+    ToolSimulationConfig,
+)
 
 config = EnvironmentSimulationConfig(
-    tools=[ToolSimulationConfig(tool_name="get_weather")],
-    llm_name="gemini-2.0-flash",
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="get_weather",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+    ],
+    simulation_model="gemini-2.0-flash",
 )
 
 engine = EnvironmentSimulationEngine(config)
@@ -1039,14 +1089,25 @@ engine._custom_strategy = FixedResponseMockStrategy({
 })
 ```
 
-### Example 2 — using `TracingMockStrategy` for deterministic replay
+### Example 2 — passing trace context via `EnvironmentSimulationConfig.tracing`
+
+`TracingMockStrategy` (`MOCK_STRATEGY_TRACING`) is **deprecated** — its `mock()` always returns
+`{"status": "error", "error_message": "Not implemented"}`. It does not replay traces.
+
+To give the `ToolSpecMockStrategy` historical context, pass the trace as a JSON string in
+`EnvironmentSimulationConfig.tracing`; the engine forwards it to `ToolSpecMockStrategy.mock(tracing=...)`
+so the LLM can reference prior call patterns when generating mocks.
 
 ```python
-import asyncio
 import json
-from google.adk.tools.environment_simulation.strategies.base import TracingMockStrategy
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
+    EnvironmentSimulationConfig,
+    MockStrategy,
+    ToolSimulationConfig,
+)
 
-# Suppose you captured this trace from a real agent run
+# Trace from a prior run captured as a plain list of {tool_name, args, response} dicts
 recorded_trace = json.dumps([
     {
         "tool_name": "search_products",
@@ -1070,11 +1131,24 @@ recorded_trace = json.dumps([
     }
 ])
 
-strategy = TracingMockStrategy(tracing=recorded_trace)
-
-# The strategy will replay the recorded response when the same tool+args are called.
-# Useful for integration tests that must behave identically across runs.
-print("TracingMockStrategy ready with", len(json.loads(recorded_trace)), "recorded calls")
+# tracing= is forwarded to ToolSpecMockStrategy.mock(tracing=...) and injected
+# into the prompt so the LLM uses the captured patterns as reference.
+config = EnvironmentSimulationConfig(
+    tool_simulation_configs=[
+        ToolSimulationConfig(
+            tool_name="search_products",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+        ToolSimulationConfig(
+            tool_name="get_product_details",
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
+    ],
+    simulation_model="gemini-2.0-flash",
+    tracing=recorded_trace,
+)
+callback = EnvironmentSimulationFactory.create_callback(config)
+print("Simulation callback with trace context ready:", len(json.loads(config.tracing)), "recorded calls")
 ```
 
 ### Example 3 — composing strategies with a fallback chain
@@ -1117,18 +1191,19 @@ class FallbackMockStrategy(MockStrategy):
 from google.adk.tools.environment_simulation.strategies.base import TracingMockStrategy
 import json
 
-trace_data = json.dumps([])  # Empty trace — no recorded responses
-
 class AlwaysSuccessStrategy(MockStrategy):
     async def mock(self, tool, args, tool_context, tool_connection_map,
                    state_store, environment_data=None, tracing=None):
         return {"status": "ok", "tool": tool.name, "mocked": True}
 
+# TracingMockStrategy is deprecated — mock() always returns "Not implemented".
+# In a fallback chain it will always fail through to the next strategy.
+# Constructor takes llm_name (str) and optional llm_config, not tracing data.
 fallback = FallbackMockStrategy([
-    TracingMockStrategy(tracing=trace_data),
+    TracingMockStrategy(llm_name="gemini-2.0-flash"),
     AlwaysSuccessStrategy(),
 ])
-print("Fallback strategy chain ready")
+print("Fallback strategy chain ready (TracingMockStrategy will always fall through)")
 ```
 
 ---
@@ -1275,27 +1350,27 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
-from google.adk.tools.environment_simulation import (
+from google.adk.tools.environment_simulation import EnvironmentSimulationFactory
+from google.adk.tools.environment_simulation.environment_simulation_config import (
     EnvironmentSimulationConfig,
+    MockStrategy,
     ToolSimulationConfig,
-    MockStrategyEnum,
-    EnvironmentSimulationFactory,
 )
 
 def send_notification(user_id: str, message: str, channel: str = "email") -> dict:
     """Sends a notification to a user."""
     return {"notification_id": "REAL-NOTIF-001", "delivered": True}
 
-# MockStrategyEnum.TOOL_SPEC instructs the engine to use ToolSpecMockStrategy.
-# The engine instantiates it internally with the configured llm_name.
+# MockStrategy.MOCK_STRATEGY_TOOL_SPEC instructs the engine to use ToolSpecMockStrategy.
+# The engine instantiates it internally with the configured simulation_model.
 config = EnvironmentSimulationConfig(
-    tools=[
+    tool_simulation_configs=[
         ToolSimulationConfig(
             tool_name="send_notification",
-            mock_strategy=MockStrategyEnum.TOOL_SPEC,  # explicit (default)
-        )
+            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
+        ),
     ],
-    llm_name="gemini-2.0-flash",
+    simulation_model="gemini-2.0-flash",
 )
 
 callback = EnvironmentSimulationFactory.create_callback(config)
