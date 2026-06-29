@@ -468,34 +468,39 @@ asyncio.run(main())
 ### Key implementation facts (verified from source)
 
 - **`new_llm(model_name)`** — creates a fresh `BaseLlm` instance for the given name by calling `resolve(model_name)(model=model_name)`.
-- **`resolve(model_name)`** — `@lru_cache(maxsize=None)`-decorated; returns the registered class (not an instance). Cache is keyed on the exact string.
+- **`resolve(model_name)`** — `@lru_cache(maxsize=32)`-decorated; returns the registered class (not an instance). Cache is keyed on the exact string.
 - **Prefix routing** — if `model_name` contains `:`, the part before `:` is treated as a provider prefix for explicit routing (e.g. `"litellm:gpt-4o"` always routes to `LiteLlm`).
 - **Lazy module loading** — `_register_lazy(prefix, module_path, class_name)` defers importing the provider module until `resolve()` is first called with a matching prefix. Used to avoid heavy imports at startup.
 - **Helpful error messages** — if a model name starts with `"claude-"`, the error suggests installing `anthropic`; if it contains `"/"`, it suggests `litellm`.
 
 ```python
 # models/registry.py (simplified)
+# Internal store: maps regex pattern → class or (module_path, class_name) for lazy imports
+_llm_registry_dict: dict[str, type[BaseLlm] | tuple[str, str]] = {}
+
 class LLMRegistry:
-    _registry: dict[str, type[BaseLlm]] = {}
-    _lazy_registry: dict[str, tuple[str, str]] = {}
+    @staticmethod
+    def register(llm_cls: type[BaseLlm]) -> None:
+        """Register an LLM class; reads regex patterns from supported_models()."""
+        for regex in llm_cls.supported_models():
+            _llm_registry_dict[regex] = llm_cls
 
-    @classmethod
-    def register(cls, prefix: str, llm_class: type[BaseLlm]) -> None:
-        cls._registry[prefix] = llm_class
-        cls.resolve.cache_clear()   # Invalidate lru_cache on new registration
-
-    @classmethod
-    @lru_cache(maxsize=None)
-    def resolve(cls, model_name: str) -> type[BaseLlm]:
-        # 1. Explicit prefix routing: "litellm:gpt-4o" → LiteLlm
-        if ":" in model_name:
-            prefix = model_name.split(":")[0]
-            # ... load from lazy or direct registry
-        # 2. Walk registered prefixes longest-first
-        for prefix in sorted(cls._registry, key=len, reverse=True):
-            if model_name.startswith(prefix):
-                return cls._registry[prefix]
-        raise ValueError(f"No LLM registered for model: {model_name}")
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def resolve(model: str) -> type[BaseLlm]:
+        # 1. Prefix routing: "litellm:gpt-4o" → match class name via _match_prefix()
+        if ":" in model:
+            prefix = model.split(":", 1)[0]
+            for regex, entry in _llm_registry_dict.items():
+                class_name = entry[1] if isinstance(entry, tuple) else entry.__name__
+                if LLMRegistry._match_prefix(prefix, class_name):
+                    # ... handle lazy loading if entry is (module_path, class_name)
+                    return entry if not isinstance(entry, tuple) else _load_lazy(entry)
+        # 2. Regex matching against all registered patterns
+        for regex, entry in _llm_registry_dict.items():
+            if re.fullmatch(regex, model):
+                return entry if not isinstance(entry, tuple) else _load_lazy(entry)
+        raise ValueError(f"No LLM registered for model: {model}")
 ```
 
 ### Example 1 — resolving built-in Gemini models
