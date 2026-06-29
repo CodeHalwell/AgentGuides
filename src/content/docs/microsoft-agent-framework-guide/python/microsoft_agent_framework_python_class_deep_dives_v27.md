@@ -176,12 +176,12 @@ These functions form the security tool-integration layer that sits on top of `La
 
 ### Key source facts
 
-- `store_untrusted_content` always calls `_global_variable_store.store(content, label)` — it uses the module-level singleton, not a per-middleware store.
+- `store_untrusted_content` always calls `_global_variable_store.store(content, label)` — it uses the module-level singleton, not a per-middleware store. **Important:** when `LabelTrackingFunctionMiddleware` is active, `inspect_variable` and `quarantined_llm` look up variables in the *middleware's* own store — not `_global_variable_store`. A variable ID returned by `store_untrusted_content` will raise `KeyError` inside those tools when middleware is running. To use the security tools together with middleware, store content via `middleware.get_variable_store().store(content, label)` directly, or call `store_untrusted_content` before the middleware context is entered.
 - `get_security_tools()` is a plain function that returns a new list each time; it does not cache.
 - `quarantined_llm` is decorated with `approval_mode="never_require"` so it never triggers a tool-approval gate.
 - `inspect_variable` has `additional_properties={"confidentiality": "private"}` — its result itself is marked private.
-- Both tools check for an active `LabelTrackingFunctionMiddleware` via `get_current_middleware()` first; they fall back to `_global_variable_store` when no middleware is running.
-- The `quarantined_llm` tool logs `WARNING: inspect_variable called` — use the module-level logger `agent_framework.security` to capture these audit events.
+- Both tools resolve the variable store via `get_current_middleware()`: `inspect_variable` and `quarantined_llm` use the active middleware's store when one is present, and fall back to `_global_variable_store` only when no middleware is running.
+- `inspect_variable` emits two `WARNING`-level log entries per call: `"inspect_variable called for {id}. Reason: …"` and `"SECURITY AUDIT: Variable {id} inspected. Label: … Reason: …"`. `quarantined_llm` logs at `INFO` level (one entry per call); it logs `WARNING` only when a requested variable ID cannot be found in the store.
 
 **Example 1 — storing external API responses and adding security tools to an agent:**
 
