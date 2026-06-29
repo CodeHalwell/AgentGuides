@@ -393,6 +393,9 @@ compiled_price = price_graph.compile()
 price_tool = compiled_price.as_tool(
     name="get_price",
     description="Get the price for a product by ID",
+    # arg_types restricts the schema to input-only keys; without it, output-only
+    # 'price' appears as a required tool argument the LLM must supply before lookup
+    arg_types={"product_id": str},
 )
 
 # The tool can now be passed to ToolNode, create_react_agent, etc.
@@ -678,7 +681,7 @@ async def aclear_cache(self, nodes: Sequence[str] | None = None) -> None:
 - Internally calls `cache.clear(namespaces)` where `namespaces` is a list of `(CACHE_NS_WRITES, node_identifier)` tuples.
 - When `nodes=None`, **all** namespaces registered to this graph are cleared, not the entire `BaseCache` object (other graphs sharing the cache are unaffected).
 - For `@task`-decorated functions, use `task_func.clear_cache(cache)` or `await task_func.aclear_cache(cache)` — these are convenience wrappers for the same underlying mechanism.
-- `clear_cache()` is a no-op if no `cache=` was passed at compile time or if all entries have already expired via TTL.
+- `clear_cache()` raises `ValueError("No cache is set for this graph. Cannot clear cache.")` when called on a graph compiled without `cache=`. Guard teardown/test code with a `try/except ValueError` or check `compiled.cache is not None` before calling. TTL-expired entries disappear silently on next read — they do not cause an error.
 
 ```python
 # Example 1: clear cache between test runs to force re-execution
