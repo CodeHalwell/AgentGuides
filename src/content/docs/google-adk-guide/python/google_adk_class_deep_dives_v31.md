@@ -55,10 +55,11 @@ def _get_transfer_targets(agent):
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 
 billing_agent = LlmAgent(
     name="billing_agent",
@@ -86,9 +87,8 @@ coordinator = LlmAgent(
 
 async def main():
     session_service = InMemorySessionService()
-    app = App(name="support_app", root_agent=coordinator,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="support_app", root_agent=coordinator)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="support_app", user_id="user1"
     )
@@ -96,7 +96,7 @@ async def main():
     async for event in runner.run_async(
         user_id="user1",
         session_id=session.id,
-        new_message_text="Where is my package? Tracking #ABC123",
+        new_message=types.Content(role="user", parts=[types.Part(text="Where is my package? Tracking #ABC123")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -136,7 +136,6 @@ coordinator = LlmAgent(
 ```python
 from google.adk.flows.llm_flows.agent_transfer import (
     _build_transfer_instruction_body,
-    _get_transfer_targets,
 )
 from google.adk.agents import LlmAgent
 
@@ -318,7 +317,7 @@ from google.adk.agents import LlmAgent
 from google.adk.code_executors import BuiltInCodeExecutor
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.genai import types
 
 async def main():
@@ -335,9 +334,8 @@ async def main():
     )
 
     session_service = InMemorySessionService()
-    app = App(name="data_app", root_agent=agent,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="data_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="data_app", user_id="user1"
     )
@@ -405,7 +403,7 @@ from google.adk.agents import LlmAgent
 from google.adk.code_executors import UnsafeLocalCodeExecutor
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.genai import types
 
 async def main():
@@ -426,9 +424,8 @@ async def main():
     )
 
     session_service = InMemorySessionService()
-    app = App(name="local_app", root_agent=agent,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="local_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="local_app", user_id="dev_user"
     )
@@ -605,10 +602,11 @@ agent = LlmAgent(
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools.environment_simulation import (
     EnvironmentSimulationConfig,
     ToolSimulationConfig,
@@ -647,9 +645,8 @@ agent = LlmAgent(
 
 async def main():
     session_service = InMemorySessionService()
-    app = App(name="support_app", root_agent=agent,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="support_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="support_app", user_id="user1"
     )
@@ -657,7 +654,7 @@ async def main():
     async for event in runner.run_async(
         user_id="user1",
         session_id=session.id,
-        new_message_text="Create a ticket: Login is broken",
+        new_message=types.Content(role="user", parts=[types.Part(text="Create a ticket: Login is broken")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -707,10 +704,11 @@ print(f"Simulating {len(config.tools)} tools")
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools.environment_simulation import (
     EnvironmentSimulationConfig,
     ToolSimulationConfig,
@@ -743,10 +741,9 @@ async def main():
     app = App(
         name="email_app",
         root_agent=agent,
-        session_service=session_service,
         plugins=[sim_plugin],   # Plugin wires up simulation automatically
     )
-    runner = Runner(app=app)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="email_app", user_id="tester"
     )
@@ -754,7 +751,7 @@ async def main():
     async for event in runner.run_async(
         user_id="tester",
         session_id=session.id,
-        new_message_text="Send a welcome email to alice@example.com",
+        new_message=types.Content(role="user", parts=[types.Part(text="Send a welcome email to alice@example.com")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -781,10 +778,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools.environment_simulation import (
     EnvironmentSimulationConfig,
     ToolSimulationConfig,
@@ -821,9 +819,8 @@ agent = LlmAgent(
 
 async def main():
     session_service = InMemorySessionService()
-    app = App(name="hotel_app", root_agent=agent,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="hotel_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="hotel_app", user_id="traveler"
     )
@@ -831,7 +828,7 @@ async def main():
     async for event in runner.run_async(
         user_id="traveler",
         session_id=session.id,
-        new_message_text="Book hotel H123 for Dec 20-25",
+        new_message=types.Content(role="user", parts=[types.Part(text="Book hotel H123 for Dec 20-25")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -843,10 +840,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools.environment_simulation import (
     EnvironmentSimulationConfig,
     ToolSimulationConfig,
@@ -884,9 +882,8 @@ agent = LlmAgent(
 
 async def main():
     session_service = InMemorySessionService()
-    app = App(name="order_app", root_agent=agent,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="order_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="order_app", user_id="shopper"
     )
@@ -894,7 +891,7 @@ async def main():
     # Turn 1: create an order (engine generates and stores a fake order_id)
     async for event in runner.run_async(
         user_id="shopper", session_id=session.id,
-        new_message_text="Order 2 units of product P001",
+        new_message=types.Content(role="user", parts=[types.Part(text="Order 2 units of product P001")]),
     ):
         if event.is_final_response():
             print("Turn 1:", event.content.parts[0].text)
@@ -902,7 +899,7 @@ async def main():
     # Turn 2: look up the order created in turn 1 (engine uses stored state)
     async for event in runner.run_async(
         user_id="shopper", session_id=session.id,
-        new_message_text="What is the status of my latest order?",
+        new_message=types.Content(role="user", parts=[types.Part(text="What is the status of my latest order?")]),
     ):
         if event.is_final_response():
             print("Turn 2:", event.content.parts[0].text)
@@ -914,10 +911,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools.environment_simulation import (
     EnvironmentSimulationConfig,
     ToolSimulationConfig,
@@ -941,10 +939,9 @@ async def build_test_app(simulation_config: EnvironmentSimulationConfig) -> tupl
     app = App(
         name="payment_app",
         root_agent=agent,
-        session_service=session_service,
         plugins=[plugin],
     )
-    return Runner(app=app), session_service
+    return Runner(app=app, session_service=session_service), session_service
 
 
 async def test_payment_flow():
@@ -960,7 +957,7 @@ async def test_payment_flow():
     responses = []
     async for event in runner.run_async(
         user_id="test_user", session_id=session.id,
-        new_message_text="Charge $50 to card token tok_test123",
+        new_message=types.Content(role="user", parts=[types.Part(text="Charge $50 to card token tok_test123")]),
     ):
         if event.is_final_response():
             responses.append(event.content.parts[0].text)
@@ -1273,10 +1270,11 @@ asyncio.run(demo())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools.environment_simulation import (
     EnvironmentSimulationConfig,
     ToolSimulationConfig,
@@ -1312,16 +1310,15 @@ agent = LlmAgent(
 
 async def main():
     session_service = InMemorySessionService()
-    app = App(name="notif_app", root_agent=agent,
-              session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="notif_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="notif_app", user_id="ops_user"
     )
 
     async for event in runner.run_async(
         user_id="ops_user", session_id=session.id,
-        new_message_text="Send an email notification to user U001 about their order",
+        new_message=types.Content(role="user", parts=[types.Part(text="Send an email notification to user U001 about their order")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)

@@ -1,6 +1,6 @@
 ---
 title: "Google Agent Development Kit (ADK) - Comprehensive Technical Guide"
-description: "Version: 1.0 Last Updated: May 1, 2026 Framework: Google Agent Development Kit (ADK) Target Audience: Beginner to Advanced Developers"
+description: "Version: 1.0 Last Updated: June 29, 2026 Framework: Google Agent Development Kit (ADK) Target Audience: Beginner to Advanced Developers"
 framework: google-adk
 language: python
 ---
@@ -9,7 +9,7 @@ Latest: 2.3.0 | Updated: June 29, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
-**Last Updated:** May 19, 2026  
+**Last Updated:** June 29, 2026  
 **Framework:** Google Agent Development Kit (ADK)  
 **Target Audience:** Beginner to Advanced Developers
 

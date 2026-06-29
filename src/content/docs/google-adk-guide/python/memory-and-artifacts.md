@@ -247,11 +247,12 @@ This shows the full lifecycle: chat, ingest the session, start a new session, an
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.memory import InMemoryMemoryService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools import load_memory
 
 APP_NAME = "memory_demo"
@@ -270,19 +271,14 @@ agent = LlmAgent(
 async def main():
     session_service = InMemorySessionService()
     memory_service = InMemoryMemoryService()
-    app = App(
-        name=APP_NAME,
-        root_agent=agent,
-        session_service=session_service,
-        memory_service=memory_service,
-    )
-    runner = Runner(app=app)
+    app = App(name=APP_NAME, root_agent=agent)
+    runner = Runner(app=app, session_service=session_service, memory_service=memory_service)
 
     # --- Session 1: tell the agent a fact ---
     s1 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     async for event in runner.run_async(
         user_id=USER_ID, session_id=s1.id,
-        new_message_text="My favourite programming language is Rust.",
+        new_message=types.Content(role="user", parts=[types.Part(text="My favourite programming language is Rust.")]),
     ):
         if event.is_final_response():
             print("Session 1:", event.content.parts[0].text)
@@ -297,7 +293,7 @@ async def main():
     s2 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     async for event in runner.run_async(
         user_id=USER_ID, session_id=s2.id,
-        new_message_text="What is my favourite programming language?",
+        new_message=types.Content(role="user", parts=[types.Part(text="What is my favourite programming language?")]),
     ):
         if event.is_final_response():
             print("Session 2:", event.content.parts[0].text)
@@ -315,7 +311,7 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.artifacts import FileArtifactService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools import FunctionTool, load_artifacts
 from google.adk.tools.tool_context import ToolContext
 
@@ -352,13 +348,8 @@ agent = LlmAgent(
 async def main():
     session_service = InMemorySessionService()
     artifact_service = FileArtifactService(root_dir="/tmp/adk_artifacts")
-    app = App(
-        name=APP_NAME,
-        root_agent=agent,
-        session_service=session_service,
-        artifact_service=artifact_service,
-    )
-    runner = Runner(app=app)
+    app = App(name=APP_NAME, root_agent=agent)
+    runner = Runner(app=app, session_service=session_service, artifact_service=artifact_service)
     session = await session_service.create_session(
         app_name=APP_NAME, user_id=USER_ID
     )
@@ -366,7 +357,7 @@ async def main():
     # Turn 1: generate and save a report
     async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id,
-        new_message_text="Generate a report about climate change.",
+        new_message=types.Content(role="user", parts=[types.Part(text="Generate a report about climate change.")]),
     ):
         if event.is_final_response():
             print("Turn 1:", event.content.parts[0].text)
@@ -374,7 +365,7 @@ async def main():
     # Turn 2: retrieve the report by asking the agent to load it
     async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id,
-        new_message_text="Show me the climate change report you generated.",
+        new_message=types.Content(role="user", parts=[types.Part(text="Show me the climate change report you generated.")]),
     ):
         if event.is_final_response():
             print("Turn 2:", event.content.parts[0].text)
@@ -386,11 +377,12 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.memory import VertexAiMemoryBankService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools import load_memory, preload_memory
 
 # Replace with your GCP project, location, and Agent Engine ID (numeric string)
@@ -421,19 +413,14 @@ async def main():
         # Optional: express_mode_api_key="..." for express mode
     )
     session_service = InMemorySessionService()
-    app = App(
-        name=APP_NAME,
-        root_agent=agent,
-        session_service=session_service,
-        memory_service=memory_service,
-    )
-    runner = Runner(app=app)
+    app = App(name=APP_NAME, root_agent=agent)
+    runner = Runner(app=app, session_service=session_service, memory_service=memory_service)
 
     # Session 1 — establish user preferences
     s1 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     async for event in runner.run_async(
         user_id=USER_ID, session_id=s1.id,
-        new_message_text="I'm a vegetarian and allergic to nuts. Keep this in mind.",
+        new_message=types.Content(role="user", parts=[types.Part(text="I'm a vegetarian and allergic to nuts. Keep this in mind.")]),
     ):
         if event.is_final_response():
             print("S1:", event.content.parts[0].text)
@@ -448,7 +435,7 @@ async def main():
     s2 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     async for event in runner.run_async(
         user_id=USER_ID, session_id=s2.id,
-        new_message_text="Suggest a recipe for dinner tonight.",
+        new_message=types.Content(role="user", parts=[types.Part(text="Suggest a recipe for dinner tonight.")]),
     ):
         if event.is_final_response():
             # Agent should suggest a vegetarian, nut-free recipe

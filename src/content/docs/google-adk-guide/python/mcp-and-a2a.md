@@ -28,7 +28,7 @@ fs_toolset = McpToolset(
         timeout=5.0,
     ),
     tool_filter=["read_file", "list_directory"],
-    tool_name_prefix="fs_",
+    tool_name_prefix="fs",
 )
 
 agent = LlmAgent(
@@ -59,7 +59,7 @@ From `google/adk/tools/mcp_tool/mcp_session_manager.py`:
 toolset = McpToolset(
     connection_params=...,
     tool_filter=["read_file"],        # or a ToolPredicate callable
-    tool_name_prefix="fs_",           # prepended to each tool's name
+    tool_name_prefix="fs",             # ADK adds "_" automatically: "fs_read_file"
     errlog=sys.stderr,                # where the server's stderr goes
     auth_scheme=None,                 # OAuth/API-key auth for the MCP server
     auth_credential=None,
@@ -212,11 +212,12 @@ MCP server requests sampling via `sampling_callback`. ADK forwards the request t
 
 ```python
 import asyncio
+from google.genai import types
 from mcp import StdioServerParameters
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import StdioConnectionParams
 
@@ -231,7 +232,7 @@ async def main():
             timeout=10.0,
         ),
         tool_filter=["read_file", "list_directory", "get_file_info"],
-        tool_name_prefix="fs_",
+        tool_name_prefix="fs",
     )
 
     agent = LlmAgent(
@@ -245,13 +246,13 @@ async def main():
     )
 
     session_service = InMemorySessionService()
-    app = App(name="fs_app", root_agent=agent, session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="fs_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(app_name="fs_app", user_id="user1")
 
     async for event in runner.run_async(
         user_id="user1", session_id=session.id,
-        new_message_text="What files are in /tmp/workspace?",
+        new_message=types.Content(role="user", parts=[types.Part(text="What files are in /tmp/workspace?")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -265,10 +266,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
 
@@ -282,7 +284,7 @@ async def main():
             sse_read_timeout=300.0,
         ),
         tool_filter=["search", "get_document"],
-        tool_name_prefix="kb_",  # knowledge base prefix
+        tool_name_prefix="kb",  # knowledge base prefix
     )
 
     agent = LlmAgent(
@@ -293,13 +295,13 @@ async def main():
     )
 
     session_service = InMemorySessionService()
-    app = App(name="kb_app", root_agent=agent, session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="kb_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(app_name="kb_app", user_id="user1")
 
     async for event in runner.run_async(
         user_id="user1", session_id=session.id,
-        new_message_text="Find documents about machine learning.",
+        new_message=types.Content(role="user", parts=[types.Part(text="Find documents about machine learning.")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -315,10 +317,10 @@ asyncio.run(main())
 # server.py — run with: python server.py
 import asyncio
 from google.adk.agents import LlmAgent
-from google.adk.a2a import to_a2a
+from google.adk.a2a.utils.agent_to_a2a import to_a2a
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
-from google.adk import App
+from google.adk.apps import App
 
 agent = LlmAgent(
     name="weather_agent",
@@ -331,16 +333,12 @@ agent = LlmAgent(
 )
 
 session_service = InMemorySessionService()
-app = App(
-    name="weather_app",
-    root_agent=agent,
-    session_service=session_service,
-)
-runner = Runner(app=app)
+app = App(name="weather_app", root_agent=agent)
+runner = Runner(app=app, session_service=session_service)
 
 # to_a2a() wraps the runner in a Starlette ASGI app serving A2A protocol.
 # The agent card is auto-generated from agent.name and agent.description.
-a2a_app = to_a2a(runner, host="0.0.0.0", port=8080)
+a2a_app = to_a2a(agent, host="0.0.0.0", port=8080, runner=runner)
 
 if __name__ == "__main__":
     import uvicorn
@@ -351,11 +349,12 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 
 async def main():
     # RemoteA2aAgent fetches the agent card from the remote server
@@ -379,19 +378,15 @@ async def main():
     )
 
     session_service = InMemorySessionService()
-    app = App(
-        name="main_app",
-        root_agent=orchestrator,
-        session_service=session_service,
-    )
-    runner = Runner(app=app)
+    app = App(name="main_app", root_agent=orchestrator)
+    runner = Runner(app=app, session_service=session_service)
     session = await session_service.create_session(
         app_name="main_app", user_id="user1"
     )
 
     async for event in runner.run_async(
         user_id="user1", session_id=session.id,
-        new_message_text="What's the weather like in Tokyo?",
+        new_message=types.Content(role="user", parts=[types.Part(text="What's the weather like in Tokyo?")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -403,10 +398,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk import App
+from google.adk.apps import App
 from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import SseConnectionParams
 
@@ -428,7 +424,7 @@ async def main():
             sse_read_timeout=120.0,
         ),
         header_provider=get_tenant_headers,
-        tool_name_prefix="api_",
+        tool_name_prefix="api",
     )
 
     agent = LlmAgent(
@@ -439,8 +435,8 @@ async def main():
     )
 
     session_service = InMemorySessionService()
-    app = App(name="api_app", root_agent=agent, session_service=session_service)
-    runner = Runner(app=app)
+    app = App(name="api_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
 
     # Create session with tenant context in state
     session = await session_service.create_session(
@@ -451,7 +447,7 @@ async def main():
 
     async for event in runner.run_async(
         user_id="user1", session_id=session.id,
-        new_message_text="List all available resources.",
+        new_message=types.Content(role="user", parts=[types.Part(text="List all available resources.")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
