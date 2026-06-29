@@ -248,7 +248,7 @@ security_logger.setLevel(logging.WARNING)
 
 # All inspect_variable calls emit WARNING-level audit logs:
 # "SECURITY AUDIT: Variable var_... inspected. Label: ... Reason: ..."
-# All quarantined_llm calls emit WARNING-level logs too.
+# quarantined_llm logs at INFO level per call; WARNING only when a variable_id is not found.
 
 # To capture for your own audit trail:
 class AuditHandler(logging.Handler):
@@ -516,7 +516,7 @@ INNER_RESPONSE_TELEMETRY_CAPTURED_FIELDS.reset(token)
 
 **Module:** `agent_framework.observability`
 
-`create_mcp_client_span` is a context-manager function that emits an MCP client span following the [OTel MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/). The span name format is `"{mcp.method.name} {target}"` when a target (tool or prompt name) is provided, or just `"{mcp.method.name}"` when omitted. The span kind is `SpanKind.CLIENT`. It always sets `gen_ai.mcp.method.name` on the span, and additional attributes can be supplied via the `attributes` dict.
+`create_mcp_client_span` is a context-manager function that emits an MCP client span following the [OTel MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/). The span name format is `"{mcp.method.name} {target}"` when a target (tool or prompt name) is provided, or just `"{mcp.method.name}"` when omitted. The span kind is `SpanKind.CLIENT`. It always sets `mcp.method.name` on the span (via `OtelAttr.MCP_METHOD_NAME`), and additional attributes can be supplied via the `attributes` dict.
 
 `set_mcp_span_error(span, exception)` records an exception on a span and sets its status to `ERROR`. It is a thin wrapper that matches the pattern used by `create_mcp_client_span`'s `record_exception=True` parameter — use it when you need to mark a span as errored outside the context manager's automatic exception propagation.
 
