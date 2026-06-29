@@ -2491,6 +2491,7 @@ print("Word count:", result["word_count"])  # 7
 ### Subgraph Traversal
 
 ```python
+# `compiled` is any CompiledStateGraph returned by g.compile()
 # Iterate all subgraphs, optionally recursing into nested ones
 for name, subgraph in compiled.get_subgraphs(recurse=True):
     print(f"  namespace={name!r}  type={type(subgraph).__name__}")
@@ -2554,21 +2555,34 @@ print(result["summary"])  # got ['a', 'b']  — both items present when defer ru
 ### Cache Management
 
 ```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
 from langgraph.cache.memory import InMemoryCache
 from langgraph.types import CachePolicy
 
+class S(TypedDict):
+    x: int
+
 cache = InMemoryCache()
-# ... compile graph with cache=cache, nodes with cache_policy=CachePolicy() ...
+
+g = StateGraph(S)
+g.add_node("compute", lambda s: {"x": s["x"] * 2}, cache_policy=CachePolicy())
+g.set_entry_point("compute")
+g.set_finish_point("compute")
+compiled = g.compile(cache=cache)
 
 # Invalidate the entire graph's cache
-compiled.clear_cache()
+if compiled.cache is not None:
+    compiled.clear_cache()
 
 # Invalidate only specific nodes
-compiled.clear_cache(nodes=["expensive_node"])
+if compiled.cache is not None:
+    compiled.clear_cache(nodes=["compute"])
 
 # Async variant
 import asyncio
-asyncio.run(compiled.aclear_cache(nodes=["llm_node"]))
+if compiled.cache is not None:
+    asyncio.run(compiled.aclear_cache(nodes=["compute"]))
 ```
 
 ### REMOVE_ALL_MESSAGES Sentinel
