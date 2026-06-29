@@ -773,13 +773,13 @@ agent = Agent(
 - Merge logic: `{**(td.metadata or {}), **metadata}` — existing tool metadata is preserved; the capability's metadata is merged on top (capability values win on conflicts).
 - `tools: ToolSelector` defaults to `'all'`. Same selector mechanics as `IncludeToolReturnSchemas`: list of names, metadata dict, or async callable.
 - `get_serialization_name()` returns `'SetToolMetadata'` — spec-serializable when metadata values are JSON-compatible.
-- Downstream: `ToolDefinition.metadata` is passed through to providers that inspect it (e.g. for Anthropic cache-control headers on tools).
+- Downstream: `ToolDefinition.metadata` is read by capabilities (e.g. `IncludeToolReturnSchemas` can filter by `dict[str, Any]` selector matching metadata keys) and custom prepare functions. It is **not** read by the Anthropic (or other built-in) model mappers for provider-level features. Anthropic tool prompt caching is controlled separately via `AnthropicModelSettings(anthropic_cache_tool_definitions=True)`, not via `SetToolMetadata`.
 
 ```python
-# Example 1 — adding Anthropic cache-control metadata to all tools
+# Example 1 — tagging tools with custom metadata for capability-level filtering
 
 from pydantic_ai import Agent
-from pydantic_ai.capabilities import SetToolMetadata
+from pydantic_ai.capabilities import SetToolMetadata, IncludeToolReturnSchemas
 from pydantic_ai.toolsets import FunctionToolset
 
 toolset = FunctionToolset()
@@ -794,15 +794,22 @@ def run_code(code: str) -> str:
     """Execute Python code."""
     return "output"
 
-# Mark all tools as cache-breakpoints for Anthropic prompt caching
+# Tag tools with a custom tier. IncludeToolReturnSchemas (or a custom
+# PrepareTools function) can then filter by {'tier': 'premium'}.
 agent = Agent(
-    'anthropic:claude-opus-4-5',
+    'openai:gpt-4.1',
     toolsets=[toolset],
     capabilities=[
-        SetToolMetadata(cache_control='ephemeral')
+        SetToolMetadata(tier='premium', owner='platform-team'),
+        # IncludeToolReturnSchemas with a dict selector: only tools whose
+        # metadata contains {'tier': 'premium'} will get return schemas.
+        IncludeToolReturnSchemas(tools={'tier': 'premium'}),
     ],
 )
-# Each ToolDefinition.metadata will be {'cache_control': 'ephemeral'}
+# Each ToolDefinition.metadata will be {'tier': 'premium', 'owner': 'platform-team'}
+# NOTE: ToolDefinition.metadata is for capability/prepare-func filtering only.
+# For Anthropic tool prompt caching use AnthropicModelSettings instead:
+#   agent = Agent(..., model_settings=AnthropicModelSettings(anthropic_cache_tool_definitions=True))
 ```
 
 ```python
@@ -824,42 +831,46 @@ def quick_lookup(key: str) -> str:
     """Fast key-value lookup."""
     return ""
 
-# Only mark the expensive tool for caching; quick_lookup stays clean
+# Attach versioning metadata only to the tool that needs it.
+# A custom PrepareTools function can then inspect td.metadata to gate access.
 agent = Agent(
-    'anthropic:claude-opus-4-5',
+    'openai:gpt-4.1',
     toolsets=[toolset],
     capabilities=[
         SetToolMetadata(
             tools=['expensive_query'],  # ToolSelector: list of names
-            cache_control='ephemeral',
+            requires_elevated_permissions=True,
+            version='v2',
         )
     ],
 )
+# expensive_query.metadata = {'requires_elevated_permissions': True, 'version': 'v2'}
+# quick_lookup.metadata = None  (unaffected)
 ```
 
 ```python
-# Example 3 — stacking SetToolMetadata with other capabilities for layered metadata
+# Example 3 — stacking SetToolMetadata with IncludeToolReturnSchemas
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import SetToolMetadata, IncludeToolReturnSchemas
 
-# Capabilities compose: metadata from SetToolMetadata is applied after
-# IncludeToolReturnSchemas sets include_return_schema on tool definitions.
+# Capabilities compose: SetToolMetadata merges metadata onto tool definitions,
+# IncludeToolReturnSchemas can then select tools by that metadata dict.
 # The order matters when get_wrapper_toolset middleware chains stack.
 
 agent = Agent(
-    'anthropic:claude-opus-4-5',
+    'openai:gpt-4.1',
     capabilities=[
-        # Outer: marks all tools with Anthropic cache metadata
-        SetToolMetadata(cache_control='ephemeral', version='v2'),
-        # Inner: injects return schemas into tool descriptions
-        IncludeToolReturnSchemas(tools=['search', 'fetch']),
+        # Outer: tags all tools with tier and version
+        SetToolMetadata(tier='premium', version='v2'),
+        # Inner: enable return schemas only for premium-tier tools
+        IncludeToolReturnSchemas(tools={'tier': 'premium'}),
     ]
 )
 
-# The merged ToolDefinition for 'search' will have:
-# - metadata = {'cache_control': 'ephemeral', 'version': 'v2'}
-# - include_return_schema = True (injected by IncludeToolReturnSchemas)
+# The merged ToolDefinition for a tool will have:
+# - metadata = {'tier': 'premium', 'version': 'v2'}
+# - include_return_schema = True (set by IncludeToolReturnSchemas selector match)
 ```
 
 ---
