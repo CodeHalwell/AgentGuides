@@ -368,7 +368,7 @@ print("Sensitive telemetry enabled for dev/test")
 - `TOKEN_USAGE_BUCKET_BOUNDARIES = (1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864)` — 14 values; each is 4× the previous.
 - `OPERATION_DURATION_BUCKET_BOUNDARIES = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92)` — 14 values; each doubles the previous.
 - `create_resource` uses `Resource.create({...})` from the OTel SDK — the returned resource is directly usable in `TracerProvider`/`MeterProvider` constructors.
-- `OTEL_RESOURCE_ATTRIBUTES` is parsed by `_parse_headers` (a comma-separated `key=value` parser) then merged with explicit `**attributes` — explicit kwargs win.
+- `OTEL_RESOURCE_ATTRIBUTES` is parsed by `_parse_headers` (a comma-separated `key=value` parser) then applied via `resource_attributes.update(...)` — **env var entries win** over explicit `**attributes` kwargs. Explicit `service_name=` and `service_version=` params do win over `OTEL_SERVICE_NAME`/`OTEL_SERVICE_VERSION`, but can be overridden if those keys also appear in `OTEL_RESOURCE_ATTRIBUTES`.
 - `create_metric_views` uses `View(instrument_name="agent_framework*")` and `View(instrument_name="gen_ai*")` to pass those namespaces through, and `View(instrument_name="*", aggregation=DropAggregation())` to suppress everything else. No custom histogram boundaries are applied.
 
 **Example 1 — creating a resource with custom service name:**
@@ -438,7 +438,7 @@ print(f"Max tracked LLM duration: {OPERATION_DURATION_BUCKET_BOUNDARIES[-1]}s")
 
 ### Key source facts
 
-- `get_tracer()` returns `trace.NoOpTracer()` when `OBSERVABILITY_SETTINGS.ENABLED` is `False` — no spans are created when instrumentation is disabled.
+- `get_tracer()` is a plain pass-through to `trace.get_tracer()` — it does NOT check `OBSERVABILITY_SETTINGS`. To gate custom instrumentation, check `OBSERVABILITY_SETTINGS.ENABLED` yourself before calling `get_tracer()`. The NoOpTracer check lives in `create_mcp_client_span`, not in `get_tracer`.
 - `get_meter` accepts an optional `schema_url` and an `attributes` dict for meter-level resource attributes.
 - `INNER_ACCUMULATED_USAGE` default is `None` — the outer agent span must check for `None` before subtracting.
 - `INNER_RESPONSE_ID_CAPTURED_FIELD = "response_id"` and `INNER_USAGE_CAPTURED_FIELD = "usage"` are the sentinel strings stored in the context var set.
@@ -519,14 +519,14 @@ INNER_RESPONSE_TELEMETRY_CAPTURED_FIELDS.reset(token)
 
 `create_mcp_client_span` is a context-manager function that emits an MCP client span following the [OTel MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/). The span name format is `"{mcp.method.name} {target}"` when a target (tool or prompt name) is provided, or just `"{mcp.method.name}"` when omitted. The span kind is `SpanKind.CLIENT`. It always sets `mcp.method.name` on the span (via `OtelAttr.MCP_METHOD_NAME`), and additional attributes can be supplied via the `attributes` dict.
 
-`set_mcp_span_error(span, exception)` records an exception on a span and sets its status to `ERROR`. It is a thin wrapper that matches the pattern used by `create_mcp_client_span`'s `record_exception=True` parameter — use it when you need to mark a span as errored outside the context manager's automatic exception propagation.
+`set_mcp_span_error(span, error_type, description=None)` sets the `error.type` span attribute and marks the span status `ERROR`. It does **not** record an exception object — `error_type` is a short string (e.g. an exception class name or a JSON-RPC error code) and `description` is an optional human-readable message. Use it when you need to flag an MCP span as errored outside the context manager's automatic exception recording.
 
 ### Key source facts
 
 - When `OBSERVABILITY_SETTINGS.ENABLED` is `False`, `create_mcp_client_span` uses `trace.NoOpTracer()` — no spans are emitted.
 - `create_mcp_client_span` uses `trace.use_span(end_on_exit=True, record_exception=True, set_status_on_exception=True)` — exceptions raised inside the block are recorded automatically and the span status is set to `ERROR`.
 - The span kind `SpanKind.CLIENT` matches the MCP semantic conventions spec (MCP is a client–server protocol from the agent's perspective).
-- `set_mcp_span_error` calls `span.record_exception(exception)` then `span.set_status(StatusCode.ERROR)` — it does not re-raise the exception.
+- `set_mcp_span_error` calls `span.set_attribute(OtelAttr.ERROR_TYPE, error_type)` then `span.set_status(StatusCode.ERROR, description=description)` — it does NOT call `record_exception` and does NOT accept an exception object.
 - The `OtelAttr.MCP_METHOD_NAME = "mcp.method.name"` enum value is set as an attribute key; the method name string (e.g. `"tools/call"`, `"initialize"`) is the value.
 
 **Example 1 — wrapping an MCP tool call with a client span:**
@@ -579,7 +579,7 @@ def call_mcp_with_retry(method: str, target: str, max_retries: int = 3) -> dict 
                     raise ConnectionError("Simulated transient failure")
                 return {"data": "success"}
             except ConnectionError as e:
-                set_mcp_span_error(span, e)
+                set_mcp_span_error(span, type(e).__name__, str(e))
                 if attempt == max_retries - 1:
                     raise
     return None
