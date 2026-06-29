@@ -652,6 +652,7 @@ except UserError as e:
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
+from pydantic_ai.tools import Tool
 from pydantic import BaseModel
 
 class WeatherData(BaseModel):
@@ -685,6 +686,7 @@ agent_openai = Agent(
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
+from pydantic_ai.tools import Tool
 from pydantic import BaseModel
 
 class SearchResult(BaseModel):
@@ -724,6 +726,7 @@ agent = Agent(
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
+from pydantic_ai.tools import Tool
 from pydantic import BaseModel
 
 class SensitiveData(BaseModel):
