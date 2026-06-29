@@ -77,7 +77,9 @@ agent = LlmAgent(
 )
 ```
 
-Both tools call `memory_service.search_memory(app_name=..., user_id=..., query=...)`. Without a memory service configured, they return an empty result set (no error).
+**`preload_memory`** runs automatically before each LLM call (not invoked by the model). It wraps `ToolContext.search_memory()` in a broad `try/except` — if no `memory_service` is configured, it logs a warning and silently returns. Safe to add without a memory service.
+
+**`load_memory`** is a callable tool the model invokes explicitly. It calls `ToolContext.search_memory()` directly, which raises `ValueError('Memory service is not available.')` when the `Runner` has no `memory_service`. The model receives a tool error instead of an empty result. Always configure a `memory_service` on the `Runner` before using `load_memory`.
 
 ### Writing to memory
 
@@ -144,7 +146,7 @@ entry = MemoryEntry(
 | Service | Storage | Notes |
 |---|---|---|
 | `InMemoryArtifactService()` | Python dict; keeps full blobs in memory | Dev/testing |
-| `FileArtifactService(root_dir)` | Local filesystem under `root_dir/` | Versions stored as `artifacts/<session>/<filename>/v<N>`; metadata JSON alongside. Thread-safe via per-file locks |
+| `FileArtifactService(root_dir)` | Local filesystem under `root_dir/` | Versions stored as `artifacts/<session>/<filename>/v<N>`; metadata JSON alongside. **Not thread-safe** — concurrent saves to the same artifact can race (no lock between version enumeration and `mkdir`); use GCS or a single-writer process in production |
 | `GcsArtifactService(bucket_name, **kwargs)` | Google Cloud Storage bucket | `kwargs` forwarded to `google.cloud.storage.Client` |
 
 ```python
