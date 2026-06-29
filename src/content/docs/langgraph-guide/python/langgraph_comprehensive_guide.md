@@ -2476,8 +2476,9 @@ g.set_finish_point("count")
 compiled = g.compile()
 
 import warnings
+from langchain_core._api import LangChainBetaWarning
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=LangChainBetaWarning)
     word_count_tool = compiled.as_tool(
         args_schema=SummaryInput,
         name="word_count",

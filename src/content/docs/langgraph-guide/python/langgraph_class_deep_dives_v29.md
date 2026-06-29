@@ -293,6 +293,7 @@ def as_tool(
 ```python
 # Example 1: expose a compiled subgraph as a tool for a parent agent
 import warnings
+from langchain_core._api import LangChainBetaWarning
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 
@@ -311,7 +312,7 @@ sub.add_edge("search", END)
 compiled_sub = sub.compile()
 
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=LangChainBetaWarning)
     # Without arg_types, ALL state keys — including output-only 'result' — appear
     # in the schema as required tool arguments. Restrict to input keys only:
     search_tool = compiled_sub.as_tool(
@@ -328,6 +329,7 @@ print("Tool schema:", list(search_tool.args_schema.model_fields.keys()))
 ```python
 # Example 2: as_tool with explicit args_schema to expose only the input key
 import warnings
+from langchain_core._api import LangChainBetaWarning
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START, END
@@ -353,7 +355,7 @@ g.add_edge("summarize", END)
 compiled = g.compile()
 
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=LangChainBetaWarning)
     tool = compiled.as_tool(
         args_schema=WorkerInput,
         name="text_processor",
@@ -367,6 +369,7 @@ print("Summary:", result["summary"])
 ```python
 # Example 3: embed a graph tool into a ToolNode for multi-agent use
 import warnings
+from langchain_core._api import LangChainBetaWarning
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
@@ -386,7 +389,7 @@ price_graph.add_edge("lookup", END)
 compiled_price = price_graph.compile()
 
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=LangChainBetaWarning)
     # arg_types restricts the schema to input-only keys; without it, output-only
     # 'price' appears as a required tool argument the LLM must supply before lookup
     price_tool = compiled_price.as_tool(
