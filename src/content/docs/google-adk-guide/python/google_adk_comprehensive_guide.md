@@ -5,7 +5,7 @@ framework: google-adk
 language: python
 ---
 
-Latest: 2.1.0 | Updated: May 23, 2026
+Latest: 2.3.0 | Updated: June 29, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.0  
@@ -4112,6 +4112,7 @@ result = await agent.run(
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3.0 | June 29, 2026 | Class deep dives vol. 31 added: `_AgentTransferLlmRequestProcessor` (LLM pipeline transfer stage; `disallow_transfer_to_parent`/`disallow_transfer_to_peers`; peer inclusion; task/single_turn skip), `_IdentityLlmRequestProcessor` (exact identity injection; single_turn skip), `DataFileUtil` + `_CodeExecutionRequestProcessor` + `_CodeExecutionResponseProcessor` (code execution pipeline; CSV `explore_df` preprocessing; error retry counter; image artifact save), `LLMRegistry` (`lru_cache` resolve; prefix:model explicit routing; lazy loading), `EnvironmentSimulationEngine` (stateful intercept; shared `_state_store`; MockStrategyEnum), `EnvironmentSimulationFactory` (`create_callback`/`create_plugin`), `MockStrategy` + `TracingMockStrategy` (abstract mock base + JSON trace replay), `ToolSpecMockStrategy` (LLM-generated stateful mock; `response_mime_type=application/json`; creating-tool state mutation). Memory & Artifacts and MCP & A2A guides enhanced with 4 and 5 complete runnable examples respectively. Version line updated from 2.1.0 to 2.3.0. |
 | 2.3.0 | June 22, 2026 | Version bump to 2.3.0. Class deep dives vol. 24 added: `LlmAgent` mode system (`chat`/`task`/`single_turn`), `ContextCacheConfig`, `State` delta-aware dict + `StateSchemaError`, `DatabaseSessionService` (SQLAlchemy), `VertexAiSessionService`, `VertexAiMemoryBankService` (ingest/generate paths), `Event` + `NodeInfo`, `EventActions` + `EventCompaction`, `ReadonlyContext`, `InvocationContext`. All classes source-verified against `google-adk==2.3.0`. |
 | 2.1.0 | May 23, 2026 | Minor feature release. `RunConfig` gains `tool_thread_pool_config` (`ToolThreadPoolConfig`), `context_window_compression`, `get_session_config`, `enable_affective_dialog`, `proactivity`, `session_resumption`. `BaseNode.state_schema`, `input_schema`, `output_schema` documented as first-class fields. `Context.add_memory()` for explicit memory entries. `BasePlugin.on_model_error_callback` formally documented. Class deep dives page added. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed. |
 | 2.0.0 (GA) | May 20, 2026 | GA stable release confirmed. `pip install google-adk` (no `--pre` required). Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS. |
