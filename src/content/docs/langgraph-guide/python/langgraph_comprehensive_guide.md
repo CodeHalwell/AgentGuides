@@ -1,20 +1,20 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.2.4 (June 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Latest Version: LangGraph 1.2.6 (June 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
 framework: langgraph
 language: python
 ---
 
-Latest: 1.2.4 | Updated: June 6, 2026
+Latest: 1.2.6 | Updated: June 29, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.2.4 (June 2026)
+**Latest Version**: LangGraph 1.2.6 (June 2026)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
 > **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.4 (verified June 2026):**
+**What's real in v1.2.6 (verified June 2026):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
 - `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
 - `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
@@ -2411,6 +2411,183 @@ asyncio.run(main())
 
 ---
 
+## New in v1.2.6 — Compiled Graph APIs
+
+### Graph Visualization
+
+`get_graph(xray=True)` expands compiled subgraphs inline, prefixing their node names with the parent node name. All visualization flows through `langchain_core.runnables.graph.Graph`:
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+class State(TypedDict):
+    value: int
+
+# Build a subgraph
+sub = StateGraph(State)
+sub.add_node("sub_op", lambda s: {"value": s["value"] * 10})
+sub.set_entry_point("sub_op")
+sub.set_finish_point("sub_op")
+compiled_sub = sub.compile()
+
+# Embed in main graph
+g = StateGraph(State)
+g.add_node("scale", compiled_sub)
+g.add_node("post",  lambda s: {"value": s["value"] + 1})
+g.add_edge(START, "scale")
+g.add_edge("scale", "post")
+g.add_edge("post", END)
+compiled = g.compile()
+
+# Shallow view — subgraph appears as single "scale" node
+print(list(compiled.get_graph().nodes.keys()))
+# ['__start__', 'scale', 'post', '__end__']
+
+# Deep view — subgraph internals exposed
+print(list(compiled.get_graph(xray=True).nodes.keys()))
+# ['__start__', '__end__', 'scale:sub_op', 'post']
+
+# Generate Mermaid markdown for documentation
+mermaid_md = compiled.get_graph().draw_mermaid()
+print(mermaid_md[:200])
+```
+
+### Graph-as-Tool (Beta)
+
+`compiled.as_tool()` converts any compiled graph into a LangChain `StructuredTool`:
+
+```python
+from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
+from langgraph.graph import StateGraph, START, END
+
+class SummaryState(TypedDict):
+    text: str
+    word_count: int
+
+class SummaryInput(BaseModel):
+    text: str = Field(description="Text to analyse")
+
+g = StateGraph(SummaryState)
+g.add_node("count", lambda s: {"word_count": len(s["text"].split())})
+g.set_entry_point("count")
+g.set_finish_point("count")
+compiled = g.compile()
+
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+word_count_tool = compiled.as_tool(
+    args_schema=SummaryInput,
+    name="word_count",
+    description="Count words in a piece of text",
+)
+result = word_count_tool.invoke({"text": "LangGraph is great for building agents"})
+print("Word count:", result["word_count"])  # 7
+```
+
+### Subgraph Traversal
+
+```python
+# Iterate all subgraphs, optionally recursing into nested ones
+for name, subgraph in compiled.get_subgraphs(recurse=True):
+    print(f"  namespace={name!r}  type={type(subgraph).__name__}")
+```
+
+### Schema Introspection
+
+```python
+import json
+from typing_extensions import TypedDict
+from pydantic import BaseModel
+from langgraph.graph import StateGraph, START, END
+
+class Ctx(BaseModel):
+    user_id: str
+
+class S(TypedDict):
+    query: str
+    answer: str
+
+g = StateGraph(S, context_schema=Ctx)
+g.add_node("n", lambda s: s)
+g.set_entry_point("n")
+g.set_finish_point("n")
+compiled = g.compile()
+
+print(json.dumps(compiled.get_input_jsonschema(),   indent=2))
+print(json.dumps(compiled.get_output_jsonschema(),  indent=2))
+print(json.dumps(compiled.get_context_jsonschema(), indent=2))
+# Note: get_config_jsonschema() is deprecated — use get_context_jsonschema()
+```
+
+### Deferred Nodes
+
+`add_node(defer=True)` ensures a node runs after all non-deferred nodes in the super-step:
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+class S(TypedDict):
+    items: Annotated[list[str], operator.add]
+    summary: str
+
+g = StateGraph(S)
+g.add_node("worker_a", lambda s: {"items": ["a"]})
+g.add_node("worker_b", lambda s: {"items": ["b"]})
+g.add_node("summarise", lambda s: {"summary": f"got {s['items']}"}, defer=True)
+
+g.add_edge(START, "worker_a")
+g.add_edge(START, "worker_b")
+g.add_edge("worker_a", "summarise")
+g.add_edge("worker_b", "summarise")
+g.add_edge("summarise", END)
+
+result = g.compile().invoke({"items": [], "summary": ""})
+print(result["summary"])  # got ['a', 'b']  — both items present when defer runs
+```
+
+### Cache Management
+
+```python
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import CachePolicy
+
+cache = InMemoryCache()
+# ... compile graph with cache=cache, nodes with cache_policy=CachePolicy() ...
+
+# Invalidate the entire graph's cache
+compiled.clear_cache()
+
+# Invalidate only specific nodes
+compiled.clear_cache(nodes=["expensive_node"])
+
+# Async variant
+import asyncio
+asyncio.run(compiled.aclear_cache(nodes=["llm_node"]))
+```
+
+### REMOVE_ALL_MESSAGES Sentinel
+
+```python
+from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
+from langgraph.graph.message import add_messages, REMOVE_ALL_MESSAGES
+
+# Discard entire conversation history and start fresh
+def reset_conversation(state):
+    return {
+        "messages": [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),          # wipe all history
+            HumanMessage(content="New topic", id="n1"),     # first message of new context
+        ]
+    }
+```
+
+---
+
 ## Common Patterns Summary
 
 | Pattern | Use Case | Key Idea |
@@ -2425,6 +2602,9 @@ asyncio.run(main())
 | **Reflection** | Quality improvement | Self-critique → Refine loop |
 | **Interrupt** | Human approval | Pause, wait, resume with Command |
 | **Caching** | Performance | Store expensive results |
+| **Deferred nodes** | Post-step aggregation | `add_node(defer=True)` runs after all parallel workers |
+| **Graph-as-tool** | Multi-agent composition | `compiled.as_tool()` wraps graph as a StructuredTool |
+| **History reset** | Context window management | `RemoveMessage(id=REMOVE_ALL_MESSAGES)` clears all messages |
 
 ---
 
@@ -2528,6 +2708,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.6 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph==1.2.6`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred super-step execution, and `REMOVE_ALL_MESSAGES` bulk history reset. |
 | 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `StreamPart`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
 | 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph==1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
 | 1.1.9 | April 22, 2026 | Patch release; six source-verified reference pages added to the guide. |
