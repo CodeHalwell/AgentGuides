@@ -96,12 +96,16 @@ await runner.memory_service.add_events_to_memory(
     events=session.events[-2:],
 )
 
-# Or explicit facts
+# Or explicit facts — content must be a types.Content object, not a string
 from google.adk.memory.memory_entry import MemoryEntry
+from google.genai import types
 await runner.memory_service.add_memory(
     app_name="demo",
     user_id="u1",
-    memories=[MemoryEntry(content="User prefers metric units.")],
+    memories=[MemoryEntry(content=types.Content(
+        role="user",
+        parts=[types.Part(text="User prefers metric units.")],
+    ))],
 )
 ```
 
@@ -112,9 +116,13 @@ await runner.memory_service.add_memory(
 ```python
 from google.adk.memory.memory_entry import MemoryEntry
 
+from google.genai import types
 entry = MemoryEntry(
-    content="User's favourite language is Rust.",
-    timestamp=1_747_000_000.0,   # float seconds, optional
+    content=types.Content(
+        role="user",
+        parts=[types.Part(text="User's favourite language is Rust.")],
+    ),
+    timestamp="2025-05-12T00:00:00Z",   # ISO 8601 string, optional
     custom_metadata={"source": "self-report"},
 )
 ```

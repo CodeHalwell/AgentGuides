@@ -526,16 +526,19 @@ from google.adk.models.lite_llm import LiteLlm  # pip install litellm
 
 registry = LLMRegistry()
 
-# Register LiteLlm explicitly for the "litellm" prefix
-LLMRegistry.register("litellm", LiteLlm)
+# register() takes only the class — it reads supported_models() for regexes.
+# LiteLlm is already lazy-registered for openai/* etc., but register() adds
+# its remaining patterns immediately and makes it resolvable by class name.
+LLMRegistry.register(LiteLlm)
 
-# Now use the prefix:model syntax for explicit routing.
-# Useful when a model name would otherwise be ambiguous.
+# Prefix routing: "litellm:gpt-4o" strips the prefix, then _match_prefix()
+# matches "litellm" against the class name "LiteLlm" (strips "llm" suffix → "lite";
+# also checks class_name.lower() "litellm" == prefix "litellm" → True).
 llm = registry.new_llm("litellm:gpt-4o")
 print(type(llm).__name__)  # LiteLlm
 print(llm.model)           # litellm:gpt-4o
 
-# This pattern is also useful for any OpenAI-compatible endpoint:
+# Any OpenAI-compatible endpoint via LiteLLM:
 llm_local = registry.new_llm("litellm:ollama/llama3")
 ```
 
@@ -548,11 +551,15 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from typing import AsyncGenerator
 
-class MyCustomLlm(BaseLlm):
+# Class name drives prefix routing: _match_prefix("internal", "InternalLlm")
+# strips the "llm" suffix (case-insensitive) → "internal" == "internal" → True.
+# So model="internal:internal-model-v1" resolves to this class automatically.
+class InternalLlm(BaseLlm):
     """A custom LLM provider that routes to an internal model server."""
 
     @classmethod
     def supported_models(cls) -> list[str]:
+        # Regex patterns for direct (non-prefix) model name matching.
         return ["internal-model-v1", "internal-model-v2"]
 
     async def generate_content_async(
@@ -567,15 +574,15 @@ class MyCustomLlm(BaseLlm):
             )
         )
 
-# Register under a unique prefix
-LLMRegistry.register("internal", MyCustomLlm)
+# register() takes only the class — reads supported_models() for regex patterns.
+LLMRegistry.register(InternalLlm)
 
-# Use it in an agent
+# Use it in an agent via prefix routing ("internal:" → InternalLlm class).
 from google.adk.agents import LlmAgent
 
 agent = LlmAgent(
     name="custom_agent",
-    model="internal:internal-model-v1",  # prefix:model routing
+    model="internal:internal-model-v1",
     instruction="You are a helpful assistant.",
 )
 ```
