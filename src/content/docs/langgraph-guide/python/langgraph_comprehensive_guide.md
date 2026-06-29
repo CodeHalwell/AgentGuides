@@ -2571,12 +2571,21 @@ asyncio.run(compiled.aclear_cache(nodes=["llm_node"]))
 
 ### REMOVE_ALL_MESSAGES Sentinel
 
+The sentinel is processed by `add_messages` — the state key **must** be declared with that reducer (via `Annotated[list, add_messages]` or `MessagesState`). Without it, `RemoveMessage` is stored as a plain message rather than triggering a history wipe.
+
 ```python
-from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage
 from langgraph.graph.message import add_messages, REMOVE_ALL_MESSAGES
+from langgraph.graph import StateGraph, START, END
+
+class ConvState(TypedDict):
+    # add_messages reducer is required — it is the one that interprets the sentinel
+    messages: Annotated[list[AnyMessage], add_messages]
 
 # Discard entire conversation history and start fresh
-def reset_conversation(state):
+def reset_conversation(state: ConvState) -> dict:
     return {
         "messages": [
             RemoveMessage(id=REMOVE_ALL_MESSAGES),          # wipe all history

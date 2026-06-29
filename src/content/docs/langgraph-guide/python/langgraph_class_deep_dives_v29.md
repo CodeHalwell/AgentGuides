@@ -1289,10 +1289,10 @@ for i in range(6):
 | # | Class / symbol | Key source fact |
 |---|---|---|
 | 1 | `Edge` + `TriggerEdge` + `draw_graph()` | `draw_graph()` dry-runs the graph from an empty checkpoint; `Edge.conditional=True` marks `add_conditional_edges` origins |
-| 2 | `get_graph(xray=)` + `draw_mermaid()` | `xray=True` ≡ `xray=1`; subgraph nodes are prefixed `parent:child`; `draw_mermaid()` returns Mermaid markdown including `classDef` blocks |
+| 2 | `get_graph(xray=)` + `draw_mermaid()` | `xray=True` recurses to all leaves (boolean passes through unchanged); `xray=1` = one level, `xray=2` = two levels; subgraph nodes are prefixed `parent:child`; `draw_mermaid()` returns Mermaid markdown including `classDef` blocks |
 | 3 | `as_tool()` (beta) | Delegates to `langchain_core.tools.convert_runnable_to_tool`; returns `StructuredTool`; schema inferred from `get_input_schema()` |
 | 4 | `get_subgraphs()` + `aget_subgraphs()` | `namespace=` exits early via `return` after finding the match; `recurse=True` prefixes paths with `NS_SEP` (`:`) |
-| 5 | `get_input_jsonschema()` / `get_output_jsonschema()` / `get_context_jsonschema()` | `get_config_jsonschema()` is deprecated since v1.0; returns `{}` when schema is `Any` |
+| 5 | `get_input_jsonschema()` / `get_output_jsonschema()` / `get_context_jsonschema()` | `get_config_jsonschema()` is deprecated since v1.0; input/output return `{}` when schema is `Any`; `get_context_jsonschema()` returns `None` (not `{}`) when no `context_schema` was set |
 | 6 | `clear_cache()` + `aclear_cache()` | Clears only this graph's namespaces — not the entire `BaseCache`; `nodes=["n"]` for partial clearing |
 | 7 | `_messages_delta_reducer` | Batching-invariant; no UUID auto-assignment; no `REMOVE_ALL_MESSAGES`; fast path skips `convert_to_messages` when state is already typed |
 | 8 | `_add_messages_wrapper` + partial `add_messages` | Zero-arg call returns `functools.partial`; `format=` binds to partial; used as `Annotated[list, add_messages(format="langchain-openai")]` |
