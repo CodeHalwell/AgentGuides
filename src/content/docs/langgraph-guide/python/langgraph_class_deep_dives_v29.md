@@ -1018,7 +1018,7 @@ print("OAI count:", len(result["oai_messages"]))    # 1
 **Module**: `langgraph.graph.state`  
 **First dedicated coverage.**
 
-Passing `defer=True` to `add_node()` marks the node to run **after all non-deferred nodes have completed their current super-step**. This is a coordination primitive for cleanup, notification, or aggregation nodes that must run last — without requiring manual edge wiring to every predecessor.
+Passing `defer=True` to `add_node()` marks the node to run **when the graph run is about to finish** — i.e. at quiescence, once no non-deferred work remains anywhere in the execution (not merely at the end of the current super-step). The compiler backs this with `LastValueAfterFinish` / `NamedBarrierValueAfterFinish` trigger channels, so the deferred node becomes runnable only when the Pregel loop has nothing left to schedule for non-deferred nodes. This makes it suitable for cleanup, notification, or aggregation that must see the fully-settled state — but side effects inside a deferred node can run significantly later than the last explicit super-step if unrelated non-deferred branches extend the execution.
 
 ```python
 def add_node(
@@ -1032,10 +1032,10 @@ def add_node(
 
 Implementation facts drawn from `langgraph.graph.state`:
 - Deferred nodes are stored in `self._deferred_nodes` (a set of node names) and only compiled into the Pregel graph after all non-deferred nodes have been added.
-- A deferred node still requires edges — it just guarantees that all non-deferred nodes in the same super-step have finished before it runs.
-- Deferred nodes are commonly used with `BinaryOperatorAggregate` state keys: all parallel workers write to the same list, the deferred node reads the fully-aggregated list.
+- A deferred node still requires edges — it just guarantees it runs at graph quiescence, after all non-deferred work across the entire execution has settled (not just the triggering super-step).
+- Deferred nodes are commonly used with `BinaryOperatorAggregate` state keys: all parallel workers write to the same list, the deferred node reads the fully-aggregated list once quiescence is reached.
 - If a deferred node has no incoming edges it will never execute — the `defer=True` flag does not automatically connect it.
-- Circular edges among deferred nodes are supported; the super-step guarantee applies to non-deferred nodes only.
+- Do not place time-sensitive side effects in a deferred node: if unrelated non-deferred branches extend the execution across many super-steps, the deferred node runs only after all of them complete.
 
 ```python
 # Example 1: defer=True waits for all branches with only one explicit edge
