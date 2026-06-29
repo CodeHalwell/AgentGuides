@@ -518,7 +518,7 @@ asyncio.run(demo_gcs_artifacts())
 
 ## Gotchas
 
-- The memory tools (`load_memory`, `preload_memory`) silently no-op when no `memory_service` is configured on the runner. Wire one explicitly, or you'll never see memories.
+- **`preload_memory`** silently no-ops when no `memory_service` is configured (catches all exceptions). **`load_memory`** raises `ValueError('Memory service is not available.')` — the model receives a tool error. Always wire a `memory_service` on the `Runner` before exposing `load_memory` to the model.
 - `VertexAiMemoryBankService` requires the **numeric** `agent_engine_id` (`"456"`), not the full resource path. The constructor warns if it detects a `/`.
 - `SaveFilesAsArtifactsPlugin` replaced the deprecated `RunConfig.save_input_blobs_as_artifacts`. Install the plugin on the `App` instead of toggling the flag.
 - Artifact `save_artifact` accepts a `types.Part` OR a plain dict (camelCase or snake_case); `ensure_part` normalises via Pydantic validation (`base_artifact_service.py:68-85`).
