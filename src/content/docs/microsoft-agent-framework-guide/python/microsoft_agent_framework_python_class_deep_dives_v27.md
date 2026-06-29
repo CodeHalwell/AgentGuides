@@ -172,13 +172,13 @@ These functions form the security tool-integration layer that sits on top of `La
 
 `get_security_tools()` returns `[quarantined_llm, inspect_variable]` — the two `FunctionTool` instances that give the agent a safe way to interact with hidden content. Pass the list directly to `Agent(tools=[..., *get_security_tools()])`.
 
-`quarantined_llm` is a `@tool`-decorated async function. It sends the raw content of a variable ID to a secondary ("quarantine") chat client that is isolated from the main agent context, then returns the quarantine client's response. The quarantine client is registered globally via `set_quarantine_client` / retrieved via `get_quarantine_client`. If no quarantine client is registered, it raises `RuntimeError`.
+`quarantined_llm` is a `@tool`-decorated async function. It sends the raw content of a variable ID to a secondary ("quarantine") chat client that is isolated from the main agent context, then returns the quarantine client's response. The quarantine client is registered globally via `set_quarantine_client` / retrieved via `get_quarantine_client`. If no quarantine client is registered, it logs a `WARNING` and returns a placeholder string `'[Quarantined LLM Response] Processed: …'` — it does **not** raise.
 
 `inspect_variable` is also a `@tool`-decorated async function. It retrieves stored content from the active middleware's variable store (preferred) or the global store (fallback), logs a `WARNING` for audit purposes, and returns a dict including the content, its label, and a security warning. **Warning:** calling `inspect_variable` taints the context to `UNTRUSTED` — use only when necessary.
 
 ### Key source facts
 
-- `store_untrusted_content` always calls `_global_variable_store.store(content, label)` — it uses the module-level singleton, not a per-middleware store. **Important:** when `LabelTrackingFunctionMiddleware` is active, `inspect_variable` and `quarantined_llm` look up variables in the *middleware's* own store — not `_global_variable_store`. A variable ID returned by `store_untrusted_content` will raise `KeyError` inside those tools when middleware is running. To use the security tools together with middleware, store content via `middleware.get_variable_store().store(content, label)` directly, or call `store_untrusted_content` before the middleware context is entered.
+- `store_untrusted_content` always calls `_global_variable_store.store(content, label)` — it uses the module-level singleton, not a per-middleware store. **Important:** when `LabelTrackingFunctionMiddleware` is active, `inspect_variable` and `quarantined_llm` look up variables in the *middleware's* own store — not `_global_variable_store`. A variable ID returned by `store_untrusted_content` will raise `KeyError` inside those tools when middleware is running. To use the security tools together with middleware, store content via `middleware.get_variable_store().store(content, label)` directly.
 - `get_security_tools()` is a plain function that returns a new list each time; it does not cache.
 - `quarantined_llm` is decorated with `approval_mode="never_require"` so it never triggers a tool-approval gate.
 - `inspect_variable` has `additional_properties={"confidentiality": "private"}` — its result itself is marked private.
@@ -919,7 +919,7 @@ These four functions handle the validation and conversion side of the chat pipel
 - `validate_chat_options` makes a shallow copy of the input dict (`result = dict(options)`) before validating; the original is never mutated.
 - `validate_chat_options` returns the copy whether or not any option was invalid (the copy is returned after validation, and invalid options raise before returning).
 - `map_chat_to_agent_update` sets `raw_representation=update` — the `AgentResponseUpdate` therefore holds a reference to its originating `ChatResponseUpdate`, useful for provider-specific attribute access.
-- `add_usage_details(None, usage)` and `add_usage_details(usage, None)` both return a copy of the non-None dict. `add_usage_details(None, None)` returns an empty `UsageDetails`.
+- `add_usage_details(None, usage)` and `add_usage_details(usage, None)` both return the non-None dict **directly** (not a copy) — mutating the returned value will mutate the original. `add_usage_details(None, None)` returns an empty `UsageDetails`.
 - The skip condition in `add_usage_details` is `not isinstance(v, (int | None))` — only non-int, non-`None` values (e.g. a `str` or `float`) cause a key to be dropped. A missing key defaults to `0` (which is `int`), so keys present in only one dict ARE included in the result.
 
 **Example 1 — normalising a mix of tools:**
