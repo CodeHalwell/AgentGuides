@@ -666,7 +666,7 @@ for name, schema in schemas.items():
 **Module**: `langgraph.pregel.main`  
 **First dedicated coverage.**
 
-`clear_cache()` invalidates **all** cached task and entrypoint results stored in the graph's `InMemoryCache` (or any `BaseCache` implementation). Passing `nodes=["node_name"]` (or using the per-task `task.clear_cache()`) allows **namespace-scoped** clearing.
+`clear_cache()` invalidates cached results for the graph's **nodes** stored in its `InMemoryCache` (or any `BaseCache` implementation). It does **not** clear `@task`-function caches, which use a separate namespace. Passing `nodes=["node_name"]` allows namespace-scoped clearing of individual nodes.
 
 ```python
 def clear_cache(self, nodes: Sequence[str] | None = None) -> None:
@@ -677,7 +677,7 @@ async def aclear_cache(self, nodes: Sequence[str] | None = None) -> None:
 
 - Internally calls `cache.clear(namespaces)` where `namespaces` is a list of `(CACHE_NS_WRITES, node_identifier)` tuples.
 - When `nodes=None`, all namespaces registered to **this graph's nodes** are cleared; the rest of the `BaseCache` is untouched. However, the namespace key is `(CACHE_NS_WRITES, identifier(callable), node_name)` — if two graphs share a `BaseCache` **and** happen to use the same callable under the same node name, they occupy the same namespace. In that case one graph's `clear_cache()` will also invalidate the sibling's entries. In shared-cache deployments use unique callables or distinct node names per graph to avoid cross-graph invalidation.
-- For `@task`-decorated functions, use `task_func.clear_cache(cache)` or `await task_func.aclear_cache(cache)` — these are convenience wrappers for the same underlying mechanism.
+- `@task`-decorated functions use a **separate** namespace (`(CACHE_NS_WRITES, identifier(func))`), not the node-level namespace that `compiled.clear_cache()` targets. Clear task caches independently with `task_func.clear_cache(cache)` or `await task_func.aclear_cache(cache)`. Calling only `compiled.clear_cache()` will leave stale `@task` results in the cache.
 - `clear_cache()` raises `ValueError("No cache is set for this graph. Cannot clear cache.")` when called on a graph compiled without `cache=`. Guard teardown/test code with a `try/except ValueError` or check `compiled.cache is not None` before calling. TTL-expired entries disappear silently on next read — they do not cause an error.
 
 ```python
