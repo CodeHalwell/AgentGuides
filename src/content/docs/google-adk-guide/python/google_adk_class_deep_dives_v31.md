@@ -601,7 +601,7 @@ agent = LlmAgent(
 
 **Module:** `google.adk.tools.environment_simulation.environment_simulation_engine`
 
-`EnvironmentSimulationEngine` is the core engine that intercepts tool calls and replaces them with simulated responses. It maintains a `_state_store` dict shared across a session and picks the right mock strategy based on `MockStrategy`.
+`EnvironmentSimulationEngine` is the core engine that intercepts tool calls and replaces them with simulated responses. It maintains a `_state_store` dict that is app-scoped — shared across all sessions and users that share the same callback or plugin instance — and picks the right mock strategy based on `MockStrategy`.
 
 ### Key implementation facts (verified from source)
 
