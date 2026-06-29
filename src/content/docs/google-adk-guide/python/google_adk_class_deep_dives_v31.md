@@ -416,7 +416,10 @@ async def main():
     # UnsafeLocalCodeExecutor always has stateful=False and optimize_data_file=False
     # (passing either as True raises ValueError). DataFileUtil CSV preprocessing
     # is therefore NOT triggered here — the inline data reaches the model as-is.
-    # For optimize_data_file support use BuiltInCodeExecutor (see Example 1 above).
+    # NOTE: DataFileUtil CSV preprocessing (optimize_data_file) only applies to
+    # external BaseCodeExecutor subclasses with optimize_data_file=True. It does
+    # NOT apply to BuiltInCodeExecutor — _run_pre_processor returns immediately
+    # for BuiltInCodeExecutor after calling process_llm_request().
     agent = LlmAgent(
         name="local_analyst",
         model="gemini-2.0-flash",
@@ -805,7 +808,7 @@ asyncio.run(main())
 - **`@experimental(FeatureName.ENVIRONMENT_SIMULATION)`** — not stable API.
 - **`create_callback(config)`** — creates one `EnvironmentSimulationEngine`, wraps it in a `async def _environment_simulation_callback(tool, args, tool_context)` closure, and returns the closure. Use as `before_tool_callback` on an `LlmAgent`.
 - **`create_plugin(config)`** — creates one `EnvironmentSimulationEngine`, passes it to `EnvironmentSimulationPlugin(engine)`, and returns the plugin. Use in `App(plugins=[...])`.
-- The engine instance is **shared** between calls via closure capture, so `_state_store` persists across tool invocations in the same session.
+- The engine instance is **shared** across all sessions via closure/plugin capture — `_state_store` is app-scoped, not session-scoped. Every call to `create_callback()` or `create_plugin()` creates one engine, and that single engine is reused by all sessions that share the same callback or plugin instance. Create a separate callback/plugin per session if you need isolation.
 
 ### Example 1 — using `create_callback` for per-agent simulation
 

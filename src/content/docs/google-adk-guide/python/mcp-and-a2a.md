@@ -473,7 +473,7 @@ asyncio.run(main())
 
 ## Gotchas
 
-- `McpToolset` is **session-scoped** — it holds a live MCP client. Always let the `Runner` manage lifecycle (it calls `close()` on shutdown), or use `async with toolset:` yourself.
+- `McpToolset` is **session-scoped** — it holds a live MCP client. Always let the `Runner` manage lifecycle (it calls `close()` on shutdown). If you manage the lifecycle yourself, use `try/finally` and call `await toolset.close()` directly — `McpToolset` does not implement `__aenter__`/`__aexit__`, so `async with toolset:` raises `TypeError`.
 - The MCP stdio server runs as a child process. Failures in the command (e.g. wrong `args`) surface as timeouts — check `errlog` for stderr.
 - `RemoteA2aAgent` with `use_legacy=True` (the default) talks the legacy A2A protocol. Set `use_legacy=False` after upgrading both peers.
 - `to_a2a` builds **in-memory** services when `runner=None`. For production, build your own `Runner` with Vertex / database services and pass it explicitly.
