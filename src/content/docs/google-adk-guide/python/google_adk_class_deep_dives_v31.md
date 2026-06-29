@@ -211,7 +211,7 @@ async def inspect_identity_injection():
     async for _ in request_processor.run_async(ctx, llm_request):
         pass  # No events yielded
 
-    print(llm_request.system_instruction)
+    print(llm_request.config.system_instruction)
     # → 'You are an agent. Your internal name is "customer_support".
     #     The description about you is "Helps customers with their questions."'
 
@@ -245,7 +245,7 @@ async def check_no_injection():
         pass
 
     # system_instruction will be None or not contain identity text
-    print("Identity injected:", bool(llm_request.system_instruction))
+    print("Identity injected:", bool(llm_request.config.system_instruction))
     # → Identity injected: False
 
 asyncio.run(check_no_injection())
@@ -275,7 +275,7 @@ async def no_description():
     async for _ in request_processor.run_async(ctx, llm_request):
         pass
 
-    print(llm_request.system_instruction)
+    print(llm_request.config.system_instruction)
     # → 'You are an agent. Your internal name is "processor".'
     # The description clause is absent because agent.description is falsy.
 
@@ -1016,7 +1016,7 @@ asyncio.run(test_payment_flow())
 
 **Module:** `google.adk.tools.environment_simulation.strategies.base`
 
-`MockStrategy` is the abstract base class for all simulation strategies. `TracingMockStrategy` extends it to replay mock responses from a previously recorded execution trace rather than generating them with an LLM.
+`MockStrategy` is the abstract base class for all simulation strategies. `TracingMockStrategy` extends it but is **deprecated** — its `mock()` always returns a not-implemented error and does not replay recorded traces. Prefer `MOCK_STRATEGY_TOOL_SPEC` (see `ToolSpecMockStrategy`) for all production use.
 
 ### Key implementation facts (verified from source)
 
@@ -1061,31 +1061,25 @@ class FixedResponseMockStrategy(MockStrategy):
         return {"status": "error", "message": f"No mock for tool: {tool.name}"}
 
 
-# Use the custom strategy with EnvironmentSimulationEngine
-from google.adk.tools.environment_simulation.environment_simulation_engine import (
-    EnvironmentSimulationEngine,
-)
-from google.adk.tools.environment_simulation.environment_simulation_config import (
-    EnvironmentSimulationConfig,
-    MockStrategy,
-    ToolSimulationConfig,
-)
+# EnvironmentSimulationEngine always creates strategies from mock_strategy_type
+# via its internal factory — there is no injection point for a custom instance.
+# Test custom strategies directly by calling mock() yourself:
 
-config = EnvironmentSimulationConfig(
-    tool_simulation_configs=[
-        ToolSimulationConfig(
-            tool_name="get_weather",
-            mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC,
-        ),
-    ],
-    simulation_model="gemini-2.0-flash",
-)
+import asyncio
+from unittest.mock import MagicMock
 
-engine = EnvironmentSimulationEngine(config)
-# Override the strategy selection by setting it directly
-engine._custom_strategy = FixedResponseMockStrategy({
+strategy = FixedResponseMockStrategy({
     "get_weather": {"temperature": 22, "condition": "sunny", "city": "London"},
 })
+
+async def run_strategy_test():
+    tool = MagicMock()
+    tool.name = "get_weather"
+    result = await strategy.mock(tool, {}, None, None, {})
+    print(result)
+    # → {'temperature': 22, 'condition': 'sunny', 'city': 'London'}
+
+asyncio.run(run_strategy_test())
 ```
 
 ### Example 2 — passing trace context via `EnvironmentSimulationConfig.tracing`
