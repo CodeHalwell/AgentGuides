@@ -1230,7 +1230,7 @@ print("Fallback strategy chain ready (TracingMockStrategy will always fall throu
   1. Gets the tool's `FunctionDeclaration` via `tool._get_declaration()`.
   2. Builds the prompt from `_TOOL_SPEC_MOCK_PROMPT_TEMPLATE` with: `environment_data`, `tracing`, `tool_connection_map` JSON, `state_store` JSON, tool name/description/schema/args.
   3. Calls the LLM with `response_mime_type="application/json"` (forces JSON output).
-  4. Strips markdown code fences if present (`^```[a-zA-Z]*\n` and `\n```$`).
+  4. Strips markdown code fences if present — removes an opening fence (triple backtick + optional language tag) and a closing fence (triple backtick) before JSON parsing.
   5. Parses JSON; on `JSONDecodeError` returns `{"status": "error", ...}`.
 - **State mutation** after successful mock:
   - Checks if the tool is in `all_creating_tools` from the `tool_connection_map`.
