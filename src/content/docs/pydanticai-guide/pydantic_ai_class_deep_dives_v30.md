@@ -372,7 +372,7 @@ Key implementation facts:
 
 ```python
 import asyncio
-from pydantic_ai import Agent, FunctionToolset, MCPToolset
+from pydantic_ai import Agent, FunctionToolset
 from pydantic_ai.toolsets import CombinedToolset
 
 async def local_search(query: str) -> list[str]:
@@ -384,9 +384,10 @@ async def calculate(a: float, b: float) -> float:
     return a + b
 
 local_tools = FunctionToolset([local_search, calculate])
-# mcp_tools = MCPToolset('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/data'])
+# MCP is not a toolset class in pydantic-ai 2.x; use the pydantic-ai-mcp package
+# or construct an AbstractToolset subclass backed by an MCP session.
 
-combined = CombinedToolset(toolsets=[local_tools])  # add mcp_tools when available
+combined = CombinedToolset(toolsets=[local_tools])
 agent = Agent('openai:gpt-4.1', toolsets=[combined])
 ```
 
@@ -1212,7 +1213,7 @@ class ImageGenerationSubagentTool:
         return result.output
 
 def image_generation_tool(
-    model: ImageGenerationFallbackModel,
+    model: Model | KnownModelName | str | ImageGenerationFallbackModelFunc,
     native_tool: ImageGenerationTool,
     *,
     instructions: str = ...,
@@ -1239,12 +1240,16 @@ Key implementation facts:
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
+from pydantic_ai.messages import BinaryImage
 
 # ImageGeneration selects native generation if the model supports it;
 # falls back to a subagent if not. 'openai-responses:gpt-5.4' is a
 # conversational model that can generate images natively.
+# output_type=BinaryImage is required so the agent returns the image
+# directly rather than a text description.
 agent = Agent(
     'openai:gpt-4.1',
+    output_type=BinaryImage,
     capabilities=[
         ImageGeneration(
             fallback_model='openai-responses:gpt-5.4',
@@ -1254,7 +1259,7 @@ agent = Agent(
     ],
 )
 result = await agent.run('Generate a photorealistic image of a golden retriever on a beach at sunset.')
-print(type(result.output))  # BinaryImage or path to image
+print(type(result.output))  # <class 'pydantic_ai.messages.BinaryImage'>
 ```
 
 ### 9.2 Direct `image_generation_tool` Usage
