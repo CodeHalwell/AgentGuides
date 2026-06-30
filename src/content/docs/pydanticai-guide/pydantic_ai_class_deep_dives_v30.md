@@ -20,7 +20,7 @@ Ten class groups covering the toolset composition layer (approval gating, filter
 
 **Source**: `pydantic_ai/toolsets/approval_required.py`
 
-`ApprovalRequiredToolset` wraps any `AbstractToolset` and pauses execution before each tool call, giving a human (or programmatic guard) the opportunity to approve or block it. The approval decision is made by `approval_required_func`; the default approves every call. Approval is communicated back to the framework via `ctx.tool_call_approved` on subsequent retries.
+`ApprovalRequiredToolset` wraps any `AbstractToolset` and pauses execution before each tool call, giving a human (or programmatic guard) the opportunity to approve or block it. The approval decision is made by `approval_required_func`; the default requires approval for every call (the predicate always returns `True`). Approval is communicated back to the framework via `ctx.tool_call_approved` on subsequent retries.
 
 ```python
 # Key signatures verified from source:
@@ -68,7 +68,7 @@ async def fetch_record(record_id: str) -> dict:
 
 base_toolset = FunctionToolset([delete_record, fetch_record])
 
-# Wrap with ApprovalRequiredToolset — default approves every call.
+# Wrap with ApprovalRequiredToolset — default requires approval for every call.
 # In production, the framework pauses and calls your UI/approval endpoint.
 guarded = ApprovalRequiredToolset(wrapped=base_toolset)
 
@@ -379,9 +379,9 @@ async def local_search(query: str) -> list[str]:
     """Local in-memory search."""
     return [f'local: {query}']
 
-async def calculate(expression: str) -> float:
-    """Evaluate a math expression safely."""
-    return eval(expression, {'__builtins__': {}}, {})  # noqa: S307 — demo only
+async def calculate(a: float, b: float) -> float:
+    """Add two numbers and return the result."""
+    return a + b
 
 local_tools = FunctionToolset([local_search, calculate])
 # mcp_tools = MCPToolset('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/data'])
