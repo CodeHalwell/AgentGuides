@@ -1,6 +1,6 @@
 ---
 title: "Class deep dives — volume 32 (10 additional classes)"
-description: "Source-verified deep dives into 10 additional google-adk 2.3.0 classes: TriggerRouter, ServiceRegistry, PerAgentDatabaseSessionService, PerAgentFileArtifactService, DotAdkFolder, _InvocationCostManager, RealtimeCacheEntry, ApiServerSpanExporter, A2aRemoteAgentConfig, LongRunningFunctions, ParsedArtifactUri, and find_context_parameter."
+description: "Source-verified deep dives into 10 additional google-adk 2.3.0 classes and utilities: TriggerRouter, ServiceRegistry, PerAgentDatabaseSessionService/PerAgentFileArtifactService, DotAdkFolder, _InvocationCostManager/RealtimeCacheEntry, ApiServerSpanExporter, A2aRemoteAgentConfig, LongRunningFunctions, ParsedArtifactUri, and find_context_parameter."
 framework: google-adk
 language: python
 sidebar:
@@ -211,8 +211,8 @@ from google.adk.cli.service_registry import get_service_registry
 
 registry = get_service_registry()
 
-# SQLite session service
-session_svc = registry.create_session_service("sqlite://myapp.db")
+# SQLite session service (three slashes = absolute path)
+session_svc = registry.create_session_service("sqlite:///myapp.db")
 print(type(session_svc).__name__)  # SqliteSessionService
 
 # In-memory session service (empty sqlite path)
@@ -313,7 +313,6 @@ asyncio.run(main())
 ```python
 import asyncio
 from pathlib import Path
-from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.artifacts.file_artifact_service import FileArtifactService
 from google.adk.cli.utils.local_storage import PerAgentFileArtifactService
 from google.genai import types
@@ -455,6 +454,7 @@ import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.agents.run_config import RunConfig
+from google.genai import types
 
 # cap the agent to 2 LLM calls per invocation
 agent = LlmAgent(
@@ -476,7 +476,7 @@ async def run_with_budget():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message={"role": "user", "parts": [{"text": "Summarise quantum computing in detail."}]},
+        new_message=types.Content(role="user", parts=[types.Part.from_text("Summarise quantum computing in detail.")]),
         run_config=config,
     ):
         events.append(event)
@@ -1029,7 +1029,6 @@ asyncio.run(run_with_early_exit())
 import asyncio
 from typing import Optional
 from google.adk.agents import LlmAgent
-from google.adk.tools import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 from google.adk.runners import InMemoryRunner
 from google.adk.utils.context_utils import find_context_parameter
@@ -1077,7 +1076,7 @@ asyncio.run(main())
 
 | # | Class / function | Module | What it does |
 |---|---|---|---|
-| 1 | `TriggerRouter` + `PubSubTriggerRequest` + `EventarcTriggerRequest` | `google.adk.cli.trigger_routes` | Registers `/trigger/pubsub` and `/trigger/eventarc` FastAPI endpoints with semaphore concurrency control and exponential-backoff retry |
+| 1 | `TriggerRouter` + `PubSubTriggerRequest` + `EventarcTriggerRequest` | `google.adk.cli.trigger_routes` | Registers `/apps/{app_name}/trigger/pubsub` and `/apps/{app_name}/trigger/eventarc` FastAPI endpoints with semaphore concurrency control and exponential-backoff retry |
 | 2 | `ServiceRegistry` + `ServiceFactory` + `load_services_module` | `google.adk.cli.service_registry` | URI-scheme–keyed factory registry for session, artifact, memory, and A2A task-store services; built-in schemes + YAML/Python extension |
 | 3 | `PerAgentDatabaseSessionService` + `PerAgentFileArtifactService` | `google.adk.cli.utils.local_storage` | Routes session/artifact operations to per-agent `.adk` folders with async-lock lazy init and legacy-fallback reads |
 | 4 | `DotAdkFolder` + `dot_adk_folder_for_agent` | `google.adk.cli.utils.dot_adk_folder` | Path-safe `.adk` folder accessor with `cached_property` for `session.db` and `artifacts/`; blocks path-traversal via `is_relative_to` guard |
@@ -1090,6 +1089,6 @@ asyncio.run(main())
 
 ## Revision history
 
-| Date | Framework version | Summary |
-|------|-------------------|---------|
-| 2026-06-30 | google-adk 2.3.0 | Initial publication — 10 source-verified class groups (vol. 32) |
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-06-30 | 2.3.0 | Initial publication of Vol. 32 |
