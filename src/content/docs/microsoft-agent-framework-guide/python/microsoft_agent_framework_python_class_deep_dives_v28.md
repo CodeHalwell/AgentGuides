@@ -152,8 +152,7 @@ All keys are optional (`total=False`):
 
 ### `ClaudeAgentSettings` (TypedDict)
 
-Settings are resolved in priority order: **explicit kwargs → `.env` file →
-`CLAUDE_AGENT_*` environment variables**.
+Settings are resolved in priority order: **explicit kwargs → `.env` file → `CLAUDE_AGENT_*` environment variables**.
 
 ```python
 class ClaudeAgentSettings(TypedDict, total=False):
@@ -231,8 +230,7 @@ async def code_review(repo_path: str) -> str:
 
 `AgentFrameworkAgent` wraps **any** `SupportsAgentRun` object (including `Agent`,
 `WorkflowAgent`, `ClaudeAgent`, etc.) and translates its streaming responses into
-the AG-UI event protocol: `RUN_STARTED → TEXT_MESSAGE_CONTENT → TOOL_CALL_* →
-RUN_FINISHED`.
+the AG-UI event protocol: `RUN_STARTED → TEXT_MESSAGE_CONTENT → TOOL_CALL_* → RUN_FINISHED`.
 
 ### `AgentConfig`
 
@@ -1000,7 +998,6 @@ async def human_review_loop():
 
     # The workflow pauses at AgentRequestInfoExecutor waiting for a response.
     # Pass AgentRequestInfoResponse.approve() to approve, or from_strings(...) to correct.
-    from agent_framework._types import Message
     from agent_framework.orchestrations import AgentRequestInfoResponse
 
     result = await workflow.run(
@@ -1297,7 +1294,7 @@ from fastapi.responses import StreamingResponse
 import json
 
 app = FastAPI()
-my_workflow = ...  # Replace with your actual AgentFrameworkWorkflow or Workflow instance
+my_workflow = ...  # Replace with your actual Workflow instance
 
 @app.post("/run")
 async def run(request: dict):
