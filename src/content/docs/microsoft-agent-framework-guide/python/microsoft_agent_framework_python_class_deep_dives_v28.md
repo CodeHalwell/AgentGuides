@@ -111,7 +111,7 @@ RawClaudeAgent(
     description: str | None = None,
     context_providers: Sequence[ContextProvider] | None = None,
     middleware: Sequence[AgentMiddlewareTypes] | None = None,
-    tools: ToolTypes | Callable[..., Any] | str | Sequence[...] | None = None,
+    tools: ToolTypes | Callable[..., Any] | str | Sequence[Any] | None = None,
     default_options: OptionsT | MutableMapping[str, Any] | None = None,
     env_file_path: str | None = None,
     env_file_encoding: str | None = None,
@@ -235,13 +235,12 @@ the AG-UI event protocol: `RUN_STARTED → TEXT_MESSAGE_CONTENT → TOOL_CALL_* 
 ### `AgentConfig`
 
 ```python
-AgentConfig(
-    state_schema: Any | None = None,
-    predict_state_config: dict[str, dict[str, str]] | None = None,
-    use_service_session: bool = False,
-    require_confirmation: bool = True,
-    snapshot_store: AGUIThreadSnapshotStore | None = None,
-)
+class AgentConfig(TypedDict, total=False):
+    state_schema: Any | None
+    predict_state_config: dict[str, dict[str, str]] | None
+    use_service_session: bool
+    require_confirmation: bool
+    snapshot_store: AGUIThreadSnapshotStore | None
 ```
 
 | Parameter | Default | Behaviour |
@@ -531,8 +530,9 @@ handle_tool_complete(tool_name: str, args: dict | str | None) -> dict[str, Any] 
 ### Key facts
 
 - State changes are only emitted when the extracted value **differs** from `last_emitted_state`
-  (deduplication on `state_delta_count`). The framework does not emit a state update for every
-  chunk — only when the parsed value actually changes.
+  (the dedup guard). `state_delta_count` is a separate counter that tracks how many state
+  updates have been emitted this run — it is a throttle/metric, not the dedup mechanism. The
+  framework does not emit a state update for every chunk — only when the parsed value changes.
 - `predict_state_config` is a flat dict where the keys are **state keys** (not tool names).
   Multiple state keys can watch the same tool (emit different state fields as different args
   stream in).
