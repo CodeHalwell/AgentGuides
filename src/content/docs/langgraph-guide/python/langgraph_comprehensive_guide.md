@@ -1,20 +1,20 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.2.6 (June 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Latest Version: LangGraph 1.2.7 (June 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
 framework: langgraph
 language: python
 ---
 
-Latest: 1.2.6 | Updated: June 29, 2026
+Latest: 1.2.7 | Updated: June 29, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.2.6 (June 2026)
+**Latest Version**: LangGraph 1.2.7 (June 2026)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
 > **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.6 (verified June 2026):**
+**What's real in v1.2.7 (verified June 2026):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
 - `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
 - `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
@@ -2411,7 +2411,7 @@ asyncio.run(main())
 
 ---
 
-## New in v1.2.6 — Compiled Graph APIs
+## New in v1.2.7 — Compiled Graph APIs
 
 ### Graph Visualization
 
@@ -2732,7 +2732,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.2.6 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph==1.2.6`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
+| 1.2.7 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph==1.2.7`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
 | 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `StreamPart`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
 | 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph==1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
 | 1.1.9 | April 22, 2026 | Patch release; six source-verified reference pages added to the guide. |
