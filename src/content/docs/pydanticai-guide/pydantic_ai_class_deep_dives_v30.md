@@ -47,7 +47,7 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 ```
 
 Key implementation facts:
-- `ApprovalRequired` (from `pydantic_ai.exceptions`) is a sentinel exception that adds the pending call to a `DeferredToolRequests` result. The caller approves it by constructing `DeferredToolResults(approvals={'<tool_call_id>': True})` (or `ToolApproved()`/`ToolDenied()` for fine-grained control) and passing it as `deferred_tool_results=` on the next `agent.run(message_history=result.messages, ...)` call, which sets `ctx.tool_call_approved` on re-entry.
+- `ApprovalRequired` (from `pydantic_ai.exceptions`) is a sentinel exception that adds the pending call to a `DeferredToolRequests` result. The caller approves it by constructing `DeferredToolResults(approvals={'<tool_call_id>': True})` (or `ToolApproved()`/`ToolDenied()` for fine-grained control) and passing it as `deferred_tool_results=` on the next `agent.run(message_history=result.all_messages(), ...)` call, which sets `ctx.tool_call_approved` on re-entry.
 - When `approval_required_func` returns `False` the call proceeds immediately — no approval needed for that invocation.
 - `ctx.tool_call_approved` is checked *first*; if the call has already been approved, `approval_required_func` is never invoked, ensuring a single approve-then-execute cycle.
 
@@ -398,7 +398,7 @@ agent = Agent('openai:gpt-4.1', toolsets=[combined])
 ### 3.2 Stack Toolset Wrappers Around a Combined Set
 
 ```python
-from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai import Agent, DeferredToolRequests, FunctionToolset
 from pydantic_ai.toolsets import CombinedToolset, ApprovalRequiredToolset, FilteredToolset
 
 async def send_email(to: str, subject: str, body: str) -> str:
@@ -421,7 +421,7 @@ guarded = ApprovalRequiredToolset(
     wrapped=combined,
     approval_required_func=lambda ctx, td, args: td.name == 'send_email',
 )
-agent = Agent('openai:gpt-4.1', toolsets=[guarded])
+agent = Agent('openai:gpt-4.1', toolsets=[guarded], output_type=DeferredToolRequests | str)
 ```
 
 ### 3.3 Detect Name Conflicts Early at Startup
