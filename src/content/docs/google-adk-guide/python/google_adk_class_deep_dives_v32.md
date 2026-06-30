@@ -77,6 +77,7 @@ async def build_app(server) -> FastAPI:
 ### Example 2 — sending a Pub/Sub push message manually
 
 ```python
+import asyncio
 import base64
 import json
 import httpx
@@ -248,7 +249,7 @@ These two classes route session and artifact operations to each agent's own `.ad
 ```python
 import asyncio
 from pathlib import Path
-from google.adk.cli.utils.local_storage import create_local_session_service, create_local_artifact_service
+from google.adk.cli.utils.local_storage import create_local_session_service
 
 # agents_root/
 #   billing_agent/.adk/session.db
@@ -515,10 +516,6 @@ print(cache[0].data.mime_type)              # audio/pcm
 ### Example 3 — inspecting cost metadata on `InvocationContext`
 
 ```python
-import asyncio
-from google.adk.agents import LlmAgent
-from google.adk.runners import InMemoryRunner
-from google.adk.agents.run_config import RunConfig
 from google.adk.agents.invocation_context import _InvocationCostManager
 
 # Demonstrate _InvocationCostManager directly
@@ -671,7 +668,6 @@ print(sorted(trace_dict.keys()))  # ['evt-1', 'evt-2', 'evt-3']
 ```python
 from google.adk.a2a.agent.config import A2aRemoteAgentConfig
 from google.adk.a2a.converters.part_converter import convert_a2a_part_to_genai_part
-from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 from google.genai import types as genai_types
 
 
@@ -720,7 +716,6 @@ print("Interceptors registered:", len(config.request_interceptors))  # 1
 ### Example 3 — aborting a request from `before_request`
 
 ```python
-import asyncio
 from google.adk.a2a.agent.config import A2aRemoteAgentConfig, ParametersConfig, RequestInterceptor
 from google.adk.events.event import Event
 from google.genai import types
@@ -769,7 +764,6 @@ print("Config ready with rate-limit interceptor")
 ### Example 1 — tracking a long-running function call
 
 ```python
-from unittest.mock import MagicMock
 from google.adk.a2a.converters.long_running_functions import LongRunningFunctions
 from google.adk.events.event import Event
 from google.genai import types
