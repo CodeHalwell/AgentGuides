@@ -691,7 +691,7 @@ options: AGUIChatOptions = {
 
 **Sub-package:** `agent_framework_a2a._agent`
 **Install:** `pip install agent-framework-a2a`
-**Import:** `from agent_framework.a2a import A2AAgentSession, A2AContinuationToken`
+**Import:** `from agent_framework.a2a import A2AAgentSession` / `from agent_framework_a2a import A2AContinuationToken`
 
 `A2AAgent` (documented in [Vol. 12](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v12/))
 uses these two types to maintain conversation continuity across multiple HTTP round-trips with
@@ -885,7 +885,7 @@ filtering_converter = FilteringConverter(attachment_data_fetcher=fetch_attachmen
 
 **Sub-package:** `agent_framework_orchestrations._orchestration_request_info`
 **Install:** `pip install agent-framework-orchestrations`
-**Import:** `from agent_framework.orchestrations import AgentApprovalExecutor`
+**Import:** `from agent_framework_orchestrations._orchestration_request_info import AgentApprovalExecutor, AgentRequestInfoExecutor` / `from agent_framework.orchestrations import AgentRequestInfoResponse`
 
 `AgentApprovalExecutor` implements the **agent approval gate pattern**: an agent runs, a human
 reviews its output, and either approves (sending the response downstream) or provides correction
@@ -975,7 +975,7 @@ class AgentRequestInfoResponse:
 import asyncio
 from agent_framework import Workflow
 from agent_framework.openai import OpenAIResponsesClient
-from agent_framework.orchestrations import AgentApprovalExecutor
+from agent_framework_orchestrations._orchestration_request_info import AgentApprovalExecutor
 
 async def human_review_loop():
     client = OpenAIResponsesClient(model="gpt-4o")
