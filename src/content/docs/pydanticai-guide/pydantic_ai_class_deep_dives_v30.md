@@ -395,7 +395,7 @@ combined = CombinedToolset(toolsets=[local_tools])
 agent = Agent('openai:gpt-4.1', toolsets=[combined])
 ```
 
-### 3.2 Stack Capability Wrappers Around a Combined Set
+### 3.2 Stack Toolset Wrappers Around a Combined Set
 
 ```python
 from pydantic_ai import Agent, FunctionToolset
