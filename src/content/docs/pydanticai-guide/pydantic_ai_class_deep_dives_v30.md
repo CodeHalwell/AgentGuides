@@ -47,7 +47,7 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 ```
 
 Key implementation facts:
-- `ApprovalRequired` (from `pydantic_ai.exceptions`) is a sentinel exception that adds the pending call to a `DeferredToolRequests` result. The caller approves it by passing `DeferredToolResults.approvals(...)` as the `deferred_tool_results=` argument on the next `agent.run()` call, which sets `ctx.tool_call_approved` on re-entry.
+- `ApprovalRequired` (from `pydantic_ai.exceptions`) is a sentinel exception that adds the pending call to a `DeferredToolRequests` result. The caller approves it by constructing `DeferredToolResults(approvals={'<tool_call_id>': True})` (or `ToolApproved()`/`ToolDenied()` for fine-grained control) and passing it as `deferred_tool_results=` on the next `agent.run(message_history=result.messages, ...)` call, which sets `ctx.tool_call_approved` on re-entry.
 - When `approval_required_func` returns `False` the call proceeds immediately — no approval needed for that invocation.
 - `ctx.tool_call_approved` is checked *first*; if the call has already been approved, `approval_required_func` is never invoked, ensuring a single approve-then-execute cycle.
 
@@ -514,10 +514,9 @@ approve_payment = ToolDefinition(
 external_toolset = ExternalToolset(tool_defs=[approve_payment])
 # Include DeferredToolRequests in output_type so the run surfaces external calls
 # to the caller rather than stub-skipping them.
-from typing import Union
-from pydantic_ai.result import DeferredToolRequests
+from pydantic_ai import DeferredToolRequests
 agent = Agent('openai:gpt-4.1', toolsets=[external_toolset],
-              output_type=Union[str, DeferredToolRequests])
+              output_type=DeferredToolRequests | str)
 
 # When the model calls 'approve_payment', agent.run() returns a DeferredToolRequests.
 # The web-app layer shows the user a confirmation dialog, then feeds the result back
@@ -546,10 +545,9 @@ run_etl = ToolDefinition(
 )
 
 external_toolset = ExternalToolset(tool_defs=[run_etl], id='etl-external')
-from typing import Union
-from pydantic_ai.result import DeferredToolRequests
+from pydantic_ai import DeferredToolRequests
 agent = Agent('anthropic:claude-sonnet-4-6', toolsets=[external_toolset],
-              output_type=Union[str, DeferredToolRequests])
+              output_type=DeferredToolRequests | str)
 # When the model calls 'run_etl_pipeline', agent.run() returns DeferredToolRequests.
 # The caller dispatches the RPC, collects the result, then resumes via
 # deferred_tool_results=DeferredToolResults(...) on the next agent.run() call.
@@ -592,11 +590,10 @@ browser_toolset = ExternalToolset(
     tool_defs=[browse_page, click_element],
     id='browser-external',  # stable id for spec serialization
 )
-from typing import Union
-from pydantic_ai.result import DeferredToolRequests
+from pydantic_ai import DeferredToolRequests
 agent = Agent(
     'openai:gpt-4.1',
-    output_type=Union[str, DeferredToolRequests],
+    output_type=DeferredToolRequests | str,
     toolsets=[
         CombinedToolset(toolsets=[
             FunctionToolset([search_internal_docs]),
@@ -956,7 +953,7 @@ class HookTimeoutError(TimeoutError):
 
 Key implementation facts:
 - Constructor kwarg `run=` maps to internal key `'wrap_run'`; `run_error=` maps to `'on_run_error'`; `event=` maps to `'_on_event'`. The decorator names (`hooks.on.run`) match constructor names, not internal keys.
-- Multiple handlers registered for the same hook run sequentially; `before_*` and `after_*` handlers pass results through the chain; `wrap_*` handlers are chained with reversed order (outermost wraps register last).
+- Multiple handlers registered for the same hook run sequentially; `before_*` and `after_*` handlers pass results through the chain; `wrap_*` handlers are chained via `reversed(entries)` — the first registered wrapper becomes outermost (middleware-stack ordering).
 - Tool hooks (`before_tool_execute`, etc.) accept an optional `tools: Sequence[str]` filter; only calls to listed tools trigger that handler.
 - `anyio.fail_after(entry.timeout)` enforces per-handler timeouts; `HookTimeoutError` is raised (a `TimeoutError` subclass) with the hook name and handler function name for clear diagnostics.
 - Sync functions are auto-wrapped: `inspect.isawaitable(result)` after calling the function routes through `await` or returns directly.
@@ -1208,6 +1205,11 @@ class ImageGenerationSubagentTool:
             if inspect.isawaitable(result):
                 result = await result
             model = result
+
+        if isinstance(model, str) and callable(self.model):
+            # Static strings are guarded at factory time; callable-resolved
+            # strings must be checked here (at call time).
+            _check_image_only_model(model)
 
         agent = Agent(
             model,
