@@ -652,6 +652,7 @@ from fastapi.responses import StreamingResponse
 from agent_framework_ag_ui._types import AGUIRequest
 
 app = FastAPI()
+ag_ui_agent = ...  # Replace with your actual AgentFrameworkAgent instance
 
 @app.post("/agent/run")
 async def run_agent(request: AGUIRequest):
@@ -670,7 +671,7 @@ async def run_agent(request: AGUIRequest):
 ```python
 # Using AGUIChatOptions with an AG-UI client
 from agent_framework.openai import OpenAIResponsesClient
-from agent_framework_ag_ui import AGUIHttpService
+from agent_framework_ag_ui._types import AGUIChatOptions
 
 client = OpenAIResponsesClient(model="gpt-4o")
 agent = client.as_agent(instructions="You are a helpful assistant.")
@@ -754,7 +755,6 @@ print(response.text)
 
 ```python
 import asyncio
-from a2a.types import AgentCard, AgentInterface, AgentCapabilities
 from agent_framework.a2a import A2AAgent, A2AAgentSession
 
 async def multi_turn_conversation():
@@ -840,7 +840,6 @@ ThreadItemConverter(
 ```python
 import asyncio
 from agent_framework_chatkit import ThreadItemConverter
-from agent_framework import Agent
 from agent_framework.openai import OpenAIResponsesClient
 
 # Basic usage without attachment fetching
@@ -1089,7 +1088,6 @@ must not share a workflow instance (and its in-memory checkpoint). Passing
 ### Code example
 
 ```python
-from agent_framework import Workflow
 from agent_framework.openai import OpenAIResponsesClient
 from agent_framework.orchestrations import SequentialBuilder
 from agent_framework_ag_ui import AgentFrameworkWorkflow
@@ -1296,6 +1294,7 @@ from fastapi.responses import StreamingResponse
 import json
 
 app = FastAPI()
+my_workflow = ...  # Replace with your actual AgentFrameworkWorkflow or Workflow instance
 
 @app.post("/run")
 async def run(request: dict):
