@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 28"
-description: "Source-verified deep dives into 10 class groups from agent-framework 1.9.0: RawClaudeAgent+ClaudeAgent+ClaudeAgentOptions+ClaudeAgentSettings (Claude Code CLI integration — AGENT_PROVIDER_NAME='anthropic.claude', ClaudeSDKClient lifecycle, PermissionMode literals, SandboxSettings, ClaudeAgentSettings env-prefix resolution); AgentFrameworkAgent+AgentConfig (AG-UI protocol wrapper for any SupportsAgentRun — state_schema Pydantic dispatch, predict_state_config tool-argument interception, require_confirmation gate, snapshot_store wiring); AGUIThreadSnapshot+AGUIThreadSnapshotStore+InMemoryAGUIThreadSnapshotStore (replayable thread state — messages+state+interrupt triad, Protocol async save/get/delete, max_snapshots LRU eviction, scope+thread_id composite key); PredictiveStateHandler+PredictStateConfig (streaming tool-call state prediction — predict_state_config dict[state_key→{tool,tool_argument}], streaming_tool_args accumulator, state_delta_count throttle, pending_state_updates flush); AGUIRequest+AGUIChatOptions+AgentState+RunMetadata (AG-UI protocol types — AliasChoices camelCase aliases, client-side tools forwarding, thread_id continuity, predict_state list[PredictStateConfig]); A2AAgentSession+A2AContinuationToken (A2A session management — _CONTEXT_ID_KEY/task_id/task_state slot keys, service_session_id=context_id, TaskState continuation detection); ThreadItemConverter (ChatKit→agent-framework bridge — attachment_data_fetcher async callback, UserMessageItem→Message dispatch, to_agent_input() normalisation); AgentApprovalExecutor+AgentRequestInfoExecutor+AgentRequestInfoResponse (orchestration approval gate — allow_direct_output terminal mode, @handler/@response_handler pair, AgentRequestInfoResponse.approve() shortcut); AgentFrameworkWorkflow (workflow-to-AG-UI bridge — workflow vs workflow_factory mutex, (scope,thread_id) cache key, snapshot_store activation guard); FlowState+AGUIHttpService+run_workflow_stream (run-level streaming state — 13 dataclass fields, AGUIHttpService SSE parsing, run_workflow_stream thread/run-id resolution)."
+description: "Source-verified deep dives into 10 class groups from agent-framework 1.9.0: RawClaudeAgent+ClaudeAgent+ClaudeAgentOptions+ClaudeAgentSettings (Claude Code CLI integration — AGENT_PROVIDER_NAME='anthropic.claude', ClaudeSDKClient lifecycle, PermissionMode literals, SandboxSettings, ClaudeAgentSettings env-prefix resolution); AgentFrameworkAgent+AgentConfig (AG-UI protocol wrapper for any SupportsAgentRun — state_schema Pydantic dispatch, predict_state_config tool-argument interception, require_confirmation gate, snapshot_store wiring); AGUIThreadSnapshot+AGUIThreadSnapshotStore+InMemoryAGUIThreadSnapshotStore (replayable thread state — messages+state+interrupt triad, Protocol async save/get/delete, max_snapshots LRU eviction, scope+thread_id composite key); PredictiveStateHandler+PredictStateConfig (streaming tool-call state prediction — predict_state_config dict[state_key→{tool,tool_argument}], streaming_tool_args accumulator, state_delta_count throttle, pending_state_updates flush); AGUIRequest+AGUIChatOptions+AgentState+RunMetadata (AG-UI protocol types — AliasChoices camelCase aliases, client-side tools forwarding, thread_id continuity, predict_state list[PredictStateConfig]); A2AAgentSession+A2AContinuationToken (A2A session management — _CONTEXT_ID_KEY/task_id/task_state slot keys, service_session_id=context_id, TaskState continuation detection); ThreadItemConverter (ChatKit→agent-framework bridge — attachment_data_fetcher async callback, UserMessageItem→Message dispatch, to_agent_input() normalisation); AgentApprovalExecutor+AgentRequestInfoExecutor+AgentRequestInfoResponse (orchestration approval gate — allow_direct_output terminal mode, @handler/@response_handler pair, AgentRequestInfoResponse.approve() shortcut); AgentFrameworkWorkflow (workflow-to-AG-UI bridge — workflow vs workflow_factory mutex, (scope,thread_id) cache key, snapshot_store activation guard); FlowState+AGUIHttpService+run_workflow_stream (run-level streaming state — 14 dataclass fields, AGUIHttpService SSE parsing, run_workflow_stream thread/run-id resolution)."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -56,8 +56,11 @@ This volume covers **ten class groups** across five provider/integration sub-pac
 `agent-framework-claude` (Claude Code CLI integration), `agent-framework-ag-ui` (AG-UI streaming
 protocol — wrappers, snapshots, predictive state, protocol types, workflow bridge, run state),
 `agent-framework-a2a` (A2A session management), `agent-framework-chatkit` (ChatKit thread
-converter), and `agent-framework-orchestrations` (approval gate executor). All classes
-documented here are genuinely new — they have not appeared in any prior volume.
+converter), and `agent-framework-orchestrations` (approval gate executor). Some of these
+classes appeared in Vol. 15 and Vol. 16 with brief coverage; this volume goes deeper —
+covering `AgentConfig` TypedDict wiring, `predict_state_config` internals, `snapshot_store`
+activation guards, and the full `AgentApprovalExecutor`/`AgentRequestInfoExecutor` executor
+pair that was not documented before.
 
 | # | Class / group | Sub-package |
 |---|---|---|
@@ -78,7 +81,7 @@ documented here are genuinely new — they have not appeared in any prior volume
 
 **Sub-package:** `agent_framework_claude._agent`
 **Install:** `pip install agent-framework-claude`
-**Import:** `from agent_framework.anthropic import ClaudeAgent, RawClaudeAgent`
+**Import:** `from agent_framework_claude import ClaudeAgent, RawClaudeAgent`
 
 `agent-framework-claude` integrates the **Claude Code CLI** (not the Anthropic REST API) as a
 first-class agent-framework provider. The agent shells out to the `claude` binary and communicates
@@ -176,7 +179,7 @@ class ClaudeAgentSettings(TypedDict, total=False):
 
 ```python
 import asyncio
-from agent_framework.anthropic import ClaudeAgent
+from agent_framework_claude import ClaudeAgent
 
 async def main():
     async with ClaudeAgent(
@@ -202,7 +205,7 @@ asyncio.run(main())
 
 ```python
 # Use tools restriction for a sandboxed code-review agent
-from agent_framework.anthropic import ClaudeAgent
+from agent_framework_claude import ClaudeAgent
 
 async def code_review(repo_path: str) -> str:
     async with ClaudeAgent(
@@ -271,7 +274,7 @@ passed to `AgentFrameworkAgent(**config, agent=my_agent)`.
 
 ### Key facts
 
-- The wrapper follows a **linear event flow**: `RUN_STARTED → one or more
+- The wrapper follows a **linear event flow**: `RUN_STARTED` → one or more
   `TEXT_MESSAGE_CONTENT`/`TOOL_CALL_*` events → `RUN_FINISHED`. It does not support
   branching or sub-workflows — for that, use `AgentFrameworkWorkflow` (§9).
 - When `require_confirmation=True` (default), each tool call emits a
@@ -998,7 +1001,7 @@ async def human_review_loop():
     # The workflow pauses at AgentRequestInfoExecutor waiting for a response.
     # Pass AgentRequestInfoResponse.approve() to approve, or from_strings(...) to correct.
     from agent_framework._types import Message
-    from agent_framework_orchestrations._orchestration_request_info import AgentRequestInfoResponse
+    from agent_framework.orchestrations import AgentRequestInfoResponse
 
     result = await workflow.run(
         "Write a tagline for a new coffee brand called 'Aurora Roast'.",
