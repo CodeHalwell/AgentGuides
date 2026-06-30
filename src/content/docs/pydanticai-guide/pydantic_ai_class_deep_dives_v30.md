@@ -546,7 +546,13 @@ run_etl = ToolDefinition(
 )
 
 external_toolset = ExternalToolset(tool_defs=[run_etl], id='etl-external')
-agent = Agent('anthropic:claude-sonnet-4-6', toolsets=[external_toolset])
+from typing import Union
+from pydantic_ai.result import DeferredToolRequests
+agent = Agent('anthropic:claude-sonnet-4-6', toolsets=[external_toolset],
+              output_type=Union[str, DeferredToolRequests])
+# When the model calls 'run_etl_pipeline', agent.run() returns DeferredToolRequests.
+# The caller dispatches the RPC, collects the result, then resumes via
+# deferred_tool_results=DeferredToolResults(...) on the next agent.run() call.
 ```
 
 ### 4.3 Multiple External Tools with Stable ID
@@ -586,8 +592,11 @@ browser_toolset = ExternalToolset(
     tool_defs=[browse_page, click_element],
     id='browser-external',  # stable id for spec serialization
 )
+from typing import Union
+from pydantic_ai.result import DeferredToolRequests
 agent = Agent(
     'openai:gpt-4.1',
+    output_type=Union[str, DeferredToolRequests],
     toolsets=[
         CombinedToolset(toolsets=[
             FunctionToolset([search_internal_docs]),
@@ -1294,6 +1303,7 @@ result = await agent.run('Draw a minimalist logo for a tech startup called Neura
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
+from pydantic_ai.messages import BinaryImage
 from pydantic_ai.tools import RunContext
 from dataclasses import dataclass
 
@@ -1308,6 +1318,7 @@ def select_image_model(ctx: RunContext[Deps]) -> str:
 
 agent = Agent(
     'openai:gpt-4.1',
+    output_type=BinaryImage,               # required to get BinaryImage output
     capabilities=[
         ImageGeneration(
             fallback_model=select_image_model,  # callable: RunContext → model
