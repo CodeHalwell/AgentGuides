@@ -445,7 +445,7 @@ asyncio.run(bootstrap_agent_storage("./demo_agent"))
 - **`_InvocationCostManager`** — a `BaseModel` subclass that stores `_number_of_llm_calls: int = 0` as a private attribute. The single method `increment_and_enforce_llm_calls_limit(run_config)` increments the counter *before* checking, so the limit is strictly enforced at the call that pushes over the threshold.
 - **`LlmCallsLimitExceededError`** — raised by `increment_and_enforce_llm_calls_limit` only when `run_config.max_llm_calls > 0` AND the count exceeds the limit. `max_llm_calls <= 0` disables the check entirely.
 - **`RealtimeCacheEntry`** — a `BaseModel` with `arbitrary_types_allowed=True` (needed for `types.Blob`), holding `role: str`, `data: types.Blob`, and `timestamp: float`. Used in live bidirectional sessions to buffer audio chunks for context-caching before they are flushed to the model.
-- **`InvocationContext.llm_calls_limit_exceeded`** — accessed as a cached property computed from `_invocation_cost_manager`; the limit error is caught upstream to send a final "limit exceeded" event to the client rather than crashing the session.
+- **`InvocationContext.increment_llm_call_count()`** — the public method callers use to tick the counter; it delegates to `_invocation_cost_manager.increment_and_enforce_llm_calls_limit(self.run_config)`. There is no `llm_calls_limit_exceeded` property on `InvocationContext`; the limit is enforced by the raised `LlmCallsLimitExceededError` which is caught upstream to send a final event to the client.
 
 ### Example 1 — enforcing a maximum LLM call budget
 
@@ -755,7 +755,7 @@ print("Config ready with rate-limit interceptor")
 ### Key implementation facts (verified from source)
 
 - **Long-running detection** — `process_event()` copies the event (deep) and removes any `FunctionCall` parts whose `.id` appears in `event.long_running_tool_ids`. Matching parts are accumulated in `self._parts` and their IDs recorded in `self._long_running_tool_ids`. Partial events (`event.partial=True`) are not accumulated.
-- **Response matching** — `FunctionResponse` parts whose `.id` is in `_long_running_tool_ids` are also removed from the event (and accumulated), closing the open obligation.
+- **Response matching** — `FunctionResponse` parts whose `.id` is in `_long_running_tool_ids` are removed from the returned event copy and accumulated in `self._parts`, but the ID is **not** removed from `_long_running_tool_ids`. `has_long_running_function_calls()` therefore remains `True` after a response is processed; the caller (A2A executor) drives the lifecycle, not the tracker.
 - **`TaskState` tracking** — `self._task_state` starts as `input_required`. In `_mark_long_running_function_call`, if the function call name matches `REQUEST_EUC_FUNCTION_CALL_NAME` (the end-user-credentials request), `_task_state` is set to `auth_required`; otherwise stays `input_required`. The last function call wins.
 - **`create_long_running_function_call_event(task_id, context_id)`** — converts accumulated parts back to A2A parts via the injected `a2a_part_converter`, sets `A2A_DATA_PART_METADATA_IS_LONG_RUNNING_KEY` on DataParts containing function call metadata, then wraps them in a `TaskStatusUpdateEvent` with `final=True`.
 - **`handle_user_input(context)`** — guard function: if the current task is in `input_required` or `auth_required` state but the user's incoming message does NOT contain a `DataPart` typed as `FUNCTION_RESPONSE`, it emits a `TaskStatusUpdateEvent` re-asserting the same state to signal the user that a function response is still expected.
