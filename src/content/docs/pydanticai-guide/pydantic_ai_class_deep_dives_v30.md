@@ -55,7 +55,7 @@ Key implementation facts:
 
 ```python
 import asyncio
-from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai import Agent, DeferredToolRequests, FunctionToolset
 from pydantic_ai.toolsets import ApprovalRequiredToolset
 
 async def delete_record(record_id: str) -> str:
@@ -72,13 +72,16 @@ base_toolset = FunctionToolset([delete_record, fetch_record])
 # In production, the framework pauses and calls your UI/approval endpoint.
 guarded = ApprovalRequiredToolset(wrapped=base_toolset)
 
-agent = Agent('openai:gpt-4.1', toolsets=[guarded])
+# output_type must include DeferredToolRequests: ApprovalRequired raises the same
+# deferred-call signal as ExternalToolset, and the runtime raises UserError if
+# DeferredToolRequests is not in the output schema when an approval is triggered.
+agent = Agent('openai:gpt-4.1', toolsets=[guarded], output_type=DeferredToolRequests | str)
 ```
 
 ### 1.2 Selective Approval via `approval_required_func`
 
 ```python
-from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai import Agent, DeferredToolRequests, FunctionToolset
 from pydantic_ai.toolsets import ApprovalRequiredToolset
 from pydantic_ai.tools import RunContext, ToolDefinition
 
@@ -102,15 +105,15 @@ toolset = ApprovalRequiredToolset(
     wrapped=FunctionToolset([delete_item, list_items]),
     approval_required_func=needs_approval,
 )
-agent = Agent('openai:gpt-4.1', toolsets=[toolset])
-# list_items → no approval needed; delete_item → pauses for approval.
+agent = Agent('openai:gpt-4.1', toolsets=[toolset], output_type=DeferredToolRequests | str)
+# list_items → no approval needed; delete_item → pauses for approval (DeferredToolRequests result).
 ```
 
 ### 1.3 Context-Aware Approval (Check User Role)
 
 ```python
 from dataclasses import dataclass
-from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai import Agent, DeferredToolRequests, FunctionToolset
 from pydantic_ai.toolsets import ApprovalRequiredToolset
 from pydantic_ai.tools import RunContext, ToolDefinition
 
@@ -142,10 +145,11 @@ toolset = ApprovalRequiredToolset(
     wrapped=FunctionToolset([write_document, read_document]),
     approval_required_func=role_aware_approval,
 )
-agent = Agent('openai:gpt-4.1', toolsets=[toolset])
+agent = Agent('openai:gpt-4.1', toolsets=[toolset], output_type=DeferredToolRequests | str)
 result = agent.run_sync(
     'Read document and update it', deps=AppDeps(user_role='editor')
 )
+# When editor role triggers write_document, result.output is DeferredToolRequests.
 ```
 
 ---
