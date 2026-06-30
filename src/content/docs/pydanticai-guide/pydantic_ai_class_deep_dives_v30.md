@@ -47,7 +47,7 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 ```
 
 Key implementation facts:
-- `ApprovalRequired` (from `pydantic_ai.exceptions`) is a sentinel exception the framework catches and re-dispatches after human approval arrives via `agent.run(..., tool_call_approved=True)` or the equivalent event in streaming.
+- `ApprovalRequired` (from `pydantic_ai.exceptions`) is a sentinel exception that adds the pending call to a `DeferredToolRequests` result. The caller approves it by passing `DeferredToolResults.approvals(...)` as the `deferred_tool_results=` argument on the next `agent.run()` call, which sets `ctx.tool_call_approved` on re-entry.
 - When `approval_required_func` returns `False` the call proceeds immediately — no approval needed for that invocation.
 - `ctx.tool_call_approved` is checked *first*; if the call has already been approved, `approval_required_func` is never invoked, ensuring a single approve-then-execute cycle.
 
@@ -511,10 +511,16 @@ approve_payment = ToolDefinition(
 )
 
 external_toolset = ExternalToolset(tool_defs=[approve_payment])
-agent = Agent('openai:gpt-4.1', toolsets=[external_toolset])
+# Include DeferredToolRequests in output_type so the run surfaces external calls
+# to the caller rather than stub-skipping them.
+from typing import Union
+from pydantic_ai.result import DeferredToolRequests
+agent = Agent('openai:gpt-4.1', toolsets=[external_toolset],
+              output_type=Union[str, DeferredToolRequests])
 
-# The agent yields a ToolCallPart for 'approve_payment' without executing it.
-# The web-app layer shows the user a confirmation dialog, then feeds the result back.
+# When the model calls 'approve_payment', agent.run() returns a DeferredToolRequests.
+# The web-app layer shows the user a confirmation dialog, then feeds the result back
+# via deferred_tool_results=DeferredToolResults(...) on the next agent.run() call.
 ```
 
 ### 4.2 Fire-and-Forget RPC via External Toolset
@@ -1357,8 +1363,8 @@ class XSearchSubagentTool:
         return result.output
 
 def x_search_tool(
-    model: XSearchFallbackModel,
-    native_tool: XSearchTool | None = None,
+    model: Model | KnownModelName | str | XSearchFallbackModelFunc,
+    native_tool: XSearchTool,          # required — no default
     *,
     instructions: str = ...,
 ) -> Tool[Any]:
@@ -1370,7 +1376,7 @@ Key implementation facts:
 - `UnexpectedModelBehavior` from the subagent is re-raised as `ModelRetry`, allowing the outer agent to handle X search failures gracefully.
 - Both sync and async `XSearchFallbackModelFunc` are supported via `inspect.isawaitable`.
 - Unlike `ImageGenerationSubagentTool`, there is no `_XSEARCH_ONLY_MODELS` guard — X search is always performed via conversational models.
-- `x_search_tool()` accepts `native_tool=None`; when `None`, a default `XSearchTool()` is constructed.
+- `x_search_tool()` requires both `model` and `native_tool` — neither has a default. Accepting `None` for the fallback model is a feature of the higher-level `XSearch` capability, not the factory function.
 
 ### 10.1 X Search via the `XSearch` Capability (High-Level)
 
@@ -1408,7 +1414,7 @@ from pydantic_ai.tools import Tool
 # Fine-tune the subagent's instructions for domain-specific searches.
 subagent_tool = XSearchSubagentTool(
     model='xai:grok-4-1-fast-non-reasoning',
-    native_tool=XSearchTool(max_results=20),
+    native_tool=XSearchTool(allowed_x_handles=['pydantic_ai', 'tiangolo', 'samuel_colvin']),
     instructions=(
         'Search X/Twitter for the given query. '
         'Focus on posts from verified accounts and developers. '
