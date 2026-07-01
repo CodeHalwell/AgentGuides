@@ -635,7 +635,7 @@ graph = builder.compile()
 # After compilation, inspect the PregelNode
 pn: PregelNode = graph.nodes["counter"]
 print("channels:", pn.channels)       # ['count'] or '__root__' depending on schema
-print("triggers:", pn.triggers)       # ['counter']
+print("triggers:", pn.triggers)       # ['branch:to:counter']  ← branch-scheduling channel, not the node name
 print("writers:", pn.writers)         # [ChannelWrite(...)]
 print("node type:", type(pn.node).__name__)   # RunnableSeq
 ```
