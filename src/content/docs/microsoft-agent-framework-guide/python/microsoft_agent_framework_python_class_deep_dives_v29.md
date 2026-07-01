@@ -1076,7 +1076,7 @@ req = AgentFrameworkRequest(
     temperature=0.3,
 )
 print("Entity ID:", req.get_entity_id())      # "customer-support-agent"
-print("Conversation ID:", req._get_conversation_id())  # "conv_abc123"
+print("Conversation ID:", req.conversation)  # "conv_abc123"
 
 # Produce an OpenAI-compatible error response
 err = OpenAIError.create(
