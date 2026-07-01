@@ -134,7 +134,7 @@ async def main():
         agent = Agent(
             client=client,
             tools=proxy.tools,
-            context_providers=[SecureAgentConfig(chat_client=client)],
+            context_providers=[SecureAgentConfig()],
             instructions="You are a GitHub assistant.",
         )
         response = await agent.run("List my open pull requests.")
@@ -241,24 +241,25 @@ options: BedrockChatOptions = {
 ### Code examples
 
 ```python
-# Example 1 — Apply a guardrail to every call via default_options
+# Example 1 — Apply a guardrail to every call via default_options on Agent
 import asyncio
 from agent_framework import Agent
 from agent_framework.amazon import BedrockChatClient, BedrockGuardrailConfig
 
 async def main():
-    client = BedrockChatClient(
+    client = BedrockChatClient(model="anthropic.claude-3-5-sonnet-20241022-v2:0")
+    agent = Agent(
+        client=client,
+        instructions="You are a customer support agent.",
         default_options={
-            "model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
             "guardrailConfig": BedrockGuardrailConfig(
                 guardrailIdentifier="arn:aws:bedrock:us-east-1::guardrail/abc123",
                 guardrailVersion="1",
                 trace="enabled",
                 streamProcessingMode="sync",
             ),
-        }
+        },
     )
-    agent = Agent(client=client, instructions="You are a customer support agent.")
     response = await agent.run("How do I reset my password?")
     # Check if guardrail intervened
     trace = getattr(response, "additional_properties", {}).get("guardrailTrace")
@@ -393,12 +394,9 @@ async def main():
         .build()
     )
 
-    # Inject extra guidance for round 2 via a pre-round hook
-    async def on_request(msg: GroupChatRequestMessage, round_idx: int) -> GroupChatRequestMessage:
-        if round_idx == 2:
-            msg.additional_instruction = "Now focus specifically on scalability concerns."
-        return msg
-
+    # Run the workflow; additional_instruction is set per-round by the orchestrator.
+    # To inject custom per-round guidance, implement a custom executor that mutates
+    # the GroupChatRequestMessage before dispatch.
     result = await workflow.run("Design a distributed caching system.")
     print(result.text)
 
@@ -751,6 +749,7 @@ Exception
 ```python
 # Example 1 — Catch ToolExecutionException to handle MCP task abandonment
 import asyncio
+from datetime import timedelta
 from agent_framework import Agent
 from agent_framework._mcp import MCPStreamableHTTPTool, MCPTaskOptions
 from agent_framework.exceptions import ToolExecutionException
@@ -762,7 +761,7 @@ async def main():
     async with MCPStreamableHTTPTool(
         name="long-runner",
         url="https://mcp.example.com/",
-        task_options=MCPTaskOptions(max_task_wait=30.0),
+        task_options=MCPTaskOptions(max_task_wait=timedelta(seconds=30)),
     ) as mcp:
         agent = Agent(client=client, tools=mcp.functions)
         try:
@@ -880,9 +879,9 @@ from agent_framework._middleware import AgentMiddleware, AgentContext
 from agent_framework.openai import OpenAIChatClient
 
 class RunLogger(AgentMiddleware):
-    async def on_agent_run(self, context: AgentContext, next_handler):
+    async def process(self, context: AgentContext, call_next):
         print(f"[BEFORE] Running agent with {len(context.messages or [])} messages")
-        result = await next_handler(context)
+        result = await call_next(context)
         print(f"[AFTER] Agent returned {len(result.messages)} messages")
         return result
 
@@ -907,9 +906,9 @@ from agent_framework._middleware import AgentMiddleware, AgentContext
 from agent_framework.openai import OpenAIChatClient
 
 class SecurityAudit(AgentMiddleware):
-    async def on_agent_run(self, context: AgentContext, next_handler):
+    async def process(self, context: AgentContext, call_next):
         print("[AUDIT] High-security call initiated")
-        result = await next_handler(context)
+        result = await call_next(context)
         print("[AUDIT] Call completed")
         return result
 
@@ -936,10 +935,10 @@ from agent_framework._middleware import ChatMiddleware, ChatContext
 from agent_framework.openai import OpenAIChatClient
 
 class RetryOnRateLimit(ChatMiddleware):
-    async def on_get_response(self, context: ChatContext, next_handler):
+    async def process(self, context: ChatContext, call_next):
         for attempt in range(3):
             try:
-                return await next_handler(context)
+                return await call_next(context)
             except Exception as exc:
                 if "rate_limit" in str(exc).lower() and attempt < 2:
                     import asyncio as _a; await _a.sleep(2 ** attempt)
