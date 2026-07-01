@@ -374,7 +374,7 @@ class GroupChatResponseReceivedEvent:
 ```python
 # Example 1 — Inject additional_instruction for a specific round
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import GroupChatBuilder, GroupChatRequestMessage
 from agent_framework.openai import OpenAIChatClient
 
@@ -383,16 +383,10 @@ async def main():
     critic = Agent(client=client, name="Critic", instructions="Critique ideas critically.")
     builder_agent = Agent(client=client, name="Builder", instructions="Propose solutions.")
 
-    workflow = (
-        WorkflowBuilder()
-        .add_group_chat(
-            GroupChatBuilder()
-            .add_participant(critic)
-            .add_participant(builder_agent)
-            .with_max_rounds(4)
-        )
-        .build()
-    )
+    workflow = GroupChatBuilder(
+        participants=[critic, builder_agent],
+        max_rounds=4,
+    ).build()
 
     # Run the workflow; additional_instruction is set per-round by the orchestrator.
     # To inject custom per-round guidance, implement a custom executor that mutates
@@ -407,7 +401,7 @@ asyncio.run(main())
 # Example 2 — Observe GroupChatRequestSentEvent for structured logging
 import asyncio
 import logging
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import GroupChatBuilder, GroupChatRequestSentEvent, GroupChatResponseReceivedEvent
 from agent_framework.openai import OpenAIChatClient
 
@@ -418,16 +412,10 @@ async def main():
     alpha = Agent(client=client, name="Alpha")
     beta = Agent(client=client, name="Beta")
 
-    workflow = (
-        WorkflowBuilder()
-        .add_group_chat(
-            GroupChatBuilder()
-            .add_participant(alpha)
-            .add_participant(beta)
-            .with_max_rounds(3)
-        )
-        .build()
-    )
+    workflow = GroupChatBuilder(
+        participants=[alpha, beta],
+        max_rounds=3,
+    ).build()
 
     stream = workflow.run("What are the risks of deploying on Friday?", stream=True)
     async for event in stream:
@@ -516,7 +504,7 @@ class MagenticProgressLedgerItem(DictConvertible):
 ```python
 # Example 1 — Stream Magentic events to observe planning phases
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import (
     MagenticBuilder,
     MagenticOrchestratorEvent,
@@ -529,18 +517,12 @@ async def main():
     researcher = Agent(client=client, name="Researcher")
     coder = Agent(client=client, name="Coder")
     reviewer = Agent(client=client, name="Reviewer")
+    manager = Agent(client=client, name="MagenticManager")
 
-    workflow = (
-        WorkflowBuilder()
-        .add_magentic(
-            MagenticBuilder()
-            .add_participant(researcher)
-            .add_participant(coder)
-            .add_participant(reviewer)
-            .with_manager(client=client)
-        )
-        .build()
-    )
+    workflow = MagenticBuilder(
+        participants=[researcher, coder, reviewer],
+        manager_agent=manager,
+    ).build()
 
     stream = workflow.run("Build a REST API for a todo app.", stream=True)
     async for event in stream:
@@ -587,7 +569,7 @@ assert restored.answer is True
 ```python
 # Example 3 — Filter only PROGRESS_LEDGER_UPDATED events for task-completion detection
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import (
     MagenticBuilder,
     MagenticOrchestratorEvent,
@@ -614,12 +596,12 @@ async def wait_for_completion(workflow, prompt: str) -> bool:
 
 async def main():
     client = OpenAIChatClient()
-    agent = Agent(client=client, name="Worker")
-    workflow = (
-        WorkflowBuilder()
-        .add_magentic(MagenticBuilder().add_participant(agent).with_manager(client=client))
-        .build()
-    )
+    worker = Agent(client=client, name="Worker")
+    manager = Agent(client=client, name="MagenticManager")
+    workflow = MagenticBuilder(
+        participants=[worker],
+        manager_agent=manager,
+    ).build()
     completed = await wait_for_completion(workflow, "Calculate the first 10 Fibonacci numbers.")
     print("Completed:", completed)
 
@@ -1051,37 +1033,32 @@ print(entity.model_dump(exclude_none=True))
 ```
 
 ```python
-# Example 2 — Use DevServer to serve agents locally with OpenAI-compatible API
-import asyncio
+# Example 2 — Use serve() to run agents locally with OpenAI-compatible API
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework.devui import serve, register_cleanup
 
-async def main():
-    client = OpenAIChatClient()
-    support_agent = Agent(
-        client=client,
-        name="SupportAgent",
-        instructions="You answer customer questions.",
-    )
-    triage_agent = Agent(
-        client=client,
-        name="TriageAgent",
-        instructions="You classify incoming tickets.",
-    )
+client = OpenAIChatClient()
+support_agent = Agent(
+    client=client,
+    name="SupportAgent",
+    instructions="You answer customer questions.",
+)
+triage_agent = Agent(
+    client=client,
+    name="TriageAgent",
+    instructions="You classify incoming tickets.",
+)
 
-    # register_cleanup ensures background tasks are stopped on shutdown
-    register_cleanup(client)
+register_cleanup(client)
 
-    # serve() starts an HTTP server at localhost:8000 (default)
-    # Test with: curl http://localhost:8000/discovery
-    await serve(
-        agents=[support_agent, triage_agent],
-        host="0.0.0.0",
-        port=8000,
-    )
-
-asyncio.run(main())
+# serve() is synchronous and blocking; starts the HTTP server
+# Test with: curl http://localhost:8000/discovery
+serve(
+    entities=[support_agent, triage_agent],
+    host="0.0.0.0",
+    port=8000,
+)
 ```
 
 ```python
@@ -1176,7 +1153,7 @@ Strips all non-text content (function calls, tool results, approval payloads) fr
 # Example 1 — Custom selection function using GroupChatState
 import asyncio
 from collections import OrderedDict
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import GroupChatBuilder, GroupChatState
 from agent_framework.openai import OpenAIChatClient
 
@@ -1194,18 +1171,11 @@ async def main():
     builder = Agent(client=client, name="Builder", instructions="Build solutions.")
     expert = Agent(client=client, name="Expert", instructions="Provide domain expertise.")
 
-    workflow = (
-        WorkflowBuilder()
-        .add_group_chat(
-            GroupChatBuilder()
-            .add_participant(critic)
-            .add_participant(builder)
-            .add_participant(expert)
-            .with_selection_function(round_robin_with_override)
-            .with_max_rounds(6)
-        )
-        .build()
-    )
+    workflow = GroupChatBuilder(
+        participants=[critic, builder, expert],
+        selection_func=round_robin_with_override,
+        max_rounds=6,
+    ).build()
     result = await workflow.run("Design a fault-tolerant microservice.")
     print(result.text)
 
@@ -1215,29 +1185,23 @@ asyncio.run(main())
 ```python
 # Example 2 — AgentOrchestrationOutput for LLM-based speaker selection
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent
 from agent_framework.orchestrations import GroupChatBuilder, AgentOrchestrationOutput
 from agent_framework.openai import OpenAIChatClient
 
 async def main():
     client = OpenAIChatClient()
-    # AgentBasedGroupChatOrchestrator produces AgentOrchestrationOutput internally
     researcher = Agent(client=client, name="Researcher")
     writer = Agent(client=client, name="Writer")
     editor = Agent(client=client, name="Editor")
+    # orchestrator_agent drives LLM-based selection (AgentBasedGroupChatOrchestrator)
+    orchestrator = Agent(client=client, name="Orchestrator")
 
-    workflow = (
-        WorkflowBuilder()
-        .add_group_chat(
-            GroupChatBuilder()
-            .add_participant(researcher)
-            .add_participant(writer)
-            .add_participant(editor)
-            .with_llm_selection(client=client)  # Uses AgentBasedGroupChatOrchestrator
-            .with_max_rounds(6)
-        )
-        .build()
-    )
+    workflow = GroupChatBuilder(
+        participants=[researcher, writer, editor],
+        orchestrator_agent=orchestrator,
+        max_rounds=6,
+    ).build()
     result = await workflow.run("Write a blog post about quantum computing.")
     print(result.text)
 
