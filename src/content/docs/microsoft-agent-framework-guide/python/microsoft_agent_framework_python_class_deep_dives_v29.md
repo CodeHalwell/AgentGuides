@@ -719,7 +719,7 @@ print("SecureMCPToolProxy feature ID:", feature_id)
 
 **Module:** `agent_framework._mcp` / `agent_framework._tools`
 **Install:** `pip install agent-framework`
-**Import:** `from agent_framework._mcp import _MCPTaskAbandoned, _MCPDeadlineExpired; from agent_framework.exceptions import ToolException`
+**Import:** `from agent_framework.exceptions import ToolException, ToolExecutionException`
 
 These three classes define the **MCP error taxonomy** for task-lifecycle failures. Understanding the chain matters when writing error-handling middleware or retry logic around long-running MCP tasks.
 
@@ -1414,6 +1414,7 @@ asyncio.run(main())
 ```python
 # Example 3 — BYOK (Bring Your Own Key) via provider config for enterprise routing
 import asyncio
+import os
 from agent_framework.github import GitHubCopilotAgent
 
 async def main():
@@ -1425,7 +1426,7 @@ async def main():
             "provider": {
                 "type": "azure",
                 "endpoint": "https://mycompany.openai.azure.com/",
-                "api_key": "AZURE_OPENAI_KEY",
+                "api_key": os.environ["AZURE_OPENAI_KEY"],
                 "deployment": "gpt-5-deployment",
             },
             "base_directory": "/var/app/copilot-sessions",
