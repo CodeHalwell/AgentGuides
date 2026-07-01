@@ -314,7 +314,7 @@ async def main():
     client = BedrockChatClient()
     agent = Agent(client=client)
 
-    async with agent.run(
+    stream = agent.run(
         "Tell me about our product roadmap.",
         stream=True,
         options={
@@ -326,9 +326,10 @@ async def main():
                 "streamProcessingMode": "async",  # Non-blocking for streaming
             },
         },
-    ) as stream:
-        async for update in stream:
-            print(update.text, end="", flush=True)
+    )
+    async for update in stream:
+        print(update.text, end="", flush=True)
+    await stream.get_final_response()
 
 asyncio.run(main())
 ```
@@ -1368,9 +1369,10 @@ async def main():
             },
         },
     ) as agent:
-        async with agent.run("Analyze the open PRs in my repository.", stream=True) as stream:
-            async for update in stream:
-                print(update.text, end="", flush=True)
+        stream = agent.run("Analyze the open PRs in my repository.", stream=True)
+        async for update in stream:
+            print(update.text, end="", flush=True)
+        await stream.get_final_response()
 
 asyncio.run(main())
 ```
