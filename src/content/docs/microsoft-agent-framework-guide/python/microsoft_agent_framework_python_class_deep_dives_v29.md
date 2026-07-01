@@ -1313,13 +1313,13 @@ Key options unique to this agent:
 | `provider` | `ProviderConfig` | BYOK — route through your own OpenAI/Azure/Anthropic endpoint |
 | `instruction_directories` | `list[str]` | Extra directories scanned for `.github/copilot-instructions.md` |
 | `on_permission_request` | `PermissionHandlerType` | Called when Copilot requests permission for shell/read/write |
-| `on_pre_tool_use` | `PreToolUseHandler` | Called **before** every tool execution; return `"allow"`/`"deny"`/`"ask"` |
+| `on_pre_tool_use` | `PreToolUseHandler` | Called **before** every tool execution; return `{"permissionDecision": "allow"/"deny"/"ask"}` (`PreToolUseHookOutput` TypedDict) or `None` to defer |
 | `on_function_approval` | `FunctionApprovalCallback` | **Deprecated** — use `on_pre_tool_use` instead |
 
 ### Key facts
 
 - Always use as an **async context manager**: `async with GitHubCopilotAgent(...) as agent:`. The context manager starts (or borrows) the Copilot CLI subprocess and closes it on exit.
-- `on_pre_tool_use` and `on_permission_request` are **complementary**: `on_pre_tool_use` intercepts at the SDK level before any Copilot permission dialog; `on_permission_request` handles the dialog itself. When neither is set, the agent installs a default `on_pre_tool_use` that returns `"ask"` for `always_require` tools.
+- `on_pre_tool_use` and `on_permission_request` are **complementary**: `on_pre_tool_use` intercepts at the SDK level before any Copilot permission dialog; `on_permission_request` handles the dialog itself. When neither is set, the agent installs a default `on_pre_tool_use` that returns `{"permissionDecision": "ask"}` for `always_require` tools. Hooks must return a `PreToolUseHookOutput` TypedDict (e.g. `{"permissionDecision": "allow"}`) or `None` — bare strings are not consumed.
 - `on_function_approval` is deprecated and mutually exclusive with `on_pre_tool_use` — setting both raises `ValueError`.
 - The `provider` option enables BYOK scenarios where you route Copilot requests through your own Azure endpoint instead of the GitHub backend. This is useful for enterprise deployments with data-residency requirements.
 
@@ -1393,9 +1393,9 @@ async def main():
             # Route through company's Azure OpenAI endpoint
             "provider": {
                 "type": "azure",
-                "endpoint": "https://mycompany.openai.azure.com/",
+                "base_url": "https://mycompany.openai.azure.com/",  # ProviderConfig.base_url
                 "api_key": os.environ["AZURE_OPENAI_KEY"],
-                "deployment": "gpt-5-deployment",
+                "wire_model": "gpt-5-deployment",  # Azure deployment name sent to provider API
             },
             "base_directory": "/var/app/copilot-sessions",
             "instruction_directories": ["/company/shared-instructions"],
