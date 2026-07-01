@@ -431,20 +431,22 @@ async def main():
         .build()
     )
 
-    async with workflow.run("What are the risks of deploying on Friday?", stream=True) as stream:
-        async for event in stream.events():
-            if isinstance(event.data, GroupChatRequestSentEvent):
-                logger.info(
-                    "Round %d: sending to %s",
-                    event.data.round_index,
-                    event.data.participant_name,
-                )
-            elif isinstance(event.data, GroupChatResponseReceivedEvent):
-                logger.info(
-                    "Round %d: received from %s",
-                    event.data.round_index,
-                    event.data.participant_name,
-                )
+    stream = workflow.run("What are the risks of deploying on Friday?", stream=True)
+    async for event in stream:
+        if isinstance(event.data, GroupChatRequestSentEvent):
+            logger.info(
+                "Round %d: sending to %s",
+                event.data.round_index,
+                event.data.participant_name,
+            )
+        elif isinstance(event.data, GroupChatResponseReceivedEvent):
+            logger.info(
+                "Round %d: received from %s",
+                event.data.round_index,
+                event.data.participant_name,
+            )
+    result = await stream.get_final_response()
+    print(result.text)
 
 asyncio.run(main())
 ```
@@ -453,7 +455,7 @@ asyncio.run(main())
 # Example 3 — Use GroupChatRequestMessage metadata to pass per-round context
 import asyncio
 from dataclasses import asdict
-from agent_framework.orchestrations import GroupChatRequestMessage, GroupChatRequestSentEvent
+from agent_framework.orchestrations import GroupChatRequestMessage, GroupChatRequestSentEvent, GroupChatResponseReceivedEvent
 
 # Programmatically inspect what metadata is available on a request message
 msg = GroupChatRequestMessage(
@@ -542,16 +544,18 @@ async def main():
         .build()
     )
 
-    async with workflow.run("Build a REST API for a todo app.", stream=True) as stream:
-        async for event in stream.events():
-            if isinstance(event.data, MagenticOrchestratorEvent):
-                if event.data.event_type == MagenticOrchestratorEventType.PLAN_CREATED:
-                    print("PLAN:", event.data.content.text)
-                elif event.data.event_type == MagenticOrchestratorEventType.REPLANNED:
-                    print("REPLAN:", event.data.content.text)
-                elif event.data.event_type == MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
-                    for item in event.data.content:
-                        print(f"  [{item.answer}] {item.reason}")
+    stream = workflow.run("Build a REST API for a todo app.", stream=True)
+    async for event in stream:
+        if isinstance(event.data, MagenticOrchestratorEvent):
+            if event.data.event_type == MagenticOrchestratorEventType.PLAN_CREATED:
+                print("PLAN:", event.data.content.text)
+            elif event.data.event_type == MagenticOrchestratorEventType.REPLANNED:
+                print("REPLAN:", event.data.content.text)
+            elif event.data.event_type == MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
+                for item in event.data.content:
+                    print(f"  [{item.answer}] {item.reason}")
+    result = await stream.get_final_response()
+    print(result.text)
 
 asyncio.run(main())
 ```
@@ -596,16 +600,18 @@ from agent_framework.openai import OpenAIChatClient
 
 async def wait_for_completion(workflow, prompt: str) -> bool:
     """Run a Magentic workflow and return True when a ledger confirms completion."""
-    async with workflow.run(prompt, stream=True) as stream:
-        async for event in stream.events():
-            if not isinstance(event.data, MagenticOrchestratorEvent):
-                continue
-            if event.data.event_type != MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
-                continue
-            ledger: MagenticProgressLedger = event.data.content
-            # Ledger item with boolean True answer signals task completion
-            if any(item.answer is True for item in ledger):
-                return True
+    stream = workflow.run(prompt, stream=True)
+    async for event in stream:
+        if not isinstance(event.data, MagenticOrchestratorEvent):
+            continue
+        if event.data.event_type != MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
+            continue
+        ledger: MagenticProgressLedger = event.data.content
+        # Ledger item with boolean True answer signals task completion
+        if any(item.answer is True for item in ledger):
+            await stream.get_final_response()
+            return True
+    await stream.get_final_response()
     return False
 
 async def main():
@@ -1251,12 +1257,12 @@ conversation = [
         role="assistant",
         contents=[
             Content.from_text("Let me look that up."),
-            Content(type="function_call", id="call_1", name="search", arguments='{"q": "help"}'),
+            Content.from_function_call(call_id="call_1", name="search", arguments='{"q": "help"}'),
         ],
     ),
     Message(
         role="tool",
-        contents=[Content(type="function_result", tool_use_id="call_1", result="Found: ...")],
+        contents=[Content.from_function_result(call_id="call_1", result="Found: ...")],
     ),
     Message(role="assistant", contents=[Content.from_text("Here is what I found.")]),
 ]
