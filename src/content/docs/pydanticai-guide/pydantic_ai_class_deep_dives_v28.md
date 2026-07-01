@@ -1054,8 +1054,12 @@ def web_search(query: str) -> list[str]:
 
 @code_tools.tool_plain
 def run_code(snippet: str) -> str:
-    """Execute a Python snippet."""
-    return eval(snippet)  # noqa: S307 (demo only)
+    """Evaluate a Python literal expression (safe subset — no imports or calls)."""
+    import ast
+    try:
+        return str(ast.literal_eval(snippet))
+    except (ValueError, SyntaxError) as e:
+        return f'Invalid literal: {e}'
 
 
 # CombinedToolset.get_instructions() fans out and merges both instruction sets
@@ -1179,15 +1183,17 @@ agent = Agent(
 )
 ```
 
-### 8.3 Using `id` for Deferred Capability Loading
+### 8.3 Using `id` for Durable-Execution Toolset Identity
 
 ```python
 from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.external import ExternalToolset
 
-# The 'id' links this toolset to a capability registered in the agent spec,
-# enabling deferred loading — the capability is only materialised when needed.
+# The 'id' is a stable identifier used by durable-execution runtimes
+# (Temporal, DBOS, Prefect) to track which toolset handles a given activity.
+# It does NOT control deferred/lazy loading — tools are still exposed
+# immediately; use defer_loading=True on FunctionToolset for lazy discovery.
 TOOLSET_ID = 'human-approval-v1'
 
 approval_tool = ToolDefinition(
@@ -1202,7 +1208,7 @@ approval_tool = ToolDefinition(
 
 ext = ExternalToolset(tool_defs=[approval_tool], id=TOOLSET_ID)
 # output_type=[str, DeferredToolRequests] is required to receive the external tool
-# call so you can route it to the deferred capability system.
+# call so you can supply results from your external system and resume the run.
 agent = Agent('openai:gpt-4o', toolsets=[ext], output_type=[str, DeferredToolRequests])
 ```
 
@@ -1353,6 +1359,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import EmbeddingModel, EmbeddingSettings
 from pydantic_ai.embeddings.result import EmbeddingResult, EmbedInputType
@@ -1386,7 +1393,10 @@ class DeterministicEmbeddingModel(EmbeddingModel):
             input_type=input_type,
             model_name=self.model_name,
             provider_name=self.system,
+            timestamp=datetime.now(timezone.utc),
             usage=RequestUsage(input_tokens=sum(len(t) for t in normalised)),
+            provider_details=None,
+            provider_response_id=None,
         )
 
 
@@ -1403,7 +1413,7 @@ async def main():
     # Override in tests using Embedder.override()
     production_embedder = Embedder('openai:text-embedding-3-small')
     with production_embedder.override(model=model):
-        r = production_embedder.embed_query_sync('test')
+        r = await production_embedder.embed_query('test')
         assert r.model_name == 'deterministic-test'
 
 
@@ -1437,7 +1447,7 @@ class FunctionToolset(AbstractToolset[AgentDepsT]):
         metadata: dict[str, Any] | None = None,
         defer_loading: bool = False,      # lazy tool discovery
         include_return_schema: bool | None = None,
-        id: str | None = None,            # deferred capability registry ID
+        id: str | None = None,            # stable ID for durable-exec runtimes (Temporal, DBOS, Prefect)
         instructions: str | SystemPromptFunc[AgentDepsT] | Sequence[...] | None = None,
     ): ...
 
