@@ -393,7 +393,7 @@ async def main():
     # To inject custom per-round guidance, implement a custom executor that mutates
     # the GroupChatRequestMessage before dispatch.
     result = await workflow.run("Design a distributed caching system.")
-    print(result.text)
+    print(result.get_outputs())  # WorkflowRunResult.get_outputs() returns list[Any]
 
 asyncio.run(main())
 ```
@@ -433,7 +433,7 @@ async def main():
                 event.data.participant_name,
             )
     result = await stream.get_final_response()
-    print(result.text)
+    print(result.get_outputs())  # WorkflowRunResult; use get_outputs() not .text
 
 asyncio.run(main())
 ```
@@ -533,10 +533,10 @@ async def main():
             elif event.data.event_type == MagenticOrchestratorEventType.REPLANNED:
                 print("REPLAN:", event.data.content.text)
             elif event.data.event_type == MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
-                for item in event.data.content:
-                    print(f"  [{item.answer}] {item.reason}")
+                ledger = event.data.content  # MagenticProgressLedger dataclass, not iterable
+                print(f"  satisfied={ledger.is_request_satisfied.answer}, next={ledger.next_speaker.answer}")
     result = await stream.get_final_response()
-    print(result.text)
+    print(result.get_outputs())  # WorkflowRunResult; use get_outputs() not .text
 
 asyncio.run(main())
 ```
@@ -588,8 +588,8 @@ async def wait_for_completion(workflow, prompt: str) -> bool:
         if event.data.event_type != MagenticOrchestratorEventType.PROGRESS_LEDGER_UPDATED:
             continue
         ledger: MagenticProgressLedger = event.data.content
-        # Ledger item with boolean True answer signals task completion
-        if any(item.answer is True for item in ledger):
+        # MagenticProgressLedger is a dataclass with named fields, not an iterable
+        if ledger.is_request_satisfied.answer is True:
             await stream.get_final_response()
             return True
     await stream.get_final_response()
@@ -864,9 +864,8 @@ from agent_framework.openai import OpenAIChatClient
 class RunLogger(AgentMiddleware):
     async def process(self, context: AgentContext, call_next):
         print(f"[BEFORE] Running agent with {len(context.messages or [])} messages")
-        result = await call_next(context)
-        print(f"[AFTER] Agent returned {len(result.messages)} messages")
-        return result
+        await call_next()  # zero-arg continuation; result lands on context.result
+        print(f"[AFTER] agent run complete; text={context.result.text if context.result else None}")
 
 async def main():
     client = OpenAIChatClient()
@@ -891,9 +890,8 @@ from agent_framework.openai import OpenAIChatClient
 class SecurityAudit(AgentMiddleware):
     async def process(self, context: AgentContext, call_next):
         print("[AUDIT] High-security call initiated")
-        result = await call_next(context)
+        await call_next()  # zero-arg; inspect context.result after
         print("[AUDIT] Call completed")
-        return result
 
 async def main():
     client = OpenAIChatClient()
@@ -921,7 +919,8 @@ class RetryOnRateLimit(ChatMiddleware):
     async def process(self, context: ChatContext, call_next):
         for attempt in range(3):
             try:
-                return await call_next(context)
+                await call_next()  # zero-arg; raises on transient errors
+                return
             except Exception as exc:
                 if "rate_limit" in str(exc).lower() and attempt < 2:
                     import asyncio as _a; await _a.sleep(2 ** attempt)
@@ -1179,7 +1178,7 @@ async def main():
         max_rounds=6,
     ).build()
     result = await workflow.run("Design a fault-tolerant microservice.")
-    print(result.text)
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
@@ -1205,7 +1204,7 @@ async def main():
         max_rounds=6,
     ).build()
     result = await workflow.run("Write a blog post about quantum computing.")
-    print(result.text)
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
