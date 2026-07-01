@@ -815,6 +815,8 @@ class ToolErrorLoggingMiddleware:
 
 `AgentMiddlewareLayer` and `ChatMiddlewareLayer` are **MRO mixin classes** injected into the `Agent` and `BaseChatClient` class hierarchies respectively. They intercept `run()` and `get_response()` calls, build the middleware pipeline, and forward execution with streaming support. Understanding them explains how `Agent(middleware=[...])` and per-call `agent.run(middleware=[...])` interact.
 
+> **1.10.0 vs earlier volumes**: Vol. 6 documented these classes as standalone middleware pipeline layer classes with different signatures. In 1.10.0 they have been reworked as public MRO mixins — the `process(self, context, call_next)` hook signature and zero-argument `call_next()` continuation described here supersede the Vol. 6 coverage.
+
 ### Inheritance context
 
 ```
