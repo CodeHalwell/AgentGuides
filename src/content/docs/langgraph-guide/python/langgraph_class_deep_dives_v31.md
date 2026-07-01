@@ -113,13 +113,13 @@ print(_is_required_type(nr))     # False
 **Example 1 — non-None values always pass through; None with None-default is excluded**
 
 ```python
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langgraph._internal._fields import get_update_as_tuples
 
 class AgentOutput(BaseModel):
     answer: str = ""
-    confidence: float | None = None   # default is None
-    citations: list[str] = []         # default is non-None ([])
+    confidence: float | None = None
+    citations: list[str] = Field(default_factory=list)  # non-None default
 
 # Only 'answer' was explicitly set; 'citations' has a non-None default value
 output = AgentOutput(answer="Paris")
@@ -324,6 +324,8 @@ async def child_task():
     return cfg.get("run_name") if cfg else "no config"
 
 async def main():
+    # Pass the async function (factory), not child_task() — the helper calls it
+    # internally via context.run(lambda: asyncio.create_task(coro_factory()))
     task = create_task_in_config_context(child_task, config)
     result = await task
     print(result)  # child-task
