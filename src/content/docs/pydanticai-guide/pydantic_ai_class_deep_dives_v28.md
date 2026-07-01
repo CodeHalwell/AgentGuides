@@ -1436,7 +1436,7 @@ asyncio.run(main())
 class FunctionToolset(AbstractToolset[AgentDepsT]):
     def __init__(
         self,
-        tools: Sequence[Tool[AgentDepsT] | ToolFuncEither[AgentDepsT, ...]] = [],
+        tools: Sequence[Tool[AgentDepsT] | ToolFuncEither[AgentDepsT, ...]] = [],  # upstream uses []; safe — never mutated
         *,
         max_retries: int | None = None,   # None → inherits agent default
         timeout: float | None = None,     # seconds; triggers retry prompt on timeout
