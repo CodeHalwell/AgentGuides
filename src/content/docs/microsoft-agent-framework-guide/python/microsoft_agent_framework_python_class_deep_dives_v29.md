@@ -218,7 +218,7 @@ asyncio.run(main())
 
 ### Wiring into `BedrockChatOptions`
 
-Pass `guardrailConfig` as a key in the `options` dict at the **client** level (via `default_options`) or per `agent.run()` call:
+Pass `guardrailConfig` as a key in the `options` dict on `Agent(default_options=...)` for every call, or per `agent.run(..., options=...)` for a single call:
 
 ```python
 options: BedrockChatOptions = {
@@ -1292,7 +1292,7 @@ RawGitHubCopilotAgent(
 
 ### `GitHubCopilotSettings` (TypedDict, total=False)
 
-Resolved in priority order: **`settings=` constructor argument → `.env` file → `GITHUB_COPILOT_*` env vars**.
+Resolved in priority order: **`env_file_path=` constructor argument (`.env` file) → `GITHUB_COPILOT_*` env vars**.
 
 | Key | Env var | Notes |
 |-----|---------|-------|
