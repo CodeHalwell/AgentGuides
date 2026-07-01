@@ -1290,7 +1290,7 @@ RawGitHubCopilotAgent(
 
 ### `GitHubCopilotSettings` (TypedDict, total=False)
 
-Resolved in priority order: **explicit kwargs → `.env` file → `GITHUB_COPILOT_*` env vars**.
+Resolved in priority order: **`settings=` constructor argument → `.env` file → `GITHUB_COPILOT_*` env vars**.
 
 | Key | Env var | Notes |
 |-----|---------|-------|
