@@ -496,7 +496,7 @@ class MagenticProgressLedgerItem(DictConvertible):
 
 - `PLAN_CREATED` fires when the outer-loop orchestrator generates the initial task plan. `content` is a `Message` containing the plan text.
 - `REPLANNED` fires when the orchestrator detects the current plan is no longer viable and generates a new plan. `content` is a `Message`.
-- `PROGRESS_LEDGER_UPDATED` fires after each inner-loop evaluation cycle. `content` is a `MagenticProgressLedger` (a list of `MagenticProgressLedgerItem`).
+- `PROGRESS_LEDGER_UPDATED` fires after each inner-loop evaluation cycle. `content` is a `MagenticProgressLedger` — a **dataclass** with five named `MagenticProgressLedgerItem` fields: `is_request_satisfied`, `is_in_loop`, `is_progress_being_made`, `next_speaker`, and `instruction_or_question`. Access them as attributes (e.g. `ledger.is_request_satisfied.answer`), not by iterating.
 - `MagenticProgressLedgerItem.answer` is typed `str | bool`. When the orchestrator answers a yes/no progress question (e.g., "Is the task complete?"), it returns `True`/`False`. For open-ended status questions (e.g., "What is the current status?"), it returns a `str`.
 - `MagenticProgressLedgerItem` implements `DictConvertible`: `to_dict()` returns `{"reason": ..., "answer": ...}` and `from_dict()` validates the `answer` field — falling back to `""` when the value is neither `str` nor `bool`.
 
