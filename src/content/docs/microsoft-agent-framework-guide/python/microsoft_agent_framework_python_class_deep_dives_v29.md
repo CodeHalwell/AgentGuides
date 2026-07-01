@@ -1051,7 +1051,8 @@ triage_agent = Agent(
     instructions="You classify incoming tickets.",
 )
 
-register_cleanup(client)
+register_cleanup(support_agent, lambda: print("SupportAgent cleanup complete"))
+register_cleanup(triage_agent, lambda: print("TriageAgent cleanup complete"))
 
 # serve() is synchronous and blocking; starts the HTTP server
 # Test with: curl http://localhost:8000/discovery
@@ -1348,11 +1349,11 @@ import asyncio
 from agent_framework.github import GitHubCopilotAgent
 
 async def handle_permission(request, context):
-    """Approve read operations; deny all write operations."""
-    if request.permission_type in ("read", "list"):
-        return {"decision": "allow"}
-    print(f"Denying {request.permission_type} permission for: {request.resource}")
-    return {"decision": "deny"}
+    """Approve MCP tool calls; reject everything else."""
+    from copilot.generated.rpc import PermissionDecisionApproveOnce, PermissionDecisionReject
+    if request.kind == "mcp":
+        return PermissionDecisionApproveOnce()
+    return PermissionDecisionReject(feedback="Operation not permitted")
 
 async def main():
     async with GitHubCopilotAgent(
