@@ -58,7 +58,7 @@ This volume covers **ten class groups** across the core security module, Amazon 
 | 3 | `GroupChatRequestMessage` · `GroupChatRequestSentEvent` · `GroupChatResponseReceivedEvent` | `agent_framework.orchestrations` |
 | 4 | `MagenticOrchestratorEvent` · `MagenticOrchestratorEventType` · `MagenticProgressLedgerItem` | `agent_framework.orchestrations` |
 | 5 | `ReleaseCandidateFeature` · `ExperimentalWarning` · `FeatureStageWarning` | `agent_framework._feature_stage` |
-| 6 | `ToolExecutionException` · `_MCPTaskAbandoned` · `_MCPDeadlineExpired` | `agent_framework._mcp` / `._tools` |
+| 6 | `ToolExecutionException` · `_MCPTaskAbandoned` · `_MCPDeadlineExpired` | `agent_framework._mcp` / `agent_framework._tools` |
 | 7 | `AgentMiddlewareLayer` · `ChatMiddlewareLayer` | `agent_framework._middleware` |
 | 8 | `DiscoveryResponse` · `EntityInfo` · `AgentFrameworkRequest` · `OpenAIError` | `agent_framework.devui` |
 | 9 | `GroupChatState` · `AgentOrchestrationOutput` · `create_completion_message` · `clean_conversation_for_handoff` | `agent_framework.orchestrations` |
