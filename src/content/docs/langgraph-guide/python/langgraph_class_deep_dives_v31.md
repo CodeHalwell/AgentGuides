@@ -67,7 +67,6 @@ class MyState(TypedDict, total=True):
 print(get_field_default("required_field", str, MyState))              # Ellipsis
 
 # optional_field: NotRequired → returns None (optional default)
-from typing_extensions import NotRequired
 print(get_field_default("optional_field", NotRequired[str], MyState)) # None
 
 # nullable_field: _is_optional_type(str | None) = True → returns None
@@ -325,11 +324,9 @@ async def child_task():
     return cfg.get("run_name") if cfg else "no config"
 
 async def main():
-    with __import__("contextlib").suppress(Exception):
-        # Normally you'd call this from within a running graph node
-        task = create_task_in_config_context(child_task, config)
-        result = await task
-        print(result)  # child-task
+    task = create_task_in_config_context(child_task, config)
+    result = await task
+    print(result)  # child-task
 
 asyncio.run(main())
 ```
@@ -857,7 +854,7 @@ asyncio.run(main())
 | # | Class / Symbol | Module | Key insight |
 |---|---------------|--------|-------------|
 | 1 | `_is_optional_type` · `_is_required_type` · `_is_readonly_type` | `langgraph._internal._fields` | TypedDict annotation predicates; all recurse through `Annotated` wrappers |
-| 2 | `get_update_as_tuples` | `langgraph._internal._fields` | Pydantic `model_fields_set` partial-update filter; keeps only explicitly set fields |
+| 2 | `get_update_as_tuples` | `langgraph._internal._fields` | Pydantic state-update projection; non-`None` values always pass through; `None` excluded only when default is also `None` and field not explicitly set |
 | 3 | `_RunnableWithConfigStore` · `KWARGS_CONFIG_KEYS` | `langgraph._internal._runnable` | Six Protocol variants + dispatch table auto-injecting `config`/`writer`/`store`/`runtime` into node functions |
 | 4 | `StrEnum` · `set_config_context` · `create_task_in_config_context` | `langgraph._internal._runnable` | Pre-3.11 enum backport; config ContextVar propagation into copied contexts and asyncio tasks |
 | 5 | `_create_root_model` · `_remap_field_definitions` · `create_model` | `langgraph._internal._pydantic` | RootModel factory; reserved-name escaping with `private_` prefix + alias; LRU-cached model creation |
