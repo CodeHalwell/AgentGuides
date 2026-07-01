@@ -118,9 +118,7 @@ def on_rate_limit(exc: Exception) -> bool:
 
 def response_too_short(response: ModelResponse) -> bool:
     """Reject responses that contain fewer than 10 characters — likely a refusal."""
-    text = ''.join(
-        part.content for part in response.parts if hasattr(part, 'content') and isinstance(part.content, str)
-    )
+    text = response.text or ''
     return len(text.strip()) < 10
 
 
@@ -154,10 +152,7 @@ from pydantic_ai.exceptions import FallbackExceptionGroup, ModelAPIError
 
 async def content_policy_rejected(response: ModelResponse) -> bool:
     """Async handler — falls through if the model returned an empty response."""
-    for part in response.parts:
-        if hasattr(part, 'content') and part.content:
-            return False
-    return True  # no content → fall through
+    return not (response.text or '').strip()
 
 
 model = FallbackModel(
@@ -217,7 +212,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 
 @dataclass
@@ -274,7 +269,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 
 @dataclass
@@ -317,7 +312,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 toolset = FunctionToolset()
 
@@ -421,7 +416,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 DESTRUCTIVE_TOOLS = {'delete_file', 'send_email', 'execute_sql'}
 
@@ -460,7 +455,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 
 def high_cost_guard(ctx: RunContext[None], tool_def: ToolDefinition, args: dict) -> bool:
@@ -783,7 +778,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.prepared import PreparedToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 toolset = FunctionToolset()
 
@@ -829,7 +824,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.prepared import PreparedToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 
 @dataclass
@@ -870,7 +865,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.prepared import PreparedToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._run_context import RunContext
+from pydantic_ai import RunContext
 
 toolset = FunctionToolset()
 
