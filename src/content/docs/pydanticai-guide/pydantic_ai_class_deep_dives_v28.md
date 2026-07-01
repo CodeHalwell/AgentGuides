@@ -497,12 +497,14 @@ class RenamedToolset(WrapperToolset[AgentDepsT]):
 
     async def get_tools(self, ctx):
         original_to_new = {v: k for k, v in self.name_map.items()}
+        tools: dict[str, ToolsetTool] = {}
         for original_name, tool in (await super().get_tools(ctx)).items():
             if new_name := original_to_new.get(original_name):
                 # Uses dataclass.replace() — immutable update pattern
                 tools[new_name] = replace(tool, tool_def=replace(tool.tool_def, name=new_name))
             else:
                 tools[original_name] = tool
+        return tools
 
     async def call_tool(self, name, tool_args, ctx, tool):
         original_name = self.name_map.get(name, name)   # look up original
