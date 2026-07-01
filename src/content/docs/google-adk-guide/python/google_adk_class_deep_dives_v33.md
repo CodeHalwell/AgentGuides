@@ -1,6 +1,6 @@
 ---
 title: "Class deep dives — volume 33 (10 additional classes)"
-description: "Source-verified deep dives into 10 additional google-adk 2.3.0 classes: LoggingPlugin, InMemoryEvalSetsManager, _VertexAiEvalFacade hierarchy, SafetyEvaluatorV1, MultiTurnToolUseQualityV1Evaluator, session migration pipeline, AgentBuilderAssistant, yaml_utils, and the V1 SQLAlchemy schema models."
+description: "Source-verified deep dives into 10 additional google-adk 2.3.0 classes: LoggingPlugin, InMemoryEvalSetsManager, _VertexAiEvalFacade hierarchy, SafetyEvaluatorV1, MultiTurnToolUseQualityV1Evaluator, session migration pipeline, AgentBuilderAssistant, yaml_utils, V1 SQLAlchemy schema models, and env_utils."
 framework: google-adk
 language: python
 sidebar:
@@ -896,7 +896,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     #   Be concise.
     # model: gemini-2.5-pro
     # name: summariser
-    # (description absent: excluded_none=True; model not default so included)
+    # (description absent: exclude_none=True; model not default so included)
 
     loaded = load_yaml_file(path)
     print(type(loaded))  # <class 'dict'>
@@ -1096,7 +1096,7 @@ These two small functions govern ADK's feature-flag and mode-switching behaviour
 
 ### Key implementation facts (verified from source)
 
-- **`is_env_enabled(env_var_name, default='0') -> bool`** — checks `os.environ.get(env_var_name, default).lower() in ['true', '1']`. Case-insensitive; truthy only for `'true'` or `'1'`. Any other value (including `'yes'`, `'on'`, `'True'`) is falsy.
+- **`is_env_enabled(env_var_name, default='0') -> bool`** — checks `os.environ.get(env_var_name, default).lower() in ['true', '1']`. Case-insensitive; truthy for any casing of `'true'` (e.g. `'True'`, `'TRUE'`) or `'1'`. Any other value (including `'yes'`, `'on'`, `'false'`) is falsy.
 - **`default='0'`** — all ADK feature flags are disabled by default. You must explicitly opt in.
 - **`is_enterprise_mode_enabled() -> bool`** — checks `GOOGLE_GENAI_USE_ENTERPRISE` first. If absent, falls back to `GOOGLE_GENAI_USE_VERTEXAI` with a `DeprecationWarning` (stacklevel=2). If neither is set, returns `False`.
 - **`GOOGLE_GENAI_USE_VERTEXAI` is deprecated** — the old name implied Vertex AI specifically. The new `GOOGLE_GENAI_USE_ENTERPRISE` reflects broader enterprise feature gating beyond just Vertex AI.
