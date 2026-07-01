@@ -100,33 +100,35 @@ print(_is_required_type(nr))     # False
 
 ## 2 · `get_update_as_tuples`
 
-`get_update_as_tuples` in `langgraph._internal._fields` filters Pydantic model state updates so that only fields explicitly set by the node — tracked via `model_fields_set` — are written back to the graph state.
+`get_update_as_tuples` in `langgraph._internal._fields` converts a state update object into a list of `(key, value)` pairs consumed by the channel write subsystem. The inclusion rule differs between Pydantic and non-Pydantic inputs.
 
 **Key source facts** (from `langgraph/_internal/_fields.py`):
 
-- When `input` is a `BaseModel`, it reads `model_fields_set` (the set of keys the user explicitly assigned) and the `model_fields` defaults.
-- A field is included in the output only if `getattr(input, k)` is not `MISSING` **and** the value differs from the model default **or** the key is in `model_fields_set`.
-- There's a special backwards-compat rule: if `value is None` and `default is not None`, the key is dropped — this prevents un-set `None` fields from clearing existing state.
-- For non-Pydantic inputs (`TypedDict`, `dataclass`, plain dict), `keep=None` so every key whose `getattr` does not return `MISSING` is included.
+- When `input` is a `BaseModel`, it reads `model_fields_set` and the `model_fields` defaults.
+- A field is **included** when `value is not None` **OR** the field's default is not `None` **OR** the field is in `model_fields_set`. Non-None values always pass through — there is **no** `model_fields_set` filter on them.
+- A field is **excluded** only in one case: `value is None`, the field default is also `None`, and the field was **not** explicitly assigned. This backwards-compat rule prevents un-set optional fields from wiping existing state.
+- For non-Pydantic inputs (dataclasses), `keep=None` and `defaults={}`. Because `defaults.get(k, MISSING) is not None` evaluates to `True` for any key not in the empty dict, all non-MISSING `getattr` values pass through — including `None`.
+- `TypedDict` annotations create plain `dict` objects at runtime; `getattr(dict, key, MISSING)` always returns `MISSING`, so passing a TypedDict instance returns `[]`. Use a dataclass for non-Pydantic examples.
 - The function returns a `list[tuple[str, Any]]` consumed by the channel write subsystem.
 
-**Example 1 — only explicitly set fields are written**
+**Example 1 — non-None values always pass through; None with None-default is excluded**
 
 ```python
 from pydantic import BaseModel
-from typing_extensions import TypedDict
 from langgraph._internal._fields import get_update_as_tuples
 
 class AgentOutput(BaseModel):
     answer: str = ""
-    confidence: float = 1.0
-    citations: list[str] = []
+    confidence: float | None = None   # default is None
+    citations: list[str] = []         # default is non-None ([])
 
-# Only 'answer' was explicitly set
+# Only 'answer' was explicitly set; 'citations' has a non-None default value
 output = AgentOutput(answer="Paris")
 print(output.model_fields_set)  # {'answer'}
 tuples = get_update_as_tuples(output, ["answer", "confidence", "citations"])
-print(tuples)  # [('answer', 'Paris')]  ← confidence and citations are filtered out
+print(tuples)  # [('answer', 'Paris'), ('citations', [])]
+# 'confidence' is excluded: value is None, default is None, not in model_fields_set
+# 'citations' passes through: its value [] is non-None (even though not explicitly set)
 ```
 
 **Example 2 — explicit None clears a field that had a non-None default**
@@ -145,20 +147,24 @@ tuples = get_update_as_tuples(s, ["error"])
 print(tuples)  # [('error', None)]
 ```
 
-**Example 3 — TypedDict passes all keys (keep=None path)**
+**Example 3 — dataclass passes all keys including None (keep=None path)**
 
 ```python
-from typing_extensions import TypedDict
+from dataclasses import dataclass
 from langgraph._internal._fields import get_update_as_tuples
 
-class SimpleState(TypedDict):
+@dataclass
+class SimpleState:
     x: int
     y: int
+    z: str | None = None
 
-# plain dict — not a BaseModel → keep=None so all keys pass through
-d = SimpleState(x=1, y=0)
-tuples = get_update_as_tuples(d, ["x", "y"])
-print(tuples)  # [('x', 1), ('y', 0)]
+# dataclass — not a BaseModel → keep=None; defaults={} so all getattr values pass through
+d = SimpleState(x=1, y=0, z=None)
+tuples = get_update_as_tuples(d, ["x", "y", "z"])
+print(tuples)  # [('x', 1), ('y', 0), ('z', None)]
+# Note: TypedDict creates plain dicts at runtime — getattr(dict, key) always returns
+# MISSING, so passing a TypedDict instance would return []. Use dataclass instead.
 ```
 
 ---
@@ -277,7 +283,7 @@ print(isinstance(NodeKind.ROUTER, str))  # True
 print(NodeKind("tool"))              # NodeKind.TOOL
 ```
 
-**Example 2 — set_config_context propagates config to a nested call**
+**Example 2 — set_config_context propagates config to a synchronous nested call**
 
 ```python
 import asyncio
@@ -287,18 +293,21 @@ from langgraph._internal._runnable import set_config_context
 
 config: RunnableConfig = {"run_name": "my-run", "configurable": {"thread_id": "t1"}}
 
-async def nested():
-    # Reads the config ContextVar set by the parent context
+def sync_reader():
+    # ctx.run() works with synchronous callables: the body executes entirely inside ctx
     current = var_child_runnable_config.get()
     return current.get("run_name") if current else None
 
 async def main():
     with set_config_context(config) as ctx:
-        # ctx.run executes nested() inside the copied context
-        result = await ctx.run(nested)
+        # ctx.run(sync_fn) runs the function body inside the copied context
+        result = ctx.run(sync_reader)
     return result
 
 print(asyncio.run(main()))  # my-run
+# Note: ctx.run(async_fn) only creates the coroutine object inside ctx — the async
+# body executes later when awaited, in the caller's context, NOT in ctx.
+# For async propagation use create_task_in_config_context (see Example 3).
 ```
 
 **Example 3 — create_task_in_config_context propagates config to an asyncio task**
@@ -318,7 +327,7 @@ async def child_task():
 async def main():
     with __import__("contextlib").suppress(Exception):
         # Normally you'd call this from within a running graph node
-        task = create_task_in_config_context(child_task, config)
+        task = create_task_in_config_context(child_task(), config)
         result = await task
         print(result)  # child-task
 
@@ -725,7 +734,6 @@ converted2 = _convert_future_exc(exc2)
 print(type(converted2).__name__)  # TimeoutError (asyncio version)
 
 # Other exceptions pass through unchanged
-import ValueError as _v
 exc3 = ValueError("custom error")
 print(_convert_future_exc(exc3) is exc3)  # True
 ```
