@@ -89,16 +89,14 @@ asyncio.run(main())
 # ...
 ```
 
-### Example 2 — inspecting LLM errors with `on_model_error_callback`
+### Example 2 — listing all 12 callback hooks available on `LoggingPlugin`
 
 ```python
 import asyncio
-from unittest.mock import AsyncMock, patch
 from google.adk.plugins.logging_plugin import LoggingPlugin
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.genai import types
 
 
 async def main():
@@ -116,19 +114,9 @@ async def main():
         plugins=[plugin],
     )
 
-    # Simulate a transient model error by patching the LLM call.
-    # In production, on_model_error_callback fires on real API failures.
-    original_generate = None
+    await session_service.create_session(app_name="demo", user_id="u1")
 
-    async def failing_generate(*args, **kwargs):
-        raise ConnectionError("Upstream LLM unreachable")
-
-    session = await session_service.create_session(app_name="demo", user_id="u1")
-
-    # With the real model you would see:
-    # [logging_plugin] 🧠 LLM ERROR
-    # [logging_plugin]    Agent: failer
-    # [logging_plugin]    Error: <the exception>
+    # LoggingPlugin implements all 12 BasePlugin hooks.
     print("LoggingPlugin hooks:", [
         m for m in dir(plugin)
         if m.endswith("_callback")
@@ -664,7 +652,7 @@ with patch(
 
 ## 6 · Session migration pipeline — `MIGRATIONS`, `upgrade()`, `migrate_from_sqlalchemy_pickle.migrate()`
 
-**Modules:** `google.adk.sessions.migration.migration_runner`, `google.adk.sessions.migration.migrate_from_sqlalchemy_sqlite`, `google.adk.sessions.migration._schema_check_utils`
+**Modules:** `google.adk.sessions.migration.migration_runner`, `google.adk.sessions.migration.migrate_from_sqlalchemy_pickle`, `google.adk.sessions.migration._schema_check_utils`
 
 ADK's session DB has evolved through two schema versions. The migration system supports upgrading existing databases to the latest V1 JSON schema without data loss.
 
@@ -751,7 +739,7 @@ print(f"  Target: v{migration_runner.LATEST_VERSION}")
 
 # Output:
 #   Migration chain:
-#     v0 --> v1 via google.adk.sessions.migration.migrate_from_sqlalchemy_sqlite.migrate
+#     v0 --> v1 via google.adk.sessions.migration.migrate_from_sqlalchemy_pickle.migrate
 #     Target: v1
 
 # When Google adds v2, MIGRATIONS will gain a "1" -> ("2", ...) entry
@@ -770,14 +758,14 @@ print("\nupgrade() handles multi-step chains transparently via temp SQLite files
 
 ### Key implementation facts (verified from source)
 
-- **`create_agent(model, working_directory) -> LlmAgent`** — the single public entry point. Default model is `"gemini-2.5-pro"`. Returns an `LlmAgent` named `"agent_builder_assistant"` with `max_output_tokens=8192`.
+- **`create_agent(model="gemini-2.5-pro") -> LlmAgent`** — the single public entry point. Returns an `LlmAgent` named `"agent_builder_assistant"` with `max_output_tokens=8192`. Note: the `working_directory` parameter is accepted in the signature but is not read inside the function body in v2.3.0; actual working-directory resolution happens at runtime via `resolve_file_path(".", session.state)`.
 - **9 custom `FunctionTool`s** — `read_config_files`, `write_config_files`, `explore_project`, `read_files`, `write_files`, `delete_files`, `cleanup_unused_files`, `search_adk_source`, `search_adk_knowledge`. Tool declarations are generated automatically from function signatures and docstrings.
 - **2 `AgentTool` sub-agents** — `google_search_agent` and `url_context_agent` are created via `create_google_search_agent()` / `create_url_context_agent()` and wrapped with `AgentTool`. This is necessary because ADK's built-in search/context tools are implemented as sub-agents, not plain functions.
 - **Instruction is a callable** — `_load_instruction_with_schema(model)` returns a `Callable[[ReadonlyContext], str]`. At runtime, the callable reads `session.state` to resolve the working directory via `resolve_file_path(".", state)` and interpolates `{project_folder_name}` and `{schema_content}` into the template.
 - **Schema embedding** — `_load_schema()` loads `AgentConfig.json` (the ADK YAML schema), extracts 9 core definition names (`LlmAgentConfig`, `LoopAgentConfig`, etc.), prunes `GenerateContentConfig` to 4 fields (`temperature`, `topP`, `topK`, `maxOutputTokens`), and formats it as a compact `\`\`\`text\`\`\`` block injected into the system prompt.
 - **`_MultilineDumper` pattern** — the schema is formatted with `textwrap.TextWrapper(width=78)` for readability in the system prompt.
 - **`root_agent` module-level singleton** — the module creates `root_agent = AgentBuilderAssistant.create_agent()` so `AgentLoader` can discover and serve the built-in assistant without explicit registration.
-- **`CORE_SCHEMA_DEF_NAMES`** — tuple of 9 schema definition names surfaced in the assistant's context. Keeps the system prompt token-efficient by omitting rarely needed definitions.
+- **`_CORE_SCHEMA_DEF_NAMES`** — tuple of 9 schema definition names surfaced in the assistant's context. Keeps the system prompt token-efficient by omitting rarely needed definitions.
 
 ### Example 1 — launch the built-in agent builder assistant
 
@@ -790,11 +778,9 @@ from google.genai import types
 
 
 async def main():
-    # Create the assistant with a custom model and working directory.
-    assistant = AgentBuilderAssistant.create_agent(
-        model="gemini-2.5-pro",
-        working_directory="/my/agents",
-    )
+    # working_directory is accepted by the signature but not read in v2.3.0;
+    # path resolution happens at call time via resolve_file_path(".", session.state).
+    assistant = AgentBuilderAssistant.create_agent(model="gemini-2.5-pro")
     print("Agent name:", assistant.name)             # agent_builder_assistant
     print("Tool count:", len(assistant.tools))       # 11 (9 function + 2 agent)
     print("Max output tokens:", assistant.generate_content_config.max_output_tokens)  # 8192
