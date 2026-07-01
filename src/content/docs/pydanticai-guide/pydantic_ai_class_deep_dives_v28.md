@@ -815,9 +815,11 @@ def translate(text: str, lang: str) -> str:
 def hide_expensive_on_first_step(
     ctx: RunContext[None], tool_defs: list[ToolDefinition]
 ) -> list[ToolDefinition]:
-    """Only expose deep_research after at least one prior tool call."""
-    if not ctx.messages:
-        # First step — keep only cheap tools
+    """Only expose deep_research after the first model step."""
+    if ctx.run_step == 0:
+        # Step 0 is the initial call — hide expensive tools until the model
+        # has had at least one exchange. ctx.messages is not reliable here
+        # because it already includes the user prompt and any message_history.
         return [d for d in tool_defs if d.name != 'deep_research']
     return tool_defs
 
