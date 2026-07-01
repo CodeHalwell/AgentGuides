@@ -390,10 +390,10 @@ def read_file(path: str) -> str:
 
 
 # All tools require human approval before execution.
-# output_type=DeferredToolRequests tells the agent to surface pending
+# output_type=[str, DeferredToolRequests] tells the agent to surface pending
 # approval requests as structured output rather than raising an exception.
 gated = ApprovalRequiredToolset(toolset=toolset)
-agent = Agent('test', toolsets=[gated], output_type=DeferredToolRequests)
+agent = Agent('test', toolsets=[gated], output_type=[str, DeferredToolRequests])
 
 
 async def main():
@@ -449,15 +449,15 @@ def requires_approval(
 
 
 gated = ApprovalRequiredToolset(toolset=toolset, approval_required_func=requires_approval)
-# output_type=DeferredToolRequests: non-destructive tools run immediately;
+# output_type=[str, DeferredToolRequests]: non-destructive tools run immediately;
 # destructive tools are surfaced as pending approvals instead of executing.
-agent = Agent('test', toolsets=[gated], output_type=DeferredToolRequests)
+agent = Agent('test', toolsets=[gated], output_type=[str, DeferredToolRequests])
 ```
 
 ### 3.3 AG-UI Human-in-the-Loop Pattern
 
 ```python
-# When using the AG-UI adapter with output_type=DeferredToolRequests, approval
+# When using the AG-UI adapter with output_type=[str, DeferredToolRequests], approval
 # requests are surfaced to the frontend as interrupt events; the user clicks
 # Approve/Deny in the UI which re-submits the run with deferred_tool_results.
 import asyncio
@@ -484,9 +484,9 @@ async def charge_card(amount_usd: float, card_token: str) -> str:
 
 gated = ApprovalRequiredToolset(toolset=toolset, approval_required_func=high_cost_guard)
 
-# output_type=DeferredToolRequests enables the AG-UI adapter to forward
+# output_type=[str, DeferredToolRequests] enables the AG-UI adapter to forward
 # approval requests to the frontend as structured interrupt events.
-agent = Agent('openai:gpt-4o', toolsets=[gated], output_type=DeferredToolRequests)
+agent = Agent('openai:gpt-4o', toolsets=[gated], output_type=[str, DeferredToolRequests])
 ```
 
 ---
@@ -1123,9 +1123,9 @@ approve_transfer = ToolDefinition(
 )
 
 ext_toolset = ExternalToolset(tool_defs=[approve_transfer])
-# output_type=DeferredToolRequests: the agent pauses when the model calls an
+# output_type=[str, DeferredToolRequests]: the agent pauses when the model calls an
 # external tool and surfaces the pending call so you can supply the result.
-agent = Agent('openai:gpt-4o', toolsets=[ext_toolset], output_type=DeferredToolRequests,
+agent = Agent('openai:gpt-4o', toolsets=[ext_toolset], output_type=[str, DeferredToolRequests],
               system_prompt='You help users with banking. Use approve_bank_transfer to initiate.')
 
 
@@ -1174,7 +1174,7 @@ collect_address = ToolDefinition(
 agent = Agent(
     'openai:gpt-4o',
     toolsets=[ExternalToolset(tool_defs=[collect_address])],
-    output_type=DeferredToolRequests,
+    output_type=[str, DeferredToolRequests],
     system_prompt='Guide the user through checkout. Collect their address first.',
 )
 ```
@@ -1201,9 +1201,9 @@ approval_tool = ToolDefinition(
 )
 
 ext = ExternalToolset(tool_defs=[approval_tool], id=TOOLSET_ID)
-# output_type=DeferredToolRequests is required to receive the external tool
+# output_type=[str, DeferredToolRequests] is required to receive the external tool
 # call so you can route it to the deferred capability system.
-agent = Agent('openai:gpt-4o', toolsets=[ext], output_type=DeferredToolRequests)
+agent = Agent('openai:gpt-4o', toolsets=[ext], output_type=[str, DeferredToolRequests])
 ```
 
 ---
