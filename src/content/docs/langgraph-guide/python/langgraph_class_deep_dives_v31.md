@@ -327,7 +327,7 @@ async def child_task():
 async def main():
     with __import__("contextlib").suppress(Exception):
         # Normally you'd call this from within a running graph node
-        task = create_task_in_config_context(child_task(), config)
+        task = create_task_in_config_context(child_task, config)
         result = await task
         print(result)  # child-task
 
@@ -504,7 +504,7 @@ These two functions in `langgraph.pregel._io` are the output projection layer �
 - `map_output_values(output_channels, pending_writes, channels)` yields a single snapshot for the whole graph step. If `output_channels` is a string: yields `read_channel(channels, output_channels)` whenever that channel appears in `pending_writes` (or when `pending_writes is True` — the "emit unconditionally" sentinel). If a list: yields the dict of all output channels whenever any of them appears in pending writes.
 - `map_output_updates(output_channels, tasks, cached=False)` groups by task. It first filters out tasks tagged with `TAG_HIDDEN` and tasks whose first write is to `ERROR` or `INTERRUPT` channels. Then, per task: if a `RETURN` sentinel is in the writes, that value is used instead of the channel write. Multi-write tasks (same channel written twice) are split into individual `{channel: value}` dicts.
 - The `cached=False` parameter is reserved for future use to distinguish live vs cached task outputs.
-- `map_output_updates` yields `dict[str, Any | dict[str, Any]]` — the outer key is the task (node) name; the inner value is either the channel value or a dict of `{channel: value}` if multiple outputs exist.
+- `map_output_updates` yields `dict[str, Any | dict[str, Any]]` — the outer key is the task (node) name; the inner value is either the channel value (single-channel output), a `{channel: value}` dict (multi-channel single-write), or a **list of `{channel: value}` dicts** when the same channel is written more than once in one step (e.g. `{"node": [{"x": 1}, {"x": 2}]}`). One-element lists are unwrapped to a single value; empty entries become `None`.
 
 **Example 1 — stream_mode="values" vs stream_mode="updates" output shape**
 
