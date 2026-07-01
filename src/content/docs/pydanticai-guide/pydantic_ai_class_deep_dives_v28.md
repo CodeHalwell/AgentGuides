@@ -223,13 +223,13 @@ class UserDeps:
 toolset = FunctionToolset[UserDeps]()
 
 
-@toolset.tool
+@toolset.tool_plain
 def list_users() -> list[str]:
     """List all registered users."""
     return ['alice', 'bob', 'carol']
 
 
-@toolset.tool
+@toolset.tool_plain
 def delete_user(username: str) -> str:
     """Permanently delete a user account."""
     return f'Deleted {username}'
@@ -288,13 +288,13 @@ async def permission_filter(ctx: RunContext[AppDeps], tool_def: ToolDefinition) 
 toolset = FunctionToolset[AppDeps]()
 
 
-@toolset.tool
+@toolset.tool_plain
 async def search(query: str) -> str:
     """Search the knowledge base."""
     return f'Results for: {query}'
 
 
-@toolset.tool
+@toolset.tool_plain
 async def delete_record(record_id: str) -> str:
     """Delete a database record."""
     return f'Deleted {record_id}'
@@ -317,13 +317,13 @@ from pydantic_ai import RunContext
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 def cheap_lookup(q: str) -> str:
     """Fast, cheap knowledge lookup."""
     return f'Quick answer: {q}'
 
 
-@toolset.tool
+@toolset.tool_plain
 def expensive_api_call(q: str) -> str:
     """Calls a paid third-party API."""
     return f'Expensive answer: {q}'
@@ -369,40 +369,48 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
-from pydantic_ai.exceptions import ApprovalRequired
 
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 def send_email(to: str, subject: str, body: str) -> str:
     """Send an email to a recipient."""
     return f'Email sent to {to}'
 
 
-@toolset.tool
+@toolset.tool_plain
 def read_file(path: str) -> str:
     """Read a file from disk."""
     with open(path) as f:
         return f.read()
 
 
-# All tools require human approval before execution
+# All tools require human approval before execution.
+# output_type=DeferredToolRequests tells the agent to surface pending
+# approval requests as structured output rather than raising an exception.
 gated = ApprovalRequiredToolset(toolset=toolset)
-agent = Agent('test', toolsets=[gated])
+agent = Agent('test', toolsets=[gated], output_type=DeferredToolRequests)
 
 
 async def main():
-    try:
-        result = await agent.run('Send a welcome email to alice@example.com')
+    result = await agent.run('Send a welcome email to alice@example.com')
+    if isinstance(result.output, DeferredToolRequests):
+        # Show the pending approval requests to the user
+        for call in result.output.approvals:
+            print(f'Approval required: {call.tool_name}({call.args_as_dict()})')
+        # User approves — build results and resume the run
+        tool_results = result.output.build_results(approve_all=True)
+        final = await agent.run(
+            message_history=result.all_messages(),
+            deferred_tool_results=tool_results,
+        )
+        print(final.output)
+    else:
         print(result.output)
-    except ApprovalRequired as e:
-        print(f'Approval required: {e}')
-        # In a real app, display the pending call to the user here,
-        # collect their decision, then re-run with tool_call_approved=True.
 
 
 asyncio.run(main())
@@ -412,24 +420,23 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai import RunContext
 
 DESTRUCTIVE_TOOLS = {'delete_file', 'send_email', 'execute_sql'}
 
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 def search_docs(query: str) -> list[str]:
     """Search documentation."""
     return [f'Doc about {query}']
 
 
-@toolset.tool
+@toolset.tool_plain
 def delete_file(path: str) -> str:
     """Delete a file from disk."""
     return f'Deleted {path}'
@@ -442,20 +449,22 @@ def requires_approval(
 
 
 gated = ApprovalRequiredToolset(toolset=toolset, approval_required_func=requires_approval)
-agent = Agent('test', toolsets=[gated])
+# output_type=DeferredToolRequests: non-destructive tools run immediately;
+# destructive tools are surfaced as pending approvals instead of executing.
+agent = Agent('test', toolsets=[gated], output_type=DeferredToolRequests)
 ```
 
 ### 3.3 AG-UI Human-in-the-Loop Pattern
 
 ```python
-# When using the AG-UI adapter, ApprovalRequired is surfaced to the frontend
-# as an interrupt event; the user clicks Approve/Deny in the UI.
+# When using the AG-UI adapter with output_type=DeferredToolRequests, approval
+# requests are surfaced to the frontend as interrupt events; the user clicks
+# Approve/Deny in the UI which re-submits the run with deferred_tool_results.
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai import RunContext
 
 
 def high_cost_guard(ctx: RunContext[None], tool_def: ToolDefinition, args: dict) -> bool:
@@ -467,7 +476,7 @@ def high_cost_guard(ctx: RunContext[None], tool_def: ToolDefinition, args: dict)
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 async def charge_card(amount_usd: float, card_token: str) -> str:
     """Charge a payment card."""
     return f'Charged ${amount_usd}'
@@ -475,9 +484,9 @@ async def charge_card(amount_usd: float, card_token: str) -> str:
 
 gated = ApprovalRequiredToolset(toolset=toolset, approval_required_func=high_cost_guard)
 
-# Plug gated toolset into an AG-UI agent; the adapter converts ApprovalRequired
-# into an interrupt that the frontend resolves before re-submitting the run.
-agent = Agent('openai:gpt-4o', toolsets=[gated])
+# output_type=DeferredToolRequests enables the AG-UI adapter to forward
+# approval requests to the frontend as structured interrupt events.
+agent = Agent('openai:gpt-4o', toolsets=[gated], output_type=DeferredToolRequests)
 ```
 
 ---
@@ -549,13 +558,13 @@ from pydantic_ai.toolsets.renamed import RenamedToolset
 vendor_toolset = FunctionToolset()
 
 
-@vendor_toolset.tool
+@vendor_toolset.tool_plain
 def getUserProfile(user_id: str) -> dict:
     """Get a user profile by ID."""
     return {'id': user_id, 'name': 'Alice'}
 
 
-@vendor_toolset.tool
+@vendor_toolset.tool_plain
 def updateUserEmail(user_id: str, email: str) -> bool:
     """Update a user's email address."""
     return True
@@ -583,19 +592,19 @@ from pydantic_ai.toolsets.renamed import RenamedToolset
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 def search(query: str) -> list[str]:
     """Search the knowledge base."""
     return [f'Result for {query}']
 
 
-@toolset.tool
+@toolset.tool_plain
 def fetch_url(url: str) -> str:
     """Fetch content from a URL."""
     return 'content...'
 
 
-@toolset.tool
+@toolset.tool_plain
 def summarise(text: str) -> str:
     """Summarise a piece of text."""
     return 'summary...'
@@ -655,7 +664,7 @@ from pydantic_ai.toolsets.combined import CombinedToolset
 toolset_a = FunctionToolset()
 
 
-@toolset_a.tool
+@toolset_a.tool_plain
 def search(query: str) -> list[str]:
     """Search using provider A."""
     return [f'A: {query}']
@@ -665,7 +674,7 @@ def search(query: str) -> list[str]:
 toolset_b = FunctionToolset()
 
 
-@toolset_b.tool
+@toolset_b.tool_plain
 def search(query: str) -> list[str]:  # same name!
     """Search using provider B."""
     return [f'B: {query}']
@@ -716,13 +725,13 @@ v1_tools = FunctionToolset()
 v2_tools = FunctionToolset()
 
 
-@v1_tools.tool
+@v1_tools.tool_plain
 def analyse(text: str) -> str:
     """Analyse text (v1 — keyword based)."""
     return f'v1 analysis of: {text}'
 
 
-@v2_tools.tool
+@v2_tools.tool_plain
 def analyse(text: str) -> str:
     """Analyse text (v2 — ML powered)."""
     return f'v2 analysis of: {text}'
@@ -785,19 +794,19 @@ from pydantic_ai import RunContext
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 def quick_answer(q: str) -> str:
     """Fast local lookup."""
     return f'quick: {q}'
 
 
-@toolset.tool
+@toolset.tool_plain
 def deep_research(topic: str) -> str:
     """Thorough research — slow and expensive."""
     return f'deep: {topic}'
 
 
-@toolset.tool
+@toolset.tool_plain
 def translate(text: str, lang: str) -> str:
     """Translate text to another language."""
     return f'{text} in {lang}'
@@ -838,7 +847,7 @@ class SessionDeps:
 toolset = FunctionToolset[SessionDeps]()
 
 
-@toolset.tool
+@toolset.tool_plain
 def get_weather(city: str) -> str:
     """Get current weather for a city."""
     return f'Weather in {city}: sunny'
@@ -872,13 +881,13 @@ from pydantic_ai import RunContext
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 def beta_feature(input: str) -> str:
     """Access a beta feature."""
     return f'beta: {input}'
 
 
-@toolset.tool
+@toolset.tool_plain
 def stable_feature(input: str) -> str:
     """Access a stable feature."""
     return f'stable: {input}'
@@ -956,7 +965,7 @@ from pydantic_ai.toolsets.prefixed import PrefixedToolset
 local_tools = FunctionToolset()
 
 
-@local_tools.tool
+@local_tools.tool_plain
 def get_current_time() -> str:
     """Return the current UTC time."""
     from datetime import datetime, timezone
@@ -988,19 +997,19 @@ write_tools = FunctionToolset()
 admin_tools = FunctionToolset()
 
 
-@read_tools.tool
+@read_tools.tool_plain
 def read_doc(doc_id: str) -> str:
     """Fetch a document by ID."""
     return f'content of {doc_id}'
 
 
-@write_tools.tool
+@write_tools.tool_plain
 def create_doc(title: str, body: str) -> str:
     """Create a new document."""
     return f'created: {title}'
 
 
-@admin_tools.tool
+@admin_tools.tool_plain
 def delete_doc(doc_id: str) -> str:
     """Delete a document permanently."""
     return f'deleted {doc_id}'
@@ -1037,13 +1046,13 @@ code_tools = FunctionToolset(
 )
 
 
-@search_tools.tool
+@search_tools.tool_plain
 def web_search(query: str) -> list[str]:
     """Search the web."""
     return [f'Result: {query}']
 
 
-@code_tools.tool
+@code_tools.tool_plain
 def run_code(snippet: str) -> str:
     """Execute a Python snippet."""
     return eval(snippet)  # noqa: S307 (demo only)
@@ -1094,7 +1103,7 @@ class ExternalToolset(AbstractToolset[AgentDepsT]):
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.external import ExternalToolset
 
@@ -1114,19 +1123,42 @@ approve_transfer = ToolDefinition(
 )
 
 ext_toolset = ExternalToolset(tool_defs=[approve_transfer])
-agent = Agent('openai:gpt-4o', toolsets=[ext_toolset],
+# output_type=DeferredToolRequests: the agent pauses when the model calls an
+# external tool and surfaces the pending call so you can supply the result.
+agent = Agent('openai:gpt-4o', toolsets=[ext_toolset], output_type=DeferredToolRequests,
               system_prompt='You help users with banking. Use approve_bank_transfer to initiate.')
+
+
+async def main():
+    result = await agent.run('Transfer £500 to GB33BUKB20201555555555')
+    if isinstance(result.output, DeferredToolRequests):
+        # result.output.calls contains the external tool requests
+        for call in result.output.calls:
+            print(f'External call requested: {call.tool_name}({call.args_as_dict()})')
+        # Supply results from your external system and resume
+        tool_results = result.output.build_results(
+            calls={call.tool_call_id: {'status': 'approved'} for call in result.output.calls}
+        )
+        final = await agent.run(
+            message_history=result.all_messages(),
+            deferred_tool_results=tool_results,
+        )
+        print(final.output)
+
+
+asyncio.run(main())
 ```
 
 ### 8.2 Frontend Form Integration
 
 ```python
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.external import ExternalToolset
 
 # The frontend renders a form when the model requests this tool.
-# The user fills in the form; the frontend submits the result back.
+# The user fills in the form; the frontend submits the result back via
+# deferred_tool_results on the next agent.run() call.
 collect_address = ToolDefinition(
     name='collect_shipping_address',
     description='Display a form for the user to enter their shipping address.',
@@ -1142,6 +1174,7 @@ collect_address = ToolDefinition(
 agent = Agent(
     'openai:gpt-4o',
     toolsets=[ExternalToolset(tool_defs=[collect_address])],
+    output_type=DeferredToolRequests,
     system_prompt='Guide the user through checkout. Collect their address first.',
 )
 ```
@@ -1149,7 +1182,7 @@ agent = Agent(
 ### 8.3 Using `id` for Deferred Capability Loading
 
 ```python
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets.external import ExternalToolset
 
@@ -1168,7 +1201,9 @@ approval_tool = ToolDefinition(
 )
 
 ext = ExternalToolset(tool_defs=[approval_tool], id=TOOLSET_ID)
-agent = Agent('openai:gpt-4o', toolsets=[ext])
+# output_type=DeferredToolRequests is required to receive the external tool
+# call so you can route it to the deferred capability system.
+agent = Agent('openai:gpt-4o', toolsets=[ext], output_type=DeferredToolRequests)
 ```
 
 ---
@@ -1425,14 +1460,14 @@ from pydantic_ai.toolsets import FunctionToolset
 slow_toolset = FunctionToolset(timeout=2.0)
 
 
-@slow_toolset.tool
+@slow_toolset.tool_plain
 async def fetch_report(report_id: str) -> str:
     """Fetch a report from the data warehouse."""
     await asyncio.sleep(0.5)  # fast enough
     return f'Report {report_id}: revenue = £12,000'
 
 
-@slow_toolset.tool
+@slow_toolset.tool_plain
 async def run_heavy_query(sql: str) -> str:
     """Run an arbitrary SQL query — may be slow."""
     await asyncio.sleep(5)  # will time out
@@ -1472,19 +1507,19 @@ commit_toolset = FunctionToolset(
 validate_toolset = FunctionToolset()
 
 
-@validate_toolset.tool
+@validate_toolset.tool_plain
 def run_tests() -> str:
     """Run the test suite."""
     return 'All 142 tests passed.'
 
 
-@validate_toolset.tool
+@validate_toolset.tool_plain
 def lint_code() -> str:
     """Run the linter."""
     return 'No lint errors.'
 
 
-@commit_toolset.tool
+@commit_toolset.tool_plain
 def commit_changes(message: str) -> str:
     """Commit the current changes to version control."""
     return f'Committed: {message}'
@@ -1532,7 +1567,7 @@ class SearchResult(BaseModel):
     relevance_score: float
 
 
-@strict_toolset.tool
+@strict_toolset.tool_plain
 def structured_search(
     query: Annotated[str, Field(description='The search query string')],
     max_results: Annotated[int, Field(description='Maximum number of results to return', ge=1, le=20)] = 5,
