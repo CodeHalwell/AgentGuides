@@ -541,7 +541,7 @@ from google.adk.evaluation.multi_turn_tool_use_quality_evaluator import (
     MultiTurnToolUseQualityV1Evaluator,
 )
 from google.adk.evaluation.eval_metrics import EvalMetric
-from google.adk.evaluation.eval_case import Invocation, IntermediateData, InvocationEvent
+from google.adk.evaluation.eval_case import Invocation, InvocationEvents, InvocationEvent
 from google.genai import types
 
 metric = EvalMetric(metric_name="multi_turn_tool_use_quality", threshold=0.6)
@@ -558,7 +558,7 @@ tool_result = types.Content(parts=[
 turn1 = Invocation(
     invocation_id="t1",
     user_content=types.Content(parts=[types.Part(text="What's the weather in Paris?")]),
-    intermediate_data=IntermediateData(invocation_events=[
+    intermediate_data=InvocationEvents(invocation_events=[
         InvocationEvent(author="agent", content=tool_call),
         InvocationEvent(author="tool", content=tool_result),
     ]),
