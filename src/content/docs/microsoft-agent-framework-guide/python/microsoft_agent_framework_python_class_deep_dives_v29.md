@@ -235,7 +235,7 @@ options: BedrockChatOptions = {
 
 - `BedrockChatOptions` is a `total=False` TypedDict extending `ChatOptions`. All keys are optional. `guardrailConfig` is a Bedrock-specific key — it does **not** exist on `ChatOptions` or other provider option dicts.
 - `streamProcessingMode="sync"` makes the Converse call block until the guardrail evaluates the output, which is required when you need the trace in the response body. Use `"async"` when guardrail latency would affect perceived streaming performance.
-- `trace="enabled"` returns a `guardrailTrace` field in the Bedrock API response, which agent-framework surfaces in `ChatResponse.additional_properties["guardrailTrace"]`.
+- `trace="enabled"` returns a `guardrailTrace` field in the Bedrock API response, which agent-framework surfaces in `AgentResponse.additional_properties["guardrailTrace"]`.
 - Guardrails apply at the model level: the policy — topic denial, content filters, PII anonymization, grounding checks — is configured in the AWS console or via `bedrock:CreateGuardrail`, not in agent code.
 
 ### Code examples
@@ -1111,7 +1111,7 @@ class GroupChatState:
     conversation: list[Message]             # full history up to this point
 ```
 
-Passed to the **selection function** in `GroupChatBuilder.with_selection_function(fn)`. The selection function receives the current state and returns the name of the next speaker. `frozen=True` prevents accidental mutation during selection.
+Passed to the **selection function** via the `selection_func=` constructor argument on `GroupChatBuilder`. The selection function receives the current state and returns the name of the next speaker. `frozen=True` prevents accidental mutation during selection.
 
 ### `AgentOrchestrationOutput` — strict structured output for LLM-based selection
 
