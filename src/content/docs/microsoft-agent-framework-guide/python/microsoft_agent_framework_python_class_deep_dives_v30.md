@@ -138,16 +138,22 @@ debug_path = viz.export(
 )
 ```
 
-### `display(include_internal_executors=False)`
+### `save_svg` / `save_png` / `save_pdf` — convenience savers
 
-Renders the SVG inline in a Jupyter notebook cell via `IPython.display`. Raises `ImportError` when called outside a Jupyter environment.
+Each is a thin wrapper around `export(format=…)` that returns the saved file path. Use `save_svg` + `IPython.display.SVG` to render inline in Jupyter — `WorkflowViz` has no `display()` method.
 
 ```python
 # In a Jupyter notebook cell:
 from agent_framework._workflows._viz import WorkflowViz
+from IPython.display import SVG, display
+
 viz = WorkflowViz(wf)
-viz.display()          # renders inline SVG
-viz.display(include_internal_executors=True)  # include routing internals
+svg_path = viz.save_svg("pipeline.svg")               # returns path string
+display(SVG(svg_path))                                 # render inline
+
+# Include internal routing executors:
+svg_path2 = viz.save_svg("pipeline_full.svg", include_internal_executors=True)
+display(SVG(svg_path2))
 ```
 
 ---
@@ -902,49 +908,41 @@ The todo harness gives an agent a structured task-tracking system with file-pers
 
 ### `TodoItem`
 
-A `SerializationMixin` dataclass with fields: `id` (int), `description` (str), `completed` (bool, default `False`).
+A `SerializationMixin` class with fields: `id` (int), `title` (str), `description` (str | None, optional), `is_complete` (bool, default `False`).
 
 ```python
 from agent_framework._harness._todo import TodoItem
 
-item = TodoItem(id=1, description="Draft the introduction section")
-print(item.completed)   # False
+item = TodoItem(id=1, title="Draft the introduction section")
+print(item.is_complete)   # False
+print(item.description)   # None
 
-# Mark done
-item.completed = True
 d = item.to_dict()
-# {"id": 1, "description": "Draft the introduction section", "completed": True}
+# {"id": 1, "title": "Draft the introduction section", "is_complete": False}
 ```
 
 ### `TodoInput` + `TodoCompleteInput`
 
-`TodoInput` carries the `description` for `todo_add`. `TodoCompleteInput` carries the `id` for `todo_complete`.
+`TodoInput` carries the `title` (+ optional `description`) for `todo_add`. `TodoCompleteInput` carries the `id` and a mandatory `reason` string for `todo_complete`.
 
 ```python
 from agent_framework._harness._todo import TodoInput, TodoCompleteInput
 
-add_input = TodoInput(description="Write conclusion")
-complete_input = TodoCompleteInput(id=3)
+add_input = TodoInput(title="Write conclusion", description="Cover key findings")
+complete_input = TodoCompleteInput(id=3, reason="Finished drafting all sections")
 ```
 
 ### `TodoFileStore` — persistent todo storage
 
-`TodoFileStore` persists todo lists to disk as JSON. It implements the `TodoStore` protocol — `load()` / `save()` / `clear()` returning/accepting `list[TodoItem]`.
+`TodoFileStore` persists todo state to disk as JSON, keyed by session + source ID. Constructor takes `base_path` (a root directory). The abstract `TodoStore` protocol defines `load_state(session, *, source_id)` → `(list[TodoItem], next_id)`, `save_state(session, items, *, next_id, source_id)`, and the convenience `load_items(session, *, source_id)`.
 
 ```python
 from agent_framework._harness._todo import TodoFileStore
 
-store = TodoFileStore(path="/tmp/agent_todos.json")
-
-await store.save([
-    TodoItem(id=1, description="Step 1"),
-    TodoItem(id=2, description="Step 2"),
-])
-
-todos = await store.load()
-print([t.description for t in todos])  # ["Step 1", "Step 2"]
-
-await store.clear()
+store = TodoFileStore(base_path="/tmp/agent_todos")
+# Files are written to: /tmp/agent_todos/<owner>/<kind>/todos.json
+# Access items via the TodoProvider tools — TodoFileStore is a backing store,
+# not a direct list API.
 ```
 
 ### Wiring `TodoProvider`
@@ -954,7 +952,7 @@ from agent_framework import Agent
 from agent_framework import TodoProvider    # public re-export
 from agent_framework._harness._todo import TodoFileStore
 
-store = TodoFileStore(path="/workspace/todos.json")
+store = TodoFileStore(base_path="/workspace/todos")
 provider = TodoProvider(store=store)
 
 agent = Agent(
