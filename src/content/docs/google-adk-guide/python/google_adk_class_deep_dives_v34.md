@@ -12,8 +12,8 @@ import { Aside } from "@astrojs/starlight/components";
 
 <Aside type="note">
 All signatures, constants, and behaviours on this page were verified directly
-against the installed package source at
-`/usr/local/lib/python3.11/dist-packages/google/adk/` on
+against the installed package source (locate yours with
+`python -c 'import google.adk; print(google.adk.__file__)'`) on
 **google-adk == 2.3.0**. No documentation or blog posts were used as primary
 sources.
 </Aside>
@@ -342,8 +342,13 @@ def delete_records(table: str, where_clause: str) -> dict:
       where_clause: SQL WHERE clause (without the 'WHERE' keyword).
     Returns:
       A dict with rows_deleted count.
+
+    WARNING: Never interpolate `where_clause` directly into a SQL string —
+    use parameterised queries or an allow-list of known-safe expressions to
+    prevent SQL injection and unintended destructive queries.
     """
-    # Real implementation would execute the DELETE
+    # Real implementation would use parameterised SQL, e.g.:
+    #   cursor.execute(f"DELETE FROM {table} WHERE ?", (where_clause_value,))
     return {"rows_deleted": 42, "table": table}
 
 # Only require confirmation when the where_clause is the dangerous "1=1"
@@ -444,7 +449,9 @@ Key write methods (all verified against `context.py`):
 | `await ctx.list_artifacts()` | tools + callbacks | List artifact filenames in scope |
 | `await ctx.get_artifact_version(filename, version=None)` | tools + callbacks | Metadata only |
 | `await ctx.search_memory(query)` | tools | Search long-term memory |
-| `await ctx.add_memory(events)` | callbacks (after_agent) | Ingest events into memory |
+| `await ctx.add_events_to_memory(events=events)` | callbacks (after_agent) | Ingest a list of `Event` objects into long-term memory |
+| `await ctx.add_session_to_memory()` | callbacks (after_agent) | Ingest the entire current session into long-term memory |
+| `await ctx.add_memory(memories=entries)` | callbacks (after_agent) | Inject explicit `MemoryEntry` objects directly (keyword-only) |
 | `ctx.request_confirmation(hint=None)` | tool functions | Trigger HITL confirmation |
 | `await ctx.run_node(node, input)` | `@node` functions | Dynamically invoke another node |
 | `yield RequestInput(interrupt_id=..., message=...)` | `@node` functions | Pause workflow for user input |
@@ -1194,7 +1201,7 @@ from google.adk.tools.mcp_tool import StdioConnectionParams
 
 def make_progress_callback(tool_name: str, callback_context, **kwargs):
     """Factory: returns a per-tool progress callback that logs to session state."""
-    def on_progress(progress: float, total: float | None, message: str | None):
+    async def on_progress(progress: float, total: float | None, message: str | None):
         pct = int(progress / total * 100) if total else "?"
         print(f"[{tool_name}] {pct}% — {message}", file=sys.stderr)
         # Also persist progress in session state for downstream tools to read
@@ -1371,7 +1378,7 @@ def regular_func() -> str:
     return "done"
 
 regular = FunctionTool(func=regular_func)
-print(regular.is_long_running)      # False (not set on FunctionTool base)
+print(regular.is_long_running)      # False (FunctionTool.is_long_running defaults to False)
 ```
 
 ---
@@ -1442,8 +1449,8 @@ async def shorten_draft(node_input: str, ctx) -> str:
         return " ".join(words[:100])  # trim and loop
 
 @node
-def publish(draft: str) -> str:
-    return f"[PUBLISHED] {draft}"
+def publish(node_input: str) -> str:
+    return f"[PUBLISHED] {node_input}"
 
 refine_workflow = Workflow(
     name="refine",
@@ -1491,8 +1498,8 @@ async def review(node_input: str, ctx) -> str:
     return draft
 
 @node
-def final_output(text: str) -> str:
-    return text
+def final_output(node_input: str) -> str:
+    return node_input
 
 draft_workflow = Workflow(
     name="draft_loop2",
@@ -1600,15 +1607,15 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 3 — fan-out with per-branch state isolation (using `isolation_scope`)
+### Example 3 — fan-out with parallel branches (researcher + critic)
 
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow, JoinNode, node, START
 
-# Each branch writes to state, but branches are isolated by default in Workflow.
-# The Trigger.use_sub_branch=True (default for fan-out) ensures branch A's
-# state writes don't collide with branch B's.
+# Each branch gets its own event history (use_sub_branch=True is implicit for
+# nested-tuple fan-out), but state writes are NOT isolated — use unique
+# output_key values per branch to avoid collisions.
 
 researcher = LlmAgent(
     name="researcher",
