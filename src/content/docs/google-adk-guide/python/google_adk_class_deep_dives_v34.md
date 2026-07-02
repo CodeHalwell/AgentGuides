@@ -35,7 +35,9 @@ because it carries four optional config blocks that the runner's
 ```python
 class App(BaseModel):
     name: str
-    root_agent: Union[BaseAgent, BaseNode, None] = None   # required at runtime
+    # Pydantic field default is None, but a @model_validator(mode="after")
+    # raises ValueError immediately during App(...) construction if None.
+    root_agent: Union[BaseAgent, BaseNode, None] = None
     plugins: list[BasePlugin] = []
     events_compaction_config: Optional[EventsCompactionConfig] = None
     context_cache_config: Optional[ContextCacheConfig] = None
@@ -44,8 +46,11 @@ class App(BaseModel):
 
 `validate_app_name(name)` enforces `^[a-zA-Z][a-zA-Z0-9_-]*$` and bans
 the name `"user"` (reserved for the user-message namespace in session
-state). `root_agent` must be a `BaseAgent` or `BaseNode` instance; a bare
-`None` raises `ValueError` at validation time.
+state). `root_agent` must be a `BaseAgent` or `BaseNode` instance. The
+field's Pydantic default is `None`, but a `@model_validator(mode="after")`
+fires immediately during `App(...)` construction and raises `ValueError` if
+`root_agent` is omitted or `None` — so in practice the argument is
+required.
 
 ### Example 1 — minimal App with a plugin
 
