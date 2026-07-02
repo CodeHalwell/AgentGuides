@@ -867,7 +867,7 @@ class CachingSkillsSource(DelegatingSkillsSource):
         import time
         now = time.monotonic()
         if self._cache is None or now > self._expires:
-            self._cache = await self._inner_source.get_skills()
+            self._cache = await self.inner_source.get_skills()
             self._expires = now + 60
         return self._cache
 ```
@@ -1071,14 +1071,16 @@ from agent_framework._evaluation import AgentEvalConverter
 
 msg = Message("assistant", [
     Content(type="text", text="Here is the result:"),
-    Content(type="function_call", name="search", arguments='{"q": "AI"}'),
+    # call_id is required — the converter uses it as tool_call_id
+    Content(type="function_call", name="search", arguments='{"q": "AI"}', call_id="call_abc123"),
 ])
 
 converted = AgentEvalConverter.convert_message(msg)
 # [
 #   {"role": "assistant", "content": [
 #       {"type": "text", "text": "Here is the result:"},
-#       {"type": "tool_call", "tool_call_id": "...", "function": {"name": "search", ...}}
+#       {"type": "tool_call", "tool_call_id": "call_abc123", "name": "search",
+#        "arguments": {"q": "AI"}}
 #   ]}
 # ]
 ```
