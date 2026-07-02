@@ -121,7 +121,7 @@ Returns Mermaid flowchart syntax (`flowchart TD`). Paste directly into any Merma
 mermaid_src = viz.to_mermaid()
 print(mermaid_src)
 # flowchart TD
-#   fetch["fetch"] --> summarise["summarise"]
+#   fetcher["fetcher"] --> summariser["summariser"]
 ```
 
 ### `export(format="svg", filename=None, include_internal_executors=False) → str`
@@ -620,7 +620,7 @@ AGUIChatClient
   └─ BaseChatClient             (core get_response/stream)
 ```
 
-The client maintains **thread continuity** via `thread_id` in `additional_properties` — the server is responsible for history; the client sends only the messages it receives per call.
+The client maintains **thread continuity** by reading `thread_id` from the response's `additional_properties` and passing it back on subsequent calls via `options={"metadata": {"thread_id": ...}}` — the server uses this ID to retrieve conversation history; the client sends only the messages it receives per call.
 
 ### Constructor
 
