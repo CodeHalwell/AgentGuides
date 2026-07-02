@@ -82,7 +82,7 @@ Supply domain-specific summarisation instructions and detect the compaction even
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicCompaction
-from pydantic_ai.messages import ModelResponse
+from pydantic_ai.messages import ModelResponse, CompactionPart
 
 LEGAL_INSTRUCTIONS = (
     'Preserve all cited statute numbers, party names, and ruling dates verbatim. '
@@ -107,9 +107,8 @@ async def run_with_compaction_guard(turns: list[str]) -> None:
         new_messages = result.new_messages()
         for msg in new_messages:
             if isinstance(msg, ModelResponse):
-                # Check if Anthropic stopped due to compaction
-                if any(getattr(p, 'finish_reason', None) == 'compaction'
-                       for p in getattr(msg, 'parts', [])):
+                # Check if Anthropic inserted a CompactionPart (pause_after_compaction=True)
+                if any(isinstance(p, CompactionPart) for p in msg.parts):
                     print('⚡ Compaction occurred — checkpointing state')
                     # resume logic here
         history = result.all_messages()
@@ -1511,7 +1510,7 @@ The callable `model` form (`ImageGenerationFallbackModelFunc`, `XSearchFallbackM
 
 ### 10.1 Image Generation Fallback for Non-Native Models
 
-Outer agent uses `gpt-4o-mini` (no native image gen); fallback subagent uses `dall-e-3` via `OpenAIResponsesModel`.
+Outer agent uses `gpt-4o-mini` (no native image gen); fallback subagent uses a conversational OpenAI Responses model with native image generation support.
 
 ```python  {test="skip"}
 import asyncio
@@ -1521,8 +1520,8 @@ from pydantic_ai.native_tools import ImageGenerationTool
 from pydantic_ai.messages import BinaryImage
 
 gen_tool = ImageGenerationSubagentTool(
-    model='openai-responses:gpt-image-1',  # subagent model with native image gen
-    native_tool=ImageGenerationTool(size='1024x1024', quality='standard'),
+    model='openai-responses:gpt-5.4',  # conversational model with native image gen capability
+    native_tool=ImageGenerationTool(size='1024x1024', quality='high'),
 )
 
 agent = Agent(
