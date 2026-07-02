@@ -225,9 +225,8 @@ storage = InMemoryCheckpointStorage()
 r1 = await count_words.run("hello world foo", checkpoint_storage=storage)
 checkpoint_id = r1.checkpoint_id
 
-# Resume run – @step calls return cached results (bypass event emitted)
+# Resume run – message is mutually exclusive with checkpoint_id; omit it
 r2 = await count_words.run(
-    "hello world foo",
     checkpoint_id=checkpoint_id,
     checkpoint_storage=storage,
 )
@@ -263,7 +262,6 @@ r = await agent.run("draft document text")
 if agent.pending_requests:
     req_id = next(iter(agent.pending_requests))
     r2 = await agent.run(
-        "draft document text",
         responses={req_id: "Approved — ship it."},
         checkpoint_id=r.checkpoint_id,
     )
@@ -358,7 +356,7 @@ print(r2.get_outputs())   # ["Approved text: LGTM"]
 @step
 async def fetch_data(url: str, ctx: RunContext) -> dict:
     ctx.set_state("source_url", url)          # persist across steps
-    ctx.add_event({"type": "fetching", "url": url})   # custom event
+    await ctx.add_event({"type": "fetching", "url": url})   # async — must await
     return {"content": "..."}
 
 @workflow
@@ -1098,17 +1096,17 @@ from agent_framework import LocalEvaluator, Agent
 from agent_framework._evaluation import EvalItem, CheckResult
 from agent_framework import ConversationSplit
 
-def keyword_check(item: EvalItem) -> CheckResult:
-    found = item.expected_output and item.expected_output.lower() in item.response.lower()
+def match_expected(item: EvalItem) -> CheckResult:
+    found = bool(item.expected_output and item.expected_output.lower() in item.response.lower())
     return CheckResult(
-        passed=bool(found),
+        passed=found,
         reason=f"Expected '{item.expected_output}' in response",
         check_name="keyword-match",
     )
 
-evaluator = LocalEvaluator(checks=[keyword_check])
+# LocalEvaluator takes checks as positional *args, not a checks= keyword
+evaluator = LocalEvaluator(match_expected)
 
-agent = Agent(client=client, name="qa-bot")
 item = EvalItem(
     conversation=[
         Message("user", [Content(type="text", text="Capital of France?")]),
@@ -1116,7 +1114,9 @@ item = EvalItem(
     expected_output="Paris",
 )
 
-results = await evaluator.evaluate(agent=agent, items=[item])
-for r in results:
-    print(r.passed, r.reason)
+# evaluate() takes items as positional arg; returns a single EvalResults
+result = await evaluator.evaluate([item])
+print(f"Passed: {result.passed}/{result.total}")
+for item_result in result.items:
+    print(item_result.item_id, item_result.status)   # "pass" or "fail"
 ```
