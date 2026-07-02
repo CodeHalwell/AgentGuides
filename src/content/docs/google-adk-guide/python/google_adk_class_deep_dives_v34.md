@@ -284,9 +284,9 @@ class Order(BaseModel):
     quantity: int
     shipping_address: Address
 
-# The LLM sends {"item_id": "SKU-1", "quantity": 2, "shipping_address": {"street": "..."}...}
-# FunctionTool._preprocess_args converts shipping_address dict → Address, and the whole
-# dict → Order automatically.
+# The LLM sends {"order": {"item_id": "SKU-1", "quantity": 2, "shipping_address": {"street": "..."}}}
+# The outer key must match the parameter name ("order"). _preprocess_args then
+# converts the inner dict → Order (and shipping_address dict → Address) automatically.
 def place_order(order: Order) -> dict:
     """Place a product order.
 
