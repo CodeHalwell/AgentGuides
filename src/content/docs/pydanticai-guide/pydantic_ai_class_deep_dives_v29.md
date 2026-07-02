@@ -515,9 +515,9 @@ class LoggingCapability(WrapperCapability):
         log.info('before_model_request: run_step=%s', ctx.run_step)
         return await self.wrapped.before_model_request(ctx, request_context)
 
-    async def after_node_run(self, ctx: RunContext, node):
+    async def after_node_run(self, ctx: RunContext, *, node, result):
         log.info('after_node_run: node=%s', type(node).__name__)
-        return await self.wrapped.after_node_run(ctx, node)
+        return await self.wrapped.after_node_run(ctx, node=node, result=result)
 
 
 # Base capability that holds the tools
@@ -1556,7 +1556,7 @@ def pick_xai_model(ctx: RunContext) -> str:
 x_tool = XSearchSubagentTool(
     model=pick_xai_model,         # callable factory
     native_tool=XSearchTool(
-        max_search_results=5,
+        include_output=True,       # expose raw search results programmatically
     ),
 )
 
