@@ -88,14 +88,20 @@ WorkflowViz(workflow: Workflow)
 Returns the workflow as a DOT-language string. Set `include_internal_executors=True` to expose framework-internal nodes (fan-out routing, merge nodes) that are normally hidden.
 
 ```python
-from agent_framework import Workflow, WorkflowBuilder
+from agent_framework import WorkflowBuilder, Agent
 from agent_framework import WorkflowViz
 
-builder = WorkflowBuilder()
-builder.add_executor("fetch", fetch_agent)
-builder.add_executor("summarise", summary_agent)
-builder.add_edge("fetch", "summarise")
-wf = builder.build()
+# Agent implements SupportsAgentRun and can be used as a workflow executor
+fetch_agent = Agent(client=client, name="fetcher")
+summary_agent = Agent(client=client, name="summariser")
+
+# WorkflowBuilder takes start_executor= as a keyword arg; add_edge takes
+# executor instances (not string IDs) — there is no add_executor() method
+wf = (
+    WorkflowBuilder(start_executor=fetch_agent)
+    .add_edge(fetch_agent, summary_agent)
+    .build()
+)
 
 viz = WorkflowViz(wf)
 dot_src = viz.to_digraph()
@@ -1182,6 +1188,9 @@ evaluator = LocalEvaluator(match_expected)
 item = EvalItem(
     conversation=[
         Message("user", [Content(type="text", text="Capital of France?")]),
+        # EvalItem.response is derived from assistant messages after the last
+        # user turn — without an assistant message, response is always empty
+        Message("assistant", [Content(type="text", text="Paris.")]),
     ],
     expected_output="Paris",
 )
