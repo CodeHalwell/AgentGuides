@@ -184,11 +184,22 @@ class State(TypedDict):
 def noop(state: State) -> State:
     return {}
 
+def worker_1(state: State) -> State:
+    return {}
+
+def worker_2(state: State) -> State:
+    return {}
+
 graph = (
     StateGraph(State)
     .add_node("noop", noop)
+    .add_node("worker_1", worker_1)
+    .add_node("worker_2", worker_2)
     .add_edge(START, "noop")
-    .add_edge("noop", END)
+    .add_edge("noop", "worker_1")
+    .add_edge("noop", "worker_2")
+    .add_edge("worker_1", END)
+    .add_edge("worker_2", END)
     .compile(checkpointer=InMemorySaver())
 )
 
@@ -268,6 +279,7 @@ asyncio.run(seed_thread("async-thread", 0.95))
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.config import get_stream_writer
+from langgraph.stream.transformers import CustomTransformer
 from typing_extensions import TypedDict
 
 class State(TypedDict):
@@ -288,8 +300,8 @@ graph = (
     .compile()
 )
 
-# v3 stream_events gives a GraphRunStream with .values and .custom projections
-with graph.stream_events({"step": 0}, version="v3") as run:
+# v3 stream_events: pass CustomTransformer to register the "custom" projection
+with graph.stream_events({"step": 0}, version="v3", transformers=[CustomTransformer]) as run:
     for name, item in run.interleave("values", "custom"):
         print(f"[{name}] {item}")
 # Output (order reflects actual arrival):
@@ -303,6 +315,7 @@ with graph.stream_events({"step": 0}, version="v3") as run:
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.config import get_stream_writer
+from langgraph.stream.transformers import CustomTransformer, UpdatesTransformer
 from typing_extensions import TypedDict
 
 class State(TypedDict):
@@ -326,7 +339,8 @@ graph = (
     .compile()
 )
 
-with graph.stream_events({"value": 3}, version="v3") as run:
+# Register UpdatesTransformer and CustomTransformer to expose those projections
+with graph.stream_events({"value": 3}, version="v3", transformers=[UpdatesTransformer, CustomTransformer]) as run:
     for name, item in run.interleave("updates", "custom"):
         print(f"[{name:7s}] {item}")
 # Interleaved in arrival order:
@@ -341,6 +355,7 @@ with graph.stream_events({"value": 3}, version="v3") as run:
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.config import get_stream_writer
+from langgraph.stream.transformers import CustomTransformer
 from typing_extensions import TypedDict
 
 class State(TypedDict):
@@ -361,7 +376,7 @@ graph = (
 )
 
 # Break after seeing the first custom event — the rest of the run is not consumed
-with graph.stream_events({"n": 5}, version="v3") as run:
+with graph.stream_events({"n": 5}, version="v3", transformers=[CustomTransformer]) as run:
     for name, item in run.interleave("custom", "values"):
         if name == "custom":
             print("First custom tick:", item)
@@ -437,7 +452,7 @@ graph = (
 )
 
 async def run_with_timeout(timeout: float) -> None:
-    async with graph.astream_events({"n": 0}, version="v3") as run:
+    async with await graph.astream_events({"n": 0}, version="v3") as run:
         async def collector() -> None:
             async for item in run.values:
                 print("value:", item)
@@ -496,6 +511,7 @@ with graph.stream_events({"v": 0}, version="v3") as run:
 
 ```python
 from langchain_core.tools import tool
+from langchain_core.messages import AIMessage
 from langgraph.prebuilt import ToolNode, create_react_agent
 from langgraph.prebuilt.tool_node import ToolRuntime
 
@@ -511,11 +527,10 @@ def streaming_tool(query: str, runtime: ToolRuntime) -> str:
 node = ToolNode([streaming_tool])
 # runtime.emit_output_delta is a no-op outside stream_mode="tools"
 result = node.invoke({
-    "messages": [{
-        "role": "ai",
-        "content": "",
-        "tool_calls": [{"id": "tc1", "name": "streaming_tool", "args": {"query": "langgraph"}}],
-    }]
+    "messages": [AIMessage(
+        content="",
+        tool_calls=[{"id": "tc1", "name": "streaming_tool", "args": {"query": "langgraph"}}],
+    )]
 })
 print(result["messages"][0].content)   # 'Results for: langgraph'
 ```
@@ -524,6 +539,7 @@ print(result["messages"][0].content)   # 'Results for: langgraph'
 
 ```python
 from langchain_core.tools import tool
+from langchain_core.messages import AIMessage
 from langgraph.prebuilt.tool_node import ToolRuntime
 
 @tool
@@ -541,11 +557,10 @@ def analyse(data: list[int], runtime: ToolRuntime) -> dict:
 from langgraph.prebuilt import ToolNode
 node = ToolNode([analyse])
 out = node.invoke({
-    "messages": [{
-        "role": "ai",
-        "content": "",
-        "tool_calls": [{"id": "tc1", "name": "analyse", "args": {"data": [1, 2, 3]}}],
-    }]
+    "messages": [AIMessage(
+        content="",
+        tool_calls=[{"id": "tc1", "name": "analyse", "args": {"data": [1, 2, 3]}}],
+    )]
 })
 print(out["messages"][0].content)  # '{"final_sum": 6, "count": 3}'
 ```
@@ -568,15 +583,15 @@ def smart_tool(text: str, runtime: ToolRuntime) -> str:
     return f"Processed {len(sentences)} sentences"
 
 # Demonstration: calling with ToolNode without stream_mode="tools"
+from langchain_core.messages import AIMessage
 from langgraph.prebuilt import ToolNode
-import json
 
 node = ToolNode([smart_tool])
 result = node.invoke({
-    "messages": [{
-        "role": "ai", "content": "",
-        "tool_calls": [{"id": "1", "name": "smart_tool", "args": {"text": "Hello. World."}}],
-    }]
+    "messages": [AIMessage(
+        content="",
+        tool_calls=[{"id": "1", "name": "smart_tool", "args": {"text": "Hello. World."}}],
+    )]
 })
 # No deltas received (no consumer), final result is the return value
 print(result["messages"][0].content)  # 'Processed 2 sentences'
@@ -888,8 +903,8 @@ print(retry_runtime.execution_info.node_first_attempt_time)  # 1_700_000_000.0
 
 - `path: tuple[str, ...]` — the checkpoint-namespace path of the subgraph (e.g. `("subagent", "inner")`) as a tuple of strings. Each element corresponds to one level of nesting.
 - `graph_name: str | None` — the human-readable name of the subgraph, if registered. `None` when the subgraph name is not available from the protocol event.
-- `status: str` — lifecycle status. Starts as `"started"`, transitions to `"done"` or `"error"` when `SubgraphTransformer` processes the terminal event. Useful for knowing whether to drain the handle.
-- `error: BaseException | None` — holds the exception if `status == "error"`.
+- `status: str` — lifecycle status. Starts as `"started"`, transitions to `"completed"`, `"failed"`, `"interrupted"`, or `"drained"` when `SubgraphTransformer` processes the terminal event. Useful for knowing whether to drain the handle.
+- `error: BaseException | None` — holds the exception if `status == "failed"`.
 - `trigger_call_id: str | None` — the `Call` task ID that triggered the subgraph (present only for functional-API `@task`-spawned subgraphs).
 - The pump is delegated: `_pump_next` calls `_parent_pump_fn`. You never need to drive `SubgraphRunStream` separately — iterating the parent's projections automatically advances subgraph handles too.
 - Subgraph handles are discovered via `run.extensions["subgraphs"]` which is a `StreamChannel[SubgraphRunStream]`.
@@ -1013,11 +1028,11 @@ graph = (
 )
 
 async def main():
-    async with graph.astream_events({"x": 5}, version="v3") as run:
+    async with await graph.astream_events({"x": 5}, version="v3") as run:
         # Consume parent values; subgraph handles (if any) are also advanced
         async for val in run.values:
             print("parent value:", val)
-        print("final output:", run.output)
+        print("final output:", await run.output())
 
 asyncio.run(main())
 # parent value: {'x': 10}
