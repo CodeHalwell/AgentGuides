@@ -192,8 +192,6 @@ class OpenAICompaction(AbstractCapability[AgentDepsT]):
         token_threshold: int | None = None,
         message_count_threshold: int | None = None,
         trigger: Callable[[list[ModelMessage]], bool] | None = None,
-        instructions: str | None = None,
-        pause_after_compaction: bool = False,
     ) -> None: ...
 ```
 
@@ -366,7 +364,7 @@ import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext
-from pydantic_evals.online import OnlineEvalConfig, OnlineEvaluator, EvaluationSink
+from pydantic_evals.online import OnlineEvalConfig, OnlineEvaluator, EvaluationSink, SinkPayload
 from pydantic_evals.online_capability import OnlineEvaluation
 
 # A simple dataclass sink that collects results in memory for testing
@@ -374,8 +372,9 @@ results_log: list[dict] = []
 
 @dataclass
 class LogSink(EvaluationSink):
-    async def send(self, payload) -> None:  # type: ignore[override]
-        results_log.append({'name': payload.name, 'score': payload.score})
+    async def submit(self, payload: SinkPayload) -> None:
+        for r in payload.results:
+            results_log.append({'name': r.name, 'value': r.value})
 
 @dataclass
 class ToneCheck(Evaluator):
@@ -882,25 +881,22 @@ Expose three models for user selection and log which model was chosen per reques
 
 ```python  {test="skip"}
 from pydantic_ai import Agent
-from pydantic_ai.ui._web.api import ModelInfo, ConfigureFrontend
 
 agent = Agent(
     'openai:gpt-4o-mini',
     instructions='You are a helpful assistant. Answer concisely.',
 )
 
-# Build the config object that the frontend will receive at GET /config
-config = ConfigureFrontend(
-    models=[
-        ModelInfo(id='openai:gpt-4o-mini', name='GPT-4o mini (fast)'),
-        ModelInfo(id='openai:gpt-4o', name='GPT-4o (smart)'),
-        ModelInfo(id='anthropic:claude-haiku-4-5', name='Claude Haiku'),
-    ],
-    builtin_tools=[],
+# to_web() accepts models= as a dict {label: model_id} or a list of model ids.
+# The agent's own model is always included; models= adds extra choices.
+# Internally this builds a ConfigureFrontend / ModelInfo payload served at GET /configure.
+app = agent.to_web(
+    models={
+        'GPT-4o mini (fast)': 'openai:gpt-4o-mini',
+        'GPT-4o (smart)': 'openai:gpt-4o',
+        'Claude Haiku': 'anthropic:claude-haiku-4-5',
+    }
 )
-
-# agent.to_web() mounts a Starlette app; integrate with uvicorn or FastAPI
-app = agent.to_web(frontend_config=config)
 
 if __name__ == '__main__':
     import uvicorn
