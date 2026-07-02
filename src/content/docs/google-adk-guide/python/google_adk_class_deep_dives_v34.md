@@ -142,10 +142,19 @@ asyncio.run(main())
 
 ### Example 3 — App with `ResumabilityConfig` for HITL workflows
 
-`ResumabilityConfig(is_resumable=True)` enables pause-and-resume: the
-session state is persisted when a node yields `RequestInput`, and
-`Runner.run_async` can be called again with a matching function-response
-to continue from where the workflow paused.
+`ResumabilityConfig(is_resumable=True)` enables pause-and-resume: when a
+node yields `RequestInput` the runner emits an interrupt event; calling
+`Runner.run_async` again with a matching `FunctionResponse` part resumes
+the workflow from that point.
+
+Key correctness rules:
+- The first node receives the user's initial message as **`node_input`**,
+  not a custom-named parameter (custom params are resolved from state).
+- With `rerun_on_resume=True` the node restarts from scratch on resume.
+  Read the user's answer from `ctx.resume_inputs[interrupt_id]`; the
+  `yield` expression always evaluates to `None`.
+- Turn 2 must send only a `FunctionResponse` part — mixing text and
+  function-response parts in the same message raises `ValueError`.
 
 ```python
 import asyncio
@@ -154,20 +163,25 @@ from google.adk.apps._configs import ResumabilityConfig
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow, node, START
 from google.adk.events.request_input import RequestInput
+from google.adk.workflow.utils._workflow_hitl_utils import (
+    create_request_input_response,
+    get_request_input_interrupt_ids,
+)
 from google.genai import types
 
 @node(rerun_on_resume=True)
-async def approval_gate(draft: str, ctx):
-    decision = yield RequestInput(
+async def approval_gate(node_input: str, ctx):
+    # On resume ctx.resume_inputs is populated — check before yielding.
+    if decision := ctx.resume_inputs.get("review"):
+        approved = str(decision.get("value", "no")).lower() == "yes"
+        ctx.output = node_input
+        ctx.route = "publish" if approved else "revise"
+        return
+    # First run: pause and request human approval.
+    yield RequestInput(
         interrupt_id="review",
-        message=f"Approve this draft?\n\n{draft}\n\nReply yes/no.",
+        message=f"Approve this draft?\n\n{node_input}\n\nReply yes/no.",
     )
-    # async generators cannot return a value — set output via ctx instead.
-    ctx.output = draft
-    if str(decision).strip().lower() == "yes":
-        ctx.route = "publish"
-    else:
-        ctx.route = "revise"
 
 @node
 def publish(text: str) -> str:
@@ -195,17 +209,24 @@ async def main():
     session = await runner.session_service.create_session(
         app_name="hitl_app", user_id="u1"
     )
-    # Turn 1: start the workflow
+    # Turn 1: start the workflow; capture the interrupt id from the event.
+    interrupt_id = None
     async for event in runner.run_async(
         user_id="u1", session_id=session.id,
         new_message=types.Content(role="user", parts=[types.Part(text="Draft: the sky is blue.")]),
     ):
+        ids = get_request_input_interrupt_ids(event)
+        if ids:
+            interrupt_id = ids[0]
         print(f"[turn1] {event}")
 
-    # Turn 2: resume with approval
+    # Turn 2: resume with a FunctionResponse — do NOT mix with text parts.
+    resume_part = create_request_input_response(
+        interrupt_id or "review", {"value": "yes"}
+    )
     async for event in runner.run_async(
         user_id="u1", session_id=session.id,
-        new_message=types.Content(role="user", parts=[types.Part(text="yes")]),
+        new_message=types.Content(role="user", parts=[resume_part]),
     ):
         if event.is_final_response() and event.content:
             print(f"[turn2] {event.content.parts[0].text}")
