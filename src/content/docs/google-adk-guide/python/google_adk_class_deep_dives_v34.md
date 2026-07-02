@@ -961,9 +961,14 @@ asyncio.run(main())
 
 Three constructor parameters added or clarified in 2.3.0:
 
-- **`preserve_property_names`** — default `False`. When `True`, property
-  names in request bodies are sent as-is instead of being snake_case-ified.
-  Use when the API expects `camelCase` or `PascalCase` field names.
+- **`preserve_property_names`** — default `False`. Controls the **LLM-facing
+  tool argument names**, not the outgoing HTTP request body. ADK always
+  sends the spec's `original_name` (`firstName`) in the JSON body regardless
+  of this flag. When `False` (default), property names are snake_case-ified
+  for the LLM (`firstName` → `first_name` as the tool argument). When `True`,
+  the LLM sees the original spec name (`firstName`) as the argument. Use
+  `True` when you want the LLM's argument names to match the spec exactly
+  (e.g. to avoid ambiguity with similarly named snake_case fields).
 - **`httpx_client_factory`** — zero-argument callable returning a fresh
   `httpx.AsyncClient`. Overrides per-tool default HTTP client construction.
   Enables proxies, request signing, HTTP/2, and custom transports. The
@@ -1013,8 +1018,11 @@ camel_spec = {
     },
 }
 
-# Without preserve_property_names=True, "firstName" → "first_name" in the request.
-# With preserve_property_names=True, the LLM sends "firstName" unchanged.
+# The HTTP body always uses the spec's original field names (firstName, etc.)
+# regardless of this flag — ADK maps py_name → original_name before sending.
+# preserve_property_names only changes the LLM-visible argument name:
+#   False (default): LLM calls with {"first_name": "Alice"} → body {"firstName": "Alice"}
+#   True:            LLM calls with {"firstName": "Alice"} → body {"firstName": "Alice"}
 toolset = OpenAPIToolset(
     spec_dict=camel_spec,
     preserve_property_names=True,
