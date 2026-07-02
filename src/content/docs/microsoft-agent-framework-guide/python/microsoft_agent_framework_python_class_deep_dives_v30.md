@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 30"
-description: "Source-verified deep dives into 10 class groups from agent-framework 1.10.0: WorkflowViz (DOT/Mermaid/SVG export — to_digraph include_internal_executors, to_mermaid, export format dispatch, display Jupyter helper); FunctionalWorkflow+FunctionalWorkflowAgent (functional workflow execution — @workflow decorator, streaming run() overloads, checkpoint_storage= per-run override, HITL resume via responses=+checkpoint_id=, FunctionalWorkflowAgent as agent-compatible adapter); StepWrapper+RunContext (step caching/replay — (step_name, call_index) cache key, executor_bypassed vs executed events, RunContext.request_info() HITL suspension, get_state/set_state per-run KV, add_event custom events); CompactionProvider+ContextWindowCompactionStrategy (two-phase compaction pipeline — before_strategy/after_strategy phases, DEFAULT_TOOL_EVICTION_THRESHOLD=0.5/DEFAULT_TRUNCATION_THRESHOLD=0.8, tokenizer override, keep_last_tool_call_groups); SlidingWindowStrategy+SelectiveToolCallCompactionStrategy+CharacterEstimatorTokenizer (targeted compaction — keep_last_groups+preserve_system, keep_last_tool_call_groups=0 to remove all, 4-char/token heuristic); AGUIChatClient+AGUIEventConverter (AG-UI chat integration — multi-layer MRO FunctionInvocationLayer+ChatMiddlewareLayer+ChatTelemetryLayer, thread_id continuity via additional_properties, convert_event 10+ event-type dispatch); ClassSkill+AggregatingSkillsSource+FilteringSkillsSource+DelegatingSkillsSource (skills composition — @ClassSkill.resource/@ClassSkill.script decorators, resources+scripts auto-discovery, decorator stack AggregatingSkillsSource→FilteringSkillsSource→DelegatingSkillsSource); BackgroundAgentsProvider+BackgroundTaskInfo+BackgroundTaskStatus (background task delegation — 6 tools exposed to LLM, source_id session key, wait_for_first_completion, continue_task resume, BackgroundTaskStatus RUNNING/COMPLETED/FAILED/LOST); TodoItem+TodoFileStore+TodoInput+TodoCompleteInput (structured todo tracking — SessionContext source_id, TodoFileStore persistent store, TodoItem status lifecycle, TodoProvider toolset); AgentEvalConverter+ConversationSplitter+EvalResults+EvalItem+CheckResult (evaluation pipeline — convert_message typed content, ConversationSplitter callable protocol + ConversationSplit.LAST_TURN built-in strategy, EvalResults sub_results per-agent breakdown, EvalItem query/response properties, CheckResult pass/reason/check_name) — source-verified at agent-framework 1.10.0 / 30 volumes / 300+ classes."
+description: "Source-verified deep dives into 10 class groups from agent-framework 1.10.0: WorkflowViz (DOT/Mermaid/SVG export — to_digraph include_internal_executors, to_mermaid, export format dispatch, save_svg/save_png/save_pdf + IPython.display for Jupyter rendering); FunctionalWorkflow+FunctionalWorkflowAgent (functional workflow execution — @workflow decorator, streaming run() overloads, checkpoint_storage= per-run override, HITL resume via responses=+checkpoint_id=, FunctionalWorkflowAgent as agent-compatible adapter); StepWrapper+RunContext (step caching/replay — (step_name, call_index) cache key, executor_bypassed vs executed events, RunContext.request_info() HITL suspension, get_state/set_state per-run KV, add_event custom events); CompactionProvider+ContextWindowCompactionStrategy (two-phase compaction pipeline — before_strategy/after_strategy phases, DEFAULT_TOOL_EVICTION_THRESHOLD=0.5/DEFAULT_TRUNCATION_THRESHOLD=0.8, tokenizer override, keep_last_tool_call_groups); SlidingWindowStrategy+SelectiveToolCallCompactionStrategy+CharacterEstimatorTokenizer (targeted compaction — keep_last_groups+preserve_system, keep_last_tool_call_groups=0 to remove all, 4-char/token heuristic); AGUIChatClient+AGUIEventConverter (AG-UI chat integration — multi-layer MRO FunctionInvocationLayer+ChatMiddlewareLayer+ChatTelemetryLayer, thread_id continuity via additional_properties, convert_event 10+ event-type dispatch); ClassSkill+AggregatingSkillsSource+FilteringSkillsSource+DelegatingSkillsSource (skills composition — @ClassSkill.resource/@ClassSkill.script decorators, resources+scripts auto-discovery, decorator stack AggregatingSkillsSource→FilteringSkillsSource→DelegatingSkillsSource); BackgroundAgentsProvider+BackgroundTaskInfo+BackgroundTaskStatus (background task delegation — 6 tools exposed to LLM, source_id session key, wait_for_first_completion, continue_task resume, BackgroundTaskStatus RUNNING/COMPLETED/FAILED/LOST); TodoItem+TodoFileStore+TodoInput+TodoCompleteInput (structured todo tracking — SessionContext source_id, TodoFileStore persistent store, TodoItem status lifecycle, TodoProvider toolset); AgentEvalConverter+ConversationSplitter+EvalResults+EvalItem+CheckResult (evaluation pipeline — convert_message typed content, ConversationSplitter callable protocol + ConversationSplit.LAST_TURN built-in strategy, EvalResults sub_results per-agent breakdown, EvalItem query/response properties, CheckResult pass/reason/check_name) — source-verified at agent-framework 1.10.0 / 30 volumes / 300+ classes."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -71,7 +71,7 @@ This volume covers **ten class groups** across workflow visualization, functiona
 
 **Module:** `agent_framework._workflows._viz`
 **Install:** `pip install agent-framework`
-**Import:** `from agent_framework._workflows._viz import WorkflowViz`
+**Import:** `from agent_framework import WorkflowViz`
 
 `WorkflowViz` is the built-in workflow visualization helper. It wraps a compiled `Workflow` object and exposes three output formats — Graphviz DOT, Mermaid diagram syntax, and rendered image files (SVG/PNG/PDF). The constructor stores a reference to the workflow; no graph traversal happens until you call an output method.
 
@@ -89,7 +89,7 @@ Returns the workflow as a DOT-language string. Set `include_internal_executors=T
 
 ```python
 from agent_framework import Workflow, WorkflowBuilder
-from agent_framework._workflows._viz import WorkflowViz
+from agent_framework import WorkflowViz
 
 builder = WorkflowBuilder()
 builder.add_executor("fetch", fetch_agent)
@@ -144,7 +144,7 @@ Each is a thin wrapper around `export(format=…)` that returns the saved file p
 
 ```python
 # In a Jupyter notebook cell:
-from agent_framework._workflows._viz import WorkflowViz
+from agent_framework import WorkflowViz
 from IPython.display import SVG, display
 
 viz = WorkflowViz(wf)
