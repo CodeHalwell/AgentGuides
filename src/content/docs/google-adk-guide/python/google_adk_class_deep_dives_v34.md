@@ -88,22 +88,26 @@ asyncio.run(main())
 
 ### Example 2 — App with `EventsCompactionConfig`
 
-`EventsCompactionConfig` (imported from `google.adk.apps`) controls how
-the runner summarises the conversation history when it grows long. Setting
-`compaction_interval` (in tokens) triggers rolling summarisation; the
-overlap protects continuity.
+`EventsCompactionConfig` (imported from `google.adk.apps.app`) controls how
+the runner summarises the conversation history when it grows long.
+`compaction_interval` is the number of **new user-initiated invocations** that
+must accumulate before the sliding-window compaction fires — not a token count.
+`overlap_size` is the number of preceding invocations retained for context
+continuity. To trigger token-based compaction instead, also set
+`token_threshold` + `event_retention_size`.
 
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
-from google.adk.apps import App, EventsCompactionConfig
+from google.adk.apps import App
+from google.adk.apps.app import EventsCompactionConfig
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-# Summarise once the window exceeds 8 000 tokens; keep a 1 000-token overlap
+# Compact after every 5 invocations; keep the previous 2 for context overlap.
 compaction_cfg = EventsCompactionConfig(
-    compaction_interval=8_000,
-    overlap_size=1_000,
+    compaction_interval=5,
+    overlap_size=2,
 )
 
 agent = LlmAgent(
@@ -158,11 +162,12 @@ async def approval_gate(draft: str, ctx):
         interrupt_id="review",
         message=f"Approve this draft?\n\n{draft}\n\nReply yes/no.",
     )
+    # async generators cannot return a value — set output via ctx instead.
+    ctx.output = draft
     if str(decision).strip().lower() == "yes":
         ctx.route = "publish"
-        return draft
-    ctx.route = "revise"
-    return draft
+    else:
+        ctx.route = "revise"
 
 @node
 def publish(text: str) -> str:
@@ -1072,9 +1077,11 @@ agent = LlmAgent(
 Three features worth calling out explicitly:
 
 - **`header_provider`** — a `(ReadonlyContext) -> dict[str, str]` callable.
-  Called on *every* MCP request, *after* any auth headers are added from
-  `auth_scheme`/`auth_credential`. Useful for per-turn tenant routing,
-  correlation IDs, or dynamic bearer tokens stored in session state.
+  Called on *every* MCP request. Provider headers are merged **first**; auth
+  headers from `auth_scheme`/`auth_credential` are applied **after** and win
+  on duplicate keys. Useful for per-turn tenant routing or correlation IDs;
+  avoid setting `Authorization` here if an `auth_scheme` is also configured,
+  as the auth-derived header will silently overwrite it.
 - **`use_mcp_resources`** — when `True`, ADK appends a `LoadMcpResourceTool`
   to the toolset's tool list. The model can call it to fetch named MCP
   resources (not tools) from the server.
