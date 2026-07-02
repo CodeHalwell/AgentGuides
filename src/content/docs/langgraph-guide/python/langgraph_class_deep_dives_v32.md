@@ -996,7 +996,6 @@ with graph.stream_events({"v": 3}, version="v3") as run:
 # status=completed
 # Final output: {'v': 6}
 ```
-```
 
 ### Example 3 — reading subgraph `values` projection separately
 
