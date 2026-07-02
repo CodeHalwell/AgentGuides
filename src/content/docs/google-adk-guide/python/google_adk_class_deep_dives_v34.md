@@ -20,7 +20,7 @@ sources.
 
 ---
 
-## 1 — `App` — the application container
+## 1 · `App` — the application container
 
 **Source:** `google/adk/apps/app.py`
 
@@ -244,7 +244,7 @@ asyncio.run(main())
 
 ---
 
-## 2 — `FunctionTool` — deep dive into arg handling
+## 2 · `FunctionTool` — deep dive into arg handling
 
 **Source:** `google/adk/tools/function_tool.py`
 
@@ -440,7 +440,7 @@ asyncio.run(main())
 
 ---
 
-## 3 — `Context` unified write API (= `ToolContext` = `CallbackContext`)
+## 3 · `Context` unified write API (= `ToolContext` = `CallbackContext`)
 
 **Source:** `google/adk/agents/context.py`
 
@@ -625,7 +625,7 @@ triage = Workflow(
 
 ---
 
-## 4 — `InMemoryArtifactService` — versioning CRUD
+## 4 · `InMemoryArtifactService` — versioning CRUD
 
 **Source:** `google/adk/artifacts/in_memory_artifact_service.py`
 
@@ -773,7 +773,7 @@ asyncio.run(main())
 
 ---
 
-## 5 — `Workflow.state_schema` — validated shared state
+## 5 · `Workflow.state_schema` — validated shared state
 
 **Source:** `google/adk/workflow/_workflow.py`, `google/adk/workflow/_base_node.py`
 
@@ -950,7 +950,7 @@ asyncio.run(main())
 
 ---
 
-## 6 — `OpenAPIToolset` — advanced usage
+## 6 · `OpenAPIToolset` — advanced usage
 
 **Source:** `google/adk/tools/openapi_tool/openapi_spec_parser/openapi_toolset.py`
 
@@ -1115,7 +1115,7 @@ agent = LlmAgent(
 
 ---
 
-## 7 — `McpToolset` — `header_provider`, `use_mcp_resources`, `progress_callback` factory
+## 7 · `McpToolset` — `header_provider`, `use_mcp_resources`, `progress_callback` factory
 
 **Source:** `google/adk/tools/mcp_tool/mcp_toolset.py`
 
@@ -1250,7 +1250,7 @@ agent = LlmAgent(
 
 ---
 
-## 8 — `LongRunningFunctionTool` — fire-and-forget + companion poll
+## 8 · `LongRunningFunctionTool` — fire-and-forget + companion poll
 
 **Source:** `google/adk/tools/long_running_tool.py`
 
@@ -1403,7 +1403,7 @@ print(regular.is_long_running)      # False (FunctionTool.is_long_running defaul
 
 ---
 
-## 9 — `LoopAgent` → `Workflow` migration
+## 9 · `LoopAgent` → `Workflow` migration
 
 **Source:** `google/adk/agents/loop_agent.py`
 
@@ -1534,7 +1534,7 @@ draft_workflow = Workflow(
 
 ---
 
-## 10 — `ParallelAgent` → `Workflow` fan-out migration
+## 10 · `ParallelAgent` → `Workflow` fan-out migration
 
 **Source:** `google/adk/agents/parallel_agent.py`
 
