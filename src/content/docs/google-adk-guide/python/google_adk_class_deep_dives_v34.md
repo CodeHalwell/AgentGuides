@@ -151,8 +151,11 @@ Key correctness rules:
 - The first node receives the user's initial message as **`node_input`**,
   not a custom-named parameter (custom params are resolved from state).
 - With `rerun_on_resume=True` the node restarts from scratch on resume.
-  Read the user's answer from `ctx.resume_inputs[interrupt_id]`; the
-  `yield` expression always evaluates to `None`.
+  The turn-2 message contains only a `FunctionResponse` part (no text),
+  so `node_input` is empty on the second run. **Always save the original
+  input to `ctx.state` before yielding** and restore it from state on
+  resume. Read the user's answer from `ctx.resume_inputs[interrupt_id]`;
+  the `yield` expression always evaluates to `None`.
 - Turn 2 must send only a `FunctionResponse` part — mixing text and
   function-response parts in the same message raises `ValueError`.
 
@@ -173,11 +176,15 @@ from google.genai import types
 async def approval_gate(node_input: str, ctx):
     # On resume ctx.resume_inputs is populated — check before yielding.
     if decision := ctx.resume_inputs.get("review"):
+        # node_input is empty on resume (turn-2 message has no text), so
+        # restore the original draft that was saved to state on the first run.
+        draft = ctx.state.get("hitl_draft", "")
         approved = str(decision.get("value", "no")).lower() == "yes"
-        ctx.output = node_input
+        ctx.output = draft
         ctx.route = "publish" if approved else "revise"
         return
-    # First run: pause and request human approval.
+    # First run: save draft to state so it survives the resume rerun.
+    ctx.state["hitl_draft"] = node_input
     yield RequestInput(
         interrupt_id="review",
         message=f"Approve this draft?\n\n{node_input}\n\nReply yes/no.",
