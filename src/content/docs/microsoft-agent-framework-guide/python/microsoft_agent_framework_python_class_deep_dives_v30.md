@@ -90,6 +90,9 @@ Returns the workflow as a DOT-language string. Set `include_internal_executors=T
 ```python
 from agent_framework import WorkflowBuilder, Agent
 from agent_framework import WorkflowViz
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
 
 # Agent implements SupportsAgentRun and can be used as a workflow executor
 fetch_agent = Agent(client=client, name="fetcher")
@@ -453,7 +456,9 @@ CompactionProvider(
 ```python
 from agent_framework import Agent, CompactionProvider, InMemoryHistoryProvider
 from agent_framework._compaction import ContextWindowCompactionStrategy
+from agent_framework.openai import OpenAIChatClient
 
+client = OpenAIChatClient()
 history = InMemoryHistoryProvider()
 
 strategy = ContextWindowCompactionStrategy(
@@ -541,7 +546,10 @@ aggressive = SlidingWindowStrategy(keep_last_groups=5, preserve_system=False)
 
 ```python
 from agent_framework import Agent, CompactionProvider, InMemoryHistoryProvider
+from agent_framework._compaction import SlidingWindowStrategy
+from agent_framework.openai import OpenAIChatClient
 
+client = OpenAIChatClient()
 history = InMemoryHistoryProvider()
 compaction = CompactionProvider(
     after_strategy=SlidingWindowStrategy(keep_last_groups=20),
@@ -781,8 +789,10 @@ class UnitConverterSkill(ClassSkill):
 ```python
 from agent_framework import Agent
 from agent_framework import SkillsProvider, InMemorySkillsSource
+from agent_framework.openai import OpenAIChatClient
 import asyncio
 
+client = OpenAIChatClient()
 skill = UnitConverterSkill()
 skills_source = InMemorySkillsSource([skill])
 provider = SkillsProvider(source=skills_source)
@@ -911,8 +921,10 @@ BackgroundAgentsProvider(
 ```python
 from agent_framework import Agent
 from agent_framework._harness._background_agents import BackgroundAgentsProvider
+from agent_framework.openai import OpenAIChatClient
 import asyncio
 
+client = OpenAIChatClient()
 research_agent = Agent(client=client, name="researcher")
 writer_agent = Agent(client=client, name="writer")
 
@@ -1028,8 +1040,10 @@ store = TodoFileStore(base_path="/tmp/agent_todos")
 from agent_framework import Agent
 from agent_framework import TodoProvider    # public re-export
 from agent_framework._harness._todo import TodoFileStore
+from agent_framework.openai import OpenAIChatClient
 import asyncio
 
+client = OpenAIChatClient()
 store = TodoFileStore(base_path="/workspace/todos")
 provider = TodoProvider(store=store)
 
