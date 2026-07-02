@@ -904,7 +904,7 @@ for status in BackgroundTaskStatus:
 **Import:** `from agent_framework._harness._todo import TodoItem, TodoFileStore, TodoInput, TodoCompleteInput`
 **Decorator:** `@experimental(feature_id=ExperimentalFeature.HARNESS)`
 
-The todo harness gives an agent a structured task-tracking system with file-persisted state. `TodoProvider` exposes four tools (`todo_add`, `todo_complete`, `todo_list`, `todo_clear_completed`) and manages session-scoped state via `SessionContext`.
+The todo harness gives an agent a structured task-tracking system with file-persisted state. `TodoProvider` exposes five tools (`todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, `todos_get_all`) and manages session-scoped state via a `WeakKeyDictionary`-backed per-session `asyncio.Lock`.
 
 ### `TodoItem`
 
@@ -923,7 +923,7 @@ d = item.to_dict()
 
 ### `TodoInput` + `TodoCompleteInput`
 
-`TodoInput` carries the `title` (+ optional `description`) for `todo_add`. `TodoCompleteInput` carries the `id` and a mandatory `reason` string for `todo_complete`.
+`TodoInput` carries the `title` (+ optional `description`) for `todos_add`. `TodoCompleteInput` carries the `id` and a mandatory `reason` string for `todos_complete`.
 
 ```python
 from agent_framework._harness._todo import TodoInput, TodoCompleteInput
@@ -1057,11 +1057,11 @@ results = EvalResults(
     eval_id="eval-001",
     run_id="run-abc",
     status="completed",
-    result_counts={"pass": 8, "fail": 2},
+    result_counts={"passed": 8, "failed": 2},
     report_url="https://ai.azure.com/evals/run-abc",
     per_evaluator={
-        "groundedness": {"pass": 9, "fail": 1},
-        "coherence":    {"pass": 8, "fail": 2},
+        "groundedness": {"passed": 9, "failed": 1},
+        "coherence":    {"passed": 8, "failed": 2},
     },
 )
 
@@ -1070,7 +1070,7 @@ print(f"Pass rate: {results.passed}/{results.total}")
 
 # Per-evaluator breakdown
 for name, counts in results.per_evaluator.items():
-    print(f"  {name}: {counts['pass']}/{sum(counts.values())}")
+    print(f"  {name}: {counts['passed']}/{sum(counts.values())}")
 
 # Workflow eval — per-agent sub_results
 for agent_name, sub in (results.sub_results or {}).items():
