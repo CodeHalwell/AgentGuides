@@ -383,7 +383,7 @@ from google.adk.tools import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 
-async def fetch_weather(city: str, units: str = "metric", tool_context: ToolContext = None) -> dict:
+async def fetch_weather(city: str, units: str = "metric", tool_context: ToolContext | None = None) -> dict:
     """Fetch current weather for a city.
 
     Args:
@@ -399,7 +399,7 @@ async def fetch_weather(city: str, units: str = "metric", tool_context: ToolCont
     #              input parameters are not present:\ncity\n..."}
     if tool_context:
         tool_context.state["last_weather_city"] = city
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as _client:
         # Simulated response — replace with a real weather API call
         return {"city": city, "temperature": 22, "units": units, "description": "sunny"}
 
@@ -1277,7 +1277,7 @@ async def _run_export_background(job_id: str, rows: int) -> None:
     await asyncio.sleep(5)   # simulate 5 s of work
     _jobs[job_id] = {"status": "done", "rows": rows, "file": f"/tmp/{job_id}.csv"}
 
-async def start_export(dataset: str, row_limit: int = 1000, tool_context: ToolContext = None) -> dict:
+async def start_export(dataset: str, row_limit: int = 1000, tool_context: ToolContext | None = None) -> dict:
     """Start an async data export job.
 
     Args:
@@ -1296,7 +1296,7 @@ async def start_export(dataset: str, row_limit: int = 1000, tool_context: ToolCo
 
 export_tool = LongRunningFunctionTool(func=start_export)
 
-async def check_export(dataset: str, tool_context: ToolContext = None) -> dict:
+async def check_export(dataset: str, tool_context: ToolContext | None = None) -> dict:
     """Check the status of a dataset export job.
 
     Args:
@@ -1332,7 +1332,7 @@ async def _process_video(job_id: str, video_url: str) -> None:
         if phase == "done":
             _job_store[job_id]["url"] = f"https://cdn.example.com/{job_id}.mp4"
 
-async def transcode_video(video_url: str, quality: str = "720p", tool_context: ToolContext = None) -> dict:
+async def transcode_video(video_url: str, quality: str = "720p", tool_context: ToolContext | None = None) -> dict:
     """Start a video transcoding job.
 
     Args:
@@ -1348,7 +1348,7 @@ async def transcode_video(video_url: str, quality: str = "720p", tool_context: T
     asyncio.create_task(_process_video(job_id, video_url))
     return {"status": "pending", "job_id": job_id, "quality": quality, "eta_seconds": 8}
 
-async def get_video_status(tool_context: ToolContext = None) -> dict:
+async def get_video_status(tool_context: ToolContext | None = None) -> dict:
     """Check the status of the current video transcoding job.
 
     Returns:
