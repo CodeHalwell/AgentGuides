@@ -155,11 +155,11 @@ from IPython.display import SVG, display
 
 viz = WorkflowViz(wf)
 svg_path = viz.save_svg("pipeline.svg")               # returns path string
-display(SVG(svg_path))                                 # render inline
+display(SVG(filename=svg_path))                        # filename= reads from disk; positional arg is raw markup
 
 # Include internal routing executors:
 svg_path2 = viz.save_svg("pipeline_full.svg", include_internal_executors=True)
-display(SVG(svg_path2))
+display(SVG(filename=svg_path2))
 ```
 
 ---
@@ -648,10 +648,11 @@ async def main():
     thread_id = r1.additional_properties.get("thread_id")
     print(r1.text)
 
-    # Subsequent turns — pass thread_id so server retrieves history
+    # Subsequent turns — pass thread_id so server retrieves history;
+    # get_response() has no metadata= param — pass it inside options=
     r2 = await client.get_response(
         "Multiply that by 3.",
-        metadata={"thread_id": thread_id},
+        options={"metadata": {"thread_id": thread_id}},
     )
     print(r2.text)
 
