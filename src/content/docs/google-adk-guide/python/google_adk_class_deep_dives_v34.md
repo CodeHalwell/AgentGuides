@@ -184,12 +184,12 @@ async def approval_gate(node_input: str, ctx):
     )
 
 @node
-def publish(text: str) -> str:
-    return f"[PUBLISHED] {text}"
+def publish(node_input: str) -> str:
+    return f"[PUBLISHED] {node_input}"
 
 @node
-def revise(text: str) -> str:
-    return f"[NEEDS REVISION] {text}"
+def revise(node_input: str) -> str:
+    return f"[NEEDS REVISION] {node_input}"
 
 pipeline = Workflow(
     name="review_pipeline",
@@ -572,20 +572,22 @@ async def classify_intent(query: str, ctx) -> str:
         ctx.route = "support"
     else:
         ctx.route = DEFAULT_ROUTE
-    ctx.output = query  # pass the original query downstream unchanged
-    return query  # also return explicitly so the function's return type matches
+    # Return the query as the node output; do NOT also set ctx.output —
+    # the output setter raises ValueError('Output already set...') if both
+    # the return value and ctx.output are provided.
+    return query
 
 @node
-async def billing(query: str, ctx) -> str:
-    return f"[BILLING] {query}"
+async def billing(node_input: str, ctx) -> str:
+    return f"[BILLING] {node_input}"
 
 @node
-async def support(query: str, ctx) -> str:
-    return f"[SUPPORT] {query}"
+async def support(node_input: str, ctx) -> str:
+    return f"[SUPPORT] {node_input}"
 
 @node
-async def general(query: str, ctx) -> str:
-    return f"[GENERAL] {query}"
+async def general(node_input: str, ctx) -> str:
+    return f"[GENERAL] {node_input}"
 
 triage = Workflow(
     name="triage",
@@ -1514,8 +1516,12 @@ that affect the migration:
 
 - `_create_branch_ctx_for_sub_agent` gives each sub-agent an isolated
   `invocation_context` by appending `"{parent}.{sub}"` to the `branch`
-  field. This prevents sub-agents from overwriting each other's state. The
-  `Workflow` fan-out does the same via `Trigger.use_sub_branch`.
+  field. This isolates **event history** (each branch sees its own
+  conversation events) but does **not** namespace `state_delta` — state
+  writes from parallel branches still merge into the same session state, so
+  branches that write the same state key will overwrite each other. The
+  `Workflow` fan-out exposes the same behaviour via `Trigger.use_sub_branch`;
+  use unique output keys per branch or collect results in a `JoinNode`.
 - `_merge_agent_run` uses `asyncio.TaskGroup` (Python 3.11+) or manual
   task management (3.10) with a queue + resume signal to interleave events
   from concurrent sub-agents without blocking any of them.
