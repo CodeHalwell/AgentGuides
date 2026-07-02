@@ -240,7 +240,11 @@ async def main():
         user_id="u1", session_id=session.id,
         new_message=types.Content(role="user", parts=[resume_part]),
     ):
-        if event.is_final_response() and event.content:
+        # FunctionNode return values arrive as event.output (content is None).
+        # LLM text responses arrive as event.content; check both.
+        if event.output is not None:
+            print(f"[turn2] {event.output}")
+        elif event.is_final_response() and event.content:
             print(f"[turn2] {event.content.parts[0].text}")
     await runner.close()
 
