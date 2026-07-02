@@ -588,8 +588,8 @@ The client maintains **thread continuity** via `thread_id` in `additional_proper
 
 ```python
 AGUIChatClient(
+    *,                           # all parameters are keyword-only
     endpoint: str,               # AG-UI server URL, e.g. "http://localhost:8888/"
-    *,
     http_client=None,            # optional httpx.AsyncClient
     timeout: float = 60.0,
     # inherits all BaseChatClient / middleware kwargs
