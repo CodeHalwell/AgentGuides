@@ -569,20 +569,22 @@ asyncio.run(main())
 from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
 
 @node
-async def classify_intent(query: str, ctx) -> str:
+async def classify_intent(node_input: str, ctx) -> str:
     # ctx.route controls which edge the workflow follows after this node.
     # ctx.output is the value passed to the downstream node.
     # By default ctx.output = the function's return value (if it returns one).
-    if "refund" in query.lower():
+    # Use node_input (not a custom name) so FunctionNode passes the edge
+    # payload here rather than looking it up in ctx.state.
+    if "refund" in node_input.lower():
         ctx.route = "billing"
-    elif "broken" in query.lower() or "error" in query.lower():
+    elif "broken" in node_input.lower() or "error" in node_input.lower():
         ctx.route = "support"
     else:
         ctx.route = DEFAULT_ROUTE
-    # Return the query as the node output; do NOT also set ctx.output —
+    # Return the input as the node output; do NOT also set ctx.output —
     # the output setter raises ValueError('Output already set...') if both
     # the return value and ctx.output are provided.
-    return query
+    return node_input
 
 @node
 async def billing(node_input: str, ctx) -> str:
@@ -1107,11 +1109,16 @@ agent = LlmAgent(
 Three features worth calling out explicitly:
 
 - **`header_provider`** — a `(ReadonlyContext) -> dict[str, str]` callable.
-  Called on *every* MCP request. Provider headers are merged **first**; auth
-  headers from `auth_scheme`/`auth_credential` are applied **after** and win
-  on duplicate keys. Useful for per-turn tenant routing or correlation IDs;
-  avoid setting `Authorization` here if an `auth_scheme` is also configured,
-  as the auth-derived header will silently overwrite it.
+  Called on every MCP request. **Header precedence differs by code path:**
+  - **Session creation** (`mcp_toolset.py` → `get_tools` / `get_resources`):
+    provider headers are merged first, auth headers second — **auth headers
+    win** on duplicate keys.
+  - **Individual tool calls** (`mcp_tool.py` → `_run_async_impl`): auth
+    headers are merged first, provider headers second — **provider headers
+    win** on duplicate keys.
+  Use `header_provider` for per-turn tenant routing or correlation IDs. On
+  the tool-call path a provider-supplied `Authorization` will overwrite the
+  auth-scheme-derived one, so avoid setting that key from both sources.
 - **`use_mcp_resources`** — when `True`, ADK appends a `LoadMcpResourceTool`
   to the toolset's tool list. The model can call it to fetch named MCP
   resources (not tools) from the server.
@@ -1622,7 +1629,7 @@ researcher = LlmAgent(
     model="gemini-2.5-flash",
     instruction="Research the topic and write a paragraph.",
     mode="single_turn",
-    output_key="research_result",  # writes to branch-isolated state
+    output_key="research_result",  # writes to shared session state (not isolated)
 )
 critic = LlmAgent(
     name="critic",
