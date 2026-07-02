@@ -226,8 +226,9 @@ public API:
 - **`_get_mandatory_args`** — inspects `inspect.signature` to find all
   params without defaults (excluding VAR_POSITIONAL/VAR_KEYWORD). Missing
   mandatory args short-circuit to `{"error": "...missing parameters..."}`.
-- **`require_confirmation`** — a `bool` **or** a callable receiving the
-  processed args dict and returning `bool`. When truthy:
+- **`require_confirmation`** — a `bool` **or** a callable invoked with the
+  preprocessed tool arguments as **keyword arguments** (same keys passed
+  to the tool function itself) and returning `bool`. When truthy:
   1. Calls `tool_context.request_confirmation(hint=...)`.
   2. Sets `tool_context.actions.skip_summarization = True`.
   3. Returns `{"error": "This tool call requires confirmation..."}`.
@@ -546,8 +547,7 @@ async def classify_intent(query: str, ctx) -> str:
     else:
         ctx.route = DEFAULT_ROUTE
     ctx.output = query  # pass the original query downstream unchanged
-    # (equivalent to just: return query — ctx.output is set automatically
-    # from the return value when the function returns normally)
+    return query  # also return explicitly so the function's return type matches
 
 @node
 async def billing(query: str, ctx) -> str:
