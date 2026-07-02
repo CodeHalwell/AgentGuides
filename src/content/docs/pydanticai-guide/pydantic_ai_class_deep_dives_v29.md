@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI Class Deep Dives Vol. 29"
-description: "Source-verified deep dives into 10 pydantic-ai 2.3.0 class groups: AnthropicCompaction (server-side context compaction — token_threshold, instructions, pause_after_compaction), OpenAICompaction (stateful server-side + stateless /responses/compact — message_count_threshold, custom trigger, ZDR mode), OnlineEvaluation capability (async background evaluators after every run — wrap_run, run_on_errors, disable_evaluation, EvaluationSink), WrapperCapability (transparent delegation base — apply() traversal, id inheritance, defer_loading forwarding, selective override), Capability full v2.3.0 (decorator API — @cap.tool/@cap.tool_plain/@cap.instructions, toolsets=, defer_loading=, role-scoped dispatch), ChatRequestExtra + ConfigureFrontend + ModelInfo + BuiltinToolInfo (Agent.to_web() config wire types — model selection, builtin-tool routing, camelCase API contract), CapabilityOwnedToolset (binds toolsets to capabilities — capability_id stamping, defer_loading propagation, deferred instruction gating), DeferredCapabilityLoaderToolset (framework load_capability tool — load capability by id, instruction injection, ctx.available_capability_ids guard), DynamicCapability deep patterns (async factory, None passthrough, id forwarding, feature-flag activation, per-request personalisation), ImageGenerationSubagentTool + XSearchSubagentTool (common_tools fallback pattern — subagent delegation for non-native models, ModelRetry on failure, callable model factory). All verified against pydantic-ai 2.3.0 source."
+description: "Source-verified deep dives into 10 pydantic-ai 2.3.0 class groups: AnthropicCompaction (server-side context compaction — token_threshold, instructions, pause_after_compaction), OpenAICompaction (stateful server-side + stateless /responses/compact — message_count_threshold, custom trigger, ZDR mode), OnlineEvaluation capability (async background evaluators after every run — wrap_run, run_on_errors, disable_evaluation, EvaluationSink), WrapperCapability (transparent delegation base — apply() traversal, id inheritance, defer_loading forwarding, selective override), Capability full v2.3.0 (decorator API — @cap.tool/@cap.tool_plain/@cap.instructions, toolsets=, defer_loading=, role-scoped dispatch), ChatRequestExtra + ConfigureFrontend + ModelInfo + BuiltinToolInfo (Agent.to_web() config wire types — model selection, builtin-tool routing, camelCase API contract), CapabilityOwnedToolset (binds toolsets to capabilities — capability_id stamping, defer_loading propagation, deferred instruction gating), DeferredCapabilityLoaderToolset (framework load_capability tool — load capability by id, instruction injection, ctx.capabilities resolution), DynamicCapability deep patterns (async factory, None passthrough, id forwarding, feature-flag activation, per-request personalisation), ImageGenerationSubagentTool + XSearchSubagentTool (common_tools fallback pattern — subagent delegation for non-native models, ModelRetry on failure, callable model factory). All verified against pydantic-ai 2.3.0 source."
 sidebar:
   label: "Class deep dives (Vol. 29)"
   order: 55
@@ -881,9 +881,8 @@ All four classes use `alias_generator=to_camel` for JSON serialisation: Python f
 Expose three models for user selection and log which model was chosen per request.
 
 ```python  {test="skip"}
-import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.ui._web.api import ChatRequestExtra, ModelInfo, ConfigureFrontend
+from pydantic_ai.ui._web.api import ModelInfo, ConfigureFrontend
 
 agent = Agent(
     'openai:gpt-4o-mini',
@@ -913,17 +912,13 @@ if __name__ == '__main__':
 In a custom endpoint, parse the extra request fields to select the model at run time.
 
 ```python  {test="skip"}
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.ui._web.api import ChatRequestExtra
-from pydantic_ai.models.openai import OpenAIChatModel
 
 AVAILABLE_MODELS = {
     'openai:gpt-4o-mini': 'gpt-4o-mini',
     'openai:gpt-4o':      'gpt-4o',
 }
-
-base_agent = Agent('openai:gpt-4o-mini')
 
 def parse_chat_request(body: dict) -> tuple[Agent, ChatRequestExtra]:
     """Parse inbound chat body and select the right agent configuration."""
