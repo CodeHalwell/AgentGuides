@@ -459,7 +459,7 @@ Key write methods (all verified against `context.py`):
 
 | Property / method | Available in | Purpose |
 |---|---|---|
-| `ctx.state[key] = val` | tools + callbacks | Mutate session state (app:/user:/temp: prefixes apply) |
+| `ctx.state[key] = val` | tools + callbacks | Mutate session state (`app:`, `user:`, `temp:` prefixes apply) |
 | `ctx.route = "key"` | `@node` functions | Set conditional edge for the current workflow step |
 | `ctx.output = val` | `@node` functions | Set the node's explicit output value |
 | `await ctx.save_artifact(filename, artifact)` | tools + callbacks | Save a versioned binary/text artifact |
