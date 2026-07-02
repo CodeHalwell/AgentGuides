@@ -415,7 +415,6 @@ An evaluator that also fires on errors, plus disabling evaluation inside test su
 import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelAPIError
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext
 from pydantic_evals.online import OnlineEvaluator, disable_evaluation, wait_for_evaluations
 from pydantic_evals.online_capability import OnlineEvaluation
@@ -555,13 +554,12 @@ import asyncio
 import dataclasses
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import Capability, WrapperCapability
-from pydantic_ai.exceptions import ModelRetry
 
 _sem = asyncio.Semaphore(3)  # at most 3 concurrent uses
 
 @dataclasses.dataclass
 class RateLimitedCapability(WrapperCapability):
-    """Permits at most `max_concurrent` simultaneous uses of the wrapped capability."""
+    """Permits at most 3 simultaneous uses of the wrapped capability."""
 
     async def wrap_run(self, ctx: RunContext, *, handler):
         async with _sem:
