@@ -240,7 +240,6 @@ agent = Agent(
     capabilities=[
         OpenAICompaction(
             message_count_threshold=20,  # compact when > 20 messages
-            instructions='Preserve all code snippets verbatim. Summarise discussion.',
         )
     ],
     model_settings=OpenAIResponsesModelSettings(openai_store=False),  # ZDR
@@ -844,13 +843,13 @@ asyncio.run(main())
 **Source**: `pydantic_ai/ui/_web/api.py`  
 **Export**: `from pydantic_ai.ui._web.api import ChatRequestExtra, ConfigureFrontend, ModelInfo, BuiltinToolInfo`
 
-`Agent.to_web()` launches a Starlette-based chat UI with four routes. These four Pydantic models are the wire types governing dynamic frontend configuration:
+`Agent.to_web()` launches a Starlette-based chat UI with four routes: `POST /chat`, `OPTIONS /chat`, `GET /configure`, and `GET /health`. These four Pydantic models are the wire types governing dynamic frontend configuration:
 
 | Class | Direction | Route | Purpose |
 |-------|-----------|-------|---------|
-| `ModelInfo` | server → client | `GET /config` | Available model list |
-| `BuiltinToolInfo` | server → client | `GET /config` | Available builtin tools |
-| `ConfigureFrontend` | server → client | `GET /config` | Full config payload |
+| `ModelInfo` | server → client | `GET /configure` | Available model list (nested in `ConfigureFrontend`) |
+| `BuiltinToolInfo` | server → client | `GET /configure` | Available builtin tools (nested in `ConfigureFrontend`) |
+| `ConfigureFrontend` | server → client | `GET /configure` | Full config payload |
 | `ChatRequestExtra` | client → server | `POST /chat` | Per-request model/tool overrides |
 
 ```python
