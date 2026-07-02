@@ -219,7 +219,7 @@ async def main():
     stream = count_words.run("hello world foo", stream=True)
     async for update in stream:
         print(update)
-    final = await stream
+    final = await stream.get_final_response()
 
 asyncio.run(main())
 ```
@@ -268,7 +268,7 @@ async def main():
     stream = agent.run("hello world foo", stream=True)
     async for update in stream:
         print(update.text)
-    final = await stream
+    final = await stream.get_final_response()
 
 asyncio.run(main())
 ```
