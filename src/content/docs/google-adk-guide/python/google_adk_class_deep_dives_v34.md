@@ -979,6 +979,10 @@ from google.adk.agents import LlmAgent
 camel_spec = {
     "openapi": "3.0.0",
     "info": {"title": "User API", "version": "1.0"},
+    # servers must be at the spec root — OpenApiSpecParser._collect_operations
+    # reads openapi_spec["servers"][0] before iterating paths and never reads
+    # operation-level servers.
+    "servers": [{"url": "https://api.example.com"}],
     "paths": {
         "/users": {
             "post": {
@@ -999,7 +1003,6 @@ camel_spec = {
                     }
                 },
                 "responses": {"200": {"description": "Created"}},
-                "servers": [{"url": "https://api.example.com"}],
             }
         }
     },
@@ -1032,12 +1035,12 @@ toolset_ca_path = OpenAPIToolset(
     spec_dict={
         "openapi": "3.0.0",
         "info": {"title": "Internal API", "version": "1"},
+        "servers": [{"url": "https://internal.corp.example.com"}],
         "paths": {
             "/data": {
                 "get": {
                     "operationId": "getData",
                     "responses": {"200": {"description": "OK"}},
-                    "servers": [{"url": "https://internal.corp.example.com"}],
                 }
             }
         },
@@ -1054,12 +1057,12 @@ toolset_mtls = OpenAPIToolset(
     spec_dict={
         "openapi": "3.0.0",
         "info": {"title": "Secure API", "version": "1"},
+        "servers": [{"url": "https://secure.corp.example.com"}],
         "paths": {
             "/secure": {
                 "get": {
                     "operationId": "secureEndpoint",
                     "responses": {"200": {"description": "OK"}},
-                    "servers": [{"url": "https://secure.corp.example.com"}],
                 }
             }
         },
@@ -1092,12 +1095,12 @@ toolset = OpenAPIToolset(
     spec_dict={
         "openapi": "3.0.0",
         "info": {"title": "Signed API", "version": "1"},
+        "servers": [{"url": "https://api.example.com"}],
         "paths": {
             "/items": {
                 "get": {
                     "operationId": "listItems",
                     "responses": {"200": {"description": "OK"}},
-                    "servers": [{"url": "https://api.example.com"}],
                 }
             }
         },
@@ -1142,11 +1145,16 @@ Three features worth calling out explicitly:
 
 ### Example 1 — `header_provider` for multi-tenant routing
 
+> **Transport note:** `header_provider` only works with HTTP-based transports
+> (`SseConnectionParams` / `StreamableHTTPConnectionParams`). For stdio
+> connections `MCPSessionManager._merge_headers` returns `None` and the
+> provider's headers are discarded. Use an HTTP MCP server for any scenario
+> that requires per-request headers.
+
 ```python
-from mcp import StdioServerParameters
 from google.adk.agents import LlmAgent
 from google.adk.tools import McpToolset
-from google.adk.tools.mcp_tool import StdioConnectionParams
+from google.adk.tools.mcp_tool import SseConnectionParams
 
 def tenant_headers(ctx) -> dict[str, str]:
     """Inject tenant ID and correlation ID from session state on every call."""
@@ -1157,12 +1165,12 @@ def tenant_headers(ctx) -> dict[str, str]:
         "X-Correlation-ID": correlation_id,
     }
 
+# header_provider requires an HTTP transport — SSE or StreamableHTTP.
+# The provider is called on every tool invocation; returned headers are
+# merged into the request (provider headers win on the tool-call path).
 toolset = McpToolset(
-    connection_params=StdioConnectionParams(
-        server_params=StdioServerParameters(
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp/work"],
-        ),
+    connection_params=SseConnectionParams(
+        url="https://mcp.example.com/sse",
         timeout=10.0,
     ),
     header_provider=tenant_headers,
