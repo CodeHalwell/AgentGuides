@@ -50,7 +50,7 @@ Everything in `google.adk.tools` is lazy-loaded (`tools/__init__.py`):
 | `TransferToAgentTool`, `transfer_to_agent` | Class + singleton | Injected automatically when `sub_agents` is set |
 | `McpToolset` | Class | Connects to an MCP server (also exported as `MCPToolset` for back-compat) |
 | `APIHubToolset` | Class | Wraps APIs registered in Google API Hub |
-| `ApiRegistry` | Class | Builds tools from OpenAPI specs |
+| `ApiRegistry` | Class | Wraps Cloud API Registry MCP servers as `McpToolset` instances |
 | `ToolContext` | Class | Passed to every tool via `tool_context=` |
 | `google_search` | Singleton | Built-in Google Search (Gemini-side) |
 | `url_context` | Singleton | Built-in URL context (Gemini-side) |

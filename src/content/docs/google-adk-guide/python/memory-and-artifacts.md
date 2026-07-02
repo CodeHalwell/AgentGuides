@@ -77,7 +77,9 @@ agent = LlmAgent(
 )
 ```
 
-Both tools call `memory_service.search_memory(app_name=..., user_id=..., query=...)`. Without a memory service configured, they return an empty result set (no error).
+**`preload_memory`** runs automatically before each LLM call (not invoked by the model). It wraps `ToolContext.search_memory()` in a broad `try/except` — if no `memory_service` is configured, it logs a warning and silently returns. Safe to add without a memory service.
+
+**`load_memory`** is a callable tool the model invokes explicitly. It calls `ToolContext.search_memory()` directly, which raises `ValueError('Memory service is not available.')` when the `Runner` has no `memory_service`. The model receives a tool error instead of an empty result. Always configure a `memory_service` on the `Runner` before using `load_memory`.
 
 ### Writing to memory
 
@@ -94,12 +96,16 @@ await runner.memory_service.add_events_to_memory(
     events=session.events[-2:],
 )
 
-# Or explicit facts
+# Or explicit facts — content must be a types.Content object, not a string
 from google.adk.memory.memory_entry import MemoryEntry
+from google.genai import types
 await runner.memory_service.add_memory(
     app_name="demo",
     user_id="u1",
-    memories=[MemoryEntry(content="User prefers metric units.")],
+    memories=[MemoryEntry(content=types.Content(
+        role="user",
+        parts=[types.Part(text="User prefers metric units.")],
+    ))],
 )
 ```
 
@@ -110,9 +116,13 @@ await runner.memory_service.add_memory(
 ```python
 from google.adk.memory.memory_entry import MemoryEntry
 
+from google.genai import types
 entry = MemoryEntry(
-    content="User's favourite language is Rust.",
-    timestamp=1_747_000_000.0,   # float seconds, optional
+    content=types.Content(
+        role="user",
+        parts=[types.Part(text="User's favourite language is Rust.")],
+    ),
+    timestamp="2025-05-12T00:00:00Z",   # ISO 8601 string, optional
     custom_metadata={"source": "self-report"},
 )
 ```
@@ -144,7 +154,7 @@ entry = MemoryEntry(
 | Service | Storage | Notes |
 |---|---|---|
 | `InMemoryArtifactService()` | Python dict; keeps full blobs in memory | Dev/testing |
-| `FileArtifactService(root_dir)` | Local filesystem under `root_dir/` | Versions stored as `artifacts/<session>/<filename>/v<N>`; metadata JSON alongside. Thread-safe via per-file locks |
+| `FileArtifactService(root_dir)` | Local filesystem under `root_dir/` | Versions stored as `artifacts/<session>/<filename>/v<N>`; metadata JSON alongside. **Not thread-safe** — concurrent saves to the same artifact can race (no lock between version enumeration and `mkdir`); use GCS or a single-writer process in production |
 | `GcsArtifactService(bucket_name, **kwargs)` | Google Cloud Storage bucket | `kwargs` forwarded to `google.cloud.storage.Client` |
 
 ```python
@@ -239,9 +249,284 @@ Each run saves a new version of `report.pdf`. The UI lists `list_artifact_versio
 ### 5 — RAG corpus-backed memory
 `VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The corpus is updated by a separate ingestion job (files, web pages, BigQuery). Agents retrieve only — they never mutate the corpus.
 
+## Complete examples
+
+### Example A — cross-session memory recall
+
+This shows the full lifecycle: chat, ingest the session, start a new session, and recall what was said.
+
+```python
+import asyncio
+from google.genai import types
+from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.memory import InMemoryMemoryService
+from google.adk.apps import App
+from google.adk.tools import load_memory
+
+APP_NAME = "memory_demo"
+USER_ID = "alice"
+
+agent = LlmAgent(
+    name="assistant",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a helpful assistant. Use load_memory to recall "
+        "things the user told you in previous conversations."
+    ),
+    tools=[load_memory],
+)
+
+async def main():
+    session_service = InMemorySessionService()
+    memory_service = InMemoryMemoryService()
+    app = App(name=APP_NAME, root_agent=agent)
+    runner = Runner(app=app, session_service=session_service, memory_service=memory_service)
+
+    # --- Session 1: tell the agent a fact ---
+    s1 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=s1.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="My favourite programming language is Rust.")]),
+    ):
+        if event.is_final_response():
+            print("Session 1:", event.content.parts[0].text)
+
+    # Ingest the session into memory so future sessions can recall it
+    session_1 = await session_service.get_session(
+        app_name=APP_NAME, user_id=USER_ID, session_id=s1.id
+    )
+    await memory_service.add_session_to_memory(session_1)
+
+    # --- Session 2: recall the fact ---
+    s2 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=s2.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="What is my favourite programming language?")]),
+    ):
+        if event.is_final_response():
+            print("Session 2:", event.content.parts[0].text)
+            # → "Your favourite programming language is Rust."
+
+asyncio.run(main())
+```
+
+### Example B — saving and retrieving artifacts across an agent turn
+
+```python
+import asyncio
+from google.genai import types
+from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.artifacts import FileArtifactService
+from google.adk.apps import App
+from google.adk.tools import FunctionTool, load_artifacts
+from google.adk.tools.tool_context import ToolContext
+
+APP_NAME = "artifact_demo"
+USER_ID = "bob"
+
+async def generate_report(topic: str, tool_context: ToolContext) -> dict:
+    """Generates a text report and saves it as an artifact."""
+    content = f"# Report: {topic}\n\nThis is an auto-generated report about {topic}."
+    part = types.Part(
+        inline_data=types.Blob(
+            mime_type="text/plain",
+            data=content.encode(),
+        )
+    )
+    version = await tool_context.save_artifact(
+        filename=f"{topic.lower().replace(' ', '_')}_report.txt",
+        artifact=part,
+    )
+    return {"saved": True, "filename": f"{topic.lower().replace(' ', '_')}_report.txt", "version": version}
+
+report_tool = FunctionTool(func=generate_report)
+
+agent = LlmAgent(
+    name="report_agent",
+    model="gemini-2.0-flash",
+    instruction=(
+        "Generate reports when asked. Use generate_report to save them. "
+        "Use load_artifacts to retrieve them when asked."
+    ),
+    tools=[report_tool, load_artifacts],
+)
+
+async def main():
+    session_service = InMemorySessionService()
+    artifact_service = FileArtifactService(root_dir="/tmp/adk_artifacts")
+    app = App(name=APP_NAME, root_agent=agent)
+    runner = Runner(app=app, session_service=session_service, artifact_service=artifact_service)
+    session = await session_service.create_session(
+        app_name=APP_NAME, user_id=USER_ID
+    )
+
+    # Turn 1: generate and save a report
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="Generate a report about climate change.")]),
+    ):
+        if event.is_final_response():
+            print("Turn 1:", event.content.parts[0].text)
+
+    # Turn 2: retrieve the report by asking the agent to load it
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="Show me the climate change report you generated.")]),
+    ):
+        if event.is_final_response():
+            print("Turn 2:", event.content.parts[0].text)
+
+asyncio.run(main())
+```
+
+### Example C — VertexAiMemoryBankService for semantic recall
+
+```python
+import asyncio
+from google.genai import types
+from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.memory import VertexAiMemoryBankService
+from google.adk.apps import App
+from google.adk.tools import load_memory, preload_memory
+
+# Replace with your GCP project, location, and Agent Engine ID (numeric string)
+PROJECT = "my-gcp-project"
+LOCATION = "us-central1"
+AGENT_ENGINE_ID = "1234567890"   # Numeric ID, not the full resource path
+APP_NAME = "vertex_memory_demo"
+USER_ID = "charlie"
+
+agent = LlmAgent(
+    name="vertex_assistant",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a helpful assistant. Memories from past conversations "
+        "are automatically available to you via preload_memory. "
+        "Use load_memory to search for specific information."
+    ),
+    # preload_memory runs automatically every turn — model sees memories without calling a tool
+    # load_memory lets the model explicitly query memories when needed
+    tools=[preload_memory, load_memory],
+)
+
+async def main():
+    memory_service = VertexAiMemoryBankService(
+        project=PROJECT,
+        location=LOCATION,
+        agent_engine_id=AGENT_ENGINE_ID,
+        # Optional: express_mode_api_key="..." for express mode
+    )
+    session_service = InMemorySessionService()
+    app = App(name=APP_NAME, root_agent=agent)
+    runner = Runner(app=app, session_service=session_service, memory_service=memory_service)
+
+    # Session 1 — establish user preferences
+    s1 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=s1.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="I'm a vegetarian and allergic to nuts. Keep this in mind.")]),
+    ):
+        if event.is_final_response():
+            print("S1:", event.content.parts[0].text)
+
+    # Ingest into Vertex AI Memory Bank for semantic retrieval
+    s1_obj = await session_service.get_session(
+        app_name=APP_NAME, user_id=USER_ID, session_id=s1.id
+    )
+    await memory_service.add_session_to_memory(s1_obj)
+
+    # Session 2 — the agent recalls dietary requirements via semantic search
+    s2 = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
+    async for event in runner.run_async(
+        user_id=USER_ID, session_id=s2.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="Suggest a recipe for dinner tonight.")]),
+    ):
+        if event.is_final_response():
+            # Agent should suggest a vegetarian, nut-free recipe
+            print("S2:", event.content.parts[0].text)
+
+asyncio.run(main())
+```
+
+### Example D — versioned user-scoped GCS artifacts
+
+```python
+import asyncio
+from google.genai import types
+from google.adk.artifacts import GcsArtifactService
+from google.adk.sessions import InMemorySessionService
+
+APP_NAME = "gcs_demo"
+USER_ID = "diana"
+
+async def demo_gcs_artifacts():
+    artifact_service = GcsArtifactService(bucket_name="my-adk-artifacts")
+    session_service = InMemorySessionService()
+    session = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
+
+    # Save version 0 — user-scoped (survives session deletion)
+    # Use the "user:" prefix to scope to user rather than session
+    v0 = await artifact_service.save_artifact(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        session_id=session.id,
+        filename="user:preferences.json",
+        artifact=types.Part(
+            inline_data=types.Blob(
+                mime_type="application/json",
+                data=b'{"theme": "dark", "language": "en"}',
+            )
+        ),
+    )
+    print(f"Saved version {v0}")  # → 0
+
+    # Save version 1 — updated preferences
+    v1 = await artifact_service.save_artifact(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        session_id=session.id,
+        filename="user:preferences.json",
+        artifact=types.Part(
+            inline_data=types.Blob(
+                mime_type="application/json",
+                data=b'{"theme": "light", "language": "fr"}',
+            )
+        ),
+    )
+    print(f"Saved version {v1}")  # → 1
+
+    # List all versions
+    versions = await artifact_service.list_artifact_versions(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        session_id=session.id,
+        filename="user:preferences.json",
+    )
+    for v in versions:
+        print(f"Version {v.version}: {v.canonical_uri} at {v.create_time}")
+
+    # Load a specific version
+    old_prefs = await artifact_service.load_artifact(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        session_id=session.id,
+        filename="user:preferences.json",
+        version=0,
+    )
+    print("Old prefs:", old_prefs.inline_data.data)
+
+asyncio.run(demo_gcs_artifacts())
+```
+
 ## Gotchas
 
-- The memory tools (`load_memory`, `preload_memory`) silently no-op when no `memory_service` is configured on the runner. Wire one explicitly, or you'll never see memories.
+- **`preload_memory`** silently no-ops when no `memory_service` is configured (catches all exceptions). **`load_memory`** raises `ValueError('Memory service is not available.')` — the model receives a tool error. Always wire a `memory_service` on the `Runner` before exposing `load_memory` to the model.
 - `VertexAiMemoryBankService` requires the **numeric** `agent_engine_id` (`"456"`), not the full resource path. The constructor warns if it detects a `/`.
 - `SaveFilesAsArtifactsPlugin` replaced the deprecated `RunConfig.save_input_blobs_as_artifacts`. Install the plugin on the `App` instead of toggling the flag.
 - Artifact `save_artifact` accepts a `types.Part` OR a plain dict (camelCase or snake_case); `ensure_part` normalises via Pydantic validation (`base_artifact_service.py:68-85`).
