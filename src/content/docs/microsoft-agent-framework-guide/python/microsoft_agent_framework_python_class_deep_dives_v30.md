@@ -725,21 +725,25 @@ for event in events:
 ```python
 # Lower-level: stream raw SSE events from AGUIHttpService
 from agent_framework.ag_ui import AGUIHttpService, AGUIEventConverter
+import asyncio
 
 service = AGUIHttpService("http://localhost:8888/")
 converter = AGUIEventConverter()
 
-async with service as svc:
-    async for event in svc.post_run(
-        thread_id="t-42",
-        run_id="r-1",
-        messages=[{"role": "user", "content": "Hello"}],
-    ):
-        update = converter.convert_event(event)
-        if update and update.contents:
-            for c in update.contents:
-                if c.type == "text":
-                    print(c.text, end="", flush=True)
+async def main():
+    async with service as svc:
+        async for event in svc.post_run(
+            thread_id="t-42",
+            run_id="r-1",
+            messages=[{"role": "user", "content": "Hello"}],
+        ):
+            update = converter.convert_event(event)
+            if update and update.contents:
+                for c in update.contents:
+                    if c.type == "text":
+                        print(c.text, end="", flush=True)
+
+asyncio.run(main())
 ```
 
 ---
