@@ -334,22 +334,28 @@ asyncio.run(main())
 ```python
 from google.adk.tools import FunctionTool
 
+_ALLOWED_TABLES = {"orders", "sessions", "cache"}
+
 def delete_records(table: str, where_clause: str) -> dict:
     """Delete rows from a database table.
 
     Args:
-      table: The table name.
-      where_clause: SQL WHERE clause (without the 'WHERE' keyword).
+      table: The table name (must be on the allow-list).
+      where_clause: A structured filter like 'user_id=42' or '1=1'.
     Returns:
       A dict with rows_deleted count.
 
-    WARNING: Never interpolate `where_clause` directly into a SQL string —
-    use parameterised queries or an allow-list of known-safe expressions to
-    prevent SQL injection and unintended destructive queries.
+    NOTE: `table` is validated against an allow-list — it cannot be
+    parameterised in SQL. `where_clause` is a free-form string and
+    CANNOT be substituted with a single SQL placeholder; use a
+    structured filter type (e.g. {'column': ..., 'value': ...}) in
+    production to allow safe parameterisation of individual values.
     """
-    # Real implementation would use parameterised SQL, e.g.:
-    #   cursor.execute(f"DELETE FROM {table} WHERE ?", (where_clause_value,))
-    return {"rows_deleted": 42, "table": table}
+    if table not in _ALLOWED_TABLES:
+        return {"error": f"Table '{table}' is not in the allowed list."}
+    # Stub — real code would parse where_clause into column/value pairs
+    # and use parameterised queries for the values.
+    return {"rows_deleted": 0, "table": table}
 
 # Only require confirmation when the where_clause is the dangerous "1=1"
 def needs_confirm(table: str, where_clause: str) -> bool:
