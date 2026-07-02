@@ -655,7 +655,8 @@ def idempotent_write(key: str, value: str, runtime: ToolRuntime) -> str:
     """Write to external API; skip if this is a retry within the same run."""
     ei = runtime.execution_info
     if ei is not None and ei.node_attempt > 1:
-        elapsed = time.time() - (ei.node_first_attempt_time or time.time())
+        first_ts = ei.node_first_attempt_time if ei.node_first_attempt_time is not None else time.time()
+        elapsed = time.time() - first_ts
         return f"Retry #{ei.node_attempt} — skipping write (elapsed {elapsed:.1f}s)"
 
     # First attempt: perform the expensive write
