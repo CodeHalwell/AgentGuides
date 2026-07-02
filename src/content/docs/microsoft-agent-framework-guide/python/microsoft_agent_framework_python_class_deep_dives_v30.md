@@ -281,10 +281,12 @@ import asyncio
 async def main():
     r = await agent.run("draft document text")
     if agent.pending_requests:
+        # FunctionalWorkflowAgent.run() returns AgentResponse, which does not
+        # expose checkpoint_id. Resume via responses= only — the adapter tracks
+        # the pending workflow state internally via agent.pending_requests.
         req_id = next(iter(agent.pending_requests))
         r2 = await agent.run(
             responses={req_id: "Approved — ship it."},
-            checkpoint_id=r.checkpoint_id,
         )
         print(r2.text)
 
@@ -385,10 +387,14 @@ asyncio.run(main())
 ### `RunContext` — per-run state and custom events
 
 ```python
+from agent_framework._workflows._functional import WorkflowEvent
+
 @step
 async def fetch_data(url: str, ctx: RunContext) -> dict:
     ctx.set_state("source_url", url)          # persist across steps
-    await ctx.add_event({"type": "fetching", "url": url})   # async — must await
+    # add_event() requires a WorkflowEvent, not a plain dict;
+    # use WorkflowEvent.warning() for user-generated progress messages
+    await ctx.add_event(WorkflowEvent.warning(f"fetching {url}"))
     return {"content": "..."}
 
 @workflow
