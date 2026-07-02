@@ -96,7 +96,7 @@ No urgent action is required — nothing is broken today. Before merging, the ma
 - Close/retarget the losing chain's PRs as superseded, or
 - Renumber the losing chain's volumes (and rebase its `index.mdx` edits) so both can land without collision.
 
-Affected PRs needing a decision: **Google ADK** #243, #247, #251, #255, #260 (9 total combined with PydanticAI); **PydanticAI** #244, #248, #256, #261.
+Affected PRs needing a decision: **Google ADK** #243, #247, #251, #255, #260 (10 total combined with PydanticAI); **PydanticAI** #244, #248, #252, #256, #261.
 
 LangGraph (#242→#259) and Microsoft Agent Framework (#245→#262) chains have no such issue and can be merged in sequence as-is.
 
@@ -110,5 +110,5 @@ LangGraph (#242→#259) and Microsoft Agent Framework (#245→#262) chains have 
 | Clean single-root chains | LangGraph (#242→#259), Microsoft Agent Framework (#245→#262) |
 | Colliding duplicate roots | Google ADK: #243 vs. #247-chain (both "Vol. 30", same file path) |
 | Colliding duplicate chains | PydanticAI: #244-chain vs. #256-chain (both "Vol. 28" and "Vol. 29", same file paths) |
-| PRs needing maintainer decision | 9: #243, #244, #247, #248, #251, #255, #256, #260, #261 |
+| PRs needing maintainer decision | 10: #243, #244, #247, #248, #251, #252, #255, #256, #260, #261 |
 | Recommended action | Pick one canonical chain per family (Google ADK, PydanticAI); close/retarget or renumber the other before either merges to `main` |
