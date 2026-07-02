@@ -132,7 +132,7 @@ print("channels:", passive_node.channels)   # ['a', 'c']
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import StateUpdate
 from typing_extensions import TypedDict
 
@@ -148,7 +148,7 @@ graph = (
     .add_node("inc", increment)
     .add_edge(START, "inc")
     .add_edge("inc", END)
-    .compile(checkpointer=MemorySaver())
+    .compile(checkpointer=InMemorySaver())
 )
 
 config = {"configurable": {"thread_id": "thread-1"}}
@@ -172,7 +172,7 @@ print(snapshot.values)   # {'count': 10, 'status': 'done'}
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import StateUpdate
 from typing import Annotated
 import operator
@@ -189,7 +189,7 @@ graph = (
     .add_node("noop", noop)
     .add_edge(START, "noop")
     .add_edge("noop", END)
-    .compile(checkpointer=MemorySaver())
+    .compile(checkpointer=InMemorySaver())
 )
 
 config = {"configurable": {"thread_id": "t2"}}
@@ -214,7 +214,7 @@ print(snap.values["items"])  # ['a', 'b', 'c']  (reducer applied to both)
 ```python
 import asyncio
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import StateUpdate
 from typing_extensions import TypedDict
 
@@ -230,7 +230,7 @@ async def seed_thread(thread_id: str, initial_score: float) -> None:
         .add_node("rate", rate)
         .add_edge(START, "rate")
         .add_edge("rate", END)
-        .compile(checkpointer=MemorySaver())
+        .compile(checkpointer=InMemorySaver())
     )
     config = {"configurable": {"thread_id": thread_id}}
     await graph.abulk_update_state(
@@ -604,7 +604,6 @@ print(result["messages"][0].content)  # 'Processed 2 sentences'
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode, create_react_agent
 from langgraph.prebuilt.tool_node import ToolRuntime
-from langgraph.checkpoint.memory import MemorySaver
 
 @tool
 def introspect(runtime: ToolRuntime) -> str:
