@@ -609,7 +609,7 @@ print(result["messages"][0].content)  # 'Processed 2 sentences'
 
 - `execution_info: ExecutionInfo | None` — fields: `checkpoint_id`, `checkpoint_ns`, `task_id`, `thread_id`, `run_id`, `node_attempt` (1-indexed), `node_first_attempt_time` (Unix timestamp of first attempt). The `patch(**overrides)` method returns a new `ExecutionInfo` with overridden fields (useful for testing).
 - `server_info: ServerInfo | None` — fields: `assistant_id`, `graph_id`, `user: BaseUser | None`. `None` when running open-source LangGraph without LangSmith Deployments.
-- Both are `None` for the first few nanoseconds of task preparation; always populated by the time your tool function body runs.
+- When invoked inside a running LangGraph graph, both are populated by the time your tool function body runs. In direct `ToolNode.invoke()` calls and unit-test contexts the executor is not active, so `execution_info` remains `None`; `server_info` is `None` in all local/open-source environments — it is only populated by LangGraph Server.
 - `node_attempt` increments on each retry (1, 2, 3, …). On the first attempt `node_first_attempt_time` equals the current time; on retries it stays fixed at the first attempt's timestamp, giving you the total elapsed time across all attempts.
 - `ToolRuntime` also exposes `tool_call_id`, `state`, `config`, `context`, `store`, `stream_writer`, `heartbeat`, `tools`, and `previous` — making it the most feature-rich injection surface in LangGraph.
 
@@ -915,49 +915,49 @@ print(retry_runtime.execution_info.node_first_attempt_time)  # 1_700_000_000.0
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict
 
-class Inner(TypedDict):
+class State(TypedDict):
     count: int
 
-class Outer(TypedDict):
-    count: int
-
-def inner_node(state: Inner) -> Inner:
+def step(state: State) -> State:
     return {"count": state["count"] + 10}
 
-inner_graph = (
-    StateGraph(Inner)
-    .add_node("inner", inner_node)
+# Compiled subgraph
+inner = (
+    StateGraph(State)
+    .add_node("step", step)
+    .add_edge(START, "step")
+    .add_edge("step", END)
+    .compile()
+)
+
+# Add the compiled subgraph directly as a node. SubgraphTransformer
+# (registered by default in v3) discovers it via the subgraph namespace
+# and pushes a SubgraphRunStream handle onto run.subgraphs.
+graph = (
+    StateGraph(State)
+    .add_node("inner", inner)   # CompiledStateGraph as a node
     .add_edge(START, "inner")
     .add_edge("inner", END)
     .compile()
 )
 
-def outer_node(state: Outer) -> Outer:
-    result = inner_graph.invoke({"count": state["count"]})
-    return {"count": result["count"]}
-
-graph = (
-    StateGraph(Outer)
-    .add_node("outer", outer_node)
-    .add_edge(START, "outer")
-    .add_edge("outer", END)
-    .compile()
-)
-
 with graph.stream_events({"count": 0}, version="v3") as run:
-    # Drain the main stream to populate subgraph handles
+    # Draining run.values drives the pump; subgraph handles are
+    # buffered in run.subgraphs as the inner namespace events arrive.
     for _ in run.values:
         pass
-    # Inspect subgraph handles that were discovered
-    # Note: subgraph handles may appear in run.extensions["subgraphs"]
+    # Iterate the subgraph channel after the run to inspect handles.
+    for sg in run.subgraphs:
+        print(f"path={sg.path}  name={sg.graph_name}  status={sg.status}")
     print("Run output:", run.output)
+# path=('inner',)  name=None  status=completed
+# Run output: {'count': 10}
 ```
 
 ### Example 2 — check subgraph `path` and `status` during streaming
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream.run_stream import SubgraphRunStream
 from typing_extensions import TypedDict
 
 class State(TypedDict):
@@ -966,6 +966,7 @@ class State(TypedDict):
 def worker(state: State) -> State:
     return {"v": state["v"] * 2}
 
+# Compiled subgraph added directly as a node
 sub = (
     StateGraph(State)
     .add_node("worker", worker)
@@ -974,25 +975,27 @@ sub = (
     .compile()
 )
 
-def outer(state: State) -> State:
-    r = sub.invoke({"v": state["v"]})
-    return {"v": r["v"]}
-
 graph = (
     StateGraph(State)
-    .add_node("outer", outer)
-    .add_edge(START, "outer")
-    .add_edge("outer", END)
+    .add_node("sub", sub)   # CompiledStateGraph as a node
+    .add_edge(START, "sub")
+    .add_edge("sub", END)
     .compile()
 )
 
 with graph.stream_events({"v": 3}, version="v3") as run:
-    # Drain values to complete the run
-    final = run.output
-    print("Final output:", final)
-
-# SubgraphRunStream handles track path, graph_name, and status
-# These are available via run.extensions["subgraphs"] channel
+    for _ in run.values:
+        pass
+    for sg in run.subgraphs:
+        print(f"path={sg.path}")           # ('sub',)
+        print(f"status={sg.status}")       # completed
+        if sg.status == "failed":
+            print(f"error={sg.error}")
+    print("Final output:", run.output)
+# path=('sub',)
+# status=completed
+# Final output: {'v': 6}
+```
 ```
 
 ### Example 3 — reading subgraph `values` projection separately
