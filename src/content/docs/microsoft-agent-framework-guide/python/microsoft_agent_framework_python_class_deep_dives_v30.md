@@ -189,6 +189,7 @@ The `@workflow` decorator constructs this for you. At decoration time it:
 
 ```python
 from agent_framework._workflows._functional import workflow, step
+import asyncio
 
 @step
 async def extract(text: str) -> list[str]:
@@ -203,40 +204,48 @@ async def count_words(text: str) -> int:
     tokens = await extract(text)
     return await score(tokens)
 
-# Non-streaming run
-result = await count_words.run("hello world foo")
-print(result.get_outputs())   # [3]
+async def main():
+    # Non-streaming run
+    result = await count_words.run("hello world foo")
+    print(result.get_outputs())   # [3]
 
-# Streaming run
-stream = count_words.run("hello world foo", stream=True)
-async for update in stream:
-    print(update)
-final = await stream
+    # Streaming run
+    stream = count_words.run("hello world foo", stream=True)
+    async for update in stream:
+        print(update)
+    final = await stream
+
+asyncio.run(main())
 ```
 
 ### Checkpoint-enabled run with per-run storage override
 
 ```python
 from agent_framework import InMemoryCheckpointStorage
+import asyncio
 
-storage = InMemoryCheckpointStorage()
+async def main():
+    storage = InMemoryCheckpointStorage()
 
-# First run – steps are executed and cached
-r1 = await count_words.run("hello world foo", checkpoint_storage=storage)
-checkpoint_id = r1.checkpoint_id
+    # First run – steps are executed and cached
+    r1 = await count_words.run("hello world foo", checkpoint_storage=storage)
+    checkpoint_id = r1.checkpoint_id
 
-# Resume run – message is mutually exclusive with checkpoint_id; omit it
-r2 = await count_words.run(
-    checkpoint_id=checkpoint_id,
-    checkpoint_storage=storage,
-)
-print(r2.get_outputs())    # [3]  (from cache, not re-executed)
+    # Resume run – message is mutually exclusive with checkpoint_id; omit it
+    r2 = await count_words.run(
+        checkpoint_id=checkpoint_id,
+        checkpoint_storage=storage,
+    )
+    print(r2.get_outputs())    # [3]  (from cache, not re-executed)
+
+asyncio.run(main())
 ```
 
 ### `FunctionalWorkflowAgent` — agent-compatible adapter
 
 ```python
 from agent_framework._workflows._functional import FunctionalWorkflowAgent
+import asyncio
 
 agent = FunctionalWorkflowAgent(
     workflow=count_words,
@@ -244,28 +253,36 @@ agent = FunctionalWorkflowAgent(
     description="Counts words in a document.",
 )
 
-# Drop-in replacement for Agent.run():
-response = await agent.run("hello world foo")
-print(response.text)
+async def main():
+    # Drop-in replacement for Agent.run():
+    response = await agent.run("hello world foo")
+    print(response.text)
 
-# Streaming
-stream = agent.run("hello world foo", stream=True)
-async for update in stream:
-    print(update.text)
-final = await stream
+    # Streaming
+    stream = agent.run("hello world foo", stream=True)
+    async for update in stream:
+        print(update.text)
+    final = await stream
+
+asyncio.run(main())
 ```
 
 HITL: when a workflow step suspends, the framework catches `WorkflowInterrupted` internally and `run()` returns an interrupted result — `agent.pending_requests` is then populated with the suspended `WorkflowEvent` objects. Resume by passing `responses` keyed by `request_id`:
 
 ```python
-r = await agent.run("draft document text")
-if agent.pending_requests:
-    req_id = next(iter(agent.pending_requests))
-    r2 = await agent.run(
-        responses={req_id: "Approved — ship it."},
-        checkpoint_id=r.checkpoint_id,
-    )
-    print(r2.text)
+import asyncio
+
+async def main():
+    r = await agent.run("draft document text")
+    if agent.pending_requests:
+        req_id = next(iter(agent.pending_requests))
+        r2 = await agent.run(
+            responses={req_id: "Approved — ship it."},
+            checkpoint_id=r.checkpoint_id,
+        )
+        print(r2.text)
+
+asyncio.run(main())
 ```
 
 ---
@@ -317,9 +334,14 @@ async def approval_pipeline(doc: str) -> str:
 ### `StepWrapper` outside a workflow (unit testing)
 
 ```python
-# Called outside a @workflow — behaves like the original function
-result = await validate("this is a valid document")
-assert result is True
+import asyncio
+
+async def main():
+    # Called outside a @workflow — behaves like the original function
+    result = await validate("this is a valid document")
+    assert result is True
+
+asyncio.run(main())
 ```
 
 ### `RunContext` — HITL with `request_info`
@@ -327,6 +349,8 @@ assert result is True
 `request_info` suspends the workflow on first call. The workflow is paused and returns a `WorkflowRunResult` containing the pending `WorkflowEvent`. On resume (via `responses=` dict keyed by `request_id`), the cached response is returned and execution continues.
 
 ```python
+import asyncio
+
 @workflow
 async def human_review(draft: str, ctx: RunContext) -> str:
     # First call — workflow suspends here
@@ -337,17 +361,19 @@ async def human_review(draft: str, ctx: RunContext) -> str:
     )
     return f"Approved text: {approval}"
 
-# Run #1 — suspends
-r = await human_review.run("my draft")
-# r.checkpoint_id is set; pending requests available
+async def main():
+    # Run #1 — suspends
+    r = await human_review.run("my draft")
+    # r.checkpoint_id is set; pending requests available
 
-# Run #2 — resume with response
-r2 = await human_review.run(
-    "my draft",
-    responses={"review-1": "LGTM"},
-    checkpoint_id=r.checkpoint_id,
-)
-print(r2.get_outputs())   # ["Approved text: LGTM"]
+    # Run #2 — resume (message= is mutually exclusive with checkpoint_id; omit it)
+    r2 = await human_review.run(
+        responses={"review-1": "LGTM"},
+        checkpoint_id=r.checkpoint_id,
+    )
+    print(r2.get_outputs())   # ["Approved text: LGTM"]
+
+asyncio.run(main())
 ```
 
 ### `RunContext` — per-run state and custom events
@@ -600,20 +626,24 @@ AGUIChatClient(
 
 ```python
 from agent_framework.ag_ui import AGUIChatClient
+import asyncio
 
 client = AGUIChatClient(endpoint="http://localhost:8888/")
 
-# First turn — thread ID auto-generated
-r1 = await client.get_response("What is 2+2?")
-thread_id = r1.additional_properties.get("thread_id")
-print(r1.text)
+async def main():
+    # First turn — thread ID auto-generated
+    r1 = await client.get_response("What is 2+2?")
+    thread_id = r1.additional_properties.get("thread_id")
+    print(r1.text)
 
-# Subsequent turns — pass thread_id so server retrieves history
-r2 = await client.get_response(
-    "Multiply that by 3.",
-    metadata={"thread_id": thread_id},
-)
-print(r2.text)
+    # Subsequent turns — pass thread_id so server retrieves history
+    r2 = await client.get_response(
+        "Multiply that by 3.",
+        metadata={"thread_id": thread_id},
+    )
+    print(r2.text)
+
+asyncio.run(main())
 ```
 
 ### Recommended usage — wrap with `Agent` for client-side history
@@ -621,15 +651,19 @@ print(r2.text)
 ```python
 from agent_framework import Agent
 from agent_framework.ag_ui import AGUIChatClient
+import asyncio
 
 client = AGUIChatClient(endpoint="http://localhost:8888/")
 agent = Agent(client=client, name="ui-agent")
 session = agent.create_session()
 
-r = await agent.run("Hello", session=session)
-print(r.text)
-r2 = await agent.run("Follow up question", session=session)
-print(r2.text)
+async def main():
+    r = await agent.run("Hello", session=session)
+    print(r.text)
+    r2 = await agent.run("Follow up question", session=session)
+    print(r2.text)
+
+asyncio.run(main())
 ```
 
 ### `AGUIEventConverter` — event-by-event conversion
@@ -734,6 +768,7 @@ class UnitConverterSkill(ClassSkill):
 ```python
 from agent_framework import Agent
 from agent_framework import SkillsProvider, InMemorySkillsSource
+import asyncio
 
 skill = UnitConverterSkill()
 skills_source = InMemorySkillsSource([skill])
@@ -744,36 +779,63 @@ agent = Agent(
     name="converter-bot",
     context_providers=[provider],
 )
-response = await agent.run("Convert 10 km to miles.")
-print(response.text)
+
+async def main():
+    response = await agent.run("Convert 10 km to miles.")
+    print(response.text)
+
+asyncio.run(main())
 ```
 
 ### `AggregatingSkillsSource` — merge multiple sources
 
 ```python
-from agent_framework._skills import AggregatingSkillsSource
-from agent_framework import InMemorySkillsSource
+from agent_framework._skills import AggregatingSkillsSource, ClassSkill
+from agent_framework import InMemorySkillsSource, SkillFrontmatter
+import asyncio
+
+class DateFormatterSkill(ClassSkill):
+    def __init__(self):
+        super().__init__(
+            frontmatter=SkillFrontmatter(
+                name="date-formatter",
+                description="Format dates in various styles.",
+            ),
+        )
+
+    @property
+    def instructions(self) -> str:
+        return "Format dates as requested by the user."
 
 source_a = InMemorySkillsSource([UnitConverterSkill()])
 source_b = InMemorySkillsSource([DateFormatterSkill()])
 
 combined = AggregatingSkillsSource([source_a, source_b])
-skills = await combined.get_skills()
-print([s.frontmatter.name for s in skills])
-# ["unit-converter", "date-formatter"]
+
+async def main():
+    skills = await combined.get_skills()
+    print([s.frontmatter.name for s in skills])
+    # ["unit-converter", "date-formatter"]
+
+asyncio.run(main())
 ```
 
 ### `FilteringSkillsSource` — exclude skills by predicate
 
 ```python
 from agent_framework._skills import FilteringSkillsSource
+import asyncio
 
 # Hide internal-use skills from the agent
 production_skills = FilteringSkillsSource(
     inner_source=combined,
     predicate=lambda s: not s.frontmatter.name.startswith("internal"),
 )
-skills = await production_skills.get_skills()
+
+async def main():
+    skills = await production_skills.get_skills()
+
+asyncio.run(main())
 ```
 
 ### `DelegatingSkillsSource` — base for custom decorators
@@ -836,6 +898,7 @@ BackgroundAgentsProvider(
 ```python
 from agent_framework import Agent
 from agent_framework._harness._background_agents import BackgroundAgentsProvider
+import asyncio
 
 research_agent = Agent(client=client, name="researcher")
 writer_agent = Agent(client=client, name="writer")
@@ -850,13 +913,16 @@ coordinator = Agent(
     context_providers=[provider],
 )
 
-# The coordinator can now delegate to "researcher" and "writer" via tool calls
-session = coordinator.create_session()
-response = await coordinator.run(
-    "Research Python async patterns and write a 200-word summary.",
-    session=session,
-)
-print(response.text)
+async def main():
+    # The coordinator can now delegate to "researcher" and "writer" via tool calls
+    session = coordinator.create_session()
+    response = await coordinator.run(
+        "Research Python async patterns and write a 200-word summary.",
+        session=session,
+    )
+    print(response.text)
+
+asyncio.run(main())
 ```
 
 ### `BackgroundTaskInfo` — task metadata
@@ -949,6 +1015,7 @@ store = TodoFileStore(base_path="/tmp/agent_todos")
 from agent_framework import Agent
 from agent_framework import TodoProvider    # public re-export
 from agent_framework._harness._todo import TodoFileStore
+import asyncio
 
 store = TodoFileStore(base_path="/workspace/todos")
 provider = TodoProvider(store=store)
@@ -959,12 +1026,15 @@ agent = Agent(
     context_providers=[provider],
 )
 
-session = agent.create_session()
-response = await agent.run(
-    "I need to write a blog post. Track the steps: outline, draft, edit, publish.",
-    session=session,
-)
-print(response.text)
+async def main():
+    session = agent.create_session()
+    response = await agent.run(
+        "I need to write a blog post. Track the steps: outline, draft, edit, publish.",
+        session=session,
+    )
+    print(response.text)
+
+asyncio.run(main())
 ```
 
 ---
@@ -1095,6 +1165,8 @@ print(result.check_name)   # "keyword-match"
 from agent_framework import LocalEvaluator, Agent
 from agent_framework._evaluation import EvalItem, CheckResult
 from agent_framework import ConversationSplit
+from agent_framework import Message, Content
+import asyncio
 
 def match_expected(item: EvalItem) -> CheckResult:
     found = bool(item.expected_output and item.expected_output.lower() in item.response.lower())
@@ -1114,9 +1186,12 @@ item = EvalItem(
     expected_output="Paris",
 )
 
-# evaluate() takes items as positional arg; returns a single EvalResults
-result = await evaluator.evaluate([item])
-print(f"Passed: {result.passed}/{result.total}")
-for item_result in result.items:
-    print(item_result.item_id, item_result.status)   # "pass" or "fail"
+async def main():
+    # evaluate() takes items as positional arg; returns a single EvalResults
+    result = await evaluator.evaluate([item])
+    print(f"Passed: {result.passed}/{result.total}")
+    for item_result in result.items:
+        print(item_result.item_id, item_result.status)   # "pass" or "fail"
+
+asyncio.run(main())
 ```
