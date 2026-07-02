@@ -234,8 +234,10 @@ async def main():
     storage = InMemoryCheckpointStorage()
 
     # First run – steps are executed and cached
-    r1 = await count_words.run("hello world foo", checkpoint_storage=storage)
-    checkpoint_id = r1.checkpoint_id
+    await count_words.run("hello world foo", checkpoint_storage=storage)
+    # WorkflowRunResult has no checkpoint_id; retrieve it from storage
+    latest = await storage.get_latest(workflow_name=count_words.name)
+    checkpoint_id = latest.checkpoint_id
 
     # Resume run – message is mutually exclusive with checkpoint_id; omit it
     r2 = await count_words.run(
@@ -370,14 +372,12 @@ async def human_review(draft: str, ctx: RunContext) -> str:
     return f"Approved text: {approval}"
 
 async def main():
-    # Run #1 — suspends
-    r = await human_review.run("my draft")
-    # r.checkpoint_id is set; pending requests available
-
-    # Run #2 — resume (message= is mutually exclusive with checkpoint_id; omit it)
+    # Run #1 — suspends; WorkflowRunResult has no checkpoint_id attribute
+    await human_review.run("my draft")
+    # The workflow object tracks its pending state in-memory; resume with
+    # responses= only — no checkpoint_id needed for in-memory HITL
     r2 = await human_review.run(
         responses={"review-1": "LGTM"},
-        checkpoint_id=r.checkpoint_id,
     )
     print(r2.get_outputs())   # ["Approved text: LGTM"]
 
