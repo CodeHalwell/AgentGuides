@@ -174,7 +174,7 @@ Key implementation details (verified `client.py`):
 
 | Detail | Publisher | Subscriber |
 |--------|-----------|------------|
-| Cache TTL | 1 800 s (30 min) | 1 800 s (30 min) |
+| Cache TTL | 1800 s (30 min) | 1800 s (30 min) |
 | Cache key | `(id(credentials), user_agents_key, id(publisher_options))` | `(id(credentials), user_agents_key)` |
 | Batching | `BatchSettings(max_messages=1)` — effectively disables batching for synchronous publish | N/A |
 | Thread safety | `threading.Lock` per cache dict | `threading.Lock` per cache dict |
