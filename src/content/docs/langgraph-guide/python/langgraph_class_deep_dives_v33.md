@@ -905,16 +905,15 @@ def branch_right(state: State) -> State:
 
 # Both branches run in the same superstep — AnyValue accepts both writes
 # and keeps whichever arrived last (non-deterministic across branches).
+# Connect branches directly to END to keep the pattern unambiguous.
 graph = (
     StateGraph(State)
     .add_node("left", branch_left)
     .add_node("right", branch_right)
-    .add_node("merge", lambda s: {})
     .add_edge(START, "left")
     .add_edge(START, "right")
-    .add_edge("left", "merge")
-    .add_edge("right", "merge")
-    .add_edge("merge", END)
+    .add_edge("left", END)
+    .add_edge("right", END)
     .compile()
 )
 
