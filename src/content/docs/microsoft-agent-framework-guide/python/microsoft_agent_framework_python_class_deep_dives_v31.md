@@ -306,7 +306,7 @@ item on its self-created todo list is checked off.
 ```python
 import asyncio
 from agent_framework import create_harness_agent
-from agent_framework._harness._loop import todos_remaining, todos_remaining_message
+from agent_framework import todos_remaining, todos_remaining_message
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -339,7 +339,7 @@ asyncio.run(main())
 ## 3. `AgentLoopMiddleware` — Advanced Patterns
 
 **Module:** `agent_framework._harness._loop`  
-**Import:** `from agent_framework._harness._loop import AgentLoopMiddleware`
+**Import:** `from agent_framework import AgentLoopMiddleware`
 
 `AgentLoopMiddleware` re-runs an agent until a `should_continue` predicate returns
 `False`. Beyond the basics (covered in Vol. 17), this section focuses on the lesser-used
@@ -369,7 +369,7 @@ Set `return_final_only=True` to return only the final pass (useful for streaming
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework import AgentLoopMiddleware
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -407,7 +407,7 @@ each subsequent iteration so the agent can learn from its own history.
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework import AgentLoopMiddleware
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -455,7 +455,7 @@ intermediate answers from polluting later context. The accumulated `progress` lo
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework import AgentLoopMiddleware
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -540,11 +540,7 @@ prompting the user each time.
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._tool_approval import (
-    ToolApprovalMiddleware,
-    ToolApprovalRule,
-    ToolApprovalState,
-)
+from agent_framework import ToolApprovalMiddleware, ToolApprovalRule, ToolApprovalState
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -603,8 +599,7 @@ return `True` to auto-approve without surfacing it to the user.
 
 ```python
 import asyncio
-from agent_framework import Agent, Content, tool
-from agent_framework._harness._tool_approval import ToolApprovalMiddleware
+from agent_framework import Agent, Content, ToolApprovalMiddleware, tool
 from agent_framework.openai import OpenAIChatClient
 
 # ToolApprovalRuleCallback = Callable[[Content], bool | Awaitable[bool]]
@@ -661,7 +656,7 @@ survive process restarts.
 ```python
 import asyncio
 import json
-from agent_framework._harness._tool_approval import ToolApprovalRule, ToolApprovalState
+from agent_framework import ToolApprovalRule, ToolApprovalState
 
 
 async def save_approval_state(session_state: dict) -> str:
@@ -759,7 +754,7 @@ Prevent test scripts from being loaded as runnable skill scripts.
 ```python
 import asyncio
 from agent_framework import Agent, FileSkillsSource
-from agent_framework._skills import SkillsProvider
+from agent_framework import SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -797,7 +792,7 @@ accepts the same `search_depth`, `script_filter`, and `resource_filter` paramete
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._skills import SkillsProvider
+from agent_framework import SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -935,10 +930,8 @@ async def main() -> None:
     )
 
     workflow = (
-        WorkflowBuilder()
-        .add_agent(extractor, id="extract")
-        .add_agent(formatter, id="format")
-        .connect("extract", "format")
+        WorkflowBuilder(start_executor=extractor)
+        .add_chain([extractor, formatter])
         .build()
     )
 
@@ -1000,10 +993,8 @@ async def main() -> None:
     agent = Agent(client=OpenAIChatClient(), instructions="Answer concisely.")
 
     workflow = (
-        WorkflowBuilder()
-        .add_agent(agent, id="answerer")
-        .add_executor(upper_case, id="upper_case")
-        .connect("answerer", "upper_case")
+        WorkflowBuilder(start_executor=agent)
+        .add_chain([agent, upper_case])
         .build()
     )
 
@@ -1050,12 +1041,8 @@ async def main() -> None:
     )
 
     workflow = (
-        WorkflowBuilder()
-        .add_agent(drafter, id="draft")
-        .add_executor(summarise, id="summarise")
-        .add_agent(summariser_agent, id="followup")
-        .connect("draft", "summarise")
-        .connect("summarise", "followup")
+        WorkflowBuilder(start_executor=drafter)
+        .add_chain([drafter, summarise, summariser_agent])
         .build()
     )
 
@@ -1073,8 +1060,7 @@ Show that `with_text` can be called repeatedly; each call returns a new independ
 
 ```python
 import asyncio
-from agent_framework import AgentExecutorResponse
-from agent_framework._types import AgentResponse, Message
+from agent_framework import AgentExecutorResponse, AgentResponse, Message
 
 
 async def main() -> None:
@@ -1110,7 +1096,7 @@ asyncio.run(main())
 ## 8. `todos_remaining` and `background_tasks_running`
 
 **Module:** `agent_framework._harness._loop`  
-**Import:** `from agent_framework._harness._loop import todos_remaining, background_tasks_running`
+**Import:** `from agent_framework import todos_remaining, background_tasks_running`
 
 These factory functions return `ShouldContinueCallable` predicates ready to pass to
 `AgentLoopMiddleware` or `create_harness_agent(loop_should_continue=...)`. They
@@ -1126,7 +1112,7 @@ Companion message callables:
 ```python
 import asyncio
 from agent_framework import create_harness_agent
-from agent_framework._harness._loop import todos_remaining, todos_remaining_message
+from agent_framework import todos_remaining, todos_remaining_message
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1161,7 +1147,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import create_harness_agent, Agent
-from agent_framework._harness._loop import background_tasks_running, background_tasks_running_message
+from agent_framework import background_tasks_running, background_tasks_running_message
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1203,10 +1189,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import create_harness_agent, Agent
-from agent_framework._harness._loop import (
-    todos_remaining,
-    background_tasks_running,
-)
+from agent_framework import todos_remaining, background_tasks_running
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1299,9 +1282,7 @@ Inject a dynamic greeting based on the time of day into every invocation.
 import asyncio
 from datetime import datetime
 from typing import Any
-from agent_framework import Agent, ContextProvider
-from agent_framework._sessions import SessionContext, AgentSession
-from agent_framework._types import Message
+from agent_framework import Agent, AgentSession, ContextProvider, Message, SessionContext
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1343,8 +1324,7 @@ it to add a latency annotation after the run.
 import asyncio
 import time
 from typing import Any
-from agent_framework import Agent, ContextProvider
-from agent_framework._sessions import SessionContext, AgentSession
+from agent_framework import Agent, AgentSession, ContextProvider, SessionContext
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1405,8 +1385,7 @@ within the same session. Use it to track per-session counters or cached data.
 ```python
 import asyncio
 from typing import Any
-from agent_framework import Agent, ContextProvider
-from agent_framework._sessions import SessionContext, AgentSession
+from agent_framework import Agent, AgentSession, ContextProvider, SessionContext
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1495,11 +1474,8 @@ async def main() -> None:
     writer = Agent(client=OpenAIChatClient(), instructions="Write a polished summary.")
 
     workflow = (
-        WorkflowBuilder()
-        .add_agent(researcher, id="research")
-        .add_agent(writer, id="write")
-        .connect("research", "write")
-        .with_checkpointing(storage=storage, workflow_name="research-write")
+        WorkflowBuilder(start_executor=researcher, checkpoint_storage=storage)
+        .add_chain([researcher, writer])
         .build()
     )
 
@@ -1530,13 +1506,8 @@ async def main() -> None:
     step3 = Agent(client=OpenAIChatClient(), instructions="Write a conclusion.")
 
     workflow = (
-        WorkflowBuilder()
-        .add_agent(step1, id="outline")
-        .add_agent(step2, id="expand")
-        .add_agent(step3, id="conclude")
-        .connect("outline", "expand")
-        .connect("expand", "conclude")
-        .with_checkpointing(storage=storage, workflow_name="essay-pipeline")
+        WorkflowBuilder(start_executor=step1, checkpoint_storage=storage)
+        .add_chain([step1, step2, step3])
         .build()
     )
 
@@ -1570,11 +1541,8 @@ async def build_workflow(storage: InMemoryCheckpointStorage):
     step_b = Agent(client=OpenAIChatClient(), instructions="Step B: enrich the category.")
 
     return (
-        WorkflowBuilder()
-        .add_agent(step_a, id="categorise")
-        .add_agent(step_b, id="enrich")
-        .connect("categorise", "enrich")
-        .with_checkpointing(storage=storage, workflow_name="test-workflow")
+        WorkflowBuilder(start_executor=step_a, checkpoint_storage=storage)
+        .add_chain([step_a, step_b])
         .build()
     )
 
