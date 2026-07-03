@@ -1,8 +1,10 @@
 ---
-title: "Microsoft Agent Framework Python — Class Deep Dives Vol. 31"
+title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 31"
 description: "Source-verified deep dives into 10 class groups from agent-framework 1.10.0: FileMemoryProvider, create_harness_agent, AgentLoopMiddleware advanced patterns, ToolApprovalMiddleware, FileSkillsSource depth and filter predicates, FoundryAgent, AgentExecutorResponse.with_text, todos_remaining and background_tasks_running loop helpers, custom ContextProvider with SessionContext.metadata, and InMemoryCheckpointStorage for workflow testing."
 framework: microsoft-agent-framework
 language: python
+sidebar:
+  order: 54
 ---
 
 # Microsoft Agent Framework Python — Class Deep Dives Vol. 31
@@ -838,10 +840,10 @@ asyncio.run(main())
 **Module:** `agent_framework.foundry` (requires `pip install agent-framework-foundry`)  
 **Import:** `from agent_framework.foundry import FoundryAgent`
 
-`FoundryAgent` is new in **1.10.0**. It wraps an existing Azure AI Foundry
-PromptAgent or HostedAgent and exposes it as an `agent_framework.Agent`-compatible
-object, so it can participate in `WorkflowBuilder` pipelines and multi-agent
-orchestration patterns alongside locally-constructed agents.
+`FoundryAgent` wraps an existing Azure AI Foundry PromptAgent or HostedAgent
+and exposes it as an `agent_framework.Agent`-compatible object, so it can
+participate in `WorkflowBuilder` pipelines and multi-agent orchestration
+patterns alongside locally-constructed agents.
 
 > **Note:** `FoundryAgent` lives in the `agent-framework-foundry` sub-package.
 > Install it with `pip install agent-framework-foundry`.
@@ -1589,9 +1591,9 @@ async def test_checkpoint_delete():
 
 ---
 
-## Quick-Reference: New in 1.10.0
+## Vol. 31 Quick-Reference
 
-| Class / Function | Module | What's new |
+| Class / Function | Module | Key capabilities covered |
 |---|---|---|
 | `FileMemoryProvider` | `agent_framework._harness._file_memory` | Session-scoped file memory; 7 built-in tools |
 | `create_harness_agent` | `agent_framework._harness._agent` | Batteries-included factory for fully-wired agents |
