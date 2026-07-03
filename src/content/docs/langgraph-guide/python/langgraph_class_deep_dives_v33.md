@@ -225,19 +225,26 @@ print(graph.invoke({"trigger": None, "result": ""}))
 - `snapshot_frequency` controls how often a full `_DeltaSnapshot(value)` blob is written (every N updates, or every `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` supersteps, whichever comes first).
 - `checkpoint()` always returns `MISSING`; snapshot blobs are written directly into `channel_values` by `create_checkpoint`. Older checkpointers that do not call `get_delta_channel_history` will not reconstruct correctly.
 - `replay_writes(writes)` takes `PendingWrite` triples and applies them oldest-to-newest. An `Overwrite` inside the sequence resets the base and only later writes are reduced.
-- Use `Annotated[list[T], DeltaChannel(operator.add)]` in your state schema wherever you currently use `Annotated[list[T], operator.add]`.
+- The reducer has the signature `(state, writes: list[write]) -> new_state` where `writes` is a **batch** of everything written to this channel in one superstep. Do not use a pairwise function like `operator.add` — it would produce nested lists. Define a bulk reducer that iterates and extends instead.
+- Use `Annotated[list[T], DeltaChannel(your_bulk_reducer)]` in your state schema.
 
 ### Example 1 — basic usage as state field
 
 ```python
-import operator
-from typing import Annotated
+from typing import Annotated, Sequence
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.channels.delta import DeltaChannel
 
+def append_reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+    """Bulk reducer: each write is a list[str]; flatten all writes onto state."""
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
 class State(TypedDict):
-    items: Annotated[list[str], DeltaChannel(operator.add)]
+    items: Annotated[list[str], DeltaChannel(append_reducer)]
 
 def add_item(state: State) -> State:
     return {"items": [f"item_{len(state['items']) + 1}"]}
@@ -257,20 +264,26 @@ print(result["items"])  # ['item_1']
 ### Example 2 — low-level channel inspection
 
 ```python
-import operator
+from typing import Sequence
 from langgraph.channels.delta import DeltaChannel
 from langgraph._internal._typing import MISSING
 
-ch = DeltaChannel(operator.add, list, snapshot_frequency=5)
+def append_reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
+
+ch = DeltaChannel(append_reducer, list, snapshot_frequency=5)
 
 # start from checkpoint (MISSING → empty list)
 live = ch.from_checkpoint(MISSING)
 print(live.get())  # []
 
-# write two batches
-live.update(["a", "b"])
-live.update(["c"])
-print(live.get())  # ['a', 'b', 'c']
+# each call to update() passes a list of writes for that superstep
+live.update([["a", "b"]])   # one write: the list ["a", "b"]
+live.update([["c"]])        # one write: the list ["c"]
+print(live.get())           # ['a', 'b', 'c']
 
 # checkpoint() returns MISSING — full snapshot is written separately
 print(live.checkpoint() is MISSING)  # True
@@ -279,28 +292,32 @@ print(live.checkpoint() is MISSING)  # True
 ### Example 3 — `replay_writes` for checkpoint reconstruction
 
 ```python
-import operator
+from typing import Sequence
 from langgraph.channels.delta import DeltaChannel
 from langgraph._internal._typing import MISSING
 
-def batch_reducer(state: list, writes: list) -> list:
-    """Reducer that concatenates batches — batching-invariant."""
-    return state + writes
+def append_reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+    """Bulk reducer — batching-invariant: append_reducer(append_reducer(s, xs), ys) == append_reducer(s, xs+ys)."""
+    result = list(state)
+    for write in writes:
+        result.extend(write)
+    return result
 
-ch = DeltaChannel(batch_reducer, list)
+ch = DeltaChannel(append_reducer, list)
 live = ch.from_checkpoint(MISSING)   # start empty
 
-# Simulate replaying saved writes (as (ns, key, value) triples)
+# PendingWrite triples: (namespace, key, value). Each value is a list[str]
+# — the same shape a StateGraph node would produce for a list[str] field.
 pending = [
-    ("ns", "k", "alpha"),
-    ("ns", "k", "beta"),
-    ("ns", "k", "gamma"),
+    ("ns", "k", ["alpha"]),
+    ("ns", "k", ["beta"]),
+    ("ns", "k", ["gamma"]),
 ]
 live.replay_writes(pending)
 print(live.get())  # ['alpha', 'beta', 'gamma']
 
 # A second replay batch builds on top
-more = [("ns", "k", "delta")]
+more = [("ns", "k", ["delta"])]
 live.replay_writes(more)
 print(live.get())  # ['alpha', 'beta', 'gamma', 'delta']
 ```
@@ -568,9 +585,11 @@ def read_previous(
 config2 = {"configurable": {"thread_id": "t2"}}
 nullify.invoke(99, config2)
 
-# Note: previous is saved per-thread. Each @entrypoint has its own graph,
-# so reading across them requires sharing the checkpointer and thread_id.
-# Verify saved value by streaming the checkpoint directly:
+# Note: previous is saved per-thread and is scoped to the specific @entrypoint.
+# Each @entrypoint compiles into a separate graph with its own namespace, so
+# checkpoints from one @entrypoint are NOT accessible from a different one even
+# when sharing the same checkpointer and thread_id.
+# Verify a saved value by listing checkpoints for the thread:
 snapshot = list(saver.list({"configurable": {"thread_id": "t1"}}))
 print(bool(snapshot))  # True — checkpoint exists
 ```
@@ -613,11 +632,12 @@ graph = (
     .compile()
 )
 
-# stream_events(version="v3") wires ValuesTransformer automatically
+# stream_events(version="v3") wires ValuesTransformer automatically.
+# NOTE: stream_mode is NOT accepted under version="v3" — the mux derives
+# modes from the transformer set. Remove it to avoid TypeError.
 with graph.stream_events(
     {"count": 0},
     version="v3",
-    stream_mode="values",      # required for ValuesTransformer
 ) as run:
     for snapshot in run.values:
         print("snapshot:", snapshot)
@@ -651,8 +671,7 @@ graph = (
 
 with graph.stream_events(
     {"total": 0},
-    version="v3",
-    stream_mode="updates",     # required for UpdatesTransformer
+    version="v3",              # stream_mode= is rejected under v3
 ) as run:
     for node_update in run.updates:
         # Each item: {"node_name": {"field": value, ...}}
@@ -685,8 +704,7 @@ graph = (
 
 with graph.stream_events(
     {"items": ["a", "b", "c"]},
-    version="v3",
-    stream_mode="custom",    # required for CustomTransformer
+    version="v3",              # stream_mode= is rejected under v3
 ) as run:
     for payload in run.custom:
         print("custom:", payload)   # {'progress': 1, 'item': 'a'} …
@@ -753,26 +771,28 @@ print(result["response"])   # Hello, world!
 # MessagesTransformer only captures events whose namespace matches
 # the run's own scope. Subgraph LLM calls appear on the subgraph's
 # SubgraphRunStream.messages, not on the parent run.messages.
+#
+# The scope is stored as a list for O(1) equality checks against the
+# namespace field in protocol events, which also arrives as a list.
 
-# Demonstration using the transformer class directly:
 from langgraph.stream.transformers import MessagesTransformer
 
-# Outer scope: root graph
-outer = MessagesTransformer(scope=())
-# Inner scope: a subgraph named "sub"
-inner = MessagesTransformer(scope=("sub",))
+# Root graph scope (empty tuple)
+root_transformer = MessagesTransformer(scope=())
+# Subgraph scope named "sub"
+sub_transformer = MessagesTransformer(scope=("sub",))
 
-# An event from the subgraph ("sub") namespace:
-sample_event = {
-    "method": "message-start",
-    "params": {"namespace": ["sub"], "run_id": "abc", "data": {}},
-}
+# The scope_list attribute holds the pre-converted list form used in
+# process() comparisons, letting you verify the scope assignment:
+print("root scope_list:", root_transformer._scope_list)   # []
+print("sub  scope_list:", sub_transformer._scope_list)    # ['sub']
 
-outer.process(sample_event)   # ignored — namespace mismatch
-inner.process(sample_event)   # accepted — namespace matches
-
-print("outer log size:", outer._log._queue.qsize() if hasattr(outer._log, '_queue') else "N/A")
-print("Scope filtering works as expected")
+# Scoping rule: process() returns True without acting when
+# params["namespace"] != self._scope_list.
+# Root transformer ignores ["sub"] events; sub transformer ignores [] events.
+assert root_transformer._scope_list != ["sub"]
+assert sub_transformer._scope_list == ["sub"]
+print("Scope filtering verified via _scope_list attribute")
 ```
 
 ### Example 3 — full async messages streaming pattern
@@ -797,14 +817,15 @@ graph = (
 )
 
 async def stream_messages():
-    # With a real streaming model, msg_stream.text yields token strings.
-    # This skeleton verifies the async context-manager API compiles.
-    async with graph.astream_events(
-        {"text": "hello"},
-        version="v3",
-        stream_mode=["messages", "values"],
-    ) as run:
-        final = await run.values.__anext__()   # await first values snapshot
+    # astream_events(version="v3") returns a coroutine; await it first to
+    # obtain the AsyncGraphRunStream, then enter it as an async context manager.
+    # stream_mode= is rejected under version="v3" — omit it.
+    run_stream = await graph.astream_events({"text": "hello"}, version="v3")
+    async with run_stream as run:
+        # With a real streaming model, iterating run.messages yields
+        # AsyncChatModelStream objects; each exposes .text, .tool_calls etc.
+        # Here we drive the run to completion via run.output:
+        final = run.output   # drives the pump synchronously on first access
         print("state:", final)
 
 asyncio.run(stream_messages())
@@ -857,23 +878,29 @@ print(ch.is_available())   # False
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 
-# StateGraph uses LastValue by default. To get AnyValue semantics inside
-# StateGraph, wire converging branches that always agree on the result.
-# In custom Pregel graphs you can inject AnyValue channels directly.
+# IMPORTANT: StateGraph uses LastValue by default, which raises
+# InvalidUpdateError whenever two parallel branches write the same
+# state key in the same superstep — even if the values are identical.
+# AnyValue is NOT available via StateGraph's default channel resolution.
+# To get last-write-wins semantics you must either:
+#   (a) use a reducer (e.g. Annotated[str, lambda a, b: b])
+#   (b) inject AnyValue directly into a custom Pregel graph
+#
+# This example shows a SEQUENTIAL pattern (safe with LastValue) to
+# illustrate the node logic. True parallel concurrent writes require
+# a reducer or direct Pregel construction.
 
 class State(TypedDict):
     x: int
     result: str
 
 def branch_left(state: State) -> State:
-    return {"result": "same"}
+    return {"result": "from_left"}
 
 def branch_right(state: State) -> State:
-    return {"result": "same"}   # same value — convergence guaranteed
+    return {"result": "from_right"}
 
-# In a real graph both nodes run in the same superstep and write "same".
-# LastValue would raise; AnyValue would silently pick the last.
-# Here we demonstrate the safe pattern via sequential nodes:
+# Sequential (not parallel) — no concurrent write, no InvalidUpdateError:
 graph = (
     StateGraph(State)
     .add_node("left", branch_left)
