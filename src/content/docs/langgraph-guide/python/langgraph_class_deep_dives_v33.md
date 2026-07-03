@@ -86,9 +86,9 @@ graph = (
     .compile(cache=cache)
 )
 
-r1 = graph.invoke({"x": 5})
-r2 = graph.invoke({"x": 5})   # cache hit — expensive_double not called again
-r3 = graph.invoke({"x": 9})   # different input — cache miss
+r1 = graph.invoke({"x": 5, "doubled": 0})
+r2 = graph.invoke({"x": 5, "doubled": 0})   # cache hit — expensive_double not called again
+r3 = graph.invoke({"x": 9, "doubled": 0})   # different input — cache miss
 
 print(r1["doubled"], r2["doubled"], r3["doubled"])  # 10 10 18
 print("actual calls:", call_count)                  # 2  (x=5 and x=9)
@@ -311,7 +311,7 @@ print(live.get())  # ['alpha', 'beta', 'gamma', 'delta']
 
 **Module:** `langgraph.channels.named_barrier_value`
 
-These two channels implement synchronisation barriers: a downstream node can only fire after **every named producer** has written to the channel. They model fan-out → fan-in without manually tracking which branches have completed.
+These two channels implement synchronization barriers: a downstream node can only fire after **every named producer** has written to the channel. They model fan-out → fan-in without manually tracking which branches have completed.
 
 **Key source facts** (from `langgraph/channels/named_barrier_value.py`):
 
