@@ -61,7 +61,6 @@ class ServiceAccountCredentialExchanger(BaseAuthCredentialExchanger):
 
 ```python
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, ServiceAccount, ServiceAccountCredential
-from google.adk.auth.auth_schemes import AuthScheme
 from fastapi.openapi.models import HTTPBearer
 from google.adk.tools.openapi_tool.auth.credential_exchangers.service_account_exchanger import ServiceAccountCredentialExchanger
 
@@ -688,7 +687,7 @@ else:
 # "pending" state — user must complete an OAuth2 browser flow
 pending = AuthPreparationResult(
     state="pending",
-    auth_scheme=None,   # scheme returned for re-rendering the auth prompt
+    auth_scheme=None,   # omitted in this minimal example; real responses may include the scheme for re-rendering
     auth_credential=None,
 )
 print(f"Pending: waiting for user OAuth2 completion → state={pending.state!r}")
@@ -699,7 +698,7 @@ print(f"Pending: waiting for user OAuth2 completion → state={pending.state!r}"
 ```python
 from fastapi.openapi.models import HTTPBearer
 from google.adk.auth.auth_credential import (
-    AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials, ServiceAccount
+    AuthCredential, AuthCredentialTypes, ServiceAccount
 )
 from google.adk.tools.openapi_tool.openapi_spec_parser.tool_auth_handler import (
     ToolAuthHandler
