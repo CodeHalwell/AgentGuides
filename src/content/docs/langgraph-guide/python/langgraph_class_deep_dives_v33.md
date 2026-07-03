@@ -425,7 +425,9 @@ class State(TypedDict):
 def counting_node(state: State, runtime: Runtime) -> State:
     if runtime.drain_requested:
         print(f"draining: {runtime.drain_reason}")
-        # In production you'd raise GraphDrained or finish cleanly.
+        # Return cleanly — the engine checks drain_requested at the superstep boundary
+        # and raises GraphDrained there (after committing writes). Do NOT raise it
+        # inside the node; that skips the node's write commit.
         return {"counter": state["counter"]}
     return {"counter": state["counter"] + 1}
 
