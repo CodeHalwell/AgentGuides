@@ -179,7 +179,7 @@ it in shutdown handlers to avoid dangling gRPC connections.
 
 ```python
 from unittest.mock import MagicMock
-from google.adk.tools.pubsub.client import get_publisher_client, _CACHE_TTL
+from google.adk.tools.pubsub.client import get_publisher_client
 
 # Fake credentials object (identity used as cache key)
 creds = MagicMock()
@@ -773,7 +773,7 @@ parser_orig = OperationParser(op, preserve_property_names=True)
 for p in parser_snake._params:
     print(f"snake:  {p.py_name}")
 for p in parser_orig._params:
-    print(f"original: {p.py_name}")
+    print(f"original: {p.original_name}")
 # snake:  x_api_key, user_id
 # original: X-Api-Key, userId  (only keyword conflicts renamed)
 ```
