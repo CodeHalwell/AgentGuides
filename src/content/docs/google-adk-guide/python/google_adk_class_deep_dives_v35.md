@@ -725,7 +725,10 @@ async def call_with_sa_auth(ctx):
             token = result.auth_credential.http.credentials.token
             print(token[:20])
         else:
-            print("Credential stored by exchanger; retrieve from session store")
+            # For service-account exchangers, auth_credential=None on "done"
+            # means exchange_credential() raised and the error was logged.
+            # Check logs for the root cause (invalid key, quota issues, etc.)
+            print("Exchange failed — auth_credential is None; check logs")
 ```
 
 ---
