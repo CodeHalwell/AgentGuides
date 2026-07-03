@@ -198,13 +198,9 @@ client_b = get_publisher_client(credentials=creds)
 
 # Same object identity proves the cache was hit
 assert client_a is client_b, "Cache miss — unexpected new client created"
-
-# Publish using the cached client
-topic = "projects/my-project/topics/my-topic"
-data = b"hello from adk"
-future = client_a.publish(topic, data)
-msg_id = future.result()
-print(f"Published message {msg_id}")
+print(f"Cache hit: both calls returned the same {type(client_a).__name__} instance")
+# To actually publish, supply real GCP credentials and call:
+#   client_a.publish("projects/my-project/topics/my-topic", b"hello")
 ```
 
 ### Example 2 — separate caches for different credential objects
@@ -277,7 +273,7 @@ class ScheduleDynamicNode(Protocol):
         use_sub_branch: bool = False,       # run in isolated sub-branch
         override_branch: str | None = None, # explicit branch override
         override_isolation_scope: str | None = None,
-    ) -> Awaitable[Context]:
+    ) -> Awaitable[Context]:  # internal; ctx.run_node() unwraps this and returns child output (Any)
         ...
 ```
 
