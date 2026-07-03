@@ -599,11 +599,11 @@ print(bool(snapshot))  # True — checkpoint exists
 
 **Module:** `langgraph.stream.transformers`
 
-These three classes are **native transformers** for the v3 streaming protocol. They are wired automatically when you call `graph.stream_events(version="v3")`. Each processes a specific stream mode's raw events and exposes a typed `StreamChannel` projection.
+These three classes are **native transformers** for the v3 streaming protocol. `ValuesTransformer` is wired automatically when you call `graph.stream_events(version="v3")`; `UpdatesTransformer` and `CustomTransformer` are **not** wired by default and must be passed explicitly via `transformers=[UpdatesTransformer]` / `transformers=[CustomTransformer]`. Each processes a specific stream mode's raw events and exposes a typed `StreamChannel` projection.
 
 **Key source facts** (from `langgraph/stream/transformers.py`):
 
-- All three inherit `StreamTransformer` and set `_native = True`, which means their projection keys appear as **direct attributes** on `GraphRunStream` (e.g. `run.values`, `run.updates`, `run.custom`).
+- All three inherit `StreamTransformer` and set `_native = True`, which means their projection keys appear as **direct attributes** on `GraphRunStream` once the transformer is registered (e.g. `run.values` when `ValuesTransformer` is active, `run.updates` when `UpdatesTransformer` is passed explicitly).
 - `required_stream_modes` declares which `stream_mode` strings must be enabled for the transformer to receive events.
 - `ValuesTransformer` captures `"values"` events and exposes `run.values` as `StreamChannel[dict[str, Any]]`. It also maintains `_latest`, `_interrupted`, and `_interrupts` used by `run.output`, `run.interrupted`, and `run.interrupts`.
 - `UpdatesTransformer` captures `"updates"` events and exposes `run.updates` as `StreamChannel[dict[str, Any]]`. Each item maps node/task name → update dict.
