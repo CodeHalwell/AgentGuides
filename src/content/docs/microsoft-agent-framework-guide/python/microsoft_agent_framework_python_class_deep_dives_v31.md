@@ -603,13 +603,15 @@ return `True` to auto-approve without surfacing it to the user.
 
 ```python
 import asyncio
-from agent_framework import Agent, tool
+from agent_framework import Agent, Content, tool
 from agent_framework._harness._tool_approval import ToolApprovalMiddleware
 from agent_framework.openai import OpenAIChatClient
 
-# Auto-approve any read-only tool (name starts with "get_" or "list_" or "search_")
-def approve_readonly(tool_name: str, arguments: dict, **kwargs) -> bool:
-    return tool_name.startswith(("get_", "list_", "search_"))
+# ToolApprovalRuleCallback = Callable[[Content], bool | Awaitable[bool]]
+# The callback receives the raw function-call Content; inspect .name for the tool name.
+def approve_readonly(function_call: Content) -> bool:
+    """Auto-approve any read-only tool (name starts with 'get_', 'list_', or 'search_')."""
+    return bool(function_call.name and function_call.name.startswith(("get_", "list_", "search_")))
 
 
 @tool
