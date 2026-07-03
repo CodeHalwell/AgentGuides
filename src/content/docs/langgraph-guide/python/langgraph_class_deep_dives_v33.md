@@ -306,18 +306,20 @@ def append_reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
 ch = DeltaChannel(append_reducer, list)
 live = ch.from_checkpoint(MISSING)   # start empty
 
-# PendingWrite triples: (namespace, key, value). Each value is a list[str]
-# — the same shape a StateGraph node would produce for a list[str] field.
+# PendingWrite = tuple[str, str, Any] — fields are (task_id, channel_name, value).
+# replay_writes() only uses the third element; the first two are discarded.
+# Each value is a list[str] — the same shape a StateGraph node produces for
+# a list[str] state field.
 pending = [
-    ("ns", "k", ["alpha"]),
-    ("ns", "k", ["beta"]),
-    ("ns", "k", ["gamma"]),
+    ("task-1", "items", ["alpha"]),
+    ("task-2", "items", ["beta"]),
+    ("task-3", "items", ["gamma"]),
 ]
 live.replay_writes(pending)
 print(live.get())  # ['alpha', 'beta', 'gamma']
 
 # A second replay batch builds on top
-more = [("ns", "k", ["delta"])]
+more = [("task-4", "items", ["delta"])]
 live.replay_writes(more)
 print(live.get())  # ['alpha', 'beta', 'gamma', 'delta']
 ```
@@ -683,7 +685,7 @@ with graph.stream_events(
 ```python
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.config import get_stream_writer     # or get_stream_writer from langgraph.types
+from langgraph.config import get_stream_writer
 
 class State(TypedDict):
     items: list[str]
@@ -751,10 +753,10 @@ graph = (
     .compile()
 )
 
-# With a real streaming model, run.messages yields ChatModelStream objects:
+# With a real streaming model, run.messages yields ChatModelStream objects.
+# stream_mode= is not accepted under version="v3" — omit it:
 #
-# with graph.stream_events({"response": ""}, version="v3",
-#                          stream_mode="messages") as run:
+# with graph.stream_events({"response": ""}, version="v3") as run:
 #     for msg_stream in run.messages:
 #         for text_chunk in msg_stream.text:
 #             print(text_chunk, end="", flush=True)
@@ -824,8 +826,8 @@ async def stream_messages():
     async with run_stream as run:
         # With a real streaming model, iterating run.messages yields
         # AsyncChatModelStream objects; each exposes .text, .tool_calls etc.
-        # Here we drive the run to completion via run.output:
-        final = run.output   # drives the pump synchronously on first access
+        # AsyncGraphRunStream.output is an async method — use await + call:
+        final = await run.output()
         print("state:", final)
 
 asyncio.run(stream_messages())
@@ -912,7 +914,7 @@ graph = (
 )
 
 print(graph.invoke({"x": 1, "result": ""}))
-# {'x': 1, 'result': 'same'}
+# {'x': 1, 'result': 'from_right'}
 ```
 
 ---
