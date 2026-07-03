@@ -271,15 +271,22 @@ import asyncio
 from collections.abc import AsyncIterable, AsyncIterator
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessEventStream
-from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPart
+from pydantic_ai.messages import (
+    AgentStreamEvent, PartDeltaEvent, PartEndEvent, PartStartEvent, ThinkingPart,
+)
 
 
 async def strip_thinking_events(
     ctx: RunContext, stream: AsyncIterable[AgentStreamEvent]
 ) -> AsyncIterator[AgentStreamEvent]:
+    suppressed: set[int] = set()
     async for event in stream:
-        # Suppress thinking-part start events from downstream consumers
+        # Track and suppress the start event for any thinking part
         if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
+            suppressed.add(event.index)
+            continue
+        # Also drop the delta and end events for suppressed part indexes
+        if isinstance(event, (PartDeltaEvent, PartEndEvent)) and event.index in suppressed:
             continue
         yield event
 
@@ -1213,17 +1220,17 @@ async def feature_gate(
 toolset = FunctionToolset()
 
 
-@toolset.tool_plain_plain
+@toolset.tool_plain
 def post_to_slack(message: str) -> str:
     return "Posted"
 
 
-@toolset.tool_plain_plain
+@toolset.tool_plain
 def query_db(sql: str) -> list[dict]:
     return []
 
 
-@toolset.tool_plain_plain
+@toolset.tool_plain
 def get_time() -> str:
     return "12:00"
 
