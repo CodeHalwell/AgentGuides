@@ -278,33 +278,31 @@ Three execution paths the scheduler resolves:
 - **Dedup (same-turn completed)** — node already completed this turn; returns cached output immediately.
 - **Resume (cross-turn)** — node state found in session events; rehydrates interrupts or fast-forwards.
 
-`node_name` must be **deterministic across turns** — it is the key used to
-match events on resume.  If `None`, the scheduler falls back to `node.name`.
-Avoid generated names like `f"step_{uuid.uuid4()}"` or resume will never match.
+`node_name` is an internal scheduler parameter; the public `ctx.run_node()` API
+uses `node.name` as the tracking key automatically.  The scheduler's `node_name`
+must be deterministic across turns — avoid generated names like
+`f"step_{uuid.uuid4()}"` or resume will never match.
 
 ### Example 1 — basic `ctx.run_node()` call pattern
 
 ```python
-import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
-from google.adk.workflow._function_node import FunctionNode
 
-# A FunctionNode that dynamically dispatches a sub-node
+# A node that dynamically dispatches a sub-node; ctx.run_node() returns the output directly
 async def orchestrate(ctx):
     summariser = LlmAgent(
         name="summariser",
         model="gemini-2.5-flash",
         instruction="Summarise the text provided as input.",
     )
-    # node_name is fixed — safe for resume across invocations
-    child_ctx = await ctx.run_node(
+    # run_id is optional but useful for correlating events across runs
+    output = await ctx.run_node(
         summariser,
         node_input={"text": ctx.input},
-        node_name="summarise_step",      # deterministic — resume-safe
         run_id="run-001",
     )
-    ctx.output = child_ctx.output
+    ctx.output = output   # run_node() returns the child's output directly
 
 wf = Workflow(name="demo").add_node(orchestrate, name="orchestrate")
 ```
@@ -320,38 +318,37 @@ async def transparent_wrapper(ctx):
         model="gemini-2.5-flash",
         instruction="Answer the question.",
     )
-    # Child output replaces this node's output — the caller sees inner's answer
+    # use_as_output=True: child output replaces this node's output event
     await ctx.run_node(
         inner,
         node_input=ctx.input,
-        node_name="inner_step",
         run_id="run-wrap-001",
         use_as_output=True,   # ← transparent pass-through
     )
-    # ctx.output is now automatically set to inner_ctx.output
+    # ctx.output is automatically set to the child's output when use_as_output=True
 ```
 
 ### Example 3 — `use_sub_branch=True` for isolated message history
 
 ```python
+import asyncio
 from google.adk.agents import LlmAgent
 
 async def parallel_evaluator(ctx):
-    import asyncio
     tasks = []
     for i, chunk in enumerate(ctx.input.get("chunks", [])):
         async def run_chunk(i=i, chunk=chunk):
+            # run_node() returns the child output directly
             return await ctx.run_node(
                 LlmAgent(name="evaluator", model="gemini-2.5-flash",
                          instruction="Evaluate quality."),
                 node_input={"text": chunk},
-                node_name=f"eval_{i}",    # deterministic per chunk index
                 run_id=f"eval-{i}-001",
                 use_sub_branch=True,      # each branch gets its own message history
             )
         tasks.append(run_chunk())
     results = await asyncio.gather(*tasks)
-    ctx.output = {"scores": [r.output for r in results]}
+    ctx.output = {"scores": results}   # results is a list of child outputs
 ```
 
 ---
