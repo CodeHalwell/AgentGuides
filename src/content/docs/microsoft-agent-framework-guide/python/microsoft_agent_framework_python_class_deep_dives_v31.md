@@ -663,10 +663,13 @@ from agent_framework import ToolApprovalRule, ToolApprovalState
 
 async def save_approval_state(session_state: dict) -> str:
     """Serialise approval state to JSON."""
-    state: ToolApprovalState | None = session_state.get("tool_approval")
-    if state is None:
+    raw = session_state.get("tool_approval")
+    if raw is None:
         return "{}"
-    return json.dumps(state.to_dict())
+    if isinstance(raw, ToolApprovalState):
+        return json.dumps(raw.to_dict())
+    # ToolApprovalMiddleware stores state as a serialised dict between turns
+    return json.dumps(raw)
 
 
 async def load_approval_state(json_str: str) -> ToolApprovalState:
