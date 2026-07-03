@@ -597,33 +597,55 @@ class AuthPreparationResult(BaseModel):
 
 ```python
 import hashlib
+import json
+from fastapi.openapi.models import OAuth2, OAuthFlows, OAuthFlowClientCredentials
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import OAuth2Auth
 
-# Replicate the key logic from ToolContextCredentialStore._get_legacy_credential_key
-def stable_digest(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+# Mirrors _stable_model_digest from google.adk.auth.auth_tool (used by get_credential_key)
+def stable_model_digest(model) -> str:
+    dumped = model.model_dump(by_alias=True, exclude_none=True, mode="json")
+    canonical = json.dumps(dumped, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
+# Auth scheme contributes the first half of the key
+auth_scheme = OAuth2(
+    flows=OAuthFlows(
+        clientCredentials=OAuthFlowClientCredentials(
+            tokenUrl="https://auth.example.com/token",
+        )
+    )
+)
+
+# Build the credential; volatile OAuth2 fields are zeroed before hashing
 credential = AuthCredential(
     auth_type=AuthCredentialTypes.OAUTH2,
     oauth2=OAuth2Auth(
         client_id="my-client",
         client_secret="my-secret",
-        access_token="short-lived-token",  # zeroed before hashing
-        refresh_token="long-lived-token",  # zeroed before hashing
+        access_token="short-lived-token",   # zeroed before hashing
+        refresh_token="long-lived-token",   # zeroed before hashing
     ),
 )
 
-# Zero out volatile fields (mirrors store._get_legacy_credential_key)
+# Zero out volatile fields (mirrors ToolContextCredentialStore.get_credential_key)
 cred_copy = credential.model_copy(deep=True)
 cred_copy.oauth2.access_token = None
 cred_copy.oauth2.refresh_token = None
 cred_copy.oauth2.expires_at = None
 cred_copy.oauth2.expires_in = None
 
-cred_hash = stable_digest(cred_copy.model_dump_json())
-print(f"Stable credential hash (16 chars): {cred_hash}")
-# Same hash regardless of which access_token is currently active
+# Full key format: {scheme_type}_{scheme_digest}_{cred_type}_{cred_digest}_existing_exchanged_credential
+scheme_digest = stable_model_digest(auth_scheme)
+cred_digest = stable_model_digest(cred_copy)
+key = (
+    f"{auth_scheme.type_.name}_{scheme_digest}"
+    f"_{credential.auth_type.value}_{cred_digest}"
+    f"_existing_exchanged_credential"
+)
+print(f"Session state key: {key}")
+# → oauth2_<16-char-hex>_oauth2_<16-char-hex>_existing_exchanged_credential
+# The key is stable regardless of which access_token is currently active
 ```
 
 ### Example 2 — `AuthPreparationResult` states in practice
@@ -713,7 +735,7 @@ via `_to_snake_case()` and then sanitised with `rename_python_keywords()`.
 When `True`, only Python keyword conflicts are resolved (e.g. `if` → `param_if`).
 
 `_dedupe_param_names()` ensures no two parameters share the same `py_name` by
-appending `_<location>` suffixes (`_query`, `_path`, `_header`, `_cookie`).
+appending a numeric counter to later duplicates (`name_0`, `name_1`, …).
 
 `load()` is a classmethod that constructs an `OperationParser` from a
 pre-processed param list — useful when you need to inject synthetic parameters.
