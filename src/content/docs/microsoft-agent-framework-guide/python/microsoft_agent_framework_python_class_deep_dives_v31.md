@@ -936,7 +936,8 @@ async def main() -> None:
     )
 
     result = await workflow.run("Analyse and format the Q3 earnings call transcript.")
-    print(result.text)
+    outputs = result.get_outputs()
+    print(outputs[0] if outputs else "No output")
 
 
 asyncio.run(main())
@@ -999,7 +1000,8 @@ async def main() -> None:
     )
 
     result = await workflow.run("What is the capital of France?")
-    print(result)  # "PARIS"
+    outputs = result.get_outputs()
+    print(outputs[0] if outputs else "No output")  # "PARIS"
 
 
 asyncio.run(main())
@@ -1047,7 +1049,8 @@ async def main() -> None:
     )
 
     result = await workflow.run("Explain context providers in agent-framework.")
-    print(result.text)
+    outputs = result.get_outputs()
+    print(outputs[0] if outputs else "No output")
 
 
 asyncio.run(main())
@@ -1474,13 +1477,14 @@ async def main() -> None:
     writer = Agent(client=OpenAIChatClient(), instructions="Write a polished summary.")
 
     workflow = (
-        WorkflowBuilder(start_executor=researcher, checkpoint_storage=storage)
+        WorkflowBuilder(start_executor=researcher, checkpoint_storage=storage, name="research-write")
         .add_chain([researcher, writer])
         .build()
     )
 
     result = await workflow.run("Explain multi-agent orchestration.")
-    print(result.text)
+    outputs = result.get_outputs()
+    print(outputs[0] if outputs else "No output")
 
     # Inspect what was saved
     checkpoints = await storage.list_checkpoints(workflow_name="research-write")
@@ -1506,19 +1510,22 @@ async def main() -> None:
     step3 = Agent(client=OpenAIChatClient(), instructions="Write a conclusion.")
 
     workflow = (
-        WorkflowBuilder(start_executor=step1, checkpoint_storage=storage)
+        WorkflowBuilder(start_executor=step1, checkpoint_storage=storage, name="essay-pipeline")
         .add_chain([step1, step2, step3])
         .build()
     )
 
     # First run: checkpoint saved after each step
-    result = await workflow.run("Write an essay about context providers.")
+    await workflow.run("Write an essay about context providers.")
 
     # Get the latest checkpoint and resume (simulates process restart)
     checkpoint = await storage.get_latest(workflow_name="essay-pipeline")
     if checkpoint:
-        resumed = await workflow.resume(checkpoint.checkpoint_id, storage=storage)
-        print(resumed.text)
+        resumed = await workflow.run(
+            checkpoint_id=checkpoint.checkpoint_id,
+            checkpoint_storage=storage,
+        )
+        print(resumed.get_outputs())
 
 
 asyncio.run(main())
@@ -1541,7 +1548,7 @@ async def build_workflow(storage: InMemoryCheckpointStorage):
     step_b = Agent(client=OpenAIChatClient(), instructions="Step B: enrich the category.")
 
     return (
-        WorkflowBuilder(start_executor=step_a, checkpoint_storage=storage)
+        WorkflowBuilder(start_executor=step_a, checkpoint_storage=storage, name="test-workflow")
         .add_chain([step_a, step_b])
         .build()
     )
