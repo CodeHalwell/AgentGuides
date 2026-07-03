@@ -204,9 +204,9 @@ graph = (
 )
 
 print(graph.invoke({"trigger": "fire", "result": ""}))
-# {'trigger': None, 'result': 'handled: fire'}
+# {'result': 'handled: fire'}   ← trigger is omitted: EphemeralValue clears to MISSING after the superstep
 print(graph.invoke({"trigger": None, "result": ""}))
-# {'trigger': None, 'result': 'no trigger'}
+# {'result': 'no trigger'}      ← same: trigger channel is unavailable in final state
 ```
 
 ---
@@ -410,7 +410,7 @@ print(gate.is_available())   # False — reset; ready for next round
 - `Runtime.drain_requested` and `Runtime.drain_reason` delegate directly to `self.control`.
 - `GraphDrained` inherits from `GraphBubbleUp`, which is caught by the Pregel engine before propagating, allowing the checkpoint to be saved. The run can be resumed from that checkpoint later.
 - The control object is available inside nodes via `runtime.control` or via the `Runtime.drain_requested` convenience shortcut.
-- `RunControl` is **executor-owned** — you never instantiate it yourself in production code. The executor creates it and forwards it through `Runtime.control`. Access it only via `runtime.control`, `runtime.drain_requested`, or `runtime.drain_reason` inside a node.
+- `RunControl` can be instantiated by user code for **external drain** scenarios. Pass `control=my_control` to `invoke()`, `stream()`, or `stream_events()` and then call `my_control.request_drain(reason)` from a SIGTERM handler or background thread. If you do not pass `control=`, the executor creates an internal `RunControl()` that external code cannot reach. Inside a node, access the active control via `runtime.control`, `runtime.drain_requested`, or `runtime.drain_reason`.
 
 ### Example 1 — inspect `drain_requested` inside a node
 
@@ -441,27 +441,45 @@ result = graph.invoke({"counter": 0})
 print(result)  # {'counter': 1}
 ```
 
-### Example 2 — `RunControl.request_drain()` from a background thread
+### Example 2 — external drain via `control=` in `invoke()`
+
+Pass your own `RunControl` to `invoke()`/`stream()` so a SIGTERM handler or background thread can signal the run to drain cooperatively.
 
 ```python
-# NOTE: In production, RunControl is created by the executor — you never
-# construct one yourself. This standalone example demonstrates the API
-# surface only; it does not wire into compile()/invoke().
-import threading, time
-from langgraph.runtime import RunControl
+import signal, threading, time
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.runtime import RunControl, Runtime
 
+class State(TypedDict):
+    counter: int
+
+def slow_node(state: State, runtime: Runtime) -> State:
+    time.sleep(0.02)
+    if runtime.drain_requested:
+        print(f"drain requested: {runtime.drain_reason}")
+    return {"counter": state["counter"] + 1}
+
+graph = (
+    StateGraph(State)
+    .add_node("count", slow_node)
+    .add_edge(START, "count")
+    .add_edge("count", END)
+    .compile()
+)
+
+# Create a RunControl *before* the run and pass it as control=.
+# The SIGTERM handler (or any thread) can then call request_drain().
 control = RunControl()
 
-def shutdown_later():
-    time.sleep(0.05)
+def sigterm_handler(signum, frame):
     control.request_drain("SIGTERM received")
 
-thread = threading.Thread(target=shutdown_later, daemon=True)
-thread.start()
-thread.join()
+signal.signal(signal.SIGTERM, sigterm_handler)
 
-print(control.drain_requested)   # True
-print(control.drain_reason)      # 'SIGTERM received'
+result = graph.invoke({"counter": 0}, control=control)
+print(result)                     # {'counter': 1}
+print(control.drain_requested)    # False (no SIGTERM was sent in this run)
 ```
 
 ### Example 3 — catching `GraphDrained` at the call site
@@ -720,8 +738,8 @@ with graph.stream_events(
 
 **Key source facts** (from `langgraph/stream/transformers.py`):
 
-- Each new `message-start` protocol event creates a fresh `ChatModelStream` keyed by `run_id`.
-- `message-finish` closes that stream and pushes it to `_log: StreamChannel[ChatModelStream]`.
+- Each `message-start` protocol event creates a fresh `ChatModelStream` keyed by `run_id` and **immediately pushes it to `run.messages`** (`_log: StreamChannel[ChatModelStream]`). Consumers receive the handle at stream-start and can begin iterating `.text` / `.tool_calls` while the model is still generating.
+- `message-finish` dispatches the final event to the stream (closing it) and removes the run from `_by_run`. Nothing is pushed to `_log` at finish — the handle was already delivered on `message-start`.
 - Whole `AIMessage` objects arriving via `on_chain_end` are replayed as synthetic protocol events via `message_to_events()` so the same projection API works for non-streaming models.
 - V1 `AIMessageChunk` tuples (legacy `on_llm_new_token`) are **not** projected; models must use `stream_events(version="v3")` to populate `run.messages` with streaming content.
 - `run.messages` is a `StreamChannel[ChatModelStream]`. Iterating it yields stream handles you then iterate for token-by-token content.
