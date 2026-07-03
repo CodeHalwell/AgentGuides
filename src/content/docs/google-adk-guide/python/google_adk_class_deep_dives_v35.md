@@ -1,6 +1,6 @@
 ---
 title: "Class deep dives — volume 35 (10 additional classes)"
-description: "Source-verified deep dives into 10 more google-adk 2.3.0 classes: ServiceAccountCredentialExchanger (access token vs ID token exchange; use_id_token; use_default_credential; audience-based Cloud Run auth), PubSub client factory (get_publisher_client/get_subscriber_client/cleanup_clients; TTL-30-min cache; BatchSettings(max_messages=1)), ScheduleDynamicNode Protocol (ctx.run_node() contract; 8 parameters; fresh/dedup/resume dispatch semantics), build_node + is_node_like (NodeLike→BaseNode; LlmAgent mode inference; _ParallelWorker wrapping; _ToolNode/FunctionNode promotion), OAuthGrantType + ExtendedOAuth2 + OpenIdConnectWithConfig (extended auth scheme models; from_flow() factory; issuer_url discovery), ToolContextCredentialStore + AuthPreparationResult + ToolAuthHandler.prepare_auth_credentials (SHA-256 credential key derivation; OAuth2 field nulling before hashing; refresh on read), OperationParser (OpenAPI operation→Python params; preserve_property_names; snake_case; _dedupe_param_names; load() classmethod), UrlContextTool standalone (Gemini 2 built-in URL fetcher; process_llm_request hook; model guard; types.UrlContext injection), ApiParameter + rename_python_keywords (OpenAPI→Python parameter transformation; location-based defaults; TypeHintHelper), token_to_scheme_credential + openid_dict_to_scheme_credential + credential_to_param (auth helper factories; API key/bearer/OAuth2/OpenID scheme+credential pairs)."
+description: "Source-verified deep dives into 10 more google-adk 2.3.0 classes: ServiceAccountCredentialExchanger (access token vs ID token exchange; use_id_token; use_default_credential; audience-based Cloud Run auth), PubSub client factory (get_publisher_client/get_subscriber_client/cleanup_clients; TTL-30-min cache; BatchSettings(max_messages=1)), ScheduleDynamicNode Protocol (ctx.run_node() contract; 9 parameters: 3 positional + 6 keyword-only; fresh/dedup/resume dispatch semantics), build_node + is_node_like (NodeLike→BaseNode; LlmAgent mode inference; _ParallelWorker wrapping; _ToolNode/FunctionNode promotion), OAuthGrantType + ExtendedOAuth2 + OpenIdConnectWithConfig (extended auth scheme models; from_flow() factory; issuer_url discovery), ToolContextCredentialStore + AuthPreparationResult + ToolAuthHandler.prepare_auth_credentials (SHA-256 credential key derivation; OAuth2 field nulling before hashing; refresh on read), OperationParser (OpenAPI operation→Python params; preserve_property_names; snake_case; _dedupe_param_names; load() classmethod), UrlContextTool standalone (Gemini 2 built-in URL fetcher; process_llm_request hook; model guard; types.UrlContext injection), ApiParameter + rename_python_keywords (OpenAPI→Python parameter transformation; location-based defaults; TypeHintHelper), token_to_scheme_credential + openid_dict_to_scheme_credential + credential_to_param (auth helper factories; API key/bearer/OAuth2/OpenID scheme+credential pairs)."
 framework: google-adk
 language: python
 sidebar:
@@ -524,8 +524,9 @@ print("Grant type detection works correctly")
 ```python
 from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 
+# OpenIdConnectWithConfig uses explicit endpoint fields; it does not have an
+# openIdConnectUrl constructor param — use ExtendedOAuth2.issuer_url for discovery (see example 3)
 google_oidc = OpenIdConnectWithConfig(
-    openIdConnectUrl="https://accounts.google.com/.well-known/openid-configuration",
     authorization_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
     token_endpoint="https://oauth2.googleapis.com/token",
     userinfo_endpoint="https://openidconnect.googleapis.com/v1/userinfo",
