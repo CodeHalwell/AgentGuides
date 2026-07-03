@@ -173,28 +173,26 @@ ch_relaxed.update([1, 2])
 print("relaxed last-write:", ch_relaxed.get())  # 2
 ```
 
-### Example 3 — `EphemeralValue` inside a custom `Pregel` graph
+### Example 3 — `EphemeralValue` directly inside a `StateGraph`
 
 ```python
-from typing import TypedDict
+from typing import Annotated
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langgraph.channels.ephemeral_value import EphemeralValue
 
-# EphemeralValue is chosen automatically when you annotate a field
-# with no reducer and you want it to clear after each step.
-# StateGraph uses LastValue by default; use EphemeralValue manually
-# in Pregel if you need one-shot trigger semantics.
-
-# Practical pattern: simulate an EphemeralValue inside StateGraph
-# by setting the field back to None in the node that reads it.
+# StateGraph's channel resolver checks for BaseChannel instances in
+# Annotated metadata before falling back to LastValue, so you can
+# use EphemeralValue directly — no manual Pregel construction needed.
 
 class State(TypedDict):
-    trigger: str | None     # treated as one-shot: node clears it after reading
+    trigger: Annotated[str | None, EphemeralValue(str)]   # clears each superstep
     result: str
 
 def handle_trigger(state: State) -> State:
     trigger = state.get("trigger")
     if trigger:
-        return {"result": f"handled: {trigger}", "trigger": None}  # clear
+        return {"result": f"handled: {trigger}"}   # trigger auto-clears; no need to set None
     return {"result": "no trigger"}
 
 graph = (
@@ -671,9 +669,13 @@ graph = (
     .compile()
 )
 
+# UpdatesTransformer is NOT wired by default — pass it via transformers=
+from langgraph.stream.transformers import UpdatesTransformer
+
 with graph.stream_events(
     {"total": 0},
-    version="v3",              # stream_mode= is rejected under v3
+    version="v3",
+    transformers=[UpdatesTransformer],   # opts in run.updates projection
 ) as run:
     for node_update in run.updates:
         # Each item: {"node_name": {"field": value, ...}}
@@ -704,9 +706,13 @@ graph = (
     .compile()
 )
 
+# CustomTransformer is NOT wired by default — pass it via transformers=
+from langgraph.stream.transformers import CustomTransformer
+
 with graph.stream_events(
     {"items": ["a", "b", "c"]},
-    version="v3",              # stream_mode= is rejected under v3
+    version="v3",
+    transformers=[CustomTransformer],    # opts in run.custom projection
 ) as run:
     for payload in run.custom:
         print("custom:", payload)   # {'progress': 1, 'item': 'a'} …
@@ -874,27 +880,23 @@ ch.update([])              # empty → clears
 print(ch.is_available())   # False
 ```
 
-### Example 3 — using `AnyValue` in a custom `Pregel` setup
+### Example 3 — `AnyValue` in `StateGraph` via `Annotated` metadata
 
 ```python
-from typing import TypedDict
+from typing import Annotated
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langgraph.channels.any_value import AnyValue
 
-# IMPORTANT: StateGraph uses LastValue by default, which raises
-# InvalidUpdateError whenever two parallel branches write the same
-# state key in the same superstep — even if the values are identical.
-# AnyValue is NOT available via StateGraph's default channel resolution.
-# To get last-write-wins semantics you must either:
-#   (a) use a reducer (e.g. Annotated[str, lambda a, b: b])
-#   (b) inject AnyValue directly into a custom Pregel graph
-#
-# This example shows a SEQUENTIAL pattern (safe with LastValue) to
-# illustrate the node logic. True parallel concurrent writes require
-# a reducer or direct Pregel construction.
+# StateGraph's channel resolver checks for BaseChannel instances in
+# Annotated metadata before falling back to LastValue, so you can wire
+# AnyValue directly — no custom Pregel construction needed.
+# This is the correct fix for INVALID_CONCURRENT_GRAPH_UPDATE when you
+# genuinely want last-write-wins behaviour across parallel branches.
 
 class State(TypedDict):
     x: int
-    result: str
+    result: Annotated[str, AnyValue(str)]   # last concurrent write wins; no exception
 
 def branch_left(state: State) -> State:
     return {"result": "from_left"}
@@ -902,19 +904,23 @@ def branch_left(state: State) -> State:
 def branch_right(state: State) -> State:
     return {"result": "from_right"}
 
-# Sequential (not parallel) — no concurrent write, no InvalidUpdateError:
+# Both branches run in the same superstep — AnyValue accepts both writes
+# and keeps whichever arrived last (non-deterministic across branches).
 graph = (
     StateGraph(State)
     .add_node("left", branch_left)
     .add_node("right", branch_right)
+    .add_node("merge", lambda s: {})
     .add_edge(START, "left")
-    .add_edge("left", "right")
-    .add_edge("right", END)
+    .add_edge(START, "right")
+    .add_edge("left", "merge")
+    .add_edge("right", "merge")
+    .add_edge("merge", END)
     .compile()
 )
 
 print(graph.invoke({"x": 1, "result": ""}))
-# {'x': 1, 'result': 'from_right'}
+# {'x': 1, 'result': 'from_left'} or 'from_right' — last write wins
 ```
 
 ---
