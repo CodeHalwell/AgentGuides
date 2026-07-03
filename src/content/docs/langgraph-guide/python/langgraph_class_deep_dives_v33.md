@@ -500,7 +500,6 @@ print(isinstance(exc, RecursionError))  # False — it's GraphBubbleUp
 ### Example 1 — counter that exposes `previous` to the caller
 
 ```python
-from typing import Any
 from langgraph.func import entrypoint
 from langgraph.checkpoint.memory import InMemorySaver
 
