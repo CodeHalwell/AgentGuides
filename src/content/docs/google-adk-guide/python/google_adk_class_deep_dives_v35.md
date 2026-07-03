@@ -653,10 +653,16 @@ from google.adk.tools.openapi_tool.openapi_spec_parser.tool_auth_handler import 
     AuthPreparationResult
 )
 
-# "done" state — credential is ready for use in HTTP headers
+# "done" state — auth_credential is Optional[AuthCredential]; it may be
+# populated (e.g. a freshly exchanged token) or None if the credential was
+# consumed/stored downstream. Check before use.
 ready = AuthPreparationResult(state="done")
 assert ready.state == "done"
-assert ready.auth_credential is None  # credential consumed downstream
+# auth_credential is Optional — do not assert it is always None for "done"
+if ready.auth_credential is not None:
+    print("Credential available:", ready.auth_credential.auth_type)
+else:
+    print("Credential already stored/consumed downstream")
 
 # "pending" state — user must complete an OAuth2 browser flow
 pending = AuthPreparationResult(
@@ -698,8 +704,12 @@ async def call_with_sa_auth(ctx):
     )
     result = await handler.prepare_auth_credentials()
     if result.state == "done":
-        # Use result.auth_credential in HTTP headers
-        print(result.auth_credential.http.credentials.token[:20])
+        # auth_credential is Optional — guard before dereferencing
+        if result.auth_credential is not None:
+            token = result.auth_credential.http.credentials.token
+            print(token[:20])
+        else:
+            print("Credential stored by exchanger; retrieve from session store")
 ```
 
 ---
