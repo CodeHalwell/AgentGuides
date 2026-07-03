@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 33"
-description: "Source-verified deep dives into 10 previously undocumented class groups — InMemoryCache/BaseCache namespace-TTL caching, EphemeralValue one-step channel, DeltaChannel (beta) replay-based accumulation, NamedBarrierValue/NamedBarrierValueAfterFinish fan-in barriers, RunControl/GraphDrained cooperative drain, entrypoint.final decoupled return/save, ValuesTransformer/UpdatesTransformer/CustomTransformer v3 native stream transformers, MessagesTransformer ChatModelStream lifecycle, AnyValue relaxed last-write channel, and ExecutionInfo/ServerInfo/get_runtime execution metadata — verified against langgraph==1.2.7."
+description: "Source-verified deep dives into 10 class groups in langgraph==1.2.7 — InMemoryCache/BaseCache namespace-TTL caching, EphemeralValue one-step channel, DeltaChannel (beta) replay-based accumulation, NamedBarrierValue/NamedBarrierValueAfterFinish fan-in barriers, RunControl/GraphDrained cooperative drain, entrypoint.final decoupled return/save, ValuesTransformer/UpdatesTransformer/CustomTransformer v3 native stream transformers, MessagesTransformer ChatModelStream lifecycle, AnyValue relaxed last-write channel, and ExecutionInfo/ServerInfo/get_runtime execution metadata — expanded and updated coverage verified against langgraph==1.2.7."
 framework: langgraph
 language: python
 sidebar:
@@ -8,7 +8,7 @@ sidebar:
   order: 64
 ---
 
-Source-verified deep dives into **10 previously undocumented class groups**, each with **3 runnable examples**, verified against `langgraph==1.2.7` / `langgraph-checkpoint==4.1.1` / `langgraph-prebuilt==1.1.0`.
+Source-verified deep dives into **10 class groups**, each with **3 runnable examples**, updated and expanded for `langgraph==1.2.7` / `langgraph-checkpoint==4.1.1` / `langgraph-prebuilt==1.1.0`.
 
 ---
 
