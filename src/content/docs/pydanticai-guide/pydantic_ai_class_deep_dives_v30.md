@@ -730,7 +730,7 @@ READ_TOOLS = {"fetch_data", "list_items", "get_status"}
 async def approve_reads_only(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
-    all_reads = all(call.tool_name in READ_TOOLS for call in requests.tool_calls)
+    all_reads = all(call.tool_name in READ_TOOLS for call in requests.approvals)
     if all_reads:
         return requests.build_results(approve_all=True)
     return None  # writes bubble up as DeferredToolRequests for human review
@@ -782,7 +782,7 @@ HIGH_RISK = {"reboot_server", "clear_cache"}
 async def approve_low_risk(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
-    if all(c.tool_name in LOW_RISK for c in requests.tool_calls):
+    if all(c.tool_name in LOW_RISK for c in requests.approvals):
         return requests.build_results(approve_all=True)
     return None
 
@@ -1028,7 +1028,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 
 
 provider = HerokuProvider(api_key=os.environ["HEROKU_INFERENCE_KEY"])
-model = OpenAIChatModel("claude-3-5-haiku-20241022", openai_client=provider.client)
+model = OpenAIChatModel("claude-3-5-haiku-20241022", provider=provider)
 
 agent = Agent(model, system_prompt="You are a concise assistant.")
 
@@ -1055,7 +1055,7 @@ from pydantic_ai.settings import ModelSettings
 
 
 provider = HerokuProvider(api_key=os.environ["HEROKU_INFERENCE_KEY"])
-model = OpenAIChatModel("claude-opus-4-5", openai_client=provider.client)
+model = OpenAIChatModel("claude-opus-4-5", provider=provider)
 
 agent = Agent(
     model,
@@ -1088,7 +1088,7 @@ provider = HerokuProvider(
     api_key=os.environ["HEROKU_INFERENCE_KEY"],
     base_url="https://inference.my-private-space.herokuspace.com",
 )
-model = OpenAIChatModel("llama3.1-70b-versatile", openai_client=provider.client)
+model = OpenAIChatModel("llama3.1-70b-versatile", provider=provider)
 
 agent = Agent(model, system_prompt="You are a helpful coding assistant.")
 
@@ -1530,7 +1530,7 @@ provider = gateway_provider(
     "openai",
     api_key=os.environ["PYDANTIC_AI_GATEWAY_API_KEY"],
 )
-model = OpenAIChatModel("gpt-4o-mini", openai_client=provider.client)
+model = OpenAIChatModel("gpt-4o-mini", provider=provider)
 
 agent = Agent(model, system_prompt="You are a concise assistant.")
 
@@ -1559,8 +1559,7 @@ provider = gateway_provider(
     "anthropic",
     api_key=os.environ["PYDANTIC_AI_GATEWAY_API_KEY"],
 )
-# AnthropicProvider.client returns AsyncAnthropic; AnthropicModel accepts that
-model = AnthropicModel("claude-haiku-4-5", anthropic_client=provider.client)
+model = AnthropicModel("claude-haiku-4-5", provider=provider)
 
 agent = Agent(model, system_prompt="Answer in plain text.")
 
@@ -1594,7 +1593,7 @@ provider = gateway_provider(
     api_key=os.environ.get("PYDANTIC_AI_GATEWAY_API_KEY", ""),
     route="openai-premium",  # a custom routing group on the Gateway side
 )
-model = OpenAIChatModel("gpt-4o", openai_client=provider.client)
+model = OpenAIChatModel("gpt-4o", provider=provider)
 
 agent = Agent(model, system_prompt="You are an expert assistant.")
 
