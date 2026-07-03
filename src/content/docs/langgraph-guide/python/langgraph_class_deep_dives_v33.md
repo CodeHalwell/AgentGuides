@@ -581,16 +581,18 @@ def read_previous(
 ) -> int:
     return previous or -1
 
-config2 = {"configurable": {"thread_id": "t2"}}
-nullify.invoke(99, config2)
+# Invoke nullify again on the SAME thread — saves 99 to that thread's checkpoint.
+nullify.invoke(99, config)   # config still has thread_id="t1"
 
-# Note: previous is saved per-thread and is scoped to the specific @entrypoint.
-# Each @entrypoint compiles into a separate graph with its own namespace, so
-# checkpoints from one @entrypoint are NOT accessible from a different one even
-# when sharing the same checkpointer and thread_id.
-# Verify a saved value by listing checkpoints for the thread:
+# read_previous is a different @entrypoint compiled into a separate graph
+# namespace. Even though we pass the same checkpointer and thread_id="t1",
+# it cannot see the value nullify saved — each entrypoint is isolated.
+result = read_previous.invoke(0, config)
+print(result)   # -1 — read_previous has no prior checkpoint of its own yet
+
+# Verify nullify's checkpoint exists for thread t1:
 snapshot = list(saver.list({"configurable": {"thread_id": "t1"}}))
-print(bool(snapshot))  # True — checkpoint exists
+print(bool(snapshot))  # True — nullify's checkpoint exists, but read_previous can't see it
 ```
 
 ---
