@@ -1451,7 +1451,25 @@ base = FunctionToolset()
 
 @base.tool_plain
 def calculate(expression: str) -> float:
-    return eval(expression, {"__builtins__": {}}, {})  # demo only
+    """Evaluate a simple arithmetic expression without eval()."""
+    import ast
+    import operator as op
+
+    _ops = {
+        ast.Add: op.add, ast.Sub: op.sub,
+        ast.Mult: op.mul, ast.Div: op.truediv,
+    }
+
+    def _safe(node: ast.expr) -> float:
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+        if isinstance(node, ast.BinOp) and type(node.op) in _ops:
+            return _ops[type(node.op)](_safe(node.left), _safe(node.right))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return -_safe(node.operand)
+        raise ValueError(f"Unsupported operation in expression: {ast.dump(node)}")
+
+    return _safe(ast.parse(expression, mode="eval").body)
 
 
 agent = Agent("openai:gpt-4o-mini", toolsets=[TimedToolset(base)])
