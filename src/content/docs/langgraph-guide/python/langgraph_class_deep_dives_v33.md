@@ -410,6 +410,7 @@ print(gate.is_available())   # False — reset; ready for next round
 - `Runtime.drain_requested` and `Runtime.drain_reason` delegate directly to `self.control`.
 - `GraphDrained` inherits from `GraphBubbleUp`, which is caught by the Pregel engine before propagating, allowing the checkpoint to be saved. The run can be resumed from that checkpoint later.
 - The control object is available inside nodes via `runtime.control` or via the `Runtime.drain_requested` convenience shortcut.
+- `RunControl` is **executor-owned** — you never instantiate it yourself in production code. The executor creates it and forwards it through `Runtime.control`. Access it only via `runtime.control`, `runtime.drain_requested`, or `runtime.drain_reason` inside a node.
 
 ### Example 1 — inspect `drain_requested` inside a node
 
@@ -443,6 +444,9 @@ print(result)  # {'counter': 1}
 ### Example 2 — `RunControl.request_drain()` from a background thread
 
 ```python
+# NOTE: In production, RunControl is created by the executor — you never
+# construct one yourself. This standalone example demonstrates the API
+# surface only; it does not wire into compile()/invoke().
 import threading, time
 from langgraph.runtime import RunControl
 
@@ -565,34 +569,21 @@ def nullify(
     previous: int | None = None,
 ) -> entrypoint.final[None, int]:
     """Always returns None to the caller, but saves x."""
+    print(f"  previous={previous}")
     return entrypoint.final(value=None, save=x)
 
 config = {"configurable": {"thread_id": "t1"}}
 
-r = nullify.invoke(42, config)
-print(r)       # None  ← caller sees None
+r1 = nullify.invoke(42, config)
+print(r1)    # None  ← caller sees None; 42 is saved to checkpoint
 
-# On next invocation, previous=42 (the saved value)
-@entrypoint(checkpointer=saver)
-def read_previous(
-    _: int,
-    *,
-    previous: int | None = None,
-) -> int:
-    return previous or -1
+r2 = nullify.invoke(99, config)
+# previous=42  ← the value saved by entrypoint.final in the prior call
+print(r2)    # None  ← still None to the caller; 99 is now saved
 
-# Invoke nullify again on the SAME thread — saves 99 to that thread's checkpoint.
-nullify.invoke(99, config)   # config still has thread_id="t1"
-
-# read_previous is a different @entrypoint compiled into a separate graph
-# namespace. Even though we pass the same checkpointer and thread_id="t1",
-# it cannot see the value nullify saved — each entrypoint is isolated.
-result = read_previous.invoke(0, config)
-print(result)   # -1 — read_previous has no prior checkpoint of its own yet
-
-# Verify nullify's checkpoint exists for thread t1:
+# Verify the checkpoint exists for this thread:
 snapshot = list(saver.list({"configurable": {"thread_id": "t1"}}))
-print(bool(snapshot))  # True — nullify's checkpoint exists, but read_previous can't see it
+print(bool(snapshot))  # True — checkpoint persisted even though value=None
 ```
 
 ---
@@ -791,8 +782,9 @@ root_transformer = MessagesTransformer(scope=())
 # Subgraph scope named "sub"
 sub_transformer = MessagesTransformer(scope=("sub",))
 
-# The scope_list attribute holds the pre-converted list form used in
-# process() comparisons, letting you verify the scope assignment:
+# NOTE: _scope_list is a private implementation detail (leading underscore).
+# It is used here only to verify scope assignment; do not depend on it in
+# production code as it may change without notice.
 print("root scope_list:", root_transformer._scope_list)   # []
 print("sub  scope_list:", sub_transformer._scope_list)    # ['sub']
 
@@ -801,7 +793,7 @@ print("sub  scope_list:", sub_transformer._scope_list)    # ['sub']
 # Root transformer ignores ["sub"] events; sub transformer ignores [] events.
 assert root_transformer._scope_list != ["sub"]
 assert sub_transformer._scope_list == ["sub"]
-print("Scope filtering verified via _scope_list attribute")
+print("Scope filtering verified (via private _scope_list — for inspection only)")
 ```
 
 ### Example 3 — full async messages streaming pattern
