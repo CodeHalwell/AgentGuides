@@ -85,11 +85,15 @@ auth_credential = AuthCredential(
 
 auth_scheme = HTTPBearer(bearerFormat="JWT")
 exchanger = ServiceAccountCredentialExchanger()
-# Returns AuthCredential with auth_type=HTTP and http.credentials.token set
-result = exchanger.exchange_credential(auth_scheme, auth_credential)
-print(result.auth_type)            # AuthCredentialTypes.HTTP
-print(result.http.scheme)          # bearer
-print(result.http.credentials.token[:20])  # <the access token>
+# Replace the placeholder private_key above with a real key before running.
+# exchange_credential() calls the token endpoint and will fail on a dummy key.
+try:
+    result = exchanger.exchange_credential(auth_scheme, auth_credential)
+    print(result.auth_type)            # AuthCredentialTypes.HTTP
+    print(result.http.scheme)          # bearer
+    print(result.http.credentials.token[:20])
+except Exception as exc:
+    print(f"Provide a real service-account key to run this example: {exc}")
 ```
 
 ### Example 2 — exchange for an ID token (Cloud Run service-to-service)
@@ -121,9 +125,14 @@ auth_credential = AuthCredential(
 )
 
 exchanger = ServiceAccountCredentialExchanger()
-result = exchanger.exchange_credential(HTTPBearer(), auth_credential)
-# result.http.credentials.token is now a signed OIDC ID token valid for
-# the specified audience — suitable for Cloud Run Authorization headers
+# Replace the placeholder private_key above with a real key before running.
+try:
+    result = exchanger.exchange_credential(HTTPBearer(), auth_credential)
+    # result.http.credentials.token is a signed OIDC ID token valid for
+    # the specified audience — suitable for Cloud Run Authorization headers
+    print(result.http.credentials.token[:20])
+except Exception as exc:
+    print(f"Provide a real service-account key to run this example: {exc}")
 ```
 
 ### Example 3 — fall back to Application Default Credentials with custom scopes
@@ -283,20 +292,32 @@ uses `node.name` as the tracking key automatically.  The scheduler's `node_name`
 must be deterministic across turns — avoid generated names like
 `f"step_{uuid.uuid4()}"` or resume will never match.
 
+**Public API vs. Protocol differences** — `ctx.run_node()` wraps the scheduler
+and has a slightly different surface:
+- Return type: the Protocol returns `Awaitable[Context]` (the child's full
+  execution context); `ctx.run_node()` unwraps it and returns the child's output
+  as `Any`.
+- `run_id`: the Protocol declares it as a required `str`; `ctx.run_node()`
+  exposes it as `run_id: str | None = None` (optional — pass a stable ID to
+  correlate logs and events across retries).
+
 ### Example 1 — basic `ctx.run_node()` call pattern
 
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
 
-# A node that dynamically dispatches a sub-node; ctx.run_node() returns the output directly
+# ctx.run_node() returns the child's output directly (Any).
+# Note: the internal ScheduleDynamicNode Protocol returns Awaitable[Context];
+# ctx.run_node() unwraps that Context and surfaces only the output.
 async def orchestrate(ctx):
     summariser = LlmAgent(
         name="summariser",
         model="gemini-2.5-flash",
         instruction="Summarise the text provided as input.",
     )
-    # run_id is optional but useful for correlating events across runs
+    # run_id is str | None = None in ctx.run_node(); pass a stable string to
+    # correlate this execution in logs and events across retries
     output = await ctx.run_node(
         summariser,
         node_input={"text": ctx.input},
