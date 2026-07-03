@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Python - Recipes and Code Patterns"
-description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.6.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, workflow checkpointing, compaction, long-term memory, and todo tracking."
+description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.10.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, workflow checkpointing, compaction, long-term memory, and todo tracking."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -10,14 +10,14 @@ language: python
 Practical, runnable patterns for the real `agent_framework` package. Every recipe targets the public surface of the latest release; nothing here relies on private modules.
 
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.
-- **Pinned version:** `agent-framework==1.6.0`. Check the latest with `pip index versions agent-framework`.
+- **Pinned version:** `agent-framework==1.10.0`. Check the latest with `pip index versions agent-framework`.
 - **Python:** 3.10+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
 - **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`, `CompactionProvider`, `ToolResultCompactionStrategy`, `SelectiveToolCallCompactionStrategy`, `TokenBudgetComposedStrategy`, `TodoProvider`, `TodoFileStore`, `MemoryContextProvider`, `MemoryFileStore`.
 
 ```bash
 pip install agent-framework
 # Or pin explicitly:
-pip install 'agent-framework==1.6.0'
+pip install 'agent-framework==1.10.0'
 ```
 
 ---
