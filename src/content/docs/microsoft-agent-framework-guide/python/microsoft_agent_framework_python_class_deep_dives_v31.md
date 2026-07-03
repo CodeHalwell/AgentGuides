@@ -56,8 +56,7 @@ provider derive the working folder from `session_id` automatically.
 
 ```python
 import asyncio
-from agent_framework import Agent, FileMemoryProvider
-from agent_framework._harness._file_access import FileSystemAgentFileStore
+from agent_framework import Agent, FileMemoryProvider, FileSystemAgentFileStore
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -97,8 +96,7 @@ sessions for the same logical entity.
 
 ```python
 import asyncio
-from agent_framework import Agent, FileMemoryProvider
-from agent_framework._harness._file_access import FileSystemAgentFileStore
+from agent_framework import Agent, FileMemoryProvider, FileSystemAgentFileStore
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -136,8 +134,7 @@ the agent discover large files efficiently.
 
 ```python
 import asyncio
-from agent_framework import Agent, FileMemoryProvider
-from agent_framework._harness._file_access import FileSystemAgentFileStore
+from agent_framework import Agent, FileMemoryProvider, FileSystemAgentFileStore
 from agent_framework.openai import OpenAIChatClient
 
 CUSTOM_INSTRUCTIONS = """
@@ -1215,9 +1212,13 @@ async def main() -> None:
     todos_check = todos_remaining()
     bg_tasks_check = background_tasks_running()
 
-    # Loop while either open todos OR running background tasks exist
+    # Loop while either open todos OR running background tasks exist.
+    # todos_check is async; bg_tasks_check is sync — evaluate separately to avoid
+    # accidentally returning an unawaited coroutine object as a truthy value.
     async def should_continue_combined(**kwargs) -> bool:
-        return await todos_check(**kwargs) or bg_tasks_check(**kwargs)
+        todos = await todos_check(**kwargs)
+        bg_running = bg_tasks_check(**kwargs)
+        return todos or bg_running
 
     sub_agent = Agent(client=OpenAIChatClient(), name="helper")
 
@@ -1425,7 +1426,8 @@ class InvocationCounterProvider(ContextProvider):
     async def after_run(
         self, *, agent, session: AgentSession, context: SessionContext, state: dict[str, Any]
     ) -> None:
-        print(f"Invocation #{state['count']} complete. Response length: {len(context.response.text)} chars")
+        response_len = len(context.response.text) if context.response and context.response.text else 0
+        print(f"Invocation #{state['count']} complete. Response length: {response_len} chars")
 
 
 async def main() -> None:
