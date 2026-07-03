@@ -781,7 +781,7 @@ from fastapi.openapi.models import Operation, Parameter, Schema
 
 op = Operation(
     parameters=[
-        Parameter(**{"name": "X-Api-Key", "in": "header", "required": True,
+        Parameter(**{"name": "xApiKey", "in": "header", "required": True,
                      "schema": Schema(type="string")}),
         Parameter(**{"name": "userId", "in": "path", "required": True,
                      "schema": Schema(type="string")}),
@@ -797,7 +797,7 @@ for p in parser_snake._params:
 for p in parser_orig._params:
     print(f"original: {p.original_name}")
 # snake:  x_api_key, user_id
-# original: X-Api-Key, userId  (only keyword conflicts renamed)
+# original: xApiKey, userId  (only keyword conflicts renamed)
 ```
 
 ### Example 3 — `load()` classmethod to inject synthetic parameters
@@ -947,7 +947,7 @@ location (`query`, `path`, `header`, `cookie`, `body`), and the JSON Schema
 On construction (`model_post_init`), `ApiParameter` automatically:
 1. Calls `_to_snake_case(original_name)` unless `py_name` is already set.
 2. Passes the result through `rename_python_keywords()` to avoid collisions
-   with Python builtins (`if`, `for`, `return`, etc.).
+   with Python keywords (`if`, `for`, `return`, etc.).
 3. Falls back to a `param_location`-derived default name if both steps produce
    an empty string.
 4. Calls `TypeHintHelper.get_type_value()` + `TypeHintHelper.get_type_hint()`
