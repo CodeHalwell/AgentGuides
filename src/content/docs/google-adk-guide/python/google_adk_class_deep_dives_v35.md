@@ -101,6 +101,16 @@ from google.adk.auth.auth_credential import (
 from fastapi.openapi.models import HTTPBearer
 from google.adk.tools.openapi_tool.auth.credential_exchangers.service_account_exchanger import ServiceAccountCredentialExchanger
 
+sa_json = {
+    "type": "service_account",
+    "project_id": "my-project",
+    "private_key_id": "key-id",
+    "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n",
+    "client_email": "my-sa@my-project.iam.gserviceaccount.com",
+    "client_id": "123456789",
+    "token_uri": "https://oauth2.googleapis.com/token",
+}
+
 auth_credential = AuthCredential(
     auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
     service_account=ServiceAccount(
@@ -209,8 +219,7 @@ print("Two independent publisher clients obtained")
 ### Example 3 — custom user-agent string and TTL cache expiry check
 
 ```python
-import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from google.adk.tools.pubsub.client import (
     get_publisher_client, get_subscriber_client, cleanup_clients, _CACHE_TTL
 )
@@ -303,6 +312,8 @@ wf = Workflow(name="demo").add_node(orchestrate, name="orchestrate")
 ### Example 2 — `use_as_output=True` to propagate child output transparently
 
 ```python
+from google.adk.agents import LlmAgent
+
 async def transparent_wrapper(ctx):
     inner = LlmAgent(
         name="inner_agent",
@@ -323,6 +334,8 @@ async def transparent_wrapper(ctx):
 ### Example 3 — `use_sub_branch=True` for isolated message history
 
 ```python
+from google.adk.agents import LlmAgent
+
 async def parallel_evaluator(ctx):
     import asyncio
     tasks = []
@@ -415,7 +428,6 @@ print(f"Tool wrapped as: {type(tool_node).__name__}(name={tool_node.name!r})")
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.workflow import Workflow
 from google.adk.workflow.utils._workflow_graph_utils import build_node
 
 standalone = LlmAgent(name="standalone", model="gemini-2.5-flash",
@@ -585,11 +597,8 @@ class AuthPreparationResult(BaseModel):
 
 ```python
 import hashlib
-import json
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import OAuth2Auth
-from google.adk.auth.auth_schemes import AuthSchemeType
-from fastapi.openapi.models import OAuth2, OAuthFlows, OAuthFlowClientCredentials
 
 # Replicate the key logic from ToolContextCredentialStore._get_legacy_credential_key
 def stable_digest(text: str) -> str:
@@ -652,25 +661,25 @@ from google.adk.tools.openapi_tool.auth.credential_exchangers.service_account_ex
     ServiceAccountCredentialExchanger
 )
 
-# Construct the handler from an existing ToolContext (ctx obtained inside a tool)
-# auth_scheme = HTTPBearer()
-# auth_credential = AuthCredential(
-#     auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
-#     service_account=ServiceAccount(use_default_credential=True,
-#                                    scopes=["https://www.googleapis.com/auth/cloud-platform"]),
-# )
-# handler = ToolAuthHandler.from_tool_context(
-#     tool_context=ctx,
-#     auth_scheme=auth_scheme,
-#     auth_credential=auth_credential,
-#     credential_exchanger=ServiceAccountCredentialExchanger(),
-# )
-# result = await handler.prepare_auth_credentials()
-# if result.state == "done":
-#     # Use result.auth_credential in HTTP headers
-#     print(result.auth_credential.http.credentials.token[:20])
-print("ToolAuthHandler.from_tool_context() is the recommended entry point")
-print("Call prepare_auth_credentials() to drive the full 5-step pipeline")
+# ToolAuthHandler.from_tool_context() requires a live ToolContext (ctx),
+# so it is called from inside a tool implementation:
+async def call_with_sa_auth(ctx):
+    auth_scheme = HTTPBearer()
+    auth_credential = AuthCredential(
+        auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
+        service_account=ServiceAccount(use_default_credential=True,
+                                       scopes=["https://www.googleapis.com/auth/cloud-platform"]),
+    )
+    handler = ToolAuthHandler.from_tool_context(
+        tool_context=ctx,
+        auth_scheme=auth_scheme,
+        auth_credential=auth_credential,
+        credential_exchanger=ServiceAccountCredentialExchanger(),
+    )
+    result = await handler.prepare_auth_credentials()
+    if result.state == "done":
+        # Use result.auth_credential in HTTP headers
+        print(result.auth_credential.http.credentials.token[:20])
 ```
 
 ---
@@ -874,7 +883,7 @@ agent = LlmAgent(
 
 ```python
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from google.adk.tools.url_context_tool import UrlContextTool
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
