@@ -690,7 +690,7 @@ async def approve_all(
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 async def send_notification(message: str) -> str:
     return f"Notification sent: {message}"
 
@@ -739,12 +739,12 @@ async def approve_reads_only(
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 async def fetch_data(endpoint: str) -> dict:
     return {"endpoint": endpoint, "data": [1, 2, 3]}
 
 
-@toolset.tool
+@toolset.tool_plain
 async def delete_record(record_id: str) -> bool:
     return True
 
@@ -799,12 +799,12 @@ async def approve_high_risk_in_test(
 toolset = FunctionToolset()
 
 
-@toolset.tool
+@toolset.tool_plain
 async def ping() -> str:
     return "pong"
 
 
-@toolset.tool
+@toolset.tool_plain
 async def reboot_server(server_id: str) -> str:
     return f"Rebooted {server_id}"
 
@@ -937,14 +937,14 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 6.3 Spec-Based Construction for Declarative Agents
+### 6.3 Wrapping a Live Toolset via Direct Constructor
 
-Use `from_spec` to build a `PrefixTools` capability from a plain dict, as if loaded from a YAML config file.
+`from_spec` is intended for YAML/JSON-driven declarative agents where the wrapped capability has a registered serialization name. For code-driven usage, use the direct constructor with `Toolset(...)` to wrap any live toolset.
 
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.capabilities import PrefixTools
+from pydantic_ai.capabilities import PrefixTools, Toolset
 from pydantic_ai.toolsets import FunctionToolset
 
 search_toolset = FunctionToolset()
@@ -960,20 +960,18 @@ def image_search(query: str) -> list[str]:
     return [f"Image 1 for {query}"]
 
 
-# As if loaded from config:
-# capabilities:
-#   - type: PrefixTools
-#     prefix: search
-#     capability:
-#       type: Toolset
-#       toolset: <injected>
-
-cap = PrefixTools.from_spec(
-    prefix="search",
-    capability={"type": "Toolset", "toolset": search_toolset},
-)
+# Direct constructor — preferred for code-driven agents.
+# PrefixTools.get_serialization_name() == 'PrefixTools', so it can also be
+# expressed in YAML as:
+#   capabilities:
+#     - type: PrefixTools
+#       prefix: search
+#       capability:
+#         type: WebSearch   # (any capability with a serialization name)
+cap = PrefixTools(wrapped=Toolset(search_toolset), prefix="search")
 
 agent = Agent("openai:gpt-4o-mini", capabilities=[cap])
+# Model sees: 'search_web_search', 'search_image_search'
 
 
 async def main() -> None:
@@ -1215,17 +1213,17 @@ async def feature_gate(
 toolset = FunctionToolset()
 
 
-@toolset.tool_plain
+@toolset.tool_plain_plain
 def post_to_slack(message: str) -> str:
     return "Posted"
 
 
-@toolset.tool_plain
+@toolset.tool_plain_plain
 def query_db(sql: str) -> list[dict]:
     return []
 
 
-@toolset.tool_plain
+@toolset.tool_plain_plain
 def get_time() -> str:
     return "12:00"
 
