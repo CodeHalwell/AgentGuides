@@ -559,18 +559,19 @@ class PIIRedactTransformer(StreamTransformer):
 
     def process(self, event) -> bool:
         if event["method"] == "messages":
-            data = event["params"]["data"]
-            # Mutate message content in-place (built-ins read the same dict later)
-            if isinstance(data, dict) and "content" in data:
-                if isinstance(data["content"], str):
-                    data["content"] = re.sub(
+            # data is a (payload, metadata) tuple — MessagesTransformer unpacks it the same way
+            payload, _metadata = event["params"]["data"]
+            # Mutate payload content in-place (built-ins read the same payload dict later)
+            if isinstance(payload, dict) and "content" in payload:
+                if isinstance(payload["content"], str):
+                    payload["content"] = re.sub(
                         r"\b[\w.+-]+@[\w-]+\.\w+\b",
                         "[REDACTED_EMAIL]",
-                        data["content"],
+                        payload["content"],
                     )
         return True
 
-# Safe to mutate data["content"] here; avoid touching data["id"] or
+# Safe to mutate payload["content"] here; avoid touching payload["id"] or
 # event["params"]["namespace"] — those are read by LifecycleTransformer.
 print(f"before_builtins={PIIRedactTransformer.before_builtins}")  # True
 ```
@@ -858,14 +859,18 @@ print("SafeNetDemo: finalize/fail close all open subgraph handles")
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.errors import NodeError
 
 def risky_node(state):
     if state.get("trigger_error"):
         raise RuntimeError("Something went wrong")
     return {"value": 1}
 
-def error_handler(state):
-    # Receives NodeError in state["error"] when registered via add_node(error_handler=)
+def error_handler(state, error: NodeError = None):
+    # NodeError is injected as the 'error' keyword argument by the runtime —
+    # it is NOT placed in state["error"]; access the failed node via error.node
+    # and the original exception via error.error.
+    print(f"Error in node '{error.node}': {type(error.error).__name__}")
     return {"value": -1, "error_handled": True}
 
 builder = StateGraph(dict)
