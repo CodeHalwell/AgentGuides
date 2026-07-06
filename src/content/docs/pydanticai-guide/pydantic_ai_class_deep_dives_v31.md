@@ -21,7 +21,7 @@ Ten class groups covering two new model providers (`ZaiModel`/`ZaiProvider` for 
 Z.AI's GLM models are Zhipu AI's leading open-weight models with support for vision, thinking/reasoning, and *preserved thinking across turns*.  The key differentiators versus other OpenAI-compatible providers:
 
 - **`reasoning_content` field** — Z.AI sends thinking blocks as a separate JSON field, not inline text.  `ZaiModel.prepare_request` maps the unified `thinking=` setting to `extra_body.thinking.type = 'enabled'|'disabled'`.
-- **Preserved thinking (`zai_clear_thinking`)** — by default the library keeps `reasoning_content` from prior turns and sends it back unchanged (`clear_thinking=False`), matching the Z.AI "preserved thinking" API contract.  Set `zai_clear_thinking=True` to discard prior reasoning.
+- **Preserved thinking (`zai_clear_thinking`)** — by default the library keeps `reasoning_content` from prior turns and sends it back unchanged (`zai_clear_thinking=False`), matching the Z.AI "preserved thinking" API contract.  Set `zai_clear_thinking=True` to discard prior reasoning.
 - **Per-request reasoning effort (GLM-5.2)** — when `ZaiModelProfile.zai_supports_reasoning_effort=True` the library forwards the effort string (`'low'`, `'high'`, …) as `extra_body.reasoning_effort`.
 - **`zai_model_profile`** — the profile function marks `glm-5*`, `glm-4.7*`, `glm-4.6*`, `glm-4.5*` as `supports_thinking=True`; GLM-5.2 additionally gets `zai_supports_reasoning_effort=True`.
 
@@ -230,7 +230,8 @@ for model_name in [
     'unknown-provider/some-model',
 ]:
     profile = VercelProvider.model_profile(model_name)
-    print(f'{model_name}: json_schema_transformer={profile and profile.get("json_schema_transformer").__class__.__name__}')
+    transformer = profile and profile.get('json_schema_transformer')
+    print(f'{model_name}: json_schema_transformer={getattr(transformer, "__name__", None)}')
 
 # Unqualified name → OpenAI profile with OpenAIJsonSchemaTransformer
 bare_profile = VercelProvider.model_profile('gpt-5')
