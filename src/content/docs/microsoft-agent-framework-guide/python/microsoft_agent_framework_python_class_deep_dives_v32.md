@@ -471,7 +471,7 @@ directly.
 | `WorkflowEvent.failed(details, data=None)` | `"failed"` | `.details: WorkflowErrorDetails` |
 | `WorkflowEvent.warning(message)` | `"warning"` | `.data: str` |
 | `WorkflowEvent.error(exception)` | `"error"` | `.data: Exception` |
-| `WorkflowEvent.request_info(request_id, source_executor_id, request_data, response_type)` | `"request_info"` | `.request_id`, `.source_executor_id`, `.request_type`, `.response_type` |
+| `WorkflowEvent.request_info(request_id, source_executor_id, request_data, response_type)` | `"request_info"` | `.request_id`, `.source_executor_id`, `.data`, `.response_type` |
 | `WorkflowEvent.superstep_started(iteration, data=None)` | `"superstep_started"` | `.iteration: int` |
 | `WorkflowEvent.superstep_completed(iteration, data=None)` | `"superstep_completed"` | `.iteration: int` |
 | `WorkflowEvent.executor_invoked(executor_id, data=None)` | `"executor_invoked"` | `.executor_id: str` |
