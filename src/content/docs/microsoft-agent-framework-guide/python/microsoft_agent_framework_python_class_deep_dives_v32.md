@@ -102,20 +102,18 @@ asyncio.run(main())
 import asyncio
 from agent_framework import evaluate_workflow, LocalEvaluator, keyword_check
 from agent_framework.openai import OpenAIChatClient
-from agent_framework import Workflow, AgentExecutor, Agent
-
-
-class TravelWorkflow(Workflow):
-    def __init__(self) -> None:
-        planner = Agent(client=OpenAIChatClient(), name="planner", instructions="Plan travel itineraries.")
-        booker = Agent(client=OpenAIChatClient(), name="booker", instructions="Book travel arrangements.")
-        super().__init__(
-            executors=[AgentExecutor(planner, "planner"), AgentExecutor(booker, "booker")],
-        )
+from agent_framework import WorkflowBuilder, Agent
 
 
 async def main() -> None:
-    wf = TravelWorkflow()
+    planner = Agent(client=OpenAIChatClient(), name="planner", instructions="Plan travel itineraries.")
+    booker = Agent(client=OpenAIChatClient(), name="booker", instructions="Book travel arrangements.")
+
+    wf = (
+        WorkflowBuilder(start_executor=planner, name="travel")
+        .add_chain([planner, booker])
+        .build()
+    )
     local = LocalEvaluator(keyword_check("Paris"))
 
     results = await evaluate_workflow(
