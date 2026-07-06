@@ -1013,6 +1013,7 @@ class ToolConfirmation(BaseModel):
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_confirmation import ToolConfirmation
 from typing import Optional
 
@@ -1030,12 +1031,15 @@ def confirm_delete(ctx: ReadonlyContext) -> Optional[ToolConfirmation]:
     )
 
 
+# require_confirmation is a field on FunctionTool, not on LlmAgent.
+# Pass a bool (always gate) or a callable (ctx: ReadonlyContext) -> Optional[ToolConfirmation].
+delete_tool = FunctionTool(delete_record, require_confirmation=confirm_delete)
+
 agent = LlmAgent(
     name="admin_agent",
     model="gemini-2.5-flash",
     instruction="You manage database records.",
-    tools=[delete_record],
-    tool_callbacks={"delete_record": {"require_confirmation": confirm_delete}},
+    tools=[delete_tool],
 )
 ```
 
