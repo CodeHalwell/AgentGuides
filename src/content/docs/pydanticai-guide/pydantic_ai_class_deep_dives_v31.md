@@ -167,11 +167,15 @@ import asyncio
 import os
 
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.vercel import VercelProvider
 
 os.environ.setdefault('VERCEL_AI_GATEWAY_API_KEY', 'your-vercel-key')
 
-# prefix determines which upstream profile is selected
-agent = Agent('openai:anthropic/claude-opus-4-8', providers=['vercel'])
+# Construct the provider explicitly and pass the model to Agent
+provider = VercelProvider()
+model = OpenAIChatModel('anthropic/claude-opus-4-8', provider=provider)
+agent = Agent(model)
 
 
 async def main() -> None:
@@ -180,13 +184,6 @@ async def main() -> None:
 
 
 asyncio.run(main())
-# Alternatively construct the provider explicitly:
-from pydantic_ai.providers.vercel import VercelProvider
-from pydantic_ai.models.openai import OpenAIChatModel
-
-provider = VercelProvider()
-model = OpenAIChatModel('anthropic/claude-opus-4-8', provider=provider)
-agent2 = Agent(model)
 ```
 
 ### 2.2 Explicit Provider Construction with Custom HTTP Client
