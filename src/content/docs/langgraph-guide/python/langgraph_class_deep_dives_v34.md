@@ -198,15 +198,19 @@ for updates, supersteps in scenarios:
 
 import os
 
-# Example: force a snapshot every 50 supersteps max (for high-frequency graphs)
+# Best practice: set this env var BEFORE importing any langgraph module.
+# Changing it in-process requires reloading _config AND _checkpoint because
+# _checkpoint imports DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT at module level.
 os.environ["LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT"] = "50"
 
-# Reload the module constant after the env change
 import importlib
 import langgraph._internal._config as _cfg
+import langgraph.pregel._checkpoint as _ckpt
 importlib.reload(_cfg)
+importlib.reload(_ckpt)  # re-binds the constant from the freshly reloaded _cfg
 
-print(f"After env change: {_cfg.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT}")  # 50
+print(f"After env change: {_cfg.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT}")   # 50
+print(f"_checkpoint sees: {_ckpt.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT}")  # 50
 ```
 
 ---
@@ -864,9 +868,17 @@ print("SafeNetDemo: finalize/fail close all open subgraph handles")
 ### Example 1 — error routing with add_node(error_handler=...)
 
 ```python
+from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import NodeError
+
+# Use a TypedDict schema so node return dicts are merged (not root-replaced).
+# StateGraph(dict) replaces the entire state on each node return.
+class State(TypedDict, total=False):
+    trigger_error: bool
+    value: int
+    error_handled: bool
 
 def risky_node(state):
     if state.get("trigger_error"):
@@ -880,7 +892,7 @@ def error_handler(state, error: NodeError = None):
     print(f"Error in node '{error.node}': {type(error.error).__name__}")
     return {"value": -1, "error_handled": True}
 
-builder = StateGraph(dict)
+builder = StateGraph(State)
 builder.add_node("risky", risky_node, error_handler=error_handler)
 builder.add_edge(START, "risky")
 builder.add_edge("risky", END)
