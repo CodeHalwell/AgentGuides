@@ -52,6 +52,7 @@ evaluators. `evaluate_workflow` does the same for multi-agent workflows, produci
 import asyncio
 from agent_framework import (
     Agent,
+    FunctionTool,
     LocalEvaluator,
     evaluate_agent,
     keyword_check,
@@ -60,11 +61,17 @@ from agent_framework import (
 from agent_framework.openai import OpenAIChatClient
 
 
+async def get_weather(location: str) -> str:
+    """Return current weather for a location."""
+    return f"The weather in {location} is sunny and 22°C."
+
+
 async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
-        instructions="You are a weather assistant.",
+        instructions="You are a weather assistant. Use get_weather to answer weather queries.",
         name="weather-agent",
+        tools=[FunctionTool(get_weather)],
     )
 
     local = LocalEvaluator(
@@ -268,7 +275,7 @@ Pass any callable with signature `(list[Message]) -> tuple[list[Message], list[M
 
 ```python
 import asyncio
-from agent_framework import evaluate_agent, LocalEvaluator, keyword_check, Message, Agent
+from agent_framework import evaluate_agent, LocalEvaluator, keyword_check, Message, Agent, ConversationSplit
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -278,7 +285,7 @@ def split_before_tool(conversation: list[Message]) -> tuple[list[Message], list[
         for c in msg.contents or []:
             if c.type == "function_call":
                 return conversation[:i], conversation[i:]
-    return EvalItem._split_last_turn_static(conversation)  # fallback
+    return ConversationSplit.LAST_TURN(conversation)  # fallback
 
 
 async def main() -> None:
@@ -324,6 +331,7 @@ read `item.expected_tool_calls` — set those via `evaluate_agent(expected_tool_
 import asyncio
 from agent_framework import (
     Agent,
+    FunctionTool,
     LocalEvaluator,
     evaluate_agent,
     keyword_check,
@@ -332,8 +340,17 @@ from agent_framework import (
 from agent_framework.openai import OpenAIChatClient
 
 
+async def get_weather(location: str) -> str:
+    """Return current weather for a location."""
+    return f"The weather in {location} is 18°C and partly cloudy."
+
+
 async def main() -> None:
-    agent = Agent(client=OpenAIChatClient(), instructions="Use tools to answer questions.")
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="Use get_weather to answer weather questions.",
+        tools=[FunctionTool(get_weather)],
+    )
     local = LocalEvaluator(
         keyword_check("London", "degrees"),      # both must appear in response
         tool_called_check("get_weather"),         # tool must have been called
@@ -356,6 +373,7 @@ import asyncio
 from agent_framework import (
     Agent,
     ExpectedToolCall,
+    FunctionTool,
     LocalEvaluator,
     evaluate_agent,
     tool_call_args_match,
@@ -363,8 +381,17 @@ from agent_framework import (
 from agent_framework.openai import OpenAIChatClient
 
 
+async def get_weather(location: str) -> str:
+    """Return current weather for a location."""
+    return f"The weather in {location} is 18°C and partly cloudy."
+
+
 async def main() -> None:
-    agent = Agent(client=OpenAIChatClient(), instructions="Use get_weather for weather queries.")
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="Use get_weather for weather queries.",
+        tools=[FunctionTool(get_weather)],
+    )
     local = LocalEvaluator(tool_call_args_match)  # pass the function directly
 
     results = await evaluate_agent(
@@ -715,8 +742,8 @@ from agent_framework import CompactionProvider, ContextWindowCompactionStrategy
 
 
 async def main() -> None:
-    strategy = ContextWindowCompactionStrategy(token_budget=4096, summary_ratio=0.5)
-    compaction = CompactionProvider(strategy=strategy)
+    strategy = ContextWindowCompactionStrategy(max_context_window_tokens=4096, max_output_tokens=512)
+    compaction = CompactionProvider(before_strategy=strategy)
 
     agent = Agent(
         client=OpenAIChatClient(),
@@ -785,7 +812,7 @@ async def system_only_compaction(messages: list[Message]) -> bool:
 from agent_framework import CompactionProvider, Agent
 from agent_framework.openai import OpenAIChatClient
 
-compaction = CompactionProvider(strategy=system_only_compaction)
+compaction = CompactionProvider(before_strategy=system_only_compaction)
 agent = Agent(
     client=OpenAIChatClient(),
     instructions="You are helpful.",
@@ -810,8 +837,8 @@ from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
-    strategy = ContextWindowCompactionStrategy(token_budget=2048, summary_ratio=0.4)
-    compaction = CompactionProvider(strategy=strategy)
+    strategy = ContextWindowCompactionStrategy(max_context_window_tokens=2048, max_output_tokens=512)
+    compaction = CompactionProvider(before_strategy=strategy)
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="You are a helpful assistant.",
@@ -863,9 +890,8 @@ Both work by resolving their respective provider (`BackgroundAgentsProvider` / `
 ```python
 import asyncio
 from agent_framework import (
-    Agent,
     TodoProvider,
-    InMemoryTodoStore,
+    TodoSessionStore,
     create_harness_agent,
     todos_remaining,
     todos_remaining_message,
@@ -874,14 +900,10 @@ from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
-    base_agent = Agent(
-        client=OpenAIChatClient(),
-        instructions="Complete all assigned tasks.",
-    )
-
     harness_agent = create_harness_agent(
-        agent=base_agent,
-        context_providers=[TodoProvider(store=InMemoryTodoStore())],
+        OpenAIChatClient(),
+        agent_instructions="Complete all assigned tasks.",
+        todo_provider=TodoProvider(store=TodoSessionStore()),
         loop_should_continue=todos_remaining(),
         loop_next_message=todos_remaining_message,  # function reference, not called
         loop_max_iterations=10,
@@ -950,7 +972,7 @@ from agent_framework import (
     Agent,
     BackgroundAgentsProvider,
     TodoProvider,
-    InMemoryTodoStore,
+    TodoSessionStore,
     AgentLoopMiddleware,
     background_tasks_running,
     todos_remaining,
@@ -981,7 +1003,7 @@ async def main() -> None:
         instructions="Research topics and track todos.",
         context_providers=[
             BackgroundAgentsProvider(agents=[worker]),
-            TodoProvider(store=InMemoryTodoStore()),
+            TodoProvider(store=TodoSessionStore()),
         ],
         middleware=[
             AgentLoopMiddleware(
