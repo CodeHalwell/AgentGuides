@@ -175,8 +175,10 @@ agent = LlmAgent(
 **Source:** `google/adk/auth/auth_credential.py`
 
 `AuthCredential` is the unified data class for every credential shape ADK
-understands.  The `auth_type` discriminator selects the credential union
-member: `api_key`, `http`, `service_account`, or `oauth2`.
+understands.  The `auth_type` discriminator selects the credential shape:
+`API_KEY`, `HTTP`, `OAUTH2`, `SERVICE_ACCOUNT`, or `OPEN_ID_CONNECT`.
+OIDC credentials use `auth_type=OPEN_ID_CONNECT` but still populate the
+`oauth2: OAuth2Auth` field (same model, different type tag).
 
 ### Key types (verified `auth_credential.py`)
 
@@ -196,10 +198,19 @@ class HttpCredentials(BaseModelWithConfig):
 class OAuth2Auth(BaseModelWithConfig):
     client_id: str | None = None
     client_secret: str | None = None
-    auth_uri: str | None = None
+    auth_uri: str | None = None              # generated redirect URI
+    nonce: str | None = None                 # CSRF/replay protection
+    state: str | None = None                 # CSRF state token
+    redirect_uri: str | None = None          # registered redirect URI
+    auth_response_uri: str | None = None     # full callback URL received from provider
+    auth_code: str | None = None             # authorization code from callback
     access_token: str | None = None
     refresh_token: str | None = None
-    code_verifier: str | None = None          # PKCE
+    id_token: str | None = None              # OIDC identity token
+    expires_at: int | None = None            # Unix timestamp
+    expires_in: int | None = None            # seconds
+    audience: str | None = None
+    code_verifier: str | None = None         # PKCE
     code_challenge_method: Literal["S256"] | None = None
 
 class ServiceAccount(BaseModelWithConfig):
