@@ -1154,11 +1154,30 @@ from pydantic_ai.toolsets.function import FunctionToolset
 os.environ.setdefault('ANTHROPIC_API_KEY', 'your-key')
 
 
+import ast
+import operator as _op
+
+_SAFE_OPS: dict = {
+    ast.Add: _op.add,
+    ast.Sub: _op.sub,
+    ast.Mult: _op.mul,
+    ast.Div: _op.truediv,
+}
+
+
+def _eval_node(node: ast.expr) -> float:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return -_eval_node(node.operand)
+    raise ValueError(f'Unsupported expression: {ast.dump(node)}')
+
+
 def calculate(expression: str) -> float:
-    # Safe eval via ast — production code should use a proper parser
-    import ast
     tree = ast.parse(expression, mode='eval')
-    return float(eval(compile(tree, '<string>', 'eval')))  # noqa: S307
+    return _eval_node(tree.body)
 
 
 calc_toolset = FunctionToolset()
