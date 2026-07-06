@@ -1140,15 +1140,21 @@ from agent_framework import (
     create_always_approve_tool_with_arguments_response,
     Message,
     Content,
+    tool,
 )
 from agent_framework.openai import OpenAIChatClient
 
 
+# approval_mode="always_require" is essential: without it FunctionTool defaults to
+# "never_require" and ToolApprovalMiddleware will never raise function_approval_request
+# contents — the approval loop below would be skipped entirely.
+@tool(approval_mode="always_require")
 async def read_file(path: str) -> str:
     """Read a file at the given path."""
     return f"Contents of {path}: [sample data]"
 
 
+@tool(approval_mode="always_require")
 async def write_report(content: str, filename: str) -> str:
     """Write a report file."""
     return f"Report saved to {filename}"
