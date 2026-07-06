@@ -784,7 +784,7 @@ from agent_framework import (
     GROUP_KIND_KEY,
     included_messages,
 )
-from agent_framework._types import Message
+from agent_framework import Message
 
 
 async def system_only_compaction(messages: list[Message]) -> bool:
@@ -1052,7 +1052,7 @@ from agent_framework import (
     Agent,
     ToolApprovalMiddleware,
 )
-from agent_framework._types import Content
+from agent_framework import Content
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1137,7 +1137,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent, ToolApprovalMiddleware
-from agent_framework._types import Content
+from agent_framework import Content
 from agent_framework.openai import OpenAIChatClient
 
 
