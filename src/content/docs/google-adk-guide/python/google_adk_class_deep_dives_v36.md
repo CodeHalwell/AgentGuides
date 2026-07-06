@@ -733,7 +733,7 @@ from fastapi.openapi.models import APIKey, APIKeyIn
 api_key_scheme = APIKey(**{"in": APIKeyIn.header, "name": "X-API-Key"})
 api_key_credential = AuthCredential(
     auth_type=AuthCredentialTypes.API_KEY,
-    api_key="sk-live-abc123",
+    api_key="my-test-api-key-00000000",
 )
 
 auth_config = AuthConfig(
@@ -746,7 +746,7 @@ handler = AuthHandler(auth_config=auth_config)
 # Simulate state that already has the credential stored
 state = State({}, {"temp:my_api_key": api_key_credential})
 retrieved = handler.get_auth_response(state)
-print(retrieved.api_key)  # sk-live-abc123
+print(retrieved.api_key)  # my-test-api-key-00000000
 ```
 
 ---
@@ -1023,10 +1023,7 @@ class ToolConfirmation(BaseModel):
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.function_tool import FunctionTool
-from google.adk.tools.tool_confirmation import ToolConfirmation
-from typing import Optional
 
 
 def delete_record(record_id: str) -> str:
@@ -1034,17 +1031,14 @@ def delete_record(record_id: str) -> str:
     return f"Record {record_id} deleted."
 
 
-def confirm_delete(ctx: ReadonlyContext) -> Optional[ToolConfirmation]:
-    """Gate expensive / irreversible operations behind a user prompt."""
-    return ToolConfirmation(
-        hint="This will permanently delete the record. Please confirm.",
-        confirmed=False,         # starts unconfirmed; user must set to True
-    )
+def should_confirm_delete(record_id: str) -> bool:
+    """Require confirmation before deleting; could inspect record_id to decide."""
+    return True  # always gate deletes
 
 
-# require_confirmation is a field on FunctionTool, not on LlmAgent.
-# Pass a bool (always gate) or a callable (ctx: ReadonlyContext) -> Optional[ToolConfirmation].
-delete_tool = FunctionTool(delete_record, require_confirmation=confirm_delete)
+# require_confirmation accepts bool or a callable(**tool_args) -> bool.
+# The callable receives the tool's arguments as keyword arguments.
+delete_tool = FunctionTool(delete_record, require_confirmation=should_confirm_delete)
 
 agent = LlmAgent(
     name="admin_agent",
@@ -1054,12 +1048,11 @@ agent = LlmAgent(
 )
 ```
 
-### Example 2 — `payload` for collecting extra user input before tool execution
+### Example 2 — `ToolConfirmation` payload structure
 
 ```python
 from google.adk.tools.tool_confirmation import ToolConfirmation
-from typing import Optional
-from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.tools.function_tool import FunctionTool
 
 
 def transfer_funds(amount: float, destination_account: str) -> dict:
@@ -1067,22 +1060,18 @@ def transfer_funds(amount: float, destination_account: str) -> dict:
     return {"status": "success", "amount": amount, "to": destination_account}
 
 
-def confirm_transfer(ctx: ReadonlyContext) -> Optional[ToolConfirmation]:
-    """Ask the user for a 2FA code before executing the transfer."""
-    return ToolConfirmation(
-        hint="Enter your 2FA code to authorise this transfer.",
-        confirmed=False,
-        payload={"requires_2fa_code": True},  # client renders a 2FA input
-    )
+# require_confirmation=True always gates; ADK emits a generic hint automatically.
+transfer_tool = FunctionTool(transfer_funds, require_confirmation=True)
 
+# ToolConfirmation is the payload the client sends back when responding.
+# confirmed=True means the user approved; payload carries any extra data.
+approved = ToolConfirmation(confirmed=True, payload={"note": "authorised by admin"})
+print(approved.model_dump(by_alias=True))
+# {'hint': '', 'confirmed': True, 'payload': {'note': 'authorised by admin'}}
 
-# When the user responds with:
-#   ToolConfirmation(confirmed=True, payload={"2fa_code": "123456"})
-# _RequestConfirmationLlmRequestProcessor re-runs transfer_funds.
-
-confirmed = ToolConfirmation(confirmed=True, payload={"2fa_code": "123456"})
-print(confirmed.model_dump(by_alias=True))
-# {'hint': '', 'confirmed': True, 'payload': {'2fa_code': '123456'}}
+rejected = ToolConfirmation(confirmed=False)
+print(rejected.model_dump(by_alias=True))
+# {'hint': '', 'confirmed': False, 'payload': None}
 ```
 
 ### Example 3 — round-trip serialisation (camelCase aliases)
