@@ -548,6 +548,8 @@ from langgraph.stream._types import StreamTransformer
 from typing import Any
 import re
 
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.\w+\b")
+
 class PIIRedactTransformer(StreamTransformer):
     """Redact email addresses from messages events BEFORE MessagesTransformer snapshots them."""
 
@@ -561,18 +563,23 @@ class PIIRedactTransformer(StreamTransformer):
         if event["method"] == "messages":
             # data is a (payload, metadata) tuple — MessagesTransformer unpacks it the same way
             payload, _metadata = event["params"]["data"]
-            # Mutate payload content in-place (built-ins read the same payload dict later)
-            if isinstance(payload, dict) and "content" in payload:
-                if isinstance(payload["content"], str):
-                    payload["content"] = re.sub(
-                        r"\b[\w.+-]+@[\w-]+\.\w+\b",
-                        "[REDACTED_EMAIL]",
-                        payload["content"],
-                    )
+            # Two payload shapes in the messages projection:
+            # 1. Whole BaseMessage (non-streaming): redact .content directly
+            if hasattr(payload, "content") and isinstance(payload.content, str):
+                payload.content = _EMAIL_RE.sub("[REDACTED_EMAIL]", payload.content)
+            # 2. Protocol event dict (streaming path): text is in delta["text"]
+            #    for content-block-delta events; other events carry no text.
+            elif isinstance(payload, dict) and payload.get("event") == "content-block-delta":
+                delta = payload.get("delta", {})
+                if isinstance(delta.get("text"), str):
+                    delta["text"] = _EMAIL_RE.sub("[REDACTED_EMAIL]", delta["text"])
+                    # Note: a regex across streaming chunks cannot catch emails
+                    # split across chunk boundaries — use a stateful buffer for
+                    # production-grade PII redaction.
         return True
 
-# Safe to mutate payload["content"] here; avoid touching payload["id"] or
-# event["params"]["namespace"] — those are read by LifecycleTransformer.
+# Safe to mutate payload here; avoid touching event["params"]["namespace"]
+# — that is read by LifecycleTransformer.
 print(f"before_builtins={PIIRedactTransformer.before_builtins}")  # True
 ```
 
