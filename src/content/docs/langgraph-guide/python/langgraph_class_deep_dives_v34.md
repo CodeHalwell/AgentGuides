@@ -119,7 +119,7 @@ These two functions handle the most subtle edge in DeltaChannel snapshotting: de
 
 **Key source facts:**
 
-- `exit_delta_task_id(step, task_id)` creates a synthetic RFC-4122 UUID by embedding the superstep number (`step`) zero-padded to 8 hex digits in the first UUID group (`{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}`). This ensures `ORDER BY task_id, idx` preserves **chronological order** across supersteps while the string remains a valid UUID (required by Postgres `checkpoint_writes.task_id uuid` column).
+- `exit_delta_task_id(step, task_id)` creates a synthetic RFC-4122 UUID by embedding the superstep number (`step`) zero-padded to **8 decimal digits** in the first UUID group (`{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}`). This ensures `ORDER BY task_id, idx` preserves **chronological order** across supersteps while the string remains a valid UUID (required by Postgres `checkpoint_writes.task_id uuid` column).
 - `delta_channels_to_snapshot(channels, counters_since_delta_snapshot)` returns a set of DeltaChannel names that should snapshot now. A channel snapshots when **either**:
   - Its accumulated update count since last snapshot ≥ `snapshot_frequency` (per-channel threshold), **or**
   - Total supersteps since its last snapshot ≥ `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` (env-var global cap, default 5000).
@@ -141,16 +141,17 @@ for step in [0, 1, 99, 255]:
 
 # step=  0 → 00000000-e29b-41d4-a716-446655440000
 # step=  1 → 00000001-e29b-41d4-a716-446655440000
-# step= 99 → 00000063-e29b-41d4-a716-446655440000
-# step=255 → 000000ff-e29b-41d4-a716-446655440000
+# step= 99 → 00000099-e29b-41d4-a716-446655440000
+# step=255 → 00000255-e29b-41d4-a716-446655440000
 #
-# The first group (8 hex digits) encodes the step number.
+# The first group (8 zero-padded decimal digits) encodes the step number.
 # ORDER BY task_id in SQL now gives chronological order across supersteps.
 ```
 
 ### Example 2 — understand the two snapshot triggers
 
 ```python
+import operator
 from langgraph.pregel._checkpoint import delta_channels_to_snapshot
 from langgraph.channels.delta import DeltaChannel
 from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
@@ -158,13 +159,10 @@ from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
 # Default global cap
 print(f"DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = {DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT}")
 
-# Build a DeltaChannel with snapshot_frequency=10
-ch = DeltaChannel(list, snapshot_frequency=10)
-# Manually mark it available so is_available() returns True
-try:
-    ch.update([[1, 2, 3]])  # seed with a value
-except Exception:
-    pass
+# DeltaChannel(reducer, typ=...) — first arg is the reducer function, not the type.
+# operator.add concatenates list values; typ=list gives an empty-list seed on MISSING.
+ch = DeltaChannel(operator.add, typ=list, snapshot_frequency=10)
+ch.update([1, 2, 3])  # seeds value to [] + [1,2,3] → [1,2,3]; is_available() → True
 
 channels = {"events": ch}
 
@@ -865,14 +863,16 @@ builder.add_edge(START, "risky")
 builder.add_edge("risky", END)
 
 graph = builder.compile(checkpointer=InMemorySaver())
+config = {"configurable": {"thread_id": "t1"}}  # required by InMemorySaver
 
 # Normal path
-r1 = graph.invoke({"trigger_error": False})
+r1 = graph.invoke({"trigger_error": False}, config=config)
 print(r1)   # {"trigger_error": False, "value": 1}
 
 # Error path — PregelRunner.commit() routes to error_handler via
 # _should_route_to_error_handler and appends ERROR_SOURCE_NODE write
-r2 = graph.invoke({"trigger_error": True})
+config2 = {"configurable": {"thread_id": "t2"}}
+r2 = graph.invoke({"trigger_error": True}, config=config2)
 print(r2)   # {"trigger_error": True, "value": -1, "error_handled": True}
 ```
 
@@ -887,7 +887,9 @@ from langgraph.graph import StateGraph, START, END
 import time
 
 def slow_task(state):
-    time.sleep(10)  # would block indefinitely without cancellation
+    # Note: Python cannot interrupt a blocking sleep in a thread-pool worker;
+    # use a very short delay here so the example completes quickly.
+    time.sleep(0.05)
     return {"slow": True}
 
 def fast_fail(state):
@@ -903,11 +905,11 @@ builder.add_edge("fail", END)
 
 graph = builder.compile()
 try:
-    # "fail" node errors → _should_stop_others returns True → "slow" is cancelled
+    # "fail" node errors → _should_stop_others returns True → "slow" future is cancelled
     graph.invoke({})
 except Exception as e:
-    print(f"Error raised (fast): {type(e).__name__}: {e}")
-# The run completes quickly — "slow" was cancelled, not waited on.
+    print(f"Error raised: {type(e).__name__}: {e}")
+# The future is marked cancelled; the short sleep means the run finishes promptly.
 ```
 
 ### Example 3 — _handled_exception_ids prevents double-cancel
