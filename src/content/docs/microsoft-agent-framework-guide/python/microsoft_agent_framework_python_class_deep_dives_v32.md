@@ -494,13 +494,13 @@ automatically from a `ContextVar`; framework-owned code temporarily sets `FRAMEW
 
 ```python
 import asyncio
-from agent_framework import WorkflowEvent, WorkflowRunState, Workflow, AgentExecutor, Agent
+from agent_framework import WorkflowEvent, WorkflowRunState, AgentExecutor, Agent, WorkflowBuilder
 from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
     agent = Agent(client=OpenAIChatClient(), name="summarizer", instructions="Summarise text.")
-    workflow = Workflow(executors=[AgentExecutor(agent, "summarizer")])
+    workflow = WorkflowBuilder(start_executor=AgentExecutor(agent)).build()
 
     async for event in workflow.run_stream("Summarise the history of Python."):
         if event.type == "started":
@@ -557,19 +557,24 @@ asyncio.run(handle_requests(build_hitl_workflow(), "What is my account balance?"
 
 ```python
 import asyncio
-from agent_framework import Workflow, AgentExecutor, Agent, WorkflowEvent, AGENT_FORWARDED_EVENT_TYPES
+from agent_framework import AgentExecutor, Agent, WorkflowBuilder
 from agent_framework.openai import OpenAIChatClient
+
+# AGENT_FORWARDED_EVENT_TYPES is defined in agent_framework._workflows._events
+# (not re-exported from the public package API):
+# frozenset({"output", "intermediate", "data", "request_info"})
 
 
 async def demonstrate_forwarded_events() -> None:
     inner_agent = Agent(client=OpenAIChatClient(), name="inner", instructions="Do inner work.")
-    workflow = Workflow(executors=[AgentExecutor(inner_agent, "inner")])
+    executor = AgentExecutor(inner_agent, id="inner")
 
-    # as_agent() wraps the workflow as an agent; only forwarded types cross the boundary
+    # WorkflowBuilder is the correct way to construct a Workflow
+    workflow = WorkflowBuilder(start_executor=executor).build()
+
+    # as_agent() wraps the workflow as an agent; only "output", "intermediate",
+    # "data", and "request_info" events cross the executor/agent boundary
     outer_agent = workflow.as_agent()
-
-    print("Forwarded event types:", AGENT_FORWARDED_EVENT_TYPES)
-    # {"output", "intermediate", "data", "request_info"}
 
     response = await outer_agent.run("Process this input")
     print(response.text)
@@ -644,13 +649,13 @@ except Exception as exc:
 
 ```python
 import asyncio
-from agent_framework import WorkflowEventSource, Workflow, AgentExecutor, Agent
+from agent_framework import WorkflowEventSource, AgentExecutor, Agent, WorkflowBuilder
 from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
     agent = Agent(client=OpenAIChatClient(), name="worker", instructions="Process tasks.")
-    workflow = Workflow(executors=[AgentExecutor(agent, "worker")])
+    workflow = WorkflowBuilder(start_executor=AgentExecutor(agent)).build()
 
     async for event in workflow.run_stream("Do some work"):
         if event.origin == WorkflowEventSource.EXECUTOR:
@@ -666,13 +671,13 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import WorkflowRunState, Workflow, AgentExecutor, Agent
+from agent_framework import WorkflowRunState, AgentExecutor, Agent, WorkflowBuilder
 from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
     agent = Agent(client=OpenAIChatClient(), name="worker", instructions="Process tasks.")
-    workflow = Workflow(executors=[AgentExecutor(agent, "worker")])
+    workflow = WorkflowBuilder(start_executor=AgentExecutor(agent)).build()
 
     states_seen = []
 
@@ -721,56 +726,60 @@ custom compaction strategies.
 `included_messages(messages)` returns only messages where `_excluded` is falsy.  
 `included_token_count(messages)` sums the `token_count` annotation of all included messages.
 
-### Example 1 — Reading compaction annotations from a session
+### Example 1 — Annotating messages and reading compaction constants
+
+`annotate_message_groups` stamps group metadata onto a list of `Message` objects in-place.
+This is how built-in strategies populate the annotation keys before passing messages to the LLM.
 
 ```python
-import asyncio
 from agent_framework import (
-    Agent,
+    Message,
+    Content,
+    annotate_message_groups,
     EXCLUDED_KEY,
     EXCLUDE_REASON_KEY,
     GROUP_ANNOTATION_KEY,
     GROUP_KIND_KEY,
+    GROUP_INDEX_KEY,
     GROUP_TOKEN_COUNT_KEY,
     included_messages,
     included_token_count,
 )
-from agent_framework.openai import OpenAIChatClient
-from agent_framework import CompactionProvider, ContextWindowCompactionStrategy
 
 
-async def main() -> None:
-    strategy = ContextWindowCompactionStrategy(max_context_window_tokens=4096, max_output_tokens=512)
-    compaction = CompactionProvider(before_strategy=strategy)
+def demonstrate_annotations() -> None:
+    messages = [
+        Message(role="system", contents=[Content(type="text", text="You are a helpful assistant.")]),
+        Message(role="user", contents=[Content(type="text", text="What is the capital of France?")]),
+        Message(role="assistant", contents=[Content(type="text", text="Paris.")]),
+        Message(role="user", contents=[Content(type="text", text="Tell me more about Paris.")]),
+        Message(role="assistant", contents=[Content(type="text", text="Paris is known for the Eiffel Tower.")]),
+    ]
 
-    agent = Agent(
-        client=OpenAIChatClient(),
-        instructions="You are a helpful assistant.",
-        context_providers=[compaction],
-    )
+    # Simulate a compaction strategy excluding an older exchange
+    messages[1].additional_properties[EXCLUDED_KEY] = True
+    messages[1].additional_properties[EXCLUDE_REASON_KEY] = "context_window_limit"
+    messages[2].additional_properties[EXCLUDED_KEY] = True
+    messages[2].additional_properties[EXCLUDE_REASON_KEY] = "context_window_limit"
 
-    session = agent.create_session()
-    for _ in range(5):
-        await agent.run("Tell me something interesting", session=session)
+    # annotate_message_groups assigns group IDs, kind, and index to each message
+    annotate_message_groups(messages)
 
-    # Access the compaction messages from session state
-    from agent_framework import COMPACTION_STATE_KEY
-    compaction_msgs = session.state.get(COMPACTION_STATE_KEY, [])
-
-    for msg in compaction_msgs:
+    for msg in messages:
         group = msg.additional_properties.get(GROUP_ANNOTATION_KEY, {})
         excluded = msg.additional_properties.get(EXCLUDED_KEY, False)
         reason = msg.additional_properties.get(EXCLUDE_REASON_KEY)
         kind = group.get(GROUP_KIND_KEY, "unknown")
-        tokens = group.get(GROUP_TOKEN_COUNT_KEY, 0)
+        index = group.get(GROUP_INDEX_KEY, "?")
+        tokens = group.get(GROUP_TOKEN_COUNT_KEY)
         status = f"EXCLUDED ({reason})" if excluded else "included"
-        print(f"  [{kind}] tokens={tokens} status={status}")
+        print(f"  [group {index}] kind={kind!r:18} tokens={tokens} {status}")
 
-    print(f"Included count: {len(included_messages(compaction_msgs))}")
-    print(f"Included tokens: {included_token_count(compaction_msgs)}")
+    print(f"\nIncluded: {len(included_messages(messages))}/{len(messages)} messages")
+    print(f"Included token count: {included_token_count(messages)}")
 
 
-asyncio.run(main())
+demonstrate_annotations()
 ```
 
 ### Example 2 — Custom compaction strategy using annotation constants
@@ -818,47 +827,62 @@ agent = Agent(
 )
 ```
 
-### Example 3 — Checking whether compaction ran during a session
+### Example 3 — Checking compaction coverage on a message list
+
+`included_messages` and `included_token_count` work on any `list[Message]` where the
+`_excluded` annotation has been set. Use `annotate_message_groups` first to ensure all
+group metadata is populated, then query the helpers.
 
 ```python
-import asyncio
 from agent_framework import (
-    Agent,
-    CompactionProvider,
-    ContextWindowCompactionStrategy,
-    COMPACTION_STATE_KEY,
+    Message,
+    Content,
+    annotate_message_groups,
     EXCLUDED_KEY,
+    EXCLUDE_REASON_KEY,
+    GROUP_ANNOTATION_KEY,
+    GROUP_KIND_KEY,
     included_messages,
     included_token_count,
 )
-from agent_framework.openai import OpenAIChatClient
 
 
-async def main() -> None:
-    strategy = ContextWindowCompactionStrategy(max_context_window_tokens=2048, max_output_tokens=512)
-    compaction = CompactionProvider(before_strategy=strategy)
-    agent = Agent(
-        client=OpenAIChatClient(),
-        instructions="You are a helpful assistant.",
-        context_providers=[compaction],
-    )
+def check_compaction_coverage(messages: list[Message]) -> None:
+    """Annotate and report compaction coverage for a message list."""
+    annotate_message_groups(messages)
 
-    session = agent.create_session()
-    for prompt in ["Explain quantum computing", "What are qubits?", "How does entanglement work?"]:
-        await agent.run(prompt, session=session)
-
-    msgs = session.state.get(COMPACTION_STATE_KEY, [])
-    total = len(msgs)
-    included = len(included_messages(msgs))
+    total = len(messages)
+    included = len(included_messages(messages))
     excluded = total - included
 
-    print(f"Total messages tracked: {total}")
-    print(f"Currently included:     {included}")
-    print(f"Compacted away:         {excluded}")
-    print(f"Estimated token usage:  {included_token_count(msgs)}")
+    print(f"Total messages:      {total}")
+    print(f"Currently included:  {included}")
+    print(f"Compacted away:      {excluded}")
+    print(f"Estimated tokens:    {included_token_count(messages)}")
+
+    for msg in messages:
+        if msg.additional_properties.get(EXCLUDED_KEY, False):
+            reason = msg.additional_properties.get(EXCLUDE_REASON_KEY, "no reason")
+            kind = msg.additional_properties.get(GROUP_ANNOTATION_KEY, {}).get(GROUP_KIND_KEY, "?")
+            print(f"  Excluded [{kind}]: {reason}")
 
 
-asyncio.run(main())
+# Build a conversation and simulate a compaction pass
+messages = [
+    Message(role="system", contents=[Content(type="text", text="You are a helpful assistant.")]),
+    Message(role="user", contents=[Content(type="text", text="Explain quantum computing")]),
+    Message(role="assistant", contents=[Content(type="text", text="Quantum computing uses qubits...")]),
+    Message(role="user", contents=[Content(type="text", text="What are qubits?")]),
+    Message(role="assistant", contents=[Content(type="text", text="Qubits are quantum bits...")]),
+]
+
+# A compaction strategy would mark older messages excluded to stay within token limits
+messages[1].additional_properties[EXCLUDED_KEY] = True
+messages[1].additional_properties[EXCLUDE_REASON_KEY] = "context_window_limit"
+messages[2].additional_properties[EXCLUDED_KEY] = True
+messages[2].additional_properties[EXCLUDE_REASON_KEY] = "context_window_limit"
+
+check_compaction_coverage(messages)
 ```
 
 ---
@@ -1081,52 +1105,87 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Example 2 — Creating standing approval rules from `request_info` events
+### Example 2 — HITL approval loop using `function_approval_request` contents
 
-When `ToolApprovalMiddleware` requires approval it emits a `"request_info"` event. The caller creates
-a response `Content` using one of the factory functions to record a standing rule.
+When `ToolApprovalMiddleware` requires explicit approval it returns an `AgentResponse` whose
+`messages` contain `function_approval_request` `Content` objects. The caller inspects those,
+creates approval responses via the factory functions, and re-invokes `agent.run()` with them.
+`ToolApprovalMiddleware` reads `function_approval_response` contents on the next inbound call
+and resumes execution — no `run_stream` or `provide_response` method is involved.
 
 ```python
 import asyncio
 from agent_framework import (
     Agent,
+    FunctionTool,
     ToolApprovalMiddleware,
     create_always_approve_tool_response,
     create_always_approve_tool_with_arguments_response,
+    Message,
+    Content,
 )
 from agent_framework.openai import OpenAIChatClient
+
+
+async def read_file(path: str) -> str:
+    """Read a file at the given path."""
+    return f"Contents of {path}: [sample data]"
+
+
+async def write_report(content: str, filename: str) -> str:
+    """Write a report file."""
+    return f"Report saved to {filename}"
 
 
 async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
-        instructions="Use tools to complete work.",
+        instructions="Use read_file and write_report tools to complete tasks.",
+        tools=[FunctionTool(read_file), FunctionTool(write_report)],
         middleware=[ToolApprovalMiddleware()],
     )
 
     session = agent.create_session()
+    response = await agent.run("Analyse the data file and write a monthly report.", session=session)
 
-    async for event in agent.run_stream("Analyse and write the monthly report.", session=session):
-        if event.type == "request_info":
-            request_content = event.data  # the function_approval_request Content
+    # ToolApprovalMiddleware returns function_approval_request contents when a tool
+    # needs explicit authorisation. Loop until all approvals are resolved.
+    while True:
+        pending = [
+            content
+            for msg in response.messages
+            for content in msg.contents
+            if content.type == "function_approval_request"
+        ]
+        if not pending:
+            break
 
+        approvals: list[Content] = []
+        for request_content in pending:
             tool_name = request_content.function_call.name if request_content.function_call else "unknown"
-            print(f"Approval needed for tool: {tool_name}")
+            print(f"Approval needed for: {tool_name}")
 
-            # For low-risk read operations: approve whole tool permanently
-            if tool_name in ("read_file", "list_files"):
-                response = create_always_approve_tool_response(
-                    request_content,
-                    reason="read-only tool — always safe",
+            if tool_name == "read_file":
+                # Approve this tool permanently — safe read-only operation
+                approvals.append(
+                    create_always_approve_tool_response(request_content, reason="read-only tool")
                 )
             else:
-                # For specific argument combinations: approve this call and identical future calls
-                response = create_always_approve_tool_with_arguments_response(
-                    request_content,
-                    reason="user approved this exact invocation",
+                # Approve this exact invocation and any identical future calls
+                approvals.append(
+                    create_always_approve_tool_with_arguments_response(
+                        request_content, reason="user approved this call"
+                    )
                 )
 
-            await agent.provide_response(event.request_id, response, session=session)
+        # Feed approval responses back as a user message; ToolApprovalMiddleware
+        # converts them to internal rules and resumes tool execution.
+        response = await agent.run(
+            [Message(role="user", contents=approvals)],
+            session=session,
+        )
+
+    print(response.text)
 
 
 asyncio.run(main())
@@ -1231,6 +1290,7 @@ from agent_framework import (
     Agent,
     FileAccessProvider,
     FileSystemAgentFileStore,
+    ToolApprovalMiddleware,
     DEFAULT_FILE_ACCESS_INSTRUCTIONS,
     DEFAULT_FILE_ACCESS_SOURCE_ID,
 )
@@ -1250,10 +1310,18 @@ async def main() -> None:
         source_id=DEFAULT_FILE_ACCESS_SOURCE_ID,
         instructions=CUSTOM_INSTRUCTIONS,
     )
+    # FileAccessProvider marks all its tools with approval_mode="always_require".
+    # ToolApprovalMiddleware is required for a plain Agent to execute them.
+    # read_only_tools_auto_approval_rule auto-approves ls/read operations.
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="Manage project files according to conventions.",
         context_providers=[file_access],
+        middleware=[
+            ToolApprovalMiddleware(
+                auto_approval_rules=[FileAccessProvider.read_only_tools_auto_approval_rule],
+            )
+        ],
     )
 
     session = agent.create_session()
