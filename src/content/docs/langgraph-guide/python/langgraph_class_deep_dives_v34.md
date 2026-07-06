@@ -55,10 +55,9 @@ print(_needs_replay(delta_spec, snap))   # False — seed blob resolves directly
 print(_needs_replay(delta_spec, MISSING))  # True — ancestor walk required
 ```
 
-### Example 2 — custom in-memory saver providing delta history
+### Example 2 — channels_from_checkpoint without a saver — delta channels seed to typ()
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.pregel._checkpoint import channels_from_checkpoint, empty_checkpoint
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.delta import DeltaChannel
@@ -74,11 +73,13 @@ specs = {
 chk = empty_checkpoint()
 chk["channel_values"]["counter"] = 7
 
-# No saver → delta channels without a stored value get MISSING
+# No saver → _needs_replay returns True for log but no history is fetched.
+# DeltaChannel.from_checkpoint(MISSING) seeds to typ() = list(), making the
+# channel available with an empty accumulator.
 channels, managed = channels_from_checkpoint(specs, chk)
 print(channels["counter"].get())   # 7
-# log channel has no stored value — from_checkpoint(MISSING) returns empty list
-print(channels["log"].is_available())  # False (MISSING → channel not available)
+# log channel seeds to list() — it is available but empty until writes replay
+print(channels["log"].is_available())  # True — from_checkpoint(MISSING) → typ() = []
 ```
 
 ### Example 3 — understand the DeltaChannel ancestor-walk batch path
@@ -226,13 +227,12 @@ These three functions handle scheduling of *out-of-band* tasks: `@task` call-gra
 ### Example 1 — Send() fan-out and task path anatomy
 
 ```python
-from typing import Annotated
+from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
-from langgraph.checkpoint.memory import MemorySaver
 
-class State:
-    items: Annotated[list, lambda a, b: a + b]
+class State(TypedDict):
+    items: Annotated[list, lambda a, b: a + b]  # reducer merges parallel writes
 
 def router(state):
     # Fan out to multiple parallel worker tasks via Send
@@ -241,14 +241,14 @@ def router(state):
 def worker(state):
     return {"items": [state["item"] * 2]}
 
-builder = StateGraph(dict)
+builder = StateGraph(State)  # use typed state so the Annotated reducer is honoured
 builder.add_node("worker", worker)
 builder.add_conditional_edges(START, router)
 builder.add_edge("worker", END)
 
 graph = builder.compile()
 result = graph.invoke({"items": [1, 2, 3]})
-print(result)  # {"items": [2, 4, 6]} — workers run in parallel
+print(result)  # {"items": [2, 4, 6]} — workers run in parallel; reducer merges lists
 # Each Send() becomes a PUSH task with task_path (PUSH, idx_in_TASKS_channel)
 # prepare_push_task_send resolves the idx to the Send packet.
 ```
@@ -257,10 +257,10 @@ print(result)  # {"items": [2, 4, 6]} — workers run in parallel
 
 ```python
 from langgraph.func import entrypoint, task
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import RetryPolicy
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 # The RetryPolicy on the @task is passed through prepare_push_task_functional
 # as call.retry_policy, overriding any graph-level retry_policy.
@@ -284,24 +284,32 @@ print(result)  # ["data from http://a.com", "data from http://b.com"]
 ### Example 3 — sanitize_untracked_values_in_send in action
 
 ```python
+# sanitize_untracked_values_in_send is an internal helper in langgraph.pregel._algo
+# that strips UntrackedValue channel keys from Send.arg before checkpointing.
+# The equivalent logic using the public channel types:
+
 from langgraph.types import Send
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.channels.last_value import LastValue
-from langgraph.pregel._algo import sanitize_untracked_values_in_send
 
-# Build a channel map where "scratch" is untracked
+# Channel map where "scratch" is ephemeral — must NOT survive in a checkpoint
 channels = {
     "topic": LastValue(str),
-    "scratch": UntrackedValue(dict),   # ephemeral — must NOT be checkpointed
+    "scratch": UntrackedValue(dict),
 }
 
-# A Send packet that accidentally includes an untracked channel value
-raw_send = Send(node="writer", arg={"topic": "hello", "scratch": {"temp": 42}})
+raw_arg = {"topic": "hello", "scratch": {"temp": 42}}
 
-# sanitize_untracked_values_in_send strips "scratch" before checkpointing
-safe_send = sanitize_untracked_values_in_send(raw_send, channels)
-print(safe_send.arg)   # {"topic": "hello"} — "scratch" removed
-print(raw_send.arg)    # {"topic": "hello", "scratch": {"temp": 42}} — original unchanged
+# Equivalent of the internal sanitizer: strip any key whose channel is UntrackedValue
+safe_arg = {k: v for k, v in raw_arg.items()
+            if not isinstance(channels.get(k), UntrackedValue)}
+
+safe_send = Send(node="writer", arg=safe_arg)
+print(safe_send.arg)   # {"topic": "hello"} — "scratch" stripped before checkpointing
+
+# UntrackedValue channels are never written to checkpoint blobs; their presence
+# in Send.arg would create stale values that cannot be replayed safely.
+print(isinstance(channels["scratch"], UntrackedValue))  # True
 ```
 
 ---
@@ -377,7 +385,6 @@ found = find_subgraph_pregel(runnable)
 print(found is subgraph)  # True — closure walk found it
 
 # A Pregel with checkpointer=False is excluded (it has no independent state)
-from langgraph.checkpoint.memory import MemorySaver
 sub_no_ckpt = sub_builder.compile(checkpointer=False)
 found2 = find_subgraph_pregel(sub_no_ckpt)
 print(found2 is None)  # True — checkpointer=False subgraphs don't count
@@ -625,7 +632,7 @@ metadata = {"parents": {"parent_graph": "abc123"}}
 
 new_config = patch_checkpoint_map(parent_config, metadata)
 cmap = new_config["configurable"]["checkpoint_map"]
-print(cmap)   # {"parent_graph": "abc123", "parent_graph": "abc123"}
+print(cmap)   # {"parent_graph": "abc123"}
 # Now the child subgraph can look up parent_graph's checkpoint ID via checkpoint_map.
 ```
 
@@ -841,10 +848,7 @@ print("SafeNetDemo: finalize/fail close all open subgraph handles")
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
-
-class State:
-    value: int
+from langgraph.checkpoint.memory import InMemorySaver
 
 def risky_node(state):
     if state.get("trigger_error"):
@@ -860,7 +864,7 @@ builder.add_node("risky", risky_node, error_handler=error_handler)
 builder.add_edge(START, "risky")
 builder.add_edge("risky", END)
 
-graph = builder.compile(checkpointer=MemorySaver())
+graph = builder.compile(checkpointer=InMemorySaver())
 
 # Normal path
 r1 = graph.invoke({"trigger_error": False})
