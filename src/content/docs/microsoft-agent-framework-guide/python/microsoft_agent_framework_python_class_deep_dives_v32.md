@@ -52,7 +52,6 @@ evaluators. `evaluate_workflow` does the same for multi-agent workflows, produci
 import asyncio
 from agent_framework import (
     Agent,
-    FunctionTool,
     LocalEvaluator,
     evaluate_agent,
     keyword_check,
@@ -71,7 +70,7 @@ async def main() -> None:
         client=OpenAIChatClient(),
         instructions="You are a weather assistant. Use get_weather to answer weather queries.",
         name="weather-agent",
-        tools=[FunctionTool(get_weather)],
+        tools=[get_weather],
     )
 
     local = LocalEvaluator(
@@ -329,7 +328,6 @@ read `item.expected_tool_calls` — set those via `evaluate_agent(expected_tool_
 import asyncio
 from agent_framework import (
     Agent,
-    FunctionTool,
     LocalEvaluator,
     evaluate_agent,
     keyword_check,
@@ -347,7 +345,7 @@ async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="Use get_weather to answer weather questions.",
-        tools=[FunctionTool(get_weather)],
+        tools=[get_weather],
     )
     local = LocalEvaluator(
         keyword_check("London", "degrees"),      # both must appear in response
@@ -371,7 +369,6 @@ import asyncio
 from agent_framework import (
     Agent,
     ExpectedToolCall,
-    FunctionTool,
     LocalEvaluator,
     evaluate_agent,
     tool_call_args_match,
@@ -388,7 +385,7 @@ async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="Use get_weather for weather queries.",
-        tools=[FunctionTool(get_weather)],
+        tools=[get_weather],
     )
     local = LocalEvaluator(tool_call_args_match)  # pass the function directly
 
@@ -736,6 +733,7 @@ from agent_framework import (
     Message,
     Content,
     annotate_message_groups,
+    CharacterEstimatorTokenizer,
     EXCLUDED_KEY,
     EXCLUDE_REASON_KEY,
     GROUP_ANNOTATION_KEY,
@@ -762,8 +760,9 @@ def demonstrate_annotations() -> None:
     messages[2].additional_properties[EXCLUDED_KEY] = True
     messages[2].additional_properties[EXCLUDE_REASON_KEY] = "context_window_limit"
 
-    # annotate_message_groups assigns group IDs, kind, and index to each message
-    annotate_message_groups(messages)
+    # Pass a tokenizer so GROUP_TOKEN_COUNT_KEY is populated and
+    # included_token_count() returns a real (non-zero) estimate
+    annotate_message_groups(messages, tokenizer=CharacterEstimatorTokenizer())
 
     for msg in messages:
         group = msg.additional_properties.get(GROUP_ANNOTATION_KEY, {})
@@ -838,6 +837,7 @@ from agent_framework import (
     Message,
     Content,
     annotate_message_groups,
+    CharacterEstimatorTokenizer,
     EXCLUDED_KEY,
     EXCLUDE_REASON_KEY,
     GROUP_ANNOTATION_KEY,
@@ -849,7 +849,7 @@ from agent_framework import (
 
 def check_compaction_coverage(messages: list[Message]) -> None:
     """Annotate and report compaction coverage for a message list."""
-    annotate_message_groups(messages)
+    annotate_message_groups(messages, tokenizer=CharacterEstimatorTokenizer())
 
     total = len(messages)
     included = len(included_messages(messages))
@@ -1117,7 +1117,6 @@ and resumes execution — no `run_stream` or `provide_response` method is involv
 import asyncio
 from agent_framework import (
     Agent,
-    FunctionTool,
     ToolApprovalMiddleware,
     create_always_approve_tool_response,
     create_always_approve_tool_with_arguments_response,
@@ -1141,7 +1140,7 @@ async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="Use read_file and write_report tools to complete tasks.",
-        tools=[FunctionTool(read_file), FunctionTool(write_report)],
+        tools=[read_file, write_report],
         middleware=[ToolApprovalMiddleware()],
     )
 
