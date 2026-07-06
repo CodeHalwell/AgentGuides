@@ -521,16 +521,33 @@ asyncio.run(main())
 
 ### Example 2 — Inspecting `request_info` events (HITL)
 
+`FunctionalWorkflow` (created via the `@workflow` decorator) is the simplest
+self-contained HITL pattern. `WorkflowRunResult` extends `list[WorkflowEvent]`
+and can be iterated directly. Resume by passing `responses={request_id: value}`
+to a second `.run()` call.
+
 ```python
 import asyncio
-from agent_framework import WorkflowEvent
-from my_workflow import build_hitl_workflow  # hypothetical
+from agent_framework import RunContext, workflow
 
 
-async def handle_requests(workflow, query: str) -> None:
+@workflow
+async def account_query_workflow(message: str, ctx: RunContext) -> str:
+    """Workflow that requests human verification before answering."""
+    verification = await ctx.request_info(
+        request_data=f"Verification required to answer: {message}",
+        response_type=str,
+    )
+    return f"Verified answer (code={verification}): your balance is $1,200."
+
+
+async def main() -> None:
     responses: dict[str, str] = {}
 
-    async for event in workflow.run_stream(query):
+    # First run — workflow suspends at request_info and returns events collected so far
+    result = await account_query_workflow.run("What is my account balance?")
+
+    for event in result:  # WorkflowRunResult is a list[WorkflowEvent]
         if event.type == "request_info":
             # Type-safe properties only available on request_info events
             rid = event.request_id
@@ -538,16 +555,17 @@ async def handle_requests(workflow, query: str) -> None:
             payload = event.data
             resp_type = event.response_type
 
-            print(f"Request from {executor}: {payload!r} (expects {resp_type.__name__})")
-            # Collect human response
-            answer = input(f"Answer for request {rid}: ")
-            responses[rid] = answer
+            print(f"Request [{rid}] from '{executor}': {payload!r} (expects {resp_type.__name__})")
+            responses[rid] = input(f"Answer for request {rid}: ")
 
-        elif event.type == "output":
-            print(f"Final answer: {event.data}")
+    # Second run — resume with collected responses; returns output events
+    if responses:
+        final = await account_query_workflow.run(responses=responses)
+        for output in final.get_outputs():
+            print(f"Final answer: {output}")
 
 
-asyncio.run(handle_requests(build_hitl_workflow(), "What is my account balance?"))
+asyncio.run(main())
 ```
 
 ### Example 3 — Forwarding events across the `as_agent()` boundary
@@ -1423,12 +1441,12 @@ async def main() -> None:
         Agent(client=OpenAIChatClient(), name="tech-agent", instructions="Research technology topics."),
     ]
 
+    # create_harness_agent signature: create_harness_agent(client, *, agent_instructions, ...)
+    # The first positional argument is the chat client, not an Agent instance.
     orchestrator = create_harness_agent(
-        agent=Agent(
-            client=OpenAIChatClient(),
-            instructions="Delegate research across specialist agents, then synthesise results.",
-        ),
-        context_providers=[BackgroundAgentsProvider(agents=researchers)],
+        OpenAIChatClient(),
+        agent_instructions="Delegate research across specialist agents, then synthesise results.",
+        background_agents=researchers,
         loop_should_continue=background_tasks_running(),
         loop_next_message=background_tasks_running_message,
         loop_max_iterations=15,
