@@ -31,6 +31,7 @@ These functions hydrate live `BaseChannel` instances from a persisted checkpoint
 ### Example 1 — inspect which channels would replay on load
 
 ```python
+import operator
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.delta import DeltaChannel
 from langgraph.pregel._checkpoint import _needs_replay, LATEST_VERSION
@@ -40,7 +41,8 @@ from langgraph._internal._typing import MISSING
 checkpoint_values = {"x": 42}          # only x is stored; delta_log is absent
 
 last_val_spec = LastValue(int)
-delta_spec = DeltaChannel(list)
+# DeltaChannel: first arg is reducer, second (keyword) is the accumulator type
+delta_spec = DeltaChannel(operator.add, typ=list)
 
 # _needs_replay: False for regular channels regardless of stored value
 print(_needs_replay(last_val_spec, checkpoint_values.get("x", MISSING)))  # False
@@ -58,14 +60,16 @@ print(_needs_replay(delta_spec, MISSING))  # True — ancestor walk required
 ### Example 2 — channels_from_checkpoint without a saver — delta channels seed to typ()
 
 ```python
+import operator
 from langgraph.pregel._checkpoint import channels_from_checkpoint, empty_checkpoint
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.delta import DeltaChannel
 
 # Build a simple two-channel spec
+# DeltaChannel: first arg is reducer (batching-invariant), typ= is the accumulator type
 specs = {
     "counter": LastValue(int),
-    "log":     DeltaChannel(list),
+    "log":     DeltaChannel(operator.add, typ=list),
 }
 
 # A checkpoint that has counter but not log (simulates a delta channel
@@ -132,7 +136,7 @@ These two functions handle the most subtle edge in DeltaChannel snapshotting: de
 from langgraph.pregel._checkpoint import exit_delta_task_id
 import uuid
 
-# A real task_id (UUID v6)
+# A real task_id (UUID v4 for illustration; LangGraph uses UUID v6 in production)
 real_task_id = str(uuid.uuid4())   # e.g. "550e8400-e29b-41d4-a716-446655440000"
 
 for step in [0, 1, 99, 255]:
@@ -155,14 +159,16 @@ import operator
 from langgraph.pregel._checkpoint import delta_channels_to_snapshot
 from langgraph.channels.delta import DeltaChannel
 from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
+from langgraph._internal._typing import MISSING
 
 # Default global cap
 print(f"DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = {DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT}")
 
-# DeltaChannel(reducer, typ=...) — first arg is the reducer function, not the type.
-# operator.add concatenates list values; typ=list gives an empty-list seed on MISSING.
-ch = DeltaChannel(operator.add, typ=list, snapshot_frequency=10)
-ch.update([1, 2, 3])  # seeds value to [] + [1,2,3] → [1,2,3]; is_available() → True
+# DeltaChannel(reducer, typ=...) — first arg is the reducer, not the type.
+# from_checkpoint(MISSING) seeds to typ() = [], consistent with channels_from_checkpoint.
+ch_spec = DeltaChannel(operator.add, typ=list, snapshot_frequency=10)
+ch = ch_spec.from_checkpoint(MISSING)   # seeds value to []; is_available() → True
+ch.update([1, 2, 3])  # applies reducer: [] + [1,2,3] → [1,2,3]
 
 channels = {"events": ch}
 
@@ -230,23 +236,26 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
 class State(TypedDict):
-    items: Annotated[list, lambda a, b: a + b]  # reducer merges parallel writes
+    items: list                                   # input list — no reducer (last-write)
+    results: Annotated[list, lambda a, b: a + b]  # accumulated worker outputs
 
 def router(state):
     # Fan out to multiple parallel worker tasks via Send
     return [Send("worker", {"item": x}) for x in state["items"]]
 
 def worker(state):
-    return {"items": [state["item"] * 2]}
+    return {"results": [state["item"] * 2]}
 
-builder = StateGraph(State)  # use typed state so the Annotated reducer is honoured
+# Use a separate 'results' key so the reducer doesn't also absorb the initial 'items'.
+# Writing workers back to 'items' would include the initial list in the output.
+builder = StateGraph(State)
 builder.add_node("worker", worker)
 builder.add_conditional_edges(START, router)
 builder.add_edge("worker", END)
 
 graph = builder.compile()
 result = graph.invoke({"items": [1, 2, 3]})
-print(result)  # {"items": [2, 4, 6]} — workers run in parallel; reducer merges lists
+print(result)  # {"items": [1, 2, 3], "results": [2, 4, 6]} — workers run in parallel
 # Each Send() becomes a PUSH task with task_path (PUSH, idx_in_TASKS_channel)
 # prepare_push_task_send resolves the idx to the Send packet.
 ```
@@ -601,7 +610,7 @@ Two config-merge utilities that power multi-subgraph state coordination and Lang
 
 **Key source facts** (from `langgraph/_internal/_config.py`):
 
-- `patch_checkpoint_map(config, metadata)` is used when a node transitions from a parent to a child subgraph. It adds an entry to `configurable["checkpoint_map"]` that records the **parent** namespace's current checkpoint ID. This lets the child refer back to the parent's checkpoint for cross-namespace reads (e.g. `Command.PARENT`). If `metadata` is `None` or has no `"parents"` key, the config is returned **unchanged**. The new map entry is `{parent_ns: parent_checkpoint_id}` merged with any existing `checkpoint_map`.
+- `patch_checkpoint_map(config, metadata)` is used when a node transitions from a parent to a child subgraph. It sets `configurable["checkpoint_map"]` to `{**metadata["parents"], current_ns: current_checkpoint_id}` — the map is **built from `metadata["parents"]`** (the ancestry chain from the checkpoint) plus the current namespace entry. Any pre-existing `checkpoint_map` on the config is **not** preserved; `metadata["parents"]` is the authoritative source. If `metadata` is `None` or has no `"parents"` key, the config is returned **unchanged**.
 - `_merge_metadata(base, new)` merges two `Mapping[str, Any]` metadata dicts **without mutating either input**. Rules:
   - Top-level keys merge with `new` values winning.
   - **`lc_versions`** is the only mapping-valued key that merges one level deeper — individual package version strings are unioned so different LangChain packages can each contribute their version without clobbering the others.
@@ -789,7 +798,9 @@ for task_data in [single, batched]:
 # Without this sweep, a SubgraphRunStream would remain in "started" status
 # indefinitely, blocking consumers iterating run.subgraphs.
 #
-# The sweep fires _on_terminal(ns, "drained", None) for every open entry.
+# finalize() fires _on_terminal(ns, "completed", None) — the normal-end status.
+# fail(err) derives the status string from the exception type via
+# _status_from_exception (e.g. "drained" for GraphDrained, "failed" otherwise).
 
 # Subclass skeleton showing the safety-net hook:
 from langgraph.stream.transformers import _TasksLifecycleBase
@@ -809,13 +820,13 @@ class SafeNetDemo(_TasksLifecycleBase):
         self._statuses["/".join(ns)] = status
 
     def finalize(self):
-        # _TasksLifecycleBase.finalize() calls _pop_terminal_transitions()
-        # for all _open entries with status="drained".
+        # _TasksLifecycleBase.finalize() fires _on_terminal(ns, "completed", None)
+        # for all still-open entries — the normal run-end sweep.
         super().finalize()
 
     def fail(self, err):
-        # _TasksLifecycleBase.fail() calls _pop_terminal_transitions()
-        # for all _open entries with status="failed".
+        # _TasksLifecycleBase.fail() derives status from the exception type
+        # (e.g. "drained" for GraphDrained, "failed" otherwise) and sweeps _open.
         super().fail(err)
 
 print("SafeNetDemo: finalize/fail close all open subgraph handles")
