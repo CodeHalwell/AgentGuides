@@ -20,7 +20,7 @@ These functions hydrate live `BaseChannel` instances from a persisted checkpoint
 
 **Key source facts** (from `langgraph/pregel/_checkpoint.py`):
 
-- `channels_from_checkpoint(specs, checkpoint, *, saver, config)` iterates over every key in `specs`:
+- `channels_from_checkpoint(specs, checkpoint, *, saver=None, config=None)` iterates over every key in `specs`:
   - Regular channels call `spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))`.
   - `DeltaChannel` entries that are absent from `channel_values` (i.e., `_needs_replay` returns `True`) are batched and passed to `saver.get_delta_channel_history(config=config, channels=delta_channels)`.
   - History results arrive as `{"seed": <value or MISSING>, "writes": [...]}`; the channel is seeded with `from_checkpoint(seed)` then `replay_writes(writes)` is called to replay the accumulated writes.
@@ -34,7 +34,7 @@ These functions hydrate live `BaseChannel` instances from a persisted checkpoint
 import operator
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.delta import DeltaChannel
-from langgraph.pregel._checkpoint import _needs_replay, LATEST_VERSION
+from langgraph.pregel._checkpoint import _needs_replay
 from langgraph._internal._typing import MISSING
 
 # Simulate a checkpoint that is missing a delta channel's value
@@ -136,7 +136,8 @@ These two functions handle the most subtle edge in DeltaChannel snapshotting: de
 from langgraph.pregel._checkpoint import exit_delta_task_id
 import uuid
 
-# A real task_id (UUID v4 for illustration; LangGraph uses UUID v6 in production)
+# A UUID string for illustration — in practice LangGraph derives task_id
+# deterministically via UUID5/XXH3 (see Vol. 24); any valid UUID string works here.
 real_task_id = str(uuid.uuid4())   # e.g. "550e8400-e29b-41d4-a716-446655440000"
 
 for step in [0, 1, 99, 255]:
