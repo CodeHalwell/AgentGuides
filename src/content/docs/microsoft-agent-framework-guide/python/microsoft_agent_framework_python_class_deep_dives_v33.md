@@ -119,6 +119,11 @@ invocation.
 
 ```python
 import asyncio
+import sys
+if sys.version_info >= (3, 11):
+    from typing import Never
+else:
+    from typing_extensions import Never  # pip install typing_extensions
 from agent_framework import (
     WorkflowBuilder, WorkflowContext, Executor, handler,
 )
@@ -189,6 +194,11 @@ executor provides the authoritative output.
 
 ```python
 import asyncio
+import sys
+if sys.version_info >= (3, 11):
+    from typing import Never
+else:
+    from typing_extensions import Never  # pip install typing_extensions
 from agent_framework import WorkflowBuilder, WorkflowContext, Executor, handler
 
 
@@ -276,6 +286,11 @@ result2 = await workflow.run(
 
 ```python
 import asyncio
+import sys
+if sys.version_info >= (3, 11):
+    from typing import Never
+else:
+    from typing_extensions import Never  # pip install typing_extensions
 from agent_framework import WorkflowBuilder, WorkflowContext, Executor, handler
 
 
@@ -327,6 +342,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import sys
+if sys.version_info >= (3, 11):
+    from typing import Never
+else:
+    from typing_extensions import Never  # pip install typing_extensions
 from agent_framework import WorkflowBuilder, WorkflowContext, Executor, handler, WorkflowEvent
 
 
@@ -361,6 +381,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import sys
+if sys.version_info >= (3, 11):
+    from typing import Never
+else:
+    from typing_extensions import Never  # pip install typing_extensions
 from agent_framework import WorkflowBuilder, WorkflowContext, Executor, handler, WorkflowRunState
 
 
