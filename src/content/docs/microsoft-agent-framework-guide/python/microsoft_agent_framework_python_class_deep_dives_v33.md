@@ -782,16 +782,14 @@ from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     # Reads are auto-approved; writes always prompt the user.
+    # MCPSpecificApproval is a TypedDict with two collection fields.
     git_tool = MCPStdioTool(
         name="git",
         command="uvx",
         args=["mcp-server-git", "--repository", "."],
         approval_mode={
-            "git_read_file": "never_require",
-            "git_diff": "never_require",
-            "git_log": "never_require",
-            "git_commit": "always_require",   # write op — requires approval
-            "git_push": "always_require",     # write op — requires approval
+            "never_require_approval": ["git_read_file", "git_diff", "git_log"],
+            "always_require_approval": ["git_commit", "git_push"],  # write ops
         },
     )
 
@@ -889,7 +887,7 @@ Resolution order (highest → lowest priority):
 
 `required_fields` entries:
 - `"field_name"` — must resolve to non-`None`
-- `("field_a", "field_b")` — at least one must resolve to non-`None`
+- `("field_a", "field_b")` — exactly one must resolve to non-`None` (mutually exclusive)
 
 ### Example 1 · Basic settings with env prefix
 
@@ -948,7 +946,7 @@ settings = load_settings(
     env_prefix="DB_",
     env_file_path=env_path,
     database="production",   # direct override — highest priority
-    required_fields=["host", ("password",)],
+    required_fields=["host", "password"],
 )
 
 print(settings["host"])      # localhost  (from .env)
@@ -959,7 +957,7 @@ print(repr(settings["password"]))  # SecretString('**********')
 os.unlink(env_path)
 ```
 
-### Example 3 · Tuple `required_fields` — at-least-one constraint
+### Example 3 · Tuple `required_fields` — mutually exclusive constraint
 
 ```python
 from typing import TypedDict, Optional
@@ -977,19 +975,21 @@ class AuthSettings(TypedDict, total=False):
 os.environ["AUTH_CLIENT_ID"] = "my-client"
 os.environ["AUTH_CLIENT_SECRET"] = "my-secret"
 
-# Require EITHER api_key OR (client_id AND client_secret)
+# Exactly one of (api_key, client_id) must be set; exactly one of (api_key, client_secret) must be set.
+# Here api_key is absent, so client_id satisfies constraint 1 and client_secret satisfies constraint 2.
 settings = load_settings(
     AuthSettings,
     env_prefix="AUTH_",
     required_fields=[
-        ("api_key", "client_id"),    # at least one of these
+        ("api_key", "client_id"),    # exactly one — mutually exclusive
         ("api_key", "client_secret"),
     ],
 )
 
 print("client_id:", settings["client_id"])           # my-client
 print("api_key:", settings.get("api_key"))           # None
-# First constraint passes because client_id is set; second passes because client_secret is set
+# Both constraints pass: api_key is None, so client_id (constraint 1) and client_secret (constraint 2)
+# each satisfy their "exactly one non-None" requirement. Setting api_key alongside either would raise.
 ```
 
 ---
@@ -1137,9 +1137,10 @@ asyncio.run(main())
 `agent_framework._sessions.HistoryProvider`  
 `agent_framework._sessions.InMemoryHistoryProvider`
 
-`HistoryProvider` is the ABC that persists per-session conversation history.
-`FileHistoryProvider` stores one JSONL file per session; `InMemoryHistoryProvider`
-keeps messages in RAM. Custom providers implement three abstract methods.
+`HistoryProvider` is a `ContextProvider` ABC that persists per-session conversation
+history. `FileHistoryProvider` stores one JSONL file per session; `InMemoryHistoryProvider`
+keeps messages in `session.state`. Custom providers implement two abstract methods:
+`get_messages` and `save_messages`.
 
 ### `FileHistoryProvider` constructor
 
@@ -1148,44 +1149,56 @@ FileHistoryProvider(
     storage_path: str | Path,
     *,
     source_id: str = "file_history",
-    service_stores_history: bool = False,
+    load_messages: bool = True,       # load history before each run
+    store_inputs: bool = True,        # persist input messages after each run
+    store_context_messages: bool = False,  # persist context from other providers
+    store_context_from: set[str] | None = None,  # restrict context storage to these source_ids
+    store_outputs: bool = True,       # persist response messages after each run
+    skip_excluded: bool = False,      # skip messages marked _excluded during load
     dumps: Callable[[Any], str] | None = None,   # default json.dumps
     loads: Callable[[str], Any] | None = None,   # default json.loads
-    encoding: str = "utf-8",
 )
 ```
 
-**`service_stores_history=True`** — the remote service owns history (e.g. Azure
-AI Agents service). The provider skips local writes when set.
-
-Files are stored as `<storage_path>/<session_id>.jsonl`. Windows reserved names
-and unusual characters are encoded as `~session-<hex>.jsonl`.
+Files are stored as `<storage_path>/<session_id>.jsonl`. Each message is
+written as one JSON object per line. Set `store_inputs=False` for write-only
+audit logs; set `load_messages=False` to disable history loading entirely.
 
 ### `HistoryProvider` ABC
 
+Custom providers subclass `HistoryProvider` and implement two abstract methods.
+`HistoryProvider` itself is a `ContextProvider`, so pass it via `context_providers`.
+
 ```python
-class HistoryProvider:
-    async def load(
+class HistoryProvider(ContextProvider):
+    def __init__(
         self,
+        source_id: str,              # required; unique identifier for this provider
         *,
-        session: AgentSession,
-        context: SessionContext,
-        conversation_id: str | None = None,
+        load_messages: bool = True,
+        store_inputs: bool = True,
+        store_context_messages: bool = False,
+        store_context_from: set[str] | None = None,
+        store_outputs: bool = True,
+    ): ...
+
+    @abstractmethod
+    async def get_messages(
+        self,
+        session_id: str | None,
+        *,
+        state: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[Message]: ...
 
-    async def save(
+    @abstractmethod
+    async def save_messages(
         self,
+        session_id: str | None,
+        messages: Sequence[Message],
         *,
-        session: AgentSession,
-        context: SessionContext,
-        messages: list[Message],
-    ) -> None: ...
-
-    async def clear(
-        self,
-        *,
-        session: AgentSession,
-        context: SessionContext,
+        state: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None: ...
 ```
 
@@ -1223,6 +1236,10 @@ asyncio.run(main())
 
 ### Example 2 · `InMemoryHistoryProvider` for testing
 
+`InMemoryHistoryProvider` stores messages in `session.state["messages"]` —
+the provider holds no state of its own. Inspect stored messages by reading
+`session.state` directly after a run.
+
 ```python
 import asyncio
 from agent_framework import Agent, AgentSession, InMemoryHistoryProvider
@@ -1241,16 +1258,13 @@ async def main() -> None:
     response = await agent.run("What is the magic word?", session=session)
     print(response.text)  # should mention avocado
 
-    # Inspect stored messages
-    messages = await history.load(
-        session=session,
-        context=None,  # type: ignore[arg-type]  — None accepted in in-memory impl
-    )
-    print(f"stored {len(messages)} messages")
+    # Inspect stored messages — they live in session.state, not on the provider
+    stored = session.state.get("messages", [])
+    print(f"stored {len(stored)} messages")
 
-    await history.clear(session=session, context=None)  # type: ignore[arg-type]
-    cleared = await history.load(session=session, context=None)  # type: ignore[arg-type]
-    print("after clear:", len(cleared))  # 0
+    # Clear history by resetting the state key
+    session.state["messages"] = []
+    print("after clear:", len(session.state.get("messages", [])))  # 0
 
 
 asyncio.run(main())
@@ -1258,10 +1272,14 @@ asyncio.run(main())
 
 ### Example 3 · Custom `HistoryProvider` backed by a dict store
 
+Implement `get_messages` and `save_messages` — the two abstract methods.
+Both receive `session_id: str | None` and accept `**kwargs` for forward
+compatibility. Pass a unique `source_id` to `super().__init__()`.
+
 ```python
 import asyncio
+from typing import Any, Sequence
 from agent_framework import Agent, AgentSession, HistoryProvider, Message
-from agent_framework._sessions import SessionContext
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1269,26 +1287,28 @@ class InProcessDictHistoryProvider(HistoryProvider):
     """Minimal HistoryProvider backed by an in-process dict for demonstration."""
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__("dict_history")   # source_id is required
         self._store: dict[str, list[dict]] = {}
 
-    def _key(self, session: AgentSession) -> str:
-        return session.session_id
-
-    async def load(
-        self, *, session: AgentSession, context: SessionContext, conversation_id=None
+    async def get_messages(
+        self,
+        session_id: str | None,
+        *,
+        state: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[Message]:
-        raw = self._store.get(self._key(session), [])
-        # Reconstruct Message objects from plain dicts
+        raw = self._store.get(session_id or "", [])
         return [Message.from_dict(m) for m in raw]
 
-    async def save(
-        self, *, session: AgentSession, context: SessionContext, messages: list[Message]
+    async def save_messages(
+        self,
+        session_id: str | None,
+        messages: Sequence[Message],
+        *,
+        state: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
-        self._store[self._key(session)] = [m.to_dict() for m in messages]
-
-    async def clear(self, *, session: AgentSession, context: SessionContext) -> None:
-        self._store.pop(self._key(session), None)
+        self._store[session_id or ""] = [m.to_dict() for m in messages]
 
 
 async def main() -> None:
@@ -1481,20 +1501,19 @@ caching. `DeduplicatingSkillsSource` wraps any source and drops skills whose
 # Load from a list of directory paths
 provider = SkillsProvider.from_paths(["/skills/customer", "/skills/finance"])
 
-# Compose multiple sources
-provider = SkillsProvider(sources=[source_a, source_b])
+# Pass a single source (SkillsSource instance) positionally
+provider = SkillsProvider(source)          # SkillsSource instance
+provider = SkillsProvider([skill_a, skill_b])  # or a list of Skill instances
 ```
 
 ### `SkillsSource` ABC
 
+`get_skills` takes no arguments — the framework calls it without session context.
+
 ```python
 class SkillsSource:
-    async def get_skills(
-        self,
-        *,
-        session: AgentSession,
-        context: SessionContext,
-    ) -> list[Skill]: ...
+    @abstractmethod
+    async def get_skills(self) -> list[Skill]: ...
 ```
 
 ### Example 1 · `SkillsProvider.from_paths` — multi-directory discovery
@@ -1542,7 +1561,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import (
     Agent, SkillsProvider, DeduplicatingSkillsSource,
-    AggregatingSkillsSource, InMemorySkillsSource, Skill, SkillFrontmatter,
+    AggregatingSkillsSource, InMemorySkillsSource, InlineSkill, SkillFrontmatter,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -1550,25 +1569,23 @@ from agent_framework.openai import OpenAIChatClient
 async def main() -> None:
     # Two sources expose a skill with the same name — "summarize".
     # DeduplicatingSkillsSource keeps only the first one encountered.
-    v1_skill = Skill(
+    v1_skill = InlineSkill(
         frontmatter=SkillFrontmatter(name="summarize", description="Summarize v1"),
-        resources=[],
-        scripts=[],
+        instructions="Summarize the provided text concisely.",
     )
-    v2_skill = Skill(
+    v2_skill = InlineSkill(
         frontmatter=SkillFrontmatter(name="summarize", description="Summarize v2"),
-        resources=[],
-        scripts=[],
+        instructions="Provide a detailed summary of the provided text.",
     )
 
     source_v1 = InMemorySkillsSource([v1_skill])
     source_v2 = InMemorySkillsSource([v2_skill])
 
-    # Aggregate both, then deduplicate
+    # Aggregate both, then deduplicate — v1 wins because it appears first
     combined = AggregatingSkillsSource([source_v1, source_v2])
     deduped = DeduplicatingSkillsSource(combined)
 
-    provider = SkillsProvider(sources=[deduped])
+    provider = SkillsProvider(deduped)   # pass source positionally
 
     client = OpenAIChatClient(model="gpt-4o-mini")
     agent = Agent(client=client, name="skill-agent", context_providers=[provider])
@@ -1586,9 +1603,8 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import (
-    Agent, SkillsProvider, SkillsSource, AgentSession, Skill, SkillFrontmatter,
+    Agent, SkillsProvider, SkillsSource, InlineSkill, SkillFrontmatter,
 )
-from agent_framework._sessions import SessionContext
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1598,16 +1614,11 @@ class RemoteSkillsSource(SkillsSource):
     def __init__(self, registry_url: str) -> None:
         self._registry_url = registry_url
 
-    async def get_skills(
-        self,
-        *,
-        session: AgentSession,
-        context: SessionContext,
-    ) -> list[Skill]:
+    async def get_skills(self) -> list[InlineSkill]:
         # In production: call self._registry_url with an HTTP client.
         # For demonstration, return a static skill.
         return [
-            Skill(
+            InlineSkill(
                 frontmatter=SkillFrontmatter(
                     name="remote-search",
                     description=(
@@ -1615,15 +1626,14 @@ class RemoteSkillsSource(SkillsSource):
                         "Pass a `query` string to retrieve relevant documents."
                     ),
                 ),
-                resources=[],
-                scripts=[],
+                instructions="Call this skill with a `query` argument to retrieve documents.",
             )
         ]
 
 
 async def main() -> None:
     remote_source = RemoteSkillsSource(registry_url="https://skills.internal/api")
-    provider = SkillsProvider(sources=[remote_source])
+    provider = SkillsProvider(remote_source)   # pass source positionally
 
     client = OpenAIChatClient(model="gpt-4o-mini")
     agent = Agent(client=client, name="remote-skill-agent", context_providers=[provider])
@@ -1648,7 +1658,7 @@ asyncio.run(main())
 | 5 | `MCPStdioTool` | `_mcp` | `allowed_tools` = allowlist; `MCPSpecificApproval` = per-tool approval dict; `additional_tool_argument_names` = hidden args injected into every tool call |
 | 6 | `SecretString` + `load_settings` | `_settings` | `SecretString.__repr__` masks; `load_settings` resolution: overrides → .env → env vars → defaults; `required_fields` tuple = at-least-one constraint |
 | 7 | `FunctionInvocationConfiguration` | `_tools` | `max_function_calls` is per-request, best-effort; `additional_tools` injects tools without rebuilding agent; `enabled=False` disables the tool loop |
-| 8 | `FileHistoryProvider` + `HistoryProvider` | `_sessions` | JSONL per session; `service_stores_history=True` skips local writes; custom provider = implement `load`/`save`/`clear` |
+| 8 | `FileHistoryProvider` + `HistoryProvider` | `_sessions` | JSONL per session; pass via `context_providers=[...]`; custom provider = implement `get_messages`/`save_messages` with `(session_id, *, state, **kwargs)` |
 | 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; `MiddlewareTermination(result=value)` short-circuits without calling the model (`result` is keyword-only) |
 | 10 | `SkillsProvider` + `SkillsSource` | `_skills` | `from_paths()` discovers SKILL.md files; `DeduplicatingSkillsSource` = first-one-wins; custom ABC = implement `get_skills(session, context)` |
 
