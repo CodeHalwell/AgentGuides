@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 35"
-description: "Source-verified deep dives into 10 previously undocumented class groups from langgraph==1.2.8 — EncryptedSerializer/CipherProtocol/SerializerProtocol (AES checkpoint encryption), SerdeEvent/register_serde_event_listener/emit_serde_event (thread-safe audit hooks), ReplayState (subgraph time-travel checkpoint hydration), UIMessage/RemoveUIMessage/push_ui_message/delete_ui_message/ui_message_reducer (UI streaming primitives), _RemoteGraphRunStream/_AsyncRemoteGraphRunStream/_ChannelProjection/_ProjectionRegistry (remote-graph run stream adapters), UntrackedValue (non-checkpointed per-step channel), HumanResponse + deprecated HumanInterrupt migration pattern, ManagedValue/ManagedValueSpec/ManagedValueMapping/IsLastStep/RemainingSteps (managed value injection), StreamToolCallHandler/ToolCallWriter/_tool_call_writer ContextVar (tool-call lifecycle streaming), and AsyncQueue/SyncQueue/Semaphore (internal FIFO concurrency primitives)."
+description: "Source-verified deep dives into 10 class groups from langgraph==1.2.8 — EncryptedSerializer/CipherProtocol/SerializerProtocol (AES checkpoint encryption), SerdeEvent/register_serde_event_listener/emit_serde_event (thread-safe audit hooks), ReplayState (subgraph time-travel checkpoint hydration), UIMessage/RemoveUIMessage/push_ui_message/delete_ui_message/ui_message_reducer (UI streaming primitives), _RemoteGraphRunStream/_AsyncRemoteGraphRunStream/_ChannelProjection/_ProjectionRegistry (remote-graph run stream adapters), UntrackedValue (non-checkpointed per-step channel), HumanResponse + deprecated HumanInterrupt migration pattern, ManagedValue/ManagedValueSpec/ManagedValueMapping/IsLastStep/RemainingSteps (managed value injection), StreamToolCallHandler/ToolCallWriter/_tool_call_writer ContextVar (tool-call lifecycle streaming), and AsyncQueue/SyncQueue/Semaphore (internal FIFO concurrency primitives)."
 framework: langgraph
 language: python
 sidebar:
@@ -8,7 +8,7 @@ sidebar:
   order: 66
 ---
 
-Source-verified deep dives into **10 previously undocumented class groups**, each with **3 runnable examples**, verified against `langgraph==1.2.8` / `langgraph-checkpoint==4.1.1` / `langgraph-prebuilt==1.1.0`.
+Source-verified deep dives into **10 class groups**, each with **3 runnable examples**, verified against `langgraph==1.2.8` / `langgraph-checkpoint==4.1.1` / `langgraph-prebuilt==1.1.0`.
 
 ---
 
@@ -23,7 +23,7 @@ Source-verified deep dives into **10 previously undocumented class groups**, eac
 - `EncryptedSerializer.__init__(cipher, serde=JsonPlusSerializer())` — composable: any `CipherProtocol` × any `SerializerProtocol`.
 - `dumps_typed(obj)` → `(f"{typ}+{ciphername}", ciphertext)` — encrypts after the inner serde serialises; the ciphername is returned by `cipher.encrypt()`.
 - `loads_typed((enc_type, ciphertext))` — splits on the first `+`; if absent, falls through to inner serde for backward-compat reads of unencrypted checkpoints.
-- `from_pycryptodome_aes(serde, **kwargs)` — factory that reads `LANGGRAPH_AES_KEY` env var (16/24/32 bytes), defaults mode to `AES.MODE_EAX` (authenticated encryption — nonce + tag + ciphertext layout).
+- `EncryptedSerializer.from_pycryptodome_aes(serde, **kwargs)` — classmethod factory; reads `LANGGRAPH_AES_KEY` env var (a plain string; `.encode()` must yield 16/24/32 bytes) or accepts an explicit `key=<bytes>` kwarg. Defaults mode to `AES.MODE_EAX` (authenticated encryption — nonce + tag + ciphertext layout).
 - `CipherProtocol` — `Protocol` with `encrypt(plaintext) -> (cipher_name, ciphertext)` and `decrypt(cipher_name, ciphertext) -> plaintext`. Implement this to plug in any cipher (Fernet, ChaCha20, AWS KMS, etc.).
 - `SerializerProtocol` — `runtime_checkable Protocol` with `dumps_typed(obj) -> (str, bytes)` and `loads_typed((str, bytes)) -> Any`. The inner serde is replaceable (e.g. `MsgPackSerializer`).
 
@@ -392,10 +392,12 @@ def search_node(state: AppState) -> dict:
     # … run the actual search …
     result_text = f"Found results for: {state['query']}"
 
-    # Replace spinner with a result card (full replace, not merge)
+    # Replace spinner with a result card: pass same id so the reducer
+    # replaces the existing entry instead of appending a new one.
     push_ui_message(
         name="ResultCard",
         props={"text": result_text},
+        id="search-spinner",
     )
     return {}
 
@@ -549,7 +551,7 @@ from langgraph.channels.untracked_value import UntrackedValue
 
 # guard=True (default): one writer per step
 strict_ch: UntrackedValue[int] = UntrackedValue(int, guard=True)
-strict_ch.from_checkpoint(None)  # initialise
+strict_ch = strict_ch.from_checkpoint(None)  # from_checkpoint returns a new instance
 strict_ch.update([42])           # OK
 
 try:
@@ -789,9 +791,10 @@ CallCount = Annotated[int, CallCountManager]
 
 class State(TypedDict):
     log: list[str]
+    call_count: CallCount  # managed: injected as int each superstep
 
-def logging_node(state: State, call_count: CallCount) -> State:
-    entry = f"call_count={call_count}"
+def logging_node(state: State) -> State:
+    entry = f"call_count={state['call_count']}"
     print(entry)
     return {"log": state["log"] + [entry]}
 
