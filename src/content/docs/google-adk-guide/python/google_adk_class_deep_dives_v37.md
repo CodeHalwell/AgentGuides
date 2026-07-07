@@ -234,7 +234,7 @@ result: OptimizerResult[ScoredAgent] = OptimizerResult(
 )
 
 # Pareto front: pick the agent with the highest overall score
-best = max(result.optimized_agents, key=lambda a: a.overall_score or 0)
+best = max(result.optimized_agents, key=lambda a: a.overall_score if a.overall_score is not None else 0)
 print(f"Best agent: {best.optimized_agent.name}, score={best.overall_score}")
 # Best agent: agent_v2, score=0.78
 ```
@@ -318,11 +318,12 @@ async def main():
     )
     optimizer = SimplePromptOptimizer(config=config)
     result = await optimizer.optimize(initial_agent, MySampler())
-    best = max(result.optimized_agents, key=lambda a: a.overall_score or float('-inf'))
+    best = max(result.optimized_agents, key=lambda a: a.overall_score if a.overall_score is not None else float('-inf'))
     print("Score:", best.overall_score)
     print("Optimized instruction:", best.optimized_agent.instruction[:120])
 
-# asyncio.run(main())  # commented out — runs real LLM calls and incurs API costs
+if __name__ == "__main__":
+    asyncio.run(main())  # makes real LLM calls and incurs API costs
 ```
 
 ### Example 2 — Using a thinking budget to guide prompt improvement
@@ -402,7 +403,7 @@ class GEPARootAgentPromptOptimizerConfig(BaseModel):
     )
     max_metric_calls: int = 100        # total LLM evaluations budget
     reflection_minibatch_size: int = 3 # examples fed to the reflection step
-    run_dir: Optional[str] = None      # checkpoint / artefact directory
+    run_dir: Optional[str] = None      # checkpoint / artifact directory
 ```
 
 `run_dir` enables mid-run recovery: the optimizer saves intermediate
