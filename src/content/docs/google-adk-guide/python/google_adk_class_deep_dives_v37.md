@@ -118,7 +118,7 @@ class CapitalQuizSampler(Sampler[SamplingResult]):
 
     async def sample_and_score(
         self,
-        candidate: LlmAgent,
+        candidate: Agent,
         example_set: Literal["train", "validation"] = "validation",
         batch: Optional[list[str]] = None,
         capture_full_eval_data: bool = False,
@@ -164,7 +164,7 @@ class ReflectionSampler(Sampler[UnstructuredSamplingResult]):
 
     async def sample_and_score(
         self,
-        candidate: LlmAgent,
+        candidate: Agent,
         example_set: Literal["train", "validation"] = "validation",
         batch: Optional[list[str]] = None,
         capture_full_eval_data: bool = False,
@@ -289,7 +289,7 @@ class MySampler(Sampler[UnstructuredSamplingResult]):
 
     async def sample_and_score(
         self,
-        candidate: LlmAgent,
+        candidate: Agent,
         example_set: Literal["train", "validation"] = "validation",
         batch: Optional[list[str]] = None,
         capture_full_eval_data: bool = False,
@@ -1119,7 +1119,7 @@ exception **class** to its `__name__` string. This means `exceptions=[ValueError
 is equivalent to `exceptions=["ValueError"]` in the stored model.
 
 Actual retry delay formula (from `_node_runner.py`):
-`delay = min(initial_delay * backoff_factor^attempt, max_delay) * uniform(1, 1+jitter)`
+`delay = min(initial_delay * (backoff_factor ** attempt), max_delay) * uniform(1, 1 + jitter)`
 
 ### Example 1 — Basic retry with class-based exception filter
 
