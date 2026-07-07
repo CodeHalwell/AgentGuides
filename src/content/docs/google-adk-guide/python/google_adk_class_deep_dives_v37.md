@@ -99,7 +99,7 @@ is a single objective this list typically has one element.
 ```python
 import asyncio
 from typing import Literal, Optional
-from google.adk.agents import LlmAgent
+from google.adk.agents import Agent, LlmAgent
 from google.adk.optimization.sampler import Sampler
 from google.adk.optimization.data_types import SamplingResult
 
@@ -151,7 +151,7 @@ print(sampler.VALIDATION_SET)             # 'validation'
 ```python
 import asyncio
 from typing import Literal, Optional, Any
-from google.adk.agents import LlmAgent
+from google.adk.agents import Agent, LlmAgent
 from google.adk.optimization.sampler import Sampler
 from google.adk.optimization.data_types import UnstructuredSamplingResult
 
@@ -268,7 +268,7 @@ used directly as the new `instruction`.
 ```python
 import asyncio
 from typing import Literal, Optional
-from google.adk.agents import LlmAgent
+from google.adk.agents import Agent, LlmAgent
 from google.adk.optimization.simple_prompt_optimizer import (
     SimplePromptOptimizer,
     SimplePromptOptimizerConfig,
