@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI Class Deep Dives Vol. 32"
-description: "Source-verified deep dives into 10 pydantic-ai 2.5.1 class groups: AnthropicModelProfile + anthropic_model_profile() + AnthropicCodeExecutionToolVersion + resolve_anthropic_effort (13 Anthropic-specific profile fields for Claude Fable 5, Mythos 5, Opus 4.7/4.8, Sonnet 4.6/5 — adaptive thinking, fast mode, effort, xhigh, task budgets, dynamic filtering, forced-tool-choice gate, dual code-execution-tool versions), OpenAIModelProfile + OpenAISystemPromptRole + OPENAI_REASONING_EFFORT_MAP (thinking-field config, send_back_thinking_parts auto/tags/field/False modes, strict tool definitions, SAMPLING_PARAMS incompatibility list, gpt-5.1+ reasoning support), GrokModelProfile + GrokReasoningEffort + grok_model_profile() (Grok 4.3 reasoning-effort tiers, builtin-tools gate, retirement-redirect slug handling), GoogleModelProfile + google_model_profile() + GoogleJsonSchemaTransformer (Gemini 3+ tool-combination support, server-side tool-invocation circulation, thinking_level vs thinking_budget, MIME multimodal returns, const→enum rewrite), CombinedCapability (nested-capability flattening, sort_capabilities topo-sort, parallel gather-based for_run, has_wrap_node_run shortcut), CapabilityOrdering + CapabilityPosition + CapabilityRef + sort_capabilities + collect_leaves + has_capability_type (ordering constraints — position tiers, wraps/wrapped_by/requires edges, graphlib TopologicalSorter, cycle detection), ToolCorrectness + TrajectoryMatch (span-based multiset and ordered-trajectory agentic evaluators — allow_extra, include_failed, order='strict'/'relaxed'), ArgumentCorrectness + ArgumentMatchMode + ArgumentOccurrence + MaxToolCalls + MaxModelRequests (argument-level correctness — subset/exact modes, first/last/indexed occurrence, failed-attempt inclusion, budget caps), GEval + HasMatchingSpan + OutputConfig (G-Eval chain-of-thought scoring — criteria + evaluation_steps + score_range, simplified log-probs, HasMatchingSpan SpanQuery delegation, OutputConfig wire TypedDict for LLMJudge/GEval), CaseLifecycle (per-case eval lifecycle hooks — setup/prepare_context/teardown, exception handling semantics, ReportCase/ReportCaseFailure teardown args). All verified against pydantic-ai 2.5.1 and pydantic-evals 2.5.1 source."
+description: "Source-verified deep dives into 10 pydantic-ai 2.5.1 class groups: AnthropicModelProfile + anthropic_model_profile() + AnthropicCodeExecutionToolVersion + resolve_anthropic_effort (13 Anthropic-specific profile fields for Claude Fable 5, Mythos 5, Opus 4.7/4.8, Sonnet 4.6/5 — adaptive thinking, fast mode, effort, xhigh, task budgets, dynamic filtering, forced-tool-choice gate, dual code-execution-tool versions), OpenAIModelProfile + OpenAISystemPromptRole + OPENAI_REASONING_EFFORT_MAP (thinking-field config, send_back_thinking_parts auto/tags/field/False modes, strict tool definitions, SAMPLING_PARAMS incompatibility list, gpt-5.1+ reasoning support), GrokModelProfile + GrokReasoningEffort + grok_model_profile() (Grok 4.3 reasoning-effort tiers, builtin-tools gate, retirement-redirect slug handling), GoogleModelProfile + google_model_profile() + GoogleJsonSchemaTransformer (Gemini 3+ tool-combination support, server-side tool-invocation circulation, thinking_level vs thinking_budget, MIME multimodal returns, const→enum rewrite), CombinedCapability (nested-capability flattening, sort_capabilities topo-sort, parallel gather-based for_run, has_wrap_node_run shortcut), CapabilityOrdering + CapabilityPosition + CapabilityRef + sort_capabilities + collect_leaves + has_capability_type (ordering constraints — position tiers, wraps/wrapped_by/requires edges, graphlib TopologicalSorter, cycle detection), ToolCorrectness + TrajectoryMatch (span-based multiset and ordered-trajectory agentic evaluators — allow_extra, include_failed, order='exact'/'in_order'/'any_order'), ArgumentCorrectness + ArgumentMatchMode + ArgumentOccurrence + MaxToolCalls + MaxModelRequests (argument-level correctness — subset/exact modes, first/last/indexed occurrence, failed-attempt inclusion, budget caps), GEval + HasMatchingSpan + OutputConfig (G-Eval chain-of-thought scoring — criteria + evaluation_steps + score_range, simplified log-probs, HasMatchingSpan SpanQuery delegation, OutputConfig wire TypedDict for LLMJudge/GEval), CaseLifecycle (per-case eval lifecycle hooks — setup/prepare_context/teardown, exception handling semantics, ReportCase/ReportCaseFailure teardown args). All verified against pydantic-ai 2.5.1 and pydantic-evals 2.5.1 source."
 sidebar:
   label: "Class deep dives (Vol. 32)"
   order: 58
@@ -739,7 +739,7 @@ print('Has Instrumentation:', has_instr)  # True
 
 ## 7. `ToolCorrectness` + `TrajectoryMatch`
 
-These are span-based agentic evaluators from `pydantic_evals`. They read from `ctx.span_tree` (populated when Logfire/OTel instrumentation is configured) and degrade gracefully when spans aren't available. `ToolCorrectness` compares the multiset of tool names actually called against `expected_tools` — order is irrelevant, duplicate entries require repeated calls. `TrajectoryMatch` enforces ordered sequences with configurable strictness.
+These are span-based agentic evaluators from `pydantic_evals`. They read from `ctx.span_tree` (populated when Logfire/OTel instrumentation is configured) and degrade gracefully when spans aren't available. `ToolCorrectness` compares the multiset of tool names actually called against `expected_tools` — order is irrelevant, duplicate entries require repeated calls. `TrajectoryMatch` enforces ordered sequences with three comparison modes: `'exact'` (pass/fail equality), `'in_order'` (LCS-based F1, default), and `'any_order'` (multiset F1, order-independent).
 
 ```python
 # Signatures verified from pydantic_evals/evaluators/agentic.py (pydantic-evals 2.5.1):
@@ -751,12 +751,15 @@ These are span-based agentic evaluators from `pydantic_evals`. They read from `c
 #     include_failed: bool = False       # True → count error/retry attempts too
 #     evaluation_name: str | None = None
 #
-# TrajectoryOrder = Literal['strict', 'relaxed']
+# TrajectoryOrder = Literal['exact', 'in_order', 'any_order']
+#   'exact'     — actual must equal expected exactly (1.0 or 0.0)
+#   'in_order'  — F1 from longest common subsequence (default)
+#   'any_order' — F1 from multiset intersection (order-independent)
 #
 # @dataclass(frozen=True)
 # class TrajectoryMatch(Evaluator[object, object, object]):
 #     expected_trajectory: list[str]
-#     order: TrajectoryOrder = 'strict'  # 'strict' = exact sequence; 'relaxed' = subsequence
+#     order: TrajectoryOrder = 'in_order'
 #     include_failed: bool = False
 #     evaluation_name: str | None = None
 ```
@@ -838,19 +841,19 @@ dataset = Dataset(
     name='trajectory_demo',
     cases=[
         Case(
-            name='strict_order',
+            name='exact_order',
             inputs='Search then summarize.',
             evaluators=[
-                # Exact sequence required: search must come before summarize
-                TrajectoryMatch(expected_trajectory=['search', 'summarize'], order='strict'),
+                # Actual sequence must match expected exactly (1.0 or 0.0)
+                TrajectoryMatch(expected_trajectory=['search', 'summarize'], order='exact'),
             ],
         ),
         Case(
-            name='relaxed_order',
+            name='in_order_match',
             inputs='Get me some data.',
             evaluators=[
-                # 'search' must appear somewhere before 'summarize', but gaps are allowed
-                TrajectoryMatch(expected_trajectory=['search', 'summarize'], order='relaxed'),
+                # F1 from longest common subsequence — order matters, gaps reduce score
+                TrajectoryMatch(expected_trajectory=['search', 'summarize'], order='in_order'),
             ],
         ),
     ],
@@ -858,7 +861,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f'{case.name}: {case.scores}')
 
@@ -878,9 +883,16 @@ from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ToolCorrectness
 
 
+_flaky_call_count = [0]
+
+
 def flaky_tool(data: str) -> str:
-    # Simulates a tool that retries once before succeeding
-    raise ModelRetry('Retry please')
+    # Retries once then succeeds — demonstrates include_failed counting
+    _flaky_call_count[0] += 1
+    if _flaky_call_count[0] == 1:
+        raise ModelRetry('Retry please')
+    _flaky_call_count[0] = 0  # reset for re-evaluation runs
+    return f'Succeeded with: {data}'
 
 
 agent = Agent(TestModel(), tools=[flaky_tool])
@@ -912,7 +924,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f'{case.name}: {case.scores}')
 
@@ -1004,7 +1018,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f'{case.name}: {case.scores}')
 
@@ -1059,7 +1075,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f'{case.name}: {case.scores}')
 
@@ -1100,7 +1118,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f'budget_check scores: {case.scores}')
 
@@ -1179,7 +1199,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f"Score: {case.scores.get('GEval')}")
 
@@ -1223,7 +1245,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f"Safety score: {case.scores.get('GEval')}")
 
@@ -1268,7 +1292,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(lambda inputs: agent.run_sync(inputs).output)
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task)
     for case in report.cases:
         print(f'Span present: {case.scores}')
 
@@ -1351,10 +1377,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(
-        lambda inputs: agent.run_sync(inputs).output,
-        lifecycle=DatabaseLifecycle,
-    )
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task, lifecycle=DatabaseLifecycle)
     print(f'Evaluated {len(report.cases)} cases')
 
 
@@ -1405,10 +1430,9 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    report = await dataset.evaluate(
-        lambda inputs: agent.run_sync(inputs).output,
-        lifecycle=TimingLifecycle,
-    )
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+    report = await dataset.evaluate(task, lifecycle=TimingLifecycle)
     for case in report.cases:
         print(f"{case.name}: duration_ms={case.metrics.get('duration_ms', 0):.1f}")
 
@@ -1461,20 +1485,17 @@ dataset = Dataset(
 
 
 async def main() -> None:
+    async def task(inputs: str) -> str:
+        return (await agent.run(inputs)).output
+
     # Faulty setup: the case is recorded as a failure, evaluation continues
-    report = await dataset.evaluate(
-        lambda inputs: agent.run_sync(inputs).output,
-        lifecycle=FaultySetupLifecycle,
-    )
+    report = await dataset.evaluate(task, lifecycle=FaultySetupLifecycle)
     print(f'Cases evaluated: {len(report.cases)}')
     # The case appears as a ReportCaseFailure in the report
 
     # Faulty teardown: wrap in try/except to prevent crashing your test suite
     try:
-        await dataset.evaluate(
-            lambda inputs: agent.run_sync(inputs).output,
-            lifecycle=FaultyTeardownLifecycle,
-        )
+        await dataset.evaluate(task, lifecycle=FaultyTeardownLifecycle)
     except RuntimeError as e:
         print(f'Teardown propagated: {e}')
 
