@@ -1019,17 +1019,28 @@ before the loop stops.
 
 ```python
 import asyncio
-from agent_framework import Agent
-from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
+from agent_framework import Agent, FunctionTool
+from agent_framework.openai import OpenAIChatClient
+
+
+async def web_search(query: str) -> str:
+    """Simulate a web search result."""
+    return f"Top results for '{query}': Django, FastAPI, Flask are the most popular Python web frameworks."
+
+
+search_tool = FunctionTool(
+    name="web_search",
+    description="Search the web for information.",
+    func=web_search,
+)
 
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
-    agent = Agent(client=client, name="budget-agent")
+    agent = Agent(client=client, name="budget-agent", tools=[search_tool])
 
     response = await agent.run(
         "Research and compare three popular Python web frameworks.",
-        tools=[...],   # assume web_search tool registered
         function_invocation_kwargs={
             "max_function_calls": 6,       # allow at most 6 search calls
             "max_iterations": 4,           # at most 4 LLM roundtrips
@@ -1082,14 +1093,26 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent
+from agent_framework import Agent, FunctionTool
 from agent_framework.openai import OpenAIChatClient
+
+
+async def expensive_search(query: str) -> str:
+    """Simulate an expensive external search."""
+    return f"Search results for: {query}"
+
+
+search_tool = FunctionTool(
+    name="expensive_search",
+    description="Search external sources (slow and costly).",
+    func=expensive_search,
+)
 
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
     # Agent normally has expensive search tools
-    agent = Agent(client=client, name="qa-agent", tools=[...])
+    agent = Agent(client=client, name="qa-agent", tools=[search_tool])
 
     # For this specific call, disable the tool loop entirely so the model
     # answers from its training knowledge — fast and deterministic.
@@ -1234,7 +1257,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, AgentSession, HistoryProvider, AgentSession
+from agent_framework import Agent, AgentSession, HistoryProvider
 from agent_framework._sessions import SessionContext
 from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
@@ -1323,11 +1346,11 @@ chain without calling the model. The result is returned as-is to the caller.
 
 ```python
 import asyncio, hashlib, json
-from agent_framework import Agent, AgentMiddleware, AgentContext, MiddlewareTermination
+from agent_framework import Agent, AgentMiddleware, AgentContext, AgentResponse, MiddlewareTermination
 from agent_framework.openai import OpenAIChatClient
 
 
-_cache: dict[str, str] = {}
+_cache: dict[str, AgentResponse] = {}
 
 
 @AgentMiddleware
@@ -1339,15 +1362,10 @@ async def simple_cache(ctx: AgentContext, next_handler):
 
     if key in _cache:
         print("[cache] HIT")
-        # Create a minimal AgentResponse-like object via MiddlewareTermination
-        # (In production use a proper AgentResponse; here we raise to short-circuit)
-        cached_text = _cache[key]
-        # Build a mock response — in real code use AgentResponse.from_text() if available
-        # For simplicity: just proceed but note the pattern
-        pass  # fall through to actual LLM if not constructing the response object
+        raise MiddlewareTermination(_cache[key])  # short-circuit; caller gets cached AgentResponse
 
     response = await next_handler(ctx)
-    _cache[key] = response.text
+    _cache[key] = response          # store the full AgentResponse, not just .text
     print(f"[cache] MISS — stored {len(_cache)} entries")
     return response
 
