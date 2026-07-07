@@ -69,8 +69,7 @@ Ten class groups covering the new **`profiles/`** subpackage (provider-specific 
 ```python
 import os
 
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.profiles.anthropic import AnthropicModelProfile, anthropic_model_profile
+from pydantic_ai.profiles.anthropic import anthropic_model_profile
 
 os.environ.setdefault('ANTHROPIC_API_KEY', 'your-key-here')
 
@@ -190,8 +189,8 @@ import os
 
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.profiles import merge_profile
 from pydantic_ai.profiles.openai import OpenAIModelProfile
+from pydantic_ai.providers.openai import OpenAIProvider
 
 os.environ.setdefault('CUSTOM_LLM_API_KEY', 'your-key-here')
 
@@ -203,9 +202,10 @@ ollama_profile = OpenAIModelProfile(
     openai_supports_strict_tool_definition=False,  # many compatible APIs don't support strict
 )
 
+# In 2.5.x, custom base URLs go through provider=, not a base_url= kwarg on the model
 model = OpenAIChatModel(
     'deepseek-r1:7b',
-    base_url='http://localhost:11434/v1',
+    provider=OpenAIProvider(base_url='http://localhost:11434/v1'),
     profile=ollama_profile,
 )
 
@@ -416,11 +416,12 @@ for name, profile in [('gemini-2.5-pro', gemini2), ('gemini-3-pro', gemini3)]:
 from pydantic_ai._json_schema import JsonSchema
 from pydantic_ai.profiles.google import GoogleJsonSchemaTransformer
 
-transformer = GoogleJsonSchemaTransformer()
+# GoogleJsonSchemaTransformer inherits JsonSchemaTransformer.__init__(schema, ...)
+# so the schema must be passed at construction time; call .walk() to run the transform.
 
 # Gemini doesn't support 'const' — the transformer rewrites it as a single-value 'enum'
 schema: JsonSchema = {'const': 'active'}
-result = transformer.transform(schema)
+result = GoogleJsonSchemaTransformer(schema).walk()
 print(result)
 # {'enum': ['active'], 'type': 'string'}   ← type is inferred from the const value
 
@@ -433,7 +434,7 @@ schema2: JsonSchema = {
     'examples': [{'kind': 'a'}],
     'properties': {'kind': {'type': 'string'}},
 }
-result2 = transformer.transform(schema2)
+result2 = GoogleJsonSchemaTransformer(schema2).walk()
 print(list(result2.keys()))
 # ['type', 'properties']  — $schema, title, discriminator, examples all removed
 ```
@@ -528,7 +529,6 @@ print('First after sort:', type(with_instrumentation.capabilities[0]).__name__)
 ### 5.2 Parallel for_run with Short-Circuit
 
 ```python
-import asyncio
 from dataclasses import dataclass
 
 from pydantic_ai import Agent
@@ -779,7 +779,7 @@ def weather_tool(city: str) -> str:
     return f'Sunny in {city}'
 
 
-test_agent = Agent(TestModel(), tools=[weather_tool])
+test_agent = Agent(TestModel(), tools=[weather_tool], instrument=True)
 
 dataset = Dataset(
     name='tool_correctness_demo',
@@ -816,7 +816,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 7.2 TrajectoryMatch with Strict vs Relaxed Order
+### 7.2 TrajectoryMatch with exact, in_order, and any_order Modes
 
 ```python
 import asyncio
@@ -835,7 +835,7 @@ def summarize(text: str) -> str:
     return f'Summary: {text[:50]}'
 
 
-agent = Agent(TestModel(), tools=[search, summarize])
+agent = Agent(TestModel(), tools=[search, summarize], instrument=True)
 
 dataset = Dataset(
     name='trajectory_demo',
@@ -895,7 +895,7 @@ def flaky_tool(data: str) -> str:
     return f'Succeeded with: {data}'
 
 
-agent = Agent(TestModel(), tools=[flaky_tool])
+agent = Agent(TestModel(), tools=[flaky_tool], instrument=True)
 
 dataset = Dataset(
     name='retry_demo',
@@ -973,7 +973,8 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
-from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ArgumentCorrectness
 
@@ -982,7 +983,17 @@ def book_flight(origin: str, destination: str, class_: str = 'economy') -> str:
     return f'Booked {origin}→{destination} ({class_})'
 
 
-agent = Agent(TestModel(), tools=[book_flight])
+def book_flight_func(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    # Return a text response once the tool result is in the history
+    if len(messages) > 1:
+        return ModelResponse(parts=[TextPart(content='Flight booked!')])
+    # Always emit deterministic London→Paris economy args so ArgumentCorrectness can verify them
+    return ModelResponse(parts=[
+        ToolCallPart(tool_name='book_flight', args='{"origin": "London", "destination": "Paris", "class_": "economy"}'),
+    ])
+
+
+agent = Agent(FunctionModel(book_flight_func), tools=[book_flight], instrument=True)
 
 dataset = Dataset(
     name='arg_correctness_demo',
@@ -994,20 +1005,20 @@ dataset = Dataset(
                 ArgumentCorrectness(
                     tool_name='book_flight',
                     expected_arguments={'origin': 'London', 'destination': 'Paris'},
-                    match_mode='subset',  # 'class_' can be anything
+                    match_mode='subset',  # 'class_' not required in subset mode
                 ),
             ],
         ),
         Case(
             name='exact_check',
-            inputs='Book a business class flight from NYC to Tokyo.',
+            inputs='Book economy class from London to Paris.',
             evaluators=[
                 ArgumentCorrectness(
                     tool_name='book_flight',
                     expected_arguments={
-                        'origin': 'NYC',
-                        'destination': 'Tokyo',
-                        'class_': 'business',
+                        'origin': 'London',
+                        'destination': 'Paris',
+                        'class_': 'economy',
                     },
                     match_mode='exact',  # all keys must match exactly
                 ),
@@ -1034,7 +1045,8 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
-from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ArgumentCorrectness
 
@@ -1043,10 +1055,28 @@ def search(query: str) -> str:
     return f'Results for: {query}'
 
 
-agent = Agent(TestModel(), tools=[search])
+def two_search_func(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    # Each tool call adds 2 messages (model response + tool return), so divide by 2
+    n = (len(messages) - 1) // 2
+    queries = ['Python', 'Rust']
+    if n < len(queries):
+        return ModelResponse(parts=[ToolCallPart(tool_name='search', args=f'{{"query": "{queries[n]}"}}')]) 
+    return ModelResponse(parts=[TextPart(content='Done.')])
 
-dataset = Dataset(
-    name='occurrence_demo',
+
+def three_search_func(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    n = (len(messages) - 1) // 2
+    queries = ['first query', 'second query', 'third query']
+    if n < len(queries):
+        return ModelResponse(parts=[ToolCallPart(tool_name='search', args=f'{{"query": "{queries[n]}"}}')]) 
+    return ModelResponse(parts=[TextPart(content='Done.')])
+
+
+agent_two = Agent(FunctionModel(two_search_func), tools=[search], instrument=True)
+agent_three = Agent(FunctionModel(three_search_func), tools=[search], instrument=True)
+
+dataset_last = Dataset(
+    name='occurrence_last',
     cases=[
         Case(
             name='check_last_call',
@@ -1055,10 +1085,16 @@ dataset = Dataset(
                 ArgumentCorrectness(
                     tool_name='search',
                     expected_arguments={'query': 'Rust'},
-                    occurrence='last',  # inspect the final call only
+                    occurrence='last',  # inspect only the final call
                 ),
             ],
         ),
+    ],
+)
+
+dataset_index = Dataset(
+    name='occurrence_index',
+    cases=[
         Case(
             name='check_second_call',
             inputs='Search three times.',
@@ -1066,7 +1102,7 @@ dataset = Dataset(
                 ArgumentCorrectness(
                     tool_name='search',
                     expected_arguments={'query': 'second query'},
-                    occurrence=1,  # 0-based index: second invocation
+                    occurrence=1,  # 0-based: second invocation
                 ),
             ],
         ),
@@ -1075,10 +1111,18 @@ dataset = Dataset(
 
 
 async def main() -> None:
-    async def task(inputs: str) -> str:
-        return (await agent.run(inputs)).output
-    report = await dataset.evaluate(task)
-    for case in report.cases:
+    async def task_two(inputs: str) -> str:
+        return (await agent_two.run(inputs)).output
+
+    async def task_three(inputs: str) -> str:
+        return (await agent_three.run(inputs)).output
+
+    report1 = await dataset_last.evaluate(task_two)
+    for case in report1.cases:
+        print(f'{case.name}: {case.scores}')
+
+    report2 = await dataset_index.evaluate(task_three)
+    for case in report2.cases:
         print(f'{case.name}: {case.scores}')
 
 
@@ -1100,7 +1144,7 @@ def lookup(term: str) -> str:
     return f'Definition of {term}'
 
 
-agent = Agent(TestModel(), tools=[lookup])
+agent = Agent(TestModel(), tools=[lookup], instrument=True)
 
 dataset = Dataset(
     name='budget_demo',
@@ -1271,7 +1315,7 @@ def search_tool(query: str) -> str:
     return f'Results for: {query}'
 
 
-agent = Agent(TestModel(), tools=[search_tool])
+agent = Agent(TestModel(), tools=[search_tool], instrument=True)
 
 # HasMatchingSpan passes when the span tree contains at least one matching span
 # SpanQuery can filter by span name, attributes, or custom predicates
