@@ -320,7 +320,7 @@ LangGraph's UI primitives let graph nodes stream structured component-update eve
 
 **Key source facts** (from `langgraph/graph/ui.py`):
 
-- `UIMessage` — TypedDict: `type="ui"`, `id: str`, `name: str`, `props: dict`, `metadata: dict`. `metadata` always carries `run_id`, `tags`, `name`, and optionally `merge` and `message_id`.
+- `UIMessage` — TypedDict: `type="ui"`, `id: str`, `name: str`, `props: dict`, `metadata: dict`. When emitted by `push_ui_message`, `metadata` typically carries `run_id`, `tags`, and `name` from the LangChain callback config; `merge` and `message_id` are added when applicable. Direct dict construction (e.g. in examples) may supply a minimal or empty metadata.
 - `RemoveUIMessage` — TypedDict: `type="remove-ui"`, `id: str`. Deleting a non-existent ID raises `ValueError`.
 - `push_ui_message(name, props, *, id=None, metadata=None, message=None, state_key="ui", merge=False)` — generates a UUID when `id` is omitted; `merge=True` stores `{"merge": True}` in `metadata` so the reducer merges `props` with the existing entry instead of replacing it; calls `get_stream_writer()` and `CONFIG_KEY_SEND` to reach both the stream and state simultaneously.
 - `delete_ui_message(id, *, state_key="ui")` — emits `RemoveUIMessage` to both stream and state.
