@@ -31,6 +31,8 @@ subclasses `AgentOptimizer`; every evaluation harness subclasses `Sampler`.
 ### `AgentOptimizer` — the abstract optimizer ABC
 
 ```python
+from google.adk.agents import Agent
+
 class AgentOptimizer(ABC, Generic[SamplingResultT, AgentWithScoresT]):
     @abstractmethod
     async def optimize(
@@ -48,6 +50,8 @@ types of its intermediate results (`SamplingResultT`) and final agents
 ### `Sampler` — the evaluation harness ABC
 
 ```python
+from google.adk.agents import Agent
+
 class Sampler(ABC, Generic[SamplingResultT]):
     TRAIN_SET = "train"
     VALIDATION_SET = "validation"
@@ -76,6 +80,8 @@ trajectories / outputs for reflection (used by GEPA).
 ### `OptimizerResult` + `UnstructuredSamplingResult`
 
 ```python
+from google.adk.agents import Agent
+
 class SamplingResult(BaseModel):
     scores: dict[str, float]           # uid → scalar score, higher is better
 
@@ -311,7 +317,7 @@ async def main():
     )
     optimizer = SimplePromptOptimizer(config=config)
     result = await optimizer.optimize(initial_agent, MySampler())
-    best = max(result.optimized_agents, key=lambda a: a.overall_score)
+    best = max(result.optimized_agents, key=lambda a: a.overall_score or float('-inf'))
     print("Score:", best.overall_score)
     print("Optimized instruction:", best.optimized_agent.instruction[:120])
 
