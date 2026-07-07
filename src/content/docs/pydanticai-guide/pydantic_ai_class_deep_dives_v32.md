@@ -77,7 +77,7 @@ os.environ.setdefault('ANTHROPIC_API_KEY', 'your-key-here')
 # Inspect the resolved profile for any model name
 for model_name in ['claude-sonnet-4-5', 'claude-sonnet-4-6', 'claude-opus-4-8', 'claude-fable-5']:
     profile = anthropic_model_profile(model_name)
-    assert isinstance(profile, AnthropicModelProfile)
+    assert profile is not None
     adaptive = profile.get('anthropic_supports_adaptive_thinking', False)
     effort = profile.get('anthropic_supports_effort', False)
     xhigh = profile.get('anthropic_supports_xhigh_effort', False)
@@ -300,7 +300,7 @@ from pydantic_ai.profiles.grok import GrokModelProfile, grok_model_profile
 
 # Grok 4.3 — full reasoning effort set + builtin tools
 grok43 = grok_model_profile('grok-4.3')
-assert isinstance(grok43, GrokModelProfile)
+assert grok43 is not None
 print('Efforts:', grok43.get('grok_reasoning_efforts'))
 print('Builtins:', grok43.get('grok_supports_builtin_tools'))
 # Efforts: frozenset({'none', 'low', 'medium', 'high'})
@@ -308,13 +308,13 @@ print('Builtins:', grok43.get('grok_supports_builtin_tools'))
 
 # 'grok-3' is a retirement-redirect slug → routed to Grok 4.3 → same profile
 grok3_redirect = grok_model_profile('grok-3')
-assert isinstance(grok3_redirect, GrokModelProfile)
+assert grok3_redirect is not None
 print('grok-3 efforts:', grok3_redirect.get('grok_reasoning_efforts'))
 # grok-3 efforts: frozenset({'none', 'low', 'medium', 'high'})
 
 # Grok 3 Mini — limited effort set (no 'none', so thinking_always_enabled=True)
 grok3mini = grok_model_profile('grok-3-mini')
-assert isinstance(grok3mini, GrokModelProfile)
+assert grok3mini is not None
 print('grok-3-mini efforts:', grok3mini.get('grok_reasoning_efforts'))
 print('thinking_always_enabled:', grok3mini.get('thinking_always_enabled'))
 # grok-3-mini efforts: frozenset({'low', 'high'})
@@ -398,7 +398,7 @@ gemini2 = google_model_profile('gemini-2.5-pro')
 gemini3 = google_model_profile('gemini-3-pro')
 
 for name, profile in [('gemini-2.5-pro', gemini2), ('gemini-3-pro', gemini3)]:
-    assert isinstance(profile, GoogleModelProfile)
+    assert profile is not None
     print(f'{name}:')
     print(f'  tool_combination:      {profile.get("google_supports_tool_combination")}')
     print(f'  server_side_tools:     {profile.get("google_supports_server_side_tool_invocations")}')
