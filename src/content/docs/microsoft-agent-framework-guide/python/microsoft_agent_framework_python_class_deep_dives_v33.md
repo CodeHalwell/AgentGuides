@@ -306,11 +306,11 @@ async def main() -> None:
 
     # Terminal output from Format
     print("outputs:", result.get_outputs())
-    # [{'enriched': 'hello', 'length': 5}]  ← intermediate from Enrich
+    # ['[FORMATTED] HELLO']
 
     # Intermediate output from Enrich
     print("intermediate:", result.get_intermediate_outputs())
-    # ['[FORMATTED] HELLO']  ← wait, order is: enrich intermediate, then fmt output
+    # [{'enriched': 'hello', 'length': 5}]
 
     print("state:", result.get_final_state())       # WorkflowRunState.IDLE
     print("status events:", len(result.status_timeline()))  # ≥ 1
@@ -1446,11 +1446,8 @@ async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
     agent = Agent(client=client, name="filtered-agent", middleware=[content_filter])
 
-    try:
-        response = await agent.run("What is my password?")
-        print(response.text)
-    except Exception as e:
-        print(f"blocked: {e}")
+    response = await agent.run("What is my password?")
+    print(response.text)
 
 
 asyncio.run(main())
