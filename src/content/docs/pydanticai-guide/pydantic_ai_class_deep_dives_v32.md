@@ -779,7 +779,8 @@ def weather_tool(city: str) -> str:
     return f'Sunny in {city}'
 
 
-test_agent = Agent(TestModel(), tools=[weather_tool], instrument=True)
+test_agent = Agent(TestModel(), tools=[weather_tool])
+test_agent.instrument = True  # enable OTel span capture for span-based evaluators
 
 dataset = Dataset(
     name='tool_correctness_demo',
@@ -835,7 +836,8 @@ def summarize(text: str) -> str:
     return f'Summary: {text[:50]}'
 
 
-agent = Agent(TestModel(), tools=[search, summarize], instrument=True)
+agent = Agent(TestModel(), tools=[search, summarize])
+agent.instrument = True
 
 dataset = Dataset(
     name='trajectory_demo',
@@ -895,7 +897,8 @@ def flaky_tool(data: str) -> str:
     return f'Succeeded with: {data}'
 
 
-agent = Agent(TestModel(), tools=[flaky_tool], instrument=True)
+agent = Agent(TestModel(), tools=[flaky_tool])
+agent.instrument = True
 
 dataset = Dataset(
     name='retry_demo',
@@ -926,7 +929,8 @@ dataset = Dataset(
 async def main() -> None:
     async def task(inputs: str) -> str:
         return (await agent.run(inputs)).output
-    report = await dataset.evaluate(task)
+    # max_concurrency=1 prevents the shared _flaky_call_count from interleaving across cases
+    report = await dataset.evaluate(task, max_concurrency=1)
     for case in report.cases:
         print(f'{case.name}: {case.scores}')
 
@@ -993,7 +997,8 @@ def book_flight_func(messages: list[ModelMessage], info: AgentInfo) -> ModelResp
     ])
 
 
-agent = Agent(FunctionModel(book_flight_func), tools=[book_flight], instrument=True)
+agent = Agent(FunctionModel(book_flight_func), tools=[book_flight])
+agent.instrument = True
 
 dataset = Dataset(
     name='arg_correctness_demo',
@@ -1072,8 +1077,10 @@ def three_search_func(messages: list[ModelMessage], info: AgentInfo) -> ModelRes
     return ModelResponse(parts=[TextPart(content='Done.')])
 
 
-agent_two = Agent(FunctionModel(two_search_func), tools=[search], instrument=True)
-agent_three = Agent(FunctionModel(three_search_func), tools=[search], instrument=True)
+agent_two = Agent(FunctionModel(two_search_func), tools=[search])
+agent_two.instrument = True
+agent_three = Agent(FunctionModel(three_search_func), tools=[search])
+agent_three.instrument = True
 
 dataset_last = Dataset(
     name='occurrence_last',
@@ -1144,7 +1151,8 @@ def lookup(term: str) -> str:
     return f'Definition of {term}'
 
 
-agent = Agent(TestModel(), tools=[lookup], instrument=True)
+agent = Agent(TestModel(), tools=[lookup])
+agent.instrument = True
 
 dataset = Dataset(
     name='budget_demo',
@@ -1315,7 +1323,8 @@ def search_tool(query: str) -> str:
     return f'Results for: {query}'
 
 
-agent = Agent(TestModel(), tools=[search_tool], instrument=True)
+agent = Agent(TestModel(), tools=[search_tool])
+agent.instrument = True
 
 # HasMatchingSpan passes when the span tree contains at least one matching span
 # SpanQuery can filter by span name, attributes, or custom predicates
