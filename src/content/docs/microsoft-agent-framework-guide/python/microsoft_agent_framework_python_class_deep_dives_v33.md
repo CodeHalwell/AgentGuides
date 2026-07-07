@@ -1669,11 +1669,11 @@ asyncio.run(main())
 | 3 | `FunctionTool` | `_tools` | `max_invocations` is per-instance lifetime; `func=None` → declaration-only; `result_parser` controls serialization to the model |
 | 4 | `Agent.run()` | `_agents` | Three `@overload` variants: plain, structured output via `options=`, streaming via `stream=True`; per-call `middleware=` and `compaction_strategy=` |
 | 5 | `MCPStdioTool` | `_mcp` | `allowed_tools` = allowlist; `MCPSpecificApproval` = per-tool approval dict; `additional_tool_argument_names` = hidden args injected into every tool call |
-| 6 | `SecretString` + `load_settings` | `_settings` | `SecretString.__repr__` masks; `load_settings` resolution: overrides → .env → env vars → defaults; `required_fields` tuple = at-least-one constraint |
+| 6 | `SecretString` + `load_settings` | `_settings` | `SecretString.__repr__` masks; `load_settings` resolution: overrides → .env → env vars → defaults; `required_fields` tuple = mutually exclusive (exactly-one) constraint |
 | 7 | `FunctionInvocationConfiguration` | `_tools` | Lives on `client.function_invocation_configuration`; `max_function_calls` is per-request best-effort; `enabled=False` disables the loop; per-call tool injection uses `agent.run(tools=[...])` |
 | 8 | `FileHistoryProvider` + `HistoryProvider` | `_sessions` | JSONL per session; pass via `context_providers=[...]`; custom provider = implement `get_messages`/`save_messages` with `(session_id, *, state, **kwargs)` |
 | 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; `MiddlewareTermination(result=value)` short-circuits without calling the model (`result` is keyword-only) |
-| 10 | `SkillsProvider` + `SkillsSource` | `_skills` | `from_paths()` discovers SKILL.md files; `DeduplicatingSkillsSource` = first-one-wins; custom ABC = implement `get_skills(session, context)` |
+| 10 | `SkillsProvider` + `SkillsSource` | `_skills` | `from_paths()` discovers SKILL.md files; `DeduplicatingSkillsSource` = first-one-wins; custom ABC = implement `get_skills(self)` (no arguments) |
 
 ## Revision history
 
