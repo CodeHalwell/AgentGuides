@@ -311,7 +311,7 @@ async def main():
     )
     optimizer = SimplePromptOptimizer(config=config)
     result = await optimizer.optimize(initial_agent, MySampler())
-    best = result.optimized_agents[0]
+    best = max(result.optimized_agents, key=lambda a: a.overall_score)
     print("Score:", best.overall_score)
     print("Optimized instruction:", best.optimized_agent.instruction[:120])
 
