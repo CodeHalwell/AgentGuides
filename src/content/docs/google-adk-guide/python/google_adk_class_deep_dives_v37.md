@@ -322,7 +322,7 @@ async def main():
     print("Score:", best.overall_score)
     print("Optimized instruction:", best.optimized_agent.instruction[:120])
 
-# asyncio.run(main())
+# asyncio.run(main())  # commented out — runs real LLM calls and incurs API costs
 ```
 
 ### Example 2 — Using a thinking budget to guide prompt improvement
@@ -479,6 +479,7 @@ if result.gepa_result:
 # Internally the optimizer calls this at runtime:
 
 def _create_agent_gepa_adapter_class():
+    # NOTE: requires `pip install gepa` — raises ImportError if not installed.
     # Only imported when actually needed → zero startup cost when gepa absent.
     from gepa.core.adapter import EvaluationBatch, GEPAAdapter
     class _AgentGEPAAdapter(GEPAAdapter):
