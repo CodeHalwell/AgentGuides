@@ -205,12 +205,13 @@ class ReflectionSampler(Sampler[UnstructuredSamplingResult]):
 ### Example 3 — Reading `OptimizerResult` with a custom `AgentWithScores`
 
 ```python
+from pydantic import Field
 from google.adk.agents import LlmAgent
 from google.adk.optimization.data_types import AgentWithScores, OptimizerResult
 
 class ScoredAgent(AgentWithScores):
     """Extend to carry per-metric scores alongside the overall score."""
-    per_metric: dict[str, float] = {}
+    per_metric: dict[str, float] = Field(default_factory=dict)
 
 agent_v1 = LlmAgent(name="agent_v1", model="gemini-2.5-flash",
                     instruction="You are a helpful assistant.")
@@ -743,13 +744,18 @@ class TaggedSkillRegistry(SkillRegistry):
         return self._skills[name]
 
     async def search_skills(self, *, query: str) -> list[Frontmatter]:
-        q = query.lower()
+        words = query.lower().split()
+        if not words:
+            return []
         return [
             s.frontmatter
             for name, s in self._skills.items()
-            if q in s.description.lower()
-            or q in name
-            or q in self._tags.get(name, set())
+            if all(
+                w in s.description.lower()
+                or w in name
+                or w in self._tags.get(name, set())
+                for w in words
+            )
         ]
 
     def search_tool_description(self) -> str | None:
@@ -844,6 +850,7 @@ flag without Python.
 # agent.yaml (write to disk with a YAML library and pass to adk CLI)
 # -------
 # agent_class: LlmAgent
+# name: my_assistant
 # model: gemini-2.5-flash
 # instruction: "You are a helpful assistant. Answer questions concisely."
 # tools:
@@ -858,11 +865,13 @@ with warnings.catch_warnings():
     from google.adk.tools.tool_configs import ToolConfig, ToolArgsConfig
 
     cfg = LlmAgentConfig(
+        name="my_assistant",
         instruction="You are a helpful assistant. Answer questions concisely.",
         model="gemini-2.5-flash",
         tools=[ToolConfig(name="google_search")],
     )
 
+print(cfg.name)                  # my_assistant
 print(cfg.instruction[:30])      # You are a helpful assistant.
 print(cfg.model)                 # gemini-2.5-flash
 print(cfg.tools[0].name)         # google_search
@@ -874,6 +883,7 @@ print(cfg.include_contents)      # default
 ```yaml
 # full_agent.yaml
 agent_class: LlmAgent
+name: classifier_agent
 model: gemini-2.5-pro
 instruction: "Classify the user's request and write the result to state."
 output_key: classification_result
@@ -905,6 +915,7 @@ with warnings.catch_warnings():
     from google.adk.tools.tool_configs import ToolConfig, ToolArgsConfig
 
     cfg = LlmAgentConfig(
+        name="classifier_agent",
         instruction="Classify the user's request.",
         model="gemini-2.5-pro",
         output_key="classification_result",
@@ -945,6 +956,7 @@ with warnings.catch_warnings():
 
     # model only — OK
     cfg = LlmAgentConfig(
+        name="my_agent",
         instruction="You are an agent.",
         model="gemini-2.5-flash",
     )
@@ -952,6 +964,7 @@ with warnings.catch_warnings():
 
     # model_code only — OK (FQN points to a LiteLlm instance)
     cfg2 = LlmAgentConfig(
+        name="my_agent",
         instruction="You are an agent.",
         model_code=CodeConfig(name="my_pkg.models.gpt4o_litellm"),
     )
@@ -960,6 +973,7 @@ with warnings.catch_warnings():
     # Both set — raises ValueError
     try:
         LlmAgentConfig(
+            name="bad_agent",
             instruction="You are an agent.",
             model="gemini-2.5-flash",
             model_code=CodeConfig(name="my_pkg.models.gpt4o_litellm"),
@@ -1124,8 +1138,15 @@ The `exceptions` field validator (`_normalize_exceptions`) converts any
 exception **class** to its `__name__` string. This means `exceptions=[ValueError]`
 is equivalent to `exceptions=["ValueError"]` in the stored model.
 
-Actual retry delay formula (from `_node_runner.py`):
-`delay = min(initial_delay * (backoff_factor ** attempt), max_delay) * uniform(1, 1 + jitter)`
+Actual retry delay formula (from `workflow/utils/_retry_utils.py`):
+```
+base  = min(initial_delay * backoff_factor ** (attempt - 1), max_delay)
+delay = max(0.0, base + uniform(-jitter * base, jitter * base))
+```
+`attempt` is 1-based (first failure = 1), so the exponent starts at 0.
+Jitter is a **symmetric additive offset** — it can shorten delays as well as
+lengthen them, unlike a multiplicative factor that only adds. With `jitter=1.0`
+(default) the first retry falls anywhere in `[0, 2 * initial_delay]`.
 
 ### Example 1 — Basic retry with class-based exception filter
 
