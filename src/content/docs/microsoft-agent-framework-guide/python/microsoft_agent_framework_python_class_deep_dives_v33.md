@@ -194,14 +194,14 @@ from agent_framework import WorkflowBuilder, WorkflowContext, Executor, handler
 
 class Stage1(Executor):
     @handler
-    async def run(self, text: str, ctx: WorkflowContext[str]) -> None:
+    async def run(self, text: str, ctx: WorkflowContext[str, str]) -> None:
         await ctx.yield_output(f"stage1:{text}")
         await ctx.send_message(text)
 
 
 class Stage2(Executor):
     @handler
-    async def run(self, text: str, ctx: WorkflowContext[str]) -> None:
+    async def run(self, text: str, ctx: WorkflowContext[str, str]) -> None:
         await ctx.yield_output(f"stage2:{text}")
         await ctx.send_message(text)
 
@@ -281,7 +281,7 @@ from agent_framework import WorkflowBuilder, WorkflowContext, Executor, handler
 
 class Enrich(Executor):
     @handler
-    async def run(self, text: str, ctx: WorkflowContext[str]) -> None:
+    async def run(self, text: str, ctx: WorkflowContext[str, dict]) -> None:
         await ctx.yield_output({"enriched": text, "length": len(text)})
         await ctx.send_message(text.upper())
 
@@ -1331,7 +1331,8 @@ class InProcessDictHistoryProvider(HistoryProvider):
         state: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self._store[session_id or ""] = [m.to_dict() for m in messages]
+        existing = self._store.get(session_id or "", [])
+        self._store[session_id or ""] = existing + [m.to_dict() for m in messages]
 
 
 async def main() -> None:
