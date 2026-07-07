@@ -511,9 +511,7 @@ asyncio.run(main())
 ### 5.1 Flattening Nested CombinedCapability at Construction
 
 ```python
-from pydantic_ai.capabilities import ProcessEventStream, WebFetch, WebSearch
-from pydantic_ai.capabilities import Instrumentation
-from pydantic_ai.capabilities.combined import CombinedCapability
+from pydantic_ai.capabilities import CombinedCapability, Instrumentation, ProcessEventStream, WebFetch, WebSearch
 
 # Two nested groups that the user assembled separately
 group_a = CombinedCapability(capabilities=[WebSearch(), WebFetch()])
@@ -573,7 +571,7 @@ from pydantic_ai.capabilities.abstract import (
     NodeResult,
     WrapNodeRunHandler,
 )
-from pydantic_ai.capabilities.combined import CombinedCapability
+from pydantic_ai.capabilities import CombinedCapability
 from pydantic_ai.tools import RunContext
 
 
