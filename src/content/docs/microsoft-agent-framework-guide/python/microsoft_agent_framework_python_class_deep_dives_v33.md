@@ -65,7 +65,11 @@ reads as a single declaration.
 
 ```python
 import asyncio
-from typing import Never
+import sys
+if sys.version_info >= (3, 11):
+    from typing import Never
+else:
+    from typing_extensions import Never  # pip install typing_extensions
 from agent_framework import (
     WorkflowBuilder, WorkflowContext, Executor, handler,
 )
@@ -664,17 +668,16 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, AgentMiddleware, SlidingWindowStrategy
+from agent_framework import Agent, agent_middleware, SlidingWindowStrategy
 from agent_framework.openai import OpenAIChatClient
 
 
-@AgentMiddleware
+@agent_middleware
 async def audit_logger(ctx, next_handler):
     """Log every agent call; append metadata before returning."""
     print(f"[audit] running agent '{ctx.agent.name}'")
-    response = await next_handler(ctx)
-    print(f"[audit] finished, finish_reason={response.finish_reason}")
-    return response
+    await next_handler()                                      # call_next takes no arguments
+    print(f"[audit] finished, finish_reason={ctx.result.finish_reason}")
 
 
 async def main() -> None:
@@ -986,7 +989,7 @@ settings = load_settings(
 
 print("client_id:", settings["client_id"])           # my-client
 print("api_key:", settings.get("api_key"))           # None
-# Both tuple constraints pass because client_id is non-None
+# First constraint passes because client_id is set; second passes because client_secret is set
 ```
 
 ---
@@ -1199,7 +1202,7 @@ async def main() -> None:
     history = FileHistoryProvider(storage_path=storage)
 
     client = OpenAIChatClient(model="gpt-4o-mini")
-    agent = Agent(client=client, name="assistant", history_provider=history)
+    agent = Agent(client=client, name="assistant", context_providers=[history])
 
     # Turn 1 — create a session and ask a question
     session = AgentSession(session_id="user-session-42")
@@ -1230,7 +1233,7 @@ async def main() -> None:
     history = InMemoryHistoryProvider()
 
     client = OpenAIChatClient(model="gpt-4o-mini")
-    agent = Agent(client=client, name="test-agent", history_provider=history)
+    agent = Agent(client=client, name="test-agent", context_providers=[history])
 
     session = AgentSession()
 
@@ -1257,9 +1260,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, AgentSession, HistoryProvider
+from agent_framework import Agent, AgentSession, HistoryProvider, Message
 from agent_framework._sessions import SessionContext
-from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -1278,12 +1280,12 @@ class InProcessDictHistoryProvider(HistoryProvider):
     ) -> list[Message]:
         raw = self._store.get(self._key(session), [])
         # Reconstruct Message objects from plain dicts
-        return [Message(**m) for m in raw]
+        return [Message.from_dict(m) for m in raw]
 
     async def save(
         self, *, session: AgentSession, context: SessionContext, messages: list[Message]
     ) -> None:
-        self._store[self._key(session)] = [m.__dict__ for m in messages]
+        self._store[self._key(session)] = [m.to_dict() for m in messages]
 
     async def clear(self, *, session: AgentSession, context: SessionContext) -> None:
         self._store.pop(self._key(session), None)
@@ -1292,7 +1294,7 @@ class InProcessDictHistoryProvider(HistoryProvider):
 async def main() -> None:
     provider = InProcessDictHistoryProvider()
     client = OpenAIChatClient(model="gpt-4o-mini")
-    agent = Agent(client=client, name="custom-history-agent", history_provider=provider)
+    agent = Agent(client=client, name="custom-history-agent", context_providers=[provider])
 
     session = AgentSession(session_id="demo")
     await agent.run("I work at Contoso.", session=session)
@@ -1321,9 +1323,9 @@ invoked, after the response is assembled, or both. Unlike function middleware
 @agent_middleware
 async def my_middleware(ctx: AgentContext, next_handler):
     # Pre-processing: inspect ctx.messages, ctx.options, ctx.session
-    result = await next_handler(ctx)
-    # Post-processing: inspect result.text, result.finish_reason, etc.
-    return result
+    await next_handler()                         # call_next takes no arguments; returns None
+    # Post-processing: result is on ctx.result
+    print(ctx.result.text, ctx.result.finish_reason)
 ```
 
 ### `AgentContext` key attributes
@@ -1339,35 +1341,35 @@ ctx.tools          # per-call extra tools
 
 ### `MiddlewareTermination`
 
-Raise `MiddlewareTermination(result)` inside middleware to short-circuit the
-chain without calling the model. The result is returned as-is to the caller.
+Raise `MiddlewareTermination(result=value)` inside middleware to short-circuit the
+chain without calling the model. The `result` keyword argument holds the value
+returned to the caller; the first positional argument is an optional log message.
 
 ### Example 1 · Response caching middleware
 
 ```python
 import asyncio, hashlib, json
-from agent_framework import Agent, AgentMiddleware, AgentContext, AgentResponse, MiddlewareTermination
+from agent_framework import Agent, agent_middleware, AgentContext, AgentResponse, MiddlewareTermination
 from agent_framework.openai import OpenAIChatClient
 
 
 _cache: dict[str, AgentResponse] = {}
 
 
-@AgentMiddleware
+@agent_middleware
 async def simple_cache(ctx: AgentContext, next_handler):
     """Return cached responses for identical message lists."""
     key = hashlib.sha256(
-        json.dumps([m.__dict__ for m in ctx.messages], sort_keys=True).encode()
+        json.dumps([m.to_dict() for m in ctx.messages], sort_keys=True).encode()
     ).hexdigest()
 
     if key in _cache:
         print("[cache] HIT")
-        raise MiddlewareTermination(_cache[key])  # short-circuit; caller gets cached AgentResponse
+        raise MiddlewareTermination(result=_cache[key])  # short-circuit; caller gets cached AgentResponse
 
-    response = await next_handler(ctx)
-    _cache[key] = response          # store the full AgentResponse, not just .text
+    await next_handler()
+    _cache[key] = ctx.result        # store the full AgentResponse, not just .text
     print(f"[cache] MISS — stored {len(_cache)} entries")
-    return response
 
 
 async def main() -> None:
@@ -1387,7 +1389,7 @@ asyncio.run(main())
 ```python
 import asyncio, re
 from agent_framework import (
-    Agent, AgentMiddleware, AgentContext, Message,
+    Agent, agent_middleware, AgentContext, Message,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -1398,20 +1400,15 @@ def _redact(text: str) -> str:
     return EMAIL_RE.sub("[REDACTED_EMAIL]", text)
 
 
-@AgentMiddleware
+@agent_middleware
 async def pii_redact(ctx: AgentContext, next_handler):
     """Strip PII from outbound messages before they reach the model."""
     redacted_messages = []
     for msg in ctx.messages:
-        contents = []
-        for content in (msg.contents or []):
-            if isinstance(content, str):
-                contents.append(_redact(content))
-            else:
-                contents.append(content)
-        redacted_messages.append(Message(role=msg.role, contents=contents))
+        redacted_text = _redact(msg.text or "")
+        redacted_messages.append(Message(role=msg.role, contents=[redacted_text]))
     ctx.messages = redacted_messages   # mutate in-place
-    return await next_handler(ctx)
+    await next_handler()
 
 
 async def main() -> None:
@@ -1432,7 +1429,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import (
-    Agent, AgentMiddleware, AgentContext, MiddlewareTermination,
+    Agent, agent_middleware, AgentContext, MiddlewareTermination,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -1440,32 +1437,26 @@ from agent_framework.openai import OpenAIChatClient
 BLOCKED_WORDS = {"password", "secret", "ssn", "credit_card"}
 
 
-@AgentMiddleware
+@agent_middleware
 async def content_filter(ctx: AgentContext, next_handler):
     """Block requests containing sensitive words before they reach the model."""
-    text = " ".join(
-        c if isinstance(c, str) else ""
-        for msg in ctx.messages
-        for c in (msg.contents or [])
-    ).lower()
+    text = " ".join(msg.text or "" for msg in ctx.messages).lower()
 
     for word in BLOCKED_WORDS:
         if word in text:
             # Short-circuit: never call the model.
-            # In production return a proper AgentResponse object.
-            raise MiddlewareTermination(
-                type("BlockedResponse", (), {"text": f"Request blocked: contains '{word}'."})()
-            )
+            raise MiddlewareTermination(result=f"Request blocked: contains '{word}'.")
 
-    return await next_handler(ctx)
+    await next_handler()
 
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
     agent = Agent(client=client, name="filtered-agent", middleware=[content_filter])
 
-    response = await agent.run("What is my password?")
-    print(response.text)
+    result = await agent.run("What is my password?")
+    # When MiddlewareTermination(result=str) fires, AgentResponse.text holds the string
+    print(result.text)
 
 
 asyncio.run(main())
@@ -1535,7 +1526,7 @@ async def main() -> None:
     agent = Agent(
         client=client,
         name="multilingual",
-        skills_provider=provider,
+        context_providers=[provider],
     )
 
     response = await agent.run("Translate 'hello' to Spanish.")
@@ -1580,7 +1571,7 @@ async def main() -> None:
     provider = SkillsProvider(sources=[deduped])
 
     client = OpenAIChatClient(model="gpt-4o-mini")
-    agent = Agent(client=client, name="skill-agent", skills_provider=provider)
+    agent = Agent(client=client, name="skill-agent", context_providers=[provider])
 
     # The agent sees only one "summarize" skill — the v1 version
     response = await agent.run("Summarise this text in one sentence: ...")
@@ -1635,7 +1626,7 @@ async def main() -> None:
     provider = SkillsProvider(sources=[remote_source])
 
     client = OpenAIChatClient(model="gpt-4o-mini")
-    agent = Agent(client=client, name="remote-skill-agent", skills_provider=provider)
+    agent = Agent(client=client, name="remote-skill-agent", context_providers=[provider])
 
     response = await agent.run("Search for 'machine learning pipelines'.")
     print(response.text)
@@ -1658,7 +1649,7 @@ asyncio.run(main())
 | 6 | `SecretString` + `load_settings` | `_settings` | `SecretString.__repr__` masks; `load_settings` resolution: overrides → .env → env vars → defaults; `required_fields` tuple = at-least-one constraint |
 | 7 | `FunctionInvocationConfiguration` | `_tools` | `max_function_calls` is per-request, best-effort; `additional_tools` injects tools without rebuilding agent; `enabled=False` disables the tool loop |
 | 8 | `FileHistoryProvider` + `HistoryProvider` | `_sessions` | JSONL per session; `service_stores_history=True` skips local writes; custom provider = implement `load`/`save`/`clear` |
-| 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; `MiddlewareTermination(result)` short-circuits without calling the model |
+| 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; `MiddlewareTermination(result=value)` short-circuits without calling the model (`result` is keyword-only) |
 | 10 | `SkillsProvider` + `SkillsSource` | `_skills` | `from_paths()` discovers SKILL.md files; `DeduplicatingSkillsSource` = first-one-wins; custom ABC = implement `get_skills(session, context)` |
 
 ## Revision history
