@@ -21,10 +21,10 @@ signature and constant was read directly from the installed package at
 
 `agent_framework._workflows._workflow_builder.WorkflowBuilder`
 
-`WorkflowBuilder` was introduced at 1.6.0 and has grown significantly.
-Three methods arrived since the Vol. 1 coverage: **`add_chain`**,
+`WorkflowBuilder` constructs immutable workflow graphs. This section covers
+three methods that extend its routing capabilities — **`add_chain`**,
 **`add_multi_selection_edge_group`**, and the **`intermediate_output_from`**
-routing mode. The constructor also gained `output_from` / `intermediate_output_from`
+routing mode — plus the constructor's `output_from` / `intermediate_output_from`
 keyword arguments that replace the deprecated `output_executors`.
 
 ### Constructor (1.10.0)
@@ -1255,9 +1255,11 @@ asyncio.run(main())
 
 ### Example 2 · `InMemoryHistoryProvider` for testing
 
-`InMemoryHistoryProvider` stores messages in `session.state["messages"]` —
-the provider holds no state of its own. Inspect stored messages by reading
-`session.state` directly after a run.
+`InMemoryHistoryProvider` stores messages under
+`session.state[history.source_id]["messages"]` — the provider's `source_id`
+is the state key, not `"messages"` at the top level. The provider holds no
+state of its own; inspect or clear history by reading
+`session.state[history.source_id]` directly after a run.
 
 ```python
 import asyncio
