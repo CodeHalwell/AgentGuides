@@ -543,13 +543,16 @@ async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o")
     agent = Agent(client=client, name="analyst", tools=[render_chart])
 
-    # The model may emit a tool call for render_chart.
-    # Because func=None, the framework returns a placeholder result
-    # so the conversation can continue; the client inspects the tool call.
+    # When the model requests a declaration-only tool, the framework short-circuits:
+    # the function_call is returned as a user_input_request (not executed).
+    # The agent does NOT call the model for an acknowledgement — response.text is empty.
+    # Inspect response.contents for the pending function_call instead.
     response = await agent.run(
         "Show me a bar chart of [10, 25, 15, 30] titled 'Monthly Sales'."
     )
-    print(response.text)  # Model acknowledges chart was requested
+    for item in response.contents or []:
+        if getattr(item, "type", None) == "function_call":
+            print(f"Pending chart call: {item.name}({item.arguments})")
 
 
 asyncio.run(main())
@@ -581,7 +584,7 @@ response: AgentResponse[MyModel] = await agent.run(
 stream: ResponseStream = agent.run(messages, stream=True)
 async for update in stream:
     print(update.text or "", end="", flush=True)
-final: AgentResponse = await stream
+final: AgentResponse = await stream.get_final_response()  # `await stream` returns the stream itself
 ```
 
 ### Per-call keyword arguments
@@ -595,7 +598,7 @@ await agent.run(
     options={"model": "gpt-4o"},               # per-call model override
     compaction_strategy=SlidingWindowStrategy(target_count=20),
     tokenizer=CharacterEstimatorTokenizer(),
-    function_invocation_kwargs={"max_function_calls": 5},
+    function_invocation_kwargs={"user_id": "u-42"},  # forwarded to tool functions as ctx.kwargs
     client_kwargs={"timeout": 30},
 )
 ```
@@ -655,8 +658,9 @@ async def main() -> None:
         if update.text:
             print(update.text, end="", flush=True)
 
-    # Await the stream object to get the fully accumulated AgentResponse
-    response = await stream
+    # get_final_response() returns the accumulated AgentResponse.
+    # Note: `await stream` returns the ResponseStream itself, not the final response.
+    response = await stream.get_final_response()
     print(f"\n\nfinish_reason: {response.finish_reason}")
     print(f"usage: {response.usage}")
 
@@ -690,7 +694,8 @@ async def main() -> None:
         "Summarise the history of the internet in two sentences.",
         middleware=[audit_logger],
         compaction_strategy=SlidingWindowStrategy(target_count=10),
-        function_invocation_kwargs={"max_function_calls": 0},  # no tools this call
+        # function_invocation_kwargs passes extra kwargs to tool functions (ctx.kwargs),
+        # NOT loop-control options. Loop limits live on client.function_invocation_configuration.
     )
     print(response.text)
 
@@ -837,7 +842,13 @@ async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
     async with crm_tool:
         agent = Agent(client=client, name="crm-agent", tools=[crm_tool])
-        response = await agent.run("Find my open opportunities.")
+        # The framework does NOT read ContextVars automatically.
+        # Explicitly pass the value via function_invocation_kwargs so it arrives in
+        # ctx.kwargs and is forwarded to the MCP server under "user_id".
+        response = await agent.run(
+            "Find my open opportunities.",
+            function_invocation_kwargs={"user_id": current_user_id.get()},
+        )
         print(response.text)
 
 
@@ -999,8 +1010,10 @@ print("api_key:", settings.get("api_key"))           # None
 `agent_framework._tools.FunctionInvocationConfiguration`
 
 `FunctionInvocationConfiguration` is a `TypedDict` that controls the function
-invocation loop inside chat clients. Pass it via `function_invocation_kwargs`
-on `Agent.run()` or `BaseChatClient.get_response()`.
+invocation loop. It lives on the **client** as `client.function_invocation_configuration`
+and applies to all calls through that client. `function_invocation_kwargs` on
+`Agent.run()` is separate — it passes extra kwargs to individual tool functions
+(as `ctx.kwargs`), not loop-control settings.
 
 ### All fields
 
@@ -1011,7 +1024,7 @@ class FunctionInvocationConfiguration(TypedDict, total=False):
     max_function_calls: int     # Max total individual calls per request (best-effort).
     max_consecutive_errors_per_request: int   # Consecutive error threshold.
     terminate_on_unknown_calls: bool          # Raise on unknown tool name.
-    additional_tools: ToolTypes | ...         # Extra tools for this request only.
+    additional_tools: ToolTypes | ...         # Extra tools available to this client.
 ```
 
 **`max_function_calls`** is checked *after* each parallel batch completes —
@@ -1040,14 +1053,14 @@ search_tool = FunctionTool(
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
+    # Loop limits are set on the client — they apply to every run() call.
+    client.function_invocation_configuration["max_function_calls"] = 6
+    client.function_invocation_configuration["max_iterations"] = 4
+
     agent = Agent(client=client, name="budget-agent", tools=[search_tool])
 
     response = await agent.run(
         "Research and compare three popular Python web frameworks.",
-        function_invocation_kwargs={
-            "max_function_calls": 6,       # allow at most 6 search calls
-            "max_iterations": 4,           # at most 4 LLM roundtrips
-        },
     )
     print(response.text)
 
@@ -1055,7 +1068,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Example 2 · `additional_tools` for per-call tool injection
+### Example 2 · Per-call tool injection via `tools=`
 
 ```python
 import asyncio
@@ -1072,7 +1085,8 @@ async def main() -> None:
     # Agent has no tools configured at construction time
     agent = Agent(client=client, name="dynamic-agent")
 
-    # Inject a tool only for this specific request without rebuilding the agent.
+    # Inject a tool only for this specific request via the tools= kwarg on run().
+    # This is the correct per-call injection mechanism — not function_invocation_kwargs.
     profile_tool = FunctionTool(
         name="get_user_profile",
         description="Retrieve user profile by ID.",
@@ -1081,10 +1095,7 @@ async def main() -> None:
 
     response = await agent.run(
         "Get the profile for user 'u-123' and summarise their plan.",
-        function_invocation_kwargs={
-            "additional_tools": [profile_tool],
-            "max_function_calls": 2,
-        },
+        tools=[profile_tool],
     )
     print(response.text)
 
@@ -1117,11 +1128,11 @@ async def main() -> None:
     # Agent normally has expensive search tools
     agent = Agent(client=client, name="qa-agent", tools=[search_tool])
 
-    # For this specific call, disable the tool loop entirely so the model
-    # answers from its training knowledge — fast and deterministic.
+    # Disable the tool loop on the client — the model answers from training only.
+    # Restore enabled=True afterwards if other calls on this client need tools.
+    client.function_invocation_configuration["enabled"] = False
     response = await agent.run(
         "What is the capital of France?",
-        function_invocation_kwargs={"enabled": False},
     )
     print(response.text)  # Paris (no tool calls made)
 
@@ -1258,13 +1269,15 @@ async def main() -> None:
     response = await agent.run("What is the magic word?", session=session)
     print(response.text)  # should mention avocado
 
-    # Inspect stored messages — they live in session.state, not on the provider
-    stored = session.state.get("messages", [])
+    # Inspect stored messages — they live in session.state[history.source_id]["messages"],
+    # because the framework passes session.state[provider.source_id] as `state` to get/save.
+    provider_state = session.state.get(history.source_id, {})
+    stored = provider_state.get("messages", [])
     print(f"stored {len(stored)} messages")
 
-    # Clear history by resetting the state key
-    session.state["messages"] = []
-    print("after clear:", len(session.state.get("messages", [])))  # 0
+    # Clear history by resetting the provider-scoped state key
+    provider_state["messages"] = []
+    print("after clear:", len(session.state.get(history.source_id, {}).get("messages", [])))  # 0
 
 
 asyncio.run(main())
@@ -1657,7 +1670,7 @@ asyncio.run(main())
 | 4 | `Agent.run()` | `_agents` | Three `@overload` variants: plain, structured output via `options=`, streaming via `stream=True`; per-call `middleware=` and `compaction_strategy=` |
 | 5 | `MCPStdioTool` | `_mcp` | `allowed_tools` = allowlist; `MCPSpecificApproval` = per-tool approval dict; `additional_tool_argument_names` = hidden args injected into every tool call |
 | 6 | `SecretString` + `load_settings` | `_settings` | `SecretString.__repr__` masks; `load_settings` resolution: overrides → .env → env vars → defaults; `required_fields` tuple = at-least-one constraint |
-| 7 | `FunctionInvocationConfiguration` | `_tools` | `max_function_calls` is per-request, best-effort; `additional_tools` injects tools without rebuilding agent; `enabled=False` disables the tool loop |
+| 7 | `FunctionInvocationConfiguration` | `_tools` | Lives on `client.function_invocation_configuration`; `max_function_calls` is per-request best-effort; `enabled=False` disables the loop; per-call tool injection uses `agent.run(tools=[...])` |
 | 8 | `FileHistoryProvider` + `HistoryProvider` | `_sessions` | JSONL per session; pass via `context_providers=[...]`; custom provider = implement `get_messages`/`save_messages` with `(session_id, *, state, **kwargs)` |
 | 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; `MiddlewareTermination(result=value)` short-circuits without calling the model (`result` is keyword-only) |
 | 10 | `SkillsProvider` + `SkillsSource` | `_skills` | `from_paths()` discovers SKILL.md files; `DeduplicatingSkillsSource` = first-one-wins; custom ABC = implement `get_skills(session, context)` |
