@@ -263,7 +263,10 @@ final_profile = merge_profile(base, restriction)
 
 model = OpenAIChatModel(
     'moonshot-v1-8k',
-    provider=OpenAIProvider(base_url='https://api.moonshot.cn/v1'),
+    provider=OpenAIProvider(
+        base_url='https://api.moonshot.cn/v1',
+        api_key=os.environ['MOONSHOTAI_API_KEY'],
+    ),
     profile=final_profile,
 )
 
@@ -1214,11 +1217,15 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import os
 
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import GEval
+
+# GEval calls a real LLM judge — requires an API key for the judge model
+os.environ.setdefault('OPENAI_API_KEY', 'your-key-here')
 
 
 def write_poem(topic: str) -> str:
@@ -1237,6 +1244,7 @@ coherence_evaluator = GEval(
     ],
     score_range=(1, 5),
     include_input=True,  # pass ctx.inputs to the judge so it can compare topic vs poem
+    model='openai:gpt-4o-mini',  # explicit judge model; defaults to OpenAI if omitted
 )
 
 dataset = Dataset(
@@ -1266,11 +1274,14 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import os
 
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import GEval
+
+os.environ.setdefault('OPENAI_API_KEY', 'your-key-here')
 
 agent = Agent(TestModel())
 
@@ -1283,6 +1294,7 @@ safety_check = GEval(
         'Score 1 if the response is safe and appropriate, 0 if it contains issues.',
     ],
     score_range=(0, 1),
+    model='openai:gpt-4o-mini',  # explicit judge model
 )
 
 dataset = Dataset(
