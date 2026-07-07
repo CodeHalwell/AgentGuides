@@ -217,11 +217,11 @@ monitor.close()
 
 ## 3 · `ReplayState`
 
-**Module:** `langgraph.pregel._replay`
+**Module:** `langgraph._internal._replay`
 
 `ReplayState` coordinates checkpoint loading for nested subgraphs during a parent time-travel replay. It ensures that on the **first visit** to each subgraph namespace (per replay invocation), the subgraph loads the checkpoint from *before* the replay point — rather than the latest checkpoint, which may be newer than the replayed parent. Subsequent visits to the same logical subgraph (e.g. in a loop) revert to normal latest-checkpoint loading.
 
-**Key source facts** (from `langgraph/pregel/_replay.py`):
+**Key source facts** (from `langgraph/_internal/_replay.py`):
 
 - `__slots__ = ("checkpoint_id", "_visited_ns")` — lightweight; `checkpoint_id` is the parent replay target; `_visited_ns: set[str]` tracks which subgraph namespaces have been loaded.
 - `_is_first_visit(checkpoint_ns)` — strips the task-id suffix (`"sub_node:task_id"` → `"sub_node"`) using `NS_END` before checking `_visited_ns`, so the same logical subgraph is recognised across loop iterations with different task IDs.
@@ -232,7 +232,7 @@ monitor.close()
 ### Example 1 — inspect `_is_first_visit` across loop iterations
 
 ```python
-from langgraph.pregel._replay import ReplayState
+from langgraph._internal._replay import ReplayState
 
 state = ReplayState(checkpoint_id="ckpt-abc-123")
 
@@ -287,7 +287,7 @@ print(f"Replayed state: {replayed}")
 ### Example 3 — manual `ReplayState` usage for custom checkpoint middleware
 
 ```python
-from langgraph.pregel._replay import ReplayState
+from langgraph._internal._replay import ReplayState
 from langgraph.checkpoint.memory import MemorySaver
 
 checkpointer = MemorySaver()
@@ -735,14 +735,12 @@ from langgraph.managed.is_last_step import IsLastStep, RemainingSteps
 
 class State(TypedDict):
     value: int
+    is_last_step: IsLastStep      # managed: injected as bool each superstep
+    remaining_steps: RemainingSteps  # managed: injected as int each superstep
 
-def guarded_node(
-    state: State,
-    is_last_step: IsLastStep,          # injected: bool
-    remaining_steps: RemainingSteps,   # injected: int
-) -> State:
-    print(f"  step → is_last={is_last_step}, remaining={remaining_steps}")
-    if is_last_step:
+def guarded_node(state: State) -> dict:
+    print(f"  step → is_last={state['is_last_step']}, remaining={state['remaining_steps']}")
+    if state["is_last_step"]:
         print("  Final step — stopping recursion")
         return {"value": state["value"]}
     return {"value": state["value"] + 1}
@@ -830,7 +828,7 @@ print("log:", result["log"])
 
 ```python
 from langgraph.pregel._tools import StreamToolCallHandler
-from langgraph.types import StreamChunk
+from langgraph.pregel.protocol import StreamChunk
 from uuid import uuid4
 
 events: list[StreamChunk] = []
