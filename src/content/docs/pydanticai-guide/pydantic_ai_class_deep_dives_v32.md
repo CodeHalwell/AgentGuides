@@ -823,7 +823,7 @@ async def task(inputs: str) -> str:
 async def main() -> None:
     report = await dataset.evaluate(task)
     for case in report.cases:
-        print(f'{case.name}: {case.scores}')
+        print(f'{case.name}: {case.assertions}')
 
 
 asyncio.run(main())
@@ -947,7 +947,7 @@ async def main() -> None:
     # max_concurrency=1 prevents the shared _flaky_call_count from interleaving across cases
     report = await dataset.evaluate(task, max_concurrency=1)
     for case in report.cases:
-        print(f'{case.name}: {case.scores}')
+        print(f'{case.name}: {case.assertions}')
 
 
 asyncio.run(main())
@@ -1055,7 +1055,7 @@ async def main() -> None:
         return (await agent.run(inputs)).output
     report = await dataset.evaluate(task)
     for case in report.cases:
-        print(f'{case.name}: {case.scores}')
+        print(f'{case.name}: {case.assertions}')
 
 
 asyncio.run(main())
@@ -1144,11 +1144,11 @@ async def main() -> None:
 
     report1 = await dataset_last.evaluate(task_two)
     for case in report1.cases:
-        print(f'{case.name}: {case.scores}')
+        print(f'{case.name}: {case.assertions}')
 
     report2 = await dataset_index.evaluate(task_three)
     for case in report2.cases:
-        print(f'{case.name}: {case.scores}')
+        print(f'{case.name}: {case.assertions}')
 
 
 asyncio.run(main())
@@ -1194,7 +1194,7 @@ async def main() -> None:
         return (await agent.run(inputs)).output
     report = await dataset.evaluate(task)
     for case in report.cases:
-        print(f'budget_check scores: {case.scores}')
+        print(f'budget_check assertions: {case.assertions}')
 
 
 asyncio.run(main())
@@ -1380,7 +1380,7 @@ async def main() -> None:
         return (await agent.run(inputs)).output
     report = await dataset.evaluate(task)
     for case in report.cases:
-        print(f'Span present: {case.scores}')
+        print(f'Span present: {case.assertions}')
 
 
 asyncio.run(main())
