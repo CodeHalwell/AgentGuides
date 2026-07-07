@@ -407,7 +407,8 @@ builder.add_edge(START, "search")
 builder.add_edge("search", END)
 # graph = builder.compile()
 # result = graph.invoke({"query": "LangGraph UI streaming", "ui": []})
-# result["ui"] contains both UIMessage entries
+# result["ui"] contains ONE entry: the ResultCard replaced the Spinner
+# (same id → reducer overwrites). Both were emitted on the stream.
 ```
 
 ---
