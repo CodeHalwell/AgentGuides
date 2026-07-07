@@ -203,9 +203,10 @@ ollama_profile = OpenAIModelProfile(
 )
 
 # In 2.5.x, custom base URLs go through provider=, not a base_url= kwarg on the model
+# Ollama ignores the API key but OpenAIProvider requires a non-empty value
 model = OpenAIChatModel(
     'deepseek-r1:7b',
-    provider=OpenAIProvider(base_url='http://localhost:11434/v1'),
+    provider=OpenAIProvider(base_url='http://localhost:11434/v1', api_key='ollama'),
     profile=ollama_profile,
 )
 
@@ -251,6 +252,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles import merge_profile
 from pydantic_ai.profiles.openai import OpenAIModelProfile, openai_model_profile
+from pydantic_ai.providers.openai import OpenAIProvider
 
 os.environ.setdefault('MOONSHOTAI_API_KEY', 'your-key-here')
 
@@ -261,7 +263,7 @@ final_profile = merge_profile(base, restriction)
 
 model = OpenAIChatModel(
     'moonshot-v1-8k',
-    base_url='https://api.moonshot.cn/v1',
+    provider=OpenAIProvider(base_url='https://api.moonshot.cn/v1'),
     profile=final_profile,
 )
 
@@ -770,6 +772,7 @@ These are span-based agentic evaluators from `pydantic_evals`. They read from `c
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ToolCorrectness
@@ -779,8 +782,7 @@ def weather_tool(city: str) -> str:
     return f'Sunny in {city}'
 
 
-test_agent = Agent(TestModel(), tools=[weather_tool])
-test_agent.instrument = True  # enable OTel span capture for span-based evaluators
+test_agent = Agent(TestModel(), tools=[weather_tool], capabilities=[Instrumentation()])
 
 dataset = Dataset(
     name='tool_correctness_demo',
@@ -823,6 +825,7 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import TrajectoryMatch
@@ -836,8 +839,7 @@ def summarize(text: str) -> str:
     return f'Summary: {text[:50]}'
 
 
-agent = Agent(TestModel(), tools=[search, summarize])
-agent.instrument = True
+agent = Agent(TestModel(), tools=[search, summarize], capabilities=[Instrumentation()])
 
 dataset = Dataset(
     name='trajectory_demo',
@@ -879,6 +881,7 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
@@ -897,8 +900,7 @@ def flaky_tool(data: str) -> str:
     return f'Succeeded with: {data}'
 
 
-agent = Agent(TestModel(), tools=[flaky_tool])
-agent.instrument = True
+agent = Agent(TestModel(), tools=[flaky_tool], capabilities=[Instrumentation()])
 
 dataset = Dataset(
     name='retry_demo',
@@ -977,6 +979,7 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_evals import Case, Dataset
@@ -997,8 +1000,7 @@ def book_flight_func(messages: list[ModelMessage], info: AgentInfo) -> ModelResp
     ])
 
 
-agent = Agent(FunctionModel(book_flight_func), tools=[book_flight])
-agent.instrument = True
+agent = Agent(FunctionModel(book_flight_func), tools=[book_flight], capabilities=[Instrumentation()])
 
 dataset = Dataset(
     name='arg_correctness_demo',
@@ -1050,6 +1052,7 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_evals import Case, Dataset
@@ -1077,10 +1080,8 @@ def three_search_func(messages: list[ModelMessage], info: AgentInfo) -> ModelRes
     return ModelResponse(parts=[TextPart(content='Done.')])
 
 
-agent_two = Agent(FunctionModel(two_search_func), tools=[search])
-agent_two.instrument = True
-agent_three = Agent(FunctionModel(three_search_func), tools=[search])
-agent_three.instrument = True
+agent_two = Agent(FunctionModel(two_search_func), tools=[search], capabilities=[Instrumentation()])
+agent_three = Agent(FunctionModel(three_search_func), tools=[search], capabilities=[Instrumentation()])
 
 dataset_last = Dataset(
     name='occurrence_last',
@@ -1142,6 +1143,7 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import MaxModelRequests, MaxToolCalls
@@ -1151,8 +1153,7 @@ def lookup(term: str) -> str:
     return f'Definition of {term}'
 
 
-agent = Agent(TestModel(), tools=[lookup])
-agent.instrument = True
+agent = Agent(TestModel(), tools=[lookup], capabilities=[Instrumentation()])
 
 dataset = Dataset(
     name='budget_demo',
@@ -1313,6 +1314,7 @@ asyncio.run(main())
 import asyncio
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import HasMatchingSpan
@@ -1323,8 +1325,7 @@ def search_tool(query: str) -> str:
     return f'Results for: {query}'
 
 
-agent = Agent(TestModel(), tools=[search_tool])
-agent.instrument = True
+agent = Agent(TestModel(), tools=[search_tool], capabilities=[Instrumentation()])
 
 # HasMatchingSpan passes when the span tree contains at least one matching span
 # SpanQuery can filter by span name, attributes, or custom predicates
