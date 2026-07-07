@@ -512,8 +512,8 @@ asyncio.run(main())
 
 ```python
 from pydantic_ai.capabilities import ProcessEventStream, WebFetch, WebSearch
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.capabilities.combined import CombinedCapability
-from pydantic_ai.capabilities.instrumentation import Instrumentation
 
 # Two nested groups that the user assembled separately
 group_a = CombinedCapability(capabilities=[WebSearch(), WebFetch()])
@@ -710,7 +710,7 @@ from dataclasses import dataclass
 
 from pydantic_ai.capabilities._ordering import has_capability_type, sort_capabilities
 from pydantic_ai.capabilities.abstract import AbstractCapability, CapabilityOrdering
-from pydantic_ai.capabilities.instrumentation import Instrumentation
+from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.exceptions import UserError
 
 
