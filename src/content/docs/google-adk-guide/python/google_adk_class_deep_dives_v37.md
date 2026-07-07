@@ -822,8 +822,9 @@ asyncio.run(main())
 `LlmAgentConfig` is the Pydantic model behind a `.yaml` agent file. It lets
 you declare an entire `LlmAgent` declaratively. As of 2.3.0 it is
 `@deprecated` in favour of writing Python code, but it remains fully
-functional and is the only way to author agents via the `adk` CLI `--agent`
-flag without Python.
+functional. To use it with the `adk` CLI, place the file at
+`agents_dir/{agent_name}/root_agent.yaml`; `AgentLoader._load_from_yaml_config`
+discovers it automatically when no Python module is found for that agent name.
 
 ### Key fields (verified `llm_agent_config.py`)
 
