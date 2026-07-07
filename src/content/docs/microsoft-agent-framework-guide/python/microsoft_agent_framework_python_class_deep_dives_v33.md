@@ -264,11 +264,11 @@ result: WorkflowRunResult = await workflow.run(input_data)
 async for event in workflow.run(input_data, stream=True):
     print(event)
 
-# Resume HITL
+# Resume HITL — responses is Mapping[str, Any]; message is mutually exclusive with responses
+pending = result.get_request_info_events()
 result2 = await workflow.run(
-    input_data,
     checkpoint_id="<id>",
-    responses=[WorkflowEvent.create_response(...)],
+    responses={pending[0].request_id: "user-provided value"},
 )
 ```
 
@@ -627,8 +627,8 @@ async def main() -> None:
         options={"response_format": Sentiment},
     )
 
-    # response.output is typed as Sentiment when options carries the model
-    sentiment: Sentiment = response.output
+    # response.value holds the parsed structured output (not response.output)
+    sentiment: Sentiment = response.value
     print(f"label={sentiment.label}, confidence={sentiment.confidence:.2f}")
     print(f"reasoning: {sentiment.reasoning}")
 
@@ -1015,6 +1015,12 @@ and applies to all calls through that client. `function_invocation_kwargs` on
 `Agent.run()` is separate — it passes extra kwargs to individual tool functions
 (as `ctx.kwargs`), not loop-control settings.
 
+> **Version note:** Earlier volumes (e.g. Vol. 6) documented passing
+> `function_invocation_kwargs={"config": {...}}` to override loop settings per
+> request. This pattern is **not supported in 1.10.0** — no code in the
+> 1.10.0 source reads a `"config"` key from `function_invocation_kwargs`. Use
+> `client.function_invocation_configuration` instead.
+
 ### All fields
 
 ```python
@@ -1025,6 +1031,7 @@ class FunctionInvocationConfiguration(TypedDict, total=False):
     max_consecutive_errors_per_request: int   # Consecutive error threshold.
     terminate_on_unknown_calls: bool          # Raise on unknown tool name.
     additional_tools: ToolTypes | ...         # Extra tools available to this client.
+    include_detailed_errors: bool             # Include exception detail in tool results.
 ```
 
 **`max_function_calls`** is checked *after* each parallel batch completes —
