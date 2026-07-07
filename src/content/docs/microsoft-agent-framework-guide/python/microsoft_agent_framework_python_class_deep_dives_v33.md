@@ -546,12 +546,13 @@ async def main() -> None:
     # When the model requests a declaration-only tool, the framework short-circuits:
     # the function_call is returned as a user_input_request (not executed).
     # The agent does NOT call the model for an acknowledgement — response.text is empty.
-    # Inspect response.contents for the pending function_call instead.
+    # Use response.user_input_requests to inspect pending function_calls;
+    # AgentResponse has no .contents attribute (that lives on Message/AgentResponseUpdate).
     response = await agent.run(
         "Show me a bar chart of [10, 25, 15, 30] titled 'Monthly Sales'."
     )
-    for item in response.contents or []:
-        if getattr(item, "type", None) == "function_call":
+    for item in response.user_input_requests:
+        if item.type == "function_call":
             print(f"Pending chart call: {item.name}({item.arguments})")
 
 
@@ -730,8 +731,8 @@ MCPStdioTool(
                                   | None = None,
     task_options: MCPTaskOptions | None = None,
     sampling_approval_callback: SamplingApprovalCallback | None = None,
-    sampling_max_tokens: int | None = 512,
-    sampling_max_requests: int | None = 5,
+    sampling_max_tokens: int | None = 4096,    # _DEFAULT_SAMPLING_MAX_TOKENS
+    sampling_max_requests: int | None = 25,    # _DEFAULT_SAMPLING_MAX_REQUESTS
     parse_tool_results: Callable[[CallToolResult], str | list[Content]] | None = None,
     request_timeout: int | None = None,
 )
