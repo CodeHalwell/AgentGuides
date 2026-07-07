@@ -1071,7 +1071,7 @@ def two_search_func(messages: list[ModelMessage], info: AgentInfo) -> ModelRespo
     n = (len(messages) - 1) // 2
     queries = ['Python', 'Rust']
     if n < len(queries):
-        return ModelResponse(parts=[ToolCallPart(tool_name='search', args=f'{{"query": "{queries[n]}"}}')]) 
+        return ModelResponse(parts=[ToolCallPart(tool_name='search', args=f'{{"query": "{queries[n]}"}}')])
     return ModelResponse(parts=[TextPart(content='Done.')])
 
 
@@ -1079,7 +1079,7 @@ def three_search_func(messages: list[ModelMessage], info: AgentInfo) -> ModelRes
     n = (len(messages) - 1) // 2
     queries = ['first query', 'second query', 'third query']
     if n < len(queries):
-        return ModelResponse(parts=[ToolCallPart(tool_name='search', args=f'{{"query": "{queries[n]}"}}')]) 
+        return ModelResponse(parts=[ToolCallPart(tool_name='search', args=f'{{"query": "{queries[n]}"}}')])
     return ModelResponse(parts=[TextPart(content='Done.')])
 
 
