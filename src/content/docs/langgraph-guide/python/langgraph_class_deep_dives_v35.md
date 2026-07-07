@@ -251,7 +251,7 @@ print(state._is_first_visit(ns3))  # True
 ### Example 2 — how `get_checkpoint` hydrates a subgraph during replay
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict
 
@@ -265,7 +265,7 @@ graph = StateGraph(State)
 graph.add_node("inc", increment)
 graph.add_edge(START, "inc")
 graph.add_edge("inc", END)
-compiled = graph.compile(checkpointer=MemorySaver())
+compiled = graph.compile(checkpointer=InMemorySaver())
 
 # Run three steps to create checkpoint history
 config = {"configurable": {"thread_id": "replay-demo"}}
@@ -288,9 +288,9 @@ print(f"Replayed state: {replayed}")
 
 ```python
 from langgraph._internal._replay import ReplayState
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 replay_target_id = "ckpt-2026-07-07-001"
 
 state = ReplayState(checkpoint_id=replay_target_id)
@@ -475,9 +475,7 @@ from langgraph.pregel._remote_run_stream import _RemoteGraphRunStream
 
 def handle_remote_run(sync_client, thread_id: str, input_payload: dict) -> dict:
     """Drive a remote run, aborting on first interrupt."""
-    from langgraph_sdk._sync.stream import SyncThreadStream
-
-    sdk_thread: SyncThreadStream = sync_client.runs.stream(
+    sdk_thread = sync_client.runs.stream(
         thread_id, assistant_id="my-graph"
     )
     stream = _RemoteGraphRunStream(
@@ -630,7 +628,7 @@ for r in [accept_resp, ignore_resp, feedback_resp]:
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt.interrupt import HumanResponse
 
 class ReviewState(TypedDict):
@@ -663,7 +661,7 @@ graph.add_edge(START, "write")
 graph.add_edge("write", "review")
 graph.add_edge("review", END)
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 compiled = graph.compile(checkpointer=checkpointer)
 config = {"configurable": {"thread_id": "review-001"}}
 
