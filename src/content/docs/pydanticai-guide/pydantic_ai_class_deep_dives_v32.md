@@ -746,6 +746,8 @@ print('Has Instrumentation:', has_instr)  # True
 
 These are span-based agentic evaluators from `pydantic_evals`. They read from `ctx.span_tree` (populated when Logfire/OTel instrumentation is configured) and degrade gracefully when spans aren't available. `ToolCorrectness` compares the multiset of tool names actually called against `expected_tools` — order is irrelevant, duplicate entries require repeated calls. `TrajectoryMatch` enforces ordered sequences with three comparison modes: `'exact'` (pass/fail equality), `'in_order'` (LCS-based F1, default), and `'any_order'` (multiset F1, order-independent).
 
+> **Tracer provider required.** `capabilities=[Instrumentation()]` adds OTel spans to agent runs, but `ctx.span_tree` is only populated when a tracer provider is registered. Call `logfire.configure(send_to_logfire=False)` (or configure any OTel-compatible provider) once per process before evaluating. Without it, span-based evaluators see an empty tree and always report zero scores.
+
 ```python
 # Signatures verified from pydantic_evals/evaluators/agentic.py (pydantic-evals 2.5.1):
 #
@@ -774,11 +776,16 @@ These are span-based agentic evaluators from `pydantic_evals`. They read from `c
 ```python
 import asyncio
 
+import logfire
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ToolCorrectness
+
+# Register a tracer provider so Instrumentation() can populate ctx.span_tree.
+# send_to_logfire=False keeps everything local — no account or API key needed.
+logfire.configure(send_to_logfire=False)
 
 
 def weather_tool(city: str) -> str:
@@ -832,6 +839,8 @@ from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import TrajectoryMatch
+
+# logfire.configure(send_to_logfire=False) — call once per process; see section 7.1
 
 
 def search(query: str) -> str:
@@ -890,6 +899,7 @@ from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ToolCorrectness
 
+# logfire.configure(send_to_logfire=False) — call once per process; see section 7.1
 
 _flaky_call_count = [0]
 
@@ -988,6 +998,8 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ArgumentCorrectness
 
+# logfire.configure(send_to_logfire=False) — call once per process; see section 7.1
+
 
 def book_flight(origin: str, destination: str, class_: str = 'economy') -> str:
     return f'Booked {origin}→{destination} ({class_})'
@@ -1060,6 +1072,8 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import ArgumentCorrectness
+
+# logfire.configure(send_to_logfire=False) — call once per process; see section 7.1
 
 
 def search(query: str) -> str:
@@ -1150,6 +1164,8 @@ from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import MaxModelRequests, MaxToolCalls
+
+# logfire.configure(send_to_logfire=False) — call once per process; see section 7.1
 
 
 def lookup(term: str) -> str:
@@ -1331,6 +1347,8 @@ from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import HasMatchingSpan
 from pydantic_evals.otel.span_tree import SpanQuery
+
+# logfire.configure(send_to_logfire=False) — call once per process; see section 7.1
 
 
 def search_tool(query: str) -> str:
