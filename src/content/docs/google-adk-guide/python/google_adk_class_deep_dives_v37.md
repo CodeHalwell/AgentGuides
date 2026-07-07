@@ -1039,7 +1039,8 @@ with warnings.catch_warnings():
         args=ToolArgsConfig(api_key="secret", timeout=30),
     )
 
-    # Pattern 4: Factory function that returns a tool; args are function kwargs
+    # Pattern 4: Factory function that returns a tool; args is passed as a single ToolArgsConfig
+    # Required signature: def my_func(args: ToolArgsConfig) -> BaseTool
     t4 = ToolConfig(
         name="my_pkg.tools.create_spanner_tool",
         args=ToolArgsConfig(project="my-project", instance="prod"),
@@ -1119,8 +1120,8 @@ with warnings.catch_warnings():
 **Source:** `google/adk/workflow/_retry_config.py`
 
 `RetryConfig` controls exponential-backoff retry for workflow nodes. Pass it
-to `@node(retry_config=...)`, `FunctionNode(retry_config=...)`, or embed it in
-an `LlmAgentConfig.generate_content_config`-equivalent block.
+to `@node(retry_config=...)` or `FunctionNode(retry_config=...)` — these are
+the only valid wiring points for node-level retry.
 
 ### Constructor signature (verified source)
 
