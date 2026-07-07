@@ -1442,18 +1442,15 @@ def make_pipeline_workflow():
         instruction="Format state['result'] as a user-friendly response.",
     )
 
-    # Workflow with explicit sequential routing
+    # Workflow with explicit sequential routing via edges tuple
     wf = Workflow(
         name="support_pipeline",
-        root_agent=intake,
+        edges=[("START", intake, processor, responder)],
     )
-    # Sequential order is encoded as edges:
-    # intake → processor → responder
-    # In a Workflow, use the `route` return value or Trigger edges.
     return wf
 
 wf = make_pipeline_workflow()
-print(f"Workflow root: {wf.root_agent.name}")   # intake
+print(f"Workflow name: {wf.name}")   # support_pipeline
 ```
 
 ### Example 3 — `SequentialAgentState` resumability and recovery
