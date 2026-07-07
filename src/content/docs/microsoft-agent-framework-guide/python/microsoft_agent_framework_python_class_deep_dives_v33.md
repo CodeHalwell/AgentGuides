@@ -1374,9 +1374,11 @@ ctx.tools          # per-call extra tools
 
 ### `MiddlewareTermination`
 
-Raise `MiddlewareTermination(result=value)` inside middleware to short-circuit the
-chain without calling the model. The `result` keyword argument holds the value
-returned to the caller; the first positional argument is an optional log message.
+Raise `MiddlewareTermination()` inside agent middleware to short-circuit the chain
+without calling the model. Always assign the intended `AgentResponse` to `ctx.result`
+**before** raising — `AgentMiddlewarePipeline` suppresses the exception and returns
+`ctx.result`. The `result` keyword argument on the exception itself is not read by the
+agent middleware pipeline (it is only used by the function-middleware loop).
 
 ### Example 1 · Response caching middleware
 
@@ -1398,7 +1400,8 @@ async def simple_cache(ctx: AgentContext, next_handler):
 
     if key in _cache:
         print("[cache] HIT")
-        raise MiddlewareTermination(result=_cache[key])  # short-circuit; caller gets cached AgentResponse
+        ctx.result = _cache[key]      # pipeline returns ctx.result; exc.result is not read
+        raise MiddlewareTermination()
 
     await next_handler()
     _cache[key] = ctx.result        # store the full AgentResponse, not just .text
@@ -1462,7 +1465,8 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import (
-    Agent, agent_middleware, AgentContext, MiddlewareTermination,
+    Agent, AgentResponse, Message,
+    agent_middleware, AgentContext, MiddlewareTermination,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -1477,8 +1481,13 @@ async def content_filter(ctx: AgentContext, next_handler):
 
     for word in BLOCKED_WORDS:
         if word in text:
-            # Short-circuit: never call the model.
-            raise MiddlewareTermination(result=f"Request blocked: contains '{word}'.")
+            # Set ctx.result to an AgentResponse before terminating.
+            # The pipeline returns ctx.result after suppressing MiddlewareTermination;
+            # passing result= on the exception has no effect for agent middleware.
+            ctx.result = AgentResponse(
+                messages=[Message("assistant", [f"Request blocked: contains '{word}'."])]
+            )
+            raise MiddlewareTermination()
 
     await next_handler()
 
@@ -1488,8 +1497,7 @@ async def main() -> None:
     agent = Agent(client=client, name="filtered-agent", middleware=[content_filter])
 
     result = await agent.run("What is my password?")
-    # When MiddlewareTermination(result=str) fires, AgentResponse.text holds the string
-    print(result.text)
+    print(result.text)   # "Request blocked: contains 'password'."
 
 
 asyncio.run(main())
@@ -1672,7 +1680,7 @@ asyncio.run(main())
 | 6 | `SecretString` + `load_settings` | `_settings` | `SecretString.__repr__` masks; `load_settings` resolution: overrides → .env → env vars → defaults; `required_fields` tuple = mutually exclusive (exactly-one) constraint |
 | 7 | `FunctionInvocationConfiguration` | `_tools` | Lives on `client.function_invocation_configuration`; `max_function_calls` is per-request best-effort; `enabled=False` disables the loop; per-call tool injection uses `agent.run(tools=[...])` |
 | 8 | `FileHistoryProvider` + `HistoryProvider` | `_sessions` | JSONL per session; pass via `context_providers=[...]`; custom provider = implement `get_messages`/`save_messages` with `(session_id, *, state, **kwargs)` |
-| 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; `MiddlewareTermination(result=value)` short-circuits without calling the model (`result` is keyword-only) |
+| 9 | `AgentMiddleware` + `@agent_middleware` | `_middleware` | Intercepts full `agent.run()` call; set `ctx.result` then raise `MiddlewareTermination()` to short-circuit; `exc.result` is not read by the agent pipeline |
 | 10 | `SkillsProvider` + `SkillsSource` | `_skills` | `from_paths()` discovers SKILL.md files; `DeduplicatingSkillsSource` = first-one-wins; custom ABC = implement `get_skills(self)` (no arguments) |
 
 ## Revision history
