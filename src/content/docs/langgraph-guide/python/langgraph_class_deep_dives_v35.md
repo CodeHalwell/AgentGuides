@@ -23,7 +23,7 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 - `EncryptedSerializer.__init__(cipher, serde=JsonPlusSerializer())` — composable: any `CipherProtocol` × any `SerializerProtocol`.
 - `dumps_typed(obj)` → `(f"{typ}+{ciphername}", ciphertext)` — encrypts after the inner serde serialises; the ciphername is returned by `cipher.encrypt()`.
 - `loads_typed((enc_type, ciphertext))` — splits on the first `+`; if absent, falls through to inner serde for backward-compat reads of unencrypted checkpoints.
-- `EncryptedSerializer.from_pycryptodome_aes(serde, **kwargs)` — classmethod factory; reads `LANGGRAPH_AES_KEY` env var (a plain string; `.encode()` must yield 16/24/32 bytes) or accepts an explicit `key=<bytes>` kwarg. Defaults mode to `AES.MODE_EAX` (authenticated encryption — nonce + tag + ciphertext layout).
+- `EncryptedSerializer.from_pycryptodome_aes(serde=JsonPlusSerializer(), **kwargs)` — classmethod factory; `serde` is optional (defaults to `JsonPlusSerializer()`). Reads `LANGGRAPH_AES_KEY` env var (a plain string; `.encode()` must yield 16/24/32 bytes) or accepts an explicit `key=<bytes>` kwarg. Defaults mode to `AES.MODE_EAX` (authenticated encryption — nonce + tag + ciphertext layout).
 - `CipherProtocol` — `Protocol` with `encrypt(plaintext) -> (cipher_name, ciphertext)` and `decrypt(cipher_name, ciphertext) -> plaintext`. Implement this to plug in any cipher (Fernet, ChaCha20, AWS KMS, etc.).
 - `SerializerProtocol` — `runtime_checkable Protocol` with `dumps_typed(obj) -> (str, bytes)` and `loads_typed((str, bytes)) -> Any`. The inner serde is replaceable (e.g. `MsgPackSerializer`).
 
@@ -41,7 +41,7 @@ serde = EncryptedSerializer.from_pycryptodome_aes(key=key)
 obj = {"messages": ["hello", "world"], "count": 42}
 typ, ciphertext = serde.dumps_typed(obj)
 
-print(f"type tag  : {typ!r}")        # 'dict+aes'
+print(f"type tag  : {typ!r}")        # 'msgpack+aes'
 print(f"encrypted : {ciphertext[:20]}...")  # raw bytes
 
 recovered = serde.loads_typed((typ, ciphertext))
@@ -74,7 +74,7 @@ key = Fernet.generate_key()
 serde = EncryptedSerializer(FernetCipher(key), JsonPlusSerializer())
 
 typ, ct = serde.dumps_typed([1, 2, 3])
-print(typ)                          # 'list+fernet'
+print(typ)                          # 'msgpack+fernet'
 print(serde.loads_typed((typ, ct))) # [1, 2, 3]
 ```
 
@@ -91,7 +91,7 @@ enc_serde = EncryptedSerializer.from_pycryptodome_aes(key=key)
 # A checkpoint written *before* encryption was added (plain jsonplus)
 plain_serde = JsonPlusSerializer()
 plain_typ, plain_bytes = plain_serde.dumps_typed({"legacy": True})
-print(f"plain type tag: {plain_typ!r}")   # 'dict' — no '+ciphername' suffix
+print(f"plain type tag: {plain_typ!r}")   # 'msgpack' — no '+ciphername' suffix
 
 # enc_serde.loads_typed falls through to inner serde when '+' is absent
 recovered = enc_serde.loads_typed((plain_typ, plain_bytes))
@@ -108,7 +108,7 @@ The serde event-hook system provides a thread-safe, multi-listener publish/subsc
 
 **Key source facts** (from `langgraph/checkpoint/serde/event_hooks.py`):
 
-- `SerdeEvent` — `TypedDict` with `kind: str`, `module: str`, `name: str`, and `method: NotRequired[str]`. `kind` is currently `"serde-allowlist"` when the serialiser encounters an unknown type.
+- `SerdeEvent` — `TypedDict` with `kind: str`, `module: str`, `name: str`, and `method: NotRequired[str]`. `JsonPlusSerializer` emits three kinds: `"msgpack_unregistered_allowed"` (type seen but not in allowlist — allowed by default, warned), `"msgpack_blocked"` (type blocked by strict mode), `"msgpack_method_blocked"` (method call blocked — adds `method` field).
 - `_listeners: list[SerdeEventListener]` — module-level list guarded by `_listeners_lock: threading.Lock`. Global scope means any listener registered in one thread is visible in all threads.
 - `register_serde_event_listener(listener)` → callable — appends to `_listeners` under the lock and returns an unregister closure. Calling the returned closure removes the listener (swallowing `ValueError` if already removed).
 - `emit_serde_event(event)` — takes a copy of the listener list under the lock (short critical section), then calls each listener with isolated failure handling: listener exceptions are logged as `WARNING` and never propagate.
@@ -133,13 +133,13 @@ unregister = register_serde_event_listener(audit_listener)
 
 # Simulate the serializer discovering a new type
 emit_serde_event({
-    "kind": "serde-allowlist",
+    "kind": "msgpack_unregistered_allowed",
     "module": "myapp.models",
     "name": "MyState",
 })
-# [serde] serde-allowlist → myapp.models.MyState
+# [serde] msgpack_unregistered_allowed → myapp.models.MyState
 
-print(log)  # [{'kind': 'serde-allowlist', 'module': 'myapp.models', 'name': 'MyState'}]
+print(log)  # [{'kind': 'msgpack_unregistered_allowed', 'module': 'myapp.models', 'name': 'MyState'}]
 
 # Cleanup
 unregister()
@@ -165,7 +165,7 @@ unreg_good = register_serde_event_listener(good_listener)
 unreg_bad  = register_serde_event_listener(bad_listener)
 
 # bad_listener raises but emit_serde_event swallows and logs it
-emit_serde_event({"kind": "serde-allowlist", "module": "m", "name": "T"})
+emit_serde_event({"kind": "msgpack_unregistered_allowed", "module": "m", "name": "T"})
 
 print(results)   # ['good: T']  — good_listener still ran
 # No exception raised
@@ -191,7 +191,7 @@ class SerdeAllowlistMonitor:
         self._unregister = register_serde_event_listener(self._on_event)
 
     def _on_event(self, event: SerdeEvent) -> None:
-        if event.get("kind") == "serde-allowlist":
+        if event.get("kind") == "msgpack_unregistered_allowed":
             key = (event["module"], event["name"])
             with self._lock:
                 if key not in self._seen:
@@ -203,11 +203,11 @@ class SerdeAllowlistMonitor:
 
 monitor = SerdeAllowlistMonitor()
 
-emit_serde_event({"kind": "serde-allowlist", "module": "app", "name": "Order"})
+emit_serde_event({"kind": "msgpack_unregistered_allowed", "module": "app", "name": "Order"})
 # New type allowed: ('app', 'Order')
-emit_serde_event({"kind": "serde-allowlist", "module": "app", "name": "Order"})
+emit_serde_event({"kind": "msgpack_unregistered_allowed", "module": "app", "name": "Order"})
 # (silent — already seen)
-emit_serde_event({"kind": "serde-allowlist", "module": "app", "name": "Customer"})
+emit_serde_event({"kind": "msgpack_unregistered_allowed", "module": "app", "name": "Customer"})
 # New type allowed: ('app', 'Customer')
 
 monitor.close()
@@ -478,8 +478,8 @@ from langgraph.pregel._remote_run_stream import _RemoteGraphRunStream
 
 def handle_remote_run(sync_client, thread_id: str, input_payload: dict) -> dict:
     """Drive a remote run, aborting on first interrupt."""
-    sdk_thread = sync_client.runs.stream(
-        thread_id, assistant_id="my-graph"
+    sdk_thread = sync_client.threads.stream(
+        thread_id=thread_id, assistant_id="my-graph"
     )
     stream = _RemoteGraphRunStream(
         sync_client=sync_client,
