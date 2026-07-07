@@ -551,7 +551,6 @@ from langgraph.channels.untracked_value import UntrackedValue
 
 # guard=True (default): one writer per step
 strict_ch: UntrackedValue[int] = UntrackedValue(int, guard=True)
-strict_ch = strict_ch.from_checkpoint(None)  # from_checkpoint returns a new instance
 strict_ch.update([42])           # OK
 
 try:
@@ -581,8 +580,9 @@ print(ch.get())          # 'secret-api-key'
 ckpt = ch.checkpoint()
 print(ckpt is MISSING)   # True
 
-# from_checkpoint ignores the persisted value and resets to empty
-restored = ch.from_checkpoint("anything")
+# from_checkpoint ignores the persisted value and resets to empty.
+# Pregel always passes MISSING here (since checkpoint() returns MISSING).
+restored = ch.from_checkpoint(MISSING)
 print(restored.is_available())  # False — fresh empty state
 ```
 
