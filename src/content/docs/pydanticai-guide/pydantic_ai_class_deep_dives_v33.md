@@ -501,7 +501,7 @@ Approve only tools whose names suggest destructive operations.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
-from pydantic_ai.tools import RunContext, ToolDefinition
+from pydantic_ai.tools import DeferredToolRequests, RunContext, ToolDefinition
 
 DESTRUCTIVE = frozenset({'delete_record', 'send_email', 'execute_query'})
 
@@ -517,12 +517,22 @@ async def get_record(ctx: RunContext[None], record_id: str) -> str:
 base = FunctionToolset([delete_record, get_record])
 selective = ApprovalRequiredToolset(wrapped=base, approval_required_func=needs_approval)
 
-agent = Agent('openai:gpt-4.1', toolsets=[selective])
+# output_type must include DeferredToolRequests so that when delete_record is
+# called the run ends with a DeferredToolRequests value (not an error), which
+# the caller can then inspect, approve, and resume (see section 4.1 pattern).
+agent = Agent('openai:gpt-4.1', toolsets=[selective], output_type=[str, DeferredToolRequests])
 
 async def main() -> None:
-    # get_record runs freely; delete_record raises ApprovalRequired
+    # get_record runs freely; delete_record ends the run with DeferredToolRequests
     result = await agent.run('Fetch record R-42')
-    print(result.output)
+    if isinstance(result.output, DeferredToolRequests):
+        pending = result.output
+        resume = pending.build_results(approve_all=True)
+        final = await agent.run('Continue', message_history=result.all_messages(),
+                                deferred_tool_results=resume)
+        print(final.output)
+    else:
+        print(result.output)
 
 asyncio.run(main())
 ```
