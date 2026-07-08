@@ -104,10 +104,11 @@ agent = ManagedAgent(
 
 ```python
 from google.genai import Client
-from google.adk.agents._managed_agent import ManagedAgent, _MANAGED_AGENT_LOCATION
+from google.adk.agents._managed_agent import ManagedAgent
 
-# Build a client targeting global explicitly (any other location is rejected).
-api_client = Client(enterprise=True, location=_MANAGED_AGENT_LOCATION)
+# Build a client targeting "global" explicitly (any other location is rejected
+# by ManagedAgent._validate_client_location at construction time).
+api_client = Client(enterprise=True, location="global")
 
 agent = ManagedAgent(
     name="managed_with_client",
@@ -167,12 +168,14 @@ asyncio.run(main())
 ```python
 from google.adk.integrations.daytona import DaytonaEnvironment
 
+import os
+
 env = DaytonaEnvironment(
     image="python:3.11-slim",           # Daytona template name or snapshot ID
     timeout=600,
-    api_key="DAYTONA_API_KEY",          # explicit key; otherwise uses env var
-    api_url="https://app.daytona.io",   # default cloud API
-    env_vars={"DEBUG": "1", "MY_TOKEN": "secret"},
+    api_key=os.environ["DAYTONA_API_KEY"],   # read from environment, never hardcode
+    api_url="https://app.daytona.io",        # default cloud API
+    env_vars={"DEBUG": "1", "MY_TOKEN": os.environ.get("MY_TOKEN", "")},
 )
 ```
 
