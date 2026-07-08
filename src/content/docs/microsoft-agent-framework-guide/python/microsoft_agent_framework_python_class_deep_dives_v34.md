@@ -48,6 +48,7 @@ API can reuse cached tokens when regenerating similar content.
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatCompletionClient
 
 async def main() -> None:
@@ -56,7 +57,7 @@ async def main() -> None:
         api_key="sk-...",           # or set OPENAI_API_KEY env var
     )
     response = await client.get_response(
-        messages=[{"role": "user", "content": "Name the planets in order."}],
+        messages=[Message("user", ["Name the planets in order."])],
         options={
             "logprobs": True,
             "top_logprobs": 3,
@@ -73,6 +74,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatCompletionClient
 
 ORIGINAL = "def greet(name):\n    print('Hello, ' + name)"
@@ -85,9 +87,7 @@ async def main() -> None:
         "content": "def greet(name: str) -> None:\n    print('Hello, ' + name)",
     }
     response = await client.get_response(
-        messages=[
-            {"role": "user", "content": f"Add a type annotation to:\n{ORIGINAL}"},
-        ],
+        messages=[Message("user", [f"Add a type annotation to:\n{ORIGINAL}"])],
         options={"prediction": prediction},
     )
     print(response.text)
@@ -99,6 +99,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatCompletionClient
 
 async def main() -> None:
@@ -109,13 +110,13 @@ async def main() -> None:
         api_version="2024-12-01-preview",
     )
     response = await client.get_response(
-        messages=[{"role": "user", "content": "What happened in AI news today?"}],
+        messages=[Message("user", ["What happened in AI news today?"])],
         options={"web_search_options": {"search_context_size": "medium"}},
     )
     print(response.text)
-    if response.usage:
+    if response.usage_details:
         # Non-streaming responses include usage directly — no stream_options needed
-        print(f"Tokens: {response.usage.total_tokens}")
+        print(f"Tokens: {response.usage_details.get('total_token_count')}")
 
 asyncio.run(main())
 ```
@@ -154,12 +155,13 @@ clients poll for its completion using the stored response ID.
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     client = OpenAIChatClient(model="o3")
     response = await client.get_response(
-        messages=[{"role": "user", "content": "Prove the Pythagorean theorem."}],
+        messages=[Message("user", ["Prove the Pythagorean theorem."])],
         options={
             "reasoning": {"effort": "high", "summary": "detailed"},
         },
@@ -173,21 +175,21 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import ResponseStream
+from agent_framework import Message, ResponseStream
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4.1")
     stream: ResponseStream = client.get_response(
-        messages=[{"role": "user", "content": "Write a haiku about the ocean."}],
+        messages=[Message("user", ["Write a haiku about the ocean."])],
         options={"stream_options": {"include_usage": True}},
         stream=True,
     )
     async for update in stream:
         print(update.text or "", end="", flush=True)
     response = await stream.get_final_response()
-    if response.usage:
-        print(f"\nTotal tokens: {response.usage.total_tokens}")
+    if response.usage_details:
+        print(f"\nTotal tokens: {response.usage_details.get('total_token_count')}")
 
 asyncio.run(main())
 ```
@@ -196,13 +198,14 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient, OpenAIContinuationToken
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4.1")
     # First call: start the response; "store" persists it server-side for later polling
     response = await client.get_response(
-        messages=[{"role": "user", "content": "Summarize the history of computing."}],
+        messages=[Message("user", ["Summarize the history of computing."])],
         options={"background": True, "store": True},
     )
     # OpenAIContinuationToken is a TypedDict — at runtime it is a plain dict.
@@ -256,6 +259,7 @@ class OpenAIContentFilterException(ChatClientContentFilterException):
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterException, ContentFilterResultSeverity
 
 async def main() -> None:
@@ -266,7 +270,7 @@ async def main() -> None:
     )
     try:
         await client.get_response(
-            messages=[{"role": "user", "content": "Generate detailed instructions for a dangerous activity."}],
+            messages=[Message("user", ["Generate detailed instructions for a dangerous activity."])],
         )
     except OpenAIContentFilterException as exc:
         print(f"Content filter triggered: {exc.content_filter_code.value}")
@@ -309,6 +313,7 @@ asyncio.run(main())
 
 ```python
 import asyncio, logging
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterException, ContentFilterResultSeverity
 
 logger = logging.getLogger("content_filter_audit")
@@ -317,7 +322,7 @@ async def run_with_audit(prompt: str) -> str | None:
     client = OpenAIChatClient(model="gpt-4o")
     try:
         r = await client.get_response(
-            messages=[{"role": "user", "content": prompt}],
+            messages=[Message("user", [prompt])],
         )
         return r.text
     except OpenAIContentFilterException as exc:
