@@ -23,7 +23,7 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 - `BinaryOperatorAggregate(typ, operator)` — `typ` is the value type; special-cased for `Sequence`/`Set`/`Mapping` ABC aliases to their concrete counterparts.
 - `update(values)` — applies `operator(current, v)` for each `v` in `values`; but if any value is an `Overwrite` (or the sentinel dict forms `{"__overwrite__": v}` / `{"value": …, "type": "__overwrite__"}` for JSON round-trips), it force-sets `self.value` and sets `seen_overwrite = True`. A second `Overwrite` in the same step raises `InvalidUpdateError`.
 - `checkpoint() / from_checkpoint()` — standard channel serde; restores to `MISSING` when absent, triggering `EmptyChannelError` on `get()`.
-- `_operators_equal(a, b)` — treats any lambda as equal to anything (lambda `__name__` is always `"<lambda>"`), so channel equality is stable under `== ` checks.
+- `_operators_equal(a, b)` — treats any lambda as equal to anything (lambda `__name__` is always `"<lambda>"`), so channel equality is stable under `==` checks.
 - `Overwrite(value)` dataclass from `langgraph.types` — `@dataclass(slots=True)` with a single `value` field.
 
 ### Example 1 — running total with `operator.add`
@@ -33,7 +33,6 @@ import operator
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
 
 class State(TypedDict):
     total: Annotated[int, operator.add]  # BinaryOperatorAggregate under the hood
@@ -199,7 +198,7 @@ from typing import Annotated, Sequence
 from typing_extensions import TypedDict
 from langgraph.channels.topic import Topic
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 # accumulate=True keeps values across supersteps
 class State(TypedDict):
@@ -218,7 +217,7 @@ builder.add_edge(START, "s1")
 builder.add_edge("s1", "s2")
 builder.add_edge("s2", END)
 
-graph = builder.compile(checkpointer=MemorySaver())
+graph = builder.compile(checkpointer=InMemorySaver())
 config = {"configurable": {"thread_id": "audit-1"}}
 result = graph.invoke({"audit": []}, config=config)
 print(result["audit"])  # ['step1', 'step2'] — both entries preserved
@@ -274,7 +273,6 @@ import asyncio
 from datetime import timedelta
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import TimeoutPolicy
-from langgraph.config import get_config
 from langgraph.runtime import get_runtime
 
 async def slow_llm_node(state: dict) -> dict:
@@ -353,28 +351,20 @@ graph.invoke({"query": "langgraph channels"})  # cache hit — no print
 ### Example 1 — `ChannelWriteEntry` with `skip_none` and `mapper`
 
 ```python
-from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry, SKIP_WRITE
-from langchain_core.runnables import RunnableConfig
+from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry, SKIP_WRITE, _assemble_writes
 
-def upper(v: str | None) -> str | None:
+def upper_or_skip(v: str) -> str | object:
+    """Return the upper-cased string, or SKIP_WRITE to suppress the channel write."""
     return v.upper() if v else SKIP_WRITE
 
-# Write 'result' channel only when value is non-None, and upper-case it
-write = ChannelWrite([
-    ChannelWriteEntry("result", skip_none=True, mapper=upper),
-])
+# _assemble_writes is the internal helper that applies mappers and respects SKIP_WRITE
+entries_hello = [ChannelWriteEntry("result", "hello", skip_none=False, mapper=upper_or_skip)]
+entries_empty = [ChannelWriteEntry("result", "", skip_none=False, mapper=upper_or_skip)]
+entries_none  = [ChannelWriteEntry("result", None,  skip_none=True,  mapper=None)]
 
-# Simulate what the Pregel executor does: call do_write with resolved values
-# (In production this happens inside the node pipeline automatically)
-def demo_write(value: str | None, config: RunnableConfig) -> None:
-    writes = [
-        ChannelWriteEntry("result", value, skip_none=True, mapper=upper)
-    ]
-    # Would call config[CONF][CONFIG_KEY_SEND] internally
-    print(f"Would write: {[w for w in writes if not (w.skip_none and w.value is None)]}")
-
-demo_write("hello", {})   # Would write: [ChannelWriteEntry(channel='result', ...)]
-demo_write(None, {})       # Skipped due to skip_none=True
+print(_assemble_writes(entries_hello))  # [('result', 'HELLO')]  — mapper applied
+print(_assemble_writes(entries_empty))  # []                     — SKIP_WRITE suppresses
+print(_assemble_writes(entries_none))   # []                     — skip_none=True suppresses
 ```
 
 ### Example 2 — marking a custom callable as a channel writer
@@ -486,7 +476,7 @@ for part in graph.stream(
 ```python
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import StateUpdate
 
 class State(TypedDict):
@@ -501,7 +491,7 @@ builder.add_node("process", process)
 builder.add_edge(START, "process")
 builder.add_edge("process", END)
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 config = {"configurable": {"thread_id": "bulk-1"}}
 
@@ -628,7 +618,7 @@ print([m.content for m in wiped])  # ['Fresh start']
 from typing import Any
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import MessagesState
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import AIMessage, HumanMessage
 
 def chatbot(state: MessagesState) -> dict:
@@ -640,7 +630,7 @@ builder.add_node("chatbot", chatbot)
 builder.add_edge(START, "chatbot")
 builder.add_edge("chatbot", END)
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 config = {"configurable": {"thread_id": "chat-1"}}
 
@@ -948,22 +938,52 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 2 — concurrent async store operations via the queue
+### Example 2 — concurrent async store operations via the background queue
+
+`InMemoryStore` inherits from `BaseStore` (not `AsyncBatchedBaseStore`), so it doesn't
+use the queue pattern. Use `SimpleAsyncStore` from Example 1 to observe the batching.
 
 ```python
 import asyncio
-from langgraph.store.memory import InMemoryStore
+from langgraph.store.base.batch import AsyncBatchedBaseStore
+from langgraph.store.base import GetOp, PutOp, Op, Result, Item
+from datetime import datetime, timezone
+
+class SimpleAsyncStore(AsyncBatchedBaseStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self._data: dict[tuple, dict[str, Item]] = {}
+
+    async def abatch(self, ops: list[Op]) -> list[Result]:
+        results = []
+        for op in ops:
+            if isinstance(op, PutOp):
+                ns = self._data.setdefault(op.namespace, {})
+                if op.value is None:
+                    ns.pop(op.key, None)
+                else:
+                    ns[op.key] = Item(
+                        value=op.value, key=op.key, namespace=op.namespace,
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                results.append(None)
+            elif isinstance(op, GetOp):
+                results.append(self._data.get(op.namespace, {}).get(op.key))
+            else:
+                results.append(None)
+        return results
 
 async def main():
-    store = InMemoryStore()
+    store = SimpleAsyncStore()
 
-    # Fire many concurrent puts — AsyncBatchedBaseStore serialises them safely
+    # Fire many concurrent puts — all serialised through the background asyncio.Queue
     await asyncio.gather(*[
         store.aput(("docs",), f"doc{i}", {"content": f"Document {i}"})
         for i in range(10)
     ])
 
-    # Concurrent gets
+    # Concurrent gets — each enqueues a GetOp; abatch() resolves them together
     items = await asyncio.gather(*[
         store.aget(("docs",), f"doc{i}")
         for i in range(10)
@@ -1051,7 +1071,7 @@ import asyncio
 import httpx
 from langgraph.func import entrypoint, task
 from langgraph.types import RetryPolicy
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 retry = RetryPolicy(max_attempts=3, initial_interval=0.5, retry_on=httpx.NetworkError)
 
@@ -1061,7 +1081,7 @@ async def fetch(url: str) -> str:
         r = await client.get(url, timeout=10.0)
     return r.text[:100]
 
-@entrypoint(checkpointer=MemorySaver())
+@entrypoint(checkpointer=InMemorySaver())
 async def pipeline(urls: list[str]) -> list[str]:
     # call() schedules each fetch as an independent tracked task
     futures = [fetch(url) for url in urls]
@@ -1141,5 +1161,6 @@ builder.add_edge("node", END)
 
 graph = builder.compile()
 graph.invoke({"result": ""})
-# Step 1 of 25 (remaining: 24)
+# Example output (step/stop values depend on graph depth and recursion limit):
+# Step 0 of 25 (remaining: 25)
 ```
