@@ -63,6 +63,7 @@ import asyncio
 from google.adk.agents._managed_agent import ManagedAgent
 from google.adk.tools import google_search
 from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 agent = ManagedAgent(
     name="managed_search",
@@ -71,12 +72,14 @@ agent = ManagedAgent(
 )
 
 async def main():
-    runner = InMemoryRunner(agent=agent)
+    runner = InMemoryRunner(agent=agent, app_name="demo")
     session = await runner.session_service.create_session(
-        app_name="demo", user_id="u1"
+        app_name=runner.app_name, user_id="u1"
     )
     async for event in runner.run_async(
-        user_id="u1", session_id=session.id, new_message="What is ADK?"
+        user_id="u1",
+        session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="What is ADK?")]),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -187,6 +190,7 @@ from google.adk.integrations.daytona import DaytonaEnvironment
 from google.adk.tools.environment_toolset import EnvironmentToolset
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 async def main():
     env = DaytonaEnvironment()
@@ -201,14 +205,17 @@ async def main():
         tools=[toolset],
     )
 
-    runner = InMemoryRunner(agent=agent)
+    runner = InMemoryRunner(agent=agent, app_name="coder_app")
     session = await runner.session_service.create_session(
-        app_name="coder_app", user_id="u1"
+        app_name=runner.app_name, user_id="u1"
     )
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="Write a Python script that prints the Fibonacci sequence up to 100.",
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part(text="Write a Python script that prints the Fibonacci sequence up to 100.")],
+        ),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -275,7 +282,7 @@ agent = LlmAgent(
     model="gemini-2.5-flash",
     instruction="Use load_profiles to fetch user preferences before responding.",
     tools=[load_profiles_tool],
-    memory_service=memory_service,
+    # memory_service is not an LlmAgent field; supply it at the runner/app layer.
 )
 ```
 
@@ -321,7 +328,7 @@ agent = LlmAgent(
         PreloadMemoryTool(),
         VertexAiLoadProfilesTool(memory_service=memory_service),
     ],
-    memory_service=memory_service,
+    # memory_service is not an LlmAgent field; supply it at the runner/app layer.
 )
 ```
 
@@ -770,8 +777,8 @@ async def _after_agent(
                 if genai_part:
                     a2a_part = convert_genai_part_to_a2a_part(genai_part)
                     new_event = TaskArtifactUpdateEvent(
-                        taskId=a2a_event.taskId,
-                        contextId=a2a_event.contextId,
+                        task_id=a2a_event.task_id,
+                        context_id=a2a_event.context_id,
                         artifact=Artifact(
                             artifactId=f"{filename}_{version}",
                             name=filename,
@@ -827,7 +834,7 @@ async def test_artifact_injection():
     runner.artifact_service = artifact_service
     ctx = MagicMock(app_name="app", user_id="u1", session_id="s1", runner=runner)
 
-    a2a_event = TaskStatusUpdateEvent(taskId="t1", contextId="c1", status=MagicMock(), final=False)
+    a2a_event = TaskStatusUpdateEvent(task_id="t1", context_id="c1", status=MagicMock(), final=False)
     adk_event = MagicMock()
     adk_event.actions.artifact_delta = {"report.pdf": 0}
 
@@ -851,7 +858,7 @@ from a2a.types import TaskStatusUpdateEvent
 
 async def test_no_op_when_no_delta():
     ctx = MagicMock(runner=MagicMock(artifact_service=AsyncMock()))
-    a2a_event = TaskStatusUpdateEvent(taskId="t1", contextId="c1", status=MagicMock(), final=False)
+    a2a_event = TaskStatusUpdateEvent(task_id="t1", context_id="c1", status=MagicMock(), final=False)
     adk_event = MagicMock()
     adk_event.actions.artifact_delta = {}    # empty → no processing
 
