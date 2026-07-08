@@ -778,7 +778,7 @@ print(get_text_at_path(doc, tokens))  # ['graphs', 'python']
 - `put(namespace, key, value, index=None)` — stores `Item(namespace, key, value, …)`; if index config is present and `index` arg is not `False`, computes embeddings for the fields specified by `index` (or the store's `index_config["fields"]`) and stores in `_vectors`.
 - `search(namespace_prefix, *, query=None, filter=None, limit=10, offset=0)` — with `query`, computes cosine similarity against `_vectors`; without, returns items sorted by `updated_at` descending. `filter` is a dict of exact-match conditions on the `value` dict.
 - `list_namespaces(*, prefix=None, suffix=None, max_depth=None, limit=100, offset=0)` — returns all distinct namespace tuples matching the given prefix/suffix constraints.
-- Async variants (`aget`, `aput`, `asearch`, `adelete`, `alist_namespaces`) delegate to the sync implementations via `asyncio.get_event_loop().run_in_executor`.
+- `abatch(ops)` is a native async implementation: it calls `await self._aembed_search_queries()` (which uses `asyncio.gather` over `aembed_query` coroutines) and `await self.embeddings.aembed_documents()`. The sync `batch()` path uses a `ThreadPoolExecutor` to run query embeddings concurrently. Public async helpers (`aget`, `aput`, `asearch`, etc.) are inherited from `BaseStore` and route through `abatch()`.
 
 ### Example 1 — basic namespace-keyed key-value storage
 
