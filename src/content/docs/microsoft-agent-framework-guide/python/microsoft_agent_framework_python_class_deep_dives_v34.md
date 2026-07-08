@@ -13,7 +13,8 @@ Source-verified against `agent-framework==1.10.0` · Python 3.10 – 3.13 · Jul
 
 Ten class groups with three runnable examples each (30 total). Every constructor
 signature, constant value, and method name was read directly from the installed
-package at `/root/.local/lib/python3.11/site-packages/`.
+`agent-framework==1.10.0` packages (`agent_framework`, `agent_framework_openai`,
+`agent_framework_durabletask`, `agent_framework_devui`, `agent_framework_azurefunctions`).
 
 ---
 
@@ -103,7 +104,7 @@ from agent_framework.openai import OpenAIChatCompletionClient
 async def main() -> None:
     client = OpenAIChatCompletionClient(
         model="gpt-4o",
-        base_url="https://my-resource.openai.azure.com/",
+        azure_endpoint="https://my-resource.openai.azure.com/",
         api_key="my-azure-key",
         api_version="2024-12-01-preview",
     )
@@ -177,9 +178,10 @@ from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4.1")
-    stream: ResponseStream = await client.get_streaming_response(
+    stream: ResponseStream = client.get_response(
         messages=[{"role": "user", "content": "Write a haiku about the ocean."}],
         options={"stream_options": {"include_usage": True}},
+        stream=True,
     )
     async for update in stream:
         print(update.text, end="", flush=True)
@@ -209,10 +211,12 @@ async def main() -> None:
     token = response.continuation_token
     if isinstance(token, OpenAIContinuationToken):
         print(f"Response ID for polling: {token.response_id}")
-        # Poll later using the same client + token:
+        # Poll later using the same client + token — pass the full token dict
+        # under the "continuation_token" key; the client checks that key and
+        # retrieves token["response_id"] to resume the background response.
         final = await client.get_response(
             messages=[],
-            options={"previous_response_id": token.response_id},
+            options={"continuation_token": token},
         )
         print(final.text)
 
@@ -258,7 +262,7 @@ from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterExceptio
 async def main() -> None:
     client = OpenAIChatClient(
         model="gpt-4o",
-        base_url="https://my-resource.openai.azure.com/",
+        azure_endpoint="https://my-resource.openai.azure.com/",
         api_key="my-azure-key",
     )
     try:
@@ -535,8 +539,8 @@ async def main() -> None:
             # Human approves — send the response
             wf_client.send_hitl_response(
                 instance_id,
-                request_id=request_id,
-                response_value={"approved": True, "approver": "finance_team"},
+                request_id,
+                response={"approved": True, "approver": "finance_team"},
             )
             break
 
@@ -907,27 +911,29 @@ print("Retrieved successfully ✓")
 **Example 2 — Adding and listing conversation items**
 
 ```python
+import asyncio
 from agent_framework_devui._conversations import InMemoryConversationStore
 
-store = InMemoryConversationStore()
-conv = store.create_conversation()
+async def main() -> None:
+    store = InMemoryConversationStore()
+    conv = store.create_conversation()
 
-# Add a user message item
-item = store.add_item(
-    conversation_id=conv.id,
-    role="user",
-    content=[{"type": "text", "text": "What is the capital of France?"}],
-)
-print(f"Added item: {item.id}")
+    # add_items takes a list of OpenAI-style message dicts and is async
+    added = await store.add_items(
+        conv.id,
+        [{"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}],
+    )
+    print(f"Added {len(added)} item(s); first id: {added[0].id}")
 
-# Retrieve all items
-items = store.get_items(conv.id)
-print(f"Items in conversation: {len(items)}")
+    # list_items returns (items, has_more)
+    items, has_more = await store.list_items(conv.id)
+    print(f"Items in conversation: {len(items)}, has_more={has_more}")
 
-# Delete a single item
-store.delete_item(conv.id, item.id)
-items_after = store.get_items(conv.id)
-print(f"After delete: {len(items_after)} items")
+    # Retrieve a specific item by id
+    item = await store.get_item(conv.id, added[0].id)
+    print(f"Retrieved item role: {item.role if item else 'not found'}")
+
+asyncio.run(main())
 ```
 
 **Example 3 — Checkpoint-backed conversation for workflow resumption**
