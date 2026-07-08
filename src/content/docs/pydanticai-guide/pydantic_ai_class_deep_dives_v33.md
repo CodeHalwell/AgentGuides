@@ -225,7 +225,7 @@ asyncio.run(main())
 
 ### 2.2 Context-Aware Redaction with `RunContext`
 
-Use the four-argument form `(ctx, messages) -> messages` to redact PII based on the caller's permissions.
+Use the two-argument form `(ctx, messages) -> messages` to redact PII based on the caller's permissions.
 
 ```python {test="skip"}
 import asyncio
@@ -235,7 +235,7 @@ from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, TextPart
 from pydantic_ai.tools import RunContext
 
-EMAIL_RE = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+EMAIL_RE = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')
 
 def redact_if_needed(
     ctx: RunContext[dict], messages: list[ModelMessage]
@@ -1180,15 +1180,14 @@ class ReducerContext(Generic[StateT, DepsT]):
         self._join_state.cancelled_sibling_tasks = True
 ```
 
-### 10.1 Simple Type-Based Routing with `Decision`
+### 10.1 Simple Type-Based Routing via `isinstance`
 
-Build a minimal graph that routes `str` vs `int` inputs to different processing branches.
+Build a minimal graph that routes `str` vs `int` inputs to different processing branches using `isinstance` dispatch inside a node's `run` method — the same pattern that `Decision` formalises at the type level.
 
 ```python {test="skip"}
 import asyncio
 from dataclasses import dataclass
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
-from pydantic_graph.decision import Decision, DecisionBranch
 from pydantic_graph.id_types import NodeID
 
 @dataclass
