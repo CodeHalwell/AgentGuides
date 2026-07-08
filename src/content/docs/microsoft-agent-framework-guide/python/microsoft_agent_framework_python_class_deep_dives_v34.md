@@ -17,7 +17,7 @@ package at `/root/.local/lib/python3.11/site-packages/`.
 
 ---
 
-## 1. `OpenAIChatCompletionOptions` + `PredictionTextContent` + `Prediction` + `RawOpenAIChatCompletionClient` + `OpenAIChatCompletionClient`
+## 1 · `OpenAIChatCompletionOptions` + `PredictionTextContent` + `Prediction` + `RawOpenAIChatCompletionClient` + `OpenAIChatCompletionClient`
 
 **Module:** `agent_framework_openai._chat_completion_client`  
 **Import:** `from agent_framework.openai import OpenAIChatCompletionClient`
@@ -123,7 +123,7 @@ asyncio.run(main())
 
 ---
 
-## 2. `ReasoningOptions` + `StreamOptions` + `OpenAIContinuationToken`
+## 2 · `ReasoningOptions` + `StreamOptions` + `OpenAIContinuationToken`
 
 **Module:** `agent_framework_openai._chat_client`  
 **Import:** `from agent_framework.openai import OpenAIChatClient`
@@ -221,7 +221,7 @@ asyncio.run(main())
 
 ---
 
-## 3. `OpenAIContentFilterException` + `ContentFilterResult` + `ContentFilterResultSeverity` + `ContentFilterCodes`
+## 3 · `OpenAIContentFilterException` + `ContentFilterResult` + `ContentFilterResultSeverity` + `ContentFilterCodes`
 
 **Module:** `agent_framework_openai._exceptions`  
 **Import:** `from agent_framework.openai import OpenAIContentFilterException`
@@ -253,8 +253,7 @@ class OpenAIContentFilterException(ChatClientContentFilterException):
 
 ```python
 import asyncio
-from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterException
-from agent_framework_openai._exceptions import ContentFilterResultSeverity
+from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterException, ContentFilterResultSeverity
 
 async def main() -> None:
     client = OpenAIChatClient(
@@ -307,8 +306,7 @@ asyncio.run(main())
 
 ```python
 import asyncio, logging
-from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterException
-from agent_framework_openai._exceptions import ContentFilterResultSeverity
+from agent_framework.openai import OpenAIChatClient, OpenAIContentFilterException, ContentFilterResultSeverity
 
 logger = logging.getLogger("content_filter_audit")
 
@@ -333,7 +331,7 @@ asyncio.run(run_with_audit("Explain SQL injection."))
 
 ---
 
-## 4. `WorkflowOrchestrationContext`
+## 4 · `WorkflowOrchestrationContext`
 
 **Module:** `agent_framework_durabletask._workflows.context`  
 **Import:** `from agent_framework_durabletask._workflows.context import WorkflowOrchestrationContext`
@@ -358,6 +356,7 @@ Key properties and methods:
 **Example 1 — Checking replay safety before logging**
 
 ```python
+import json
 # Inside a durable orchestration function registered with DurableAIAgentWorker
 from agent_framework_durabletask._workflows.context import WorkflowOrchestrationContext
 
@@ -373,7 +372,7 @@ def my_orchestrator(ctx: WorkflowOrchestrationContext):
         orchestration_instance_id=ctx.instance_id,
     )
     result = yield task
-    yield ctx.prepare_activity_task("save_result", '{"text": "' + str(result) + '"}')
+    yield ctx.prepare_activity_task("save_result", json.dumps({"text": str(result)}))
 ```
 
 **Example 2 — Conditional event streaming based on host capability**
@@ -440,7 +439,7 @@ assert isinstance(InMemoryOrchestrationContext(), WorkflowOrchestrationContext)
 
 ---
 
-## 5. `DurableWorkflowClient`
+## 5 · `DurableWorkflowClient`
 
 **Module:** `agent_framework_durabletask._workflows.client`  
 **Import:** `from agent_framework.azure import DurableWorkflowClient`
@@ -549,7 +548,7 @@ asyncio.run(main())
 
 ---
 
-## 6. `WorkflowRegistrationPlan` + `plan_workflow_registration`
+## 6 · `WorkflowRegistrationPlan` + `plan_workflow_registration`
 
 **Module:** `agent_framework_durabletask._workflows.registration`  
 **Import:** `from agent_framework_durabletask._workflows.registration import WorkflowRegistrationPlan, plan_workflow_registration`
@@ -654,7 +653,7 @@ print("Plans are deterministic ✓")
 
 ---
 
-## 7. `TaskType` + `TaskMetadata` + `PendingHITLRequest` + `ExecutorResult`
+## 7 · `TaskType` + `TaskMetadata` + `PendingHITLRequest` + `ExecutorResult`
 
 **Module:** `agent_framework_durabletask._workflows.orchestrator`  
 **Import:** `from agent_framework_durabletask._workflows.orchestrator import TaskType, TaskMetadata, PendingHITLRequest, ExecutorResult`
@@ -784,7 +783,7 @@ print(process_result(result))  # Done.
 
 ---
 
-## 8. `DurableTaskWorkflowContext`
+## 8 · `DurableTaskWorkflowContext`
 
 **Module:** `agent_framework_durabletask._workflows.dt_context`  
 **Import:** `from agent_framework_durabletask._workflows.dt_context import DurableTaskWorkflowContext`
@@ -867,7 +866,7 @@ def parallel_orchestrator(ctx: OrchestrationContext):
 
 ---
 
-## 9. `ConversationStore` + `InMemoryConversationStore` + `CheckpointConversationManager`
+## 9 · `ConversationStore` + `InMemoryConversationStore` + `CheckpointConversationManager`
 
 **Module:** `agent_framework_devui._conversations`  
 **Import:** `from agent_framework_devui._conversations import ConversationStore, InMemoryConversationStore, CheckpointConversationManager`
@@ -961,7 +960,7 @@ print("Checkpoint storage is per-conversation isolated ✓")
 
 ---
 
-## 10. `AgentTask` + `PreCompletedTask` + `AzureFunctionsAgentExecutor`
+## 10 · `AgentTask` + `PreCompletedTask` + `AzureFunctionsAgentExecutor`
 
 **Module:** `agent_framework_azurefunctions._orchestration`  
 **Import:** `from agent_framework_azurefunctions._orchestration import AgentTask, PreCompletedTask, AzureFunctionsAgentExecutor`
