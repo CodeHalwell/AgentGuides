@@ -879,7 +879,7 @@ The **DevUI** package exposes an OpenAI-compatible `/v1/conversations` REST surf
 three classes form its storage layer:
 
 - `ConversationStore` — ABC exposing `create_conversation`, `get_conversation`,
-  `add_item`, `get_items`, `delete_item`, `delete_conversation` in the shape of the
+  `add_items`, `list_items`, `get_item`, `delete_conversation` in the shape of the
   OpenAI Conversations API.
 - `InMemoryConversationStore` — thread-safe in-memory implementation.
   Each conversation maps to `messages: list[Message]`, `session: AgentSession`, and
