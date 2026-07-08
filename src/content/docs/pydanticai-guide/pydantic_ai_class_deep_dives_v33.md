@@ -600,15 +600,16 @@ click_element = ToolDefinition(
     },
 )
 
+from pydantic_ai.tools import DeferredToolRequests
+
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
     toolsets=[ExternalToolset([click_element])],
+    output_type=[str, DeferredToolRequests],  # run ends with DeferredToolRequests when tool is called
 )
 
 async def main() -> None:
-    from pydantic_ai.tools import DeferredToolRequests
-    # When the model calls click_element, the run ends with DeferredToolRequests output.
-    result = await agent.run('Click the submit button', output_type=[str, DeferredToolRequests])
+    result = await agent.run('Click the submit button')
     print(result.output)
 
 asyncio.run(main())
@@ -669,13 +670,11 @@ agent = Agent(
         ExternalToolset([confirm_action]),
         FunctionToolset([get_summary]),
     ],
+    output_type=[str, DeferredToolRequests],
 )
 
 async def main() -> None:
-    result = await agent.run(
-        'Summarise AI trends then confirm before proceeding',
-        output_type=[str, DeferredToolRequests],
-    )
+    result = await agent.run('Summarise AI trends then confirm before proceeding')
     if isinstance(result.output, DeferredToolRequests):
         print(f'Pending external confirmation: {[c.tool_name for c in result.output.calls]}')
     else:
