@@ -187,7 +187,7 @@ env = DaytonaEnvironment(
 ```python
 import asyncio
 from google.adk.integrations.daytona import DaytonaEnvironment
-from google.adk.tools.environment_toolset import EnvironmentToolset
+from google.adk.tools.environment import EnvironmentToolset
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
