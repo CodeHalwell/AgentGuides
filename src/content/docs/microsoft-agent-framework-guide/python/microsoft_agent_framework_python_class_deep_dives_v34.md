@@ -277,7 +277,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-**Example 2 — Wrapping a chat client with a safe retry fallback**
+**Example 2 — Wrapping a chat client with a safe fallback on filter exceptions**
 
 ```python
 import asyncio
@@ -329,7 +329,9 @@ async def run_with_audit(prompt: str) -> str | None:
                 )
         return None
 
-asyncio.run(run_with_audit("Explain SQL injection."))
+result = asyncio.run(run_with_audit("Explain SQL injection."))
+if result:
+    print(result)
 ```
 
 ---
