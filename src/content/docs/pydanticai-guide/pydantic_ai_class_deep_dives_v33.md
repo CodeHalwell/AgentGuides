@@ -54,7 +54,7 @@ class Hooks(AbstractCapability[AgentDepsT]):
     # to registered _HookEntry list for that point.
 ```
 
-Both sync and async hook functions are accepted; sync ones are wrapped transparently via `anyio.to_thread.run_sync`.
+Both sync and async hook functions are accepted. Sync hooks are called inline on the event loop (not offloaded to a thread), so any blocking I/O or heavy computation inside a sync hook will stall the agent. Use async hooks for anything that performs blocking work.
 
 ### 1.1 Logging and Timing Every Model Request
 
