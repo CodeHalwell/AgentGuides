@@ -514,11 +514,11 @@ asyncio.run(main())
 **Example 3 — HITL: detecting and responding to approval pauses**
 
 ```python
-import asyncio, json
+import time
 from durabletask.azuremanaged.client import DurableTaskSchedulerClient
 from agent_framework.azure import DurableWorkflowClient
 
-async def main() -> None:
+def main() -> None:
     base_client = DurableTaskSchedulerClient(
         host_address="my-scheduler.eastus.durabletask.io:443",
         taskhub="production",
@@ -526,9 +526,9 @@ async def main() -> None:
     wf_client = DurableWorkflowClient(base_client)
     instance_id = wf_client.start_workflow(input="Process payment of $12,500.")
 
-    # Poll until a HITL pause appears
+    # Poll until a HITL pause appears — all DurableWorkflowClient methods are synchronous
     for _ in range(30):
-        await asyncio.sleep(5)
+        time.sleep(5)
         pending = wf_client.get_pending_hitl_requests(instance_id)
         if pending:
             req = pending[0]
@@ -545,7 +545,7 @@ async def main() -> None:
     output = wf_client.await_workflow_output(instance_id, timeout_seconds=120)
     print("Workflow output:", output)
 
-asyncio.run(main())
+main()
 ```
 
 ---
