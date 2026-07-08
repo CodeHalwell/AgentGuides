@@ -110,13 +110,11 @@ async def main() -> None:
     )
     response = await client.get_response(
         messages=[{"role": "user", "content": "What happened in AI news today?"}],
-        options={
-            "web_search_options": {"search_context_size": "medium"},
-            "stream_options": {"include_usage": True},
-        },
+        options={"web_search_options": {"search_context_size": "medium"}},
     )
     print(response.text)
     if response.usage:
+        # Non-streaming responses include usage directly — no stream_options needed
         print(f"Tokens: {response.usage.total_tokens}")
 
 asyncio.run(main())
@@ -139,7 +137,7 @@ class ReasoningOptions(TypedDict, total=False):
     summary: Literal["auto", "concise", "detailed"]
 ```
 
-> **Note:** Reasoning token limits are controlled by the top-level `max_completion_tokens` option on the request (not a field of `ReasoningOptions`). Pass it via `options={"max_completion_tokens": N}` alongside the `"reasoning"` key.
+> **Note:** Reasoning token limits are controlled by the top-level `max_tokens` option on the request (not a field of `ReasoningOptions`). The client translates `max_tokens` → `max_output_tokens` for the Responses API. Pass it via `options={"max_tokens": N}` alongside the `"reasoning"` key.
 
 `StreamOptions` gates usage-statistics inclusion in streaming events:
 
@@ -1005,7 +1003,6 @@ def fire_and_forget_orchestrator(context):
 ```python
 from pydantic import BaseModel
 from agent_framework_azurefunctions._orchestration import AgentTask
-from durabletask.models.entity import EntityInstanceId
 import azure.durable_functions as df
 
 class SummaryResult(BaseModel):
@@ -1013,7 +1010,7 @@ class SummaryResult(BaseModel):
     word_count: int
 
 def typed_orchestrator(context: df.DurableOrchestrationContext):
-    entity_id = EntityInstanceId(name="summarizer", key=context.instance_id)
+    entity_id = df.EntityId(name="summarizer", key=context.instance_id)
 
     # Raw entity call from Durable Functions
     raw_task = context.call_entity(entity_id, "run", "Summarize the quarterly earnings report.")
