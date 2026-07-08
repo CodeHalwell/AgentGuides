@@ -466,7 +466,7 @@ to `DurableAIAgentClient` (which drives individual durable *agents*).
 |--------|---------|-------------|
 | `start_workflow(input, *, instance_id?)` | `str` | Schedule the workflow; returns instance ID |
 | `await_workflow_output(instance_id, *, timeout_seconds?)` | `Any` | Block until terminal; returns deserialized output |
-| `get_runtime_status(instance_id)` | `OrchestrationStatus` | Non-blocking status poll |
+| `get_runtime_status(instance_id)` | `str \| None` | Non-blocking status poll — returns `"RUNNING"`, `"COMPLETED"`, `"FAILED"`, `"TERMINATED"`, etc., or `None` if unknown |
 | `get_pending_hitl_requests(instance_id)` | `list[dict]` | Fetch pending HITL request payloads |
 | `send_hitl_response(instance_id, request_id, response)` | `None` | Unblock a HITL pause |
 | `stream_workflow(instance_id, *, poll_interval_seconds?, timeout_seconds?)` | `AsyncIterator[WorkflowEvent]` | Stream typed `WorkflowEvent` objects as they arrive |
@@ -890,9 +890,12 @@ def parallel_orchestrator(ctx: OrchestrationContext):
 The **DevUI** package exposes an OpenAI-compatible `/v1/conversations` REST surface. These
 three classes form its storage layer:
 
-- `ConversationStore` — ABC exposing `create_conversation`, `get_conversation`,
-  `add_items`, `list_items`, `get_item`, `delete_conversation` in the shape of the
-  OpenAI Conversations API.
+- `ConversationStore` — ABC with 11 abstract methods forming the full contract:
+  `create_conversation`, `get_conversation`, `update_conversation(id, metadata)`,
+  `delete_conversation`, `add_items`, `list_items`, `get_item`,
+  `get_session(id) → AgentSession | None`,
+  `list_conversations_by_metadata(filter) → list[Conversation]`,
+  `add_trace(id, event)`, `get_traces(id) → list[dict]`.
 - `InMemoryConversationStore` — thread-safe in-memory implementation.
   Each conversation maps to `messages: list[Message]`, `session: AgentSession`, and
   a `_item_index` dict for O(1) item lookup.
