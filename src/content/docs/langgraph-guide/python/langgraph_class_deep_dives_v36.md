@@ -318,7 +318,7 @@ def expensive_search(state: dict) -> dict:
 cache_policy = CachePolicy(key_func=query_key, ttl=300)  # 5-minute TTL
 
 builder = StateGraph(dict)
-builder.add_node("search", expensive_search, cache=cache_policy)
+builder.add_node("search", expensive_search, cache_policy=cache_policy)
 builder.add_edge(START, "search")
 builder.add_edge("search", END)
 
