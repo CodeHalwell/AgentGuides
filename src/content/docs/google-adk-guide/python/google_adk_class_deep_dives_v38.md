@@ -153,7 +153,7 @@ import asyncio
 from google.adk.integrations.daytona import DaytonaEnvironment
 
 async def main():
-    env = DaytonaEnvironment(timeout=300)   # 5-minute sandbox TTL
+    env = DaytonaEnvironment(timeout=300)   # sandbox time-to-live in seconds (default)
     await env.initialize()
 
     # Write a script and run it
@@ -666,7 +666,6 @@ and then returns without yielding any events.
 ### Example 1 — observing interaction_id chaining in session events
 
 ```python
-import asyncio
 from google.adk.flows.llm_flows.interactions_processor import (
     _find_previous_interaction_state,
 )
