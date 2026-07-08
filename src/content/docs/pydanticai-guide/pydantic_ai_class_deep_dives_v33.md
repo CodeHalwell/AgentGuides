@@ -77,7 +77,7 @@ async def log_before(ctx, request_context):
 @hooks.on.after_model_request
 async def log_after(ctx, *, request_context, response):
     elapsed = time.monotonic() - ctx.deps.get('_t0', time.monotonic())
-    print(f'[res] finish_reason={response.parts[-1]!r} elapsed={elapsed:.3f}s')
+    print(f'[res] finish_reason={response.finish_reason!r} elapsed={elapsed:.3f}s')
     return response
 
 agent = Agent('openai:gpt-4.1-mini', deps_type=dict, capabilities=[hooks])
@@ -231,7 +231,8 @@ import asyncio
 import re
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
-from pydantic_ai.messages import ModelMessage, ModelRequest, TextPart
+from dataclasses import replace
+from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.tools import RunContext
 
 EMAIL_RE = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')
@@ -244,11 +245,10 @@ def redact_if_needed(
         for msg in messages:
             if isinstance(msg, ModelRequest):
                 new_parts = [
-                    TextPart(content=EMAIL_RE.sub('[EMAIL]', p.content))
-                    if isinstance(p, TextPart) else p
+                    replace(p, content=EMAIL_RE.sub('[EMAIL]', p.content))
+                    if isinstance(p, UserPromptPart) and isinstance(p.content, str) else p
                     for p in msg.parts
                 ]
-                from dataclasses import replace
                 msg = replace(msg, parts=new_parts)
             redacted.append(msg)
         return redacted
@@ -274,15 +274,15 @@ Async variant that compresses verbose tool-return blocks older than 10 messages.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
-from pydantic_ai.messages import ModelMessage, ModelResponse, ToolReturnPart
 from dataclasses import replace
+from pydantic_ai.messages import ModelMessage, ModelRequest, ToolReturnPart
 
 async def compress_old_tool_returns(messages: list[ModelMessage]) -> list[ModelMessage]:
     if len(messages) <= 10:
         return messages
     result = []
     for i, msg in enumerate(messages):
-        if i < len(messages) - 10 and isinstance(msg, ModelResponse):
+        if i < len(messages) - 10 and isinstance(msg, ModelRequest):
             compact_parts = [
                 replace(p, content='[compressed]') if isinstance(p, ToolReturnPart) else p
                 for p in msg.parts
@@ -464,14 +464,26 @@ async def search_web(ctx: RunContext[None], query: str) -> str:
 base_toolset = FunctionToolset([send_email, search_web])
 gated_toolset = ApprovalRequiredToolset(wrapped=base_toolset)
 
-agent = Agent('openai:gpt-4.1', toolsets=[gated_toolset])
+from pydantic_ai.tools import DeferredToolRequests
+
+# Include DeferredToolRequests so the run returns it when approval is needed.
+agent = Agent('openai:gpt-4.1', toolsets=[gated_toolset], output_type=[str, DeferredToolRequests])
 
 async def main() -> None:
-    from pydantic_ai.exceptions import ApprovalRequired
-    try:
-        result = await agent.run('Send a welcome email to bob@example.com')
-    except ApprovalRequired:
-        print('Tool call pending approval — resume with ctx.tool_call_approved=True')
+    result = await agent.run('Send a welcome email to bob@example.com')
+    if isinstance(result.output, DeferredToolRequests):
+        pending = result.output
+        print(f'Approval needed for: {[c.tool_name for c in pending.approvals]}')
+        # Approve all pending calls and resume
+        resume_results = pending.build_results(approve_all=True)
+        final = await agent.run(
+            'Continue',
+            message_history=result.all_messages(),
+            tool_call_results=resume_results,
+        )
+        print(final.output)
+    else:
+        print(result.output)
 
 asyncio.run(main())
 ```
@@ -589,9 +601,9 @@ agent = Agent(
 )
 
 async def main() -> None:
-    from pydantic_ai.tools import DeferredToolResults
-    # When the model calls click_element, the run suspends with DeferredToolResults.
-    result = await agent.run('Click the submit button')
+    from pydantic_ai.tools import DeferredToolRequests
+    # When the model calls click_element, the run ends with DeferredToolRequests output.
+    result = await agent.run('Click the submit button', output_type=[str, DeferredToolRequests])
     print(result.output)
 
 asyncio.run(main())
@@ -1107,7 +1119,7 @@ for model_name in [
 
 # kimi-k2.5-code: supports_thinking=True
 # kimi-thinking-latest: supports_thinking=True
-# moonshot-v1-8k: supports_thinking=None
+# moonshot-v1-8k: supports_thinking=False
 ```
 
 ### 9.3 Composing Profiles with `merge_profile`
