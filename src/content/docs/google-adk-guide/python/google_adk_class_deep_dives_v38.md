@@ -310,7 +310,7 @@ with override_feature_enabled(FeatureName.JSON_SCHEMA_FOR_FUNC_DECL, True):
 from google.adk.agents import LlmAgent
 from google.adk.memory import VertexAiMemoryBankService
 from google.adk.tools.vertex_ai_load_profiles_tool import VertexAiLoadProfilesTool
-from google.adk.tools import PreloadMemoryTool
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 
 memory_service = VertexAiMemoryBankService(
     project="p", location="us-central1", agent_engine_id="re/123"
