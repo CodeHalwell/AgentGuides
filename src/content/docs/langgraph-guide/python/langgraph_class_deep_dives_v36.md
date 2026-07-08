@@ -351,7 +351,7 @@ graph.invoke({"query": "langgraph channels"})  # cache hit — no print
 ### Example 1 — `ChannelWriteEntry` with `skip_none` and `mapper`
 
 ```python
-from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry, SKIP_WRITE, _assemble_writes
+from langgraph.pregel._write import ChannelWriteEntry, SKIP_WRITE, _assemble_writes
 
 def upper_or_skip(v: str) -> str | object:
     """Return the upper-cased string, or SKIP_WRITE to suppress the channel write."""
@@ -809,7 +809,6 @@ print(store.get(("users", "bob"), "preferences"))  # None
 
 ```python
 from langgraph.store.memory import InMemoryStore
-from langgraph.store.base.embed import ensure_embeddings
 
 def simple_embed(texts: list[str]) -> list[list[float]]:
     """Toy bag-of-chars embedding for demo purposes."""
@@ -1113,16 +1112,16 @@ def resolve_from_thread():
     import time; time.sleep(0.05)
     fut.set_result("hello from task")
 
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-executor.submit(resolve_from_thread)
+with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+    executor.submit(resolve_from_thread)
 
-async def main():
-    # asyncio.wrap_future() bridges a concurrent.futures.Future into asyncio —
-    # do NOT write `await fut` directly here; __await__ is for LangGraph's scheduler.
-    result = await asyncio.wrap_future(fut)
-    print(result)  # 'hello from task'
+    async def main():
+        # asyncio.wrap_future() bridges a concurrent.futures.Future into asyncio —
+        # do NOT write `await fut` directly here; __await__ is for LangGraph's scheduler.
+        result = await asyncio.wrap_future(fut)
+        print(result)  # 'hello from task'
 
-asyncio.run(main())
+    asyncio.run(main())
 ```
 
 ### Example 3 — inspecting `PregelScratchpad` from a managed value
