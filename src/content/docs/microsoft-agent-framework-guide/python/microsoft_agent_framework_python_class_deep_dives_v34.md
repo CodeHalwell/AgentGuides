@@ -526,7 +526,8 @@ def main() -> None:
     wf_client = DurableWorkflowClient(base_client)
     instance_id = wf_client.start_workflow(input="Process payment of $12,500.")
 
-    # Poll until a HITL pause appears — all DurableWorkflowClient methods are synchronous
+    # Poll until a HITL pause appears — get_pending_hitl_requests/send_hitl_response/
+    # await_workflow_output are synchronous/blocking; only stream_workflow is async
     for _ in range(30):
         time.sleep(5)
         pending = wf_client.get_pending_hitl_requests(instance_id)
