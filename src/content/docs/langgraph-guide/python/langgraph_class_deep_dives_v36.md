@@ -1064,7 +1064,10 @@ asyncio.run(main())
 - `identifier(obj, name=None)` — resolves a function's `module.qualname` for stable cross-process identification (used by the cache key and remote execution). Returns `None` for locally-defined / closure functions.
 - `PregelScratchpad` — a frozen-ish `@dataclass(**_DC_KWARGS)` with: `step: int` (current superstep), `stop: int` (total supersteps limit), `call_counter: Callable[[], int]` (monotonic per-thread counter), `interrupt_counter: Callable[[], int]`, `get_null_resume: Callable[[bool], Any]`, `resume: list[Any]` (stack of resume values), `subgraph_counter: Callable[[], int]`.
 
-### Example 1 — `call()` inside a functional `@entrypoint` with retry
+### Example 1 — `@task` with `RetryPolicy` inside a functional `@entrypoint`
+
+`@task` uses `call()` under the hood to schedule each invocation as an independent
+tracked Pregel sub-task. You normally interact with `call()` indirectly through `@task`.
 
 ```python
 import asyncio
@@ -1083,7 +1086,7 @@ async def fetch(url: str) -> str:
 
 @entrypoint(checkpointer=InMemorySaver())
 async def pipeline(urls: list[str]) -> list[str]:
-    # call() schedules each fetch as an independent tracked task
+    # Each fetch() call dispatches via call() — a separate tracked Pregel sub-task
     futures = [fetch(url) for url in urls]
     results = await asyncio.gather(*futures)
     return list(results)
