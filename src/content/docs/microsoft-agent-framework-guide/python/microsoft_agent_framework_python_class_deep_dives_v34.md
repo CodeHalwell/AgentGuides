@@ -18,7 +18,7 @@ signature, constant value, and method name was read directly from the installed
 
 ---
 
-## 1 · `OpenAIChatCompletionOptions` + `PredictionTextContent` + `Prediction` + `RawOpenAIChatCompletionClient` + `OpenAIChatCompletionClient`
+## 1 · `OpenAIChatCompletionOptions` + `Prediction` + `PredictionTextContent` + `RawOpenAIChatCompletionClient` + `OpenAIChatCompletionClient`
 
 **Module:** `agent_framework_openai._chat_completion_client`  
 **Import:** `from agent_framework.openai import OpenAIChatCompletionClient`
