@@ -97,8 +97,7 @@ Use `@hooks.on.before_tool_execute(tools=['db_query', 'file_write'], timeout=2.0
 import asyncio
 import json
 from pydantic_ai import Agent
-from pydantic_ai.capabilities import Hooks
-from pydantic_ai.exceptions import HookTimeoutError
+from pydantic_ai.capabilities import Hooks, HookTimeoutError
 
 hooks = Hooks()
 
@@ -1076,14 +1075,14 @@ def merge_profile(base: ModelProfile | None, override: ModelProfile | None) -> M
 ```python {test="skip"}
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles.harmony import harmony_model_profile
 
 # Harmony response format: tool_choice_required not supported,
 # leading whitespace in streamed text is suppressed.
 profile = harmony_model_profile('gpt-4o')
 
-model = OpenAIModel('gpt-4o', provider_profile=profile)
+model = OpenAIChatModel('gpt-4o', profile=profile)
 agent = Agent(model, system_prompt='Be concise.')
 
 async def main() -> None:
@@ -1104,28 +1103,28 @@ for model_name in [
     'moonshot-v1-8k',
 ]:
     profile = moonshotai_model_profile(model_name)
-    print(f'{model_name}: supports_thinking={profile.supports_thinking!r}')
+    print(f'{model_name}: supports_thinking={profile.get("supports_thinking")!r}')
 
 # kimi-k2.5-code: supports_thinking=True
 # kimi-thinking-latest: supports_thinking=True
-# moonshot-v1-8k: supports_thinking=False
+# moonshot-v1-8k: supports_thinking=None
 ```
 
 ### 9.3 Composing Profiles with `merge_profile`
 
-Combine the Amazon base profile with a custom `max_tokens` override using `merge_profile`.
+Combine the Amazon base profile with a `supports_thinking=False` override using `merge_profile`.
 
 ```python {test="skip"}
 from pydantic_ai.profiles import ModelProfile, merge_profile
 from pydantic_ai.profiles.amazon import amazon_model_profile
 
 base = amazon_model_profile('nova-pro-v1')
-# Add a max_tokens constraint on top of the Amazon JSON schema transformer
+# Disable thinking on top of the Amazon JSON schema transformer
 extended = merge_profile(base, ModelProfile(supports_thinking=False))
 
-print(f'json_schema_transformer: {extended.json_schema_transformer}')
-print(f'supports_thinking: {extended.supports_thinking}')
-# json_schema_transformer: InlineDefsJsonSchemaTransformer
+print(f'json_schema_transformer: {extended.get("json_schema_transformer")}')
+print(f'supports_thinking: {extended.get("supports_thinking")}')
+# json_schema_transformer: <class 'pydantic_ai._json_schema.InlineDefsJsonSchemaTransformer'>
 # supports_thinking: False
 ```
 
@@ -1245,12 +1244,14 @@ class SearchResult:
     text: str
 
 def first_result_reducer(
-    ctx: ReducerContext[list, None],
+    ctx: ReducerContext[None, None],
+    current: list[SearchResult],
     incoming: SearchResult,
-) -> None:
-    if not ctx.state:          # first result to arrive
-        ctx.state.append(incoming)
+) -> list[SearchResult]:
+    if not current:             # first result to arrive
         ctx.cancel_sibling_tasks()  # stop other parallel branches
+        return [incoming]
+    return current              # already have a winner; ignore latecomers
 ```
 
 ### 10.3 Accumulating Join Reducer
@@ -1267,12 +1268,13 @@ class PartialScore:
     score: float
 
 def accumulate_scores(
-    ctx: ReducerContext[list, None],
+    ctx: ReducerContext[None, None],
+    current: list[PartialScore],
     incoming: PartialScore,
-) -> None:
-    ctx.state.append(incoming)
+) -> list[PartialScore]:
     # No cancel_sibling_tasks() → wait for all parallel branches
     print(f'Received score from {incoming.evaluator}: {incoming.score}')
+    return current + [incoming]
 ```
 
 ---
