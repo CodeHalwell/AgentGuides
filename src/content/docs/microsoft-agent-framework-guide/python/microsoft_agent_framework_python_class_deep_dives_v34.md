@@ -1013,7 +1013,7 @@ def fire_and_forget_orchestrator(context):
 
 ```python
 from pydantic import BaseModel
-from agent_framework_azurefunctions._orchestration import AgentTask
+from agent_framework_azurefunctions._orchestration import AgentTask, RunRequest
 import azure.durable_functions as df
 
 class SummaryResult(BaseModel):
@@ -1022,15 +1022,21 @@ class SummaryResult(BaseModel):
 
 def typed_orchestrator(context: df.DurableOrchestrationContext):
     entity_id = df.EntityId(name="summarizer", key=context.instance_id)
+    correlation_id = context.new_uuid()  # replay-safe unique ID
 
-    # Raw entity call from Durable Functions
-    raw_task = context.call_entity(entity_id, "run", "Summarize the quarterly earnings report.")
+    # The entity's "run" operation expects a RunRequest dict, not a bare string
+    run_request = RunRequest(
+        message="Summarize the quarterly earnings report.",
+        correlation_id=correlation_id,
+        orchestration_id=context.instance_id,
+    )
+    raw_task = context.call_entity(entity_id, "run", run_request.to_dict())
 
     # Wrap it so the result is parsed as SummaryResult
     typed_task = AgentTask(
         entity_task=raw_task,
         response_format=SummaryResult,
-        correlation_id=context.instance_id,
+        correlation_id=correlation_id,
     )
     result = yield typed_task
     # result is AgentResponse; result.value is SummaryResult if parsing succeeded
