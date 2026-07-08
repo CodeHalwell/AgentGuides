@@ -229,7 +229,7 @@ print(result["audit"])  # ['step1', 'step2'] — both entries preserved
 
 **Module:** `langgraph.types`
 
-These three policy dataclasses control the **execution contract** for individual nodes and tasks. They attach to nodes at compile time or to `Send`/`call()` at runtime.
+These three policy types control the **execution contract** for individual nodes and tasks. They attach to nodes at compile time or to `Send`/`call()` at runtime. (`RetryPolicy` is a `NamedTuple`; `TimeoutPolicy` and `CachePolicy` are frozen dataclasses.)
 
 **Key source facts** (from `langgraph/types.py`):
 
