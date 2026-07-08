@@ -128,32 +128,36 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 1.3 Wrapping the Entire Run with Error Recovery
+### 1.3 Wrapping the Entire Run with Error Logging
 
-Use `@hooks.on.run` (the `wrap_run` hook) to catch unhandled errors and return a safe fallback.
+Use `@hooks.on.run` (the `wrap_run` hook) to intercept unhandled errors, emit structured diagnostics, and re-raise so callers retain control over the failure.
 
 ```python {test="skip"}
 import asyncio
+import traceback
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
-from pydantic_ai.run import AgentRunResult
 
 hooks = Hooks()
 
 @hooks.on.run
-async def safe_run(ctx, *, handler):
+async def logged_run(ctx, *, handler):
     try:
         return await handler()
     except Exception as exc:
-        print(f'Agent run failed: {exc!r}')
-        # Return a synthetic result rather than propagating
-        return AgentRunResult._from_str(str(exc), ctx)
+        # Emit structured diagnostics then re-raise — callers decide how to recover.
+        print(f'[run-error] run_step={ctx.run_step} error={exc!r}')
+        traceback.print_exc()
+        raise
 
 agent = Agent('openai:gpt-4.1-mini', capabilities=[hooks])
 
 async def main() -> None:
-    result = await agent.run('What is the answer to life?')
-    print(result.output)
+    try:
+        result = await agent.run('What is the answer to life?')
+        print(result.output)
+    except Exception:
+        print('Handled at call site.')
 
 asyncio.run(main())
 ```
@@ -479,7 +483,7 @@ async def main() -> None:
         final = await agent.run(
             'Continue',
             message_history=result.all_messages(),
-            tool_call_results=resume_results,
+            deferred_tool_results=resume_results,
         )
         print(final.output)
     else:
@@ -876,8 +880,7 @@ agent = Agent('anthropic:claude-sonnet-4-6', system_prompt='You are a helpful as
 
 @app.post('/api/chat')
 async def chat(request: Request) -> StreamingResponse:
-    adapter = await VercelAIAdapter.from_request(request, agent, sdk_version=5)
-    return adapter.stream_response()
+    return await VercelAIAdapter.dispatch_request(request, agent=agent, sdk_version=5)
 ```
 
 ### 7.2 HITL Tool Approval with SDK v6
@@ -905,8 +908,7 @@ agent = Agent(
 @app.post('/api/chat')
 async def chat(request: Request) -> StreamingResponse:
     # sdk_version=6 enables ToolApprovalRequestChunk / ToolApprovalResponded round-trip
-    adapter = await VercelAIAdapter.from_request(request, agent, sdk_version=6)
-    return adapter.stream_response()
+    return await VercelAIAdapter.dispatch_request(request, agent=agent, sdk_version=6)
 ```
 
 ### 7.3 Static Message Loading from a Vercel AI SDK Conversation
@@ -983,11 +985,11 @@ agent = Agent('anthropic:claude-sonnet-4-6', system_prompt='You are a helpful as
 
 @app.post('/agent')
 async def run_agent(request: Request) -> StreamingResponse:
-    adapter = await AGUIAdapter.from_request(
-        request, agent,
+    return await AGUIAdapter.dispatch_request(
+        request,
+        agent=agent,
         manage_system_prompt='server',  # strips and reinjects system prompt each turn
     )
-    return adapter.stream_response()
 ```
 
 ### 8.2 Round-Trip Message Serialisation
