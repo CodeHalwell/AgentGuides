@@ -89,9 +89,9 @@ asyncio.run(main())
 ```python
 from google.adk.agents._managed_agent import ManagedAgent
 
-# Pass a pre-existing environment_id so the same sandbox persists between
-# turns (the environment_id from a previous turn's event is retrieved via
-# _find_previous_interaction_state on every subsequent call automatically).
+# Create a new remote Daytona sandbox on the first turn.  On subsequent
+# turns ADK automatically retrieves the environment_id from prior events
+# via _find_previous_interaction_state and reuses the same sandbox.
 agent = ManagedAgent(
     name="managed_code",
     agent_id="antigravity-preview-05-2026",
@@ -663,10 +663,11 @@ from google.adk.flows.llm_flows.interactions_processor import (
 
 # Simulate a session where the first turn stored an interaction_id.
 class FakeEvent:
-    def __init__(self, author, interaction_id, branch=None):
+    def __init__(self, author, interaction_id, branch=None, environment_id=None):
         self.author = author
         self.interaction_id = interaction_id
         self.branch = branch
+        self.environment_id = environment_id
 
 events = [
     FakeEvent("root_agent", None, branch=None),           # no ID yet
@@ -752,19 +753,27 @@ async def _after_agent(
     ctx: ExecutorContext, a2a_event: A2AEvent, adk_event: Event
 ) -> Union[A2AEvent, list[A2AEvent]]:
     if isinstance(a2a_event, (TaskStatusUpdateEvent, TaskArtifactUpdateEvent)):
+        artifact_service = ctx.runner.artifact_service
         if artifact_service and adk_event.actions.artifact_delta:
             new_events = []
             for filename, version in adk_event.actions.artifact_delta.items():
                 genai_part = await artifact_service.load_artifact(
-                    app_name=..., user_id=..., session_id=...,
-                    filename=filename, version=version,
+                    app_name=ctx.app_name,
+                    user_id=ctx.user_id,
+                    session_id=ctx.session_id,
+                    filename=filename,
+                    version=version,
                 )
                 if genai_part:
                     a2a_part = convert_genai_part_to_a2a_part(genai_part)
                     new_event = TaskArtifactUpdateEvent(
-                        artifact_id=f"{filename}_{version}",
-                        name=filename,
-                        ...
+                        taskId=a2a_event.taskId,
+                        contextId=a2a_event.contextId,
+                        artifact=Artifact(
+                            artifactId=f"{filename}_{version}",
+                            name=filename,
+                            parts=[a2a_part],
+                        ),
                     )
                     new_events.append(new_event)
             adk_event.actions.artifact_delta = {}  # consumed
@@ -789,9 +798,10 @@ from google.adk.a2a.executor.interceptors.include_artifacts_in_a2a_event import 
 )
 
 config = A2aAgentExecutorConfig(
-    interceptors=[include_artifacts_in_a2a_event_interceptor],
+    execute_interceptors=[include_artifacts_in_a2a_event_interceptor],
 )
-executor = A2aAgentExecutor(config=config)
+# runner is a required keyword argument — pass a Runner instance or factory.
+executor = A2aAgentExecutor(runner=my_runner, config=config)
 ```
 
 ### Example 2 — verifying artifact surfacing in a mock context
@@ -814,7 +824,7 @@ async def test_artifact_injection():
     runner.artifact_service = artifact_service
     ctx = MagicMock(app_name="app", user_id="u1", session_id="s1", runner=runner)
 
-    a2a_event = TaskStatusUpdateEvent(task_id="t1", context_id="c1", status=MagicMock())
+    a2a_event = TaskStatusUpdateEvent(taskId="t1", contextId="c1", status=MagicMock(), final=False)
     adk_event = MagicMock()
     adk_event.actions.artifact_delta = {"report.pdf": 0}
 
@@ -838,7 +848,7 @@ from a2a.types import TaskStatusUpdateEvent
 
 async def test_no_op_when_no_delta():
     ctx = MagicMock(runner=MagicMock(artifact_service=AsyncMock()))
-    a2a_event = TaskStatusUpdateEvent(task_id="t1", context_id="c1", status=MagicMock())
+    a2a_event = TaskStatusUpdateEvent(taskId="t1", contextId="c1", status=MagicMock(), final=False)
     adk_event = MagicMock()
     adk_event.actions.artifact_delta = {}    # empty → no processing
 
@@ -992,6 +1002,7 @@ Pub/Sub client library infers it from the environment or credentials.
 
 ```python
 from google.adk.tools.pubsub.pubsub_credentials import PubSubCredentialsConfig
+from google.adk.tools.pubsub.config import PubSubToolConfig
 from google.adk.tools.pubsub.pubsub_toolset import PubSubToolset
 
 creds_config = PubSubCredentialsConfig(
@@ -999,12 +1010,13 @@ creds_config = PubSubCredentialsConfig(
     client_secret="my-oauth-client-secret",
     # scopes defaults to PUBSUB_DEFAULT_SCOPE automatically
 )
+# project_id lives in PubSubToolConfig; topic/subscription names are
+# arguments to the individual publish/pull tools, not the toolset.
+tool_config = PubSubToolConfig(project_id="my-project")
 
 toolset = PubSubToolset(
-    project_id="my-project",
-    topic_id="my-topic",
-    subscription_id="my-sub",
     credentials_config=creds_config,
+    pubsub_tool_config=tool_config,
 )
 ```
 
@@ -1013,6 +1025,7 @@ toolset = PubSubToolset(
 ```python
 import google.auth
 from google.adk.tools.pubsub.pubsub_credentials import PubSubCredentialsConfig
+from google.adk.tools.pubsub.config import PubSubToolConfig
 from google.adk.tools.pubsub.pubsub_toolset import PubSubToolset
 
 creds, _ = google.auth.default(
@@ -1022,12 +1035,11 @@ creds, _ = google.auth.default(
 creds_config = PubSubCredentialsConfig(
     credentials=creds,  # bypasses OAuth flow; all users share this credential
 )
+tool_config = PubSubToolConfig(project_id="my-project")
 
 toolset = PubSubToolset(
-    project_id="my-project",
-    topic_id="events",
-    subscription_id="events-sub",
     credentials_config=creds_config,
+    pubsub_tool_config=tool_config,
 )
 ```
 
@@ -1042,8 +1054,6 @@ from google.adk.tools.pubsub.pubsub_toolset import PubSubToolset
 tool_config = PubSubToolConfig(project_id="analytics-project-1234")
 
 toolset = PubSubToolset(
-    project_id=tool_config.project_id,
-    topic_id="events",
-    subscription_id="events-sub",
+    pubsub_tool_config=tool_config,
 )
 ```
