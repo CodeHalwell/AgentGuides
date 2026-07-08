@@ -76,7 +76,8 @@ async def log_before(ctx, request_context):
 
 @hooks.on.after_model_request
 async def log_after(ctx, *, request_context, response):
-    elapsed = time.monotonic() - ctx.deps.get('_t0', time.monotonic())
+    t_now = time.monotonic()
+    elapsed = t_now - ctx.deps.get('_t0', t_now)  # 0.0 if before_model_request didn't run
     print(f'[res] finish_reason={response.finish_reason!r} elapsed={elapsed:.3f}s')
     return response
 
