@@ -645,7 +645,7 @@ Combine an `ExternalToolset` (frontend actions) with a local `FunctionToolset` (
 import asyncio
 from pydantic_ai import Agent, ExternalToolset
 from pydantic_ai.toolsets import FunctionToolset
-from pydantic_ai.tools import ToolDefinition, RunContext
+from pydantic_ai.tools import DeferredToolRequests, ToolDefinition, RunContext
 
 # Frontend tool
 confirm_action = ToolDefinition(
@@ -671,8 +671,14 @@ agent = Agent(
 )
 
 async def main() -> None:
-    result = await agent.run('Summarise AI trends then confirm before proceeding')
-    print(result.output)
+    result = await agent.run(
+        'Summarise AI trends then confirm before proceeding',
+        output_type=[str, DeferredToolRequests],
+    )
+    if isinstance(result.output, DeferredToolRequests):
+        print(f'Pending external confirmation: {[c.tool_name for c in result.output.calls]}')
+    else:
+        print(result.output)
 
 asyncio.run(main())
 ```
@@ -1117,7 +1123,8 @@ for model_name in [
     'moonshot-v1-8k',
 ]:
     profile = moonshotai_model_profile(model_name)
-    print(f'{model_name}: supports_thinking={profile.get("supports_thinking")!r}')
+    if profile is not None:
+        print(f'{model_name}: supports_thinking={profile.get("supports_thinking")!r}')
 
 # kimi-k2.5-code: supports_thinking=True
 # kimi-thinking-latest: supports_thinking=True
@@ -1136,8 +1143,9 @@ base = amazon_model_profile('nova-pro-v1')
 # Disable thinking on top of the Amazon JSON schema transformer
 extended = merge_profile(base, ModelProfile(supports_thinking=False))
 
-print(f'json_schema_transformer: {extended.get("json_schema_transformer")}')
-print(f'supports_thinking: {extended.get("supports_thinking")}')
+if extended is not None:
+    print(f'json_schema_transformer: {extended.get("json_schema_transformer")}')
+    print(f'supports_thinking: {extended.get("supports_thinking")}')
 # json_schema_transformer: <class 'pydantic_ai._json_schema.InlineDefsJsonSchemaTransformer'>
 # supports_thinking: False
 ```
@@ -1232,11 +1240,13 @@ class StartNode(BaseNode[None, None, str]):
             return ProcessString(self.input.value)
         return ProcessInt(self.input.value)
 
+# Graph is built via GraphBuilder in pydantic_graph 2.6.
+# graph.run() returns OutputT directly (not a tuple); inputs= is keyword-only.
 graph = Graph(nodes=[StartNode, ProcessString, ProcessInt])
 
 async def main() -> None:
-    result_str, _ = await graph.run(StartNode(StringResult('hello')), state=None)
-    result_int, _ = await graph.run(StartNode(IntResult(21)), state=None)
+    result_str = await graph.run(inputs=StartNode(StringResult('hello')), state=None)
+    result_int = await graph.run(inputs=StartNode(IntResult(21)), state=None)
     print(result_str)   # String: HELLO
     print(result_int)   # Integer: 42
 
