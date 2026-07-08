@@ -438,8 +438,11 @@ class InMemoryOrchestrationContext:
         self._tasks.append(("activity", activity_name, input_json))
         return "{}"
 
-# Verify it satisfies the runtime-checkable Protocol
-assert isinstance(InMemoryOrchestrationContext(), WorkflowOrchestrationContext)
+# NOTE: A complete adapter must also implement the remaining protocol members:
+# task_all, task_any, wait_for_external_event, create_timer, set_custom_status,
+# new_uuid, cancel_task, get_task_result.
+# This snippet illustrates only the dispatch methods; isinstance() checks against
+# the full protocol will fail until all members are present.
 ```
 
 ---
@@ -826,7 +829,7 @@ from agent_framework import Workflow
 def my_workflow_orchestrator(ctx: OrchestrationContext):
     workflow: Workflow = ...   # retrieved from worker configuration
     adapted = DurableTaskWorkflowContext(ctx)
-    yield from run_workflow_orchestrator(adapted, workflow, input=ctx.get_input())
+    yield from run_workflow_orchestrator(adapted, workflow, initial_message=ctx.get_input())
 ```
 
 **Example 2 — Replay-safe logging via `is_replaying`**
