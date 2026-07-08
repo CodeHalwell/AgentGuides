@@ -207,7 +207,9 @@ async def main() -> None:
         messages=[{"role": "user", "content": "Summarize the history of computing."}],
         options={"background": True, "store": True},
     )
-    token = response.continuation_token
+    # OpenAIContinuationToken is a TypedDict — at runtime it is a plain dict.
+    # isinstance() checks raise TypeError, so use key presence to guard access.
+    token: OpenAIContinuationToken | None = response.continuation_token
     if token is not None and "response_id" in token:
         print(f"Response ID for polling: {token['response_id']}")
         # Poll later using the same client + token — pass the full token dict
