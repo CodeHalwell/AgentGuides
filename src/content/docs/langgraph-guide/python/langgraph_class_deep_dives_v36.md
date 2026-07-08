@@ -478,7 +478,7 @@ for part in graph.stream(
     stream_mode=["values", "updates"],
     version="v2",
 ):
-    print(part["event"], "->", list(part.get("data", {}).keys()) if isinstance(part.get("data"), dict) else "...")
+    print(part["type"], "->", list(part.get("data", {}).keys()) if isinstance(part.get("data"), dict) else "...")
 ```
 
 ### Example 2 — `bulk_update_state` for multi-step replay seeding
@@ -512,8 +512,8 @@ graph.invoke({"step": 0, "notes": []}, config=config)
 new_config = graph.bulk_update_state(
     config,
     updates=[
-        [StateUpdate("__start__", {"step": 10, "notes": ["seeded"]})],
-        [StateUpdate("__start__", {"notes": ["seeded", "corrected"]})],
+        [StateUpdate(values={"step": 10, "notes": ["seeded"]}, as_node="process")],
+        [StateUpdate(values={"notes": ["seeded", "corrected"]}, as_node="process")],
     ],
 )
 snapshot = graph.get_state(new_config)
@@ -975,12 +975,43 @@ asyncio.run(main())
 
 ### Example 3 — `_check_loop` deadlock prevention
 
+`_check_loop` only fires on `AsyncBatchedBaseStore` subclasses — `InMemoryStore` inherits
+from `BaseStore` directly and has no deadlock guard. Use the `SimpleAsyncStore` subclass
+from Example 1 to observe the guard in action.
+
 ```python
 import asyncio
-from langgraph.store.memory import InMemoryStore
+from langgraph.store.base.batch import AsyncBatchedBaseStore
+from langgraph.store.base import GetOp, PutOp, Op, Result, Item
+from datetime import datetime, timezone
+
+class SimpleAsyncStore(AsyncBatchedBaseStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self._data: dict[tuple, dict[str, Item]] = {}
+
+    async def abatch(self, ops: list[Op]) -> list[Result]:
+        results = []
+        for op in ops:
+            if isinstance(op, PutOp):
+                ns = self._data.setdefault(op.namespace, {})
+                if op.value is None:
+                    ns.pop(op.key, None)
+                else:
+                    ns[op.key] = Item(
+                        value=op.value, key=op.key, namespace=op.namespace,
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                results.append(None)
+            elif isinstance(op, GetOp):
+                results.append(self._data.get(op.namespace, {}).get(op.key))
+            else:
+                results.append(None)
+        return results
 
 async def main():
-    store = InMemoryStore()
+    store = SimpleAsyncStore()  # must be constructed inside running event loop
     await store.aput(("test",), "k", {"v": 1})
 
     # Calling the SYNC get() from inside the SAME event loop raises InvalidStateError
@@ -1040,14 +1071,18 @@ async def pipeline(urls: list[str]) -> list[str]:
 # pipeline.invoke(["https://example.com", "https://example.org"])
 ```
 
-### Example 2 — `SyncAsyncFuture` as an awaitable `concurrent.futures.Future`
+### Example 2 — `SyncAsyncFuture` as a `concurrent.futures.Future`
+
+`SyncAsyncFuture.__await__` yields a sentinel value meant only for LangGraph's internal
+Pregel scheduler — **do not `await` a bare `SyncAsyncFuture` in plain asyncio** (it raises
+`RuntimeError: Task got bad yield`). Use `asyncio.wrap_future()` to bridge it into asyncio,
+or call `.result()` to block synchronously from a non-loop thread.
 
 ```python
 import asyncio
 import concurrent.futures
 from langgraph.pregel._call import SyncAsyncFuture
 
-# SyncAsyncFuture is both a concurrent.futures.Future and awaitable
 fut: SyncAsyncFuture[str] = SyncAsyncFuture()
 
 # Resolve it from a thread (as the Pregel executor does)
@@ -1055,12 +1090,13 @@ def resolve_from_thread():
     import time; time.sleep(0.05)
     fut.set_result("hello from task")
 
-thread = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-thread.submit(resolve_from_thread)
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+executor.submit(resolve_from_thread)
 
 async def main():
-    # Await it like a coroutine
-    result = await fut
+    # asyncio.wrap_future() bridges a concurrent.futures.Future into asyncio —
+    # do NOT write `await fut` directly here; __await__ is for LangGraph's scheduler.
+    result = await asyncio.wrap_future(fut)
     print(result)  # 'hello from task'
 
 asyncio.run(main())
