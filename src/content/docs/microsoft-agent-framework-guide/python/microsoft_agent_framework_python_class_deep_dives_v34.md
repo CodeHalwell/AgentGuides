@@ -139,6 +139,8 @@ class ReasoningOptions(TypedDict, total=False):
     summary: Literal["auto", "concise", "detailed"]
 ```
 
+> **Note:** Reasoning token limits are controlled by the top-level `max_completion_tokens` option on the request (not a field of `ReasoningOptions`). Pass it via `options={"max_completion_tokens": N}` alongside the `"reasoning"` key.
+
 `StreamOptions` gates usage-statistics inclusion in streaming events:
 
 ```python
@@ -184,7 +186,7 @@ async def main() -> None:
         stream=True,
     )
     async for update in stream:
-        print(update.text, end="", flush=True)
+        print(update.text or "", end="", flush=True)
     response = await stream.get_final_response()
     if response.usage:
         print(f"\nTotal tokens: {response.usage.total_tokens}")
@@ -456,7 +458,7 @@ to `DurableAIAgentClient` (which drives individual durable *agents*).
 | `await_workflow_output(instance_id, *, timeout_seconds?)` | `Any` | Block until terminal; returns deserialized output |
 | `get_runtime_status(instance_id)` | `OrchestrationStatus` | Non-blocking status poll |
 | `get_pending_hitl_requests(instance_id)` | `list[dict]` | Fetch pending HITL request payloads |
-| `send_hitl_response(instance_id, request_id, response_value)` | `None` | Unblock a HITL pause |
+| `send_hitl_response(instance_id, request_id, response)` | `None` | Unblock a HITL pause |
 | `stream_workflow(instance_id, *, poll_interval_seconds?, timeout_seconds?)` | `AsyncIterator[WorkflowEvent]` | Stream typed `WorkflowEvent` objects as they arrive |
 
 **Example 1 — Start a workflow and await its output**
