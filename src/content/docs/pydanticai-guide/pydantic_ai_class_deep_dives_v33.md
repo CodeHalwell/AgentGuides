@@ -898,7 +898,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
 from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
-from pydantic_ai.tools import RunContext
+from pydantic_ai.tools import DeferredToolRequests, RunContext
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 
 app = FastAPI()
@@ -906,9 +906,12 @@ app = FastAPI()
 async def send_email(ctx: RunContext[None], to: str, body: str) -> str:
     return f'Email sent to {to}'
 
+# output_type must include DeferredToolRequests so the adapter can surface
+# ToolApprovalRequestChunk when the tool requires approval.
 agent = Agent(
     'openai:gpt-4.1',
     toolsets=[ApprovalRequiredToolset(FunctionToolset([send_email]))],
+    output_type=[str, DeferredToolRequests],
 )
 
 @app.post('/api/chat')
@@ -1203,20 +1206,19 @@ class ReducerContext(Generic[StateT, DepsT]):
 
 ### 10.1 Simple Type-Based Routing via `isinstance`
 
-Build a minimal graph that routes `str` vs `int` inputs to different processing branches using `isinstance` dispatch inside a node's `run` method — the same pattern that `Decision` formalises at the type level.
+Build a minimal graph that routes `StringInput` vs `IntInput` to different processing branches using `GraphBuilder` — the same type-based dispatch that `Decision` formalises at the type level (and which replaces the old `Graph(nodes=[...])` constructor removed in pydantic_graph 2.6).
 
 ```python {test="skip"}
 import asyncio
 from dataclasses import dataclass
-from pydantic_graph import BaseNode, End, Graph, GraphRunContext
-from pydantic_graph.id_types import NodeID
+from pydantic_graph import GraphBuilder, BaseNode, End, GraphRunContext
 
 @dataclass
-class StringResult:
+class StringInput:
     value: str
 
 @dataclass
-class IntResult:
+class IntInput:
     value: int
 
 @dataclass
@@ -1231,22 +1233,32 @@ class ProcessInt(BaseNode[None, None, str]):
     async def run(self, ctx: GraphRunContext[None, None]) -> End[str]:
         return End(f'Integer: {self.value * 2}')
 
-@dataclass
-class StartNode(BaseNode[None, None, str]):
-    input: StringResult | IntResult
-
-    async def run(self, ctx: GraphRunContext[None, None]) -> ProcessString | ProcessInt:
-        if isinstance(self.input, StringResult):
-            return ProcessString(self.input.value)
-        return ProcessInt(self.input.value)
-
-# Graph is built via GraphBuilder in pydantic_graph 2.6.
-# graph.run() returns OutputT directly (not a tuple); inputs= is keyword-only.
-graph = Graph(nodes=[StartNode, ProcessString, ProcessInt])
+# In pydantic_graph 2.6, use GraphBuilder instead of Graph(nodes=[...]).
+# builder.decision() performs isinstance-based dispatch; builder.match(T)
+# selects the branch when the input is an instance of T.
+# ctx.inputs inside transform() holds the matched input value.
+builder = GraphBuilder()
+decision = (
+    builder.decision()
+    .branch(
+        builder.match(StringInput)
+        .transform(lambda ctx: ProcessString(ctx.inputs.value))
+        .to(ProcessString)
+    )
+    .branch(
+        builder.match(IntInput)
+        .transform(lambda ctx: ProcessInt(ctx.inputs.value))
+        .to(ProcessInt)
+    )
+)
+builder.add_edge(builder.start_node, decision)
+builder.add(builder.node(ProcessString))
+builder.add(builder.node(ProcessInt))
+graph = builder.build()
 
 async def main() -> None:
-    result_str = await graph.run(inputs=StartNode(StringResult('hello')), state=None)
-    result_int = await graph.run(inputs=StartNode(IntResult(21)), state=None)
+    result_str = await graph.run(inputs=StringInput('hello'), state=None)
+    result_int = await graph.run(inputs=IntInput(21), state=None)
     print(result_str)   # String: HELLO
     print(result_int)   # Integer: 42
 
