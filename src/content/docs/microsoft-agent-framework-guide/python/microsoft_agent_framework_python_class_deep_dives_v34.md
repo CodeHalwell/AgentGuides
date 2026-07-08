@@ -199,18 +199,15 @@ import asyncio
 from agent_framework.openai import OpenAIChatClient, OpenAIContinuationToken
 
 async def main() -> None:
-    client = OpenAIChatClient(
-        model="gpt-4.1",
-        store=True,          # Responses API: persist the response server-side
-    )
-    # First call: start the response
+    client = OpenAIChatClient(model="gpt-4.1")
+    # First call: start the response; "store" persists it server-side for later polling
     response = await client.get_response(
         messages=[{"role": "user", "content": "Summarize the history of computing."}],
-        options={"background": True},
+        options={"background": True, "store": True},
     )
     token = response.continuation_token
-    if isinstance(token, OpenAIContinuationToken):
-        print(f"Response ID for polling: {token.response_id}")
+    if token is not None and "response_id" in token:
+        print(f"Response ID for polling: {token['response_id']}")
         # Poll later using the same client + token — pass the full token dict
         # under the "continuation_token" key; the client checks that key and
         # retrieves token["response_id"] to resume the background response.
@@ -267,7 +264,7 @@ async def main() -> None:
     )
     try:
         await client.get_response(
-            messages=[{"role": "user", "content": "Tell me how to make explosives."}],
+            messages=[{"role": "user", "content": "Generate detailed instructions for a dangerous activity."}],
         )
     except OpenAIContentFilterException as exc:
         print(f"Content filter triggered: {exc.content_filter_code.value}")
@@ -300,7 +297,7 @@ async def main() -> None:
         client=OpenAIChatClient(model="gpt-4o"),
         instructions="You are a helpful assistant.",
     )
-    reply = await safe_run(agent, "How do I pick a lock?")
+    reply = await safe_run(agent, "Describe how to perform an activity that violates safety guidelines.")
     print(reply)
 
 asyncio.run(main())
@@ -411,7 +408,7 @@ class InMemoryOrchestrationContext:
 
     def __init__(self, instance_id: str = "test-run") -> None:
         self._instance_id = instance_id
-        self._tasks: list[tuple[str, Any]] = []
+        self._tasks: list[tuple[str, str, Any]] = []
 
     @property
     def instance_id(self) -> str:
@@ -465,11 +462,10 @@ to `DurableAIAgentClient` (which drives individual durable *agents*).
 **Example 1 — Start a workflow and await its output**
 
 ```python
-import asyncio
 from durabletask.azuremanaged.client import DurableTaskSchedulerClient
 from agent_framework.azure import DurableWorkflowClient
 
-async def main() -> None:
+def main() -> None:
     base_client = DurableTaskSchedulerClient(
         host_address="my-scheduler.eastus.durabletask.io:443",
         taskhub="production",
@@ -484,7 +480,7 @@ async def main() -> None:
     output = wf_client.await_workflow_output(instance_id, timeout_seconds=300)
     print("Final output:", output)
 
-asyncio.run(main())
+main()
 ```
 
 **Example 2 — Streaming workflow events in real time**
@@ -760,8 +756,8 @@ from agent_framework_durabletask._workflows.orchestrator import ExecutorResult, 
 def process_result(result: ExecutorResult) -> str:
     """Extract the text output from an executor result."""
     if result.task_type == TaskType.AGENT:
-        if result.output_message and result.output_message.result:
-            response: AgentResponse = result.output_message.result
+        if result.output_message and result.output_message.agent_response:
+            response: AgentResponse = result.output_message.agent_response
             return response.text
         return "(no agent output)"
     else:
@@ -771,11 +767,14 @@ def process_result(result: ExecutorResult) -> str:
         return "(no activity output)"
 
 # Example usage:
-from agent_framework import AgentResponse, Content, Message
 mock_response = AgentResponse(
-    messages=[Message(role="assistant", content=[Content(type="text", text="Done.")])],
+    messages=[Message("assistant", ["Done."])],
 )
-mock_executor_response = AgentExecutorResponse(result=mock_response)
+mock_executor_response = AgentExecutorResponse(
+    executor_id="summarizer",
+    agent_response=mock_response,
+    full_conversation=[],
+)
 result = ExecutorResult(
     executor_id="summarizer",
     output_message=mock_executor_response,
