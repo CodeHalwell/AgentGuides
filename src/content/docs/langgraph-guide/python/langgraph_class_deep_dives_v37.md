@@ -38,7 +38,6 @@ from typing_extensions import TypedDict
 
 try:
     from langchain_openai import ChatOpenAI
-    llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
     HAS_LLM = True
 except ImportError:
     HAS_LLM = False
@@ -51,6 +50,9 @@ class State(TypedDict):
 def call_model(state: State) -> dict:
     if HAS_LLM:
         try:
+            # Instantiate lazily so construction errors (e.g. missing API key)
+            # are caught here alongside invocation errors.
+            llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
             response = llm.invoke(state["messages"])
             return {"messages": [response]}
         except Exception as exc:
