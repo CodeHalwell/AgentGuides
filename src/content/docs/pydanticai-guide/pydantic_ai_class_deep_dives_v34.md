@@ -1477,11 +1477,10 @@ Define an agent entirely in YAML and load it at runtime — good for per-environ
 #       effort: low
 
 import asyncio
-from pathlib import Path
-from pydantic_ai.agent import AgentSpec
+from pydantic_ai import Agent
 
-spec = AgentSpec.from_file('agent_config.yaml')
-agent = spec.build()
+# Agent.from_file() reads the YAML and constructs the Agent in one step
+agent = Agent.from_file('agent_config.yaml')
 
 async def main() -> None:
     result = await agent.run('My order has not arrived in 14 days, what should I do?')
@@ -1496,7 +1495,7 @@ Create an `AgentSpec` in code, then save it as YAML for version control.
 
 ```python  {test="skip"}
 import asyncio
-from pathlib import Path
+from pydantic_ai import Agent
 from pydantic_ai.agent import AgentSpec
 
 spec = AgentSpec(
@@ -1515,8 +1514,8 @@ spec = AgentSpec(
 # Save to YAML for version control
 spec.to_file('research_agent.yaml')
 
-# Build and run
-agent = spec.build()
+# Build an Agent from the spec
+agent = Agent.from_spec(spec)
 
 async def main() -> None:
     result = await agent.run('What are the latest breakthroughs in protein folding?')
@@ -1532,10 +1531,9 @@ Register your own capabilities so they can be referenced by name in YAML configu
 ```python  {test="skip"}
 import asyncio
 from dataclasses import dataclass
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 from pydantic_ai.agent import AgentSpec
 from pydantic_ai.capabilities.abstract import AbstractCapability
-from pydantic_ai.models import ModelRequestContext, ModelRequestParameters
 
 
 @dataclass
@@ -1556,9 +1554,6 @@ class CompanyStyleGuide(AbstractCapability):
         return 'CompanyStyleGuide'
 
 
-# Register the custom capability
-REGISTRY = {'CompanyStyleGuide': CompanyStyleGuide}
-
 # YAML would look like:
 # capabilities:
 #   - CompanyStyleGuide:
@@ -1574,7 +1569,8 @@ spec = AgentSpec(
     ],
 )
 
-agent = spec.build(registry=REGISTRY)
+# Pass custom capability classes so the spec resolver can find them by name
+agent = Agent.from_spec(spec, custom_capability_types=[CompanyStyleGuide])
 
 async def main() -> None:
     result = await agent.run('What services does your company offer?')
