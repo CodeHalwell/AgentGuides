@@ -64,15 +64,15 @@ builder.add_edge(START, "model")
 builder.add_edge("model", END)
 graph = builder.compile()
 
-# stream_mode="messages" triggers StreamMessagesHandler under the hood
+# stream_mode="messages" (single string, no subgraphs) yields the payload
+# directly — a (message_chunk, metadata) pair per emission.
+# Use a list ["messages"] + subgraphs=True to get (ns, kind, payload) triples.
 chunks = []
-for ns, kind, payload in graph.stream(
+for msg, meta in graph.stream(
     {"messages": [HumanMessage(content="hi")]},
     stream_mode="messages",
 ):
-    if kind == "messages":
-        msg, meta = payload
-        chunks.append(msg)
+    chunks.append(msg)
 
 print(f"collected {len(chunks)} message chunk(s)")
 # The last chunk is always the complete AIMessage / final chunk
@@ -186,7 +186,7 @@ print(f"all-depth chunks: {len(all_chunks)}")
 **Key source facts** (from `langgraph/pregel/_read.py`):
 
 - `channel: str | list[str]` — a single key returns the raw value; a list returns a `dict[str, Any]`.
-- `fresh: bool = False` — when `True`, bypasses the local writes already applied in this step and reads the "clean" channel state (pre-writes). Useful for audit nodes that should see the original value regardless of what peers wrote.
+- `fresh: bool = False` — when `True`, applies the current task's own pending writes to a local copy of the channels before reading (post-write view). When `False` (default), reads the channel snapshot before any writes in this step (pre-write view).
 - `mapper: Callable[[Any], Any] | None` — applied to the result before returning; lets `ChannelRead` be used as a transform in a `RunnableSeq`.
 - `do_read(config, *, select, fresh, mapper)` — the static method; raises `RuntimeError` if called outside a Pregel execution context.
 - `get_name()` — returns `"ChannelRead<channel>"` for display in traces.
@@ -318,17 +318,21 @@ except ImportError:
 
 
 async def worker() -> str:
-    """A coroutine that would normally read the config from context."""
-    return "done"
+    """Read the propagated config from the ContextVar to prove inheritance."""
+    if HAS_VAR:
+        cfg = var_child_runnable_config.get(None)
+        tags = cfg.get("tags", []) if cfg else []
+        return f"tags={tags}"
+    return "no var_child_runnable_config in this langchain version"
 
 
 async def main():
     config: RunnableConfig = {"tags": ["example"], "metadata": {"step": 1}}
 
-    # The task inherits the config context set here
+    # The task inherits the config ContextVar snapshot set by set_config_context
     task = create_task_in_config_context(worker, config)
     result = await task
-    print(result)  # done
+    print(result)  # tags=['example']
 
 
 asyncio.run(main())
@@ -440,7 +444,9 @@ _box: list = []
 loop.call_soon_threadsafe(
     async_fut.add_done_callback, lambda f: (_box.append(f.result()), _done.set())
 )
-_done.wait(timeout=5)
+completed = _done.wait(timeout=5)
+if not completed:
+    raise TimeoutError("async_worker did not complete in time")
 result = _box[0]
 print("result:", result)  # result: 49
 
@@ -550,17 +556,19 @@ graph = builder.compile(checkpointer=saver)
 
 config = {"configurable": {"thread_id": "debug-demo"}}
 checkpoints = []
-for event_type, payload in graph.stream(
+# stream_mode="debug" (single string) yields each event as a dict directly —
+# keys are "type", "step", "timestamp", "payload". No tuple unpacking.
+for event in graph.stream(
     {"value": 0},
     config,
     stream_mode="debug",
 ):
-    if event_type == "checkpoint":
-        checkpoints.append(payload)
+    if event["type"] == "checkpoint":
+        checkpoints.append(event)
 
 print(f"received {len(checkpoints)} checkpoint event(s)")
-# Each payload contains: type, timestamp, step, payload.values, payload.next,
-# payload.config, payload.metadata, payload.tasks
+# Each event dict: "type", "timestamp", "step", "payload" (nested dict with
+# "values", "next", "config", "metadata", "tasks")
 if checkpoints:
     cp = checkpoints[0]
     print("step:", cp.get("payload", {}).get("step"))
