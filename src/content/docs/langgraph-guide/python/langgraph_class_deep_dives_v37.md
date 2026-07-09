@@ -51,9 +51,11 @@ class State(TypedDict):
 
 def call_model(state: State, *, writer: StreamWriter) -> dict:
     if HAS_LLM:
-        response = llm.invoke(state["messages"])
-        return {"messages": [response]}
-    # Fallback: write a synthetic AIMessage so the example runs offline
+        try:
+            response = llm.invoke(state["messages"])
+            return {"messages": [response]}
+        except Exception:
+            pass  # fall through to offline fallback if credentials missing
     from langchain_core.messages import AIMessage
     return {"messages": [AIMessage(content="hello from node")]}
 
@@ -452,6 +454,7 @@ print("result:", result)  # result: 49
 
 loop.call_soon_threadsafe(loop.stop)
 t.join()
+loop.close()
 ```
 
 ### Example 2 — chain two futures to propagate results across contexts
@@ -638,7 +641,7 @@ print("remaining configurable keys:", list(cleaned["configurable"].keys()))
 
 **Module:** `langgraph.stream.run_stream`
 
-`AsyncSubgraphRunStream` is the async counterpart to `SubgraphRunStream`. It is the handle object you receive when iterating `run.subgraphs` during `async for run in graph.astream_events(...)` with `version="v3"`. It extends `AsyncGraphRunStream` and mixes in `_SubgraphRunStreamMixin` to expose subgraph-specific attributes.
+`AsyncSubgraphRunStream` is the async counterpart to `SubgraphRunStream`. It is the handle object you receive when iterating `run.subgraphs` inside an `async with await graph.astream_events(..., version="v3") as run:` block. It extends `AsyncGraphRunStream` and mixes in `_SubgraphRunStreamMixin` to expose subgraph-specific attributes.
 
 **Key source facts** (from `langgraph/stream/run_stream.py`):
 
