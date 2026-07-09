@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 35"
-description: "Source-verified deep dives into 10 class groups from agent-framework 1.10.0: RawAgent (low-latency agent without middleware/telemetry, generic TOptions, streaming overload); ChatContext (chat middleware pipeline context — messages/options/metadata/result mutation, streaming hooks); SwitchCaseEdgeGroup+SwitchCaseEdgeGroupCase+SwitchCaseEdgeGroupDefault (conditional workflow fan-out — ordered case evaluation, exactly-one-default validation, to_dict serialization); WorkflowContext (workflow execution context — send_message/yield_output, OpenTelemetry PRODUCER spans, fan-in source_executor_ids); AgentLoopMiddleware+JudgeVerdict (iterative agent loop — should_continue predicate, fresh_context snapshots, with_judge LLM judge factory, DEFAULT_MAX_ITERATIONS=10); MemoryStore+MemoryFileStore (abstract + file-backed long-term memory — list_topics/get_topic/write_topic/delete_topic, rebuild_index, owner_state_key path-traversal guard, export/import_provider_state); MemoryContextProvider (memory-backed history provider — recent_turns, selection_limit, consolidation_interval, per-event-loop async locks); AgentModeProvider (operating mode harness — default plan/execute modes, mode_set/mode_get tools, external set_agent_mode notification injection); LocalEvaluator+EvalItem+EvalResults (local evaluation pipeline — variadic EvalCheck callables, asyncio.gather parallel execution, per-evaluator result_counts breakdown) — source-verified at agent-framework 1.10.0."
+description: "Source-verified deep dives into 9 class groups from agent-framework 1.10.0: RawAgent (low-latency agent without middleware/telemetry, generic TOptions, streaming overload); ChatContext (chat middleware pipeline context — messages/options/metadata/result mutation, streaming hooks); SwitchCaseEdgeGroup+SwitchCaseEdgeGroupCase+SwitchCaseEdgeGroupDefault (conditional workflow fan-out — ordered case evaluation, exactly-one-default validation, to_dict serialization); WorkflowContext (workflow execution context — send_message/yield_output, OpenTelemetry PRODUCER spans, fan-in source_executor_ids); AgentLoopMiddleware+JudgeVerdict (iterative agent loop — should_continue predicate, fresh_context snapshots, with_judge LLM judge factory, DEFAULT_MAX_ITERATIONS=10); MemoryStore+MemoryFileStore (abstract + file-backed long-term memory — list_topics/get_topic/write_topic/delete_topic, rebuild_index, owner_state_key path-traversal guard, export/import_provider_state); MemoryContextProvider (memory-backed history provider — recent_turns, selection_limit, consolidation_interval, per-event-loop async locks); AgentModeProvider (operating mode harness — default plan/execute modes, mode_set/mode_get tools, external set_agent_mode notification injection); LocalEvaluator+EvalItem+EvalResults (local evaluation pipeline — variadic EvalCheck callables, asyncio.gather parallel execution, per-evaluator result_counts breakdown) — source-verified at agent-framework 1.10.0."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -26,7 +26,7 @@ package source via `inspect.getsource()`. Sub-packages introspected:
 - [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — `FileHistoryProvider`, middleware ABCs, compaction, `FileCheckpointStorage`, `LocalEvaluator`, `WorkflowRunResult`
 - [Vol. 3–34](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v34/) — see individual volume pages (300+ classes total)
 
-Ten class groups, three runnable examples each (30 total).
+Nine class groups, three runnable examples each (27 total).
 
 | # | Class / group | Module |
 |---|---|---|
@@ -215,7 +215,7 @@ from agent_framework import Agent, ChatMiddleware, ChatContext
 from agent_framework.openai import OpenAIChatClient
 
 class TimingMiddleware(ChatMiddleware):
-    async def on_chat(self, context: ChatContext, call_next) -> None:
+    async def process(self, context: ChatContext, call_next) -> None:
         start = time.perf_counter()
         # Record message count before the call.
         n_messages = len(context.messages)
@@ -252,10 +252,10 @@ from agent_framework.openai import OpenAIChatClient
 _CACHE: dict[str, ChatResponse] = {}
 
 class CachingMiddleware(ChatMiddleware):
-    async def on_chat(self, context: ChatContext, call_next) -> None:
+    async def process(self, context: ChatContext, call_next) -> None:
         # Build a simple cache key from the last user message.
         last_user = next(
-            (m.content for m in reversed(context.messages) if m.role == "user"),
+            (m.text for m in reversed(context.messages) if m.role == "user"),
             None,
         )
         if last_user and last_user in _CACHE:
@@ -286,19 +286,32 @@ asyncio.run(main())
 ```python
 import asyncio
 import re
-from agent_framework import Agent, ChatMiddleware, ChatContext, ChatResponseUpdate
+from agent_framework import Agent, ChatMiddleware, ChatContext, ChatResponseUpdate, Content
 from agent_framework.openai import OpenAIChatClient
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 class PiiRedactMiddleware(ChatMiddleware):
-    async def on_chat(self, context: ChatContext, call_next) -> None:
+    async def process(self, context: ChatContext, call_next) -> None:
         if context.stream:
             # Append a transform hook that fires for every streamed chunk.
             def redact(update: ChatResponseUpdate) -> ChatResponseUpdate:
                 if update.text:
-                    update = ChatResponseUpdate(
-                        **{**update.__dict__, "text": _EMAIL_RE.sub("[REDACTED]", update.text)}
+                    # Construct a new update using public constructor fields;
+                    # .text is a computed property derived from .contents, not a kwarg.
+                    redacted = _EMAIL_RE.sub("[REDACTED]", update.text)
+                    return ChatResponseUpdate(
+                        contents=[Content.from_text(redacted)],
+                        role=update.role,
+                        author_name=update.author_name,
+                        response_id=update.response_id,
+                        message_id=update.message_id,
+                        conversation_id=update.conversation_id,
+                        model=update.model,
+                        created_at=update.created_at,
+                        finish_reason=update.finish_reason,
+                        continuation_token=update.continuation_token,
+                        additional_properties=update.additional_properties,
                     )
                 return update
 
@@ -401,17 +414,29 @@ async def main() -> None:
 
     import json
 
+    def get_sentiment(msg) -> str:
+        """Parse sentiment from an LLM message; tolerates markdown code fences and bad JSON."""
+        try:
+            text = msg.text.strip() if msg.text else ""
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+            return json.loads(text).get("sentiment", "neutral")
+        except (json.JSONDecodeError, ValueError, AttributeError, IndexError):
+            return "neutral"
+
     builder.add_edge_group(
         SwitchCaseEdgeGroup(
             source_id=classifier_agent.id,
             cases=[
                 SwitchCaseEdgeGroupCase(
                     target_id=positive_agent.id,
-                    condition=lambda msg: json.loads(msg.text).get("sentiment") == "positive",
+                    condition=lambda msg: get_sentiment(msg) == "positive",
                 ),
                 SwitchCaseEdgeGroupCase(
                     target_id=negative_agent.id,
-                    condition=lambda msg: json.loads(msg.text).get("sentiment") == "negative",
+                    condition=lambda msg: get_sentiment(msg) == "negative",
                 ),
                 SwitchCaseEdgeGroupDefault(target_id=neutral_agent.id),
             ],
@@ -454,6 +479,18 @@ async def main() -> None:
 
     import json
 
+    def get_score(msg) -> int:
+        """Parse numeric score from an LLM message; tolerates markdown code fences and bad JSON."""
+        try:
+            text = msg.text.strip() if msg.text else ""
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+            return int(json.loads(text).get("score", 0))
+        except (json.JSONDecodeError, ValueError, AttributeError, IndexError):
+            return 0
+
     builder = WorkflowBuilder()
     for a in [scorer, high_quality, medium_quality, low_quality]:
         builder.add_agent(a)
@@ -464,11 +501,11 @@ async def main() -> None:
             cases=[
                 SwitchCaseEdgeGroupCase(
                     target_id=high_quality.id,
-                    condition=lambda msg: json.loads(msg.text).get("score", 0) >= 8,
+                    condition=lambda msg: get_score(msg) >= 8,
                 ),
                 SwitchCaseEdgeGroupCase(
                     target_id=medium_quality.id,
-                    condition=lambda msg: 4 <= json.loads(msg.text).get("score", 0) < 8,
+                    condition=lambda msg: 4 <= get_score(msg) < 8,
                 ),
                 SwitchCaseEdgeGroupDefault(target_id=low_quality.id),
             ],
@@ -562,7 +599,7 @@ class WorkflowContext(Generic[OutT, W_OutT]):
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder
+from agent_framework import Agent, WorkflowBuilder, handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework.openai import OpenAIChatClient
@@ -571,6 +608,7 @@ from agent_framework._types import Message
 class RouterExecutor(Executor):
     """Fan the input out to two downstream executors based on message length."""
 
+    @handler
     async def execute(self, message: Message, context: WorkflowContext) -> None:
         if len(message.text or "") > 100:
             await context.send_message(message, target_id="detail_agent")
@@ -604,6 +642,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
@@ -611,23 +650,29 @@ from agent_framework._types import Message
 class AggregatorExecutor(Executor):
     """Collect responses from multiple upstream agents and merge them."""
 
-    _buffer: dict[str, str] = {}
-
+    @handler
     async def execute(self, message: Message, context: WorkflowContext) -> None:
+        # Store per-run state in context.state so concurrent runs don't share a buffer
+        # and state survives checkpointing/resumption.
+        buffer: dict[str, str] = context.state.get("aggregator_buffer") or {}
+
         # source_executor_ids tells us which executor produced this message.
         for src_id in context.source_executor_ids:
-            self._buffer[src_id] = message.text or ""
+            buffer[src_id] = message.text or ""
 
-        if len(self._buffer) >= 2:
-            merged = "\n---\n".join(self._buffer.values())
-            await context.yield_output(Message(role="assistant", content=merged))
-            self._buffer.clear()
+        context.state["aggregator_buffer"] = buffer
+
+        if len(buffer) >= 2:
+            merged = "\n---\n".join(buffer.values())
+            await context.yield_output(Message("assistant", [merged]))
+            context.state["aggregator_buffer"] = {}
 ```
 
 ### Example 3 — yield workflow-level output
 
 ```python
 import asyncio
+from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
@@ -635,10 +680,11 @@ from agent_framework._types import Message
 class SummaryExecutor(Executor):
     """Produce a structured summary as workflow output."""
 
+    @handler
     async def execute(self, message: Message, context: WorkflowContext) -> None:
         summary = Message(
-            role="assistant",
-            content=f"SUMMARY: {(message.text or '')[:200]}",
+            "assistant",
+            [f"SUMMARY: {(message.text or '')[:200]}"],
         )
         # yield_output surfaces the message as a workflow-level result
         # rather than routing it to a downstream executor.
@@ -912,13 +958,15 @@ async def main() -> None:
     # Write a topic file.
     record = MemoryTopicRecord(
         topic="preferences",
-        content="Alice prefers concise answers. Timezone: UTC+1. Language: English.",
+        summary="User preferences and locale settings.",
+        memories=["Prefers concise answers.", "Timezone: UTC+1.", "Language: English."],
+        updated_at="2026-07-09T00:00:00Z",
     )
-    await store.write_topic(session, record, source_id="memory")
+    store.write_topic(session, record, source_id="memory")
 
     # Read it back.
     fetched = await store.get_topic(session, source_id="memory", topic="preferences")
-    print(fetched.content)
+    print(fetched.summary, fetched.memories)
 
 asyncio.run(main())
 ```
@@ -1303,9 +1351,10 @@ class LocalEvaluator:
     ) -> EvalResults: ...
 
 class EvalItem:
-    query: str          # the input prompt
-    response: str       # the agent's response text
-    # ... additional metadata fields
+    # Constructor: EvalItem(conversation: list[Message], tools=None, context=None,
+    #              expected_output=None, expected_tool_calls=None, split_strategy=None)
+    query: str          # computed property — text from user messages in the query split
+    response: str       # computed property — text from assistant messages in the response split
 
 class EvalResults:
     provider: str
@@ -1323,6 +1372,7 @@ class EvalResults:
 ```python
 import asyncio
 from agent_framework._evaluation import LocalEvaluator, EvalItem
+from agent_framework._types import Message
 
 def check_length(item: EvalItem) -> bool:
     """Response must be at least 50 characters."""
@@ -1335,9 +1385,16 @@ def check_no_hallucination_marker(item: EvalItem) -> bool:
 async def main() -> None:
     evaluator = LocalEvaluator(check_length, check_no_hallucination_marker)
 
+    # EvalItem takes conversation: list[Message]; .query and .response are computed properties.
     items = [
-        EvalItem(query="Explain gravity.", response="Gravity is a fundamental force..."),
-        EvalItem(query="Describe atoms.", response="Small."),  # will fail length check
+        EvalItem(conversation=[
+            Message("user", ["Explain gravity."]),
+            Message("assistant", ["Gravity is a fundamental force that attracts objects with mass toward one another."]),
+        ]),
+        EvalItem(conversation=[
+            Message("user", ["Describe atoms."]),
+            Message("assistant", ["Small."]),  # will fail length check
+        ]),
     ]
 
     results = await evaluator.evaluate(items, eval_name="sanity-check")
@@ -1372,10 +1429,17 @@ async def factual_check(item: EvalItem) -> CheckResult:
     )
 
 async def main() -> None:
+    from agent_framework._types import Message
     evaluator = LocalEvaluator(factual_check)
     items = [
-        EvalItem(query="What is the boiling point of water?", response="100°C at sea level."),
-        EvalItem(query="What is the boiling point of water?", response="50°C."),
+        EvalItem(conversation=[
+            Message("user", ["What is the boiling point of water?"]),
+            Message("assistant", ["100°C at sea level."]),
+        ]),
+        EvalItem(conversation=[
+            Message("user", ["What is the boiling point of water?"]),
+            Message("assistant", ["50°C."]),
+        ]),
     ]
     results = await evaluator.evaluate(items, eval_name="factual-eval")
     for item_result in results.items:
@@ -1404,10 +1468,14 @@ async def main() -> None:
     agent = Agent(client=client, instructions="Answer concisely.")
 
     # Collect agent responses.
+    from agent_framework._types import Message
     items = []
     for query, expected in TEST_CASES:
         response = await agent.run(query)
-        items.append(EvalItem(query=query, response=response.text or ""))
+        items.append(EvalItem(conversation=[
+            Message("user", [query]),
+            Message("assistant", [response.text or ""]),
+        ]))
 
     # Define checks using the expected keywords stored in a closure.
     def make_keyword_check(keyword: str):
@@ -1444,13 +1512,15 @@ All examples verified against:
 
 `AgentLoopMiddleware`, `MemoryStore`, `MemoryFileStore`, `MemoryContextProvider`, and
 `AgentModeProvider` are decorated `@experimental(feature_id=ExperimentalFeature.HARNESS)`.
-Enable them by setting the environment variable `AGENT_FRAMEWORK_EXPERIMENTAL_HARNESS=1`
-or by calling `af.enable_experimental(af.ExperimentalFeature.HARNESS)` before import.
+Importing them emits an `ExperimentalWarning`; there is no opt-in call — just import them
+directly. To suppress the warning in production code use `warnings.filterwarnings`:
 
 ```python
-import agent_framework as af
-af.enable_experimental(af.ExperimentalFeature.HARNESS)
-# Now import experimental classes
+import warnings
+from agent_framework._feature_stage import ExperimentalWarning
+
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
+
 from agent_framework._harness._loop import AgentLoopMiddleware
 from agent_framework._harness._memory import MemoryStore, MemoryFileStore, MemoryContextProvider
 from agent_framework._harness._mode import AgentModeProvider
