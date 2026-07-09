@@ -192,7 +192,7 @@ class SpannerVectorStoreSettings(BaseModel):
     primary_key_columns: Optional[list[str]] = None  # defaults to auto-UUID 'id'
 ```
 
-The `SpannerVectorStoreSettings.__post_init__` validator enforces `vector_length > 0`, auto-populates `selected_columns` with `content_column` if empty, and checks that any declared `primary_key_columns` appear in the column definitions. An invalid `primary_key_columns` entry raises `ValueError`.
+The `SpannerVectorStoreSettings` model uses a `@model_validator(mode="after")` to enforce `vector_length > 0`, auto-populate `selected_columns` with `content_column` if empty, and verify that every declared `primary_key_column` appears in the column definitions (`content_column`, `embedding_column`, and any `additional_columns_to_setup`). An invalid entry raises `ValueError`.
 
 ### Example 1 — dict-list query mode with row cap
 
@@ -548,7 +548,8 @@ from google.adk.evaluation.simulation.llm_backed_user_simulator import (
 from google.adk.evaluation.conversation_scenarios import ConversationScenario
 
 scenario = ConversationScenario(
-    description="User wants to book a flight from NYC to London.",
+    starting_prompt="I'd like to book a flight from NYC to London.",
+    conversation_plan="Book a round-trip flight and confirm the booking reference.",
 )
 
 config = LlmBackedUserSimulatorConfig(
@@ -556,7 +557,7 @@ config = LlmBackedUserSimulatorConfig(
     max_allowed_invocations=5,
 )
 
-sim = LlmBackedUserSimulator(config=config, scenario=scenario)
+sim = LlmBackedUserSimulator(config=config, conversation_scenario=scenario)
 # Drives the conversation using LLM; stops when </finished> is emitted or limit hit
 ```
 
