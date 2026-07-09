@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 37"
-description: "Source-verified deep dives into 10 class groups from langgraph==1.2.8 — StreamMessagesHandler/StreamMessagesHandlerV2 (stream_mode=messages callback pair), ChannelRead (imperatively read channel state inside a node), set_config_context/create_task_in_config_context (thread-safe config propagation), chain_future/run_coroutine_threadsafe (cross-thread async bridge), map_debug_checkpoint/tasks_w_writes/rm_pregel_keys (debug checkpoint formatters), AsyncSubgraphRunStream (async discovered-subgraph handle), _triggers/_scratchpad (PULL task activation and resume state assembly), _proc_input (channel input collection and input cache), prepare_single_task/_TaskIDFn (top-level PUSH/PULL task dispatcher), and _get_channels/_get_channel/_is_field_channel/_is_field_binop (StateGraph annotation-to-channel inference)."
+description: "Source-verified deep dives (langgraph==1.2.8) into 10 class groups, extending prior coverage in Vol. 19 (StreamMessagesHandler, ChannelRead) and Vol. 31 (set_config_context) with updated 1.2.8 source facts and additional examples: StreamMessagesHandler/StreamMessagesHandlerV2, ChannelRead, set_config_context/create_task_in_config_context, chain_future/run_coroutine_threadsafe, map_debug_checkpoint/tasks_w_writes/rm_pregel_keys, AsyncSubgraphRunStream, _triggers/_scratchpad, _proc_input, prepare_single_task/_TaskIDFn, and _get_channels/_get_channel/_is_field_channel/_is_field_binop."
 framework: langgraph
 language: python
 sidebar:
