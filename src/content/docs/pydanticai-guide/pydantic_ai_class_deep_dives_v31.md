@@ -892,7 +892,7 @@ def check_kind(toolset) -> RuntimeToolsetKind | None:
 # FunctionToolset → 'function' (must be registered at agent construction)
 ft = FunctionToolset()
 
-@ft.tool
+@ft.tool_plain
 def greet(name: str) -> str:
     return f'Hello, {name}'
 
@@ -914,7 +914,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 ft = FunctionToolset()
 
-@ft.tool
+@ft.tool_plain
 def add(a: int, b: int) -> int:
     return a + b
 

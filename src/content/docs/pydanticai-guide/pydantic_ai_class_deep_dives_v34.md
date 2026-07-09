@@ -359,7 +359,7 @@ from pydantic_ai.toolsets import FunctionToolset
 def _make_ddg_fallback() -> FunctionToolset:
     toolset: FunctionToolset = FunctionToolset()
 
-    @toolset.tool()
+    @toolset.tool_plain
     def web_search(query: str) -> str:
         """Search the web using DuckDuckGo."""
         # Minimal local implementation — replace with real DuckDuckGo call
@@ -1333,7 +1333,7 @@ from pydantic_ai.toolsets import FunctionToolset
 # Native PydanticAI tool
 native_toolset = FunctionToolset()
 
-@native_toolset.tool()
+@native_toolset.tool_plain
 def get_current_date() -> str:
     """Return the current date in ISO format."""
     from datetime import date
