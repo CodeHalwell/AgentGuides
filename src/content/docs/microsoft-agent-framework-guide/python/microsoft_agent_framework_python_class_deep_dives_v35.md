@@ -632,12 +632,12 @@ asyncio.run(main())
 ### Example 2 — reading `source_executor_ids` in a fan-in executor
 
 ```python
-import asyncio
 from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
 
+# Partial snippet — wire into WorkflowBuilder with add_fan_in_edges(sources, aggregator).
 class AggregatorExecutor(Executor):
     """Collect responses from multiple upstream agents and merge them."""
 
@@ -664,12 +664,12 @@ class AggregatorExecutor(Executor):
 ### Example 3 — yield workflow-level output
 
 ```python
-import asyncio
 from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
 
+# Partial snippet — wire into WorkflowBuilder with output_from=[summary_executor].
 class SummaryExecutor(Executor):
     """Produce a structured summary as workflow output."""
 
