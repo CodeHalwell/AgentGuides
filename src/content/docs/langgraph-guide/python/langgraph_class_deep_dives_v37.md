@@ -49,7 +49,7 @@ class State(TypedDict):
     messages: list
 
 
-def call_model(state: State, *, _writer: StreamWriter) -> dict:
+def call_model(state: State) -> dict:
     if HAS_LLM:
         try:
             response = llm.invoke(state["messages"])
