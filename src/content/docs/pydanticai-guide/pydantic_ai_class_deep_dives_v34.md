@@ -247,7 +247,7 @@ agent = Agent(
     OpenRouterModel('meta-llama/llama-4-70b-instruct'),
     model_settings=OpenRouterModelSettings(
         openrouter_provider=OpenRouterProviderConfig(
-            order=['Together', 'Fireworks'],   # try Together first, then Fireworks
+            order=['together', 'fireworks'],   # provider slugs: try Together first, then Fireworks
             allow_fallbacks=True,
             require_parameters=True,           # don't route to providers missing params
             data_collection='deny',            # GDPR-friendly: no data stored
@@ -1057,7 +1057,11 @@ MATH_KEYWORDS = {'solve', 'calculate', 'equation', 'integral', 'derivative', 'ma
 
 
 class RouterAgent(WrapperAgent):
-    """Routes requests to specialised agents based on keyword matching."""
+    """Routes requests to specialised agents based on keyword matching.
+
+    Note: only plain string prompts are supported; non-string inputs are
+    forwarded directly to the default (writing) agent without routing.
+    """
 
     def __init__(self, wrapped) -> None:
         super().__init__(wrapped)
@@ -1206,15 +1210,16 @@ agent = Agent(
 )
 
 async def main() -> None:
+    enqueued = False
     async with agent.iter('Summarise the main themes in Moby Dick.') as agent_run:
         async for node in agent_run:
-            # After the first response, inject additional instructions
-            if hasattr(node, 'model_response'):
+            # After the first model response, inject additional instructions
+            if hasattr(node, 'model_response') and not enqueued:
                 agent_run.enqueue(
                     'Also note the significance of the white whale as a symbol.',
                     priority='asap',
                 )
-                break  # let the agent process the injected message
+                enqueued = True  # only enqueue once; loop continues to process it
     result = agent_run.result
     print(result.output)
 
