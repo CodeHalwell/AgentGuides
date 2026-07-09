@@ -26,7 +26,7 @@ Source-verified deep dives into **10 previously undocumented class groups**, eac
 - `run_inline = True` — forces the handler to execute synchronously in the main thread, avoiding ordering and locking races with the streaming channel.
 - `_emit(meta, message, *, dedupe=False)` — deduplicates by `message.id`; assigns a random UUID if `id is None`. The tuple `(meta[0], "messages", (message, meta[1]))` is the `StreamChunk` written to the graph stream.
 - `parent_ns` — the namespace where the handler was installed. Subgraph events are filtered to `subgraphs=True` unless their namespace has an explicit `stream_mode="messages"` subscription.
-- `StreamMessagesHandlerV2` extends `StreamMessagesHandlerV2` and also mixes in `_V2StreamingCallbackHandler`; the `on_stream_event` hook collects `on_chat_model_stream` events for the v2 streaming surface, giving richer chunk metadata.
+- `StreamMessagesHandlerV2` extends `StreamMessagesHandler` and also mixes in `_V2StreamingCallbackHandler`; the `on_stream_event` hook collects `on_chat_model_stream` events for the v2 streaming surface, giving richer chunk metadata.
 - `_find_and_emit_messages` walks `BaseMessage`, `Sequence[BaseMessage]`, state dict values, Pydantic model field values, and dataclass field values recursively — a node returning `{"messages": [AIMessage(...)]}` is handled automatically.
 
 ### Example 1 — observe how `stream_mode="messages"` surfaces chunks from an LLM inside a node
@@ -271,14 +271,10 @@ reader = ChannelRead("items", mapper=len)
 print(reader.get_name())  # ChannelRead<items>
 
 
-def update_count(state: State) -> dict:
-    # Demonstrate reading via the class in a chain — reader is invokable
-    # (needs config injected, so we show it in a full graph context)
-    return {"count": len(state["items"])}
-
-
 builder = StateGraph(State)
-builder.add_node("update", update_count)
+# Wire reader directly as the node — it reads the "items" channel via CONFIG_KEY_READ
+# and pipes the length into a dict update via the lambda
+builder.add_node("update", reader | (lambda count: {"count": count}))
 builder.add_edge(START, "update")
 builder.add_edge("update", END)
 
@@ -527,7 +523,7 @@ These three functions assemble the objects that appear in `stream_mode="debug"` 
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class State(TypedDict):
@@ -543,7 +539,7 @@ builder.add_node("inc", increment)
 builder.add_edge(START, "inc")
 builder.add_edge("inc", END)
 
-saver = MemorySaver()
+saver = InMemorySaver()
 graph = builder.compile(checkpointer=saver)
 
 config = {"configurable": {"thread_id": "debug-demo"}}
@@ -569,7 +565,7 @@ if checkpoints:
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.pregel.debug import tasks_w_writes
 
 
@@ -586,7 +582,7 @@ builder.add_node("bump", bump)
 builder.add_edge(START, "bump")
 builder.add_edge("bump", END)
 
-saver = MemorySaver()
+saver = InMemorySaver()
 graph = builder.compile(checkpointer=saver)
 config = {"configurable": {"thread_id": "tasks-demo"}}
 
@@ -635,7 +631,7 @@ print("remaining configurable keys:", list(cleaned["configurable"].keys()))
 - `path: tuple[str, ...]` — the namespace path of this subgraph (e.g. `("my_node", "<task-uuid>")` for a subgraph called from node `"my_node"`).
 - `graph_name: str | None` — the name of the subgraph class or graph object if available.
 - `trigger_call_id: str | None` — the `call()` ID that triggered this subgraph, when spawned via the functional API.
-- `status: Literal["started", "completed", "error"]` — updated by the parent mux as terminal events arrive.
+- `status: Literal["started", "completed", "failed", "interrupted", "drained"]` — updated by the parent mux as terminal events arrive.
 - `_apump_next()` — delegates to `self._parent_apump_fn`, the parent mux's pump function, rather than owning its own event loop. This is the key design: subgraph streams share the parent's event source.
 - `abort()` / async context manager — inherited from `AsyncGraphRunStream`; calling `abort()` signals the parent mux to stop forwarding events for this scope.
 
@@ -681,7 +677,7 @@ outer_graph = outer.compile()
 
 async def main():
     # v3 streaming exposes AsyncSubgraphRunStream objects
-    async with outer_graph.stream_events(
+    async with await outer_graph.astream_events(
         {"value": 5}, version="v3"
     ) as run:
         print("run type:", type(run).__name__)  # AsyncGraphRunStream
@@ -735,14 +731,14 @@ outer_compiled = outer.compile()
 
 
 async def main():
-    async with outer_compiled.stream_events({"n": 3}, version="v3") as run:
+    async with await outer_compiled.astream_events({"n": 3}, version="v3") as run:
         async for _ in run:
             pass
 
     for sg in run.subgraphs:
         print("path      :", sg.path)
         print("graph_name:", sg.graph_name)
-        print("status    :", sg.status)  # "completed" or "error"
+        print("status    :", sg.status)  # "completed", "failed", "interrupted", or "drained"
 
 
 asyncio.run(main())
@@ -779,7 +775,7 @@ graph = g.compile()
 
 async def main():
     events_seen = 0
-    async with graph.stream_events({"v": 0}, version="v3") as run:
+    async with await graph.astream_events({"v": 0}, version="v3") as run:
         async for event in run:
             events_seen += 1
             if events_seen >= 2:
@@ -950,11 +946,10 @@ print("final total:", result["total"])  # 7
 # and handed it to add_xy as its state argument
 ```
 
-### Example 2 — single-channel subscriptions (node receives a scalar, not a dict)
+### Example 2 — standard multi-channel state: `_proc_input` builds the state dict
 
 ```python
 from typing_extensions import TypedDict
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END
 
 
@@ -963,20 +958,8 @@ class State(TypedDict):
     upper: str
 
 
-def to_upper(text: str) -> str:
-    """This node is subscribed to a single channel — receives the raw value."""
-    return text.upper()
-
-
-# When a node is subscribed to a single string channel,
-# _proc_input returns the raw channel value (not a dict).
-# StateGraph handles this by detecting single-channel subscriptions.
-class State(TypedDict):
-    text: str
-    upper: str
-
-
 def uppercase_node(state: State) -> dict:
+    """_proc_input assembled this dict from channel values and passed it here."""
     return {"upper": state["text"].upper()}
 
 
@@ -1087,6 +1070,8 @@ print(result["error"])  # caught error for value=-1
 ### Example 2 — `Send()` creates PUSH task paths, inspect via `stream_mode="debug"`
 
 ```python
+import operator
+from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
@@ -1094,7 +1079,8 @@ from langgraph.types import Send
 
 class State(TypedDict):
     items: list
-    processed: list
+    # Annotated reducer required: multiple Send tasks write processed in same superstep
+    processed: Annotated[list, operator.add]
 
 
 def fan_out(state: State):
@@ -1183,7 +1169,7 @@ class MyState(TypedDict):
     # Reducer annotation → BinaryOperatorAggregate
     total: Annotated[int, operator.add]
     # Explicit channel annotation → AnyValue
-    scratch: Annotated[str, AnyValue()]
+    scratch: Annotated[str, AnyValue(str)]
 
 
 channels, managed, hints = _get_channels(MyState)
@@ -1210,7 +1196,6 @@ chan = _is_field_binop(valid_typ)
 print("valid reducer →", type(chan).__name__)  # BinaryOperatorAggregate
 
 # Zero-argument callable → ValueError
-import pytest
 try:
     bad_typ = Annotated[int, lambda: 0]
     _is_field_binop(bad_typ)
@@ -1242,7 +1227,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 
 
 # Instance annotation — the channel object itself becomes the channel
-any_value_inst = _is_field_channel(Annotated[str, AnyValue()])
+any_value_inst = _is_field_channel(Annotated[str, AnyValue(str)])
 print("instance →", type(any_value_inst).__name__)  # AnyValue
 
 # Class annotation — the class is instantiated with the origin type
