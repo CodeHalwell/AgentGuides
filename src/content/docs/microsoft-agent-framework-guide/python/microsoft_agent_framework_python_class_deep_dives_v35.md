@@ -1371,17 +1371,19 @@ from agent_framework import LocalEvaluator, EvalItem, evaluator
 from agent_framework import Message
 
 # EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]].
-# Wrap plain bool/float-returning functions with @evaluator; it coerces
-# the return value to CheckResult and handles named-parameter injection.
+# Wrap plain bool/float-returning functions with @evaluator; it coerces the
+# return value to CheckResult and injects EvalItem fields by parameter name.
+# Supported names: query, response, expected_output, expected_tool_calls,
+# conversation, tools, context.  Using any other name raises TypeError.
 @evaluator
-def check_length(item: EvalItem) -> bool:
+def check_length(response: str) -> bool:
     """Response must be at least 50 characters."""
-    return len(item.response) >= 50
+    return len(response) >= 50
 
 @evaluator
-def check_no_hallucination_marker(item: EvalItem) -> bool:
+def check_no_hallucination_marker(response: str) -> bool:
     """Response must not contain the word 'hallucination' (placeholder check)."""
-    return "hallucination" not in item.response.lower()
+    return "hallucination" not in response.lower()
 
 async def main() -> None:
     local_evaluator = LocalEvaluator(check_length, check_no_hallucination_marker)
@@ -1472,10 +1474,10 @@ TEST_CASES = [
 EXPECTED = {q: kw for q, kw in TEST_CASES}
 
 @evaluator
-def keyword_check(item: EvalItem) -> bool:
-    """Pass if the item's response contains the expected keyword for its query."""
-    expected = EXPECTED.get(item.query, "")
-    return expected.lower() in item.response.lower()
+def keyword_check(query: str, response: str) -> bool:
+    """Pass if the response contains the expected keyword for its query."""
+    expected = EXPECTED.get(query, "")
+    return expected.lower() in response.lower()
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
