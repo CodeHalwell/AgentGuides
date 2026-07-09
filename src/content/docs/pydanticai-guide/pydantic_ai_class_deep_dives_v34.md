@@ -206,7 +206,7 @@ Use OpenRouter's built-in fallback routing: if the primary model is unavailable 
 ```python  {test="skip"}
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.models.openrouter import OpenRouterModel, OpenRouterModelSettings
+from pydantic_ai.models.openrouter import OpenRouterModel, OpenRouterModelSettings, OpenRouterUsageConfig
 
 agent = Agent(
     OpenRouterModel('anthropic/claude-sonnet-4-6'),
@@ -510,18 +510,22 @@ from collections.abc import AsyncIterator
 
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessEventStream
-from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPart
+from pydantic_ai.messages import AgentStreamEvent, PartDeltaEvent, PartEndEvent, PartStartEvent, ThinkingPart
 from pydantic_ai.tools import RunContext
 
 
 async def strip_thinking(
     ctx: RunContext, stream: AsyncIterator[AgentStreamEvent]
 ) -> AsyncIterator[AgentStreamEvent]:
-    """Processor: drop all ThinkingPart events."""
+    """Processor: drop all ThinkingPart start/delta/end events."""
+    suppressed: set[int] = set()
     async for event in stream:
         if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
-            continue   # drop thinking-start events
-        yield event    # pass everything else through
+            suppressed.add(event.index)  # remember this index
+            continue
+        if isinstance(event, (PartDeltaEvent, PartEndEvent)) and event.index in suppressed:
+            continue   # drop deltas and end-events for suppressed parts
+        yield event
 
 
 agent = Agent(
@@ -562,7 +566,8 @@ async def latency_monitor(ctx: RunContext, stream: AsyncIterator[AgentStreamEven
         if first_token_time is None:
             first_token_time = time.monotonic() - start
     total = time.monotonic() - start
-    print(f'[LATENCY] TTFT={first_token_time:.3f}s  total={total:.3f}s')
+    ttft = f'{first_token_time:.3f}s' if first_token_time is not None else 'n/a'
+    print(f'[LATENCY] TTFT={ttft}  total={total:.3f}s')
 
 
 async def result_logger(ctx: RunContext, stream: AsyncIterator[AgentStreamEvent]) -> None:
@@ -971,7 +976,6 @@ Intercept every run, log metadata, and forward to the inner agent.
 ```python  {test="skip"}
 import asyncio
 import time
-from dataclasses import dataclass
 from typing import Any, Sequence
 
 from pydantic_ai import Agent
@@ -981,11 +985,12 @@ from pydantic_ai.result import AgentRunResult
 from pydantic_ai.settings import ModelSettings
 
 
-@dataclass
 class AuditedAgent(WrapperAgent):
     """Wraps any agent to log run metadata."""
 
-    audit_log: list[dict[str, Any]]
+    def __init__(self, wrapped, audit_log: list[dict[str, Any]]) -> None:
+        super().__init__(wrapped)
+        self.audit_log = audit_log
 
     async def run(
         self,
@@ -1038,7 +1043,6 @@ Route each request to a specialised agent based on keyword analysis.
 
 ```python  {test="skip"}
 import asyncio
-from dataclasses import dataclass
 from pydantic_ai import Agent
 from pydantic_ai.agent import WrapperAgent
 from pydantic_ai.result import AgentRunResult
@@ -1052,9 +1056,11 @@ CODE_KEYWORDS = {'code', 'function', 'class', 'python', 'bug', 'debug', 'impleme
 MATH_KEYWORDS = {'solve', 'calculate', 'equation', 'integral', 'derivative', 'matrix'}
 
 
-@dataclass
 class RouterAgent(WrapperAgent):
     """Routes requests to specialised agents based on keyword matching."""
+
+    def __init__(self, wrapped) -> None:
+        super().__init__(wrapped)
 
     async def run(self, user_prompt: str, **kwargs) -> AgentRunResult:
         words = set(user_prompt.lower().split())
@@ -1066,7 +1072,6 @@ class RouterAgent(WrapperAgent):
             return await writing_agent.run(user_prompt, **kwargs)
 
 
-# wrapped= is a dummy placeholder; RouterAgent overrides run() entirely
 router = RouterAgent(wrapped=writing_agent)
 
 async def main() -> None:
