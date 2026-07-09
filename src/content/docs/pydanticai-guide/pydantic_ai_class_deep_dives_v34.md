@@ -61,6 +61,7 @@ Connect to a remote MCP server over HTTP; fall back to the local client when the
 
 ```python  {test="skip"}
 import asyncio
+import os
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import MCP
 
@@ -71,7 +72,7 @@ agent = Agent(
         MCP(
             url='https://my-mcp-server.example.com/mcp',
             local=True,
-            authorization_token='Bearer my-secret-token',
+            authorization_token=os.environ['MCP_AUTH_TOKEN'],
         )
     ],
 )
