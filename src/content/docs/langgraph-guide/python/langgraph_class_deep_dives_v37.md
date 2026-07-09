@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 37"
-description: "Source-verified deep dives into 10 previously undocumented class groups from langgraph==1.2.8 — StreamMessagesHandler/StreamMessagesHandlerV2 (stream_mode=messages callback pair), ChannelRead (imperatively read channel state inside a node), set_config_context/create_task_in_config_context (thread-safe config propagation), chain_future/run_coroutine_threadsafe (cross-thread async bridge), map_debug_checkpoint/tasks_w_writes/rm_pregel_keys (debug checkpoint formatters), AsyncSubgraphRunStream (async discovered-subgraph handle), _triggers/_scratchpad (PULL task activation and resume state assembly), _proc_input (channel input collection and input cache), prepare_single_task/_TaskIDFn (top-level PUSH/PULL task dispatcher), and _get_channels/_get_channel/_is_field_channel/_is_field_binop (StateGraph annotation-to-channel inference)."
+description: "Source-verified deep dives into 10 class groups from langgraph==1.2.8 — StreamMessagesHandler/StreamMessagesHandlerV2 (stream_mode=messages callback pair), ChannelRead (imperatively read channel state inside a node), set_config_context/create_task_in_config_context (thread-safe config propagation), chain_future/run_coroutine_threadsafe (cross-thread async bridge), map_debug_checkpoint/tasks_w_writes/rm_pregel_keys (debug checkpoint formatters), AsyncSubgraphRunStream (async discovered-subgraph handle), _triggers/_scratchpad (PULL task activation and resume state assembly), _proc_input (channel input collection and input cache), prepare_single_task/_TaskIDFn (top-level PUSH/PULL task dispatcher), and _get_channels/_get_channel/_is_field_channel/_is_field_binop (StateGraph annotation-to-channel inference)."
 framework: langgraph
 language: python
 sidebar:
@@ -8,7 +8,7 @@ sidebar:
   order: 68
 ---
 
-Source-verified deep dives into **10 previously undocumented class groups**, each with **3 runnable examples**, verified against `langgraph==1.2.8` / `langgraph-checkpoint==4.1.1` / `langgraph-prebuilt==1.1.0`.
+Source-verified deep dives into **10 class groups**, each with **3 runnable examples**, verified against `langgraph==1.2.8` / `langgraph-checkpoint==4.1.1` / `langgraph-prebuilt==1.1.0`.
 
 ---
 
@@ -432,10 +432,16 @@ loop = asyncio.new_event_loop()
 t = threading.Thread(target=loop.run_forever, daemon=True)
 t.start()
 
-# Submit work from the main (non-async) thread
-fut = run_coroutine_threadsafe(async_worker(7), loop, lazy=True)
-result = asyncio.run_coroutine_threadsafe(async_worker(7), loop).result(timeout=5)
-# Using the stdlib version for .result() — our version returns an asyncio.Future
+# Submit work from the main (non-async) thread; returns asyncio.Future (not
+# concurrent.futures.Future), so bridge back via threading.Event
+async_fut = run_coroutine_threadsafe(async_worker(7), loop)
+_done = threading.Event()
+_box: list = []
+loop.call_soon_threadsafe(
+    async_fut.add_done_callback, lambda f: (_box.append(f.result()), _done.set())
+)
+_done.wait(timeout=5)
+result = _box[0]
 print("result:", result)  # result: 49
 
 loop.call_soon_threadsafe(loop.stop)
@@ -1237,3 +1243,4 @@ print("class    →", type(ephem_class).__name__)    # EphemeralValue
 # No metadata → returns None (fallback to LastValue)
 plain = _is_field_channel(int)
 print("plain    →", plain)                         # None
+```
