@@ -26,7 +26,7 @@ package source via `inspect.getsource()`. Sub-packages introspected:
 - [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — `FileHistoryProvider`, middleware ABCs, compaction, `FileCheckpointStorage`, `LocalEvaluator`, `WorkflowRunResult`
 - [Vol. 3–34](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v34/) — see individual volume pages (300+ classes total)
 
-Nine class groups, three runnable examples each (27 total).
+Nine class groups with three examples each (27 total; WorkflowContext Examples 2 and 3 are partial snippets that require WorkflowBuilder wiring before they can run).
 
 | # | Class / group | Module |
 |---|---|---|
@@ -205,6 +205,10 @@ class ChatContext:
 | `metadata` | `dict[str, Any]` | **yes** | Shared side-channel for middleware; always a `dict` at runtime (converted from the `Mapping` constructor param) |
 | `result` | `ChatResponse \| ResponseStream \| None` | **yes** | Set by `call_next()`; can be overridden |
 | `kwargs` | `dict[str, Any]` | **yes** | Extra kwargs forwarded to client |
+| `function_invocation_kwargs` | `dict[str, Any]` | **yes** | Forwarded only to tool-invocation layers, not the main chat call |
+| `stream_transform_hooks` | `list[Callable]` | **yes** | Transform hooks applied to each streamed chunk; always a `list` at runtime |
+| `stream_result_hooks` | `list[Callable]` | **yes** | Hooks applied to the finalized streaming response |
+| `stream_cleanup_hooks` | `list[Callable]` | **yes** | Cleanup hooks run after streaming completes |
 
 ### Example 1 — logging middleware that reads message count
 
@@ -632,38 +636,30 @@ asyncio.run(main())
 ### Example 2 — reading `source_executor_ids` in a fan-in executor
 
 ```python
+from typing_extensions import Never
 from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
 
 # Partial snippet — wire into WorkflowBuilder with add_fan_in_edges(sources, aggregator).
+# add_fan_in_edges waits for ALL sources to complete, then calls the handler ONCE with
+# a list containing every source's message.  Do NOT use get_source_executor_id() here;
+# it raises RuntimeError when there are multiple upstream sources.
 class AggregatorExecutor(Executor):
-    """Collect responses from multiple upstream agents and merge them."""
+    """Receive all upstream responses at once and merge them into a single output."""
 
     @handler
-    async def execute(self, message: Message, context: WorkflowContext) -> None:
-        # Store per-run state in context.state so concurrent runs don't share a buffer
-        # and state survives checkpointing/resumption.
-        buffer: dict[str, str] = context.state.get("aggregator_buffer") or {}
-
-        # get_source_executor_id() returns the single producer of this specific message.
-        # (source_executor_ids lists all possible upstream sources; use it only to check
-        # whether all expected sources have reported in, not to attribute this message.)
-        src_id = context.get_source_executor_id()
-        buffer[src_id] = message.text or ""
-
-        context.state["aggregator_buffer"] = buffer
-
-        if len(buffer) >= 2:
-            merged = "\n---\n".join(buffer.values())
-            await context.yield_output(Message("assistant", [merged]))
-            context.state["aggregator_buffer"] = {}
+    async def aggregate(self, messages: list[Message], context: WorkflowContext[Never, Message]) -> None:
+        parts = [m.text or "" for m in messages]
+        merged = "\n---\n".join(parts)
+        await context.yield_output(Message("assistant", [merged]))
 ```
 
 ### Example 3 — yield workflow-level output
 
 ```python
+from typing_extensions import Never
 from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
@@ -673,8 +669,11 @@ from agent_framework._types import Message
 class SummaryExecutor(Executor):
     """Produce a structured summary as workflow output."""
 
+    # WorkflowContext[Never, Message]:
+    #   Never  = no downstream send_message calls
+    #   Message = the type passed to yield_output (required for build() validation)
     @handler
-    async def execute(self, message: Message, context: WorkflowContext) -> None:
+    async def execute(self, message: Message, context: WorkflowContext[Never, Message]) -> None:
         summary = Message(
             "assistant",
             [f"SUMMARY: {(message.text or '')[:200]}"],
@@ -1361,19 +1360,24 @@ class EvalResults:
 
 ```python
 import asyncio
-from agent_framework._evaluation import LocalEvaluator, EvalItem
+from agent_framework._evaluation import LocalEvaluator, EvalItem, evaluator
 from agent_framework._types import Message
 
+# LocalEvaluator expects EvalCheck callables that return CheckResult.
+# Wrap plain bool-returning functions with @evaluator so the framework
+# can coerce the result and read .check_name / .passed correctly.
+@evaluator
 def check_length(item: EvalItem) -> bool:
     """Response must be at least 50 characters."""
     return len(item.response) >= 50
 
+@evaluator
 def check_no_hallucination_marker(item: EvalItem) -> bool:
     """Response must not contain the word 'hallucination' (placeholder check)."""
     return "hallucination" not in item.response.lower()
 
 async def main() -> None:
-    evaluator = LocalEvaluator(check_length, check_no_hallucination_marker)
+    local_evaluator = LocalEvaluator(check_length, check_no_hallucination_marker)
 
     # EvalItem takes conversation: list[Message]; .query and .response are computed properties.
     items = [
@@ -1387,7 +1391,7 @@ async def main() -> None:
         ]),
     ]
 
-    results = await evaluator.evaluate(items, eval_name="sanity-check")
+    results = await local_evaluator.evaluate(items, eval_name="sanity-check")
     print(f"Passed: {results.result_counts['passed']}")
     print(f"Failed: {results.result_counts['failed']}")
     for item_result in results.items:
