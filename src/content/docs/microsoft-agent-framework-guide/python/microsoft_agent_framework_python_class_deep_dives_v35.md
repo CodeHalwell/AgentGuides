@@ -26,7 +26,7 @@ package source via `inspect.getsource()`. Sub-packages introspected:
 - [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — `FileHistoryProvider`, middleware ABCs, compaction, `FileCheckpointStorage`, `LocalEvaluator`, `WorkflowRunResult`
 - [Vol. 3–34](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v34/) — see individual volume pages (300+ classes total)
 
-Nine class groups with three examples each (27 total; WorkflowContext Examples 2 and 3 are partial snippets that require WorkflowBuilder wiring before they can run).
+Nine class groups with three examples each (25 runnable end-to-end, plus 2 partial snippets — WorkflowContext Examples 2 and 3 require WorkflowBuilder wiring to run standalone).
 
 | # | Class / group | Module |
 |---|---|---|
@@ -48,9 +48,9 @@ Nine class groups with three examples each (27 total; WorkflowContext Examples 2
 
 `RawAgent` is the inner implementation that `Agent` wraps. Use it directly when you need
 the lowest possible overhead — no telemetry spans, no automatic compaction, no middleware
-pipeline unless you wire it in yourself. It is generic over `OptionsCoT`, the provider
-options TypedDict (e.g. `OpenAIChatCompletionOptions`), which enables IDE autocomplete for
-temperature, max_tokens, and reasoning-effort parameters.
+pipeline unless you wire it in yourself. It is generic over `OptionsCoT` (the actual TypeVar name; the class docstring calls it `TOptions`
+— they are the same thing), the provider options TypedDict (e.g. `OpenAIChatCompletionOptions`),
+which enables IDE autocomplete for temperature, max_tokens, and reasoning-effort parameters.
 
 ### Constructor
 
@@ -300,24 +300,29 @@ class PiiRedactMiddleware(ChatMiddleware):
         if context.stream:
             # Append a transform hook that fires for every streamed chunk.
             def redact(update: ChatResponseUpdate) -> ChatResponseUpdate:
-                if update.text:
-                    # Construct a new update using public constructor fields;
-                    # .text is a computed property derived from .contents, not a kwarg.
-                    redacted = _EMAIL_RE.sub("[REDACTED]", update.text)
-                    return ChatResponseUpdate(
-                        contents=[Content.from_text(redacted)],
-                        role=update.role,
-                        author_name=update.author_name,
-                        response_id=update.response_id,
-                        message_id=update.message_id,
-                        conversation_id=update.conversation_id,
-                        model=update.model,
-                        created_at=update.created_at,
-                        finish_reason=update.finish_reason,
-                        continuation_token=update.continuation_token,
-                        additional_properties=update.additional_properties,
-                    )
-                return update
+                if not update.text:
+                    return update
+                # Iterate over contents so tool-call/result chunks are preserved;
+                # only replace text-type items to avoid dropping non-text content.
+                redacted_contents = [
+                    Content.from_text(_EMAIL_RE.sub("[REDACTED]", c.text))
+                    if c.type == "text" and c.text
+                    else c
+                    for c in update.contents
+                ]
+                return ChatResponseUpdate(
+                    contents=redacted_contents,
+                    role=update.role,
+                    author_name=update.author_name,
+                    response_id=update.response_id,
+                    message_id=update.message_id,
+                    conversation_id=update.conversation_id,
+                    model=update.model,
+                    created_at=update.created_at,
+                    finish_reason=update.finish_reason,
+                    continuation_token=update.continuation_token,
+                    additional_properties=update.additional_properties,
+                )
 
             context.stream_transform_hooks.append(redact)
         await call_next()
@@ -1035,11 +1040,11 @@ class MemoryContextProvider(HistoryProvider):
         store: MemoryStore,
         source_id: str = "memory",
         context_prompt: str | None = None,
-        index_line_limit: int = 50,
-        index_line_length: int = 120,
-        selection_limit: int = 5,
-        max_extractions: int = 20,
-        consolidation_interval: timedelta = timedelta(days=7),
+        index_line_limit: int = 200,
+        index_line_length: int = 150,
+        selection_limit: int = 3,
+        max_extractions: int = 5,
+        consolidation_interval: timedelta = timedelta(hours=24),
         consolidation_min_sessions: int = 5,
         extraction_prompt: str = ...,    # DEFAULT_MEMORY_EXTRACTION_PROMPT
         consolidation_prompt: str = ..., # DEFAULT_MEMORY_CONSOLIDATION_PROMPT
@@ -1055,9 +1060,9 @@ class MemoryContextProvider(HistoryProvider):
 | `recent_turns` | `0` | Most-recent transcript turns injected alongside topics |
 | `load_tool_turns` | `True` | Include tool call/result message groups in recent turns |
 | `store` | — | Backing `MemoryStore` |
-| `selection_limit` | `5` | Max topic files auto-loaded per turn |
-| `max_extractions` | `20` | Max items extracted per turn |
-| `consolidation_interval` | 7 days | Minimum time between consolidation runs |
+| `selection_limit` | `3` | Max topic files auto-loaded per turn |
+| `max_extractions` | `5` | Max items extracted per turn |
+| `consolidation_interval` | 24 hours | Minimum time between consolidation runs |
 | `consolidation_min_sessions` | `5` | Sessions required before first consolidation |
 | `consolidation_client` | `None` | Cheaper LLM for consolidation; falls back to agent client |
 
