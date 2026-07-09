@@ -1025,7 +1025,7 @@ class Edge(BaseModel):
 
 class Graph(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-    nodes: list[...] = Field(default_factory=list)
+    nodes: list[BaseNode] = Field(default_factory=list)
     edges: list[Edge] = Field(default_factory=list)
     _terminal_node_names: set[str] = PrivateAttr(default_factory=set)
 
