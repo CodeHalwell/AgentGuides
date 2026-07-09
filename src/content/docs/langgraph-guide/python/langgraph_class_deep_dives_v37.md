@@ -343,10 +343,14 @@ asyncio.run(main())
 ### Example 2 — `set_config_context` for thread-local config isolation
 
 ```python
-import contextvars
 from langchain_core.runnables import RunnableConfig
 from langgraph._internal._runnable import set_config_context
 
+try:
+    from langchain_core.runnables.config import var_child_runnable_config
+    HAS_VAR = True
+except ImportError:
+    HAS_VAR = False
 
 config_a: RunnableConfig = {"tags": ["branch-a"]}
 config_b: RunnableConfig = {"tags": ["branch-b"]}
@@ -354,10 +358,11 @@ config_b: RunnableConfig = {"tags": ["branch-b"]}
 
 def run_in_context(cfg: RunnableConfig) -> None:
     with set_config_context(cfg) as ctx:
-        # ctx.run executes a callable inside this isolated context
         def read_tags() -> list:
-            # In real LangChain code, var_child_runnable_config.get()
-            # would return cfg here
+            if HAS_VAR:
+                # set_config_context sets var_child_runnable_config inside ctx
+                active = var_child_runnable_config.get(None)
+                return active.get("tags", []) if active else []
             return cfg.get("tags", [])
         tags = ctx.run(read_tags)
         print(f"tags inside context: {tags}")
@@ -701,8 +706,8 @@ async def main():
         # Subgraph discovery happens as events are pumped
         async for event in run:
             pass  # consume events to drive the pump
-        # Subgraphs discovered during the run
-        for sg in run.subgraphs:
+        # Subgraphs are buffered in run.subgraphs as they are discovered
+        async for sg in run.subgraphs:
             print(f"subgraph path={sg.path}, status={sg.status}")
 
 
@@ -751,11 +756,11 @@ async def main():
     async with await outer_compiled.astream_events({"n": 3}, version="v3") as run:
         async for _ in run:
             pass
-
-    for sg in run.subgraphs:
-        print("path      :", sg.path)
-        print("graph_name:", sg.graph_name)
-        print("status    :", sg.status)  # "completed", "failed", "interrupted", or "drained"
+        # Iterate subgraphs inside the `async with` block while the mux is still live
+        async for sg in run.subgraphs:
+            print("path      :", sg.path)
+            print("graph_name:", sg.graph_name)
+            print("status    :", sg.status)  # "completed", "failed", "interrupted", or "drained"
 
 
 asyncio.run(main())
