@@ -138,7 +138,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import RawAgent, tool
+from agent_framework import RawAgent
 from agent_framework.openai import OpenAIChatClient
 
 def get_stock_price(ticker: str) -> float:
@@ -171,7 +171,7 @@ asyncio.run(main())
 
 **Module:** `agent_framework._middleware`
 
-`ChatContext` is threaded through every `ChatMiddleware.on_chat` call. Middleware reads
+`ChatContext` is threaded through every `ChatMiddleware.process` call. Middleware reads
 `messages`, `options`, and `stream` before calling `call_next()`, then reads or replaces
 `result` after. The `metadata` dict is the standard side-channel for middleware-to-middleware
 communication within a single request.
@@ -202,7 +202,7 @@ class ChatContext:
 | `messages` | `Sequence[Message]` | no | Input message list |
 | `options` | `Mapping[str, Any] \| None` | no | Provider options |
 | `stream` | `bool` | no | Whether this is a streaming call |
-| `metadata` | `dict[str, Any]` | **yes** | Shared side-channel for middleware |
+| `metadata` | `dict[str, Any]` | **yes** | Shared side-channel for middleware; always a `dict` at runtime (converted from the `Mapping` constructor param) |
 | `result` | `ChatResponse \| ResponseStream \| None` | **yes** | Set by `call_next()`; can be overridden |
 | `kwargs` | `dict[str, Any]` | **yes** | Extra kwargs forwarded to client |
 
@@ -345,7 +345,14 @@ executor's output message first. Exactly one `SwitchCaseEdgeGroupDefault` is req
 the final fallback; at least two entries (one case + one default) are enforced at
 construction time.
 
-### Constructor
+**Two complementary APIs in 1.10.0:**
+
+| API | Used for | Types |
+|---|---|---|
+| `builder.add_switch_case_edge_group(source, [Case(...), Default(...)])` | Runtime routing | `Case(condition=..., target=executor)`, `Default(target=executor)` |
+| `SwitchCaseEdgeGroup(source_id=..., cases=[...])` | Serialization / `to_dict()` inspection | `SwitchCaseEdgeGroupCase(condition, target_id)`, `SwitchCaseEdgeGroupDefault(target_id)` |
+
+### Serialization constructor (`SwitchCaseEdgeGroup`)
 
 ```python
 @dataclass(init=False)
@@ -360,12 +367,22 @@ class SwitchCaseEdgeGroup(FanOutEdgeGroup):
 
 @dataclass
 class SwitchCaseEdgeGroupCase:
-    target_id: str
     condition: Callable[[Any], bool]  # receives the source executor's output message
+    target_id: str
 
 @dataclass
 class SwitchCaseEdgeGroupDefault:
     target_id: str
+
+# Runtime types used with WorkflowBuilder.add_switch_case_edge_group():
+@dataclass
+class Case:
+    condition: Callable[[Any], bool]
+    target: Executor | SupportsAgentRun
+
+@dataclass
+class Default:
+    target: Executor | SupportsAgentRun
 ```
 
 | Parameter | Notes |
@@ -380,13 +397,22 @@ class SwitchCaseEdgeGroupDefault:
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder, tool
-from agent_framework._workflows._edge import (
-    SwitchCaseEdgeGroup,
-    SwitchCaseEdgeGroupCase,
-    SwitchCaseEdgeGroupDefault,
-)
+import json
+from agent_framework import Agent, WorkflowBuilder
+from agent_framework._workflows._edge import Case, Default
 from agent_framework.openai import OpenAIChatClient
+
+def get_sentiment(msg) -> str:
+    """Parse sentiment from an LLM message; tolerates markdown code fences and bad JSON."""
+    try:
+        text = msg.text.strip() if msg.text else ""
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        return json.loads(text).get("sentiment", "neutral")
+    except (json.JSONDecodeError, ValueError, AttributeError, IndexError):
+        return "neutral"
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
@@ -396,7 +422,7 @@ async def main() -> None:
     negative_agent = Agent(client=client, name="negative", instructions="Respond with empathy.")
     neutral_agent  = Agent(client=client, name="neutral",  instructions="Respond factually.")
 
-    # Classifier agent returns a dict with a "sentiment" key.
+    # Classifier agent returns a JSON sentiment object.
     classifier_agent = Agent(
         client=client,
         name="classifier",
@@ -406,47 +432,22 @@ async def main() -> None:
         ),
     )
 
-    builder = WorkflowBuilder()
-    builder.add_agent(classifier_agent)
-    builder.add_agent(positive_agent)
-    builder.add_agent(negative_agent)
-    builder.add_agent(neutral_agent)
-
-    import json
-
-    def get_sentiment(msg) -> str:
-        """Parse sentiment from an LLM message; tolerates markdown code fences and bad JSON."""
-        try:
-            text = msg.text.strip() if msg.text else ""
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0].strip()
-            return json.loads(text).get("sentiment", "neutral")
-        except (json.JSONDecodeError, ValueError, AttributeError, IndexError):
-            return "neutral"
-
-    builder.add_edge_group(
-        SwitchCaseEdgeGroup(
-            source_id=classifier_agent.id,
-            cases=[
-                SwitchCaseEdgeGroupCase(
-                    target_id=positive_agent.id,
-                    condition=lambda msg: get_sentiment(msg) == "positive",
-                ),
-                SwitchCaseEdgeGroupCase(
-                    target_id=negative_agent.id,
-                    condition=lambda msg: get_sentiment(msg) == "negative",
-                ),
-                SwitchCaseEdgeGroupDefault(target_id=neutral_agent.id),
-            ],
-        )
+    # WorkflowBuilder(start_executor=...) is required in 1.10; output_from designates outputs.
+    builder = WorkflowBuilder(
+        start_executor=classifier_agent,
+        output_from=[positive_agent, negative_agent, neutral_agent],
+    )
+    # Use runtime Case/Default (with executor instances) for add_switch_case_edge_group.
+    builder.add_switch_case_edge_group(
+        classifier_agent,
+        [
+            Case(condition=lambda msg: get_sentiment(msg) == "positive", target=positive_agent),
+            Case(condition=lambda msg: get_sentiment(msg) == "negative", target=negative_agent),
+            Default(target=neutral_agent),
+        ],
     )
 
-    workflow = builder.build(
-        input_agent_id=classifier_agent.id,
-        output_agent_ids=[positive_agent.id, negative_agent.id, neutral_agent.id],
-    )
+    workflow = builder.build()
     result = await workflow.run("I absolutely love this product!")
     print(result.text)
 
@@ -457,13 +458,22 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import json
 from agent_framework import Agent, WorkflowBuilder
-from agent_framework._workflows._edge import (
-    SwitchCaseEdgeGroup,
-    SwitchCaseEdgeGroupCase,
-    SwitchCaseEdgeGroupDefault,
-)
+from agent_framework._workflows._edge import Case, Default
 from agent_framework.openai import OpenAIChatClient
+
+def get_score(msg) -> int:
+    """Parse numeric score from an LLM message; tolerates markdown code fences and bad JSON."""
+    try:
+        text = msg.text.strip() if msg.text else ""
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        return int(json.loads(text).get("score", 0))
+    except (json.JSONDecodeError, ValueError, AttributeError, IndexError):
+        return 0
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
@@ -473,49 +483,24 @@ async def main() -> None:
         name="scorer",
         instructions='Score the code quality 0-10. Reply only with {"score": <int>}.',
     )
-    high_quality  = Agent(client=client, name="high",  instructions="Congratulate the developer.")
+    high_quality   = Agent(client=client, name="high",   instructions="Congratulate the developer.")
     medium_quality = Agent(client=client, name="medium", instructions="Suggest minor improvements.")
-    low_quality    = Agent(client=client, name="low",   instructions="Provide detailed refactoring guidance.")
+    low_quality    = Agent(client=client, name="low",    instructions="Provide detailed refactoring guidance.")
 
-    import json
-
-    def get_score(msg) -> int:
-        """Parse numeric score from an LLM message; tolerates markdown code fences and bad JSON."""
-        try:
-            text = msg.text.strip() if msg.text else ""
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0].strip()
-            return int(json.loads(text).get("score", 0))
-        except (json.JSONDecodeError, ValueError, AttributeError, IndexError):
-            return 0
-
-    builder = WorkflowBuilder()
-    for a in [scorer, high_quality, medium_quality, low_quality]:
-        builder.add_agent(a)
-
-    builder.add_edge_group(
-        SwitchCaseEdgeGroup(
-            source_id=scorer.id,
-            cases=[
-                SwitchCaseEdgeGroupCase(
-                    target_id=high_quality.id,
-                    condition=lambda msg: get_score(msg) >= 8,
-                ),
-                SwitchCaseEdgeGroupCase(
-                    target_id=medium_quality.id,
-                    condition=lambda msg: 4 <= get_score(msg) < 8,
-                ),
-                SwitchCaseEdgeGroupDefault(target_id=low_quality.id),
-            ],
-        )
+    builder = WorkflowBuilder(
+        start_executor=scorer,
+        output_from=[high_quality, medium_quality, low_quality],
+    )
+    builder.add_switch_case_edge_group(
+        scorer,
+        [
+            Case(condition=lambda msg: get_score(msg) >= 8,              target=high_quality),
+            Case(condition=lambda msg: 4 <= get_score(msg) < 8,          target=medium_quality),
+            Default(target=low_quality),
+        ],
     )
 
-    workflow = builder.build(
-        input_agent_id=scorer.id,
-        output_agent_ids=[high_quality.id, medium_quality.id, low_quality.id],
-    )
+    workflow = builder.build()
     code_snippet = "def add(a, b): return a+b"
     result = await workflow.run(code_snippet)
     print(result.text)
@@ -606,32 +591,32 @@ from agent_framework.openai import OpenAIChatClient
 from agent_framework._types import Message
 
 class RouterExecutor(Executor):
-    """Fan the input out to two downstream executors based on message length."""
+    """Forward the message downstream; WorkflowBuilder edge conditions handle routing."""
 
     @handler
     async def execute(self, message: Message, context: WorkflowContext) -> None:
-        if len(message.text or "") > 100:
-            await context.send_message(message, target_id="detail_agent")
-        else:
-            await context.send_message(message, target_id="quick_agent")
+        # send_message with target_id=None lets the edge routing (add_edge conditions)
+        # decide which downstream executor receives the message.
+        await context.send_message(message)
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
+    router = RouterExecutor(id="router")
     detail_agent = Agent(client=client, name="detail_agent",
                          instructions="Provide a comprehensive answer.")
     quick_agent  = Agent(client=client, name="quick_agent",
                          instructions="Give a brief answer.")
 
-    builder = WorkflowBuilder()
-    router = RouterExecutor(id="router")
-    builder.add_executor(router)
-    builder.add_agent(detail_agent)
-    builder.add_agent(quick_agent)
-    builder.add_edge(source_id="router", target_id="detail_agent")
-    builder.add_edge(source_id="router", target_id="quick_agent")
+    # WorkflowBuilder(start_executor=...) is required in 1.10.
+    builder = WorkflowBuilder(
+        start_executor=router,
+        output_from=[detail_agent, quick_agent],
+    )
+    # Route by message length; add_edge takes executor/agent instances, not IDs.
+    builder.add_edge(router, detail_agent, condition=lambda msg: len(msg.text or "") > 100)
+    builder.add_edge(router, quick_agent,  condition=lambda msg: len(msg.text or "") <= 100)
 
-    workflow = builder.build(input_executor_id="router",
-                             output_agent_ids=["detail_agent", "quick_agent"])
+    workflow = builder.build()
     result = await workflow.run("Hi")
     print(result.text)
 
@@ -656,9 +641,11 @@ class AggregatorExecutor(Executor):
         # and state survives checkpointing/resumption.
         buffer: dict[str, str] = context.state.get("aggregator_buffer") or {}
 
-        # source_executor_ids tells us which executor produced this message.
-        for src_id in context.source_executor_ids:
-            buffer[src_id] = message.text or ""
+        # get_source_executor_id() returns the single producer of this specific message.
+        # (source_executor_ids lists all possible upstream sources; use it only to check
+        # whether all expected sources have reported in, not to attribute this message.)
+        src_id = context.get_source_executor_id()
+        buffer[src_id] = message.text or ""
 
         context.state["aggregator_buffer"] = buffer
 
@@ -888,27 +875,27 @@ class MemoryStore(ABC):
     def export_provider_state(self, session: AgentSession) -> dict[str, Any]: ...
     def import_provider_state(self, session: AgentSession, *, state: Mapping[str, Any]) -> None: ...
 
-    # Must be implemented
+    # Must be implemented — all methods are synchronous (no async)
     @abstractmethod
-    async def list_topics(self, session, *, source_id: str) -> list[MemoryTopicRecord]: ...
+    def list_topics(self, session, *, source_id: str) -> list[MemoryTopicRecord]: ...
     @abstractmethod
-    async def get_topic(self, session, *, source_id: str, topic: str) -> MemoryTopicRecord: ...
+    def get_topic(self, session, *, source_id: str, topic: str) -> MemoryTopicRecord: ...
     @abstractmethod
-    async def write_topic(self, session, record: MemoryTopicRecord, *, source_id: str) -> None: ...
+    def write_topic(self, session, record: MemoryTopicRecord, *, source_id: str) -> None: ...
     @abstractmethod
-    async def delete_topic(self, session, *, source_id: str, topic: str) -> None: ...
+    def delete_topic(self, session, *, source_id: str, topic: str) -> None: ...
     @abstractmethod
-    async def rebuild_index(self, session, *, source_id: str, line_limit: int, line_length: int) -> list[MemoryIndexEntry]: ...
+    def rebuild_index(self, session, *, source_id: str, line_limit: int, line_length: int) -> list[MemoryIndexEntry]: ...
     @abstractmethod
-    async def get_index_text(self, session, *, source_id: str, line_limit: int, line_length: int, index_entries: Sequence[MemoryIndexEntry] | None = None) -> str: ...
+    def get_index_text(self, session, *, source_id: str, line_limit: int, line_length: int, index_entries: Sequence[MemoryIndexEntry] | None = None) -> str: ...
     @abstractmethod
-    async def read_state(self, session, *, source_id: str) -> dict[str, Any]: ...
+    def read_state(self, session, *, source_id: str) -> dict[str, Any]: ...
     @abstractmethod
-    async def write_state(self, session, state: Mapping[str, Any], *, source_id: str) -> None: ...
+    def write_state(self, session, state: Mapping[str, Any], *, source_id: str) -> None: ...
     @abstractmethod
-    async def get_transcripts_directory(self, session, *, source_id: str) -> Path: ...
+    def get_transcripts_directory(self, session, *, source_id: str) -> Path: ...
     @abstractmethod
-    async def search_transcripts(self, session, *, source_id: str, query: str, session_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]: ...
+    def search_transcripts(self, session, *, source_id: str, query: str, session_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]: ...
 ```
 
 ### `MemoryFileStore` constructor
@@ -965,7 +952,7 @@ async def main() -> None:
     store.write_topic(session, record, source_id="memory")
 
     # Read it back.
-    fetched = await store.get_topic(session, source_id="memory", topic="preferences")
+    fetched = store.get_topic(session, source_id="memory", topic="preferences")
     print(fetched.summary, fetched.memories)
 
 asyncio.run(main())
@@ -974,24 +961,20 @@ asyncio.run(main())
 ### Example 2 — list and delete topics
 
 ```python
-import asyncio
 from pathlib import Path
 from agent_framework._harness._memory import MemoryFileStore
 from agent_framework import AgentSession
 
-async def main() -> None:
-    store = MemoryFileStore(base_path=Path("./agent_memory"), owner_state_key="user_id")
-    session = AgentSession()
-    session.state["user_id"] = "alice"
+store = MemoryFileStore(base_path=Path("./agent_memory"), owner_state_key="user_id")
+session = AgentSession()
+session.state["user_id"] = "alice"
 
-    topics = await store.list_topics(session, source_id="memory")
-    print(f"Topics: {[t.topic for t in topics]}")
+topics = store.list_topics(session, source_id="memory")
+print(f"Topics: {[t.topic for t in topics]}")
 
-    if topics:
-        await store.delete_topic(session, source_id="memory", topic=topics[0].topic)
-        print("Deleted first topic.")
-
-asyncio.run(main())
+if topics:
+    store.delete_topic(session, source_id="memory", topic=topics[0].topic)
+    print("Deleted first topic.")
 ```
 
 ### Example 3 — export and import provider state for multi-session routing
@@ -1453,7 +1436,8 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._evaluation import LocalEvaluator, EvalItem, AgentEvalConverter
+from agent_framework._evaluation import LocalEvaluator, EvalItem
+from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
 
 # A test dataset of (query, expected_keyword) pairs.
@@ -1463,30 +1447,30 @@ TEST_CASES = [
     ("Who wrote Hamlet?",             "Shakespeare"),
 ]
 
+# Map each query to its expected keyword so a single check function can look it up.
+# LocalEvaluator runs EVERY registered check against EVERY item, so one globally-aware
+# check avoids false failures (e.g. a correct photosynthesis answer is not expected to
+# contain "299" or "Shakespeare").
+EXPECTED = {q: kw for q, kw in TEST_CASES}
+
+def keyword_check(item: EvalItem) -> bool:
+    """Pass if the item's response contains the expected keyword for its query."""
+    expected = EXPECTED.get(item.query, "")
+    return expected.lower() in item.response.lower()
+
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
     agent = Agent(client=client, instructions="Answer concisely.")
 
-    # Collect agent responses.
-    from agent_framework._types import Message
     items = []
-    for query, expected in TEST_CASES:
+    for query, _ in TEST_CASES:
         response = await agent.run(query)
         items.append(EvalItem(conversation=[
             Message("user", [query]),
             Message("assistant", [response.text or ""]),
         ]))
 
-    # Define checks using the expected keywords stored in a closure.
-    def make_keyword_check(keyword: str):
-        def check(item: EvalItem) -> bool:
-            return keyword.lower() in item.response.lower()
-        check.__name__ = f"contains_{keyword}"
-        return check
-
-    evaluator = LocalEvaluator(
-        *[make_keyword_check(kw) for _, kw in TEST_CASES]
-    )
+    evaluator = LocalEvaluator(keyword_check)
     results = await evaluator.evaluate(items, eval_name="keyword-regression")
     print(f"Score: {results.result_counts['passed']}/{len(TEST_CASES)}")
     for r in results.items:
