@@ -97,18 +97,26 @@ asyncio.run(main())
 ### Example 2 — service-account credentials with custom scopes
 
 ```python
-from google.adk.tools.spanner.spanner_credentials import SpannerCredentialsConfig
+from google.oauth2 import service_account
+from google.adk.tools.spanner.spanner_credentials import (
+    SpannerCredentialsConfig,
+    SPANNER_DEFAULT_SCOPE,
+)
 from google.adk.tools.spanner.spanner_toolset import SpannerToolset
 
-creds = SpannerCredentialsConfig(
-    service_account_json="/path/to/sa.json",
-    # scopes is None → __post_init__ sets SPANNER_DEFAULT_SCOPE automatically
+# Load the SA key file into a Credentials object first — SpannerCredentialsConfig
+# accepts a loaded credentials object via the `credentials` field (extra="forbid"
+# means no other kwargs are accepted alongside it).
+sa_creds = service_account.Credentials.from_service_account_file(
+    "/path/to/sa.json",
+    scopes=SPANNER_DEFAULT_SCOPE,
 )
-print(creds.scopes)
-# ['https://www.googleapis.com/auth/spanner.admin',
-#  'https://www.googleapis.com/auth/spanner.data']
 
-toolset = SpannerToolset(credentials_config=creds)
+creds_config = SpannerCredentialsConfig(credentials=sa_creds)
+# SpannerCredentialsConfig.__post_init__ also sets SPANNER_DEFAULT_SCOPE when
+# scopes is None, but passing scopes= to from_service_account_file is clearer.
+
+toolset = SpannerToolset(credentials_config=creds_config)
 ```
 
 ### Example 3 — admin toolset for instance management
@@ -592,13 +600,16 @@ config = LlmBackedUserSimulatorConfig(
     model="gemini-2.5-flash",
     custom_instructions="""You are an impatient customer.
 Ask your questions quickly and bluntly.
+Conversation so far:
+{{ conversation_history }}
 When the task is complete, output {{ stop_signal }}.
 Your goal: {{ conversation_plan }}
 """,
     max_allowed_invocations=8,
 )
-# {{ stop_signal }} is replaced with </finished>
-# {{ conversation_plan }} is replaced with the scenario description
+# The field_validator requires {{ stop_signal }}, {{ conversation_plan }},
+# AND {{ conversation_history }} — omitting any one raises ValueError.
+# {{ stop_signal }} → </finished>; {{ conversation_plan }} → scenario plan
 ```
 
 ---
@@ -765,7 +776,7 @@ agent = LlmAgent(
 
 app = App(
     name="summariser-app",
-    agent=agent,
+    root_agent=agent,
     context_cache_config=ContextCacheConfig(
         cache_intervals=5,     # refresh cache every 5 invocations
         ttl_seconds=3600,      # 1 hour TTL
@@ -801,7 +812,7 @@ from google.adk.agents.llm_agent import LlmAgent
 # No context_cache_config → caching disabled for this app
 app_no_cache = App(
     name="quick-app",
-    agent=LlmAgent(name="q", model="gemini-2.0-flash"),
+    root_agent=LlmAgent(name="q", model="gemini-2.0-flash"),
     # context_cache_config=None  (default)
 )
 print(app_no_cache.context_cache_config)   # None
@@ -851,8 +862,7 @@ After a span closes, `_maybe_set_associated_events` stamps `gcp.vertex.agent.ass
 ### Example 1 — manually tracking events within a span
 
 ```python
-from google.adk.telemetry.node_tracing import TelemetryContext, start_as_current_node_span
-from dataclasses import field
+from google.adk.telemetry.node_tracing import TelemetryContext
 from opentelemetry import context as context_api
 
 # TelemetryContext is a frozen dataclass — add_event mutates the internal list
@@ -1078,7 +1088,7 @@ from google.adk.workflow._node import node
 
 @node
 async def router(ctx):
-    ctx.route("fast")   # emit route value
+    ctx.route = "fast"   # route is a property setter, not a callable
 
 @node
 async def fast_path(ctx): yield "fast result"
