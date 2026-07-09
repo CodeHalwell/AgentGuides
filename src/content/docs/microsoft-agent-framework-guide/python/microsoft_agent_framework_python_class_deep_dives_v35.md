@@ -1363,9 +1363,9 @@ import asyncio
 from agent_framework._evaluation import LocalEvaluator, EvalItem, evaluator
 from agent_framework._types import Message
 
-# LocalEvaluator expects EvalCheck callables that return CheckResult.
-# Wrap plain bool-returning functions with @evaluator so the framework
-# can coerce the result and read .check_name / .passed correctly.
+# EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]].
+# Wrap plain bool/float-returning functions with @evaluator; it coerces
+# the return value to CheckResult and handles named-parameter injection.
 @evaluator
 def check_length(item: EvalItem) -> bool:
     """Response must be at least 50 characters."""
@@ -1447,7 +1447,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._evaluation import LocalEvaluator, EvalItem
+from agent_framework._evaluation import LocalEvaluator, EvalItem, evaluator
 from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
 
@@ -1464,6 +1464,7 @@ TEST_CASES = [
 # contain "299" or "Shakespeare").
 EXPECTED = {q: kw for q, kw in TEST_CASES}
 
+@evaluator
 def keyword_check(item: EvalItem) -> bool:
     """Pass if the item's response contains the expected keyword for its query."""
     expected = EXPECTED.get(item.query, "")
@@ -1481,11 +1482,11 @@ async def main() -> None:
             Message("assistant", [response.text or ""]),
         ]))
 
-    evaluator = LocalEvaluator(keyword_check)
-    results = await evaluator.evaluate(items, eval_name="keyword-regression")
+    local_evaluator = LocalEvaluator(keyword_check)
+    results = await local_evaluator.evaluate(items, eval_name="keyword-regression")
     print(f"Score: {results.result_counts['passed']}/{len(TEST_CASES)}")
     for r in results.items:
-        mark = "✓" if r.status == "passed" else "✗"
+        mark = "✓" if r.status == "pass" else "✗"
         print(f"  {mark} {r.input_text[:50]!r}")
 
 asyncio.run(main())
