@@ -744,7 +744,10 @@ agent = Agent(
     'anthropic:claude-sonnet-4-6',
     tools=[Tool(fn, defer_loading=True) for fn in [tool_a, tool_b, tool_c]],
     capabilities=[
-        ToolSearch(strategy='bm25'),   # native BM25 only — errors on non-Anthropic providers
+        # Named native strategies ('bm25'/'regex') automatically set enable_fallback=False
+        # inside ToolSearch.get_wrapper_toolset(), so no local search_tools is emitted.
+        # Providers that don't support this strategy raise an error rather than falling back.
+        ToolSearch(strategy='bm25'),
     ],
 )
 
