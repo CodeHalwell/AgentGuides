@@ -1166,7 +1166,6 @@ Queue a summary to be injected as history for the next conversation turn, but on
 ```python  {test="skip"}
 import asyncio
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 
 def analyse_sentiment(ctx: RunContext, text: str) -> str:
