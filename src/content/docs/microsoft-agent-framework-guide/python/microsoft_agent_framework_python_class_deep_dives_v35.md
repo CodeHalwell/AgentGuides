@@ -154,8 +154,8 @@ async def main() -> None:
         tools=[get_stock_price],
     )
 
-    # Streaming returns an async iterator of AgentResponseUpdate objects.
-    stream = await agent.run("What is the current price of AAPL and MSFT?", stream=True)
+    # stream=True returns a ResponseStream directly — no await needed.
+    stream = agent.run("What is the current price of AAPL and MSFT?", stream=True)
     async for update in stream:
         if update.text:
             print(update.text, end="", flush=True)
@@ -329,7 +329,7 @@ async def main() -> None:
         instructions="Always include a sample email in your answer.",
         middleware=[PiiRedactMiddleware()],
     )
-    stream = await agent.run("Give me a contact example.", stream=True)
+    stream = agent.run("Give me a contact example.", stream=True)
     async for update in stream:
         if update.text:
             print(update.text, end="", flush=True)
