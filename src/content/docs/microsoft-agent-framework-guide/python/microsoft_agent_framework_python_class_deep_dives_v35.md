@@ -254,7 +254,7 @@ from agent_framework import Agent, ChatMiddleware, ChatContext, ChatResponse
 from agent_framework.openai import OpenAIChatClient
 
 _MAX_CACHE = 256
-_CACHE: dict[str, ChatResponse] = {}  # capped to _MAX_CACHE entries (LRU eviction)
+_CACHE: dict[str, ChatResponse] = {}  # capped to _MAX_CACHE entries (FIFO eviction)
 
 class CachingMiddleware(ChatMiddleware):
     async def process(self, context: ChatContext, call_next) -> None:
