@@ -347,7 +347,7 @@ Create a web search capability that uses the model's native search when availabl
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
@@ -458,7 +458,7 @@ class ProcessEventStream(AbstractCapability[AgentDepsT]):
     # EventStreamProcessorFunc = async def(ctx, stream) -> AsyncIterator[AgentStreamEvent]
 ```
 
-### 4.1 Observer Handler — Log All Events to a File
+### 4.1 Observer Handler — Log All Events
 
 Observe events without affecting the stream. Multiple `ProcessEventStream` capabilities tee the stream so each receives every event independently.
 
