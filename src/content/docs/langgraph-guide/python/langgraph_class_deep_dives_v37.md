@@ -148,16 +148,14 @@ class OuterState(TypedDict):
     messages: list
 
 
-def outer_node(state: OuterState) -> dict:
-    # Call the inner graph as a subgraph
-    result = inner_graph.invoke(state)
-    return {"messages": result["messages"]}
-
-
+# Wire the compiled inner graph directly as a subgraph node so its
+# message events stream under a child namespace. Calling inner_graph.invoke()
+# inside a wrapper function does NOT create a subgraph namespace, so
+# subgraphs=True would have no effect.
 outer = StateGraph(OuterState)
-outer.add_node("outer_node", outer_node)
-outer.add_edge(START, "outer_node")
-outer.add_edge("outer_node", END)
+outer.add_node("inner", inner_graph)
+outer.add_edge(START, "inner")
+outer.add_edge("inner", END)
 outer_graph = outer.compile()
 
 # subgraphs=False (default): only messages from the outer graph appear
