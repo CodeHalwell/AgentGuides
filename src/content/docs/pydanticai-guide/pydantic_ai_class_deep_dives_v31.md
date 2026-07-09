@@ -1184,7 +1184,7 @@ calc_toolset.add_function(calculate)
 agent = Agent(
     'anthropic:claude-sonnet-4-5',
     capabilities=[
-        Thinking(level='low'),
+        Thinking(effort='low'),
         Toolset(toolset=calc_toolset),
     ],
 )
