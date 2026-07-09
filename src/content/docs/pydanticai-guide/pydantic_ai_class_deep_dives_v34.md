@@ -588,9 +588,9 @@ asyncio.run(main())
 **Source**: `pydantic_ai/capabilities/_tool_search.py`, `pydantic_ai/toolsets/_tool_search.py`  
 **Export**: `from pydantic_ai.capabilities import ToolSearch`
 
-`ToolSearch` is automatically activated when an agent has tools with `defer_loading=True`. On providers that support native tool search (Anthropic BM25/regex, OpenAI Responses), the deferred tools are sent on the wire and the provider exposes them after discovery; on other providers, a local `search_tools` function is exposed as a regular tool. Add `ToolSearch()` explicitly only when you need to configure `strategy`, `enable_fallback`, or `max_results`.
+`ToolSearch` is auto-injected into every agent (zero overhead when no deferred tools exist). On providers that support native tool search (Anthropic BM25/regex, OpenAI Responses), the deferred tools are sent on the wire and the provider exposes them after discovery; on other providers, a local `search_tools` function is exposed as a regular tool. Add `ToolSearch()` explicitly only when you need to configure `strategy`, `max_results`, `tool_description`, or `parameter_description`.
 
-`ToolSearchToolset` is the companion toolset wrapper that hides deferred tools and exposes the `search_tools` function; it is used internally by `ToolSearch` when building the local-fallback path.
+`ToolSearchToolset` is the companion toolset wrapper that hides deferred tools and exposes the `search_tools` function; it is used internally by `ToolSearch` when building the local-fallback path. Its `enable_fallback` flag (default `True`) controls whether a local `search_tools` fallback is emitted when native-only strategies (`'bm25'`/`'regex'`) are in use.
 
 ```python
 # Key signatures verified from source:
@@ -600,11 +600,14 @@ class ToolSearch(AbstractCapability[AgentDepsT]):
     strategy: ToolSearchStrategy | None = None
     # ToolSearchStrategy = 'bm25' | 'regex' | 'keywords' | ToolSearchFunc
     # None = auto: native on supporting providers, keywords elsewhere
+    max_results: int = 10
+    tool_description: str | None = None      # description for the model-facing search tool
+    parameter_description: str | None = None # description for the 'queries' parameter
 
 @dataclass
 class ToolSearchToolset(WrapperToolset[AgentDepsT]):
     search_fn: ToolSearchFunc[AgentDepsT] | None = None
-    max_results: int = 10           # default MAX_SEARCH_RESULTS
+    max_results: int = 10
     tool_description: str | None = None
     parameter_description: str | None = None
     enable_fallback: bool = True    # False = named-native only, no local search_tools
