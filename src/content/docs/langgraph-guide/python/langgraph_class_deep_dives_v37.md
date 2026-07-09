@@ -685,15 +685,14 @@ class OuterState(TypedDict):
     value: int
 
 
-def outer_node(state: OuterState) -> dict:
-    result = inner_graph.invoke({"value": state["value"]})
-    return {"value": result["value"]}
-
-
+# Wire inner_graph directly as a compiled subgraph node — this is what
+# causes SubgraphTransformer to populate run.subgraphs. Calling
+# inner_graph.invoke() inside a wrapper function does NOT register a
+# subgraph stream handle.
 outer = StateGraph(OuterState)
-outer.add_node("outer", outer_node)
-outer.add_edge(START, "outer")
-outer.add_edge("outer", END)
+outer.add_node("inner", inner_graph)
+outer.add_edge(START, "inner")
+outer.add_edge("inner", END)
 outer_graph = outer.compile()
 
 
@@ -741,14 +740,12 @@ class Outer(TypedDict):
     n: int
 
 
-def call_inner(state: Outer) -> dict:
-    return inner_compiled.invoke({"n": state["n"]})
-
-
+# Wire inner_compiled directly as a subgraph node so SubgraphTransformer
+# tracks it and populates run.subgraphs in v3 streaming.
 outer = StateGraph(Outer)
-outer.add_node("call_inner", call_inner)
-outer.add_edge(START, "call_inner")
-outer.add_edge("call_inner", END)
+outer.add_node("inner", inner_compiled)
+outer.add_edge(START, "inner")
+outer.add_edge("inner", END)
 outer_compiled = outer.compile()
 
 
