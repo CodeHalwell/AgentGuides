@@ -530,8 +530,8 @@ class LlmBackedUserSimulatorConfig(BaseUserSimulatorConfig):
         )
     )
     max_allowed_invocations: int = 20   # -1 = unlimited (not recommended)
-    custom_instructions: str | None = None  # Jinja template with
-    # {{ stop_signal }} and {{ conversation_plan }} placeholders
+    custom_instructions: str | None = None  # Jinja template; field_validator requires
+    # {{ stop_signal }}, {{ conversation_plan }}, AND {{ conversation_history }}
 
 @experimental
 class LlmBackedUserSimulator(UserSimulator):
@@ -1089,6 +1089,7 @@ from google.adk.workflow._node import node
 @node
 async def router(ctx):
     ctx.route = "fast"   # route is a property setter, not a callable
+    return               # explicit return; routing is controlled via ctx.route, not yielded output
 
 @node
 async def fast_path(ctx): yield "fast result"
