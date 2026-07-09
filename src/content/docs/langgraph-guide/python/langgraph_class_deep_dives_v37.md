@@ -700,11 +700,11 @@ async def main():
         {"value": 5}, version="v3"
     ) as run:
         print("run type:", type(run).__name__)  # AsyncGraphRunStream
-        # Subgraph discovery happens as events are pumped
+        # Subscribe before pumping — StreamChannel.push only buffers when subscribed
+        subgraphs = run.subgraphs.__aiter__()
         async for event in run:
             pass  # consume events to drive the pump
-        # Subgraphs are buffered in run.subgraphs as they are discovered
-        async for sg in run.subgraphs:
+        async for sg in subgraphs:
             print(f"subgraph path={sg.path}, status={sg.status}")
 
 
@@ -749,10 +749,11 @@ outer_compiled = outer.compile()
 
 async def main():
     async with await outer_compiled.astream_events({"n": 3}, version="v3") as run:
+        # Subscribe before pumping — StreamChannel.push only buffers when subscribed
+        subgraphs = run.subgraphs.__aiter__()
         async for _ in run:
             pass
-        # Iterate subgraphs inside the `async with` block while the mux is still live
-        async for sg in run.subgraphs:
+        async for sg in subgraphs:
             print("path      :", sg.path)
             print("graph_name:", sg.graph_name)
             print("status    :", sg.status)  # "completed", "failed", "interrupted", or "drained"
