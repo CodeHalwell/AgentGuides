@@ -256,6 +256,10 @@ from agent_framework.openai import OpenAIChatClient
 
 _MAX_CACHE = 256
 _CACHE: dict[str, ChatResponse] = {}  # capped to _MAX_CACHE entries (FIFO eviction)
+# NOTE: This global cache is intentionally simplified for illustration.
+# Production use should scope the key by session/user ID to avoid cross-user leakage,
+# protect mutations with asyncio.Lock() against concurrent interleaving, and consider
+# a TTL-aware cache to prevent stale responses from being returned indefinitely.
 
 class CachingMiddleware(ChatMiddleware):
     async def process(self, context: ChatContext, call_next) -> None:
@@ -406,7 +410,7 @@ class Default:
 import asyncio
 import json
 from agent_framework import Agent, WorkflowBuilder
-from agent_framework._workflows._edge import Case, Default
+from agent_framework import Case, Default
 from agent_framework.openai import OpenAIChatClient
 
 def get_sentiment(msg) -> str:
@@ -472,7 +476,7 @@ asyncio.run(main())
 import asyncio
 import json
 from agent_framework import Agent, WorkflowBuilder
-from agent_framework._workflows._edge import Case, Default
+from agent_framework import Case, Default
 from agent_framework.openai import OpenAIChatClient
 
 def get_score(msg) -> int:
@@ -527,7 +531,7 @@ asyncio.run(main())
 
 ```python
 import json
-from agent_framework._workflows._edge import (
+from agent_framework import (
     SwitchCaseEdgeGroup,
     SwitchCaseEdgeGroupCase,
     SwitchCaseEdgeGroupDefault,
@@ -600,8 +604,8 @@ class WorkflowContext(Generic[OutT, W_OutT]):
 ```python
 import asyncio
 from agent_framework import Agent, WorkflowBuilder, handler, Message
-from agent_framework._workflows._executor import Executor
-from agent_framework._workflows._workflow_context import WorkflowContext
+from agent_framework import Executor
+from agent_framework import WorkflowContext
 from agent_framework.openai import OpenAIChatClient
 
 class RouterExecutor(Executor):
@@ -644,8 +648,8 @@ asyncio.run(main())
 ```python
 from typing_extensions import Never
 from agent_framework import handler
-from agent_framework._workflows._executor import Executor
-from agent_framework._workflows._workflow_context import WorkflowContext
+from agent_framework import Executor
+from agent_framework import WorkflowContext
 from agent_framework import Message
 
 # Partial snippet — wire into WorkflowBuilder with add_fan_in_edges(sources, aggregator).
@@ -667,8 +671,8 @@ class AggregatorExecutor(Executor):
 ```python
 from typing_extensions import Never
 from agent_framework import handler
-from agent_framework._workflows._executor import Executor
-from agent_framework._workflows._workflow_context import WorkflowContext
+from agent_framework import Executor
+from agent_framework import WorkflowContext
 from agent_framework import Message
 
 # Partial snippet — wire into WorkflowBuilder with output_from=[summary_executor].
@@ -754,7 +758,7 @@ class JudgeVerdict(BaseModel):
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework import AgentLoopMiddleware
 from agent_framework.openai import OpenAIChatClient
 
 async def has_citation(**kwargs) -> bool:
@@ -788,7 +792,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework import AgentLoopMiddleware
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
@@ -822,7 +826,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._loop import AgentLoopMiddleware
+from agent_framework import AgentLoopMiddleware
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
@@ -940,7 +944,7 @@ contains no `..` segments, preventing path traversal attacks.
 ```python
 import asyncio
 from pathlib import Path
-from agent_framework._harness._memory import (
+from agent_framework import (
     MemoryFileStore,
     MemoryTopicRecord,
 )
@@ -975,7 +979,7 @@ asyncio.run(main())
 
 ```python
 from pathlib import Path
-from agent_framework._harness._memory import MemoryFileStore
+from agent_framework import MemoryFileStore
 from agent_framework import AgentSession
 
 store = MemoryFileStore(base_path=Path("./agent_memory"), owner_state_key="user_id")
@@ -995,7 +999,7 @@ if topics:
 ```python
 import asyncio
 from pathlib import Path
-from agent_framework._harness._memory import MemoryFileStore
+from agent_framework import MemoryFileStore
 from agent_framework import AgentSession
 
 async def main() -> None:
@@ -1072,7 +1076,7 @@ import asyncio
 from pathlib import Path
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._harness._memory import MemoryFileStore, MemoryContextProvider
+from agent_framework import MemoryFileStore, MemoryContextProvider
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o-mini")
@@ -1114,7 +1118,7 @@ from pathlib import Path
 from datetime import timedelta
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._harness._memory import MemoryFileStore, MemoryContextProvider
+from agent_framework import MemoryFileStore, MemoryContextProvider
 
 async def main() -> None:
     main_client = OpenAIChatClient(model="gpt-4o")
@@ -1149,7 +1153,7 @@ import asyncio
 from pathlib import Path
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._harness._memory import MemoryFileStore, MemoryContextProvider
+from agent_framework import MemoryFileStore, MemoryContextProvider
 
 EXTRACTION_PROMPT = """
 Extract durable facts about the user from the conversation.
@@ -1224,7 +1228,7 @@ class AgentModeProvider(ContextProvider):
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._mode import AgentModeProvider, get_agent_mode, set_agent_mode
+from agent_framework import AgentModeProvider, get_agent_mode, set_agent_mode
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
@@ -1265,7 +1269,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._mode import AgentModeProvider
+from agent_framework import AgentModeProvider
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
@@ -1300,7 +1304,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._harness._mode import AgentModeProvider, get_agent_mode, set_agent_mode
+from agent_framework import AgentModeProvider, get_agent_mode, set_agent_mode
 from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
@@ -1421,11 +1425,15 @@ from agent_framework import LocalEvaluator, EvalItem, CheckResult
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
+# Construct the judge once and reuse it across all items.
+# LocalEvaluator can run checks concurrently; allocating a new client per item
+# would open redundant connections and add unnecessary overhead.
+_judge_client = OpenAIChatClient(model="gpt-4o-mini")
+_judge = Agent(client=_judge_client, instructions="Reply ONLY 'yes' or 'no'.")
+
 async def factual_check(item: EvalItem) -> CheckResult:
     """Ask a judge agent whether the response is factually plausible."""
-    client = OpenAIChatClient(model="gpt-4o-mini")
-    judge = Agent(client=client, instructions="Reply ONLY 'yes' or 'no'.")
-    verdict = await judge.run(
+    verdict = await _judge.run(
         f"Is this response factually plausible?\nQ: {item.query}\nA: {item.response}"
     )
     passed = verdict.text.strip().lower().startswith("yes")
@@ -1530,7 +1538,7 @@ from agent_framework._feature_stage import ExperimentalWarning
 
 warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
-from agent_framework._harness._loop import AgentLoopMiddleware
-from agent_framework._harness._memory import MemoryStore, MemoryFileStore, MemoryContextProvider
-from agent_framework._harness._mode import AgentModeProvider
+from agent_framework import AgentLoopMiddleware
+from agent_framework import MemoryStore, MemoryFileStore, MemoryContextProvider
+from agent_framework import AgentModeProvider
 ```
