@@ -253,7 +253,8 @@ import asyncio
 from agent_framework import Agent, ChatMiddleware, ChatContext, ChatResponse
 from agent_framework.openai import OpenAIChatClient
 
-_CACHE: dict[str, ChatResponse] = {}
+_MAX_CACHE = 256
+_CACHE: dict[str, ChatResponse] = {}  # capped to _MAX_CACHE entries (LRU eviction)
 
 class CachingMiddleware(ChatMiddleware):
     async def process(self, context: ChatContext, call_next) -> None:
@@ -271,6 +272,8 @@ class CachingMiddleware(ChatMiddleware):
 
         # Populate cache with the returned result.
         if last_user and context.result:
+            if len(_CACHE) >= _MAX_CACHE:
+                _CACHE.pop(next(iter(_CACHE)))  # evict oldest entry
             _CACHE[last_user] = context.result
         context.metadata["cache_hit"] = False
 
@@ -525,7 +528,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Example 3 — serialise edge group with `to_dict`
+### Example 3 — serialize edge group with `to_dict`
 
 ```python
 import json
@@ -545,8 +548,8 @@ group = SwitchCaseEdgeGroup(
     id="my-switch",
 )
 
-serialised = group.to_dict()
-print(json.dumps(serialised, indent=2, default=str))
+serialized = group.to_dict()
+print(json.dumps(serialized, indent=2, default=str))
 # {
 #   "type": "SwitchCaseEdgeGroup",
 #   "id": "my-switch",
