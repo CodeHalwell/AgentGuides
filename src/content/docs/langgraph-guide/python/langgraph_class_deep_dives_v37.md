@@ -935,6 +935,7 @@ print("interrupt counter :", scratchpad.interrupt_counter())  # 0 (callable, not
 - `channels: list[str]` path — iterates `proc.channels`, reads each via `channels[chan].get()`, and builds a `dict[str, Any]`. Channels in `managed` (like `IsLastStep`) are read via `managed[chan].get(scratchpad)` instead.
 - `mapper` application — if `proc.mapper` is set and `for_execution=True`, the collected dict is passed through `mapper` before being returned. Setting `for_execution=False` skips the mapper so that dry-run task inspection (for `StateGraph.get_graph()`) sees the raw input shape.
 - `input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None` — the cache key is `(proc.mapper, tuple(proc.channels))`. On a cache hit, a shallow `copy()` of the cached input is returned to prevent one node's mutations from leaking to another that shares the same input shape.
+- Single-channel path (`proc.channels: str`) — if the channel is absent from `channels` or `channels[name].is_available()` is `False`, `_proc_input` returns `MISSING` immediately (before caching). `prepare_single_task` checks for `MISSING` and skips scheduling the task at that superstep.
 
 ### Example 1 — trace which channels a node reads from and what input it receives
 
