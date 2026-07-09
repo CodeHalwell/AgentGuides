@@ -1364,7 +1364,7 @@ class EvalResults:
 
 ```python
 import asyncio
-from agent_framework._evaluation import LocalEvaluator, EvalItem, evaluator
+from agent_framework import LocalEvaluator, EvalItem, evaluator
 from agent_framework._types import Message
 
 # EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]].
@@ -1408,7 +1408,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework._evaluation import LocalEvaluator, EvalItem, CheckResult
+from agent_framework import LocalEvaluator, EvalItem, CheckResult
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
@@ -1451,7 +1451,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent
-from agent_framework._evaluation import LocalEvaluator, EvalItem, evaluator
+from agent_framework import LocalEvaluator, EvalItem, evaluator
 from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
 
