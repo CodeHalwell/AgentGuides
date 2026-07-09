@@ -1421,7 +1421,7 @@ class AgentSpec(BaseModel):
     model: str | None = None
     name: str | None = None
     description: TemplateStr[Any] | str | None = None
-    instructions: TemplateStr[Any] | str | list[...] | None = None
+    instructions: TemplateStr[Any] | str | list[TemplateStr[Any] | str] | None = None
     deps_schema: dict[str, Any] | None = None
     output_schema: dict[str, Any] | None = None
     model_settings: dict[str, Any] | None = None
