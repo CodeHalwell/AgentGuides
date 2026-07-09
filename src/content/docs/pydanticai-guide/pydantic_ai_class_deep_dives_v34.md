@@ -348,10 +348,8 @@ Create a web search capability that uses the model's native search when availabl
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 from pydantic_ai.capabilities.native_or_local import NativeOrLocalTool
 from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.toolsets import FunctionToolset
@@ -369,24 +367,17 @@ def _make_ddg_fallback() -> FunctionToolset:
     return toolset
 
 
-@dataclass(init=False)
 class HybridWebSearch(NativeOrLocalTool):
     """Web search — native on supporting providers, DuckDuckGo locally."""
-
-    def _default_native(self) -> WebSearchTool:
-        return WebSearchTool()
-
-    def _default_local(self) -> FunctionToolset:
-        return _make_ddg_fallback()
-
-    def _requires_native(self) -> bool:
-        return False  # local fallback is always acceptable
 
     def __init__(self, *, search_context_size: str = 'medium') -> None:
         super().__init__(
             native=WebSearchTool(search_context_size=search_context_size),  # type: ignore[arg-type]
             local=_make_ddg_fallback(),
         )
+
+    def _requires_native(self) -> bool:
+        return False  # local fallback is always acceptable
 
 
 # Agent gets native search on Anthropic/OpenAI, local on Ollama
@@ -469,10 +460,9 @@ import json
 from datetime import datetime
 from collections.abc import AsyncIterator
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessEventStream
 from pydantic_ai.messages import AgentStreamEvent
-from pydantic_ai.tools import RunContext
 
 
 async def audit_handler(ctx: RunContext, stream: AsyncIterator[AgentStreamEvent]) -> None:
@@ -509,10 +499,9 @@ Use the processor form (async generator) to remove thinking events before downst
 import asyncio
 from collections.abc import AsyncIterator
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessEventStream
 from pydantic_ai.messages import AgentStreamEvent, PartDeltaEvent, PartEndEvent, PartStartEvent, ThinkingPart
-from pydantic_ai.tools import RunContext
 
 
 async def strip_thinking(
@@ -553,10 +542,9 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessEventStream
 from pydantic_ai.messages import AgentStreamEvent, FinalResultEvent
-from pydantic_ai.tools import RunContext
 
 
 async def latency_monitor(ctx: RunContext, stream: AsyncIterator[AgentStreamEvent]) -> None:
@@ -1067,14 +1055,14 @@ class RouterAgent(WrapperAgent):
     def __init__(self, wrapped) -> None:
         super().__init__(wrapped)
 
-    async def run(self, user_prompt: str, **kwargs) -> AgentRunResult:
-        words = set(user_prompt.lower().split())
-        if words & CODE_KEYWORDS:
-            return await coding_agent.run(user_prompt, **kwargs)
-        elif words & MATH_KEYWORDS:
-            return await math_agent.run(user_prompt, **kwargs)
-        else:
-            return await writing_agent.run(user_prompt, **kwargs)
+    async def run(self, user_prompt, **kwargs) -> AgentRunResult:
+        if isinstance(user_prompt, str):
+            words = set(user_prompt.lower().split())
+            if words & CODE_KEYWORDS:
+                return await coding_agent.run(user_prompt, **kwargs)
+            if words & MATH_KEYWORDS:
+                return await math_agent.run(user_prompt, **kwargs)
+        return await writing_agent.run(user_prompt, **kwargs)
 
 
 router = RouterAgent(wrapped=writing_agent)
