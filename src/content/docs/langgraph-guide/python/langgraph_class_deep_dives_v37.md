@@ -274,7 +274,7 @@ print(reader.get_name())  # ChannelRead<items>
 builder = StateGraph(State)
 # Wire reader directly as the node — it reads the "items" channel via CONFIG_KEY_READ
 # and pipes the length into a dict update via the lambda
-builder.add_node("update", reader | (lambda count: {"count": count}))
+builder.add_node("update", reader | RunnableLambda(lambda count: {"count": count}))
 builder.add_edge(START, "update")
 builder.add_edge("update", END)
 
@@ -567,11 +567,11 @@ for event in graph.stream(
         checkpoints.append(event)
 
 print(f"received {len(checkpoints)} checkpoint event(s)")
-# Each event dict: "type", "timestamp", "step", "payload" (nested dict with
-# "values", "next", "config", "metadata", "tasks")
+# Event dict shape: {"type", "step", "timestamp", "payload"}
+# payload is a nested dict with "values", "next", "config", "metadata", "tasks"
 if checkpoints:
     cp = checkpoints[0]
-    print("step:", cp.get("payload", {}).get("step"))
+    print("step:", cp.get("step"))  # top-level field, not inside payload
 ```
 
 ### Example 2 — `tasks_w_writes` — apply pending writes to see task outputs in a snapshot
@@ -1113,13 +1113,13 @@ builder.add_edge("process_item", END)
 graph = builder.compile()
 
 # Each Send becomes a PUSH task path; prepare_single_task routes them
-# to prepare_push_task_send
+# to prepare_push_task_send. stream_mode="debug" yields event dicts directly.
 task_events = []
-for etype, payload in graph.stream(
+for event in graph.stream(
     {"items": [1, 2, 3], "processed": []}, stream_mode="debug"
 ):
-    if etype == "task":
-        task_events.append(payload)
+    if event["type"] == "task":
+        task_events.append(event)
 
 print(f"PUSH task events: {len(task_events)}")
 for t in task_events:
