@@ -448,8 +448,11 @@ async def main() -> None:
     )
 
     workflow = builder.build()
+    # workflow.run() returns WorkflowRunResult (a list of WorkflowEvents), not AgentResponse.
+    # Use get_outputs() to retrieve the data yielded by output executors.
     result = await workflow.run("I absolutely love this product!")
-    print(result.text)
+    for output in result.get_outputs():
+        print(output.text if hasattr(output, "text") else output)
 
 asyncio.run(main())
 ```
@@ -503,7 +506,8 @@ async def main() -> None:
     workflow = builder.build()
     code_snippet = "def add(a, b): return a+b"
     result = await workflow.run(code_snippet)
-    print(result.text)
+    for output in result.get_outputs():
+        print(output.text if hasattr(output, "text") else output)
 
 asyncio.run(main())
 ```
@@ -617,8 +621,10 @@ async def main() -> None:
     builder.add_edge(router, quick_agent,  condition=lambda msg: len(msg.text or "") <= 100)
 
     workflow = builder.build()
-    result = await workflow.run("Hi")
-    print(result.text)
+    # Pass Message so the @handler(message: Message) dispatch resolves correctly.
+    result = await workflow.run(Message("user", ["Hi"]))
+    for output in result.get_outputs():
+        print(output.text if hasattr(output, "text") else output)
 
 asyncio.run(main())
 ```
@@ -1139,9 +1145,10 @@ from agent_framework.openai import OpenAIChatClient
 from agent_framework._harness._memory import MemoryFileStore, MemoryContextProvider
 
 EXTRACTION_PROMPT = """
-Extract facts about the user from the conversation.
+Extract durable facts about the user from the conversation.
 Focus on: preferences, professional background, and recurring topics.
-Return a JSON array of strings, one fact per element.
+Reply with a JSON object in exactly this shape — no other text:
+{"memories":[{"topic":"short topic name","memory":"durable fact"}]}
 """
 
 async def main() -> None:
