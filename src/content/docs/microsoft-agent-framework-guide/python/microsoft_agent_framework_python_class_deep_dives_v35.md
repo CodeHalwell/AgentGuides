@@ -605,7 +605,7 @@ from agent_framework import Agent, WorkflowBuilder, handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._types import Message
+from agent_framework import Message
 
 class RouterExecutor(Executor):
     """Forward the message downstream; WorkflowBuilder edge conditions handle routing."""
@@ -649,7 +649,7 @@ from typing_extensions import Never
 from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
-from agent_framework._types import Message
+from agent_framework import Message
 
 # Partial snippet — wire into WorkflowBuilder with add_fan_in_edges(sources, aggregator).
 # add_fan_in_edges waits for ALL sources to complete, then calls the handler ONCE with
@@ -672,7 +672,7 @@ from typing_extensions import Never
 from agent_framework import handler
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
-from agent_framework._types import Message
+from agent_framework import Message
 
 # Partial snippet — wire into WorkflowBuilder with output_from=[summary_executor].
 class SummaryExecutor(Executor):
@@ -1370,7 +1370,7 @@ class EvalResults:
 ```python
 import asyncio
 from agent_framework import LocalEvaluator, EvalItem, evaluator
-from agent_framework._types import Message
+from agent_framework import Message
 
 # EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]].
 # Wrap plain bool/float-returning functions with @evaluator; it coerces
@@ -1432,7 +1432,7 @@ async def factual_check(item: EvalItem) -> CheckResult:
     )
 
 async def main() -> None:
-    from agent_framework._types import Message
+    from agent_framework import Message
     evaluator = LocalEvaluator(factual_check)
     items = [
         EvalItem(conversation=[
@@ -1457,7 +1457,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import Agent
 from agent_framework import LocalEvaluator, EvalItem, evaluator
-from agent_framework._types import Message
+from agent_framework import Message
 from agent_framework.openai import OpenAIChatClient
 
 # A test dataset of (query, expected_keyword) pairs.
