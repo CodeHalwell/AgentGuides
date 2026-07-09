@@ -41,7 +41,7 @@ try:
     from langchain_openai import ChatOpenAI
     llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
     HAS_LLM = True
-except Exception:
+except ImportError:
     HAS_LLM = False
 
 
@@ -49,13 +49,13 @@ class State(TypedDict):
     messages: list
 
 
-def call_model(state: State, *, writer: StreamWriter) -> dict:
+def call_model(state: State, *, _writer: StreamWriter) -> dict:
     if HAS_LLM:
         try:
             response = llm.invoke(state["messages"])
             return {"messages": [response]}
-        except Exception:
-            pass  # fall through to offline fallback if credentials missing
+        except Exception as exc:
+            print(f"LLM call failed ({type(exc).__name__}), using offline fallback")
     from langchain_core.messages import AIMessage
     return {"messages": [AIMessage(content="hello from node")]}
 
