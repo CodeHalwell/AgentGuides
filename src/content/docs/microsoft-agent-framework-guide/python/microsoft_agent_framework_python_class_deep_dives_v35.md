@@ -604,11 +604,10 @@ class WorkflowContext(Generic[OutT, W_OutT]):
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder, handler
+from agent_framework import Agent, WorkflowBuilder, handler, Message
 from agent_framework._workflows._executor import Executor
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework.openai import OpenAIChatClient
-from agent_framework import Message
 
 class RouterExecutor(Executor):
     """Forward the message downstream; WorkflowBuilder edge conditions handle routing."""
@@ -1142,7 +1141,7 @@ async def main() -> None:
     session = agent.create_session()
     session.state["user_id"] = "bob"
 
-    response = await agent.run("Remember that I work in healthcare.", session=session)
+    response = await agent.run("Remember that I prefer concise bullet-point answers.", session=session)
     print(response.text)
 
 asyncio.run(main())
