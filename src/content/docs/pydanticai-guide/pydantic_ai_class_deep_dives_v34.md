@@ -540,11 +540,10 @@ Stack two `ProcessEventStream` capabilities; both handlers receive every event i
 import asyncio
 import time
 from collections.abc import AsyncIterator
-from typing import Any
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessEventStream
-from pydantic_ai.messages import AgentStreamEvent, FinalResultEvent
+from pydantic_ai.messages import AgentStreamEvent, FinalResultEvent, PartDeltaEvent
 
 
 async def latency_monitor(ctx: RunContext, stream: AsyncIterator[AgentStreamEvent]) -> None:
@@ -552,7 +551,8 @@ async def latency_monitor(ctx: RunContext, stream: AsyncIterator[AgentStreamEven
     first_token_time: float | None = None
     start = time.monotonic()
     async for event in stream:
-        if first_token_time is None:
+        # Gate on PartDeltaEvent — skips part-start/tool/metadata events before real content
+        if first_token_time is None and isinstance(event, PartDeltaEvent):
             first_token_time = time.monotonic() - start
     total = time.monotonic() - start
     ttft = f'{first_token_time:.3f}s' if first_token_time is not None else 'n/a'
@@ -1065,7 +1065,7 @@ class RouterAgent(WrapperAgent):
                 return await coding_agent.run(user_prompt, **kwargs)
             if words & MATH_KEYWORDS:
                 return await math_agent.run(user_prompt, **kwargs)
-        return await writing_agent.run(user_prompt, **kwargs)
+        return await self.wrapped.run(user_prompt, **kwargs)
 
 
 router = RouterAgent(wrapped=writing_agent)
