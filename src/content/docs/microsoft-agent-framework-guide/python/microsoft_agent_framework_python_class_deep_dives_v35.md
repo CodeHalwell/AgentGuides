@@ -26,7 +26,7 @@ package source via `inspect.getsource()`. Sub-packages introspected:
 - [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — `FileHistoryProvider`, middleware ABCs, compaction, `FileCheckpointStorage`, `LocalEvaluator`, `WorkflowRunResult`
 - [Vol. 3–34](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v34/) — see individual volume pages (300+ classes total)
 
-Nine class groups with three examples each (25 runnable end-to-end, plus 2 partial snippets — WorkflowContext Examples 2 and 3 require WorkflowBuilder wiring to run standalone).
+Nine class groups with three examples each (27 total — 25 runnable end-to-end plus 2 partial snippets: WorkflowContext Examples 2 and 3 require WorkflowBuilder wiring to run standalone).
 
 | # | Class / group | Module |
 |---|---|---|
