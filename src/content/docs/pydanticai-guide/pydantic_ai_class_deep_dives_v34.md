@@ -1148,9 +1148,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 8.2 Deferred Post-Run Injection (`'when_idle'`)
+### 8.2 Same-Run Idle Injection (`'when_idle'`)
 
-Queue a summary to be injected as history for the next conversation turn, but only after the current run completes.
+Queue a message to be processed when the agent reaches idle state within the same `agent.run()` call — the run continues with another model request before returning to the caller.
 
 ```python  {test="skip"}
 import asyncio
@@ -1158,10 +1158,10 @@ from pydantic_ai import Agent, RunContext
 
 
 def analyse_sentiment(ctx: RunContext, text: str) -> str:
-    """Analyse text sentiment and queue a summary for next turn."""
+    """Analyse text sentiment and queue a follow-up for the idle phase."""
     sentiment = 'positive' if 'great' in text.lower() else 'neutral'
 
-    # Inject a follow-up only when the agent is idle (after current turn completes)
+    # Injected when the run reaches idle — same agent.run(), next model request
     ctx.enqueue(
         f'[PREV_ANALYSIS] Sentiment was {sentiment}.',
         priority='when_idle',
@@ -1367,7 +1367,7 @@ Defer discovery of expensive LangChain tools until needed using `ToolSearchTools
 
 ```python  {test="skip"}
 import asyncio
-from pydantic_ai import Agent, Tool
+from pydantic_ai import Agent
 from pydantic_ai.capabilities import ToolSearch
 from pydantic_ai.ext.langchain import LangChainToolset, LangChainTool
 from pydantic_ai.toolsets._tool_search import ToolSearchToolset
@@ -1387,6 +1387,9 @@ class HeavyDataTool:
 
 
 lc_toolset = LangChainToolset([HeavyDataTool()])
+# ToolSearchToolset wraps lc_toolset and exposes a 'search_tools' meta-tool to the
+# model instead of revealing HeavyDataTool directly. The model calls search_tools
+# first; matching tools are then made available for the follow-up request.
 deferred_toolset = ToolSearchToolset(
     wrapped=lc_toolset,
     tool_description='Search for analytics and data warehouse tools.',
@@ -1436,13 +1439,8 @@ class AgentSpec(BaseModel):
     @classmethod
     def from_file(cls, path: Path | str, fmt: Literal['yaml', 'json'] | None = None) -> AgentSpec: ...
     def to_file(self, path: Path | str, fmt: Literal['yaml', 'json'] | None = None) -> None: ...
-    def build(
-        self,
-        *,
-        model: Model | KnownModelName | str | None = None,
-        registry: Mapping[str, type[AbstractCapability]] | None = None,
-        **agent_kwargs: Any,
-    ) -> Agent: ...
+    # Note: AgentSpec has no build() method.
+    # Turn a spec into an Agent via Agent.from_file(path) or Agent.from_spec(spec, custom_capability_types=[...])
 ```
 
 ### 10.1 Load an Agent from YAML
