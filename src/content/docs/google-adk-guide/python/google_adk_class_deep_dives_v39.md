@@ -1058,7 +1058,7 @@ class Graph(BaseModel):
         # 4. If has_routing_edges and still empty → logs a warning; branch ends silently
 ```
 
-`Graph.get_next_pending_nodes()` is the routing engine: given the current node name and the route(s) it emitted, it returns the list of successor node names to move to `PENDING` state. An emitted `DEFAULT_ROUTE` value acts as a wildcard fallback, identical to `else` in a Python `match` statement.
+`Graph.get_next_pending_nodes()` is the routing engine: given the current node name and the route(s) it emitted, it returns the list of successor node names to move to `PENDING` state. `DEFAULT_ROUTE = "__DEFAULT__"` is an **edge-side tag**: when you define an edge with `route=DEFAULT_ROUTE`, that edge fires as a fallback only when no other edge's route matched what the node emitted. It is not a value to emit from the node itself — emitting `DEFAULT_ROUTE` as a route value will not reliably trigger the fallback and may silently end the branch.
 
 ### Example 1 — `Graph.from_edge_items` with a tuple chain
 
