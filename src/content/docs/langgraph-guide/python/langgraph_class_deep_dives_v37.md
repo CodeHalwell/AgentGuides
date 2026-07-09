@@ -438,7 +438,7 @@ t.start()
 
 # Submit work from the main (non-async) thread; returns asyncio.Future (not
 # concurrent.futures.Future), so bridge back via threading.Event
-async_fut = run_coroutine_threadsafe(async_worker(7), loop)
+async_fut = run_coroutine_threadsafe(async_worker(7), loop, lazy=False)
 _done = threading.Event()
 _box: list = []
 loop.call_soon_threadsafe(
@@ -910,7 +910,7 @@ print("step              :", scratchpad.step)           # 1
 print("stop              :", scratchpad.stop)           # 25
 print("global resume     :", scratchpad.get_null_resume())  # user_answer
 print("task resume queue :", scratchpad.resume)         # []
-print("interrupt counter :", scratchpad.interrupt_counter.value)  # 0
+print("interrupt counter :", scratchpad.interrupt_counter())  # 0 (callable, not .value)
 ```
 
 ---
