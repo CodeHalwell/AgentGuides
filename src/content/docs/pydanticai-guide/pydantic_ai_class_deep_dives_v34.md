@@ -350,7 +350,7 @@ from __future__ import annotations
 import asyncio
 
 from pydantic_ai import Agent
-from pydantic_ai.capabilities.native_or_local import NativeOrLocalTool
+from pydantic_ai.capabilities import NativeOrLocalTool
 from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -588,7 +588,7 @@ asyncio.run(main())
 **Source**: `pydantic_ai/capabilities/_tool_search.py`, `pydantic_ai/toolsets/_tool_search.py`  
 **Export**: `from pydantic_ai.capabilities import ToolSearch`
 
-`ToolSearch` is auto-injected into every agent. It activates only when tools with `defer_loading=True` exist. On providers that support native tool search (Anthropic BM25/regex, OpenAI Responses), the deferred tools are sent on the wire and the provider exposes them after discovery; on other providers, a local `search_tools` function is exposed as a regular tool.
+`ToolSearch` is automatically activated when an agent has tools with `defer_loading=True`. On providers that support native tool search (Anthropic BM25/regex, OpenAI Responses), the deferred tools are sent on the wire and the provider exposes them after discovery; on other providers, a local `search_tools` function is exposed as a regular tool. Add `ToolSearch()` explicitly only when you need to configure `strategy`, `enable_fallback`, or `max_results`.
 
 `ToolSearchToolset` is the companion toolset wrapper that hides deferred tools and exposes the `search_tools` function; it is used internally by `ToolSearch` when building the local-fallback path.
 
@@ -1361,20 +1361,19 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 9.3 LangChain Tool with `defer_loading`
+### 9.3 LangChain Tools with Semantic Search
 
-Defer discovery of expensive LangChain tools until needed using `ToolSearchToolset` wrapping.
+Use `ToolSearch` to let the model discover relevant LangChain tools from a large toolset rather than seeing all of them at once. `ToolSearch` activates automatically when tools are registered with `defer_loading=True`; add it explicitly here to set the search strategy.
 
 ```python  {test="skip"}
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ToolSearch
-from pydantic_ai.ext.langchain import LangChainToolset, LangChainTool
-from pydantic_ai.toolsets._tool_search import ToolSearchToolset
+from pydantic_ai.ext.langchain import LangChainToolset
 
 
 class HeavyDataTool:
-    """A LangChain-compatible tool that loads a large dataset."""
+    """A LangChain-compatible tool that queries a large dataset."""
     name = 'query_data_warehouse'
     description = 'Query the corporate data warehouse for business metrics.'
 
@@ -1387,19 +1386,12 @@ class HeavyDataTool:
 
 
 lc_toolset = LangChainToolset([HeavyDataTool()])
-# ToolSearchToolset wraps lc_toolset and exposes a 'search_tools' meta-tool to the
-# model instead of revealing HeavyDataTool directly. The model calls search_tools
-# first; matching tools are then made available for the follow-up request.
-deferred_toolset = ToolSearchToolset(
-    wrapped=lc_toolset,
-    tool_description='Search for analytics and data warehouse tools.',
-    max_results=5,
-)
 
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
-    toolsets=[deferred_toolset],
-    capabilities=[ToolSearch()],
+    toolsets=[lc_toolset],
+    # Explicit ToolSearch configures BM25 strategy; auto-activated for deferred tools
+    capabilities=[ToolSearch(strategy='bm25', max_results=5)],
     instructions='You are a business intelligence assistant.',
 )
 
