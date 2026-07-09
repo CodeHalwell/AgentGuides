@@ -662,6 +662,10 @@ from google.adk.sessions import InMemorySessionService
 session_service = InMemorySessionService()
 
 async def report():
+    # create_session must be called first; get_session() returns None for unknown IDs
+    await session_service.create_session(
+        app_name="my-app", user_id="user-1", session_id="session-123"
+    )
     analyzer = CachePerformanceAnalyzer(session_service)
     result = await analyzer.analyze_agent_cache_performance(
         session_id="session-123",
