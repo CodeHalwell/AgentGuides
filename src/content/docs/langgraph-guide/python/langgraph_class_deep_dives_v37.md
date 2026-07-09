@@ -34,7 +34,6 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 ```python
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import StreamWriter
 from typing_extensions import TypedDict
 
 try:
@@ -446,13 +445,18 @@ t.start()
 async_fut = run_coroutine_threadsafe(async_worker(7), loop, lazy=False)
 _done = threading.Event()
 _box: list = []
-loop.call_soon_threadsafe(
-    async_fut.add_done_callback, lambda f: (_box.append(f.result()), _done.set())
-)
+
+
+def _on_done(f: asyncio.Future) -> None:
+    _box.append(f)  # store the future; always set the event
+    _done.set()
+
+
+loop.call_soon_threadsafe(async_fut.add_done_callback, _on_done)
 completed = _done.wait(timeout=5)
 if not completed:
     raise TimeoutError("async_worker did not complete in time")
-result = _box[0]
+result = _box[0].result()  # re-raises if the coroutine failed
 print("result:", result)  # result: 49
 
 loop.call_soon_threadsafe(loop.stop)
@@ -660,7 +664,6 @@ print("remaining configurable keys:", list(cleaned["configurable"].keys()))
 ```python
 import asyncio
 from typing_extensions import TypedDict
-from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 
 
