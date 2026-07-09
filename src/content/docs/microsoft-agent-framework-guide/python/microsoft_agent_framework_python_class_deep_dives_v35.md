@@ -258,6 +258,11 @@ _CACHE: dict[str, ChatResponse] = {}  # capped to _MAX_CACHE entries (FIFO evict
 
 class CachingMiddleware(ChatMiddleware):
     async def process(self, context: ChatContext, call_next) -> None:
+        # Streaming responses cannot be cached — the stream is consumed on first read.
+        if context.stream:
+            await call_next()
+            return
+
         # Build a simple cache key from the last user message.
         last_user = next(
             (m.text for m in reversed(context.messages) if m.role == "user"),
@@ -270,8 +275,8 @@ class CachingMiddleware(ChatMiddleware):
 
         await call_next()
 
-        # Populate cache with the returned result.
-        if last_user and context.result:
+        # Populate cache only when result is a full ChatResponse (not a ResponseStream).
+        if last_user and isinstance(context.result, ChatResponse):
             if len(_CACHE) >= _MAX_CACHE:
                 _CACHE.pop(next(iter(_CACHE)))  # evict oldest entry
             _CACHE[last_user] = context.result
@@ -303,29 +308,15 @@ class PiiRedactMiddleware(ChatMiddleware):
         if context.stream:
             # Append a transform hook that fires for every streamed chunk.
             def redact(update: ChatResponseUpdate) -> ChatResponseUpdate:
-                if not update.text:
-                    return update
-                # Iterate over contents so tool-call/result chunks are preserved;
-                # only replace text-type items to avoid dropping non-text content.
-                redacted_contents = [
+                # Mutate contents in-place; guard with `or []` in case contents is None.
+                # Only replace text-type items so tool-call/result chunks are preserved.
+                update.contents = [
                     Content.from_text(_EMAIL_RE.sub("[REDACTED]", c.text))
                     if c.type == "text" and c.text
                     else c
-                    for c in update.contents
+                    for c in (update.contents or [])
                 ]
-                return ChatResponseUpdate(
-                    contents=redacted_contents,
-                    role=update.role,
-                    author_name=update.author_name,
-                    response_id=update.response_id,
-                    message_id=update.message_id,
-                    conversation_id=update.conversation_id,
-                    model=update.model,
-                    created_at=update.created_at,
-                    finish_reason=update.finish_reason,
-                    continuation_token=update.continuation_token,
-                    additional_properties=update.additional_properties,
-                )
+                return update
 
             context.stream_transform_hooks.append(redact)
         await call_next()
