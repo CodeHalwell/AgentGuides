@@ -877,7 +877,9 @@ asyncio.run(main())
 
 `MemoryStore` is the abstract base for durable per-user topic memory. `MemoryFileStore`
 is the built-in file-system implementation. Topics are individual Markdown files stored
-under `<base_path>/<owner_id>/<kind>/topics/`, with an index in `MEMORY.md`.
+under `<base_path>/<encoded_source_id>/<encoded_owner_id>/<kind>/topics/`, with an index in `MEMORY.md`.
+Both path components are URL-safe base64 encoded (no padding), so with defaults and owner `carol`
+the topics directory is `<base_path>/bWVtb3J5/Y2Fyb2w/memory/topics/`.
 
 ### `MemoryStore` abstract interface
 
@@ -1175,7 +1177,10 @@ async def main() -> None:
     session = agent.create_session()
     session.state["user_id"] = "carol"
     await agent.run("I'm a nurse and I love hiking on weekends.", session=session)
-    print("Extraction complete — check agent_memory/carol/memory/topics/")
+    # MemoryFileStore encodes both source_id and owner with URL-safe base64 (no padding).
+    # With source_id="memory" and owner="carol" the path becomes:
+    # agent_memory/bWVtb3J5/Y2Fyb2w/memory/topics/
+    print("Extraction complete — check agent_memory/bWVtb3J5/Y2Fyb2w/memory/topics/")
 
 asyncio.run(main())
 ```
@@ -1198,7 +1203,7 @@ External code can switch modes with `set_agent_mode(session, ...)` between turns
 class AgentModeProvider(ContextProvider):
     def __init__(
         self,
-        source_id: str = "mode",
+        source_id: str = "agent_mode",
         *,
         default_mode: str | None = None,
         mode_descriptions: Mapping[str, str] | None = None,
@@ -1208,7 +1213,7 @@ class AgentModeProvider(ContextProvider):
 
 | Parameter | Default | Notes |
 |---|---|---|
-| `source_id` | `"mode"` | Session-state key prefix for mode storage |
+| `source_id` | `"agent_mode"` | Session-state key prefix for mode storage |
 | `default_mode` | first in `mode_descriptions` | Initial mode; must exist in `mode_descriptions` |
 | `mode_descriptions` | `{"plan": "...", "execute": "..."}` | Available modes with descriptions |
 | `instructions` | built-in template | Supports `{available_modes}` and `{current_mode}` placeholders |
