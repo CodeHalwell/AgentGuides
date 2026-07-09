@@ -407,9 +407,11 @@ from agent_framework._workflows._edge import Case, Default
 from agent_framework.openai import OpenAIChatClient
 
 def get_sentiment(msg) -> str:
-    """Parse sentiment from an LLM message; tolerates markdown code fences and bad JSON."""
+    """Parse sentiment from an AgentExecutorResponse; tolerates markdown code fences and bad JSON."""
     try:
-        text = msg.text.strip() if msg.text else ""
+        # Agents are wrapped in AgentExecutor; conditions receive AgentExecutorResponse.
+        raw = msg.agent_response.text if hasattr(msg, "agent_response") else (msg.text or "")
+        text = raw.strip() if raw else ""
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -471,9 +473,11 @@ from agent_framework._workflows._edge import Case, Default
 from agent_framework.openai import OpenAIChatClient
 
 def get_score(msg) -> int:
-    """Parse numeric score from an LLM message; tolerates markdown code fences and bad JSON."""
+    """Parse numeric score from an AgentExecutorResponse; tolerates markdown code fences and bad JSON."""
     try:
-        text = msg.text.strip() if msg.text else ""
+        # Agents are wrapped in AgentExecutor; conditions receive AgentExecutorResponse.
+        raw = msg.agent_response.text if hasattr(msg, "agent_response") else (msg.text or "")
+        text = raw.strip() if raw else ""
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -1322,9 +1326,9 @@ callables against a sequence of `EvalItem` objects. All checks run concurrently 
 ### Key types
 
 ```python
-# An EvalCheck is any callable matching:
-EvalCheck = Callable[[EvalItem], bool | Awaitable[bool]]
-                          # or returns CheckResult with pass/fail/reason
+# The actual EvalCheck type alias — callables must return CheckResult.
+# Plain bool/float functions must be wrapped with @evaluator first.
+EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]]
 
 @experimental(feature_id=ExperimentalFeature.EVALS)
 class LocalEvaluator:
