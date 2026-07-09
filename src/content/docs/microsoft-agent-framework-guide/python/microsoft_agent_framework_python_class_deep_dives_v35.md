@@ -81,7 +81,7 @@ class RawAgent(BaseAgent, Generic[OptionsCoT]):
 | `instructions` | `None` | Injected as `system` before user messages |
 | `id` | auto | Unique agent identifier |
 | `default_options` | `None` | Provider-specific options dict applied to every call |
-| `middleware` | `None` | Ordered list of `AgentMiddleware` / `ChatMiddleware` instances |
+| `middleware` | `None` | Accepted by the constructor but **not invoked** during `RawAgent.run()` — `RawAgent` has no middleware layer. Use `Agent` for middleware support. |
 | `compaction_strategy` | `None` | Explicit compaction; no default applied unlike `Agent` |
 | `require_per_service_call_history_persistence` | `False` | Force history save on every LLM call |
 
@@ -111,23 +111,24 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import RawAgent
-from agent_framework.openai import OpenAIChatClient, OpenAIChatCompletionOptions
+from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
 
 async def main() -> None:
     client = OpenAIChatClient(model="gpt-4o")
 
-    # Typing the agent with OpenAIChatCompletionOptions gives IDE autocomplete
-    # for temperature, max_tokens, top_p, etc. when calling agent.run().
-    agent: RawAgent[OpenAIChatCompletionOptions] = RawAgent(
+    # OpenAIChatClient's native TOptions is OpenAIChatOptions (Responses API).
+    # Typing the agent with it gives IDE autocomplete for temperature, max_tokens,
+    # top_p, reasoning, verbosity, etc. when calling agent.run().
+    agent: RawAgent[OpenAIChatOptions] = RawAgent(
         client=client,
         instructions="Explain concepts concisely.",
-        default_options=OpenAIChatCompletionOptions(temperature=0.2, max_tokens=256),
+        default_options=OpenAIChatOptions(temperature=0.2, max_tokens=256),
     )
 
     # Per-call override: bump temperature for creative output.
     response = await agent.run(
         "Give me three creative names for a data pipeline tool.",
-        options=OpenAIChatCompletionOptions(temperature=0.9),
+        options=OpenAIChatOptions(temperature=0.9),
     )
     print(response.text)
 
@@ -310,6 +311,9 @@ class PiiRedactMiddleware(ChatMiddleware):
             def redact(update: ChatResponseUpdate) -> ChatResponseUpdate:
                 # Mutate contents in-place; guard with `or []` in case contents is None.
                 # Only replace text-type items so tool-call/result chunks are preserved.
+                # NOTE: per-chunk regex cannot redact an email split across chunk
+                # boundaries. For strict PII guarantees, redact the aggregated
+                # post-stream text instead of using a stream_transform_hook.
                 update.contents = [
                     Content.from_text(_EMAIL_RE.sub("[REDACTED]", c.text))
                     if c.type == "text" and c.text
