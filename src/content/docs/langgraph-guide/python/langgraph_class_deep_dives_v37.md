@@ -1052,7 +1052,7 @@ print("result_b:", result["result_b"])  # b:3
 
 **Key source facts** (from `langgraph/pregel/_algo.py`):
 
-- `task_path` format: `(PULL, node_name)` for regular nodes; `(PUSH, namespace_tuple, index, node_name, Send(...))` for `Send()`-dispatched tasks; `(PUSH, namespace_tuple, index, node_name, Call(...))` for `@task`-dispatched tasks.
+- `task_path` format: `(PULL, node_name)` for regular nodes; `(PUSH, idx)` for `Send()`-dispatched tasks (2-element, where `idx` indexes into the `TASKS` channel); `(PUSH, parent_path, push_write_idx, parent_task_id, Call(...))` for `@task`-dispatched tasks (5-element).
 - Checkpoint version determines the ID hash function: `checkpoint["v"] > 1` uses `_xxhash_str` (fast, 128-bit XXH3), otherwise `_uuid5_str` (SHA-1-based, for backwards compatibility).
 - The assembled `PregelExecutableTask` carries: node callable, input value, a `deque` for writes, the full patched config (with `CONFIG_KEY_READ`, `CONFIG_KEY_SEND`, `CONFIG_KEY_RUNTIME` etc.), retry policies, cache key, task ID, task path, flat writers, subgraph list, and timeout policy.
 - `task_id_checksum` — optional assertion parameter used in tests to verify that the computed ID matches a pre-computed value.
