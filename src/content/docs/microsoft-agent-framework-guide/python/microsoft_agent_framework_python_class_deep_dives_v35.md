@@ -550,13 +550,18 @@ group = SwitchCaseEdgeGroup(
 serialized = group.to_dict()
 print(json.dumps(serialized, indent=2, default=str))
 # {
-#   "type": "SwitchCaseEdgeGroup",
 #   "id": "my-switch",
-#   "source_id": "classifier",
+#   "type": "SwitchCaseEdgeGroup",
+#   "edges": [
+#     {"source_id": "classifier", "target_id": "agent_a"},
+#     {"source_id": "classifier", "target_id": "agent_b"},
+#     {"source_id": "classifier", "target_id": "agent_default"}
+#   ],
+#   "selection_func_name": null,
 #   "cases": [
-#     {"type": "Case", "target_id": "agent_a"},
-#     {"type": "Case", "target_id": "agent_b"},
-#     {"type": "Default", "target_id": "agent_default"}
+#     {"target_id": "agent_a", "type": "Case", "condition_name": "<lambda>"},
+#     {"target_id": "agent_b", "type": "Case", "condition_name": "<lambda>"},
+#     {"target_id": "agent_default", "type": "Default"}
 #   ]
 # }
 ```
