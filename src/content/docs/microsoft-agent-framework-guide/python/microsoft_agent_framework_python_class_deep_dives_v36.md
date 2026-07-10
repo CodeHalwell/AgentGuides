@@ -1431,6 +1431,6 @@ except TypeCompatibilityError as exc:
 | 5 | `FunctionalWorkflow` + `RunContext` | `@step` caches by call index; `ctx.request_info()` raises `WorkflowInterrupted` (a `BaseException` subclass) to bypass `except Exception:` catch-all handlers |
 | 6 | Skills pipeline | `Aggregating` → `Deduplicating` → `Filtering` → `Caching` are composable decorators |
 | 7 | `ObservabilitySettings` | Sticky-disable; VS Code extension port; `_configure()` idempotent; sensitive data opt-in |
-| 8 | `SecureAgentConfig` | One-liner IFC setup; `block_on_violation` or `approval_on_violation`; `audit_log` |
+| 8 | `SecureAgentConfig` | One-liner IFC setup; `block_on_violation` or `approval_on_violation`; `enable_audit_log` flag (log held by inner policy middleware) |
 | 9 | `TodoProvider` | `WeakKeyDictionary` per-session locks; `TodoFileStore` atomic JSON writes with path-traversal guard |
 | 10 | `WorkflowGraphValidator` | 7 checks: DFS reachability, type compat (FanIn wraps list), self-loop warnings, dead-end info |
