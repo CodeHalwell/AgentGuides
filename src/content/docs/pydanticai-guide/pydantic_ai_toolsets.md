@@ -292,7 +292,7 @@ result_reader = agent.run_sync('Delete record_1', deps=UserDeps(role='reader'))
 
 ## Instructions that follow a toolset
 
-`FunctionToolset.instructions` (verified in `toolsets/function.py`) auto-injects guidance into the model request whenever any tool from the set is active. Three forms are accepted:
+`FunctionToolset.instructions` (verified in `toolsets/function.py`) auto-injects guidance into the model request whenever any tool from the set is active. Four forms are accepted:
 
 ```python
 from dataclasses import dataclass

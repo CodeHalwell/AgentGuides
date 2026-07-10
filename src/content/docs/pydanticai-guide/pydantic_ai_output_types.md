@@ -86,7 +86,7 @@ Arguments (`output.py` — verified against pydantic-ai 2.8.0):
 
 ```python
 from pydantic import BaseModel, field_validator
-from pydantic_ai import Agent, ToolOutput, ModelRetry, RunContext
+from pydantic_ai import Agent, ToolOutput
 
 class QuickAnswer(BaseModel):
     """A short factual answer."""

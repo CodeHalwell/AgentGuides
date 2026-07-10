@@ -97,12 +97,13 @@ async with agent.run_stream(
 
 When `message_history` is provided, the agent's system prompt is **not** re-sent — the list is assumed to already contain it. If you want to layer a new system-level instruction on top of an existing history, use `agent.override(instructions=...)` or a run-level `instructions=` argument.
 
-## `HistoryProcessor` — trim, summarise, or redact in flight
+## `ProcessHistory` — trim, summarise, or redact in flight
 
-`HistoryProcessor` is a callable that runs _before_ each model request (`_history_processor.py`). Signatures (all accepted):
+`ProcessHistory` is a `capabilities=` entry that wraps a `HistoryProcessorFunc` and runs it _before_ each model request (`pydantic_ai.capabilities`). Signatures (all accepted):
 
 ```python
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage
 
 def last_n(msgs: list[ModelMessage]) -> list[ModelMessage]:
@@ -115,11 +116,11 @@ async def async_ctx(
 
 agent = Agent(
     'openai:gpt-5.2',
-    history_processors=[last_n],
+    capabilities=[ProcessHistory(last_n)],
 )
 ```
 
-Processors run in the order given; each one receives the output of the previous. They can:
+Add multiple `ProcessHistory` entries to chain processors — each receives the output of the previous. They can:
 
 - Drop messages (context window management).
 - Collapse long tool outputs into summaries.
@@ -132,6 +133,7 @@ Processors are **not** applied to the stored `all_messages()`; they only affect 
 
 ```python
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
 
 def sliding_window(max_turns: int):
@@ -171,7 +173,7 @@ def sliding_window(max_turns: int):
 
 agent = Agent(
     'openai:gpt-4o',
-    history_processors=[sliding_window(max_turns=5)],
+    capabilities=[ProcessHistory(sliding_window(max_turns=5))],
 )
 ```
 
@@ -179,7 +181,8 @@ agent = Agent(
 
 ```python
 import re
-from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart, TextContent
+from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
 _EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
 _CARD_RE  = re.compile(r'\b(?:\d[ \-]?){13,16}\b')
@@ -202,22 +205,23 @@ def redact_pii(msgs: list[ModelMessage]) -> list[ModelMessage]:
             cleaned.append(msg)
     return cleaned
 
-agent = Agent('openai:gpt-4o', history_processors=[redact_pii])
+agent = Agent('openai:gpt-4o', capabilities=[ProcessHistory(redact_pii)])
 ```
 
 ### Pattern 3 — chained processors (window → redact)
 
 ```python
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessHistory
 
 agent = Agent(
     'openai:gpt-4o',
-    history_processors=[
-        sliding_window(max_turns=10),  # trim first …
-        redact_pii,                    # … then scrub what remains
+    capabilities=[
+        ProcessHistory(sliding_window(max_turns=10)),  # trim first …
+        ProcessHistory(redact_pii),                    # … then scrub what remains
     ],
 )
-# Each processor receives the output of the previous one.
+# Each ProcessHistory receives the output of the previous one.
 ```
 
 ### Pattern 4 — async processor with context (per-user window size)
@@ -225,6 +229,7 @@ agent = Agent(
 ```python
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage
 
 @dataclass
@@ -240,7 +245,7 @@ async def dynamic_window(
 agent = Agent(
     'openai:gpt-4o',
     deps_type=ChatConfig,
-    history_processors=[dynamic_window],
+    capabilities=[ProcessHistory(dynamic_window)],
 )
 ```
 
@@ -279,7 +284,9 @@ for msg in result.all_messages():
 
 ## Patterns
 
-### 1. DB-backed conversation store
+### 1. DB-backed conversation store (add `ProcessHistory` to the agent)
+
+Wrap any processor function in `ProcessHistory` and pass it via `capabilities=`:
 
 ```python
 def load(session_id: str) -> list[ModelMessage]:
@@ -306,7 +313,7 @@ def window(n: int):
         return msgs[:2] + msgs[-n:] if len(msgs) > n + 2 else msgs
     return _proc
 
-agent = Agent('openai:gpt-5.2', history_processors=[window(20)])
+agent = Agent('openai:gpt-5.2', capabilities=[ProcessHistory(window(20))])
 ```
 
 ### 3. Summarise-on-overflow
@@ -349,7 +356,7 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 
 - **Don't mutate `result.all_messages()` in place if you plan to re-use it.** The list is owned by the run context; copy via `list(...)` before modifying.
 - **System prompt is in the list.** When concatenating histories across agents, drop the leading `SystemPromptPart`s from the imported history and let the receiving agent add its own.
-- **`HistoryProcessor` runs on every step** of a multi-step (tool-calling) run, not just once per user turn. Keep them cheap.
+- **`ProcessHistory` runs on every step** of a multi-step (tool-calling) run, not just once per user turn. Keep processors cheap.
 - **Images / files in history**: binaries are base64-encoded in JSON. Large attachments bloat the stored blob — consider storing a reference (`ImageUrl`) instead of `BinaryImage` if you re-send across turns.
 
 ## Reference
@@ -358,5 +365,6 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 - `ModelMessagesTypeAdapter` — `messages.py:2034`
 - `AgentRunResult.all_messages()` / `.new_messages()` / `.all_messages_json()` — `run.py`
 - `capture_run_messages()` — `_agent_graph.py:1791`
-- `HistoryProcessor` — `_history_processor.py:17`
-- `Agent(history_processors=...)` — `agent/__init__.py:220`
+- `HistoryProcessorFunc` — `_history_processor.py:17`
+- `ProcessHistory` — `pydantic_ai.capabilities`
+- `Agent(capabilities=[ProcessHistory(...)])` — `agent/__init__.py`

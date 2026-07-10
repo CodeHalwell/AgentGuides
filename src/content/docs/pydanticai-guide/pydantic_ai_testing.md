@@ -167,7 +167,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 
 calls_log: list[str] = []
 
@@ -184,10 +184,18 @@ def spy_function(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse
 
 async def streaming_tool_call(
     messages: list[ModelMessage], info: AgentInfo
-) -> AsyncIterator[str]:
-    """Streaming: yield a sentence token by token."""
-    for word in 'The answer is forty-two .'.split():
-        yield word + ' '
+) -> AsyncIterator[str | DeltaToolCalls]:
+    """Streaming: first turn emits a DeltaToolCalls dict, second turn yields text tokens."""
+    prior_tool_calls = [p for m in messages for p in m.parts if isinstance(p, ToolCallPart)]
+    if not prior_tool_calls:
+        # First turn: stream the tool call incrementally via DeltaToolCalls
+        # DeltaToolCalls is dict[int, DeltaToolCall] — key is the per-call index
+        yield {0: DeltaToolCall(name='lookup', json_args='{"id": ')}
+        yield {0: DeltaToolCall(json_args='"42"}')}
+    else:
+        # Second turn (tool already ran): stream the answer word by word
+        for word in 'The answer is forty-two .'.split():
+            yield word + ' '
 
 agent = Agent(
     FunctionModel(spy_function, stream_function=streaming_tool_call),
@@ -203,15 +211,16 @@ result = agent.run_sync('What is 42?')
 assert result.output == 'The answer is 42.'
 print(calls_log)  # shows two entries — one per LLM turn
 
-# Streaming: single-turn streamed text
+# Streaming: two-turn flow — first turn streams a tool call, second turn streams text
 async def test_stream():
     tokens: list[str] = []
-    async with agent.run_stream('What is the answer?') as stream:
-        async for chunk in stream.stream_text(delta=True):
+    async with agent.run_stream('What is 42?') as stream:
+        # debounce_by=None gives one token per yield so we can verify multiple chunks
+        async for chunk in stream.stream_text(delta=True, debounce_by=None):
             tokens.append(chunk)
         final = await stream.get_output()
     assert 'forty-two' in final
-    assert len(tokens) > 1
+    assert len(tokens) > 1  # multiple word chunks from the second turn
 
 asyncio.run(test_stream())
 ```
