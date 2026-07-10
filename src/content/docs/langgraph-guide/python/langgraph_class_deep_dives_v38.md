@@ -29,7 +29,6 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 ### Example 1 — log every interrupt to stdout with its checkpoint ID
 
 ```python
-from uuid import UUID
 from langgraph.callbacks import GraphCallbackHandler, GraphInterruptEvent, GraphResumeEvent
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt, Command
@@ -413,7 +412,6 @@ print(result["messages"][-1].content)  # [EN-GB] Good morning
 ### Example 3 — stream partial tool output with `emit_output_delta`
 
 ```python
-import asyncio
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage
 from langgraph.prebuilt import ToolNode
@@ -823,7 +821,6 @@ print(f"values events: {len(values_events)}, custom events: {len(custom_events)}
 
 ```python
 from langgraph.pregel.main import NodeBuilder
-from langgraph.pregel._write import ChannelWriteEntry
 
 
 def merge_inputs(inputs: dict) -> dict:
@@ -923,8 +920,6 @@ These three data classes configure **per-node execution policies** that are orth
 ### Example 1 — cache expensive node results with `CachePolicy`
 
 ```python
-import operator
-from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import CachePolicy
