@@ -347,20 +347,24 @@ travel_agent = LlmAgent(
     tools=[...],  # your booking tools
 )
 
-generator = ScenarioGenerator()
-scenarios = generator.generate_scenarios(
-    agent=travel_agent,
-    config=ConversationGenerationConfig(
-        count=5,
-        model_name="gemini-2.5-flash",
-        environment_context="Flights SFO→LAX on 2026-07-15: 08:00 ($129), 10:00 ($99).",
-    ),
-)
+async def main():
+    generator = ScenarioGenerator()
+    scenarios = await generator.generate_scenarios(
+        agent=travel_agent,
+        config=ConversationGenerationConfig(
+            count=5,
+            model_name="gemini-2.5-flash",
+            environment_context="Flights SFO→LAX on 2026-07-15: 08:00 ($129), 10:00 ($99).",
+        ),
+    )
 
-for s in scenarios:
-    print(f"Prompt: {s.starting_prompt[:60]}…")
-    print(f"Plan:   {s.conversation_plan[:80]}…")
-    print()
+    for s in scenarios:
+        print(f"Prompt: {s.starting_prompt[:60]}…")
+        print(f"Plan:   {s.conversation_plan[:80]}…")
+        print()
+
+import asyncio
+asyncio.run(main())
 ```
 
 ### Full pipeline: generate → run → evaluate
@@ -381,38 +385,38 @@ from google.genai import types
 os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
-# Step 1: generate scenarios
-generator = ScenarioGenerator()
-scenarios = generator.generate_scenarios(
-    agent=travel_agent,
-    config=ConversationGenerationConfig(count=3, model_name="gemini-2.5-flash"),
-)
-
-# Step 2: convert scenarios to EvalCases
-eval_cases = [
-    EvalCase(
-        eval_id=f"generated_{i}",
-        conversation=[
-            Invocation(
-                user_content=types.Content(
-                    role="user",
-                    parts=[types.Part(text=s.starting_prompt)],
-                )
-            )
-        ],
-        conversation_scenario=s,   # attached so multi-turn eval can use the plan
-    )
-    for i, s in enumerate(scenarios)
-]
-
-eval_set = EvalSet(eval_set_id="generated_travel_evals", eval_cases=eval_cases)
-
-# Step 3: run evals
 eval_config = EvalConfig(
     criteria={PrebuiltMetrics.MULTI_TURN_TASK_SUCCESS_V1.value: 0.7}
 )
 
 async def run_evals():
+    # Step 1: generate scenarios
+    generator = ScenarioGenerator()
+    scenarios = await generator.generate_scenarios(
+        agent=travel_agent,
+        config=ConversationGenerationConfig(count=3, model_name="gemini-2.5-flash"),
+    )
+
+    # Step 2: convert scenarios to EvalCases
+    eval_cases = [
+        EvalCase(
+            eval_id=f"generated_{i}",
+            conversation=[
+                Invocation(
+                    user_content=types.Content(
+                        role="user",
+                        parts=[types.Part(text=s.starting_prompt)],
+                    )
+                )
+            ],
+            conversation_scenario=s,   # attached so multi-turn eval can use the plan
+        )
+        for i, s in enumerate(scenarios)
+    ]
+
+    eval_set = EvalSet(eval_set_id="generated_travel_evals", eval_cases=eval_cases)
+
+    # Step 3: run evals
     await AgentEvaluator.evaluate_eval_set(
         agent_module="myapp.travel_agent",
         eval_set=eval_set,
@@ -482,12 +486,15 @@ traj_eval = MultiTurnTrajectoryQualityV1Evaluator(
     EvalMetric(metric_name=PrebuiltMetrics.MULTI_TURN_TRAJECTORY_QUALITY_V1.value, threshold=0.6)
 )
 
-for evaluator in [success_eval, tool_eval, traj_eval]:
-    result = evaluator.evaluate_invocations(
-        actual_invocations=actual_turns,
-        conversation_scenario=scenario,
-    )
-    print(f"{evaluator.__class__.__name__}: {result}")
+async def run_evaluators():
+    for evaluator in [success_eval, tool_eval, traj_eval]:
+        result = await evaluator.evaluate_invocations(
+            actual_invocations=actual_turns,
+            conversation_scenario=scenario,
+        )
+        print(f"{evaluator.__class__.__name__}: {result}")
+
+asyncio.run(run_evaluators())
 ```
 
 ### Wiring into `EvalConfig`
@@ -710,6 +717,7 @@ This pattern lets a centralised MCP server own agent instructions — update the
 ### Constructor
 
 ```python
+import sys
 from google.adk.agents.mcp_instruction_provider import McpInstructionProvider
 from google.adk.tools.mcp_tool import StdioConnectionParams
 from mcp import StdioServerParameters
@@ -1207,7 +1215,6 @@ async def approval_gate(doc_text: str, ctx) -> str:
         reviewer_agent,
         node_input=doc_text,
         run_id="doc_review",
-        rerun_on_resume=False,   # don't re-run the child if it completed before interrupt
     )
     return reviewer_ctx.output
 

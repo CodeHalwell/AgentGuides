@@ -782,6 +782,7 @@ asyncio.run(main())
 Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them from a description. This requires `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`.
 
 ```python
+import asyncio
 from google.adk.evaluation.eval_case import ConversationGenerationConfig
 from google.adk.evaluation.scenario_generator import ScenarioGenerator
 
@@ -800,14 +801,17 @@ gen_config = ConversationGenerationConfig(
     num_scenarios=3,         # number of distinct scenarios to generate
 )
 
-generator = ScenarioGenerator()
+async def main():
+    generator = ScenarioGenerator()
 
-# Returns a list of ConversationScenario objects ready to wrap in EvalCase
-scenarios = await generator.generate_scenarios(gen_config)
+    # Returns a list of ConversationScenario objects ready to wrap in EvalCase
+    scenarios = await generator.generate_scenarios(gen_config)
 
-for scenario in scenarios:
-    print(scenario.scenario_description)
-    print(scenario.task_description)
+    for scenario in scenarios:
+        print(scenario.scenario_description)
+        print(scenario.task_description)
+
+asyncio.run(main())
 ```
 
 Combine with `EvalCase` to build a full synthetic eval set:

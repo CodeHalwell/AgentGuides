@@ -546,9 +546,11 @@ async def human_review(node_input: str, ctx):
     )
     if str(decision).strip().lower() == "yes":
         ctx.state["approved_email"] = node_input
-        return node_input
+        ctx.output = node_input
+        return
     ctx.route = "revise"
-    return node_input   # send back for another draft pass
+    ctx.output = node_input
+    return   # send back for another draft pass
 
 approval_wf = Workflow(
     name="email_approval",
