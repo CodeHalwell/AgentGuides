@@ -286,31 +286,35 @@ from agent_framework.openai import OpenAIChatClient
 injector = MessageInjectionMiddleware()
 
 async def run_long_task(session: AgentSession) -> None:
-    """Simulate a long-running task that sends progress updates."""
+    """Simulate a long-running task that sends staggered progress updates."""
     for step in range(1, 4):
-        await asyncio.sleep(0)  # yield to the event loop so updates arrive during the run
+        await asyncio.sleep(0.1)  # brief pause so each update arrives while the agent is running
         injector.enqueue_messages(
             session,
             Message(role="user", contents=[f"[Progress update] Step {step}/3 complete."]),
         )
 
 @tool
-async def start_long_task() -> str:
-    """Kick off a background task. Updates will be injected into the conversation."""
-    return "Background task started. You will receive progress updates."
+async def acknowledge_task_started() -> str:
+    """Acknowledge that a background task is already running; progress updates will arrive shortly."""
+    return "Background task is running. Progress updates will be injected into the conversation."
 
 async def main() -> None:
     client = OpenAIChatClient("gpt-4o")
     agent = Agent(
         client=client,
-        tools=[start_long_task],
+        tools=[acknowledge_task_started],
         middleware=[injector],
     )
     session = agent.create_session()
-    # Run progress updater and agent loop concurrently so updates arrive during the run
+    # run_long_task is started externally via asyncio.gather so it runs concurrently with
+    # agent.run — the tool only tells the LLM that updates will arrive, it does not launch the task
     _, response = await asyncio.gather(
         run_long_task(session),
-        agent.run("Start the long task and summarise when done.", session=session),
+        agent.run(
+            "Acknowledge the background task and summarise the progress updates as they arrive.",
+            session=session,
+        ),
     )
     print(response.messages[-1].content)
 
