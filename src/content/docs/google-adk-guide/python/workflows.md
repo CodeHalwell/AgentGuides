@@ -365,7 +365,7 @@ class PipelineState(BaseModel):
     status: str = "pending"
 
 @node
-def tracker(node_input: str, iteration: int = 0, ctx) -> str:
+def tracker(node_input: str, ctx, iteration: int = 0) -> str:
     # `iteration` is injected from ctx.state["iteration"]; default 0 for first run
     # (state_schema validates writes but does not pre-populate state with defaults)
     ctx.state["iteration"] = iteration + 1
@@ -620,7 +620,8 @@ async for event in runner.run_async(new_message=user_msg, user_id="u1", session_
 
 # Resume with a matching FunctionResponse
 approval_response = types.Content(
-    parts=[create_request_input_response(interrupt_id, {"result": "yes"})]
+    role="user",
+    parts=[create_request_input_response(interrupt_id, {"result": "yes"})],
 )
 async for event in runner.run_async(
     new_message=approval_response,

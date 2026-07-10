@@ -6,6 +6,8 @@ language: python
 sidebar:
   label: "Class deep dives — vol. 40"
   order: 109
+---
+
 import { Aside } from "@astrojs/starlight/components";
 
 <Aside type="note">
@@ -17,8 +19,6 @@ sources.
 </Aside>
 
 Verified against **google-adk==2.4.0** source code.  All examples are runnable with `pip install google-adk`.
-
----
 
 ## 1. `ExecuteBashTool` + `BashToolPolicy`
 
@@ -224,12 +224,16 @@ config = DataAgentToolConfig(max_query_result_rows=100)  # default: 50
 ### Wiring it all together
 
 ```python
+import google.auth
 from google.adk.agents import LlmAgent
 from google.adk.tools.data_agent import DataAgentToolset, DataAgentCredentialsConfig
 from google.adk.tools.data_agent.config import DataAgentToolConfig
 
+# Use Application Default Credentials
+google_creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/bigquery"])
+
 toolset = DataAgentToolset(
-    credentials_config=DataAgentCredentialsConfig(auth_type="adc"),
+    credentials_config=DataAgentCredentialsConfig(credentials=google_creds),
     data_agent_tool_config=DataAgentToolConfig(max_query_result_rows=100),
     tool_filter=["list_accessible_data_agents", "ask_data_agent"],  # or None for all
 )
@@ -249,11 +253,15 @@ analytics_agent = LlmAgent(
 ### Tool filter patterns
 
 ```python
+import google.auth
+from google.adk.tools.data_agent import DataAgentToolset, DataAgentCredentialsConfig
 from google.adk.tools.base_toolset import ToolPredicate
+
+google_creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/bigquery"])
 
 # Only expose ask_data_agent
 toolset_ask_only = DataAgentToolset(
-    credentials_config=DataAgentCredentialsConfig(auth_type="adc"),
+    credentials_config=DataAgentCredentialsConfig(credentials=google_creds),
     tool_filter=["ask_data_agent"],
 )
 
@@ -262,7 +270,7 @@ def only_ask_in_analytics_mode(tool, ctx):
     return tool.name == "ask_data_agent" and ctx.state.get("mode") == "analytics"
 
 toolset_dynamic = DataAgentToolset(
-    credentials_config=DataAgentCredentialsConfig(auth_type="adc"),
+    credentials_config=DataAgentCredentialsConfig(credentials=google_creds),
     tool_filter=ToolPredicate(only_ask_in_analytics_mode),
 )
 ```
@@ -270,11 +278,14 @@ toolset_dynamic = DataAgentToolset(
 ### Multi-agent pattern: router + data analyst
 
 ```python
+import google.auth
 from google.adk.agents import LlmAgent
 from google.adk.tools.data_agent import DataAgentToolset, DataAgentCredentialsConfig
 
+google_creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/bigquery"])
+
 data_toolset = DataAgentToolset(
-    credentials_config=DataAgentCredentialsConfig(auth_type="adc"),
+    credentials_config=DataAgentCredentialsConfig(credentials=google_creds),
 )
 
 data_analyst = LlmAgent(
