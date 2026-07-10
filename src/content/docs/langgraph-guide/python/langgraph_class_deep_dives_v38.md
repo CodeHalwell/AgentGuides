@@ -640,7 +640,6 @@ except Exception as exc:
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import interrupt
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -649,7 +648,6 @@ class S(TypedDict):
 
 
 def pause(state: S) -> dict:
-    interrupt("paused")
     return {}
 
 
@@ -1192,7 +1190,7 @@ asyncio.run(main())
 
 **Module:** `langgraph.graph.ui`
 
-`UIMessage` and `RemoveUIMessage` power **generative UI streaming** in LangGraph. A node emits `UIMessage` dicts to the stream to tell a connected front-end to mount a named component with specific props. `RemoveUIMessage` tells the front-end to unmount a previously mounted component by ID. Both are `TypedDict` shapes, meaning they are plain dicts at runtime and can be emitted via `get_stream_writer()` or pushed through the `"ui"` / `"values"` stream channels.
+`UIMessage` and `RemoveUIMessage` power **generative UI streaming** in LangGraph. A node emits `UIMessage` dicts to the stream to tell a connected front-end to mount a named component with specific props. `RemoveUIMessage` tells the front-end to unmount a previously mounted component by ID. Both are `TypedDict` shapes — plain dicts at runtime. The primary emission path is `get_stream_writer()` inside a node, which surfaces the payload under `stream_mode="custom"`. For durable UI state, use `push_ui_message()` (writes to both stream and state) or store them in a `Annotated[list[UIMessage], ui_message_reducer]` state key (visible in `stream_mode="values"`).
 
 **Key source facts** (from `langgraph/graph/ui.py`):
 
