@@ -229,25 +229,34 @@ class MessageInjectionMiddleware(ChatMiddleware):
         """Snapshot of currently queued messages (does not drain)."""
 ```
 
-### Example 1 — injecting a human approval from outside the agent loop
+### Example 1 — injecting a follow-up message from inside a tool
 
 ```python
 import asyncio
 from agent_framework import Agent, tool
-from agent_framework._sessions import MessageInjectionMiddleware
+from agent_framework._sessions import AgentSession, MessageInjectionMiddleware
 from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
 
 injector = MessageInjectionMiddleware()
+_session: AgentSession | None = None  # captured after session creation
 
 @tool
 async def request_human_approval(question: str) -> str:
-    """Ask a human and return their decision (injected back as a message)."""
+    """Ask a human; also inject their answer as a standalone message for audit trail."""
     print(f"[HUMAN NEEDED] {question}")
     answer = await asyncio.to_thread(input, "Enter approval decision: ")
-    return f"Human decision: {answer}"
+    # Inject the human's response as an additional user message so it appears
+    # in the session history independently of the tool-result envelope.
+    if _session is not None:
+        injector.enqueue_messages(
+            _session,
+            Message(role="user", contents=[f"[Human decision] {answer}"]),
+        )
+    return f"Human responded: {answer}"
 
 async def main() -> None:
+    global _session
     client = OpenAIChatClient("gpt-4o")
     agent = Agent(
         client=client,
@@ -255,10 +264,10 @@ async def main() -> None:
         tools=[request_human_approval],
         middleware=[injector],
     )
-    session = agent.create_session()
+    _session = agent.create_session()
     response = await agent.run(
         "Should we deploy the new ML model to production now?",
-        session=session,
+        session=_session,
     )
     print(response.messages[-1].content)
 
@@ -1020,9 +1029,9 @@ settings = ObservabilitySettings(enable_console_exporters=True)
 from agent_framework.observability import disable_instrumentation
 disable_instrumentation()
 
-assert not settings.enable_instrumentation   # True — still disabled
-settings.enable_instrumentation = True       # silently dropped
-assert not settings.enable_instrumentation   # still False
+assert not settings.enable_instrumentation   # property is False (instrumentation disabled)
+settings.enable_instrumentation = True       # silently dropped — sticky disable in effect
+assert not settings.enable_instrumentation   # property is still False (assignment had no effect)
 
 assert settings.is_user_disabled             # True
 
@@ -1106,7 +1115,8 @@ async def main() -> None:
 
     response = await agent.run("Summarise the page at https://example.com")
     print(response.messages[-1].content)
-    print("Violations:", security.get_audit_log())
+    # Violation details are recorded on the underlying PolicyEnforcementFunctionMiddleware;
+    # inspect response.messages for any content with type="policy_violation" to audit them.
 
 asyncio.run(main())
 ```
