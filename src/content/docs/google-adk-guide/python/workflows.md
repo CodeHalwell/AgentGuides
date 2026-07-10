@@ -547,7 +547,9 @@ async def human_review(node_input: str, ctx):
         interrupt_id="email_review",
         message=f"Draft:\n\n{node_input}\n\nApprove? (yes/no)",
     )
-    if str(decision).strip().lower() == "yes":
+    # decision is the FunctionResponse payload dict, e.g. {"result": "yes"}
+    result = decision.get("result", "") if isinstance(decision, dict) else str(decision)
+    if result.strip().lower() == "yes":
         ctx.state["approved_email"] = node_input
         ctx.output = node_input
         return

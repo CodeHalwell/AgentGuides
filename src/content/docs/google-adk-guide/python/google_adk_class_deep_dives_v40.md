@@ -24,7 +24,7 @@ Verified against **google-adk==2.4.0** source code.  All examples are runnable w
 
 **Source:** `google/adk/tools/bash_tool.py`
 
-`ExecuteBashTool` is ADK's safe bash execution primitive, introduced in 2.4.0.  It wraps `asyncio.create_subprocess_exec`, enforces a command-allowlist policy, applies OS-level resource limits (`RLIMIT_AS`, `RLIMIT_FSIZE`, `RLIMIT_NPROC`) on the spawned process, and — crucially — **always requires HITL confirmation before executing**, regardless of the `require_confirmation` argument on the tool.
+`ExecuteBashTool` is ADK's safe bash execution primitive. It wraps `asyncio.create_subprocess_exec`, enforces a command-allowlist policy, applies OS-level resource limits (`RLIMIT_AS`, `RLIMIT_FSIZE`, `RLIMIT_NPROC`) on the spawned process, and — crucially — **always requires HITL confirmation before executing**, regardless of the `require_confirmation` argument on the tool.
 
 ### `BashToolPolicy` fields
 
