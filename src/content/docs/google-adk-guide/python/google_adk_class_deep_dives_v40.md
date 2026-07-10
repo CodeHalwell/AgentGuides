@@ -6,7 +6,15 @@ language: python
 sidebar:
   label: "Class deep dives — vol. 40"
   order: 109
----
+import { Aside } from "@astrojs/starlight/components";
+
+<Aside type="note">
+All signatures, constants, and behaviours on this page were verified directly
+against the installed package source (locate yours with
+`python -c 'import google.adk; print(google.adk.__file__)'`) on
+**google-adk == 2.4.0**. No documentation or blog posts were used as primary
+sources.
+</Aside>
 
 Verified against **google-adk==2.4.0** source code.  All examples are runnable with `pip install google-adk`.
 
@@ -177,21 +185,32 @@ All three are wrapped as `GoogleTool` instances, so ADK's OAuth/ADC credential p
 ### `DataAgentCredentialsConfig`
 
 ```python
+import google.auth
 from google.adk.tools.data_agent import DataAgentCredentialsConfig
 
-# OAuth2: user consent flow (default scope: bigquery read/write)
-creds = DataAgentCredentialsConfig(
-    auth_type="oauth2",             # "oauth2" | "service_account" | "adc"
-    client_id="...",
-    client_secret="...",
-    scopes=["https://www.googleapis.com/auth/bigquery"],
+# Option 1: OAuth2 user-consent flow (each end-user goes through OAuth)
+# Pass client_id + client_secret; scopes default to bigquery read/write.
+oauth_creds = DataAgentCredentialsConfig(
+    client_id="your-client-id.apps.googleusercontent.com",
+    client_secret="your-client-secret",
+    # scopes defaults to ["https://www.googleapis.com/auth/bigquery"]
 )
 
-# Application Default Credentials (simplest for GKE / Cloud Run)
-adc_creds = DataAgentCredentialsConfig(auth_type="adc")
+# Option 2: Application Default Credentials (GKE / Cloud Run service account)
+# The same shared credentials serve every end-user — only use when the
+# service account already has access to every user's data.
+google_creds, _ = google.auth.default(
+    scopes=["https://www.googleapis.com/auth/bigquery"]
+)
+adc_creds = DataAgentCredentialsConfig(credentials=google_creds)
+
+# Option 3: Token-from-state — read an access token stored in session state
+token_creds = DataAgentCredentialsConfig(
+    external_access_token_key="my_bigquery_access_token"
+)
 ```
 
-`DataAgentCredentialsConfig` extends `BaseGoogleCredentialsConfig` and pre-populates `scopes` with `["https://www.googleapis.com/auth/bigquery"]` if none are provided. The internal `_token_cache_key` is `"data_agent_token_cache"` — separate from other Google tool caches.
+`DataAgentCredentialsConfig` extends `BaseGoogleCredentialsConfig` and accepts **exactly one of**: `credentials` (a `google.auth.credentials.Credentials` object), `external_access_token_key` (a session-state key holding an OAuth access token), or a `client_id`/`client_secret` pair for end-user OAuth consent. It has no `auth_type` discriminator. Scopes default to `["https://www.googleapis.com/auth/bigquery"]` if omitted. The internal `_token_cache_key` is `"data_agent_token_cache"` — separate from other Google tool caches.
 
 ### `DataAgentToolConfig`
 
@@ -485,15 +504,13 @@ traj_eval = MultiTurnTrajectoryQualityV1Evaluator(
     EvalMetric(metric_name=PrebuiltMetrics.MULTI_TURN_TRAJECTORY_QUALITY_V1.value, threshold=0.6)
 )
 
-async def run_evaluators():
-    for evaluator in [success_eval, tool_eval, traj_eval]:
-        result = await evaluator.evaluate_invocations(
-            actual_invocations=actual_turns,
-            conversation_scenario=scenario,
-        )
-        print(f"{evaluator.__class__.__name__}: {result}")
-
-asyncio.run(run_evaluators())
+for evaluator in [success_eval, tool_eval, traj_eval]:
+    # evaluate_invocations is synchronous — no await needed
+    result = evaluator.evaluate_invocations(
+        actual_invocations=actual_turns,
+        conversation_scenario=scenario,
+    )
+    print(f"{evaluator.__class__.__name__}: {result}")
 ```
 
 ### Wiring into `EvalConfig`
@@ -1121,8 +1138,10 @@ class ScheduleDynamicNode(Protocol):
         use_sub_branch: bool = False,   # isolate child from parent message history
         override_branch: str | None = None,
         override_isolation_scope: str | None = None,
-    ) -> Awaitable[Any]:   # returns child node output, not a Context
+    ) -> Awaitable[Context]:   # the internal protocol resolves to the child Context
         ...
+    # Note: the public ctx.run_node() wrapper extracts child_ctx.output and
+    # returns it directly as Any — callers never see the Context object.
 ```
 
 ### `ctx.run_node()` — the public API

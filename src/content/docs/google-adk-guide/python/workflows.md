@@ -365,8 +365,9 @@ class PipelineState(BaseModel):
     status: str = "pending"
 
 @node
-def tracker(node_input: str, iteration: int, ctx) -> str:
-    # `iteration` is injected from ctx.state["iteration"] automatically
+def tracker(node_input: str, iteration: int = 0, ctx) -> str:
+    # `iteration` is injected from ctx.state["iteration"]; default 0 for first run
+    # (state_schema validates writes but does not pre-populate state with defaults)
     ctx.state["iteration"] = iteration + 1
     ctx.state["status"] = "running"
     return f"pass {iteration + 1}: {node_input}"
@@ -502,6 +503,7 @@ review_wf = Workflow(
 )
 
 async def main():
+    # Intentionally vulnerable SQL — this is the code the review agents will catch
     code = "def get_user(id): return db.query(f'SELECT * FROM users WHERE id={id}')"
     app = App(name="review_app", root_agent=review_wf)
     runner = InMemoryRunner(app=app)
@@ -526,7 +528,7 @@ from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from google.adk.apps._configs import ResumabilityConfig
+from google.adk.apps import ResumabilityConfig
 from google.adk.events.request_input import RequestInput
 from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
 from google.adk.workflow.utils._workflow_hitl_utils import has_request_input_function_call
@@ -557,16 +559,18 @@ async def human_review(node_input: str, ctx):
 approval_wf = Workflow(
     name="email_approval",
     edges=[
+        # drafter → human_review on every pass (chain handles re-review automatically)
+        # human_review routing: "revise" loops back to drafter; no route = approved = done
         (START, drafter, human_review, {
-            "revise": drafter,      # loop back on rejection
-            DEFAULT_ROUTE: human_review,   # re-review after drafter revises
+            "revise": drafter,   # rejection: loop back for another draft
+            # No DEFAULT_ROUTE — when human_review sets no route, the workflow ends
         }),
     ],
 )
 
 async def main():
     session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
-    await session_svc.prepare_tables()   # correct method name (no create_tables)
+    await session_svc.prepare_tables()   # optional: also called lazily on first use
 
     app = App(
         name="email_app",
@@ -599,7 +603,32 @@ async def main():
 asyncio.run(main())
 ```
 
-On the next call to `runner.run_async` with `new_message="yes"` (and the same `session_id`), the workflow resumes from `human_review` with the user's decision.
+To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. Use `get_request_input_interrupt_ids(event)` to capture the ID during the first run, then build the response:
+
+```python
+from google.adk.workflow.utils._workflow_hitl_utils import (
+    get_request_input_interrupt_ids,
+    create_request_input_response,
+)
+
+# Collect the interrupt_id emitted during the first run
+interrupt_id = None
+async for event in runner.run_async(new_message=user_msg, user_id="u1", session_id="s1"):
+    ids = get_request_input_interrupt_ids(event)
+    if ids:
+        interrupt_id = ids[0]
+
+# Resume with a matching FunctionResponse
+approval_response = types.Content(
+    parts=[create_request_input_response(interrupt_id, {"result": "yes"})]
+)
+async for event in runner.run_async(
+    new_message=approval_response,
+    user_id="u1", session_id="s1",
+):
+    if event.content:
+        print(event.content.parts[0].text if event.content.parts else "")
+```
 
 ## Gotchas
 
