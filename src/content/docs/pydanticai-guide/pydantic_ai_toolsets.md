@@ -321,7 +321,7 @@ async def async_locale_hint(ctx: RunContext[Locale]) -> str:
 kb_tools_async = FunctionToolset[Locale](instructions=async_locale_hint)
 
 # 4. Sequence — multiple instructions combined in order
-mixed_tools = FunctionToolset(
+mixed_tools = FunctionToolset[Locale](
     instructions=[
         'Be concise.',
         locale_hint,          # sync callable

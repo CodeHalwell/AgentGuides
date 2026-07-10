@@ -102,6 +102,7 @@ When `message_history` is provided, the agent's system prompt is **not** re-sent
 `ProcessHistory` is a `capabilities=` entry that wraps a `HistoryProcessorFunc` and runs it _before_ each model request (`pydantic_ai.capabilities`). Signatures (all accepted):
 
 ```python
+from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage
@@ -109,10 +110,14 @@ from pydantic_ai.messages import ModelMessage
 def last_n(msgs: list[ModelMessage]) -> list[ModelMessage]:
     return msgs[-10:]
 
+@dataclass
+class WindowConfig:
+    window: int = 10
+
 async def async_ctx(
-    ctx: RunContext[None], msgs: list[ModelMessage]
+    ctx: RunContext[WindowConfig], msgs: list[ModelMessage]
 ) -> list[ModelMessage]:
-    return msgs[-ctx.deps.window:] if ctx.deps else msgs
+    return msgs[-ctx.deps.window:]
 
 agent = Agent(
     'openai:gpt-5.2',
