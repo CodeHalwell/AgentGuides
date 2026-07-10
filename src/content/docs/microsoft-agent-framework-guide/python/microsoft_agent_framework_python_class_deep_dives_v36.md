@@ -244,7 +244,7 @@ injector = MessageInjectionMiddleware()
 async def request_human_approval(question: str) -> str:
     """Ask a human and return their decision (injected back as a message)."""
     print(f"[HUMAN NEEDED] {question}")
-    answer = input("Enter approval decision: ")
+    answer = await asyncio.to_thread(input, "Enter approval decision: ")
     return f"Human decision: {answer}"
 
 async def main() -> None:
@@ -279,7 +279,7 @@ injector = MessageInjectionMiddleware()
 async def run_long_task(session: AgentSession) -> None:
     """Simulate a long-running task that sends progress updates."""
     for step in range(1, 4):
-        await asyncio.sleep(1)
+        await asyncio.sleep(0)  # yield to the event loop so updates arrive during the run
         injector.enqueue_messages(
             session,
             Message(role="user", contents=[f"[Progress update] Step {step}/3 complete."]),
@@ -298,9 +298,11 @@ async def main() -> None:
         middleware=[injector],
     )
     session = agent.create_session()
-    # Start progress updates concurrently
-    asyncio.create_task(run_long_task(session))
-    response = await agent.run("Start the long task and summarise when done.", session=session)
+    # Run progress updater and agent loop concurrently so updates arrive during the run
+    _, response = await asyncio.gather(
+        run_long_task(session),
+        agent.run("Start the long task and summarise when done.", session=session),
+    )
     print(response.messages[-1].content)
 
 asyncio.run(main())
@@ -424,9 +426,9 @@ from agent_framework._harness._tool_approval import ToolApprovalMiddleware
 from agent_framework._types import Content
 from agent_framework.openai import OpenAIChatClient
 
-def approve_read_only_tools(function_call: Content) -> bool:
+def approve_read_only_tools(content: Content) -> bool:
     """Auto-approve any tool whose name starts with 'read_' or 'list_'."""
-    name = (function_call.name or "").lower()
+    name = (content.function_call.name or "").lower() if content.function_call else ""
     return name.startswith("read_") or name.startswith("list_")
 
 approval_middleware = ToolApprovalMiddleware(
