@@ -32,8 +32,8 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 from uuid import UUID
 from langgraph.callbacks import GraphCallbackHandler, GraphInterruptEvent, GraphResumeEvent
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import interrupt
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 
@@ -68,20 +68,17 @@ builder.add_node("review", review_step)
 builder.add_edge(START, "review")
 builder.add_edge("review", END)
 
-checkpointer = MemorySaver()
-graph = builder.compile(checkpointer=checkpointer, interrupt_before=["review"])
+checkpointer = InMemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
 
 handler = AuditHandler()
 cfg = {"configurable": {"thread_id": "t1"}, "callbacks": [handler]}
 
-# First invoke — hits the interrupt
-try:
-    graph.invoke({"value": "hello"}, config=cfg)
-except Exception:
-    pass  # interrupt raises internally in some execution paths
+# First invoke — graph runs to interrupt(), returns current state
+graph.invoke({"value": "hello"}, config=cfg)
 
-# Resume — triggers on_resume on the handler
-graph.invoke(None, config=cfg)
+# Resume — provides value to interrupt(); triggers on_resume on the handler
+graph.invoke(Command(resume=True), config=cfg)
 ```
 
 ### Example 2 — collect interrupt payloads for structured inspection
@@ -103,7 +100,7 @@ class PayloadCollector(GraphCallbackHandler):
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 
@@ -123,7 +120,7 @@ builder.add_edge(START, "a")
 builder.add_edge("a", END)
 
 graph = builder.compile(
-    checkpointer=MemorySaver(), interrupt_before=["a"]
+    checkpointer=InMemorySaver()
 )
 cfg = {"configurable": {"thread_id": "t2"}, "callbacks": [collector]}
 graph.invoke({"step": 0}, config=cfg)
@@ -156,8 +153,8 @@ class CountingHandler(GraphCallbackHandler):
 
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import interrupt
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 
@@ -176,12 +173,12 @@ builder = StateGraph(S2)
 builder.add_node("pause", pause_node)
 builder.add_edge(START, "pause")
 builder.add_edge("pause", END)
-graph = builder.compile(checkpointer=MemorySaver(), interrupt_before=["pause"])
+graph = builder.compile(checkpointer=InMemorySaver())
 
 cfg = {"configurable": {"thread_id": "t3"}, "callbacks": [h1, h2]}
 graph.invoke({"x": 0}, config=cfg)
-# Resume
-graph.invoke(None, config=cfg)
+# Resume — provides a value to interrupt(); triggers on_resume on both handlers
+graph.invoke(Command(resume="done"), config=cfg)
 
 print(f"H1 resumes: {h1.resume_count}, H2 resumes: {h2.resume_count}")
 ```
@@ -644,7 +641,7 @@ except Exception as exc:
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class S(TypedDict):
@@ -661,7 +658,7 @@ graph = (
     .add_node("pause", pause)
     .add_edge(START, "pause")
     .add_edge("pause", END)
-    .compile(checkpointer=MemorySaver(), interrupt_before=["pause"])
+    .compile(checkpointer=InMemorySaver(), interrupt_before=["pause"])
 )
 
 cfg = {"configurable": {"thread_id": "v3-test"}}
@@ -695,7 +692,7 @@ These three classes implement the **native stream transformer** pattern: each ex
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class S(TypedDict):
@@ -711,7 +708,7 @@ graph = (
     .add_node("inc", inc)
     .add_edge(START, "inc")
     .add_edge("inc", END)
-    .compile(checkpointer=MemorySaver())
+    .compile(checkpointer=InMemorySaver())
 )
 
 cfg = {"configurable": {"thread_id": "cp-demo"}}
@@ -769,7 +766,7 @@ for ev in custom_events:
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.config import get_stream_writer
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class S(TypedDict):
@@ -787,7 +784,7 @@ graph = (
     .add_node("step", step)
     .add_edge(START, "step")
     .add_edge("step", END)
-    .compile(checkpointer=MemorySaver())
+    .compile(checkpointer=InMemorySaver())
 )
 
 cfg = {"configurable": {"thread_id": "multi-mode"}}
@@ -956,7 +953,7 @@ graph = (
     .add_node(
         "lookup",
         expensive_lookup,
-        cache=CachePolicy(ttl=300),  # cache for 5 minutes
+        cache_policy=CachePolicy(ttl=300),  # cache for 5 minutes
     )
     .add_edge(START, "lookup")
     .add_edge("lookup", END)
@@ -1001,7 +998,7 @@ def user_id_key(state: dict) -> str:
 cache = InMemoryCache()
 graph = (
     StateGraph(S)
-    .add_node("fetch", fetch_profile, cache=CachePolicy(key_func=user_id_key, ttl=60))
+    .add_node("fetch", fetch_profile, cache_policy=CachePolicy(key_func=user_id_key, ttl=60))
     .add_edge(START, "fetch")
     .add_edge("fetch", END)
     .compile(cache=cache)
