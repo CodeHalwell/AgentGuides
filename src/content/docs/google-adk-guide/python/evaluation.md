@@ -636,7 +636,7 @@ Populate `final_session_state={"order_confirmed": True}` in the `EvalCase`. ADK 
 
 ## Multi-turn evaluators (2.4.0)
 
-Three Vertex AI–backed evaluators score entire conversations holistically, rather than scoring individual turn responses. All require `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` in your environment.
+Three Vertex AI–backed evaluators score entire conversations holistically, rather than scoring individual turn responses. All require either `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` (Vertex AI) or `GOOGLE_API_KEY` (AI Studio) in your environment.
 
 | Class | `PrebuiltMetrics` key | What it scores |
 |---|---|---|
@@ -741,7 +741,7 @@ asyncio.run(main())
 
 ## `ConversationGenerationConfig` and `ScenarioGenerator` (2.4.0)
 
-Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them. This is **synchronous** (not async). It requires `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. The correct module path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
+Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them. This is **synchronous** (not async). It requires either `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` (Vertex AI) or `GOOGLE_API_KEY` (AI Studio). The correct module path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
 
 `ConversationGenerationConfig` lives in `google.adk.evaluation.conversation_scenarios` with fields: `count` (required), `model_name` (required), `generation_instruction` (optional), `environment_context` (optional).
 
