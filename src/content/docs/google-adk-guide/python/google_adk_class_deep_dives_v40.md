@@ -1157,7 +1157,7 @@ summarizer = LlmAgent(
     mode="single_turn",
 )
 
-@node
+@node(rerun_on_resume=True)   # required: any node calling ctx.run_node() must be rerunnable
 async def dispatcher(node_input: list[str], ctx) -> list[str]:
     """Dispatch each item to a summarizer agent and collect results."""
     results = []
@@ -1202,7 +1202,7 @@ async def route_to_specialist(user_intent: str, ctx) -> None:
 `run_id` must be **deterministic and stable across resume attempts**. If the workflow is interrupted mid-run (HITL, restart), ADK replays the node. A stable `run_id` ensures the cached child output is returned rather than re-running the child.
 
 ```python
-@node
+@node(rerun_on_resume=True)   # required: callers of ctx.run_node() must be rerunnable
 async def parallel_research(queries: list[str], ctx) -> dict:
     import asyncio
 
