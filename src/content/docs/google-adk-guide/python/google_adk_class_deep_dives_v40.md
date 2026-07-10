@@ -348,24 +348,21 @@ travel_agent = LlmAgent(
     tools=[...],  # your booking tools
 )
 
-async def main():
-    generator = ScenarioGenerator()
-    scenarios = await generator.generate_scenarios(
-        agent=travel_agent,
-        config=ConversationGenerationConfig(
-            count=5,
-            model_name="gemini-2.5-flash",
-            environment_context="Flights SFO→LAX on 2026-07-15: 08:00 ($129), 10:00 ($99).",
-        ),
-    )
+generator = ScenarioGenerator()
+# generate_scenarios is synchronous — no await
+scenarios = generator.generate_scenarios(
+    agent=travel_agent,
+    config=ConversationGenerationConfig(
+        count=5,
+        model_name="gemini-2.5-flash",
+        environment_context="Flights SFO→LAX on 2026-07-15: 08:00 ($129), 10:00 ($99).",
+    ),
+)
 
-    for s in scenarios:
-        print(f"Prompt: {s.starting_prompt[:60]}…")
-        print(f"Plan:   {s.conversation_plan[:80]}…")
-        print()
-
-import asyncio
-asyncio.run(main())
+for s in scenarios:
+    print(f"Prompt: {s.starting_prompt[:60]}…")
+    print(f"Plan:   {s.conversation_plan[:80]}…")
+    print()
 ```
 
 ### Full pipeline: generate → run → evaluate
@@ -386,31 +383,32 @@ from google.genai import types
 os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
+from google.adk.agents import LlmAgent
+travel_agent = LlmAgent(
+    name="travel_agent",
+    model="gemini-2.5-flash",
+    description="Books flights and car rentals.",
+)
+
 eval_config = EvalConfig(
     criteria={PrebuiltMetrics.MULTI_TURN_TASK_SUCCESS_V1.value: 0.7}
 )
 
 async def run_evals():
-    # Step 1: generate scenarios
+    # Step 1: generate scenarios (synchronous call)
     generator = ScenarioGenerator()
-    scenarios = await generator.generate_scenarios(
+    scenarios = generator.generate_scenarios(
         agent=travel_agent,
         config=ConversationGenerationConfig(count=3, model_name="gemini-2.5-flash"),
     )
 
     # Step 2: convert scenarios to EvalCases
+    # Note: EvalCase enforces an XOR constraint — set either conversation= or
+    # conversation_scenario=, not both. Use conversation_scenario= for multi-turn.
     eval_cases = [
         EvalCase(
             eval_id=f"generated_{i}",
-            conversation=[
-                Invocation(
-                    user_content=types.Content(
-                        role="user",
-                        parts=[types.Part(text=s.starting_prompt)],
-                    )
-                )
-            ],
-            conversation_scenario=s,   # attached so multi-turn eval can use the plan
+            conversation_scenario=s,   # XOR with conversation=; use this for multi-turn plan
         )
         for i, s in enumerate(scenarios)
     ]
@@ -526,7 +524,7 @@ from google.adk.evaluation.eval_metrics import PrebuiltMetrics
 
 @pytest.mark.asyncio
 async def test_travel_agent_multi_turn():
-    eval_set = EvalSet.load_from_json("tests/evals/travel_multi_turn.json")
+    eval_set = EvalSet.model_validate_json(open("tests/evals/travel_multi_turn.json").read())
     config = EvalConfig(
         criteria={
             PrebuiltMetrics.MULTI_TURN_TASK_SUCCESS_V1.value: 0.7,
@@ -1123,7 +1121,7 @@ class ScheduleDynamicNode(Protocol):
         use_sub_branch: bool = False,   # isolate child from parent message history
         override_branch: str | None = None,
         override_isolation_scope: str | None = None,
-    ) -> Awaitable[Context]:
+    ) -> Awaitable[Any]:   # returns child node output, not a Context
         ...
 ```
 
@@ -1145,13 +1143,14 @@ async def dispatcher(node_input: list[str], ctx) -> list[str]:
     """Dispatch each item to a summarizer agent and collect results."""
     results = []
     for i, item in enumerate(node_input):
-        child_ctx = await ctx.run_node(
+        # ctx.run_node() returns the child node's output directly (Any), not a Context
+        result = await ctx.run_node(
             summarizer,
             node_input=item,
             run_id=f"summarize_{i}",         # stable across resume attempts
             use_sub_branch=True,              # isolate message history per item
         )
-        results.append(child_ctx.output)
+        results.append(result)
     return results
 
 pipeline = Workflow(
@@ -1189,13 +1188,14 @@ async def parallel_research(queries: list[str], ctx) -> dict:
     import asyncio
 
     async def run_one(i: int, query: str):
-        child = await ctx.run_node(
+        # ctx.run_node() returns the child node's output directly
+        output = await ctx.run_node(
             research_agent,
             node_input=query,
             run_id=f"research_{i}",   # index-based; stable across resume
             use_sub_branch=True,
         )
-        return query, child.output
+        return query, output
 
     pairs = await asyncio.gather(*[run_one(i, q) for i, q in enumerate(queries)])
     return dict(pairs)

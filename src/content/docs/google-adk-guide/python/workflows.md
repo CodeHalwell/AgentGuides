@@ -529,6 +529,8 @@ from google.adk.sessions import DatabaseSessionService
 from google.adk.apps._configs import ResumabilityConfig
 from google.adk.events.request_input import RequestInput
 from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
+from google.adk.workflow.utils._workflow_hitl_utils import has_request_input_function_call
+from google.genai import types
 
 drafter = LlmAgent(
     name="drafter",
@@ -564,7 +566,7 @@ approval_wf = Workflow(
 
 async def main():
     session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
-    await session_svc.create_tables()
+    await session_svc.prepare_tables()   # correct method name (no create_tables)
 
     app = App(
         name="email_app",
@@ -578,11 +580,18 @@ async def main():
     )
 
     # First run — triggers the HITL pause
+    # run_async is keyword-only; wrap the user text in types.Content
+    user_msg = types.Content(
+        role="user",
+        parts=[types.Part(text="noise-cancelling headphones for office workers")],
+    )
     async for event in runner.run_async(
-        "noise-cancelling headphones for office workers",
+        new_message=user_msg,
         user_id="u1", session_id="s1",
     ):
-        if event.actions and event.actions.requested_auth_configs:
+        # Use has_request_input_function_call to detect a RequestInput pause
+        # (event.actions.requested_auth_configs is for OAuth, not HITL interrupts)
+        if has_request_input_function_call(event):
             print("Workflow paused. Waiting for human approval.")
         if hasattr(event, "content") and event.content:
             print(event.content.parts[0].text if event.content.parts else "")
