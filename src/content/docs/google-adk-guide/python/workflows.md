@@ -351,7 +351,7 @@ Wrap the scraper with `retry_config=RetryConfig(max_attempts=5)` and `timeout=20
 ### 5 — HITL review gate
 Insert a `@node(rerun_on_resume=True, auth_config=...)` that yields `RequestInput` between producer and publisher. The workflow pauses, the event is persisted, `Runner.run_async` resumes on the next user turn.
 
-## `state_schema` — validated shared state
+### 6 — `state_schema` — validated shared state
 
 Pass a Pydantic `BaseModel` class as `Workflow.state_schema`. The framework validates every `ctx.state` write against it and raises `StateSchemaError` on unknown keys. Schema fields can be injected directly as `@node` function parameters.
 
@@ -571,7 +571,7 @@ approval_wf = Workflow(
 
 async def main():
     session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
-    await session_svc.prepare_tables()   # optional: also called lazily on first use
+    await session_svc.prepare_tables()   # public method (source: database_session_service.py:403); also called lazily on first use
 
     app = App(
         name="email_app",
