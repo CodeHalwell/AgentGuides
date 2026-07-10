@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 1.107.0 (June 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.8.0 (July 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 1.107.0 | Updated: June 21, 2026
+Latest: 2.8.0 | Updated: July 10, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 1.107.0 (June 2026)  
+**Version:** 2.8.0 (July 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -462,16 +462,60 @@ article_agent = Agent(
     instructions='Write comprehensive technical articles.'
 )
 
-# Usage limits
+# ── UsageLimits (verified against pydantic-ai 2.8.0 usage.py) ──────────────────
+
+# All fields — every limit defaults to None (disabled) except request_limit=50
 from pydantic_ai import UsageLimits
+
+# Typical production guard: cap cost and prevent runaway tool loops
+limits = UsageLimits(
+    request_limit=5,           # max LLM API calls per run (default: 50)
+    tool_calls_limit=10,       # max successful tool executions per run
+    input_tokens_limit=8000,   # raise UsageLimitExceeded if input tokens exceed this
+    output_tokens_limit=1500,  # raise after each response if output tokens exceed this
+    total_tokens_limit=10000,  # combined input + output ceiling
+    # count_tokens_before_request=True,  # pre-flight count (Anthropic/Google/OpenAI Responses)
+)
 
 result = article_agent.run_sync(
     'Write about type safety in Python',
-    usage_limits=UsageLimits(
-        request_limit=2,  # Max 2 API calls
-        total_tokens_limit=2000  # Max 2000 tokens total
-    )
+    usage_limits=limits,
 )
+
+# RunUsage — inspect what was consumed (pydantic-ai 2.8.0 adds tool_calls field)
+from pydantic_ai import Agent
+from pydantic_ai.usage import RunUsage
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+def get_fact() -> str:
+    return 'Python was created in 1991.'
+
+result2 = agent.run_sync('Tell me a fact.', usage_limits=UsageLimits(request_limit=3))
+usage: RunUsage = result2.usage()
+print(f"requests={usage.requests}")           # total LLM API calls made
+print(f"tool_calls={usage.tool_calls}")       # total successful tool executions (new in 2.8.0)
+print(f"input_tokens={usage.input_tokens}")   # cumulative prompt tokens
+print(f"output_tokens={usage.output_tokens}") # cumulative completion tokens
+print(f"total_tokens={usage.total_tokens}")   # property: input + output
+print(f"cache_read_tokens={usage.cache_read_tokens}")   # tokens served from provider cache
+print(f"cache_write_tokens={usage.cache_write_tokens}") # tokens written to provider cache
+
+# Combine usage across multiple independent runs
+combined: RunUsage = result.usage() + result2.usage()
+print(f"combined requests: {combined.requests}")
+
+# Handle UsageLimitExceeded gracefully
+from pydantic_ai.exceptions import UsageLimitExceeded
+
+try:
+    result3 = agent.run_sync(
+        'Count every prime below 10000 then summarise.',
+        usage_limits=UsageLimits(request_limit=1, output_tokens_limit=50),
+    )
+except UsageLimitExceeded as exc:
+    print(f"Run aborted: {exc}")   # e.g. "Exceeded the output_tokens_limit of 50 ..."
 ```
 
 ---

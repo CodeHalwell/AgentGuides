@@ -7,7 +7,7 @@ language: python
 
 # Testing Agents
 
-Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI ships two model implementations built for tests: `TestModel` (auto-generates tool calls + a response from JSON schema) and `FunctionModel` (you write the response-generating function). Combined with `agent.override(...)` and `capture_run_messages`, you can unit-test agents hermetically — no network, no API keys, deterministic.
 
@@ -158,7 +158,74 @@ async def test_streaming():
 asyncio.run(test_streaming())
 ```
 
-For streaming tool calls, yield a `DeltaToolCalls` dict — see `models/function.py` for the exact type signature.
+### Streaming tool calls with `DeltaToolCalls`
+
+To simulate a streaming model that emits a tool call then returns text, use `DeltaToolCalls` — a `dict[int, DeltaToolCall]` keyed by a per-call index (verified in `models/function.py` source):
+
+```python
+import asyncio
+from collections.abc import AsyncIterator
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+
+calls_log: list[str] = []
+
+def spy_function(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    """Non-streaming: inspect AgentInfo before deciding what to return."""
+    calls_log.append(f"turn {len(messages)} — tools available: {[t.name for t in info.function_tools]}")
+
+    prior_tool_calls = [p for m in messages for p in m.parts if isinstance(p, ToolCallPart)]
+    if not prior_tool_calls:
+        # First turn: emit a tool call
+        return ModelResponse(parts=[ToolCallPart(tool_name='lookup', args={'id': '42'})])
+    # Second turn: return the answer using context from the tool result
+    return ModelResponse(parts=[TextPart(content='The answer is 42.')])
+
+async def streaming_tool_call(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str]:
+    """Streaming: yield a sentence token by token."""
+    for word in 'The answer is forty-two .'.split():
+        yield word + ' '
+
+agent = Agent(
+    FunctionModel(spy_function, stream_function=streaming_tool_call),
+    deps_type=None,
+)
+
+@agent.tool_plain
+def lookup(id: str) -> str:
+    return f'record:{id}'
+
+# Non-streaming: two-turn dialogue (tool call → answer)
+result = agent.run_sync('What is 42?')
+assert result.output == 'The answer is 42.'
+print(calls_log)  # shows two entries — one per LLM turn
+
+# Streaming: single-turn streamed text
+async def test_stream():
+    tokens: list[str] = []
+    async with agent.run_stream('What is the answer?') as stream:
+        async for chunk in stream.stream_text(delta=True):
+            tokens.append(chunk)
+        final = await stream.get_output()
+    assert 'forty-two' in final
+    assert len(tokens) > 1
+
+asyncio.run(test_stream())
+```
+
+`AgentInfo` fields available inside any function/stream function (verified `models/function.py`):
+
+| Field | Type | Description |
+|---|---|---|
+| `function_tools` | `list[ToolDefinition]` | Tools registered via `@agent.tool` / `@agent.tool_plain` |
+| `output_tools` | `list[ToolDefinition]` | Output tool schema(s) for structured output |
+| `allow_text_output` | `bool` | `True` if plain-text output is accepted |
+| `model_settings` | `ModelSettings \| None` | Settings passed to the run |
+| `model_request_parameters` | `ModelRequestParameters` | Full wire parameters |
+| `instructions` | `str \| None` | Resolved instruction string sent to the model |
 
 ## `Agent.override(...)` — swap parts per run/test
 

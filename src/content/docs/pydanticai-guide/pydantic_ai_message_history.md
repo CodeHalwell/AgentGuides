@@ -7,7 +7,7 @@ language: python
 
 # Message History & Multi-Turn Conversations
 
-Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
+Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
 
 Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that list (or the serialised form) back into the next run to keep a multi-turn conversation. Message history is what makes chat applications possible on top of PydanticAI's otherwise stateless `Agent`.
 
@@ -127,6 +127,113 @@ Processors run in the order given; each one receives the output of the previous.
 - Rewrite system messages on a per-deps basis (async + ctx variant).
 
 Processors are **not** applied to the stored `all_messages()`; they only affect what goes over the wire to the model.
+
+### Pattern 1 — sliding window (keep last N turns)
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
+
+def sliding_window(max_turns: int):
+    """Keep only the most recent `max_turns` request/response pairs, plus system prompts."""
+    def processor(msgs: list[ModelMessage]) -> list[ModelMessage]:
+        # Separate system-level (request with only system parts) from conversation pairs
+        pairs: list[tuple[ModelRequest, ModelResponse]] = []
+        pending_request: ModelRequest | None = None
+
+        for msg in msgs:
+            if isinstance(msg, ModelRequest):
+                pending_request = msg
+            elif isinstance(msg, ModelResponse) and pending_request is not None:
+                pairs.append((pending_request, msg))
+                pending_request = None
+
+        # Trim to the last max_turns pairs and flatten
+        trimmed = pairs[-max_turns:]
+        result: list[ModelMessage] = []
+        for req, resp in trimmed:
+            result.append(req)
+            result.append(resp)
+        if pending_request:  # pending request without response (current turn)
+            result.append(pending_request)
+        return result
+
+    return processor
+
+agent = Agent(
+    'openai:gpt-4o',
+    history_processors=[sliding_window(max_turns=5)],
+)
+```
+
+### Pattern 2 — PII redaction before the wire
+
+```python
+import re
+from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart, TextContent
+
+_EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
+_CARD_RE  = re.compile(r'\b(?:\d[ \-]?){13,16}\b')
+
+def redact_pii(msgs: list[ModelMessage]) -> list[ModelMessage]:
+    """Scrub emails and card numbers from all user-prompt text before sending to the model."""
+    cleaned: list[ModelMessage] = []
+    for msg in msgs:
+        if isinstance(msg, ModelRequest):
+            new_parts = []
+            for part in msg.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    text = _EMAIL_RE.sub('[EMAIL]', part.content)
+                    text = _CARD_RE.sub('[CARD]', text)
+                    new_parts.append(UserPromptPart(content=text))
+                else:
+                    new_parts.append(part)
+            cleaned.append(ModelRequest(parts=new_parts, instructions=msg.instructions))
+        else:
+            cleaned.append(msg)
+    return cleaned
+
+agent = Agent('openai:gpt-4o', history_processors=[redact_pii])
+```
+
+### Pattern 3 — chained processors (window → redact)
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent(
+    'openai:gpt-4o',
+    history_processors=[
+        sliding_window(max_turns=10),  # trim first …
+        redact_pii,                    # … then scrub what remains
+    ],
+)
+# Each processor receives the output of the previous one.
+```
+
+### Pattern 4 — async processor with context (per-user window size)
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessage
+
+@dataclass
+class ChatConfig:
+    context_turns: int = 8   # per-user setting fetched from the DB
+
+async def dynamic_window(
+    ctx: RunContext[ChatConfig], msgs: list[ModelMessage]
+) -> list[ModelMessage]:
+    n = ctx.deps.context_turns
+    return msgs[-n * 2:]  # each turn = 1 request + 1 response
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=ChatConfig,
+    history_processors=[dynamic_window],
+)
+```
 
 ## `capture_run_messages` — inspect mid-failure
 

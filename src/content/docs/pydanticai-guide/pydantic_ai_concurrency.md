@@ -7,7 +7,7 @@ language: python
 
 # Concurrency Limiting
 
-Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.concurrency`.
+Verified against **pydantic-ai==2.8.0** — source module: `pydantic_ai.concurrency`.
 
 `ConcurrencyLimiter` caps the number of simultaneous model API calls without any external dependencies. When the cap is reached, additional callers queue and wait. Optionally set `max_queued` to reject requests once the queue depth exceeds a threshold.
 

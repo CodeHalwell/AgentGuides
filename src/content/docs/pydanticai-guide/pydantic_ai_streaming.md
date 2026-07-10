@@ -7,7 +7,7 @@ language: python
 
 # Streaming
 
-Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
+Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
 
 PydanticAI streams at three levels:
 
