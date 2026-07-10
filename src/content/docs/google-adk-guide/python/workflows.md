@@ -528,7 +528,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.apps._configs import ResumabilityConfig
 from google.adk.events.request_input import RequestInput
-from google.adk.workflow import Workflow, node, START
+from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
 
 drafter = LlmAgent(
     name="drafter",
@@ -557,7 +557,7 @@ approval_wf = Workflow(
     edges=[
         (START, drafter, human_review, {
             "revise": drafter,      # loop back on rejection
-            None: human_review,     # DEFAULT_ROUTE re-reviews after revision
+            DEFAULT_ROUTE: human_review,   # re-review after drafter revises
         }),
     ],
 )

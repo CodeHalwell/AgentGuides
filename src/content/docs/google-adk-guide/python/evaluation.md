@@ -648,47 +648,28 @@ All three are **reference-free** — they do not need `final_response` or `inter
 
 ### `ConversationScenario`
 
-`ConversationScenario` describes the task the agent was meant to solve. Pass it to `AgentEvaluator` and the multi-turn evaluators use it to judge whether the agent succeeded.
+`ConversationScenario` describes the task the agent was meant to solve. The multi-turn evaluators use it to judge whether the agent succeeded. It lives in `google.adk.evaluation.conversation_scenarios` with two required fields: `starting_prompt` (the first user message) and `conversation_plan` (the evaluator's guide to what a successful conversation looks like).
 
 ```python
-from google.adk.evaluation.eval_case import ConversationScenario
+from google.adk.evaluation.conversation_scenarios import ConversationScenario
 
 scenario = ConversationScenario(
-    scenario_description=(
-        "User wants to book a restaurant table for two people at 7pm on Friday. "
-        "The agent should confirm the booking details and acknowledge completion."
-    ),
-    # Optional: describe the overall task for the trajectory evaluator
-    task_description=(
-        "Complete a restaurant booking by collecting party size, time, and confirming."
+    starting_prompt="Book a restaurant table for 2 people at 7pm on Friday.",
+    conversation_plan=(
+        "User wants a table for 2 at 7pm Friday. "
+        "A successful conversation ends with the agent confirming the booking details."
     ),
 )
 ```
 
-Pass it on the `EvalCase`:
+Attach it to an `EvalCase` using `conversation_scenario`. **Important:** `EvalCase` enforces an XOR constraint — you must set exactly one of `conversation` (static turns) or `conversation_scenario` (scenario-driven); setting both raises `ValueError`.
 
 ```python
-from google.adk.evaluation.eval_case import EvalCase, Invocation
-from google.genai import types
+from google.adk.evaluation.eval_case import EvalCase
 
 case = EvalCase(
     eval_id="restaurant_booking",
-    conversation_scenario=scenario,      # ← attaches the scenario
-    conversation=[
-        Invocation(
-            user_content=types.Content(
-                role="user",
-                parts=[types.Part(text="Book a table for 2 at 7pm Friday at Bella Italia.")],
-            ),
-            # No final_response needed for reference-free metrics
-        ),
-        Invocation(
-            user_content=types.Content(
-                role="user",
-                parts=[types.Part(text="Yes, that looks right.")],
-            ),
-        ),
-    ],
+    conversation_scenario=scenario,   # ← scenario only; no conversation= here
 )
 ```
 
@@ -698,49 +679,30 @@ case = EvalCase(
 import asyncio
 import os
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
-from google.adk.evaluation.eval_case import (
-    EvalCase, Invocation, ConversationScenario,
-)
+from google.adk.evaluation.conversation_scenarios import ConversationScenario
+from google.adk.evaluation.eval_case import EvalCase
 from google.adk.evaluation.eval_set import EvalSet
 from google.adk.evaluation.eval_config import EvalConfig
 from google.adk.evaluation.eval_metrics import PrebuiltMetrics
-from google.genai import types
 
 # Required for the Vertex AI evaluators
 os.environ["GOOGLE_CLOUD_PROJECT"] = "my-gcp-project"
 os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
+# ConversationScenario uses starting_prompt + conversation_plan (source-verified)
 scenario = ConversationScenario(
-    scenario_description=(
-        "User wants to find and book a flight from London to Tokyo for next month. "
-        "Agent should search available flights, present options, and confirm a booking."
+    starting_prompt="Find me a flight from London to Tokyo for August 10th.",
+    conversation_plan=(
+        "User wants to book a direct flight from London to Tokyo on August 10th. "
+        "They will pick an option from the agent's search results and confirm the booking. "
+        "A successful conversation ends with a booking confirmation."
     ),
-    task_description="Book a flight by searching options and confirming the user's choice.",
 )
 
+# EvalCase enforces XOR: set conversation_scenario OR conversation, never both
 case = EvalCase(
     eval_id="flight_booking_multi_turn",
     conversation_scenario=scenario,
-    conversation=[
-        Invocation(
-            user_content=types.Content(
-                role="user",
-                parts=[types.Part(text="Find me a flight from London to Tokyo for August 10th.")],
-            ),
-        ),
-        Invocation(
-            user_content=types.Content(
-                role="user",
-                parts=[types.Part(text="I'll take the 09:00 ANA flight.")],
-            ),
-        ),
-        Invocation(
-            user_content=types.Content(
-                role="user",
-                parts=[types.Part(text="Yes, please confirm the booking.")],
-            ),
-        ),
-    ],
 )
 
 eval_set = EvalSet(eval_set_id="flight_booking_suite", eval_cases=[case])
@@ -779,89 +741,83 @@ asyncio.run(main())
 
 ## `ConversationGenerationConfig` and `ScenarioGenerator` (2.4.0)
 
-Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them from a description. This requires `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`.
+Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them. This is **synchronous** (not async). It requires `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. The correct module path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
+
+`ConversationGenerationConfig` lives in `google.adk.evaluation.conversation_scenarios` with fields: `count` (required), `model_name` (required), `generation_instruction` (optional), `environment_context` (optional).
 
 ```python
-import asyncio
-from google.adk.evaluation.eval_case import ConversationGenerationConfig
-from google.adk.evaluation.scenario_generator import ScenarioGenerator
+import os
+from google.adk.agents import LlmAgent
+from google.adk.evaluation.conversation_scenarios import ConversationGenerationConfig
+from google.adk.evaluation._vertex_ai_scenario_generation_facade import ScenarioGenerator
 
-# Describe the context and personas for the generated conversation
-gen_config = ConversationGenerationConfig(
-    conversation_context=(
-        "A user is interacting with a travel assistant that can search for flights, "
-        "check weather, and make bookings. The agent has access to: "
-        "`search_flights`, `get_weather`, and `book_flight` tools."
-    ),
-    user_persona=(
-        "A busy professional who travels frequently but gets frustrated by slow agents. "
-        "They tend to provide information incrementally rather than all at once."
-    ),
-    num_turns=4,             # number of conversation turns to generate
-    num_scenarios=3,         # number of distinct scenarios to generate
+os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
+
+travel_agent = LlmAgent(
+    name="travel_agent",
+    model="gemini-2.5-flash",
+    description="Books flights and checks weather.",
+    tools=[],  # your actual tools here
 )
 
-async def main():
-    generator = ScenarioGenerator()
+gen_config = ConversationGenerationConfig(
+    count=3,                          # number of scenarios to generate
+    model_name="gemini-2.5-flash",
+    environment_context=(
+        "Available flights: LHR→NRT on 2026-08-10 at 09:00 (ANA, £620), 14:00 (BA, £580)."
+    ),
+)
 
-    # Returns a list of ConversationScenario objects ready to wrap in EvalCase
-    scenarios = await generator.generate_scenarios(gen_config)
+generator = ScenarioGenerator()
 
-    for scenario in scenarios:
-        print(scenario.scenario_description)
-        print(scenario.task_description)
+# generate_scenarios is synchronous — no await needed
+scenarios = generator.generate_scenarios(agent=travel_agent, config=gen_config)
 
-asyncio.run(main())
+for s in scenarios:
+    print(s.starting_prompt)
+    print(s.conversation_plan)
 ```
 
 Combine with `EvalCase` to build a full synthetic eval set:
 
 ```python
+from google.adk.evaluation.eval_case import EvalCase
+from google.adk.evaluation.eval_set import EvalSet
+
 cases = [
     EvalCase(
         eval_id=f"generated_{i}",
-        conversation_scenario=sc,
-        conversation=[],     # leave empty — AgentEvaluator will run the agent live
+        conversation_scenario=s,   # XOR constraint: no conversation= when using scenario
     )
-    for i, sc in enumerate(scenarios)
+    for i, s in enumerate(scenarios)
 ]
 eval_set = EvalSet(eval_set_id="synthetic_travel_suite", eval_cases=cases)
 ```
 
 ## `AppDetails` and `AgentDetails` (2.4.0)
 
-`AppDetails` and `AgentDetails` capture a lightweight snapshot of the agent tree at eval time, letting evaluators know which agent produced each response.
+`AppDetails` and `AgentDetails` capture a lightweight snapshot of the agent tree at eval time. Both live in `google.adk.evaluation.app_details`. `AppDetails` has a single field: `agent_details: dict[str, AgentDetails]`. `AgentDetails` has: `name: str`, `instructions: str`, `tool_declarations: list`.
 
 ```python
-from google.adk.evaluation.eval_case import AppDetails, AgentDetails
+from google.adk.evaluation.app_details import AppDetails, AgentDetails
 
 # Typically you don't construct these manually — AgentEvaluator populates them
 # automatically from the running agent tree. But you can supply them explicitly
-# in an EvalCase when replaying recorded conversations.
-app_details = AppDetails(
-    app_name="travel_assistant",
-    user_id="test_user_42",
-)
-
-# Per-invocation override (e.g. if a sub-agent handled a specific turn)
-agent_details = AgentDetails(
-    agent_name="flight_sub_agent",
-    agent_type="LlmAgent",
-)
-```
-
-Pass `app_details` on an `Invocation` to override the default:
-
-```python
-Invocation(
-    user_content=types.Content(
-        role="user",
-        parts=[types.Part(text="What's the baggage policy?")],
-    ),
-    app_details=AppDetails(
-        app_name="travel_assistant",
-        user_id="test_user_42",
-    ),
+# when replaying recorded conversations for offline eval.
+snapshot = AppDetails(
+    agent_details={
+        "travel_assistant": AgentDetails(
+            name="travel_assistant",
+            instructions="You are a travel booking assistant.",
+            tool_declarations=[],   # list of tool FunctionDeclarations if known
+        ),
+        "flight_sub_agent": AgentDetails(
+            name="flight_sub_agent",
+            instructions="Search and book flights.",
+            tool_declarations=[],
+        ),
+    }
 )
 ```
 
@@ -874,4 +830,6 @@ Invocation(
 - Old `.test.json` files are accepted but emit a deprecation warning. Migrate to `EvalSet` JSON to suppress the warning.
 - `SessionInput.state` sets the **initial** session state before the first turn. Mutations during the conversation are not reflected back to `session_input`.
 - Multi-turn Vertex AI evaluators (`multi_turn_task_success_v1`, etc.) incur Vertex AI API calls per evaluation run. Cache results with `LocalEvalSetResultsManager` and avoid running them on every PR commit.
-- `ScenarioGenerator.generate_scenarios()` is async and makes a Vertex AI model call. Generated scenarios reflect the model's interpretation of your `conversation_context` — always review before using in a CI gate.
+- `ScenarioGenerator.generate_scenarios()` is **synchronous** (source-verified: plain `def`, not `async def`). It takes `agent` and `config` as positional/keyword arguments. The correct import path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
+- `ConversationScenario` fields are `starting_prompt` and `conversation_plan` (from `google.adk.evaluation.conversation_scenarios`), not `scenario_description`/`task_description`.
+- `EvalCase` enforces `conversation` XOR `conversation_scenario` — passing both raises `ValueError` at construction time.

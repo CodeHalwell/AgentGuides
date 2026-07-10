@@ -1,10 +1,11 @@
 ---
-title: "Class deep dives — vol. 40"
+title: "Class deep dives — volume 40 (ExecuteBashTool, DataAgentToolset, ScenarioGenerator, multi-turn evaluators, AppDetails, EnsureRetryOptionsPlugin, McpInstructionProvider, EnvironmentSimulationFactory, RunConfig, ScheduleDynamicNode)"
 description: "10 source-verified deep dives for google-adk 2.4.0: ExecuteBashTool, DataAgentToolset, ConversationScenario/ScenarioGenerator, multi-turn evaluators, AppDetails, EnsureRetryOptionsPlugin, McpInstructionProvider, EnvironmentSimulationFactory, RunConfig, and ScheduleDynamicNode."
 framework: google-adk
 language: python
 sidebar:
-  order: 195
+  label: "Class deep dives — vol. 40"
+  order: 109
 ---
 
 Verified against **google-adk==2.4.0** source code.  All examples are runnable with `pip install google-adk`.
@@ -1208,15 +1209,16 @@ When a dynamically scheduled child node calls `ctx.interrupt(...)`, the interrup
 from google.adk.workflow import node, Workflow, START
 from google.genai import types
 
-@node
+@node(rerun_on_resume=True)   # required: callers of ctx.run_node() must be rerunnable
 async def approval_gate(doc_text: str, ctx) -> str:
-    # Schedule a reviewer agent that may raise a HITL interrupt
-    reviewer_ctx = await ctx.run_node(
+    # Schedule a reviewer agent that may raise a HITL interrupt.
+    # ctx.run_node() returns the child node's output directly (not a Context object).
+    review_output = await ctx.run_node(
         reviewer_agent,
         node_input=doc_text,
         run_id="doc_review",
     )
-    return reviewer_ctx.output
+    return review_output
 
 review_workflow = Workflow(
     name="review_pipeline",
