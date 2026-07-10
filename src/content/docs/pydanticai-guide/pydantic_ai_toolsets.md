@@ -357,7 +357,8 @@ async def bulk_export(ctx: RunContext[UserSession], table: str) -> str:
 
 # Async predicate — can hit a permissions service
 async def scope_check(ctx: RunContext[UserSession], tool_def: ToolDefinition) -> bool:
-    required = tool_def.metadata.get('required_scope', 'read')
+    metadata = tool_def.metadata or {}   # metadata is None when not set at registration
+    required = metadata.get('required_scope', 'read')
     return required in ctx.deps.scopes
 
 # Tag tools at registration with metadata

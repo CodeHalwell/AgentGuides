@@ -137,24 +137,33 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
 def sliding_window(max_turns: int):
     """Keep only the most recent `max_turns` request/response pairs, plus system prompts."""
     def processor(msgs: list[ModelMessage]) -> list[ModelMessage]:
-        # Separate system-level (request with only system parts) from conversation pairs
+        system_prompts: list[ModelMessage] = []
         pairs: list[tuple[ModelRequest, ModelResponse]] = []
         pending_request: ModelRequest | None = None
 
         for msg in msgs:
             if isinstance(msg, ModelRequest):
-                pending_request = msg
+                # Split system-prompt parts from user/tool parts so they survive trimming
+                system_parts = [p for p in msg.parts if getattr(p, 'part_kind', None) == 'system-prompt']
+                non_system_parts = [p for p in msg.parts if getattr(p, 'part_kind', None) != 'system-prompt']
+
+                if system_parts:
+                    system_prompts.append(ModelRequest(parts=system_parts))
+
+                if non_system_parts:
+                    pending_request = ModelRequest(parts=non_system_parts, instructions=msg.instructions)
+
             elif isinstance(msg, ModelResponse) and pending_request is not None:
                 pairs.append((pending_request, msg))
                 pending_request = None
 
-        # Trim to the last max_turns pairs and flatten
+        # Trim to the last max_turns pairs and flatten; always keep system prompts first
         trimmed = pairs[-max_turns:]
-        result: list[ModelMessage] = []
+        result: list[ModelMessage] = list(system_prompts)
         for req, resp in trimmed:
             result.append(req)
             result.append(resp)
-        if pending_request:  # pending request without response (current turn)
+        if pending_request:  # pending request without a response yet (current turn)
             result.append(pending_request)
         return result
 
