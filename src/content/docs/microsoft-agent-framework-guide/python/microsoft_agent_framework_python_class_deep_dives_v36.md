@@ -1428,7 +1428,7 @@ except TypeCompatibilityError as exc:
 | 2 | `MessageInjectionMiddleware` | Drains a session-state queue into the next model call without breaking the tool loop |
 | 3 | `ToolApprovalMiddleware` | Standing rules checked before surfacing the next approval to the caller; auto-approval callbacks |
 | 4 | `BackgroundAgentsProvider` | `asyncio.Task` fan-out; `continue_task` resumes on the same session; `LOST` when process restarts |
-| 5 | `FunctionalWorkflow` + `RunContext` | `@step` caches by call index; `request_info()` raises `BaseException` to avoid catch-all traps |
+| 5 | `FunctionalWorkflow` + `RunContext` | `@step` caches by call index; `ctx.request_info()` raises `WorkflowInterrupted` (a `BaseException` subclass) to bypass `except Exception:` catch-all handlers |
 | 6 | Skills pipeline | `Aggregating` → `Deduplicating` → `Filtering` → `Caching` are composable decorators |
 | 7 | `ObservabilitySettings` | Sticky-disable; VS Code extension port; `_configure()` idempotent; sensitive data opt-in |
 | 8 | `SecureAgentConfig` | One-liner IFC setup; `block_on_violation` or `approval_on_violation`; `audit_log` |
