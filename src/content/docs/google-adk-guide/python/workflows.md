@@ -353,7 +353,7 @@ Insert a `@node(rerun_on_resume=True, auth_config=...)` that yields `RequestInpu
 
 ## `state_schema` — validated shared state
 
-Pass a Pydantic `BaseModel` class as `Workflow.state_schema`.  The framework validates every `ctx.state` write against it and raises `StateSchemaError` on unknown keys.  Schema fields can be injected directly as `@node` function parameters.
+Pass a Pydantic `BaseModel` class as `Workflow.state_schema`. The framework validates every `ctx.state` write against it and raises `StateSchemaError` on unknown keys. Schema fields can be injected directly as `@node` function parameters.
 
 ```python
 from pydantic import BaseModel
@@ -525,12 +525,11 @@ For real pause/resume you need a `DatabaseSessionService` so state survives the 
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
-from google.adk.apps import App
+from google.adk.apps import App, ResumabilityConfig
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from google.adk.apps import ResumabilityConfig
 from google.adk.events.request_input import RequestInput
-from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
+from google.adk.workflow import Workflow, node, START
 from google.adk.workflow.utils._workflow_hitl_utils import has_request_input_function_call
 from google.genai import types
 

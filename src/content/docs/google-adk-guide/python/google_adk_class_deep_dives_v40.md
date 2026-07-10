@@ -363,7 +363,6 @@ gen_config = ConversationGenerationConfig(
 ```python
 import os
 from google.adk.agents import LlmAgent
-from google.adk.tools import google_search
 from google.adk.evaluation.conversation_scenarios import ConversationGenerationConfig
 from google.adk.evaluation._vertex_ai_scenario_generation_facade import ScenarioGenerator
 
