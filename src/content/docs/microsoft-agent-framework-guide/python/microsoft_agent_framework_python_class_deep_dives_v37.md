@@ -447,8 +447,11 @@ print(f"Failed: {failed_item.is_failed}")  # True
 
 # Raise EvalNotPassedError when results contain failures
 results = [failed_item]
-if any(r.is_failed for r in results):
-    raise EvalNotPassedError("Evaluation did not pass: tool call not made")
+try:
+    if any(r.is_failed for r in results):
+        raise EvalNotPassedError("Evaluation did not pass: tool call not made")
+except EvalNotPassedError as e:
+    print(f"Caught: {e}")  # Caught: Evaluation did not pass: tool call not made
 ```
 
 ---
