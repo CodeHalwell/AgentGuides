@@ -7,7 +7,7 @@ language: python
 
 # Observability & Telemetry — Python
 
-`agent-framework-core` emits OpenTelemetry signals following the **GenAI semantic conventions**. Every agent run, model call, tool invocation, workflow executor, and edge group is a span; every chat completion emits a duration histogram and a token-usage histogram. Nothing is exported by default — you opt in either by calling a helper, setting one env var, or wiring your own OTel providers.
+`agent-framework` emits OpenTelemetry signals following the **GenAI semantic conventions**. Every agent run, model call, tool invocation, workflow executor, and edge group is a span; every chat completion emits a duration histogram and a token-usage histogram. Signal *emission* is **on by default** — what you need to add is an OTel *exporter* so those signals are actually received somewhere. Pick one of the three options in the next section; without an exporter signals are emitted but immediately discarded.
 
 Verified against `agent-framework==1.11.0` (`agent_framework.observability`).
 

@@ -255,7 +255,7 @@ def demo(client):
     prompt_preview = (strategy.prompt or "")[:60] or "<default>"
     print(f"prompt (first 60 chars): {prompt_preview}")
 
-# asyncio.run(demo(OpenAIChatClient(model="gpt-4o-mini")))
+# demo(OpenAIChatClient(model="gpt-4o-mini"))
 ```
 
 **Example 8 — custom summarisation prompt**
@@ -1000,7 +1000,7 @@ for idx, text in enumerate(["User: hello", "Assistant: hi", "User: bye"]):
         msg=text, args=(), exc_info=None,
     )
     setattr(record, MessageListTimestampFilter.INDEX_KEY, idx)
-    handler.emit(record)
+    handler.handle(record)  # handle() runs filters before emit()
 ```
 
 ---
