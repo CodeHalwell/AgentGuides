@@ -109,20 +109,21 @@ async def demo():
 asyncio.run(demo())
 ```
 
-**Example 3 — using `TruncationStrategy` inside `CompactionProvider`**
+**Example 3 — passing `TruncationStrategy` directly to `Agent.compaction_strategy`**
 
 ```python
 import asyncio
-from agent_framework import Agent, CompactionProvider
+from agent_framework import Agent
 from agent_framework._compaction import TruncationStrategy, CharacterEstimatorTokenizer
 
 async def demo(client):
     strategy = TruncationStrategy(max_n=50, compact_to=25, tokenizer=CharacterEstimatorTokenizer())
+    # Agent.compaction_strategy accepts a CompactionStrategy callable directly
     agent = Agent(
         client=client,
         name="assistant",
         instructions="You are a concise assistant.",
-        compaction_strategy=CompactionProvider(strategy=strategy),
+        compaction_strategy=strategy,
     )
     response = await agent.run("Tell me something interesting.")
     print(response.text)
@@ -1072,8 +1073,10 @@ from agent_framework import WorkflowBuilder
 from agent_framework._workflows._events import WorkflowEvent, WorkflowRunState
 
 async def demo(client):
-    builder = WorkflowBuilder()
-    # ... add executors ...
+    from agent_framework import Agent
+    start = Agent(client=client, name="assistant", instructions="You are helpful.")
+    builder = WorkflowBuilder(start_executor=start)
+    # ... add more executors / edges ...
 
     workflow = builder.build()
     runner = workflow.create_runner()
