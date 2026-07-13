@@ -252,7 +252,8 @@ def demo(client):
     )
     # strategy is invoked by CompactionProvider automatically each turn
     print(f"target_count={strategy.target_count}, threshold={strategy.threshold}")
-    print(f"prompt (first 60 chars): {strategy.prompt[:60]}")
+    prompt_preview = (strategy.prompt or "")[:60] or "<default>"
+    print(f"prompt (first 60 chars): {prompt_preview}")
 
 # asyncio.run(demo(OpenAIChatClient(model="gpt-4o-mini")))
 ```
