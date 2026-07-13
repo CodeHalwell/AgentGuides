@@ -464,12 +464,12 @@ print(result["messages"][-1].content)
 ### Example 2 — `tools_condition` on a custom state schema
 
 ```python
-from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import MessagesState
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import tools_condition
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 
 
@@ -479,19 +479,15 @@ def get_weather(city: str) -> str:
     return f"Sunny in {city}"
 
 
-class State(TypedDict):
-    messages: list
-
-
 model = ChatOpenAI(model="gpt-4o-mini").bind_tools([get_weather])
 
 
-def call_model(state: State) -> dict:
+def call_model(state: MessagesState) -> dict:
     response = model.invoke(state["messages"])
-    return {"messages": state["messages"] + [response]}
+    return {"messages": [response]}  # add_messages reducer appends, not overwrites
 
 
-builder = StateGraph(State)
+builder = StateGraph(MessagesState)
 builder.add_node("agent", call_model)
 builder.add_node("tools", ToolNode([get_weather]))
 builder.add_edge(START, "agent")
@@ -842,7 +838,7 @@ asyncio.run(handle_tool_errors())
 
 **Module:** `langgraph.stream.transformers`
 
-`DebugTransformer` and `TasksTransformer` are native stream transformers that surface `stream_mode="debug"` and `stream_mode="tasks"` data as typed `StreamChannel` projections on the run handle.
+`DebugTransformer` and `TasksTransformer` are native stream transformers that project `stream_mode="debug"` and `stream_mode="tasks"` events onto typed `StreamChannel` attributes (`run.debug` / `run.tasks`) on the v3 run handle when registered via `compile(transformers=[DebugTransformer])`. The examples below demonstrate the equivalent **raw `stream_mode` API** — which works without registering the transformers and is the most common usage pattern; the transformer attributes are available on the run handle for advanced v3 pump-based consumers.
 
 **Key source facts** (from `langgraph/stream/transformers.py`):
 
@@ -1219,10 +1215,8 @@ class State(TypedDict):
 
 def long_step(state: State) -> dict:
     runtime = get_runtime()
-    if runtime is not None and runtime.run_control is not None:
-        run_control = runtime.run_control
-        if run_control.drain_requested:
-            print(f"  Drain requested ({run_control.drain_reason}), finishing current step")
+    if runtime is not None and runtime.drain_requested:
+        print(f"  Drain requested ({runtime.drain_reason}), finishing current step")
     return {"step_count": state["step_count"] + 1}
 
 
