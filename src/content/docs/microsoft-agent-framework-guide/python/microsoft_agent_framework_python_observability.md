@@ -28,8 +28,8 @@ configure_otel_providers()
 Set the usual OTel env vars before calling:
 
 ```bash
-# ENABLE_INSTRUMENTATION=true is the default; only set it explicitly to restore after:
-# export ENABLE_INSTRUMENTATION=true
+# ENABLE_INSTRUMENTATION=true is the default; only needed to undo a prior disable:
+# export ENABLE_INSTRUMENTATION=true  # ← run this after setting ENABLE_INSTRUMENTATION=false
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 export OTEL_SERVICE_NAME=my-agent
