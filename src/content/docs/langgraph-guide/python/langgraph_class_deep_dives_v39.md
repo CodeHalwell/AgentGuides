@@ -1141,11 +1141,11 @@ asyncio.run(trace_updates())
 
 ## 9 · `LifecyclePayload` · `GraphDrained`
 
-**Module:** `langgraph.stream.transformers`
+**Modules:** `langgraph.stream.transformers` (`LifecyclePayload`) · `langgraph.errors` (`GraphDrained`)
 
 `LifecyclePayload` is the typed payload pushed onto the `lifecycle` channel by `LifecycleTransformer`; `GraphDrained` is the exception raised when a cooperative drain request is honoured.
 
-**Key source facts** (from `langgraph/stream/transformers.py`):
+**Key source facts** (from `langgraph/stream/transformers.py` and `langgraph/errors.py`):
 
 - `LifecyclePayload` is `TypedDict(total=False)` with fields: `event: SubgraphStatus` (`"started" | "completed" | "failed" | "interrupted" | "drained"`), `namespace: list[str]` (the subgraph's namespace path), `graph_name: NotRequired[str]`, `trigger_call_id: NotRequired[str]` (the `@task` call ID that spawned this subgraph, if any), `cause: NotRequired[LifecycleCause]` (`"node_step"` or `"@task"`), and `error: NotRequired[str]` (error message on `"failed"` events). All fields are optional (`total=False`) so the dict may be sparse.
 - `LifecycleTransformer` pushes a `LifecyclePayload` onto `run.lifecycle` only for **child** namespaces — namespaces strictly nested below the transformer's own scope (`len(ns) > depth`). The root namespace `[]` is not tracked. Consumers filter by `payload["namespace"]` to identify which subgraph emitted an event.
@@ -1260,10 +1260,6 @@ class Root(TypedDict):
 
 class Worker(TypedDict):
     task: str
-
-
-def process(state: Worker) -> dict:
-    return {}
 
 
 def fan_out(state: Root) -> list[Send]:
@@ -1452,5 +1448,5 @@ print(result["processed"])  # result: hello world
 | `TasksTransformer` | `langgraph.stream.transformers` | Native transformer surfacing `stream_mode="tasks"` on `run.tasks` |
 | `SubgraphTransformer` | `langgraph.stream.transformers` | Discovers direct-child subgraphs and pushes navigation handles onto `run.subgraphs` |
 | `LifecyclePayload` | `langgraph.stream.transformers` | TypedDict payload on `run.lifecycle` — event/namespace/graph_name/cause/error |
-| `GraphDrained` | `langgraph.stream.transformers` | Raised on cooperative drain; graph checkpoints and exits gracefully |
+| `GraphDrained` | `langgraph.errors` | Raised on cooperative drain; graph checkpoints and exits gracefully |
 | `RunnableCallable` | `langgraph.utils.runnable` | Lightweight callable node — sync/async pair, auto-inject config/store/writer |
