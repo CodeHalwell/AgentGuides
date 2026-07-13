@@ -360,7 +360,7 @@ print(f"Budget: {strategy.token_budget} tokens, strategies: {len(strategy.strate
 EvalItemResult(
     item_id: str,
     status: str,                          # "pass", "fail", or "error"
-    scores: list[EvalScoreResult] = [],
+    scores: list[EvalScoreResult] = field(default_factory=list),
     error_code: str | None = None,
     error_message: str | None = None,
     response_id: str | None = None,
@@ -1077,10 +1077,10 @@ async def demo(client):
     async for event in runner.run_stream("What is 2+2?"):
         if isinstance(event, WorkflowEvent):
             if event.type == "status":
-                state: WorkflowRunState = event.data
+                state: WorkflowRunState = event.state   # state lives on .state
                 print(f"State changed: {state.value}")
             elif event.type == "failed":
-                print(f"Workflow failed: {event.data.message}")
+                print(f"Workflow failed: {event.details.message}")  # error on .details
             elif event.type == "data":
                 print(f"Output: {event.data}")
 

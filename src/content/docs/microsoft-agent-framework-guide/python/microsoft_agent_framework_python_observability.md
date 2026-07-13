@@ -528,7 +528,7 @@ settings = ObservabilitySettings(env_file_path=".env.test", env_file_encoding="u
 
 ## Disabling everything
 
-`ENABLE_INSTRUMENTATION` defaults to `True` in code (the env var `ENABLE_INSTRUMENTATION=false` overrides it). Call `disable_instrumentation()` to apply a **sticky disable** that survives any subsequent `enable_instrumentation()` call, library auto-setup, or direct property write — nothing re-enables it until you pass `force=True`:
+`ENABLE_INSTRUMENTATION` defaults to `True` — you only need to set `ENABLE_INSTRUMENTATION=true` if you've previously set it to `false` and want to restore the default. Set `ENABLE_INSTRUMENTATION=false` (or call `disable_instrumentation()`) to suppress all signals. `disable_instrumentation()` also applies a **sticky disable** that survives any subsequent `enable_instrumentation()` call, library auto-setup, or direct property write — nothing re-enables it until you pass `force=True`:
 
 ```python
 from agent_framework.observability import (
