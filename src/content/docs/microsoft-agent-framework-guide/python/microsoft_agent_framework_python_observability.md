@@ -28,7 +28,8 @@ configure_otel_providers()
 Set the usual OTel env vars before calling:
 
 ```bash
-# ENABLE_INSTRUMENTATION=true is the default — only needed to restore after ENABLE_INSTRUMENTATION=false
+# ENABLE_INSTRUMENTATION=true is the default; only set it explicitly to restore after:
+# export ENABLE_INSTRUMENTATION=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 export OTEL_SERVICE_NAME=my-agent
@@ -118,9 +119,16 @@ When a single `chat` span emits a burst of message logs, they can share the same
 import logging
 from agent_framework.observability import MessageListTimestampFilter
 
-handler = logging.StreamHandler()
-handler.addFilter(MessageListTimestampFilter())
-logging.getLogger("agent_framework").addHandler(handler)
+logger = logging.getLogger("agent_framework")
+timestamp_filter = MessageListTimestampFilter()
+# Attach to every already-configured handler (e.g. OTel LoggingHandler, basicConfig handler)
+for _h in logger.handlers:
+    _h.addFilter(timestamp_filter)
+# Only add a StreamHandler when nothing is configured yet (avoids duplicate output)
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.addFilter(timestamp_filter)
+    logger.addHandler(_h)
 ```
 
 The filter checks for the `chat_message_index` attribute on each `LogRecord` (`MessageListTimestampFilter.INDEX_KEY`). Records without it are passed through unchanged, so wiring it globally is safe.
