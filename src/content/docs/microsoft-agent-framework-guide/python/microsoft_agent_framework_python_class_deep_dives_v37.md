@@ -1054,10 +1054,10 @@ try:
 except ValueError as exc:
     details = WorkflowErrorDetails.from_exception(exc, executor_id="step-1")
     error_event = WorkflowEvent.failed(details)
-    print(f"error_type={error_event.data.error_type}")      # "ValueError"
-    print(f"message={error_event.data.message}")            # "Unexpected input format"
-    print(f"executor_id={error_event.data.executor_id}")    # "step-1"
-    has_tb = error_event.data.traceback is not None
+    print(f"error_type={error_event.details.error_type}")      # "ValueError"
+    print(f"message={error_event.details.message}")            # "Unexpected input format"
+    print(f"executor_id={error_event.details.executor_id}")    # "step-1"
+    has_tb = error_event.details.traceback is not None
     print(f"traceback captured: {has_tb}")
 ```
 
@@ -1191,7 +1191,7 @@ async def demo(client, parent_runner):
 
     async for event in parent_runner.run_stream("Run the sub-workflow"):
         if isinstance(event, SubWorkflowRequestMessage):
-            print(f"Sub-workflow asks: {event.source_event.message}")
+            print(f"Sub-workflow asks: {event.source_event.data}")
             # Collect user input (here simulated)
             user_answer = "confirmed"
             response = event.create_response(user_answer)
@@ -1229,16 +1229,14 @@ SkillsSourceContext(
 **Example 34 — serving `InlineSkill` instances from memory**
 
 ```python
-from agent_framework._skills import InlineSkill, InMemorySkillsSource, SkillsSourceContext
+from agent_framework._skills import InlineSkill, InMemorySkillsSource, SkillsSourceContext, SkillFrontmatter
 
 skill_a = InlineSkill(
-    name="summariser",
-    description="Summarise long text",
+    frontmatter=SkillFrontmatter(name="summariser", description="Summarise long text"),
     instructions="When summarising, extract key points as bullet points.",
 )
 skill_b = InlineSkill(
-    name="code-reviewer",
-    description="Review Python code",
+    frontmatter=SkillFrontmatter(name="code-reviewer", description="Review Python code"),
     instructions="Focus on readability, correctness, and security.",
 )
 
@@ -1248,7 +1246,7 @@ async def demo(agent):
     context = SkillsSourceContext(agent=agent)
     skills = await source.get_skills(context)
     for skill in skills:
-        print(f"  {skill.name}: {skill.description}")
+        print(f"  {skill.frontmatter.name}: {skill.frontmatter.description}")
 
 # asyncio.run(demo(your_agent))
 ```
@@ -1259,12 +1257,14 @@ async def demo(agent):
 from agent_framework import Agent
 from agent_framework._skills import (
     InlineSkill, InMemorySkillsSource, SkillsProvider,
-    FilteringSkillsSource,
+    FilteringSkillsSource, SkillFrontmatter,
 )
 
 skill = InlineSkill(
-    name="safety-check",
-    description="Check output for safety concerns",
+    frontmatter=SkillFrontmatter(
+        name="safety-check",
+        description="Check output for safety concerns",
+    ),
     instructions="Flag any content that could be harmful or misleading.",
 )
 
