@@ -820,7 +820,8 @@ researcher = LlmAgent(
     instruction="Research this topic and give 3 key facts: {node_input}",
     include_contents="none",
     parallel_worker=True,    # fan-out over the list from expand_topics
-    max_parallel_workers=3,
+    # max_parallel_workers is a Node/@node option, not an LlmAgent field;
+    # cap concurrency by wrapping: node(researcher, max_parallel_workers=3)
 )
 
 pipeline = Workflow(
@@ -1033,15 +1034,15 @@ async def add_session_to_memory(self) -> None
 
 `add_memory` is implemented by services that support direct writes (e.g. `VertexAiMemoryBankService`). `InMemoryMemoryService` does **not** implement `add_memory` — it raises `NotImplementedError`. Use `add_events_to_memory` with in-memory services.
 
-### `MemoryEntry` model (verified `google/adk/memory/base_memory_service.py`)
+### `MemoryEntry` model (verified `google/adk/memory/memory_entry.py`)
 
 ```python
 class MemoryEntry(BaseModel):
-    content: types.Content
-    author: str = ""           # 'user' or agent name
-    timestamp: float = 0.0
-    session_id: str = ""
-    metadata: dict = {}
+    content: types.Content              # the memory payload
+    custom_metadata: dict[str, Any] = {}  # arbitrary key/value tags
+    id: Optional[str] = None            # assigned by the memory service
+    author: Optional[str] = None        # 'user' or agent name
+    timestamp: Optional[str] = None     # ISO-8601 string
 ```
 
 ### Example 1 — writing key facts from a tool
@@ -1049,8 +1050,7 @@ class MemoryEntry(BaseModel):
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.tools.tool_context import ToolContext
-from google.adk.runners import Runner
-from google.adk.memory import VertexAiMemoryBankService  # supports add_memory
+from google.adk.memory.memory_entry import MemoryEntry
 from google.genai import types
 
 async def save_user_preference(
@@ -1059,7 +1059,6 @@ async def save_user_preference(
     tool_context: ToolContext,
 ) -> dict:
     """Save a user preference directly to the memory bank."""
-    from google.adk.memory.base_memory_service import MemoryEntry
     entry = MemoryEntry(
         content=types.Content(
             role="user",
@@ -1138,6 +1137,6 @@ agent = LlmAgent(
 | Method | Use when | Works with |
 |---|---|---|
 | `add_session_to_memory()` | You want to ingest the entire session at the end of a run | All services |
-| `add_events_to_memory(events=...)` | You want to persist only the current turn (delta) | All services |
+| `add_events_to_memory(events=...)` | You want to persist only the current turn (delta) | `InMemoryMemoryService`, `VertexAiMemoryBankService`, `VertexAiRagMemoryService`; raises `NotImplementedError` on base/other services |
 | `add_memory(memories=...)` | You want to write structured facts directly (not from events) | Vertex AI Memory Bank; raises `NotImplementedError` on `InMemoryMemoryService` |
 | `search_memory(query)` | You want to retrieve relevant memories | All services |
