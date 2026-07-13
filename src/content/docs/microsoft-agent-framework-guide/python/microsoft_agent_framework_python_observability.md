@@ -182,8 +182,8 @@ class RawMyModelClient(BaseChatClient):
     OTEL_PROVIDER_NAME = "my_model"
 
     def _inner_get_response(self, *, messages, stream, options, **kwargs):
-        # ... call your model endpoint, returning Awaitable[ChatResponse] or ResponseStream ...
-        pass
+        # Must return Awaitable[ChatResponse] (stream=False) or ResponseStream (stream=True)
+        raise NotImplementedError("implement _inner_get_response to call your model endpoint")
 
 
 class MyModelClient(ChatTelemetryLayer, RawMyModelClient):
