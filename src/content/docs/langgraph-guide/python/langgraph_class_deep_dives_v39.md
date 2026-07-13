@@ -521,12 +521,20 @@ class MathResult(BaseModel):
 
 @tool
 def calculator(expression: str) -> float:
-    """Evaluate a simple arithmetic expression safely."""
-    # restrict to basic math ops only
-    allowed = set("0123456789+-*/() .")
-    if not all(c in allowed for c in expression):
-        raise ValueError("Unsafe expression")
-    return float(eval(expression))  # noqa: S307
+    """Evaluate a simple arithmetic expression (+ - * / and parentheses only)."""
+    import ast as _ast
+    _ALLOWED = frozenset({
+        _ast.Expression, _ast.BinOp, _ast.UnaryOp, _ast.Constant,
+        _ast.Add, _ast.Sub, _ast.Mult, _ast.Div, _ast.UAdd, _ast.USub,
+    })
+    try:
+        tree = _ast.parse(expression, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"Invalid expression: {exc}") from exc
+    for node in _ast.walk(tree):
+        if type(node) not in _ALLOWED:
+            raise ValueError(f"Disallowed operation: {type(node).__name__}")
+    return float(eval(compile(tree, "<expr>", "eval"), {"__builtins__": {}}))
 
 
 model = ChatOpenAI(model="gpt-4o-mini")
@@ -724,10 +732,7 @@ asyncio.run(watch_tool_calls())
 
 ```python
 import asyncio
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 from langgraph.prebuilt._tool_call_stream import ToolCallStream
-from langgraph.stream._mux import StreamMux
-from langgraph.stream.stream_channel import StreamChannel
 
 # Demonstrate ToolCallStream lifecycle directly (without a full graph)
 async def simulate_tool_lifecycle() -> None:
