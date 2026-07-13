@@ -959,7 +959,7 @@ asyncio.run(combined_stream())
 - Terminal events (`status == "completed" | "failed" | "interrupted" | "drained"`) call `_close_or_fail_handle` which closes or fails the child mini-mux, draining any iterators waiting on it.
 - `finalize()` / `afinalize()` close any open handles that never received a terminal event (e.g. if the run was cut short). This ensures iterators on child handles don't block forever.
 
-### Example 1 — iterate `run.subgraphs` synchronously to inspect a child graph
+### Example 1 — trace subgraph namespace events via `subgraphs=True`
 
 ```python
 from typing_extensions import TypedDict
