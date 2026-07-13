@@ -113,8 +113,8 @@ asyncio.run(demo())
 
 ```python
 import asyncio
-from agent_framework import Agent
-from agent_framework._compaction import CompactionProvider, TruncationStrategy, CharacterEstimatorTokenizer
+from agent_framework import Agent, CompactionProvider
+from agent_framework._compaction import TruncationStrategy, CharacterEstimatorTokenizer
 
 async def demo(client):
     strategy = TruncationStrategy(max_n=50, compact_to=25, tokenizer=CharacterEstimatorTokenizer())
