@@ -404,7 +404,11 @@ clarity_evaluator = LlmAgent(
 # Each evaluator gets the same text fresh, with no history
 pipeline = Workflow(
     name="eval_pipeline",
-    edges=[(START, fan_out, tone_evaluator), (START, fan_out, clarity_evaluator)],
+    edges=[
+        (START, fan_out),
+        (fan_out, tone_evaluator),
+        (fan_out, clarity_evaluator),
+    ],
 )
 ```
 
