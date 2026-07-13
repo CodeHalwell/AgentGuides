@@ -218,11 +218,12 @@ graph.invoke({"messages": []}, config=cfg)
 # Get the snapshot just before node "b" ran
 snapshots = list(graph.get_state_history(cfg))
 before_b = next(s for s in snapshots if "b" in s.next)
-print(f"Forking from step {before_b.metadata.get('step')}, next={before_b.next}")
+meta = before_b.metadata or {}
+print(f"Forking from step {meta.get('step')}, next={before_b.next}")
 
-# Fork: update the state at that snapshot and replay from there
-graph.update_state(before_b.config, {"messages": ["FORKED"]})
-forked_result = graph.invoke(None, config=before_b.config)
+# Fork: update_state() returns the config for the new checkpoint
+fork_config = graph.update_state(before_b.config, {"messages": ["FORKED"]})
+forked_result = graph.invoke(None, config=fork_config)
 print(forked_result["messages"])  # ['FORKED', 'B']
 ```
 
@@ -661,15 +662,17 @@ async def stream_remote() -> None:
 - Events on the `tools` channel still pass through (`process` returns `True`) — wire consumers subscribing to the raw `tools` channel still see every event. `ToolCallTransformer` is purely additive.
 - `finalize()` closes any still-active streams when the run ends normally; `fail(err)` fails them when the run errors.
 
-### Example 1 — iterate `run.tool_calls` to observe each tool call as it starts
+### Example 1 — watch tool call lifecycle via `astream_events()`
 
 ```python
 import asyncio
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 from langchain_core.messages import HumanMessage
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import tools_condition
+from langgraph.graph import StateGraph, START, END
+from typing_extensions import TypedDict
 
 
 @tool
@@ -680,43 +683,30 @@ def get_stock_price(ticker: str) -> float:
 
 
 model = ChatOpenAI(model="gpt-4o-mini")
-agent = create_react_agent(
-    model,
-    tools=[get_stock_price],
-)
-compiled = agent  # already compiled; add transformer at compile time:
-# agent = original_builder.compile(transformers=[ToolCallTransformer])
+
+
+class State(TypedDict):
+    messages: list
+
+
+m = model.bind_tools([get_stock_price])
+
+
+def call_model(state: State) -> dict:
+    return {"messages": state["messages"] + [m.invoke(state["messages"])]}
+
+
+builder = StateGraph(State)
+builder.add_node("agent", call_model)
+builder.add_node("tools", ToolNode([get_stock_price]))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile()
 
 
 async def watch_tool_calls() -> None:
-    # Rebuild with transformer so tool_calls projection is available
-    from langgraph.prebuilt.chat_agent_executor import create_react_agent as _cra
-    agent2 = _cra(model, tools=[get_stock_price])
-    # Note: transformer injection requires access to the underlying builder;
-    # shown here as a pattern for custom graphs:
-
-    from langgraph.graph import StateGraph, START, END
-    from langgraph.prebuilt import ToolNode
-    from langgraph.prebuilt.tool_node import tools_condition
-    from typing_extensions import TypedDict
-
-    class State(TypedDict):
-        messages: list
-
-    m = ChatOpenAI(model="gpt-4o-mini").bind_tools([get_stock_price])
-
-    def call_model(state: State) -> dict:
-        return {"messages": state["messages"] + [m.invoke(state["messages"])]}
-
-    builder = StateGraph(State)
-    builder.add_node("agent", call_model)
-    builder.add_node("tools", ToolNode([get_stock_price]))
-    builder.add_edge(START, "agent")
-    builder.add_conditional_edges("agent", tools_condition)
-    builder.add_edge("tools", "agent")
-
-    graph = builder.compile()
-
     async with graph.astream_events(
         {"messages": [HumanMessage("Price of AAPL and MSFT?")]},
         version="v2",
@@ -827,7 +817,6 @@ asyncio.run(simulate_tool_failure())
 import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream.transformers import DebugTransformer
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -851,7 +840,7 @@ graph = builder.compile(
 
 
 async def watch_debug() -> None:
-    async for event_type, data in graph.astream(
+    async for data in graph.astream(
         {"count": 0},
         config={"configurable": {"thread_id": "debug-demo"}},
         stream_mode="debug",
@@ -862,7 +851,7 @@ async def watch_debug() -> None:
 asyncio.run(watch_debug())
 ```
 
-### Example 2 — use `TasksTransformer` to capture task start and result payloads
+### Example 2 — stream task payloads directly with `stream_mode='tasks'`
 
 ```python
 import asyncio
@@ -895,7 +884,7 @@ graph = builder.compile(checkpointer=checkpointer)
 
 
 async def watch_tasks() -> None:
-    async for event_type, data in graph.astream(
+    async for data in graph.astream(
         {"value": 3},
         config={"configurable": {"thread_id": "tasks-demo"}},
         stream_mode="tasks",
@@ -1079,6 +1068,7 @@ import operator
 from typing import Annotated
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class RootState(TypedDict):
@@ -1116,7 +1106,7 @@ root_builder.add_node("worker", run_worker)
 root_builder.add_conditional_edges(START, fan_out)
 root_builder.add_edge("worker", END)
 
-graph = root_builder.compile(checkpointer=__import__("langgraph.checkpoint.memory", fromlist=["InMemorySaver"]).InMemorySaver())
+graph = root_builder.compile(checkpointer=InMemorySaver())
 
 
 async def trace_updates() -> None:
@@ -1144,7 +1134,7 @@ asyncio.run(trace_updates())
 
 - `LifecyclePayload` is `TypedDict(total=False)` with fields: `event: SubgraphStatus` (`"started" | "completed" | "failed" | "interrupted" | "drained"`), `namespace: list[str]` (the subgraph's namespace path), `graph_name: NotRequired[str]`, `trigger_call_id: NotRequired[str]` (the `@task` call ID that spawned this subgraph, if any), `cause: NotRequired[LifecycleCause]` (`"node_step"` or `"@task"`), and `error: NotRequired[str]` (error message on `"failed"` events). All fields are optional (`total=False`) so the dict may be sparse.
 - `LifecycleTransformer` pushes a `LifecyclePayload` onto `run.lifecycle` for **every** namespace (including the root — namespace `[]`). Consumers filter by `payload["namespace"]` to watch specific subgraphs.
-- `GraphDrained(reason="shutdown")` is a `GraphBubbleUp` subclass — a sentinel exception in the same family as `GraphInterrupt` that Pregel catches and converts into a graceful exit. The graph saves a checkpoint at the last superstep boundary and the run exits normally from the caller's perspective (no exception raised). The thread can be resumed later with `graph.invoke(None, config=cfg)`.
+- `GraphDrained(reason="shutdown")` is a `GraphBubbleUp` subclass — a sentinel exception in the same family as `GraphInterrupt` that Pregel catches and converts into a graceful exit. The graph saves a checkpoint at the last superstep boundary and raises `GraphDrained` to the caller; callers should catch it and may resume the thread later with `graph.invoke(None, config=cfg)`.
 - `RunControl.request_drain(reason="...")` is the trigger for `GraphDrained`. Call it from a `SIGTERM` handler or any background thread — it is thread-safe (no locks needed — it only sets a `bool` attribute on the `RunControl` dataclass, which Pregel polls at each superstep boundary).
 - `LifecyclePayload` events flow through the same `lifecycle` channel regardless of whether the subgraph is local or a `RemoteGraph`; remote SDK clients receive identical payloads via the wire protocol.
 
@@ -1186,7 +1176,7 @@ graph = outer.compile(checkpointer=InMemorySaver())
 
 
 async def watch_lifecycle() -> None:
-    async for mode, payload in graph.astream(
+    async for payload in graph.astream(
         {"n": 0},
         config={"configurable": {"thread_id": "lc-demo"}},
         stream_mode="lifecycle",
@@ -1200,11 +1190,9 @@ async def watch_lifecycle() -> None:
 asyncio.run(watch_lifecycle())
 ```
 
-### Example 2 — cooperative drain with `GraphDrained` on SIGTERM
+### Example 2 — observe drain state inside a long-running node
 
 ```python
-import asyncio
-import signal
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.runtime import get_runtime
@@ -1227,8 +1215,7 @@ def long_step(state: State) -> dict:
 builder = StateGraph(State)
 builder.add_node("work", long_step)
 builder.add_edge(START, "work")
-# Loop back to simulate a long-running workflow (add recursion_limit)
-builder.add_edge("work", "work")
+builder.add_edge("work", END)
 
 graph = builder.compile(checkpointer=InMemorySaver())
 
