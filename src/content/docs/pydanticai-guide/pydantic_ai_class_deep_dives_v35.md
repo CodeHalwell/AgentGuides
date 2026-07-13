@@ -158,7 +158,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai-responses:gpt-5.2',
     capabilities=[
         WebSearch(
             search_context_size='high',  # more web context per search
@@ -209,7 +209,7 @@ from pydantic_ai.capabilities import WebSearch
 
 # Restrict searches to known high-quality domains
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai-responses:gpt-5.2',
     capabilities=[
         WebSearch(
             allowed_domains=['arxiv.org', 'nature.com', 'science.org'],
@@ -271,7 +271,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebFetch
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'anthropic:claude-sonnet-4-5',
     capabilities=[
         WebFetch(enable_citations=True, max_content_tokens=8192)
     ],
@@ -380,10 +380,10 @@ class ImageGeneration(NativeOrLocalTool[AgentDepsT]):
 
 ```python
 import asyncio
-import base64
 from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
+from pydantic_ai.messages import BinaryImage
 
 agent = Agent(
     'openai-responses:gpt-5.4',
@@ -394,14 +394,14 @@ agent = Agent(
             output_format='png',
         )
     ],
-    output_type=bytes,
+    output_type=BinaryImage,
 )
 
 async def main() -> None:
     result = await agent.run(
         'Generate a photorealistic image of a red fox sitting in a snowy forest.'
     )
-    Path('fox.png').write_bytes(result.output)
+    Path('fox.png').write_bytes(result.output.data)
     print('Image saved to fox.png')
 
 asyncio.run(main())
@@ -652,11 +652,10 @@ agent_b = Agent('anthropic:claude-haiku-4-5')
 
 async def handle_request() -> None:
     # All sync callbacks in this scope share one bounded pool
-    with Agent.using_thread_executor(
-        ThreadPoolExecutor(max_workers=8, thread_name_prefix='req-worker')
-    ):
-        result_a = await agent_a.run('List 3 animals.')
-        result_b = await agent_b.run('List 3 fruits.')
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix='req-worker') as executor:
+        with Agent.using_thread_executor(executor):
+            result_a = await agent_a.run('List 3 animals.')
+            result_b = await agent_b.run('List 3 fruits.')
     print(result_a.output, result_b.output)
 
 asyncio.run(handle_request())
@@ -787,8 +786,7 @@ When a URL returns binary content (PDF, image), the tool returns a `BinaryConten
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.common_tools.web_fetch import web_fetch_tool, WebFetchResult
-from pydantic_ai.messages import BinaryContent
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
 
 agent = Agent(
     'openai:gpt-5.2',
