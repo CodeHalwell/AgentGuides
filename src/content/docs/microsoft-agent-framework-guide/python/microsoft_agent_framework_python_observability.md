@@ -531,7 +531,9 @@ settings = ObservabilitySettings(env_file_path=".env.test", env_file_encoding="u
 `ENABLE_INSTRUMENTATION` defaults to `True` in code (the env var `ENABLE_INSTRUMENTATION=false` overrides it). Call `disable_instrumentation()` to apply a **sticky disable** that survives any subsequent `enable_instrumentation()` call, library auto-setup, or direct property write — nothing re-enables it until you pass `force=True`:
 
 ```python
-from agent_framework.observability import disable_instrumentation, enable_instrumentation
+from agent_framework.observability import (
+    disable_instrumentation, enable_instrumentation, OBSERVABILITY_SETTINGS
+)
 
 # Hard-disable — sticky, survives auto-setup and library integrations.
 disable_instrumentation()

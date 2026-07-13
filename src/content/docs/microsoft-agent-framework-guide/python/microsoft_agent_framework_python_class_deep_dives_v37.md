@@ -199,7 +199,6 @@ asyncio.run(demo())
 **Example 6 — chaining `ToolResultCompactionStrategy` with `SlidingWindowStrategy`**
 
 ```python
-import asyncio
 from agent_framework._compaction import (
     ToolResultCompactionStrategy,
     SlidingWindowStrategy,
@@ -242,11 +241,10 @@ SummarizationStrategy(
 **Example 7 — basic summarisation**
 
 ```python
-import asyncio
 from agent_framework._compaction import SummarizationStrategy
 # from agent_framework.openai import OpenAIChatClient
 
-async def demo(client):
+def demo(client):
     strategy = SummarizationStrategy(
         client=client,
         target_count=4,
@@ -314,7 +312,6 @@ TokenBudgetComposedStrategy(
 **Example 10 — token-budget pipeline with three strategies**
 
 ```python
-import asyncio
 from agent_framework._compaction import (
     TokenBudgetComposedStrategy,
     CharacterEstimatorTokenizer,
@@ -540,7 +537,7 @@ asyncio.run(demo())
 **Example 16 — `FileSystemAgentFileStore` with overwrite guard**
 
 ```python
-import asyncio, tempfile, pathlib
+import asyncio, tempfile
 from agent_framework._harness._file_access import FileSystemAgentFileStore
 
 async def demo():
@@ -664,7 +661,7 @@ assert restored_entry.slug == entry.slug
 **Example 19 — attaching `MemoryContextProvider` to an agent**
 
 ```python
-import asyncio, tempfile
+import tempfile
 from agent_framework._harness._memory import MemoryContextProvider, MemoryFileStore
 
 async def demo(client):
@@ -875,7 +872,6 @@ from agent_framework import Agent, tool
 from agent_framework.security import (
     LabelTrackingFunctionMiddleware,
     PolicyEnforcementFunctionMiddleware,
-    IntegrityLabel,
 )
 
 @tool
@@ -957,20 +953,26 @@ print(OtelAttr.OUTPUT_TOKENS)   # "gen_ai.usage.output_tokens"
 print(OtelAttr.AGENT_NAME)      # "gen_ai.agent.name"
 ```
 
-**Example 27 — `ObservabilitySettings` + `ChatTelemetryLayer` toggle**
+**Example 27 — `ObservabilitySettings` + process-wide disable/re-enable**
 
 ```python
-from agent_framework.observability import ObservabilitySettings
+from agent_framework.observability import (
+    OBSERVABILITY_SETTINGS,
+    disable_instrumentation,
+    enable_instrumentation,
+)
 
-# Check / toggle global OTel instrumentation
-settings = ObservabilitySettings()
-print(f"ENABLED: {settings.ENABLED}")
+# Inspect the process-wide singleton — this is what ChatTelemetryLayer checks.
+print(f"ENABLED: {OBSERVABILITY_SETTINGS.ENABLED}")          # True by default
+print(f"user_disabled: {OBSERVABILITY_SETTINGS.is_user_disabled}")  # False
 
-# Disable to suppress all telemetry spans (e.g. in unit tests)
-settings.ENABLED = False
-print(f"Disabled: {settings.ENABLED}")
+# Sticky-disable all framework telemetry (e.g. during unit tests).
+disable_instrumentation()
+print(f"after disable: {OBSERVABILITY_SETTINGS.ENABLED}")    # False
 
-settings.ENABLED = True   # re-enable
+# Re-enable (force=True clears the sticky flag).
+enable_instrumentation(force=True)
+print(f"after re-enable: {OBSERVABILITY_SETTINGS.ENABLED}")  # True
 ```
 
 **Example 28 — `MessageListTimestampFilter` for sequenced log replay**
@@ -1062,7 +1064,6 @@ except ValueError as exc:
 **Example 30 — consuming workflow events from a running workflow**
 
 ```python
-import asyncio
 from agent_framework import WorkflowBuilder
 from agent_framework._workflows._events import WorkflowEvent, WorkflowRunState
 
@@ -1123,7 +1124,7 @@ ExecutionContext(
 ```python
 from agent_framework._workflows._events import WorkflowEvent
 from agent_framework._workflows._workflow_executor import (
-    SubWorkflowRequestMessage, SubWorkflowResponseMessage, ExecutionContext
+    SubWorkflowRequestMessage,
 )
 
 # Simulate a request_info event emitted by a sub-workflow executor
@@ -1178,8 +1179,6 @@ print(f"all received: {all_received}")  # True
 **Example 33 — full sub-workflow HITL pattern**
 
 ```python
-import asyncio
-from agent_framework import WorkflowBuilder
 from agent_framework._workflows._workflow_executor import SubWorkflowRequestMessage
 
 async def demo(client, parent_runner):
@@ -1228,7 +1227,6 @@ SkillsSourceContext(
 **Example 34 — serving `InlineSkill` instances from memory**
 
 ```python
-import asyncio
 from agent_framework._skills import InlineSkill, InMemorySkillsSource, SkillsSourceContext
 
 skill_a = InlineSkill(
@@ -1256,7 +1254,6 @@ async def demo(agent):
 **Example 35 — using `InMemorySkillsSource` inside a `SkillsProvider`**
 
 ```python
-import asyncio
 from agent_framework import Agent
 from agent_framework._skills import (
     InlineSkill, InMemorySkillsSource, SkillsProvider,
@@ -1294,7 +1291,7 @@ from agent_framework._skills import SkillsSourceContext
 from agent_framework._sessions import AgentSession
 
 # Context is frozen — fields are set at construction and cannot be mutated
-async def demo(agent):
+def demo(agent):
     session = AgentSession()
     ctx = SkillsSourceContext(agent=agent, session=session)
 
@@ -1307,5 +1304,5 @@ async def demo(agent):
     except Exception as e:
         print(f"Caught: {type(e).__name__}")  # FrozenInstanceError
 
-# asyncio.run(demo(your_agent))
+# demo(your_agent)
 ```
