@@ -166,8 +166,8 @@ class RawMyModelClient(BaseChatClient):
 
     OTEL_PROVIDER_NAME = "my_model"
 
-    async def _get_response_impl(self, messages, *, options=None, **kwargs):
-        # ... call your model endpoint ...
+    def _inner_get_response(self, *, messages, stream, options, **kwargs):
+        # ... call your model endpoint, returning Awaitable[ChatResponse] or ResponseStream ...
         pass
 
 

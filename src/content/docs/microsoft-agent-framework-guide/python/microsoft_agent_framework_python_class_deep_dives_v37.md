@@ -555,8 +555,8 @@ async def demo():
             print(f"Caught: {e}")
 
         # Exists check
-        print(await store.exists("config.json"))  # True
-        print(await store.exists("missing.txt"))   # False
+        print(await store.file_exists("config.json"))  # True
+        print(await store.file_exists("missing.txt"))   # False
 
 asyncio.run(demo())
 ```
@@ -1042,7 +1042,7 @@ started = WorkflowEvent.started()
 print(f"type={started.type}, source={started.source}")
 
 status = WorkflowEvent.status(WorkflowRunState.IN_PROGRESS)
-print(f"state={status.data}")  # WorkflowRunState.IN_PROGRESS
+print(f"state={status.state}")  # WorkflowRunState.IN_PROGRESS
 
 # Warning event
 warning = WorkflowEvent.warning("Retrying after timeout")
@@ -1129,7 +1129,9 @@ from agent_framework._workflows._workflow_executor import (
 
 # Simulate a request_info event emitted by a sub-workflow executor
 request_event = WorkflowEvent.request_info(
-    message="Please confirm the user's email address",
+    request_id="req-001",
+    source_executor_id="email-confirmation-step",
+    request_data="Please confirm the user's email address",
     response_type=str,
 )
 
