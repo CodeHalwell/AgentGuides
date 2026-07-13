@@ -77,7 +77,7 @@ async def demo():
         Message(role="user", contents=[f"turn {i}"]) for i in range(25)
     ]
     changed = await strategy(messages)
-    included = [m for m in messages if not m.additional_properties.get("excluded")]
+    included = [m for m in messages if not m.additional_properties.get("_excluded")]
     print(f"changed={changed}, included={len(included)}")  # changed=True, included=10
 
 asyncio.run(demo())
@@ -1159,8 +1159,18 @@ except TypeError as e:
 from agent_framework._workflows._events import WorkflowEvent
 from agent_framework._workflows._workflow_executor import ExecutionContext
 
-req1 = WorkflowEvent.request_info(message="Name?", response_type=str)
-req2 = WorkflowEvent.request_info(message="Age?", response_type=int)
+req1 = WorkflowEvent.request_info(
+    request_id="req-001",
+    source_executor_id="name-step",
+    request_data="What is your name?",
+    response_type=str,
+)
+req2 = WorkflowEvent.request_info(
+    request_id="req-002",
+    source_executor_id="age-step",
+    request_data="What is your age?",
+    response_type=int,
+)
 
 ctx = ExecutionContext(
     execution_id="run-001",
