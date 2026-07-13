@@ -1145,6 +1145,8 @@ asyncio.run(trace_updates())
 
 - `LifecyclePayload` is `TypedDict(total=False)` with fields: `event: SubgraphStatus` (`"started" | "completed" | "failed" | "interrupted" | "drained"`), `namespace: list[str]` (the subgraph's namespace path), `graph_name: NotRequired[str]`, `trigger_call_id: NotRequired[str]` (the `@task` call ID that spawned this subgraph, if any), `cause: NotRequired[LifecycleCause]` (`"node_step"` or `"@task"`), and `error: NotRequired[str]` (error message on `"failed"` events). All fields are optional (`total=False`) so the dict may be sparse.
 - `LifecycleTransformer` pushes a `LifecyclePayload` onto `run.lifecycle` only for **child** namespaces — namespaces strictly nested below the transformer's own scope (`len(ns) > depth`). The root namespace `[]` is not tracked. Consumers filter by `payload["namespace"]` to identify which subgraph emitted an event.
+- `LifecycleTransformer` is **built into `stream_events(version="v3")`** and its async counterpart by default. Consume lifecycle events with `with graph.stream_events(..., version="v3") as run: for payload in run.lifecycle:` (sync) or `async with await graph.astream_events(..., version="v3") as run: async for payload in run.lifecycle:` (async). You do **not** need to pass `transformers=[LifecycleTransformer]` to `compile()` — it is already wired into the v3 mux. `"lifecycle"` is not a recognised `stream_mode` string for `astream()` / `stream()`.
+- Lifecycle events are emitted for nested compiled graph invocations (either wired as a direct node or invoked via `inner_graph.invoke()` inside a node function). Plain `Send` fan-out to regular function nodes does **not** produce lifecycle payloads — those tasks execute in a parallel branch but are not nested graph namespaces.
 - `GraphDrained(reason="shutdown")` is a `GraphBubbleUp` subclass — a sentinel exception in the same family as `GraphInterrupt` that Pregel catches and converts into a graceful exit. The graph saves a checkpoint at the last superstep boundary and raises `GraphDrained` to the caller; callers should catch it and may resume the thread later with `graph.invoke(None, config=cfg)`.
 - `RunControl.request_drain(reason="...")` is the trigger for `GraphDrained`. Call it from a `SIGTERM` handler or any background thread — it is thread-safe (no locks needed — it only sets a `bool` attribute on the `RunControl` dataclass, which Pregel polls at each superstep boundary).
 - `LifecyclePayload` events flow through the same `lifecycle` channel regardless of whether the subgraph is local or a `RemoteGraph`; remote SDK clients receive identical payloads via the wire protocol.
@@ -1156,7 +1158,6 @@ import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.stream.transformers import LifecycleTransformer
 
 
 class State(TypedDict):
@@ -1179,22 +1180,23 @@ outer.add_node("inner", inner_graph)  # compiled graph as node → creates child
 outer.add_edge(START, "inner")
 outer.add_edge("inner", END)
 
-graph = outer.compile(
-    checkpointer=InMemorySaver(),
-    transformers=[LifecycleTransformer],
-)
+# LifecycleTransformer is hardcoded in the v3 mux — no compile(transformers=[...]) needed
+graph = outer.compile(checkpointer=InMemorySaver())
 
 
 async def watch_lifecycle() -> None:
-    async for payload in graph.astream(
+    # astream_events(version="v3") returns AsyncGraphRunStream; run.lifecycle yields LifecyclePayload
+    async with await graph.astream_events(
         {"n": 0},
         config={"configurable": {"thread_id": "lc-demo"}},
-        stream_mode="lifecycle",
-    ):
-        event = payload.get("event", "?")
-        ns = payload.get("namespace", [])
-        graph_name = payload.get("graph_name", "root")
-        print(f"  [{event:12s}] ns={ns}  graph={graph_name!r}")
+        version="v3",
+    ) as run:
+        async for payload in run.lifecycle:
+            event = payload.get("event", "?")
+            ns = payload.get("namespace", [])
+            graph_name = payload.get("graph_name", "root")
+            print(f"  [{event:12s}] ns={ns}  graph={graph_name!r}")
+        _ = await run.output
 
 
 asyncio.run(watch_lifecycle())
@@ -1238,57 +1240,58 @@ print(f"Completed with step_count={result['step_count']}")
 
 ```python
 import asyncio
-from typing import Annotated
-import operator
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.stream.transformers import LifecycleTransformer
 
 
-class Root(TypedDict):
-    tasks: list[str]
-    done: Annotated[list[str], operator.add]
+class S(TypedDict):
+    value: int
 
 
-class Worker(TypedDict):
-    task: str
+def double(state: S) -> dict:
+    return {"value": state["value"] * 2}
 
 
-def fan_out(state: Root) -> list[Send]:
-    return [Send("worker", {"task": t}) for t in state["tasks"]]
+# Compiled inner graph — invoking it inside a node creates a child lifecycle namespace
+inner_builder = StateGraph(S)
+inner_builder.add_node("double", double)
+inner_builder.add_edge(START, "double")
+inner_builder.add_edge("double", END)
+inner_graph = inner_builder.compile()
 
 
-def run_worker(state: Worker) -> dict:
-    return {"done": [state["task"]]}
+def run_inner(state: S) -> dict:
+    return inner_graph.invoke({"value": state["value"]})
 
 
-builder = StateGraph(Root)
-builder.add_node("worker", run_worker)
-builder.add_conditional_edges(START, fan_out)
-builder.add_edge("worker", END)
+outer_builder = StateGraph(S)
+outer_builder.add_node("sub", run_inner)
+outer_builder.add_edge(START, "sub")
+outer_builder.add_edge("sub", END)
 
-graph = builder.compile(checkpointer=InMemorySaver(), transformers=[LifecycleTransformer])
+graph = outer_builder.compile(checkpointer=InMemorySaver())
 
 
 async def count_events() -> None:
     started = 0
     completed = 0
 
-    async for _, payload in graph.astream(
-        {"tasks": ["a", "b", "c", "d"], "done": []},
+    async with await graph.astream_events(
+        {"value": 3},
         config={"configurable": {"thread_id": "count"}},
-        stream_mode="lifecycle",
-        subgraphs=True,
-    ):
-        event = payload.get("event")
-        if event == "started":
-            started += 1
-        elif event == "completed":
-            completed += 1
+        version="v3",
+    ) as run:
+        async for payload in run.lifecycle:
+            event = payload.get("event")
+            if event == "started":
+                started += 1
+            elif event == "completed":
+                completed += 1
+        _ = await run.output
 
     print(f"Lifecycle events: started={started}  completed={completed}")
+    # started=1  completed=1
 
 
 asyncio.run(count_events())
