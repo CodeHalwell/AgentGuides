@@ -806,7 +806,7 @@ def call_model(state: MessagesState) -> dict:
 
 builder = StateGraph(MessagesState)
 builder.add_node("agent", call_model)
-builder.add_node("tools", ToolNode([risky_divide]))
+builder.add_node("tools", ToolNode([risky_divide], handle_tool_errors=True))
 builder.add_edge(START, "agent")
 builder.add_conditional_edges("agent", tools_condition)
 builder.add_edge("tools", "agent")
