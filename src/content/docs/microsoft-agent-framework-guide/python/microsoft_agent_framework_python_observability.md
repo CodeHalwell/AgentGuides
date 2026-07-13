@@ -267,7 +267,7 @@ from opentelemetry import trace
 trace.get_tracer_provider().add_span_processor(TokenSpendProcessor())
 ```
 
-Common attribute keys you'll reach for, organised by domain:
+Complete `OtelAttr` reference — span attributes, span names, and metric instrument names, organised by domain:
 
 **Agent & conversation**
 
