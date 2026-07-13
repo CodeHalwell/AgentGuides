@@ -119,16 +119,23 @@ When a single `chat` span emits a burst of message logs, they can share the same
 import logging
 from agent_framework.observability import MessageListTimestampFilter
 
-logger = logging.getLogger("agent_framework")
 timestamp_filter = MessageListTimestampFilter()
-# Attach to every already-configured handler (e.g. OTel LoggingHandler, basicConfig handler)
-for _h in logger.handlers:
-    _h.addFilter(timestamp_filter)
-# Only add a StreamHandler when nothing is configured yet (avoids duplicate output)
-if not logger.handlers:
+
+# Walk up the logger hierarchy to reach whichever ancestor holds the handlers
+# (commonly the root logger when the app uses basicConfig or OTel's LoggingHandler)
+_log = logging.getLogger("agent_framework")
+while _log:
+    for _h in _log.handlers:
+        _h.addFilter(timestamp_filter)
+    if not _log.propagate:
+        break
+    _log = _log.parent
+
+# If no handlers were found anywhere in the hierarchy, add a minimal one
+if not logging.getLogger("agent_framework").hasHandlers():
     _h = logging.StreamHandler()
     _h.addFilter(timestamp_filter)
-    logger.addHandler(_h)
+    logging.getLogger("agent_framework").addHandler(_h)
 ```
 
 The filter checks for the `chat_message_index` attribute on each `LogRecord` (`MessageListTimestampFilter.INDEX_KEY`). Records without it are passed through unchanged, so wiring it globally is safe.
@@ -336,7 +343,7 @@ Complete `OtelAttr` reference — span attributes, span names, and metric instru
 
 **Span names** (compare `span.name` against these)
 
-| Attribute | String value |
+| Constant | Span name value |
 |---|---|
 | `OtelAttr.CHAT_COMPLETION_OPERATION` | `chat` |
 | `OtelAttr.EMBEDDING_OPERATION` | `embeddings` |
@@ -350,7 +357,7 @@ Complete `OtelAttr` reference — span attributes, span names, and metric instru
 
 **Metrics**
 
-| Attribute | String value |
+| Constant | Instrument name |
 |---|---|
 | `OtelAttr.LLM_OPERATION_DURATION` | `gen_ai.client.operation.duration` |
 | `OtelAttr.LLM_TOKEN_USAGE` | `gen_ai.client.token.usage` |
