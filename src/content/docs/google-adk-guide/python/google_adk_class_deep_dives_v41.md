@@ -819,14 +819,16 @@ researcher = LlmAgent(
     model="gemini-2.5-flash",
     instruction="Research this topic and give 3 key facts: {node_input}",
     include_contents="none",
-    parallel_worker=True,    # fan-out over the list from expand_topics
-    # max_parallel_workers is a Node/@node option, not an LlmAgent field;
-    # cap concurrency by wrapping: node(researcher, max_parallel_workers=3)
 )
+
+# To cap concurrency, wrap with node(parallel_worker=True, max_parallel_workers=N).
+# Both args are required on the node() call; passing max_parallel_workers without
+# parallel_worker=True raises ValueError.
+researcher_node = node(researcher, parallel_worker=True, max_parallel_workers=3)
 
 pipeline = Workflow(
     name="parallel_research",
-    edges=[(START, expand_topics, researcher)],
+    edges=[(START, expand_topics, researcher_node)],
 )
 ```
 
