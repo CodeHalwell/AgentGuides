@@ -1044,7 +1044,7 @@ from agent_framework._workflows._events import (
 
 # Lifecycle events (data=None)
 started = WorkflowEvent.started()
-print(f"type={started.type}, source={started.source}")
+print(f"type={started.type}, origin={started.origin}")
 
 status = WorkflowEvent.status(WorkflowRunState.IN_PROGRESS)
 print(f"state={status.state}")  # WorkflowRunState.IN_PROGRESS
@@ -1079,9 +1079,8 @@ async def demo(client):
     # ... add more executors / edges ...
 
     workflow = builder.build()
-    runner = workflow.create_runner()
 
-    async for event in runner.run_stream("What is 2+2?"):
+    async for event in workflow.run("What is 2+2?", stream=True):
         if isinstance(event, WorkflowEvent):
             if event.type == "status":
                 state: WorkflowRunState = event.state   # state lives on .state
