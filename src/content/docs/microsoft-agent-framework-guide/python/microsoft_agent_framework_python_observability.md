@@ -13,7 +13,7 @@ Verified against `agent-framework==1.11.0` (`agent_framework.observability`).
 
 ## Three ways to wire up an exporter
 
-Instrumentation (signal *emission*) is **on by default** — `ObservabilitySettings.ENABLED` is `True` out of the box. What you need to add is an OTel *exporter* so those signals are actually received somewhere. Pick exactly one of the three options below. Mixing them causes duplicate providers.
+Instrumentation (signal *emission*) is **on by default** — `OBSERVABILITY_SETTINGS.ENABLED` is `True` out of the box. What you need to add is an OTel *exporter* so those signals are actually received somewhere. Pick exactly one of the three options below. Mixing them causes duplicate providers.
 
 ### 1. `configure_otel_providers()` — batteries included
 
