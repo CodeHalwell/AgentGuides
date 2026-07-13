@@ -111,7 +111,7 @@ logging.getLogger("agent_framework").setLevel(logging.DEBUG)
 
 When instrumentation is enabled, logs flow through OTel's `LoggingHandler` and ship alongside traces/metrics.
 
-### `MessageListTimestampFilter` — deconflicting log timestamps
+#### `MessageListTimestampFilter` — deconflicting log timestamps
 
 When a single `chat` span emits a burst of message logs, they can share the same timestamp and appear out of order in some log UIs. `MessageListTimestampFilter` fixes this by nudging each log record's `created` time forward by `index × 1 µs`, so message logs sort stably:
 
