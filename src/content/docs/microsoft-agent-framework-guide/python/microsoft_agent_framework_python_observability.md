@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Observability & Telemetry"
-description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework-core 1.6.0. Enable instrumentation, ship to Azure Monitor / OTLP / console, or the VS Code AI Toolkit."
+description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework 1.11.0. Instrumentation is on by default — wire up an exporter (Azure Monitor, OTLP, console, or VS Code AI Toolkit) to receive signals."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,11 +9,11 @@ language: python
 
 `agent-framework-core` emits OpenTelemetry signals following the **GenAI semantic conventions**. Every agent run, model call, tool invocation, workflow executor, and edge group is a span; every chat completion emits a duration histogram and a token-usage histogram. Nothing is exported by default — you opt in either by calling a helper, setting one env var, or wiring your own OTel providers.
 
-Verified against `agent-framework-core==1.6.0` (`agent_framework.observability`).
+Verified against `agent-framework==1.11.0` (`agent_framework.observability`).
 
-## Three ways to turn it on
+## Three ways to wire up an exporter
 
-Pick exactly one. Mixing them causes duplicate providers.
+Instrumentation (signal *emission*) is **on by default** — `ObservabilitySettings.ENABLED` is `True` out of the box. What you need to add is an OTel *exporter* so those signals are actually received somewhere. Pick exactly one of the three options below. Mixing them causes duplicate providers.
 
 ### 1. `configure_otel_providers()` — batteries included
 
