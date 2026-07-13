@@ -761,13 +761,13 @@ graph = builder.compile(transformers=[ToolCallTransformer])
 
 
 async def stream_tool_output() -> None:
-    async for run in graph.astream(
+    async with graph.astream(
         {"messages": [HumanMessage("Search for LangGraph streaming docs")]},
         stream_mode="tools",
-    ):
+    ) as run:
         async for tc_stream in run.tool_calls:
             print(f"Tool: {tc_stream.tool_name}  id={tc_stream.tool_call_id}")
-            async for delta in tc_stream:
+            async for delta in tc_stream.output_deltas:
                 print(f"  delta: {delta!r}")
             print(f"  output: {tc_stream.output!r}")
             print(f"  completed: {tc_stream.completed}")
@@ -815,12 +815,12 @@ graph = builder.compile(transformers=[ToolCallTransformer])
 
 
 async def handle_tool_errors() -> None:
-    async for run in graph.astream(
+    async with graph.astream(
         {"messages": [HumanMessage("Compute 10 divided by 0")]},
         stream_mode="tools",
-    ):
+    ) as run:
         async for tc_stream in run.tool_calls:
-            async for _ in tc_stream:  # drain any partial deltas
+            async for _ in tc_stream.output_deltas:  # drain any partial deltas
                 pass
             if tc_stream.error:
                 print(f"Tool '{tc_stream.tool_name}' failed: {tc_stream.error!r}")
