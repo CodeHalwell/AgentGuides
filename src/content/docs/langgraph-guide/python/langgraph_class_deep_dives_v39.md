@@ -649,15 +649,15 @@ async def stream_remote() -> None:
 
 ## 6 · `ToolCallTransformer` · `ToolCallStream`
 
-**Module:** `langgraph.prebuilt._tool_call_transformer`
+**Modules:** `langgraph.prebuilt._tool_call_transformer` (`ToolCallTransformer`) · `langgraph.prebuilt._tool_call_stream` (`ToolCallStream`)
 
 `ToolCallTransformer` is an opt-in native stream transformer that projects `tools`-mode events into per-tool-call `ToolCallStream` handles, enabling real-time per-tool output streaming.
 
-**Key source facts** (from `langgraph/prebuilt/_tool_call_transformer.py`):
+**Key source facts** (from `langgraph/prebuilt/_tool_call_transformer.py` and `langgraph/prebuilt/_tool_call_stream.py`):
 
-- `ToolCallTransformer` extends `StreamTransformer` with `_native = True` and `required_stream_modes = ("tools",)`. It is **not** a default built-in — you must pass it at compile time: `graph.compile(transformers=[ToolCallTransformer])`.
+- `ToolCallTransformer` (from `langgraph.prebuilt._tool_call_transformer`) extends `StreamTransformer` with `_native = True` and `required_stream_modes = ("tools",)`. It is **not** a default built-in — you must pass it at compile time: `builder.compile(transformers=[ToolCallTransformer])`.
 - The transformer maintains `_active: dict[str, ToolCallStream]` keyed by `tool_call_id`. It dispatches four event types: `"tool-started"` → creates a new `ToolCallStream` and pushes it onto `run.tool_calls`; `"tool-output-delta"` → calls `stream._push_delta(data["delta"])`; `"tool-finished"` → calls `stream._finish(data["output"])`; `"tool-error"` → calls `stream._fail(data["message"])`.
-- `ToolCallStream` fields: `tool_call_id: str`, `tool_name: str`, `input: dict | None`, `output_deltas: StreamChannel[Any]` (a drainable channel of streamed delta chunks), `output: Any` (set on `tool-finished`), `error: str | None` (set on `tool-error`), `completed: bool`. Iterate via `for delta in stream` (sync) or `async for delta in stream` (async).
+- `ToolCallStream` (from `langgraph.prebuilt._tool_call_stream`) fields: `tool_call_id: str`, `tool_name: str`, `input: dict | None`, `output_deltas: StreamChannel[Any]` (a drainable channel of streamed delta chunks), `output: Any` (set on `tool-finished`), `error: str | None` (set on `tool-error`), `completed: bool`. Iterate via `for delta in stream` (sync) or `async for delta in stream` (async).
 - The `_bind_pump` / `_bind_apump` methods are called by `StreamMux.bind_pump` to wire the pump callback so `output_deltas` can be iterated on demand. The active mode (sync or async) is locked at pump-bind time.
 - Events on the `tools` channel still pass through (`process` returns `True`) — wire consumers subscribing to the raw `tools` channel still see every event. `ToolCallTransformer` is purely additive.
 - `finalize()` closes any still-active streams when the run ends normally; `fail(err)` fails them when the run errors.
@@ -707,15 +707,14 @@ graph = builder.compile()
 
 
 async def watch_tool_calls() -> None:
-    async with graph.astream_events(
+    async for event in graph.astream_events(
         {"messages": [HumanMessage("Price of AAPL and MSFT?")]},
         version="v2",
-    ) as events:
-        async for event in events:
-            if event["event"] == "on_tool_start":
-                print(f"Tool started: {event['name']} with {event['data'].get('input')}")
-            elif event["event"] == "on_tool_end":
-                print(f"Tool finished: {event['name']} → {event['data'].get('output')}")
+    ):
+        if event["event"] == "on_tool_start":
+            print(f"Tool started: {event['name']} with {event['data'].get('input')}")
+        elif event["event"] == "on_tool_end":
+            print(f"Tool finished: {event['name']} → {event['data'].get('output')}")
 
 
 asyncio.run(watch_tool_calls())
@@ -725,7 +724,8 @@ asyncio.run(watch_tool_calls())
 
 ```python
 import asyncio
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer, ToolCallStream
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.prebuilt._tool_call_stream import ToolCallStream
 from langgraph.stream._mux import StreamMux
 from langgraph.stream.stream_channel import StreamChannel
 
@@ -763,7 +763,7 @@ asyncio.run(simulate_tool_lifecycle())
 
 ```python
 import asyncio
-from langgraph.prebuilt._tool_call_transformer import ToolCallStream
+from langgraph.prebuilt._tool_call_stream import ToolCallStream
 
 
 async def simulate_tool_failure() -> None:
@@ -967,45 +967,34 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 
 
-class InnerState(TypedDict):
-    x: int
-
-
-class OuterState(TypedDict):
+class State(TypedDict):
     value: int
 
 
-def inner_step(state: InnerState) -> dict:
-    return {"x": state["x"] * 3}
+def multiply(state: State) -> dict:
+    return {"value": state["value"] * 3}
 
 
-inner_builder = StateGraph(InnerState)
-inner_builder.add_node("multiply", inner_step)
+inner_builder = StateGraph(State)
+inner_builder.add_node("multiply", multiply)
 inner_builder.add_edge(START, "multiply")
 inner_builder.add_edge("multiply", END)
 inner_graph = inner_builder.compile()
 
-
-def outer_step(state: OuterState) -> dict:
-    result = inner_graph.invoke({"x": state["value"]})
-    return {"value": result["x"]}
-
-
-outer_builder = StateGraph(OuterState)
-outer_builder.add_node("inner", outer_step)
+outer_builder = StateGraph(State)
+outer_builder.add_node("inner", inner_graph)  # wire compiled graph directly as a node
 outer_builder.add_edge(START, "inner")
 outer_builder.add_edge("inner", END)
 
 graph = outer_builder.compile(checkpointer=InMemorySaver())
 
-for chunk in graph.stream(
+for ns, chunk in graph.stream(
     {"value": 7},
     config={"configurable": {"thread_id": "sub-demo"}},
     stream_mode="values",
     subgraphs=True,
 ):
-    ns, data = chunk
-    print(f"namespace={ns}  data={data}")
+    print(f"namespace={ns}  data={chunk}")
 ```
 
 ### Example 2 — async subgraph streaming with `subgraphs=True`
@@ -1032,12 +1021,8 @@ sub_builder.add_edge("inc", END)
 sub_graph = sub_builder.compile()
 
 
-def run_sub(state: State) -> dict:
-    return sub_graph.invoke(state)
-
-
 main_builder = StateGraph(State)
-main_builder.add_node("sub", run_sub)
+main_builder.add_node("sub", sub_graph)  # wire compiled graph directly as a node
 main_builder.add_edge(START, "sub")
 main_builder.add_edge("sub", END)
 
@@ -1064,54 +1049,43 @@ asyncio.run(async_subgraph_stream())
 ```python
 import asyncio
 from typing_extensions import TypedDict
-import operator
-from typing import Annotated
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send
 from langgraph.checkpoint.memory import InMemorySaver
 
 
-class RootState(TypedDict):
-    items: list[str]
-    processed: Annotated[list[str], operator.add]
+class State(TypedDict):
+    n: int
+    total: int
 
 
-class WorkerState(TypedDict):
-    item: str
-    result: str
+def add_ten(state: State) -> dict:
+    return {"n": state["n"] + 10}
 
 
-def worker_node(state: WorkerState) -> dict:
-    return {"result": state["item"].upper()}
+inner_builder = StateGraph(State)
+inner_builder.add_node("add", add_ten)
+inner_builder.add_edge(START, "add")
+inner_builder.add_edge("add", END)
+inner_graph = inner_builder.compile()
 
 
-worker_builder = StateGraph(WorkerState)
-worker_builder.add_node("process", worker_node)
-worker_builder.add_edge(START, "process")
-worker_builder.add_edge("process", END)
-worker_graph = worker_builder.compile()
+def accumulate(state: State) -> dict:
+    return {"total": state["total"] + state["n"]}
 
 
-def fan_out(state: RootState) -> list[Send]:
-    return [Send("worker", {"item": i, "result": ""}) for i in state["items"]]
+outer_builder = StateGraph(State)
+outer_builder.add_node("inner", inner_graph)  # compiled subgraph wired as a node
+outer_builder.add_node("acc", accumulate)
+outer_builder.add_edge(START, "inner")
+outer_builder.add_edge("inner", "acc")
+outer_builder.add_edge("acc", END)
 
-
-def run_worker(state: WorkerState) -> dict:
-    r = worker_graph.invoke(state)
-    return {"processed": [r["result"]]}
-
-
-root_builder = StateGraph(RootState)
-root_builder.add_node("worker", run_worker)
-root_builder.add_conditional_edges(START, fan_out)
-root_builder.add_edge("worker", END)
-
-graph = root_builder.compile(checkpointer=InMemorySaver())
+graph = outer_builder.compile(checkpointer=InMemorySaver())
 
 
 async def trace_updates() -> None:
     async for ns, update in graph.astream(
-        {"items": ["alpha", "beta"], "processed": []},
+        {"n": 5, "total": 0},
         config={"configurable": {"thread_id": "trace"}},
         stream_mode="updates",
         subgraphs=True,
@@ -1145,6 +1119,7 @@ import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.stream.transformers import LifecycleTransformer
 
 
 class State(TypedDict):
@@ -1155,24 +1130,22 @@ def step(state: State) -> dict:
     return {"n": state["n"] + 1}
 
 
-# Inner subgraph
+# Inner subgraph wired directly as a node so it gets its own namespace
 inner = StateGraph(State)
 inner.add_node("step", step)
 inner.add_edge(START, "step")
 inner.add_edge("step", END)
 inner_graph = inner.compile()
 
-
-def outer_step(state: State) -> dict:
-    return inner_graph.invoke(state)
-
-
 outer = StateGraph(State)
-outer.add_node("outer_step", outer_step)
-outer.add_edge(START, "outer_step")
-outer.add_edge("outer_step", END)
+outer.add_node("inner", inner_graph)  # compiled graph as node → creates child namespace
+outer.add_edge(START, "inner")
+outer.add_edge("inner", END)
 
-graph = outer.compile(checkpointer=InMemorySaver())
+graph = outer.compile(
+    checkpointer=InMemorySaver(),
+    transformers=[LifecycleTransformer],
+)
 
 
 async def watch_lifecycle() -> None:
@@ -1226,7 +1199,7 @@ result = graph.invoke(
 print(f"Completed with step_count={result['step_count']}")
 ```
 
-### Example 3 — filter `LifecyclePayload` to count subgraph invocations
+### Example 3 — filter `LifecyclePayload` by event type
 
 ```python
 import asyncio
@@ -1236,6 +1209,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.stream.transformers import LifecycleTransformer
 
 
 class Root(TypedDict):
@@ -1264,10 +1238,10 @@ builder.add_node("worker", run_worker)
 builder.add_conditional_edges(START, fan_out)
 builder.add_edge("worker", END)
 
-graph = builder.compile(checkpointer=InMemorySaver())
+graph = builder.compile(checkpointer=InMemorySaver(), transformers=[LifecycleTransformer])
 
 
-async def count_subgraphs() -> None:
+async def count_events() -> None:
     started = 0
     completed = 0
 
@@ -1283,10 +1257,10 @@ async def count_subgraphs() -> None:
         elif event == "completed":
             completed += 1
 
-    print(f"Subgraph invocations: started={started}  completed={completed}")
+    print(f"Lifecycle events: started={started}  completed={completed}")
 
 
-asyncio.run(count_subgraphs())
+asyncio.run(count_events())
 ```
 
 ---
@@ -1432,7 +1406,7 @@ print(result["processed"])  # result: hello world
 | `get_client` | `langgraph.pregel.remote` | Create async `LangGraphClient` (supports ASGI loopback) |
 | `get_sync_client` | `langgraph.pregel.remote` | Create sync `SyncLangGraphClient` for script contexts |
 | `ToolCallTransformer` | `langgraph.prebuilt._tool_call_transformer` | Opt-in transformer projecting `tools` events onto `run.tool_calls` |
-| `ToolCallStream` | `langgraph.prebuilt._tool_call_transformer` | Per-tool handle with `output_deltas`, `output`, `error`, `completed` |
+| `ToolCallStream` | `langgraph.prebuilt._tool_call_stream` | Per-tool handle with `output_deltas`, `output`, `error`, `completed` |
 | `DebugTransformer` | `langgraph.stream.transformers` | Native transformer surfacing `stream_mode="debug"` on `run.debug` |
 | `TasksTransformer` | `langgraph.stream.transformers` | Native transformer surfacing `stream_mode="tasks"` on `run.tasks` |
 | `SubgraphTransformer` | `langgraph.stream.transformers` | Discovers direct-child subgraphs and pushes navigation handles onto `run.subgraphs` |
