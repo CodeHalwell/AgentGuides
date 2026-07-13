@@ -728,76 +728,112 @@ async def watch_tool_calls() -> None:
 asyncio.run(watch_tool_calls())
 ```
 
-### Example 2 — consume `ToolCallStream.output_deltas` for streaming tool output
+### Example 2 — consume `ToolCallStream` deltas via `run.tool_calls`
 
 ```python
 import asyncio
-from langgraph.prebuilt._tool_call_stream import ToolCallStream
-
-# Demonstrate ToolCallStream lifecycle directly (without a full graph)
-async def simulate_tool_lifecycle() -> None:
-    stream = ToolCallStream(
-        tool_call_id="call_123",
-        tool_name="search",
-        input={"query": "LangGraph"},
-    )
-    # Bind to async mode
-    stream._bind(is_async=True)
-
-    # Simulate deltas arriving from a streaming tool
-    async def produce() -> None:
-        for chunk in ["Result", " for", " LangGraph"]:
-            stream._push_delta(chunk)
-        stream._finish("Result for LangGraph")
-
-    async def consume() -> None:
-        full = ""
-        async for delta in stream:
-            full += delta
-            print(f"  delta: {delta!r}")
-        print(f"Completed: {stream.completed}, output: {stream.output!r}")
-        print(f"Full streamed text: {full!r}")
-
-    await asyncio.gather(produce(), consume())
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.graph import StateGraph, START, END
 
 
-asyncio.run(simulate_tool_lifecycle())
+@tool
+def search(query: str) -> str:
+    """Search the web for information."""
+    return f"Top results for '{query}': LangGraph docs, tutorials, examples."
+
+
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools([search])
+
+
+def call_model(state: MessagesState) -> dict:
+    return {"messages": [llm.invoke(state["messages"])]}
+
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", ToolNode([search]))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+# Register transformer: tools events are projected onto run.tool_calls
+graph = builder.compile(transformers=[ToolCallTransformer])
+
+
+async def stream_tool_output() -> None:
+    async for run in graph.astream(
+        {"messages": [HumanMessage("Search for LangGraph streaming docs")]},
+        stream_mode="tools",
+    ):
+        async for tc_stream in run.tool_calls:
+            print(f"Tool: {tc_stream.tool_name}  id={tc_stream.tool_call_id}")
+            async for delta in tc_stream:
+                print(f"  delta: {delta!r}")
+            print(f"  output: {tc_stream.output!r}")
+            print(f"  completed: {tc_stream.completed}")
+
+
+asyncio.run(stream_tool_output())
 ```
 
 ### Example 3 — handle `ToolCallStream.error` for failed tools
 
 ```python
 import asyncio
-from langgraph.prebuilt._tool_call_stream import ToolCallStream
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.graph import StateGraph, START, END
 
 
-async def simulate_tool_failure() -> None:
-    stream = ToolCallStream(
-        tool_call_id="call_fail",
-        tool_name="risky_tool",
-        input={"x": -1},
-    )
-    stream._bind(is_async=True)
-
-    async def produce() -> None:
-        stream._push_delta("partial...")
-        # Simulate a tool error
-        stream._fail("Division by zero in risky_tool")
-
-    async def consume() -> None:
-        collected = []
-        async for delta in stream:
-            collected.append(delta)
-        if stream.error:
-            print(f"Tool failed: {stream.error!r}")
-            print(f"Partial output before failure: {collected}")
-        else:
-            print(f"Tool succeeded: {stream.output!r}")
-
-    await asyncio.gather(produce(), consume())
+@tool
+def risky_divide(x: int, y: int) -> float:
+    """Divide x by y."""
+    if y == 0:
+        raise ValueError("Cannot divide by zero")
+    return x / y
 
 
-asyncio.run(simulate_tool_failure())
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools([risky_divide])
+
+
+def call_model(state: MessagesState) -> dict:
+    return {"messages": [llm.invoke(state["messages"])]}
+
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", ToolNode([risky_divide]))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(transformers=[ToolCallTransformer])
+
+
+async def handle_tool_errors() -> None:
+    async for run in graph.astream(
+        {"messages": [HumanMessage("Compute 10 divided by 0")]},
+        stream_mode="tools",
+    ):
+        async for tc_stream in run.tool_calls:
+            async for _ in tc_stream:  # drain any partial deltas
+                pass
+            if tc_stream.error:
+                print(f"Tool '{tc_stream.tool_name}' failed: {tc_stream.error!r}")
+            else:
+                print(f"Result: {tc_stream.output}")
+
+
+asyncio.run(handle_tool_errors())
 ```
 
 ---
@@ -1112,7 +1148,7 @@ asyncio.run(trace_updates())
 **Key source facts** (from `langgraph/stream/transformers.py`):
 
 - `LifecyclePayload` is `TypedDict(total=False)` with fields: `event: SubgraphStatus` (`"started" | "completed" | "failed" | "interrupted" | "drained"`), `namespace: list[str]` (the subgraph's namespace path), `graph_name: NotRequired[str]`, `trigger_call_id: NotRequired[str]` (the `@task` call ID that spawned this subgraph, if any), `cause: NotRequired[LifecycleCause]` (`"node_step"` or `"@task"`), and `error: NotRequired[str]` (error message on `"failed"` events). All fields are optional (`total=False`) so the dict may be sparse.
-- `LifecycleTransformer` pushes a `LifecyclePayload` onto `run.lifecycle` for **every** namespace (including the root — namespace `[]`). Consumers filter by `payload["namespace"]` to watch specific subgraphs.
+- `LifecycleTransformer` pushes a `LifecyclePayload` onto `run.lifecycle` only for **child** namespaces — namespaces strictly nested below the transformer's own scope (`len(ns) > depth`). The root namespace `[]` is not tracked. Consumers filter by `payload["namespace"]` to identify which subgraph emitted an event.
 - `GraphDrained(reason="shutdown")` is a `GraphBubbleUp` subclass — a sentinel exception in the same family as `GraphInterrupt` that Pregel catches and converts into a graceful exit. The graph saves a checkpoint at the last superstep boundary and raises `GraphDrained` to the caller; callers should catch it and may resume the thread later with `graph.invoke(None, config=cfg)`.
 - `RunControl.request_drain(reason="...")` is the trigger for `GraphDrained`. Call it from a `SIGTERM` handler or any background thread — it is thread-safe (no locks needed — it only sets a `bool` attribute on the `RunControl` dataclass, which Pregel polls at each superstep boundary).
 - `LifecyclePayload` events flow through the same `lifecycle` channel regardless of whether the subgraph is local or a `RemoteGraph`; remote SDK clients receive identical payloads via the wire protocol.
@@ -1283,7 +1319,7 @@ asyncio.run(count_events())
 - `explode_args=True` means the function receives the `input` dict unpacked as keyword arguments: `func(**input)` instead of `func(input)`. This is the pattern used internally by `ToolNode` for tool functions.
 - `trace=True` (default) wraps the call in a LangSmith trace span; set `trace=False` for internal utility functions you don't want in traces.
 - `recurse=True` (default) means if the function returns another `Runnable`, it is invoked recursively. Set `recurse=False` to return the runnable itself rather than chasing it.
-- `invoke()` calls `func(input, **injected_kwargs)`; `ainvoke()` calls `afunc(input, **injected_kwargs)` if present, otherwise falls back to running `func` in a thread pool via `asyncio.get_event_loop().run_in_executor`.
+- `invoke()` calls `func(input, **injected_kwargs)`; `ainvoke()` calls `afunc(input, **injected_kwargs)` if present, otherwise falls back to calling `invoke()` synchronously — this blocks the event loop, so always supply an explicit `afunc` for non-blocking async behaviour.
 
 ### Example 1 — wrap a sync/async function pair for a node
 
@@ -1338,12 +1374,12 @@ class State(TypedDict):
     result: int
 
 
-def add(x: int, y: int) -> dict:
-    """Receives individual fields, not the whole state dict."""
+def add(x: int, y: int, **_: object) -> dict:
+    """Receives state fields unpacked as kwargs; extra state keys ignored via **_."""
     return {"result": x + y}
 
 
-# With explode_args=True, add(x=state["x"], y=state["y"]) is called
+# explode_args=True calls func(**state_dict); function must accept all state keys
 node = RunnableCallable(add, name="add", explode_args=True)
 
 builder = StateGraph(State)
