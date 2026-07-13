@@ -173,11 +173,12 @@ graph.invoke({"value": 42, "approved": False}, config=cfg)
 
 # Walk history
 for snap in graph.get_state_history(cfg):
+    meta = snap.metadata or {}
     print(
-        f"step={snap.metadata.get('step')} "
+        f"step={meta.get('step')} "
         f"next={snap.next} "
         f"interrupts={len(snap.interrupts)} "
-        f"source={snap.metadata.get('source')}"
+        f"source={meta.get('source')}"
     )
 ```
 
@@ -714,7 +715,7 @@ async def watch_tool_calls() -> None:
     builder.add_conditional_edges("agent", tools_condition)
     builder.add_edge("tools", "agent")
 
-    graph = builder.compile(stream_mode=["messages", "tools"])
+    graph = builder.compile()
 
     async with graph.astream_events(
         {"messages": [HumanMessage("Price of AAPL and MSFT?")]},
@@ -846,7 +847,6 @@ builder.add_edge("tick", END)
 checkpointer = InMemorySaver()
 graph = builder.compile(
     checkpointer=checkpointer,
-    stream_mode=["debug"],
 )
 
 
@@ -1228,7 +1228,7 @@ builder = StateGraph(State)
 builder.add_node("work", long_step)
 builder.add_edge(START, "work")
 # Loop back to simulate a long-running workflow (add recursion_limit)
-builder.add_edge("work", END)
+builder.add_edge("work", "work")
 
 graph = builder.compile(checkpointer=InMemorySaver())
 
