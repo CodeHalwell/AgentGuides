@@ -22,7 +22,7 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 
 - `Command` is a `@dataclass` with four fields: `graph: str | None` (defaults to current graph; `Command.PARENT = "__parent__"` targets the nearest parent), `update: Any | None` (state patch applied before routing), `resume: dict | Any | None` (value delivered to the next `interrupt()` call — either a `{interrupt_id: value}` mapping or a bare value that resolves the next interrupt in order), and `goto: Send | Sequence[Send | N] | N = ()` (destination node(s) or `Send` objects).
 - `Command._update_as_tuples()` handles three update shapes: plain `dict`, a list/tuple of `(key, value)` pairs, and a Pydantic/dataclass model where `get_cached_annotated_keys` extracts annotated keys. Non-dict scalars become `[("__root__", value)]` for root-type states.
-- `Send` uses `__slots__ = ("node", "arg", "timeout")` for zero-overhead iteration. The `timeout` argument accepts a bare `float` (seconds), `timedelta`, or a `TimeoutPolicy` — all normalised via `TimeoutPolicy.coerce(timeout)`. `Send` is both hashable and equality-comparable on all three fields, making it safe in sets and dicts.
+- `Send` uses `__slots__ = ("node", "arg", "timeout")` for zero-overhead iteration. The `timeout` argument accepts a bare `float` (seconds), `timedelta`, or a `TimeoutPolicy` — all normalised via `TimeoutPolicy.coerce(timeout)`. `Send.__hash__` hashes all three fields (`node`, `arg`, `timeout`), so `Send` is hashable and set/dict-safe **only when `arg` is hashable** (e.g. a frozen dataclass or a string); the common case of passing a state `dict` as `arg` makes `Send` unhashable.
 - A `Command` returned from a node is treated identically to one returned from a conditional edge. Returning `Command(goto="other_node", update={"key": val})` atomically updates state **and** routes.
 - `Command.PARENT` works only when the current subgraph was invoked by a parent Pregel; using it at the root raises a `KeyError` from the Pregel config lookup.
 
@@ -146,7 +146,7 @@ print(result["answer"])  # 4
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import interrupt, Command
+from langgraph.types import interrupt
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -330,7 +330,6 @@ for snap in graph.get_state_history(cfg):
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import interrupt, Command
 
 
 class State(TypedDict):
