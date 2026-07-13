@@ -213,7 +213,6 @@ agent = Agent(
     capabilities=[
         WebSearch(
             allowed_domains=['arxiv.org', 'nature.com', 'science.org'],
-            max_uses=3,
         )
     ],
 )
@@ -664,7 +663,6 @@ asyncio.run(handle_request())
 ### 6.3 FastAPI Lifespan Integration
 
 ```python
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
