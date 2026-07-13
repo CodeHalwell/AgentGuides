@@ -28,7 +28,7 @@ configure_otel_providers()
 Set the usual OTel env vars before calling:
 
 ```bash
-export ENABLE_INSTRUMENTATION=true
+# ENABLE_INSTRUMENTATION=true is the default — omit unless you previously set it to false
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 export OTEL_SERVICE_NAME=my-agent
@@ -528,7 +528,7 @@ settings = ObservabilitySettings(env_file_path=".env.test", env_file_encoding="u
 
 ## Disabling everything
 
-`ENABLE_INSTRUMENTATION` defaults to `True` — you only need to set `ENABLE_INSTRUMENTATION=true` if you've previously set it to `false` and want to restore the default. Set `ENABLE_INSTRUMENTATION=false` (or call `disable_instrumentation()`) to suppress all signals. `disable_instrumentation()` also applies a **sticky disable** that survives any subsequent `enable_instrumentation()` call, library auto-setup, or direct property write — nothing re-enables it until you pass `force=True`:
+`ObservabilitySettings` defaults `enable_instrumentation` to `True`, so the framework emits spans, metrics, and logs without any env var. What you *do* need is at least one OTel exporter configured (via `configure_otel_providers()`, `configure_azure_monitor()`, or your own provider) — without one, signals are emitted but discarded. Set `ENABLE_INSTRUMENTATION=false` to suppress all signal emission entirely; call `disable_instrumentation()` to apply a **sticky disable** that survives any subsequent `enable_instrumentation()` call, library auto-setup, or direct property write — nothing re-enables it until you pass `force=True`:
 
 ```python
 from agent_framework.observability import (
