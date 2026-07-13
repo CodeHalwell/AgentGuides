@@ -42,7 +42,7 @@ import asyncio
 from typing import AsyncGenerator, Any
 from google.adk.workflow import Workflow, START
 from google.adk.workflow._node import Node
-from google.adk.tools.tool_context import Context
+from google.adk.tools.tool_context import ToolContext
 from google.adk.apps import App
 from google.adk.runners import InMemoryRunner
 
@@ -52,7 +52,7 @@ class TextSplitterNode(Node):
     chunk_size: int = 200
 
     async def run_node_impl(
-        self, *, ctx: Context, node_input: Any
+        self, *, ctx: ToolContext, node_input: Any
     ) -> AsyncGenerator[Any, None]:
         text = str(node_input or "")
         chunks = [
@@ -89,13 +89,13 @@ import asyncio
 from typing import AsyncGenerator, Any
 from google.adk.workflow import Workflow, START
 from google.adk.workflow._node import Node
-from google.adk.tools.tool_context import Context
+from google.adk.tools.tool_context import ToolContext
 
 class SentimentNode(Node):
     """Analyse sentiment of a single text snippet (simulated)."""
 
     async def run_node_impl(
-        self, *, ctx: Context, node_input: Any
+        self, *, ctx: ToolContext, node_input: Any
     ) -> AsyncGenerator[Any, None]:
         text = str(node_input)
         # Real code would call an LLM or ML model here
@@ -122,14 +122,14 @@ pipeline = Workflow(name="batch_sentiment", edges=[(START, parallel_sentiment)])
 ```python
 from google.adk.workflow import Workflow, START, RetryConfig
 from google.adk.workflow._node import Node
-from google.adk.tools.tool_context import Context
+from google.adk.tools.tool_context import ToolContext
 from typing import AsyncGenerator, Any
 
 class FlakyExternalCallNode(Node):
     url: str = "https://api.example.com/data"
 
     async def run_node_impl(
-        self, *, ctx: Context, node_input: Any
+        self, *, ctx: ToolContext, node_input: Any
     ) -> AsyncGenerator[Any, None]:
         import httpx
         async with httpx.AsyncClient() as client:
@@ -414,7 +414,7 @@ pipeline = Workflow(
 
 **Source:** `google/adk/plugins/logging_plugin.py`
 
-`LoggingPlugin` is a `BasePlugin` that prints all ADK events to the console. It implements 9 callback hooks and is intended for **development debugging** — it is not a replacement for production logging.
+`LoggingPlugin` is a `BasePlugin` that prints all ADK events to the console. It implements 12 callback hooks and is intended for **development debugging** — it is not a replacement for production logging.
 
 ### Callback hooks implemented (verified `logging_plugin.py`)
 
@@ -428,8 +428,10 @@ pipeline = Workflow(
 | `after_agent_callback` | Agent name finished |
 | `before_model_callback` | LLM request preview |
 | `after_model_callback` | LLM response preview |
+| `on_model_error_callback` | Exception from LLM call |
 | `before_tool_callback` | Tool name, arguments |
 | `after_tool_callback` | Tool name, result |
+| `on_tool_error_callback` | Exception from tool execution |
 
 ### Example 1 — attach to runner
 
@@ -599,10 +601,13 @@ agent = LlmAgent(
 
 ### Example 3 — role-based tool filtering with `ReadonlyContext`
 
+Dynamic per-request tool selection requires a `BaseToolset` — its `get_tools(readonly_context)` method is called each invocation with a `ReadonlyContext`.
+
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
-from google.adk.tools import BaseTool
+from google.adk.tools.base_toolset import BaseToolset
+from google.adk.tools.function_tool import FunctionTool
 from typing import Optional
 
 def delete_record(record_id: str) -> dict:
@@ -613,19 +618,26 @@ def read_record(record_id: str) -> dict:
     """Read a record by ID."""
     return {"record_id": record_id, "data": "..."}
 
-def role_filtered_tools(ctx: ReadonlyContext) -> list:
-    """Return tools based on user role stored in session state."""
-    role = ctx.state.get("user_role", "viewer")
-    tools = [read_record]
-    if role == "admin":
-        tools.append(delete_record)
-    return tools
+class RoleFilteredToolset(BaseToolset):
+    """Expose tools based on the user_role key in session state."""
+
+    async def get_tools(
+        self, readonly_context: Optional[ReadonlyContext] = None
+    ) -> list[FunctionTool]:
+        role = readonly_context.state.get("user_role", "viewer") if readonly_context else "viewer"
+        tools = [FunctionTool(func=read_record)]
+        if role == "admin":
+            tools.append(FunctionTool(func=delete_record))
+        return tools
+
+    async def close(self) -> None:
+        pass
 
 agent = LlmAgent(
     name="rbac_agent",
     model="gemini-2.5-flash",
     instruction="Manage records. Available actions depend on your role.",
-    tools=role_filtered_tools,  # callable tools list — receives ReadonlyContext
+    tools=[RoleFilteredToolset()],
 )
 ```
 
@@ -1054,7 +1066,7 @@ async def save_user_preference(
             parts=[types.Part(text=f"User prefers {value} for {category}.")],
         ),
         author="system",
-        metadata={"category": category, "value": value, "source": "preference_tool"},
+        custom_metadata={"category": category, "value": value, "source": "preference_tool"},
     )
     await tool_context.add_memory(memories=[entry])
     return {"saved": True, "category": category}
@@ -1105,11 +1117,11 @@ from google.adk.tools.tool_context import ToolContext
 async def recall_about(topic: str, tool_context: ToolContext) -> dict:
     """Search memory for information about a topic."""
     result = await tool_context.search_memory(topic)
+    # result.memories is list[MemoryEntry]; each entry has a .content (types.Content)
     memories = [
-        e.content.parts[0].text
+        m.content.parts[0].text
         for m in result.memories
-        for e in m.events
-        if e.content and e.content.parts and e.content.parts[0].text
+        if m.content and m.content.parts and m.content.parts[0].text
     ]
     return {"topic": topic, "recalled": memories[:5]}
 
@@ -1125,7 +1137,7 @@ agent = LlmAgent(
 
 | Method | Use when | Works with |
 |---|---|---|
-| `add_session_to_memory(session)` | You want to ingest the entire session at the end of a run | All services |
+| `add_session_to_memory()` | You want to ingest the entire session at the end of a run | All services |
 | `add_events_to_memory(events=...)` | You want to persist only the current turn (delta) | All services |
 | `add_memory(memories=...)` | You want to write structured facts directly (not from events) | Vertex AI Memory Bank; raises `NotImplementedError` on `InMemoryMemoryService` |
 | `search_memory(query)` | You want to retrieve relevant memories | All services |
