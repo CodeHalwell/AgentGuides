@@ -196,8 +196,8 @@ GAIA(
 )
 
 Key methods:
-  await gaia.run(task_runner, split="validation", level=None, max_tasks=None,
-                 concurrency=5, timeout=300) -> list[TaskResult]
+  await gaia.run(task_runner, level=1, max_n=None,
+                 parallel=1, timeout=None, out=None) -> list[TaskResult]
   await gaia.run_task(task_runner, task, timeout=300) -> TaskResult
 ```
 
@@ -1242,7 +1242,7 @@ class ConfigurableClient(BaseChatClient):
         self.endpoint = endpoint
         self._api_key = api_key   # excluded via DEFAULT_EXCLUDE
 
-    async def _inner_get_response(self, *, messages, stream, options, **kwargs):
+    def _inner_get_response(self, *, messages, stream, options, **kwargs):
         raise NotImplementedError
 
     def to_dict(self):
