@@ -6,8 +6,13 @@ sidebar:
   order: 62
 ---
 
-All examples are verified against **pydantic-ai 2.9.1** installed from PyPI. Three
-runnable examples per class group; all code blocks pass `ast.parse()` syntax validation.
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="tip">
+All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three runnable examples per class group; all code blocks pass `ast.parse()` syntax validation.
+</Aside>
+
+Ten class groups covering the streaming event protocol, delta types, DynamicToolset factory patterns, capability toolset injection, search result DTOs, AnthropicModelSettings cache controls, Vercel AI SDK inbound request types, ModelResponsePartsManager stream management, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas schema injection.
 
 ---
 
@@ -185,7 +190,7 @@ from pydantic_ai.messages import (
 
 agent = Agent(
     'anthropic:claude-opus-4-5',
-    capabilities=[Thinking(thinking_level='low')],
+    capabilities=[Thinking(effort='low')],
 )
 
 
@@ -627,7 +632,7 @@ settings: AnthropicModelSettings = {
 
 ---
 
-## 7 · Vercel AI SDK request types: `TextUIPart` + `ReasoningUIPart` + `FileUIPart` + `ToolApprovalRequested`
+## 7 · Vercel AI SDK request types: `TextUIPart` + `ReasoningUIPart` + `FileUIPart` + `ToolApprovalRequestedPart` + `ToolApprovalRespondedPart`
 
 **Source:** `pydantic_ai/ui/vercel_ai/request_types.py`
 
@@ -736,7 +741,7 @@ chunks = [
     TextDeltaChunk(id='txt-001', delta='Hello, '),
     TextDeltaChunk(id='txt-001', delta='world!'),
     TextEndChunk(id='txt-001'),
-    FinishChunk(finish_reason='stop', usage={'input_tokens': 5, 'output_tokens': 3}),
+    FinishChunk(finish_reason='stop'),
 ]
 
 # Each line is sent as `data: <json>\n\n` in an SSE endpoint
@@ -767,7 +772,7 @@ stream = [
     TextStartChunk(id='txt-002'),
     TextDeltaChunk(id='txt-002', delta='The answer is 42.'),
     TextEndChunk(id='txt-002'),
-    FinishChunk(finish_reason='stop', usage={'input_tokens': 10, 'output_tokens': 6}),
+    FinishChunk(finish_reason='stop'),
 ]
 
 for c in stream:
@@ -796,11 +801,11 @@ stream = [
     TextStartChunk(id='txt-003'),
     TextDeltaChunk(id='txt-003', delta='I need to delete a file.'),
     TextEndChunk(id='txt-003'),
-    ToolInputStartChunk(id='call-001', tool_call_id='tc-001', tool_name='delete_file'),
+    ToolInputStartChunk(tool_call_id='tc-001', tool_name='delete_file'),
     ToolInputDeltaChunk(tool_call_id='tc-001', input_text_delta='{"path": "/etc/hosts"}'),
     ToolInputAvailableChunk(tool_call_id='tc-001', tool_name='delete_file', input='{"path": "/etc/hosts"}'),
     ToolApprovalRequestChunk(approval_id='apr-001', tool_call_id='tc-001'),
-    FinishChunk(finish_reason='tool-calls', usage={'input_tokens': 20, 'output_tokens': 15}),
+    FinishChunk(finish_reason='tool-calls'),
 ]
 
 for c in stream:
@@ -843,10 +848,9 @@ class EchoStreamedResponse(StreamedResponse):
         self._words = words
 
     async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:
-        manager = ModelResponsePartsManager(self.model_request_parameters)
         for word in self._words:
-            # handle_text_delta is a synchronous Iterator; yield each event directly
-            for event in manager.handle_text_delta(vendor_part_id='text', content=word + ' '):
+            # Use self._parts_manager so __aiter__'s PartEndEvent logic stays in sync
+            for event in self._parts_manager.handle_text_delta(vendor_part_id='text', content=word + ' '):
                 yield event
 
     async def close_stream(self) -> None:
@@ -920,7 +924,7 @@ async def inspect_manager() -> None:
     params = ModelRequestParameters(
         function_tools=[],
         output_tools=[],
-        allow_text_result=True,
+        allow_text_output=True,
     )
     manager = ModelResponsePartsManager(params)
 
@@ -929,7 +933,7 @@ async def inspect_manager() -> None:
         pass
 
     # The manager tracks current parts
-    current = manager.get_response_parts()
+    current = manager.get_parts()
     assert len(current) == 1
     assert isinstance(current[0], TextPart)
     print('Content so far:', current[0].content)  # 'Hi!'
