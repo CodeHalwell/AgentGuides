@@ -486,6 +486,7 @@ validators, or build RAG pipelines on top of the built-in search tools.
 
 ```python
 # Example 1 — Post-process DuckDuckGo results: deduplicate by domain
+# Requires: pip install "pydantic-ai-slim[duckduckgo]"
 from pydantic_ai.common_tools.duckduckgo import DuckDuckGoResult, duckduckgo_search_tool
 from pydantic_ai import Agent
 from urllib.parse import urlparse
@@ -518,6 +519,7 @@ print(len(deduped))  # 2
 
 ```python
 # Example 2 — Filter TavilySearchResult by relevance score, then pass to agent
+# Requires: pip install "pydantic-ai-slim[tavily]"
 from pydantic_ai.common_tools.tavily import TavilySearchResult
 
 
@@ -536,6 +538,7 @@ print([r['title'] for r in trusted])  # ['Pydantic AI']
 
 ```python
 # Example 3 — Consume ExaSearchResult and ExaAnswerResult for a citations-aware agent
+# Requires: pip install "pydantic-ai-slim[exa]"
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.exa import ExaSearchResult, ExaAnswerResult, ExaToolset
 
@@ -691,8 +694,10 @@ assistant_msg = UIMessage(
     role='assistant',
     parts=[
         TextUIPart(type='text', text='Yes, proceed.'),
+        # type= encodes the tool name as 'tool-<name>'; the adapter extracts
+        # the name via type.removeprefix('tool-'). state= holds the lifecycle state.
         ToolApprovalRespondedPart(
-            type='tool-approval-responded',
+            type='tool-delete_file',
             tool_call_id='tc-001',
             approval=ToolApprovalResponded(id='apr-001', approved=True),
         ),
@@ -1002,7 +1007,7 @@ if HAS_INTERRUPTS:
     # Approved with edited args
     approved_entry = ResumeEntry(
         interrupt_id='pai_tc-abc-001',
-        status='completed',
+        status='resolved',  # AG-UI uses 'resolved' (not 'completed') for non-cancelled entries
         payload={'approved': True, 'editedArgs': {'path': '/tmp/safe.log'}},
     )
     result = resume_entry_to_approval(approved_entry)
@@ -1012,7 +1017,7 @@ if HAS_INTERRUPTS:
     # Denied with reason
     denied_entry = ResumeEntry(
         interrupt_id='pai_tc-abc-001',
-        status='completed',
+        status='resolved',
         payload={'approved': False, 'reason': 'Too dangerous'},
     )
     result2 = resume_entry_to_approval(denied_entry)
@@ -1031,9 +1036,9 @@ if HAS_INTERRUPTS:
 
     ambiguous_cases = [
         ResumeEntry(interrupt_id='pai_x', status='cancelled', payload=None),
-        ResumeEntry(interrupt_id='pai_x', status='completed', payload=None),
-        ResumeEntry(interrupt_id='pai_x', status='completed', payload={'approved': False}),
-        ResumeEntry(interrupt_id='pai_x', status='completed', payload={'approved': 'yes'}),
+        ResumeEntry(interrupt_id='pai_x', status='resolved', payload=None),
+        ResumeEntry(interrupt_id='pai_x', status='resolved', payload={'approved': False}),
+        ResumeEntry(interrupt_id='pai_x', status='resolved', payload={'approved': 'yes'}),
     ]
 
     for entry in ambiguous_cases:
