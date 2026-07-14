@@ -133,7 +133,7 @@ print(f"Now computed {call_count} time(s)")  # Now computed 2 time(s)
 
 - The single-input rule is enforced at decoration time via `inspect.signature`. Generators and async generators raise `NotImplementedError`.
 - `previous` is populated from the channel keyed `PREVIOUS` (a `LastValue` channel). If no checkpoint exists for the thread, `previous` is `MISSING` and the function's default value is used — typically `None`.
-- `context_schema` (replacing deprecated `config_schema`) wires the context via `Runtime[ContextT]`. Callers supply context through `config["configurable"]` under the context field names.
+- `context_schema` (replacing deprecated `config_schema`) wires the context via `Runtime[ContextT]`. Callers supply context via the `context=` keyword argument to `invoke()` / `stream()` — separate from `config["configurable"]`, which carries only runnable/checkpoint settings such as `thread_id`.
 - `store`, `cache`, `cache_policy`, `retry_policy`, and `timeout` are all passed directly to the internal `Pregel` constructor.
 - `entrypoint.final(value=..., save=...)` decouples what the caller receives (`value`) from what is written to the `PREVIOUS` channel for the next invocation (`save`). The output type annotation `-> entrypoint.final[R, S]` lets type checkers infer both types; unparameterised `-> entrypoint.final` defaults both to `Any`.
 - The `stream_mode` of the underlying `Pregel` is always `"updates"` and `stream_eager=True`, so partial results appear as soon as each task resolves.
@@ -211,14 +211,8 @@ def personalised(name: str, *, runtime: Runtime[RunContext]) -> str:
     return f"[{ctx['role'].upper()}] {greeting} (uid={ctx['user_id']})"
 
 
-config = {
-    "configurable": {
-        "thread_id": "ctx1",
-        "user_id": "u42",
-        "role": "admin",
-    }
-}
-print(personalised.invoke("Alice", config))
+config = {"configurable": {"thread_id": "ctx1"}}
+print(personalised.invoke("Alice", config, context={"user_id": "u42", "role": "admin"}))
 # [ADMIN] Hello, Alice (uid=u42)
 ```
 
@@ -491,7 +485,7 @@ from typing_extensions import TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import RemainingSteps
+from langgraph.managed import RemainingSteps
 
 
 class EnrichedState(TypedDict):
@@ -570,10 +564,14 @@ for msg in result["messages"]:
 ### Example 1 — logging wrapper (passthrough interceptor)
 
 ```python
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import ToolMessage, AIMessage, BaseMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
 
 
 def logging_wrapper(
@@ -592,24 +590,35 @@ def multiply(a: int, b: int) -> int:
     return a * b
 
 
-node = ToolNode([multiply], handle_tool_errors=False)
+class S(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
-# Manually invoke the wrapper chain by calling node with a state dict
-from langchain_core.messages import AIMessage
+
+node = ToolNode([multiply], wrap_tool_call=logging_wrapper)
+builder = StateGraph(S)
+builder.add_node("tools", node)
+builder.add_edge(START, "tools")
+builder.add_edge("tools", END)
+g = builder.compile()
 
 tool_call = {"name": "multiply", "args": {"a": 3, "b": 7}, "id": "c1", "type": "tool_call"}
-state = {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
-result = node.invoke(state)
-print(result["messages"][0].content)  # '21'
+result = g.invoke({"messages": [AIMessage(content="", tool_calls=[tool_call])]})
+# [BEFORE] tool=multiply args={'a': 3, 'b': 7}
+# [AFTER]  content='21'
+print(result["messages"][-1].content)  # 21
 ```
 
 ### Example 2 — `override()` to modify arguments before execution
 
 ```python
-from langchain_core.messages import ToolMessage, AIMessage
+from langchain_core.messages import ToolMessage, AIMessage, BaseMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
 
 
 def clamp_value_wrapper(
@@ -629,21 +638,33 @@ def set_volume(value: int) -> str:
     return f"Volume set to {value}"
 
 
-node = ToolNode([set_volume])
+class S(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+
+
+node = ToolNode([set_volume], wrap_tool_call=clamp_value_wrapper)
+builder = StateGraph(S)
+builder.add_node("tools", node)
+builder.add_edge(START, "tools")
+builder.add_edge("tools", END)
+g = builder.compile()
 
 tool_call = {"name": "set_volume", "args": {"value": 150}, "id": "v1", "type": "tool_call"}
-state = {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
-result = node.invoke(state)
-print(result["messages"][0].content)  # Volume set to 100
+result = g.invoke({"messages": [AIMessage(content="", tool_calls=[tool_call])]})
+print(result["messages"][-1].content)  # Volume set to 100
 ```
 
 ### Example 3 — retry wrapper with up to 3 attempts
 
 ```python
-from langchain_core.messages import ToolMessage, AIMessage
+from langchain_core.messages import ToolMessage, AIMessage, BaseMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from typing import Annotated, Sequence
+from typing_extensions import TypedDict
 
 call_count = 0
 
@@ -675,13 +696,21 @@ def retry_wrapper(
     )
 
 
-node = ToolNode([flaky_api], handle_tool_errors=False)
+class S(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+
+
+node = ToolNode([flaky_api], handle_tool_errors=False, wrap_tool_call=retry_wrapper)
+builder = StateGraph(S)
+builder.add_node("tools", node)
+builder.add_edge(START, "tools")
+builder.add_edge("tools", END)
+g = builder.compile()
 
 tool_call = {"name": "flaky_api", "args": {"query": "data"}, "id": "r1", "type": "tool_call"}
-state = {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
-result = node.invoke(state)
-print(result["messages"][0].content)  # result for 'data'
-print(f"Total calls: {call_count}")   # Total calls: 3
+result = g.invoke({"messages": [AIMessage(content="", tool_calls=[tool_call])]})
+print(result["messages"][-1].content)  # result for 'data'
+print(f"Total calls: {call_count}")    # Total calls: 3
 ```
 
 ---
