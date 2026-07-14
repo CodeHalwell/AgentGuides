@@ -9,7 +9,7 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="tip">
-All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation. Examples requiring API credentials have live calls commented out.
+All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation.
 </Aside>
 
 Ten class groups covering the streaming event protocol, delta types, DynamicToolset factory patterns, capability toolset injection, search result DTOs, AnthropicModelSettings cache controls, Vercel AI SDK inbound request types, ModelResponsePartsManager stream management, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas schema injection.
@@ -435,7 +435,7 @@ print(result.output)
 ```
 
 ```python
-# Example 3 — IncludeToolReturnSchemas with a selective name list + metadata predicate
+# Example 3 — IncludeToolReturnSchemas with a selective name list
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
 from pydantic_ai.toolsets import FunctionToolset
