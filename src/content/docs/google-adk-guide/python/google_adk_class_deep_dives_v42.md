@@ -482,9 +482,11 @@ class PrebuiltMetrics(Enum):
     RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1   = "rubric_based_final_response_quality_v1"
     HALLUCINATIONS_V1                        = "hallucinations_v1"
     RUBRIC_BASED_TOOL_USE_QUALITY_V1         = "rubric_based_tool_use_quality_v1"
+    PER_TURN_USER_SIMULATOR_QUALITY_V1       = "per_turn_user_simulator_quality_v1"
     MULTI_TURN_TASK_SUCCESS_V1               = "multi_turn_task_success_v1"
     MULTI_TURN_TRAJECTORY_QUALITY_V1         = "multi_turn_trajectory_quality_v1"
     MULTI_TURN_TOOL_USE_QUALITY_V1           = "multi_turn_tool_use_quality_v1"
+    RUBRIC_BASED_MULTI_TURN_TRAJECTORY_QUALITY_V1 = "rubric_based_multi_turn_trajectory_quality_v1"
 ```
 
 ### Example 1 — building an `EvalMetric` with a rubrics-based criterion
@@ -1133,11 +1135,11 @@ sessions); `session_id="<id>"` → session-scoped artifacts.
 import asyncio
 import time
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional, Union
 
 from google.genai import types
 from google.adk.artifacts.base_artifact_service import (
-    ArtifactVersion, BaseArtifactService,
+    ArtifactVersion, BaseArtifactService, ensure_part,
 )
 
 
@@ -1154,9 +1156,10 @@ class DictArtifactService(BaseArtifactService):
 
     async def save_artifact(
         self, *, app_name, user_id, filename,
-        artifact: types.Part,
+        artifact: Union[types.Part, dict[str, Any]],
         session_id=None, custom_metadata=None,
     ) -> int:
+        artifact = ensure_part(artifact)  # normalize camelCase/dict inputs
         k = self._key(app_name, user_id, session_id, filename)
         version = len(self._store[k])
         # Capture mime_type from the artifact at write time (stable per version).
