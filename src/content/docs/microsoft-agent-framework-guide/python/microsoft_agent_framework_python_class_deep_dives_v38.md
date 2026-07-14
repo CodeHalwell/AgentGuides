@@ -41,8 +41,8 @@ This volume covers **ten class groups** across the Google Vertex AI integration,
 ## 1 · Google Vertex AI — Anthropic Client
 
 **Module:** `agent_framework.google`
-**Install:** `pip install agent-framework "anthropic[vertex]"`
-*(base `agent-framework` includes `agent-framework-anthropic`; the `[vertex]` extra adds `google-auth` for Vertex AI)*
+**Install:** `pip install agent-framework agent-framework-anthropic "anthropic[vertex]"`
+*(provider package `agent-framework-anthropic` wires the Anthropic SDK into the framework; `anthropic[vertex]` adds `google-auth` for Vertex AI authentication)*
 
 The `google` sub-package provides two classes for running Anthropic (Claude) models through **Google Vertex AI** — a fully-featured client with the standard middleware stack, and a raw variant without it.
 
@@ -292,7 +292,6 @@ async def fuzzy_evaluator(task: Task, prediction: Prediction) -> Evaluation:
 async def main():
     gaia = GAIA(evaluator=fuzzy_evaluator)
     # Run a single synthetic task (no HF download needed)
-    from agent_framework.lab.gaia import Task, Prediction
     task = Task(task_id="test-1", question="What is 2 + 2?", answer="4")
     prediction = Prediction(prediction="The answer is 4.", messages=[])
     evaluation = await gaia.evaluator(task, prediction)
@@ -354,10 +353,10 @@ Exception
     ├── ToolException               # tool-level errors
     │   ├── ToolExecutionException  # runtime tool failure
     │   └── UserInputRequiredException  # sub-agent needs human input
-    ├── WorkflowCheckpointException
-    ├── WorkflowConvergenceException
     ├── WorkflowException
     │   └── WorkflowRunnerException
+    │       ├── WorkflowCheckpointException
+    │       └── WorkflowConvergenceException
     └── ContentError
 ```
 
