@@ -839,10 +839,8 @@ events with automatic deduplication and vendor-ID tracking.
 
 ```python
 # Example 1 — Custom streamed response using ModelResponsePartsManager
-import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from pydantic_ai._parts_manager import ModelResponsePartsManager
 from pydantic_ai.messages import (
     ModelResponseStreamEvent,
     ModelResponse,
@@ -949,7 +947,7 @@ async def inspect_manager() -> None:
     print('Content so far:', current[0].content)  # 'Hi!'
 
 
-asyncio.run(inspect_manager())
+# asyncio.run(inspect_manager())
 ```
 
 ---
