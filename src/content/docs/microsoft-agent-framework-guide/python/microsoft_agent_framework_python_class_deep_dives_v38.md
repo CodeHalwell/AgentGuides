@@ -649,7 +649,7 @@ AgentResponse(
     response_id: str | None = None,
     agent_id: str | None = None,
     created_at: datetime | None = None,
-    finish_reason: Literal["stop","length","tool_calls","content_filter"] | None = None,
+    finish_reason: str | None = None,   # common values: "stop", "length", "tool_calls", "content_filter"
     usage_details: UsageDetails | None = None,
     value: ResponseModelT | None = None,       # structured output (Pydantic model)
     response_format: type[ResponseModelT] | None = None,
