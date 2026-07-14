@@ -1063,6 +1063,6 @@ if HAS_INTERRUPTS:
 
 ## Revision history
 
-| Version | Date | Notes |
+| Date | Version | Notes |
 |---|---|---|
-| v2.9.1 | 2026-07-14 | Initial publication — 10 class groups, 30 examples, source-verified |
+| 2026-07-14 | v2.9.1 | Initial publication — 10 class groups, 30 examples, source-verified |
