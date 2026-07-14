@@ -498,10 +498,12 @@ from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 from google.genai import types as genai_types
 
 metric = EvalMetric(
-    metric_name=PrebuiltMetrics.RESPONSE_EVALUATION_SCORE.value,
-    threshold=3.5,  # coherence is scored 1–5 by Vertex AI
+    # RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1 dispatches to the rubric scorer,
+    # which reads criterion.rubrics; RESPONSE_EVALUATION_SCORE would ignore them.
+    metric_name=PrebuiltMetrics.RUBRIC_BASED_FINAL_RESPONSE_QUALITY_V1.value,
+    threshold=0.7,  # rubric confidence score range is 0–1
     criterion=RubricsBasedCriterion(
-        threshold=3.5,
+        threshold=0.7,
         rubrics=[
             Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Is the response factually correct?")),
             Rubric(rubric_id="r2", rubric_content=RubricContent(text_property="Is the response concise and well-structured?")),
@@ -516,8 +518,8 @@ metric = EvalMetric(
         ),
     ),
 )
-print(metric.metric_name)      # response_evaluation_score
-print(metric.threshold)        # 3.5
+print(metric.metric_name)      # rubric_based_final_response_quality_v1
+print(metric.threshold)        # 0.7
 ```
 
 ### Example 2 — ROUGE match metric (no judge model needed)
