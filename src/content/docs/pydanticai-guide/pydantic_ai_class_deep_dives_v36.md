@@ -26,9 +26,12 @@ that identifies which part in the running `parts` list is being updated, plus an
 `event_kind` literal used by Pydantic for efficient discriminated-union parsing.
 
 ```python
-# Example 1 — Consume a raw event stream from agent.run_stream()
+# Example 1 — Consume a raw event stream via model_request_stream()
+# model_request_stream yields ModelResponseStreamEvent objects (PartStartEvent etc.);
+# agent.run_stream().stream_response() yields ModelResponse snapshots instead.
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
 from pydantic_ai.messages import (
     PartStartEvent,
     PartDeltaEvent,
@@ -37,12 +40,11 @@ from pydantic_ai.messages import (
     TextPart,
 )
 
-agent = Agent('openai:gpt-4o-mini', system_prompt='Be concise.')
-
 
 async def main() -> None:
-    async with agent.run_stream('Name three planets.') as stream:
-        async for event in stream.stream_response():
+    messages = [ModelRequest.user_text_prompt('Name three planets.')]
+    async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+        async for event in stream:
             if isinstance(event, PartStartEvent):
                 print(f'[start  idx={event.index}] kind={event.part.part_kind}')
             elif isinstance(event, PartDeltaEvent):
@@ -60,7 +62,8 @@ async def main() -> None:
 ```python
 # Example 2 — Multiplex events to separate text and tool-call collectors
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
 from pydantic_ai.messages import (
     PartStartEvent,
     PartDeltaEvent,
@@ -70,20 +73,14 @@ from pydantic_ai.messages import (
     ToolCallPart,
 )
 
-agent = Agent('openai:gpt-4o-mini', system_prompt='Use the get_time tool.')
-
-
-@agent.tool_plain
-def get_time() -> str:
-    return '12:00 UTC'
-
 
 async def main() -> None:
     text_buf: dict[int, str] = {}
     tool_calls: dict[int, str] = {}
 
-    async with agent.run_stream('What time is it?') as stream:
-        async for event in stream.stream_response():
+    messages = [ModelRequest.user_text_prompt('What time is it?')]
+    async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+        async for event in stream:
             if isinstance(event, PartStartEvent):
                 if isinstance(event.part, TextPart):
                     text_buf[event.index] = event.part.content
@@ -107,18 +104,18 @@ async def main() -> None:
 # Example 3 — Build a latency monitor that tracks time-to-first-token per part
 import asyncio
 import time
-from pydantic_ai import Agent
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
 from pydantic_ai.messages import PartStartEvent, PartEndEvent
-
-agent = Agent('openai:gpt-4o-mini')
 
 
 async def main() -> None:
     timings: list[dict] = []
     t0 = time.perf_counter()
 
-    async with agent.run_stream('Tell me a joke.') as stream:
-        async for event in stream.stream_response():
+    messages = [ModelRequest.user_text_prompt('Tell me a joke.')]
+    async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+        async for event in stream:
             ts = time.perf_counter() - t0
             if isinstance(event, PartStartEvent):
                 timings.append({'idx': event.index, 'kind': event.part.part_kind, 'start': ts})
@@ -153,16 +150,16 @@ data:
 ```python
 # Example 1 — Reconstruct full text by accumulating TextPartDelta
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
 from pydantic_ai.messages import PartStartEvent, PartDeltaEvent, TextPartDelta, TextPart
-
-agent = Agent('openai:gpt-4o-mini')
 
 
 async def collect_text() -> str:
     buf: dict[int, list[str]] = {}
-    async with agent.run_stream('Write one sentence about Python.') as s:
-        async for event in s.stream_response():
+    messages = [ModelRequest.user_text_prompt('Write one sentence about Python.')]
+    async with model_request_stream('openai:gpt-4o-mini', messages) as s:
+        async for event in s:
             if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
                 buf[event.index] = [event.part.content]
             elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
@@ -177,27 +174,24 @@ async def collect_text() -> str:
 ```python
 # Example 2 — Strip thinking content; only keep final text (extended-thinking model)
 import asyncio
-from pydantic_ai import Agent
-from pydantic_ai.capabilities import Thinking
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
+from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.messages import (
     PartStartEvent,
     PartDeltaEvent,
     TextPartDelta,
     ThinkingPartDelta,
     TextPart,
-    ThinkingPart,
-)
-
-agent = Agent(
-    'anthropic:claude-opus-4-5',
-    capabilities=[Thinking(effort='low')],
 )
 
 
 async def text_only() -> str:
     text_parts: dict[int, list[str]] = {}
-    async with agent.run_stream('Is 17 prime?') as s:
-        async for event in s.stream_response():
+    messages = [ModelRequest.user_text_prompt('Is 17 prime?')]
+    settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': 1024})
+    async with model_request_stream('anthropic:claude-opus-4-5', messages, model_settings=settings) as s:
+        async for event in s:
             if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
                 text_parts[event.index] = [event.part.content]
             elif isinstance(event, PartDeltaEvent):
@@ -215,21 +209,28 @@ async def text_only() -> str:
 # Example 3 — Accumulate streamed tool call args from ToolCallPartDelta
 import asyncio
 import json
-from pydantic_ai import Agent
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
 from pydantic_ai.messages import PartStartEvent, PartDeltaEvent, ToolCallPart, ToolCallPartDelta
-
-agent = Agent('openai:gpt-4o-mini', system_prompt='Always call search_web.')
-
-
-@agent.tool_plain
-def search_web(query: str) -> list[str]:
-    return [f'Result for {query}']
+from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.tools import ToolDefinition
 
 
 async def watch_args() -> None:
     args_buf: dict[int, str] = {}
-    async with agent.run_stream('Search for "pydantic-ai streaming"') as s:
-        async for event in s.stream_response():
+    messages = [ModelRequest.user_text_prompt('Search for "pydantic-ai streaming"')]
+    tool = ToolDefinition(
+        name='search_web',
+        description='Search the web.',
+        parameters_json_schema={
+            'type': 'object',
+            'properties': {'query': {'type': 'string'}},
+            'required': ['query'],
+        },
+    )
+    params = ModelRequestParameters(function_tools=[tool], output_tools=[], allow_text_output=True)
+    async with model_request_stream('openai:gpt-4o-mini', messages, model_request_parameters=params) as s:
+        async for event in s:
             if isinstance(event, PartStartEvent) and isinstance(event.part, ToolCallPart):
                 args_buf[event.index] = event.part.args_as_json_str()
                 print(f'tool call started: {event.part.tool_name}')
@@ -650,10 +651,11 @@ from pydantic_ai.ui.vercel_ai.request_types import (
     SubmitMessage,
 )
 
-# UIMessage uses `parts` (not `content`); SubmitMessage wraps messages in `messages`.
+# Assistant messages can have reasoning, text, and file parts;
+# user messages only support text and file parts (not reasoning).
 user_msg = UIMessage(
     id='msg-1',
-    role='user',
+    role='assistant',
     parts=[
         ReasoningUIPart(type='reasoning', text='I should describe the image contents.'),
         TextUIPart(type='text', text='Explain this image.'),
@@ -675,26 +677,29 @@ for part in submit.messages[0].parts:
 
 ```python
 # Example 2 — Check for a HITL approval response in an incoming UIMessage
+# The adapter's iter_tool_approval_responses() only scans assistant-role messages,
+# so ToolApprovalRespondedPart must live in an assistant UIMessage.
 from pydantic_ai.ui.vercel_ai.request_types import (
     TextUIPart,
     ToolApprovalRespondedPart,
+    ToolApprovalResponded,
     UIMessage,
 )
 
-# Parts use the *Part suffix classes; UIMessage.parts holds them.
-user_msg = UIMessage(
+assistant_msg = UIMessage(
     id='msg-2',
-    role='user',
+    role='assistant',
     parts=[
         TextUIPart(type='text', text='Yes, proceed.'),
         ToolApprovalRespondedPart(
             type='tool-approval-responded',
             tool_call_id='tc-001',
+            approval=ToolApprovalResponded(id='apr-001', approved=True),
         ),
     ],
 )
 
-approvals = [p for p in user_msg.parts if isinstance(p, ToolApprovalRespondedPart)]
+approvals = [p for p in assistant_msg.parts if isinstance(p, ToolApprovalRespondedPart)]
 print('Approval tool_call_ids:', [a.tool_call_id for a in approvals])
 ```
 
@@ -824,10 +829,13 @@ for c in stream:
 
 `ModelResponsePartsManager` is the streaming aggregator used internally by every
 `StreamedResponse` subclass (OpenAI, Anthropic, Google, etc.). When implementing a
-custom model provider, instantiate it in your `_get_event_iterator()` and call
-`handle_text_delta()`, `handle_tool_call_delta()`, etc. to get correctly typed
-`PartStartEvent` / `PartDeltaEvent` / `PartEndEvent` events with automatic
-deduplication and vendor-ID tracking.
+custom model provider, use `self._parts_manager` (the `cached_property` on
+`StreamedResponse`) in your `_get_event_iterator()` — never instantiate a local one.
+`StreamedResponse.__aiter__` synthesises `PartEndEvent` by reading the same
+`self._parts_manager`; a separate local instance leaves it empty and breaks part-end
+emission. Call `handle_text_delta()`, `handle_tool_call_delta()`, etc. on
+`self._parts_manager` to get correctly typed `PartStartEvent` / `PartDeltaEvent`
+events with automatic deduplication and vendor-ID tracking.
 
 ```python
 # Example 1 — Custom streamed response using ModelResponsePartsManager
