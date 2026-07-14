@@ -684,8 +684,8 @@ async def main(agent: Agent) -> None:
     print("Text:", response.text)
     print("Finish reason:", response.finish_reason)
     if response.usage_details:
-        print("Prompt tokens:", response.usage_details.get("prompt_tokens"))
-        print("Completion tokens:", response.usage_details.get("completion_tokens"))
+        print("Input tokens:", response.usage_details.get("input_token_count"))
+        print("Output tokens:", response.usage_details.get("output_token_count"))
 
 # asyncio.run(main(your_agent))
 ```
@@ -782,7 +782,7 @@ class LatencyLoggingMiddleware(ChatMiddleware):
             f"[{context.client.__class__.__name__}] "
             f"model={context.options.get('model')} "
             f"elapsed={elapsed_ms:.0f}ms "
-            f"tokens={usage.get('total_tokens', '?')}"
+            f"tokens={usage.get('total_token_count', '?')}"
         )
 ```
 
