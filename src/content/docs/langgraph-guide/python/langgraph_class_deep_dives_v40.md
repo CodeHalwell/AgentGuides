@@ -456,7 +456,7 @@ print(agg.UpdateType)  # <class 'list'>
 - `add_messages` is the reducer for `messages`: it appends new messages, merges by `id` for updates, and respects `RemoveMessage` objects.
 - `remaining_steps: NotRequired[RemainingSteps]` means the field is optional in the initial state dict; the `RemainingStepsManager` initialises it to `recursion_limit - 1` on the first step.
 - `RemainingSteps` is an alias for `int` — the managed value is the integer count itself, not a wrapper.
-- `create_react_agent` accepts `state_schema` to substitute a custom schema; the custom schema must include a `messages` field with the `add_messages` reducer, and may include `remaining_steps` to enable the last-step guard.
+- `create_react_agent` accepts `state_schema` to substitute a custom schema; the custom schema must include both a `messages` field with the `add_messages` reducer **and** a `remaining_steps` field — omitting `remaining_steps` raises `ValueError: Missing required key(s) {'remaining_steps'} in state_schema`.
 - `tools_condition` checks `state["messages"][-1].tool_calls` — if present it routes to `"tools"`, otherwise to `END`.
 
 ### Example 1 — inspecting `AgentState` structure
@@ -558,7 +558,7 @@ for msg in result["messages"]:
 - `ToolCallRequest` is a `@dataclass` with `__setattr__` overridden to emit a `DeprecationWarning` on direct assignment — use `override()` instead.
 - `override(**overrides)` calls `dataclasses.replace(self, **overrides)`. Supported keys are `tool_call` and `state` (`TypedDict`-constrained by `_ToolCallRequestOverrides`).
 - The `execute` callable passed to a `ToolCallWrapper` can be called **multiple times** with different `ToolCallRequest` objects — useful for retry-on-error patterns.
-- `ToolNode` accepts `tool_call_wrappers: list[ToolCallWrapper]` and `async_tool_call_wrappers: list[AsyncToolCallWrapper]` (passed as `wrap_tool_call` / `awrap_tool_call` on the `ToolNode` constructor in newer releases or via `create_react_agent`'s `pre_tool_call_hook`).
+- `ToolNode` exposes `wrap_tool_call: ToolCallWrapper | None` and `awrap_tool_call: AsyncToolCallWrapper | None` as **singular** constructor parameters (not lists). `create_react_agent` does not expose a `pre_tool_call_hook` parameter in 1.2.9 — wire wrappers directly on the `ToolNode` instance passed to the agent's tools list.
 - `AsyncToolCallWrapper` is `Callable[[ToolCallRequest, Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]]], Awaitable[ToolMessage | Command]]`.
 
 ### Example 1 — logging wrapper (passthrough interceptor)
