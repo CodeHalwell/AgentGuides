@@ -267,7 +267,8 @@ the factory is re-called at every run step, enabling runtime decisions like:
 import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.toolsets import DynamicToolset, FunctionToolset
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets._dynamic import DynamicToolset
 
 
 @dataclass
@@ -309,7 +310,8 @@ agent: Agent[AppDeps, str] = Agent(
 import asyncio
 import os
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.toolsets import DynamicToolset, FunctionToolset
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets._dynamic import DynamicToolset
 
 ENABLE_BETA = os.getenv('ENABLE_BETA', 'false').lower() == 'true'
 
@@ -340,7 +342,8 @@ agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(feature_gated)])
 # Example 3 — per_run_step=False: expensive one-time setup, same toolset for all steps
 import asyncio
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.toolsets import DynamicToolset, FunctionToolset
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets._dynamic import DynamicToolset
 
 
 async def build_db_toolset(ctx: RunContext) -> FunctionToolset:
@@ -369,8 +372,10 @@ agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(build_db_toolset, p
 **Sources:** `pydantic_ai/capabilities/toolset.py`, `pydantic_ai/capabilities/include_return_schemas.py`
 
 **`Toolset`** is a thin `AbstractCapability` wrapper that injects any `AgentToolset`
-via the capabilities list instead of the `toolsets=` constructor arg — useful when
-composing specs from YAML or when the toolset must live inside a capability chain.
+via the capabilities list instead of the `toolsets=` constructor arg — useful for
+programmatic capability-chain composition. Note: `Toolset.get_serialization_name()`
+returns `None`, so it is not YAML/AgentSpec-serializable and cannot be named in a
+spec file.
 
 **`IncludeToolReturnSchemas`** sets `include_return_schema=True` on matching
 `ToolDefinition`s so the model sees the tool's return JSON Schema. Supports all
@@ -378,7 +383,7 @@ four `ToolSelector` shapes: `'all'`, `list[str]`, `dict[str, Any]` (metadata mat
 and a sync/async callable predicate.
 
 ```python
-# Example 1 — Inject a toolset via the Toolset capability (useful for AgentSpec)
+# Example 1 — Inject a toolset via the Toolset capability (programmatic use only)
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Toolset
 from pydantic_ai.toolsets import FunctionToolset
