@@ -104,7 +104,7 @@ agent = LlmAgent(
 )
 
 async def main():
-    runner = InMemoryRunner(agent=agent)
+    runner = InMemoryRunner(agent=agent, app_name="stateful_app")
     session = await runner.session_service.create_session(
         app_name="stateful_app", user_id="u1"
     )
@@ -447,10 +447,14 @@ class JudgeModelOptions(EvalBaseModel):
 class BaseCriterion(BaseModel):
     # camelCase JSON aliases (alias_generator=to_camel)
     threshold: float                       # required pass/fail boundary
+    include_intermediate_responses_in_final: bool = False
 
 class LlmAsAJudgeCriterion(BaseCriterion):
-    rubrics: list[str] = []                # natural-language rubric statements
     judge_model_options: JudgeModelOptions = JudgeModelOptions()
+
+class RubricsBasedCriterion(BaseCriterion):
+    judge_model_options: JudgeModelOptions = JudgeModelOptions()
+    rubrics: list[str] = []                # natural-language rubric statements
 
 class LlmBackedUserSimulatorCriterion(BaseCriterion):
     pass
@@ -459,7 +463,7 @@ class EvalMetric(EvalBaseModel):
     metric_name: str                       # PrebuiltMetrics value or custom name
     threshold: float
     criterion: Optional[BaseCriterion] = None
-    judge_model_options: Optional[JudgeModelOptions] = None
+    custom_function_path: Optional[str] = None
 ```
 
 ### `PrebuiltMetrics` values (verified `eval_metrics.py`)
@@ -479,11 +483,11 @@ class PrebuiltMetrics(Enum):
     MULTI_TURN_TOOL_USE_QUALITY_V1           = "multi_turn_tool_use_quality_v1"
 ```
 
-### Example 1 — building an `EvalMetric` with an LLM-as-judge criterion
+### Example 1 — building an `EvalMetric` with a rubrics-based criterion
 
 ```python
 from google.adk.evaluation.eval_metrics import (
-    EvalMetric, JudgeModelOptions, LlmAsAJudgeCriterion,
+    EvalMetric, JudgeModelOptions, RubricsBasedCriterion,
     PrebuiltMetrics,
 )
 from google.genai import types as genai_types
@@ -491,7 +495,7 @@ from google.genai import types as genai_types
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RESPONSE_EVALUATION_SCORE.value,
     threshold=3.5,  # coherence is scored 1–5 by Vertex AI
-    criterion=LlmAsAJudgeCriterion(
+    criterion=RubricsBasedCriterion(
         threshold=3.5,
         rubrics=[
             "Is the response factually correct?",
@@ -894,16 +898,14 @@ import asyncio
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
 
 async def evaluate():
-    results = await AgentEvaluator.evaluate(
+    # evaluate() reads metrics from evals/test_config.json and asserts
+    # failures internally; it returns None and prints a results table.
+    await AgentEvaluator.evaluate(
         agent_module="my_agent",
         eval_dataset_file_path_or_dir="evals/",
         num_runs=1,
-        eval_metrics=[
-            {"metric_name": "response_match_score", "threshold": 0.5},
-        ],
+        print_detailed_results=True,
     )
-    for r in results:
-        print(r.overall_eval_status, r.overall_score)
 
 asyncio.run(evaluate())
 ```
