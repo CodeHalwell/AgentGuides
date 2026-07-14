@@ -1020,8 +1020,11 @@ class SimpleSessionService(BaseSessionService):
     async def get_user_state(self, *, app_name, user_id) -> dict[str, Any]:
         return {}
 
-    # append_event is NOT overridden: BaseSessionService.append_event handles
-    # partial-event skipping and temp-scoped state trimming before persistence.
+    async def append_event(self, session: Session, event: Event) -> Event:
+        # get_session may return a filtered copy; always persist to the stored
+        # session so events survive across turns.
+        stored = self._sessions.get(session.id, session)
+        return await super().append_event(stored, event)
 ```
 
 ### Example 2 — `GetSessionConfig` to limit events returned
@@ -1143,7 +1146,7 @@ class DictArtifactService(BaseArtifactService):
         session_id=None, custom_metadata=None,
     ) -> int:
         k = self._key(app_name, user_id, session_id, filename)
-        self._store[k].append(artifact)
+        self._store[k].append((artifact, custom_metadata or {}))
         return len(self._store[k]) - 1
 
     async def load_artifact(
@@ -1154,7 +1157,8 @@ class DictArtifactService(BaseArtifactService):
         if not versions:
             return None
         idx = version if version is not None else len(versions) - 1
-        return versions[idx] if 0 <= idx < len(versions) else None
+        entry = versions[idx] if 0 <= idx < len(versions) else None
+        return entry[0] if entry is not None else None
 
     async def list_artifact_keys(self, *, app_name, user_id, session_id=None):
         # Always include user-scoped artifacts; also session-scoped when session_id given.
@@ -1178,11 +1182,11 @@ class DictArtifactService(BaseArtifactService):
             ArtifactVersion(
                 version=i,
                 canonical_uri=f"mem://{filename}/{i}",
-                custom_metadata={},
+                custom_metadata=meta,   # preserved from save_artifact call
                 create_time=time.time(),
                 mime_type=None,
             )
-            for i in range(len(self._store.get(k, [])))
+            for i, (_, meta) in enumerate(self._store.get(k, []))
         ]
 
     async def get_artifact_version(
@@ -1192,10 +1196,11 @@ class DictArtifactService(BaseArtifactService):
         versions = self._store.get(k, [])
         idx = version if version is not None else len(versions) - 1
         if 0 <= idx < len(versions):
+            _, meta = versions[idx]
             return ArtifactVersion(
                 version=idx,
                 canonical_uri=f"mem://{filename}/{idx}",
-                custom_metadata={},
+                custom_metadata=meta,   # preserved from save_artifact call
                 create_time=time.time(),
                 mime_type=None,
             )
