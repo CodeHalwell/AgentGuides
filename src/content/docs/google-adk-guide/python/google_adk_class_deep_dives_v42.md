@@ -240,6 +240,11 @@ asyncio.run(demo())
 ### Example 2 — `_send_content` partial-update hook
 
 ```python
+from google.genai import types
+from google.adk.models.base_llm_connection import BaseLlmConnection
+from google.adk.models.llm_response import LlmResponse
+
+
 class PartialAwareConnection(BaseLlmConnection):
     """Records whether each chunk is a partial or turn-completing update."""
 
@@ -532,7 +537,7 @@ metric = EvalMetric(
 )
 
 # Pydantic model_dump with camelCase (alias_generator=to_camel in BaseCriterion)
-raw = metric.model_dump_json(indent=2)
+raw = metric.model_dump_json(by_alias=True, indent=2)
 restored = EvalMetric.model_validate_json(raw)
 assert restored.metric_name == "custom_accuracy"
 print("Round-trip OK")
@@ -998,6 +1003,9 @@ class SimpleSessionService(BaseSessionService):
 
     async def delete_session(self, *, app_name, user_id, session_id) -> None:
         self._sessions.pop(session_id, None)
+
+    async def get_user_state(self, *, app_name, user_id) -> dict[str, Any]:
+        return {}
 
     async def append_event(self, session: Session, event: Event) -> Event:
         session.events.append(event)
