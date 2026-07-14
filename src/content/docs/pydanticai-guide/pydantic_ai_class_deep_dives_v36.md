@@ -751,6 +751,7 @@ from pydantic_ai.ui.vercel_ai.response_types import (
     TextDeltaChunk,
     TextEndChunk,
     FinishChunk,
+    DoneChunk,
 )
 
 SDK_VERSION = 6
@@ -762,6 +763,7 @@ chunks = [
     TextDeltaChunk(id='txt-001', delta='world!'),
     TextEndChunk(id='txt-001'),
     FinishChunk(finish_reason='stop'),
+    DoneChunk(),  # terminates the data stream with 'data: [DONE]\n\n'
 ]
 
 # SSE requires data: ...\n\n (double newline) between events
@@ -780,6 +782,7 @@ from pydantic_ai.ui.vercel_ai.response_types import (
     TextDeltaChunk,
     TextEndChunk,
     FinishChunk,
+    DoneChunk,
 )
 
 SDK_VERSION = 6
@@ -793,6 +796,7 @@ stream = [
     TextDeltaChunk(id='txt-002', delta='The answer is 42.'),
     TextEndChunk(id='txt-002'),
     FinishChunk(finish_reason='stop'),
+    DoneChunk(),  # terminates the data stream with 'data: [DONE]\n\n'
 ]
 
 for c in stream:
@@ -811,6 +815,7 @@ from pydantic_ai.ui.vercel_ai.response_types import (
     ToolInputAvailableChunk,
     ToolApprovalRequestChunk,
     FinishChunk,
+    DoneChunk,
 )
 
 SDK_VERSION = 6
@@ -822,9 +827,11 @@ stream = [
     TextEndChunk(id='txt-003'),
     ToolInputStartChunk(tool_call_id='tc-001', tool_name='delete_file'),
     ToolInputDeltaChunk(tool_call_id='tc-001', input_text_delta='{"path": "/etc/hosts"}'),
-    ToolInputAvailableChunk(tool_call_id='tc-001', tool_name='delete_file', input='{"path": "/etc/hosts"}'),
+    # input= takes the parsed args object (dict), not a JSON string
+    ToolInputAvailableChunk(tool_call_id='tc-001', tool_name='delete_file', input={'path': '/etc/hosts'}),
     ToolApprovalRequestChunk(approval_id='apr-001', tool_call_id='tc-001'),
     FinishChunk(finish_reason='tool-calls'),
+    DoneChunk(),  # terminates the data stream with 'data: [DONE]\n\n'
 ]
 
 for c in stream:
