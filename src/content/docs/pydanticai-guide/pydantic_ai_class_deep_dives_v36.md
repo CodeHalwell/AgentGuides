@@ -385,7 +385,7 @@ and a sync/async callable predicate.
 ```python
 # Example 1 — Inject a toolset via the Toolset capability (programmatic use only)
 from pydantic_ai import Agent
-from pydantic_ai.capabilities import Toolset
+from pydantic_ai.capabilities.toolset import Toolset
 from pydantic_ai.toolsets import FunctionToolset
 
 tools = FunctionToolset()
@@ -671,7 +671,8 @@ assistant_msg = UIMessage(
     ],
 )
 
-# SubmitMessage: required fields are `id` and `messages`.
+# SubmitMessage required Python args: `id` and `messages`.
+# The wire JSON also needs `trigger='submit-message'` (default) for the discriminated union.
 submit = SubmitMessage(id='req-1', messages=[assistant_msg])
 
 for part in submit.messages[0].parts:
