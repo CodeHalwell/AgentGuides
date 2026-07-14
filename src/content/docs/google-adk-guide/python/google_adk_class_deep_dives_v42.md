@@ -394,6 +394,7 @@ toolset = McpToolset(
 ### Example 3 — `StreamableHTTPConnectionParams` with a custom HTTPX factory
 
 ```python
+import os
 import httpx
 from google.adk.tools.mcp_tool.mcp_session_manager import (
     StreamableHTTPConnectionParams,
@@ -413,7 +414,7 @@ def private_ca_factory(**kwargs) -> httpx.AsyncClient:
 toolset = McpToolset(
     connection_params=StreamableHTTPConnectionParams(
         url="https://internal-mcp.corp.example.com/mcp",
-        headers={"X-Service-Token": "secret"},
+        headers={"X-Service-Token": os.environ["SERVICE_TOKEN"]},
         terminate_on_close=True,
         httpx_client_factory=private_ca_factory,
     )
@@ -1159,7 +1160,11 @@ class DictArtifactService(BaseArtifactService):
     async def list_artifact_versions(self, *, app_name, user_id, filename, session_id=None):
         k = self._key(app_name, user_id, session_id, filename)
         return [
-            ArtifactVersion(version=i, canonical_uri=f"mem://{filename}/{i}")
+            ArtifactVersion(
+                version=i,
+                canonical_uri=f"mem://{filename}/{i}",
+                custom_metadata={},
+            )
             for i in range(len(self._store.get(k, [])))
         ]
 
@@ -1170,7 +1175,11 @@ class DictArtifactService(BaseArtifactService):
         versions = self._store.get(k, [])
         idx = version if version is not None else len(versions) - 1
         if 0 <= idx < len(versions):
-            return ArtifactVersion(version=idx, canonical_uri=f"mem://{filename}/{idx}")
+            return ArtifactVersion(
+                version=idx,
+                canonical_uri=f"mem://{filename}/{idx}",
+                custom_metadata={},
+            )
         return None
 
 
