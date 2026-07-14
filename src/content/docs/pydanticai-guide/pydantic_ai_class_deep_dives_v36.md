@@ -6,9 +6,8 @@ sidebar:
   order: 62
 ---
 
-All examples are verified against **pydantic-ai 2.9.1** source code installed at
-`/usr/local/lib/python3.11/dist-packages/pydantic_ai`. Three runnable examples per
-class group; all code blocks pass `ast.parse()` syntax validation.
+All examples are verified against **pydantic-ai 2.9.1** installed from PyPI. Three
+runnable examples per class group; all code blocks pass `ast.parse()` syntax validation.
 
 ---
 
@@ -481,7 +480,6 @@ validators, or build RAG pipelines on top of the built-in search tools.
 
 ```python
 # Example 1 — Post-process DuckDuckGo results: deduplicate by domain
-from duckduckgo_search import DDGS
 from pydantic_ai.common_tools.duckduckgo import DuckDuckGoResult, duckduckgo_search_tool
 from pydantic_ai import Agent
 from urllib.parse import urlparse
@@ -639,31 +637,27 @@ so JSON keys are `camelCase` on the wire but `snake_case` in Python.
 
 ```python
 # Example 1 — Parse a full UIMessage payload from a Vercel AI SDK frontend request
-import json
-from pydantic import TypeAdapter
 from pydantic_ai.ui.vercel_ai.request_types import (
     TextUIPart,
-    ReasoningUIPart,
     FileUIPart,
+    UIMessage,
     SubmitMessage,
 )
 
-# Simulated Vercel AI SDK frontend POST body
-raw_message = {
-    'role': 'user',
-    'content': [
-        {'type': 'text', 'text': 'Explain this image.'},
-        {
-            'type': 'file',
-            'mediaType': 'image/png',
-            'url': 'data:image/png;base64,iVBORw0KGgo=',
-        },
+# UIMessage uses `parts` (not `content`); SubmitMessage wraps messages in `messages`.
+user_msg = UIMessage(
+    id='msg-1',
+    role='user',
+    parts=[
+        TextUIPart(text='Explain this image.'),
+        FileUIPart(media_type='image/png', url='data:image/png;base64,iVBORw0KGgo='),
     ],
-}
+)
 
-# Parse via SubmitMessage which contains a list of UI parts
-submit = SubmitMessage(**raw_message)
-for part in submit.content:
+# SubmitMessage: required fields are `id` and `messages`.
+submit = SubmitMessage(id='req-1', messages=[user_msg])
+
+for part in submit.messages[0].parts:
     if isinstance(part, TextUIPart):
         print('Text:', part.text)
     elif isinstance(part, FileUIPart):
@@ -671,42 +665,46 @@ for part in submit.content:
 ```
 
 ```python
-# Example 2 — Check for pending HITL approval in an incoming UIMessage
+# Example 2 — Check for a HITL approval response in an incoming UIMessage
 from pydantic_ai.ui.vercel_ai.request_types import (
-    ToolApprovalRequested,
-    ToolApprovalResponded,
+    TextUIPart,
+    ToolApprovalRespondedPart,
     UIMessage,
 )
 
-# Simulated message that includes an approval response
-msg_with_approval = {
-    'role': 'user',
-    'content': [
-        {'type': 'text', 'text': 'Yes, proceed.'},
-        {'type': 'tool-approval-responded', 'id': 'approve_abc'},
-    ],
-}
-
-msg = UIMessage(**msg_with_approval)
-approvals = [p for p in msg.content if isinstance(p, ToolApprovalResponded)]
-print('Approval IDs:', [a.id for a in approvals])
-```
-
-```python
-# Example 3 — Build a UIMessage programmatically for testing an endpoint
-from pydantic_ai.ui.vercel_ai.request_types import TextUIPart, SubmitMessage
-
-msg = SubmitMessage(
+# Parts use the *Part suffix classes; UIMessage.parts holds them.
+user_msg = UIMessage(
+    id='msg-2',
     role='user',
-    content=[
-        TextUIPart(text='Hello from the test suite!', state='done'),
+    parts=[
+        TextUIPart(text='Yes, proceed.'),
+        ToolApprovalRespondedPart(
+            type='tool-approval-responded',
+            tool_call_id='tc-001',
+        ),
     ],
 )
 
+approvals = [p for p in user_msg.parts if isinstance(p, ToolApprovalRespondedPart)]
+print('Approval tool_call_ids:', [a.tool_call_id for a in approvals])
+```
+
+```python
+# Example 3 — Build a SubmitMessage programmatically for testing an endpoint
+from pydantic_ai.ui.vercel_ai.request_types import TextUIPart, UIMessage, SubmitMessage
+
+user_msg = UIMessage(
+    id='msg-3',
+    role='user',
+    parts=[TextUIPart(text='Hello from the test suite!', state='done')],
+)
+
+submit = SubmitMessage(id='req-3', messages=[user_msg])
+
 # Serialise to camelCase JSON for wire transmission
-payload = msg.model_dump(by_alias=True, exclude_none=True)
+payload = submit.model_dump(by_alias=True, exclude_none=True)
 print(payload)
-# {'role': 'user', 'content': [{'type': 'text', 'text': 'Hello from the test suite!', 'state': 'done'}]}
+# {'trigger': 'submit-message', 'id': 'req-3', 'messages': [{'id': 'msg-3', 'role': 'user', ...}]}
 ```
 
 ---
@@ -800,8 +798,8 @@ stream = [
     TextEndChunk(id='txt-003'),
     ToolInputStartChunk(id='call-001', tool_call_id='tc-001', tool_name='delete_file'),
     ToolInputDeltaChunk(tool_call_id='tc-001', input_text_delta='{"path": "/etc/hosts"}'),
-    ToolInputAvailableChunk(tool_call_id='tc-001', input='{"path": "/etc/hosts"}'),
-    ToolApprovalRequestChunk(tool_call_id='tc-001', message='Approve delete_file(/etc/hosts)?'),
+    ToolInputAvailableChunk(tool_call_id='tc-001', tool_name='delete_file', input='{"path": "/etc/hosts"}'),
+    ToolApprovalRequestChunk(approval_id='apr-001', tool_call_id='tc-001'),
     FinishChunk(finish_reason='tool-calls', usage={'input_tokens': 20, 'output_tokens': 15}),
 ]
 
@@ -847,7 +845,8 @@ class EchoStreamedResponse(StreamedResponse):
     async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:
         manager = ModelResponsePartsManager(self.model_request_parameters)
         for word in self._words:
-            async for event in manager.handle_text_delta(vendor_part_id='text', content_delta=word + ' '):
+            # handle_text_delta is a synchronous Iterator; yield each event directly
+            for event in manager.handle_text_delta(vendor_part_id='text', content=word + ' '):
                 yield event
 
     async def close_stream(self) -> None:
@@ -888,20 +887,18 @@ async def demo_mixed_stream(manager: ModelResponsePartsManager):
     """Show how the manager emits PartStartEvent on first delta per vendor_part_id."""
     events: list[ModelResponseStreamEvent] = []
 
-    # Text part
-    async for e in manager.handle_text_delta(vendor_part_id='t0', content_delta='Hello'):
+    # Text part — handle_text_delta is a sync Iterator; content= (not content_delta=)
+    for e in manager.handle_text_delta(vendor_part_id='t0', content='Hello'):
         events.append(e)
-    async for e in manager.handle_text_delta(vendor_part_id='t0', content_delta=' world'):
+    for e in manager.handle_text_delta(vendor_part_id='t0', content=' world'):
         events.append(e)
 
-    # Tool call part (streamed args as JSON string)
-    async for e in manager.handle_tool_call_delta(
+    # Tool call part — handle_tool_call_delta returns a single event or None
+    if e := manager.handle_tool_call_delta(
         vendor_part_id='tc0', tool_name='get_weather', args='{"city":', tool_call_id='id-1'
     ):
         events.append(e)
-    async for e in manager.handle_tool_call_delta(
-        vendor_part_id='tc0', tool_name=None, args='"Paris"}'
-    ):
+    if e := manager.handle_tool_call_delta(vendor_part_id='tc0', tool_name=None, args='"Paris"}'):
         events.append(e)
 
     for ev in events:
@@ -928,7 +925,7 @@ async def inspect_manager() -> None:
     manager = ModelResponsePartsManager(params)
 
     # First delta creates a new TextPart via PartStartEvent
-    async for _ in manager.handle_text_delta(vendor_part_id='p0', content_delta='Hi!'):
+    for _ in manager.handle_text_delta(vendor_part_id='p0', content='Hi!'):
         pass
 
     # The manager tracks current parts
