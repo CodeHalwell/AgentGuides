@@ -9,7 +9,7 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="tip">
-All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation.
+All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation. Live API calls are commented out — uncomment to run.
 </Aside>
 
 Ten class groups covering the streaming event protocol, delta types, DynamicToolset factory patterns, capability toolset injection, search result DTOs, AnthropicModelSettings cache controls, Vercel AI SDK inbound request types, ModelResponsePartsManager stream management, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas schema injection.
@@ -54,7 +54,7 @@ async def main() -> None:
                 print(f'[result] tool_name={event.tool_name!r}')
 
 
-asyncio.run(main())
+# asyncio.run(main())
 ```
 
 ```python
@@ -100,7 +100,7 @@ async def main() -> None:
     print('tool calls:', tool_calls)
 
 
-asyncio.run(main())
+# asyncio.run(main())
 ```
 
 ```python
@@ -132,7 +132,7 @@ async def main() -> None:
         print(f"part {t['idx']} ({t['kind']}): {t.get('duration_ms', '?')} ms")
 
 
-asyncio.run(main())
+# asyncio.run(main())
 ```
 
 ---
@@ -170,8 +170,8 @@ async def collect_text() -> str:
     return ''.join(buf.get(0, []))
 
 
-result = asyncio.run(collect_text())
-print(repr(result))
+# result = asyncio.run(collect_text())
+# print(repr(result))
 ```
 
 ```python
@@ -244,7 +244,7 @@ async def watch_args() -> None:
             print(f'part {idx} incomplete args:', raw)
 
 
-asyncio.run(watch_args())
+# asyncio.run(watch_args())
 ```
 
 ---
@@ -398,8 +398,8 @@ def multiply(a: int, b: int) -> int:
 # Equivalent to Agent(..., toolsets=[tools]) but composable via capabilities
 agent = Agent('openai:gpt-4o-mini', capabilities=[Toolset(tools)])
 
-result = agent.run_sync('What is 7 * 8?')
-print(result.output)  # 56
+# result = agent.run_sync('What is 7 * 8?')
+# print(result.output)  # 56
 ```
 
 ```python
@@ -430,8 +430,8 @@ agent = Agent(
     capabilities=[IncludeToolReturnSchemas()],  # 'all' by default
 )
 
-result = agent.run_sync('What is the weather in Paris?')
-print(result.output)
+# result = agent.run_sync('What is the weather in Paris?')
+# print(result.output)
 ```
 
 ```python
@@ -460,8 +460,8 @@ agent = Agent(
     capabilities=[IncludeToolReturnSchemas(tools=['search'])],
 )
 
-result = agent.run_sync('Search for "pydantic"')
-print(result.output)
+# result = agent.run_sync('Search for "pydantic"')
+# print(result.output)
 ```
 
 ---
