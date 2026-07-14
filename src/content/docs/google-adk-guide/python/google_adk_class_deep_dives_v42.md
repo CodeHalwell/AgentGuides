@@ -604,9 +604,9 @@ def session_progress_factory(
     **kwargs,
 ) -> ProgressFnT | None:
     async def on_progress(progress: float, total: float | None, message: str | None):
-        pct = f"{progress/total*100:.0f}%" if total else f"{progress}"
+        pct = f"{progress/total*100:.0f}%" if total is not None and total > 0 else f"{progress}"
         print(f"[{tool_name}] {pct} — {message}")
-        if callback_context:
+        if callback_context is not None:
             callback_context.state[f"{tool_name}_progress"] = pct
     return on_progress
 
