@@ -147,8 +147,8 @@ async def main():
 
 ```python
 import asyncio
+from agent_framework import Message
 from agent_framework.google import RawAnthropicVertexClient
-from agent_framework._types import Message
 
 async def main():
     # RawAnthropicVertexClient skips middleware + telemetry — useful when
@@ -291,9 +291,9 @@ async def fuzzy_evaluator(task: Task, prediction: Prediction) -> Evaluation:
 async def main():
     gaia = GAIA(evaluator=fuzzy_evaluator)
     # Run a single synthetic task (no HF download needed)
-    from agent_framework.lab.gaia import Task, Prediction, TaskResult
+    from agent_framework.lab.gaia import Task, Prediction
     task = Task(task_id="test-1", question="What is 2 + 2?", answer="4")
-    prediction = Prediction(prediction="The answer is 4.")
+    prediction = Prediction(prediction="The answer is 4.", messages=[])
     evaluation = await gaia.evaluator(task, prediction)
     print(evaluation)  # Evaluation(is_correct=True, score=1.0, ...)
 
@@ -899,7 +899,7 @@ async def main(agent: Agent) -> None:
             print(f"Final usage: {response.usage_details}")
         return response
 
-    stream._result_hooks.append(log_usage)
+    stream.with_result_hook(log_usage)
 
     async for _ in stream:
         pass  # consume
@@ -1131,8 +1131,7 @@ Public API (inherited):
 ```python
 import asyncio
 from collections.abc import AsyncIterable
-from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate, Message
-from agent_framework._types import ChatResponseUpdate as Update
+from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate as Update, Message
 
 class EchoClient(BaseChatClient):
     """Trivial client that echoes the last user message — useful for testing."""
