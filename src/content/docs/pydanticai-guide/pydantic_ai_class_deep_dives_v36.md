@@ -653,7 +653,7 @@ from pydantic_ai.ui.vercel_ai.request_types import (
 
 # Assistant messages can have reasoning, text, and file parts;
 # user messages only support text and file parts (not reasoning).
-user_msg = UIMessage(
+assistant_msg = UIMessage(
     id='msg-1',
     role='assistant',
     parts=[
@@ -664,7 +664,7 @@ user_msg = UIMessage(
 )
 
 # SubmitMessage: required fields are `id` and `messages`.
-submit = SubmitMessage(id='req-1', messages=[user_msg])
+submit = SubmitMessage(id='req-1', messages=[assistant_msg])
 
 for part in submit.messages[0].parts:
     if isinstance(part, ReasoningUIPart):
