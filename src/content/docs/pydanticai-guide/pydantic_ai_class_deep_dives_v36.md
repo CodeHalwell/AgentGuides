@@ -764,9 +764,9 @@ chunks = [
     FinishChunk(finish_reason='stop'),
 ]
 
-# Each line is sent as `data: <json>\n\n` in an SSE endpoint
+# SSE requires data: ...\n\n (double newline) between events
 for chunk in chunks:
-    print(f'data: {chunk.encode(SDK_VERSION)}')
+    print(f'data: {chunk.encode(SDK_VERSION)}', end='\n\n')
 ```
 
 ```python
@@ -796,8 +796,7 @@ stream = [
 ]
 
 for c in stream:
-    line = f'data: {c.encode(SDK_VERSION)}'
-    print(line)
+    print(f'data: {c.encode(SDK_VERSION)}', end='\n\n')
 ```
 
 ```python
@@ -829,7 +828,7 @@ stream = [
 ]
 
 for c in stream:
-    print(f'data: {c.encode(SDK_VERSION)}')
+    print(f'data: {c.encode(SDK_VERSION)}', end='\n\n')
 ```
 
 ---
