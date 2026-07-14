@@ -655,9 +655,9 @@ user_msg = UIMessage(
     id='msg-1',
     role='user',
     parts=[
-        ReasoningUIPart(text='I should describe the image contents.'),
-        TextUIPart(text='Explain this image.'),
-        FileUIPart(media_type='image/png', url='data:image/png;base64,iVBORw0KGgo='),
+        ReasoningUIPart(type='reasoning', text='I should describe the image contents.'),
+        TextUIPart(type='text', text='Explain this image.'),
+        FileUIPart(type='file', media_type='image/png', url='data:image/png;base64,iVBORw0KGgo='),
     ],
 )
 
@@ -686,7 +686,7 @@ user_msg = UIMessage(
     id='msg-2',
     role='user',
     parts=[
-        TextUIPart(text='Yes, proceed.'),
+        TextUIPart(type='text', text='Yes, proceed.'),
         ToolApprovalRespondedPart(
             type='tool-approval-responded',
             tool_call_id='tc-001',
@@ -705,7 +705,7 @@ from pydantic_ai.ui.vercel_ai.request_types import TextUIPart, UIMessage, Submit
 user_msg = UIMessage(
     id='msg-3',
     role='user',
-    parts=[TextUIPart(text='Hello from the test suite!', state='done')],
+    parts=[TextUIPart(type='text', text='Hello from the test suite!', state='done')],
 )
 
 submit = SubmitMessage(id='req-3', messages=[user_msg])
