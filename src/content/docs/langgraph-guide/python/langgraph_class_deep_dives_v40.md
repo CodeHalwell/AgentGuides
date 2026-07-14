@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 40"
-description: "Source-verified deep dives (langgraph==1.2.9) into 10 class groups: task/@task decorator and _TaskFunction (retry_policy/cache_policy/timeout/clear_cache, SyncAsyncFuture parallel futures), entrypoint decorator (previous/context_schema/store/cache params, single-param rule, injectable parameters), LastValue/LastValueAfterFinish (one-write-per-step constraint, EmptyChannelError, deferred visibility via finish()/consume()), BaseChannel generic protocol (ValueType/UpdateType/Checkpoint type params, checkpoint/from_checkpoint lifecycle, custom channel implementation), AgentState/AgentStatePydantic (add_messages reducer, RemainingSteps managed value, extending for custom fields), ToolCallRequest/ToolCallWrapper (immutable override() pattern, tool call interceptor chains, retry-on-error wrappers), ToolCallWithContext/ToolInvocationError (Send-based parallel dispatch with state context, LLM-focused validation error messages filtered to LLM-controlled args), ValidationNode (deprecated structured-output validator — schema list, format_error customisation, migration path to response_format), Pregel (the core BSP runtime — nodes/channels/stream_mode/checkpointer, get_state/get_state_history/update_state/bulk_update_state, draw_mermaid_png topology export), and RunnableSeq/_RunnableWithWriter/_RunnableWithStore (lightweight sequential runnable for node pipelines, typed Protocol classes for stream_writer/store injection, coerce_to_runnable conversion)."
+description: "Source-verified deep dives (langgraph==1.2.9) into 10 class groups: task/@task decorator and _TaskFunction (retry_policy/cache_policy/timeout/clear_cache, SyncAsyncFuture parallel futures), entrypoint decorator (previous/context_schema/store/cache params, single-param rule, injectable parameters), LastValue/LastValueAfterFinish (one-write-per-step constraint, EmptyChannelError, deferred visibility via finish()/consume()), BaseChannel generic protocol (ValueType/UpdateType/Checkpoint type params, checkpoint/from_checkpoint lifecycle, custom channel implementation), AgentState/AgentStatePydantic (add_messages reducer, RemainingSteps managed value, extending for custom fields), ToolCallRequest/ToolCallWrapper (immutable override() pattern, tool call interceptor chains, retry-on-error wrappers), ToolCallWithContext/ToolInvocationError (Send-based parallel dispatch with state context, LLM-focused validation error messages filtered to LLM-controlled args), ValidationNode (deprecated structured-output validator — schema list, format_error customisation, migration path to response_format), Pregel (the core BSP runtime — nodes/channels/stream_mode/checkpointer, get_state/get_state_history/update_state/bulk_update_state, draw_mermaid topology export), and RunnableSeq/_RunnableWithWriter/_RunnableWithStore (lightweight sequential runnable for node pipelines, typed Protocol classes for stream_writer/store injection, coerce_to_runnable conversion)."
 framework: langgraph
 language: python
 sidebar:
@@ -839,7 +839,7 @@ def run_tool(payload: dict) -> dict:
 
 
 builder = StateGraph(State)
-builder.add_node("dispatch", lambda s: None)
+builder.add_node("dispatch", lambda s: {})
 builder.add_conditional_edges("dispatch", dispatch_tools, ["run_tool"])
 builder.add_node("run_tool", run_tool)
 builder.add_edge("run_tool", END)
@@ -1151,15 +1151,15 @@ for snapshot in graph.get_state_history(config):
 # step=6 values={'steps': [1, 2]}
 # ...
 
-# Rewind to before the first add_step and inject different values
+# Rewind to the very beginning and inject different values
 history = list(graph.get_state_history(config))
-checkpoint_before_start = history[-2]  # step=0: steps=[], next=('add_step',)
+checkpoint_at_start = history[-1]  # oldest: step=-1, steps=[], next=('__start__',)
 
 patched_config = graph.update_state(
-    checkpoint_before_start.config,
-    {"steps": [10, 20]},  # injected via operator.add: [] + [10, 20] = [10, 20]
+    checkpoint_at_start.config,
+    {"steps": [10, 20]},  # operator.add: [] + [10, 20] = [10, 20]
 )
-result = graph.invoke({"steps": []}, patched_config)
+result = graph.invoke(None, patched_config)  # resume from the patched start
 print("After time-travel patch:", result["steps"])  # [10, 20, 3]
 ```
 
