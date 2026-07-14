@@ -1206,6 +1206,7 @@ class CustomLLMClient(BaseChatClient):
             async def _stream():
                 async with httpx.AsyncClient() as http:
                     async with http.stream("POST", f"{self._base_url}/v1/chat/completions", json=payload) as r:
+                        r.raise_for_status()
                         async for line in r.aiter_lines():
                             if line.startswith("data: ") and line != "data: [DONE]":
                                 chunk = json.loads(line[6:])
@@ -1220,6 +1221,7 @@ class CustomLLMClient(BaseChatClient):
             async def _response():
                 async with httpx.AsyncClient() as http:
                     r = await http.post(f"{self._base_url}/v1/chat/completions", json=payload)
+                    r.raise_for_status()
                     data = r.json()
                 text = data["choices"][0]["message"]["content"]
                 return ChatResponse(
