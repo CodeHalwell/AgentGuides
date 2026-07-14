@@ -9,7 +9,7 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="tip">
-All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three runnable examples per class group; all code blocks pass `ast.parse()` syntax validation.
+All examples verified against **pydantic-ai 2.9.1** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.9.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation. Examples requiring API credentials have live calls commented out.
 </Aside>
 
 Ten class groups covering the streaming event protocol, delta types, DynamicToolset factory patterns, capability toolset injection, search result DTOs, AnthropicModelSettings cache controls, Vercel AI SDK inbound request types, ModelResponsePartsManager stream management, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas schema injection.
@@ -468,8 +468,8 @@ print(result.output)
 
 ## 5 · `DuckDuckGoResult` + `TavilySearchResult` + `ExaSearchResult` + `ExaAnswerResult` + `WebFetchResult`
 
-**Sources:** `pydantic_ai/common_tools/duckduckgo.py`, `common_tools/tavily.py`,
-`common_tools/exa.py`, `common_tools/web_fetch.py`
+**Sources:** `pydantic_ai/common_tools/duckduckgo.py`, `pydantic_ai/common_tools/tavily.py`,
+`pydantic_ai/common_tools/exa.py`, `pydantic_ai/common_tools/web_fetch.py`
 
 These `TypedDict` classes are the structured payloads returned by common tools to
 the LLM. Knowing their shapes lets you post-process results in your own tools, write
