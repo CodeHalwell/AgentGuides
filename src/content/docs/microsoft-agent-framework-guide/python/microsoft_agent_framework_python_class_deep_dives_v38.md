@@ -914,11 +914,11 @@ async def main(agent: Agent) -> None:
 
 ```python
 import asyncio
-from agent_framework import ResponseStream, ChatResponseUpdate, ChatResponse, Message
+from agent_framework import ResponseStream, ChatResponseUpdate, ChatResponse, Message, Content
 
 async def fake_stream_source():
     for word in ["Hello", " from", " a", " test", " stream"]:
-        yield ChatResponseUpdate(role="assistant", contents=[{"type": "text", "text": word}])
+        yield ChatResponseUpdate(role="assistant", contents=[Content(type="text", text=word)])
 
 def finalizer(updates):
     full_text = "".join(
