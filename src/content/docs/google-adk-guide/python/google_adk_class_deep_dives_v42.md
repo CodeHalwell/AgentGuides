@@ -490,9 +490,9 @@ from google.genai import types as genai_types
 
 metric = EvalMetric(
     metric_name=PrebuiltMetrics.RESPONSE_EVALUATION_SCORE.value,
-    threshold=0.7,
+    threshold=3.5,  # coherence is scored 1–5 by Vertex AI
     criterion=LlmAsAJudgeCriterion(
-        threshold=0.7,
+        threshold=3.5,
         rubrics=[
             "Is the response factually correct?",
             "Is the response concise and well-structured?",
@@ -508,7 +508,7 @@ metric = EvalMetric(
     ),
 )
 print(metric.metric_name)      # response_evaluation_score
-print(metric.threshold)        # 0.7
+print(metric.threshold)        # 3.5
 ```
 
 ### Example 2 — ROUGE match metric (no judge model needed)
@@ -520,7 +520,7 @@ rouge_metric = EvalMetric(
     metric_name=PrebuiltMetrics.RESPONSE_MATCH_SCORE.value,
     threshold=0.5,   # ROUGE-1 F-score ≥ 0.5 → PASSED
 )
-print(rouge_metric.judge_model_options)  # None; ROUGE is deterministic
+print(rouge_metric.metric_name)  # response_match_score
 ```
 
 ### Example 3 — serialising `EvalMetric` to JSON (camelCase aliases)
@@ -996,11 +996,12 @@ class SimpleSessionService(BaseSessionService):
         return filtered
 
     async def list_sessions(self, *, app_name, user_id=None) -> ListSessionsResponse:
-        sessions = [
-            s for s in self._sessions.values()
+        stripped = [
+            Session(id=s.id, app_name=s.app_name, user_id=s.user_id)
+            for s in self._sessions.values()
             if s.app_name == app_name and (user_id is None or s.user_id == user_id)
         ]
-        return ListSessionsResponse(sessions=sessions)
+        return ListSessionsResponse(sessions=stripped)
 
     async def delete_session(self, *, app_name, user_id, session_id) -> None:
         self._sessions.pop(session_id, None)
@@ -1109,8 +1110,9 @@ sessions); `session_id="<id>"` → session-scoped artifacts.
 
 ```python
 import asyncio
+import time
 from collections import defaultdict
-from typing import Any, Optional, Union
+from typing import Optional
 
 from google.genai import types
 from google.adk.artifacts.base_artifact_service import (
@@ -1129,7 +1131,7 @@ class DictArtifactService(BaseArtifactService):
 
     async def save_artifact(
         self, *, app_name, user_id, filename,
-        artifact: Union[types.Part, dict[str, Any]],
+        artifact: types.Part,
         session_id=None, custom_metadata=None,
     ) -> int:
         k = self._key(app_name, user_id, session_id, filename)
@@ -1164,6 +1166,8 @@ class DictArtifactService(BaseArtifactService):
                 version=i,
                 canonical_uri=f"mem://{filename}/{i}",
                 custom_metadata={},
+                create_time=time.time(),
+                mime_type=None,
             )
             for i in range(len(self._store.get(k, [])))
         ]
@@ -1179,6 +1183,8 @@ class DictArtifactService(BaseArtifactService):
                 version=idx,
                 canonical_uri=f"mem://{filename}/{idx}",
                 custom_metadata={},
+                create_time=time.time(),
+                mime_type=None,
             )
         return None
 
@@ -1234,8 +1240,9 @@ print("Round-trip OK")
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import Runner
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
 
 agent = LlmAgent(
@@ -1246,7 +1253,12 @@ agent = LlmAgent(
 
 async def main():
     artifact_svc = InMemoryArtifactService()
-    runner = InMemoryRunner(agent=agent, artifact_service=artifact_svc)
+    runner = Runner(
+        agent=agent,
+        artifact_service=artifact_svc,
+        session_service=InMemorySessionService(),
+        app_name="archivist_app",
+    )
     session = await runner.session_service.create_session(
         app_name="archivist_app", user_id="u1"
     )
@@ -1357,18 +1369,17 @@ print("Round-trip OK")
 ### Example 3 — persisting and retrieving an `EvalSet` via `InMemoryEvalSetsManager`
 
 ```python
-import asyncio
 from google.adk.evaluation.in_memory_eval_sets_manager import InMemoryEvalSetsManager
 from google.adk.evaluation.eval_set import EvalSet
 from google.adk.evaluation.eval_case import EvalCase, Invocation
 from google.genai import types
 
 
-async def main():
+def main():
     manager = InMemoryEvalSetsManager()
 
     # 1. Create the empty set
-    await manager.create_eval_set(app_name="demo_app", eval_set_id="demo_set")
+    manager.create_eval_set(app_name="demo_app", eval_set_id="demo_set")
 
     # 2. Add cases individually
     case = EvalCase(
@@ -1384,16 +1395,16 @@ async def main():
             )
         ],
     )
-    await manager.add_eval_case(
+    manager.add_eval_case(
         app_name="demo_app", eval_set_id="demo_set", eval_case=case
     )
 
     # 3. Retrieve and inspect
-    retrieved: EvalSet = await manager.get_eval_set(
+    retrieved: EvalSet = manager.get_eval_set(
         app_name="demo_app", eval_set_id="demo_set"
     )
     print(f"Retrieved {len(retrieved.eval_cases)} case(s)")
     print(f"First case: {retrieved.eval_cases[0].eval_id}")
 
-asyncio.run(main())
+main()
 ```
