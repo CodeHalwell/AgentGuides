@@ -16,7 +16,7 @@ Ten class groups covering the streaming event protocol, delta types, DynamicTool
 
 ---
 
-## 1 · `PartStartEvent` + `PartDeltaEvent` + `PartEndEvent` + `FinalResultEvent`
+## 1. `PartStartEvent` + `PartDeltaEvent` + `PartEndEvent` + `FinalResultEvent`
 
 **Source:** `pydantic_ai/messages.py`
 
@@ -137,7 +137,7 @@ async def main() -> None:
 
 ---
 
-## 2 · `TextPartDelta` + `ThinkingPartDelta` + `ToolCallPartDelta`
+## 2. `TextPartDelta` + `ThinkingPartDelta` + `ToolCallPartDelta`
 
 **Source:** `pydantic_ai/messages.py`
 
@@ -249,7 +249,7 @@ async def watch_args() -> None:
 
 ---
 
-## 3 · `DynamicToolset`
+## 3. `DynamicToolset`
 
 **Source:** `pydantic_ai/toolsets/_dynamic.py`
 
@@ -363,7 +363,7 @@ agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(build_db_toolset, p
 
 ---
 
-## 4 · `Toolset` capability + `IncludeToolReturnSchemas`
+## 4. `Toolset` capability + `IncludeToolReturnSchemas`
 
 **Sources:** `pydantic_ai/capabilities/toolset.py`, `pydantic_ai/capabilities/include_return_schemas.py`
 
@@ -466,7 +466,7 @@ agent = Agent(
 
 ---
 
-## 5 · `DuckDuckGoResult` + `TavilySearchResult` + `ExaSearchResult` + `ExaAnswerResult` + `WebFetchResult`
+## 5. `DuckDuckGoResult` + `TavilySearchResult` + `ExaSearchResult` + `ExaAnswerResult` + `WebFetchResult`
 
 **Sources:** `pydantic_ai/common_tools/duckduckgo.py`, `pydantic_ai/common_tools/tavily.py`,
 `pydantic_ai/common_tools/exa.py`, `pydantic_ai/common_tools/web_fetch.py`
@@ -555,7 +555,7 @@ print('Cited:', citation_urls)
 
 ---
 
-## 6 · `AnthropicModelSettings`
+## 6. `AnthropicModelSettings`
 
 **Source:** `pydantic_ai/models/anthropic.py`
 
@@ -632,7 +632,7 @@ settings: AnthropicModelSettings = {
 
 ---
 
-## 7 · Vercel AI SDK request types: `TextUIPart` + `ReasoningUIPart` + `FileUIPart` + `ToolApprovalRespondedPart`
+## 7. Vercel AI SDK request types: `TextUIPart` + `ReasoningUIPart` + `FileUIPart` + `ToolApprovalRespondedPart`
 
 **Source:** `pydantic_ai/ui/vercel_ai/request_types.py`
 
@@ -718,7 +718,7 @@ print(payload)
 
 ---
 
-## 8 · Vercel AI SDK response types: `TextStartChunk` + `TextDeltaChunk` + `ToolInputStartChunk` + `ToolApprovalRequestChunk`
+## 8. Vercel AI SDK response types: `TextStartChunk` + `TextDeltaChunk` + `ToolInputStartChunk` + `ToolApprovalRequestChunk`
 
 **Source:** `pydantic_ai/ui/vercel_ai/response_types.py`
 
@@ -818,7 +818,7 @@ for c in stream:
 
 ---
 
-## 9 · `ModelResponsePartsManager`
+## 9. `ModelResponsePartsManager`
 
 **Source:** `pydantic_ai/_parts_manager.py`
 
@@ -946,7 +946,7 @@ asyncio.run(inspect_manager())
 
 ---
 
-## 10 · AG-UI HITL: `approval_to_interrupt` + `resume_entry_to_approval`
+## 10. AG-UI HITL: `approval_to_interrupt` + `resume_entry_to_approval`
 
 **Source:** `pydantic_ai/ui/ag_ui/_interrupt.py`
 
