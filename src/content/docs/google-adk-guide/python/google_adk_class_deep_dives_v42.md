@@ -971,6 +971,8 @@ from google.adk.sessions.session import Session
 class SimpleSessionService(BaseSessionService):
     def __init__(self):
         self._sessions: dict[str, Session] = {}
+        # Keyed by (app_name, user_id); values are prefix-stripped user-scoped state.
+        self._user_state: dict[tuple, dict[str, Any]] = {}
 
     async def create_session(
         self, *, app_name, user_id, state=None, session_id=None
@@ -1018,13 +1020,21 @@ class SimpleSessionService(BaseSessionService):
         self._sessions.pop(session_id, None)
 
     async def get_user_state(self, *, app_name, user_id) -> dict[str, Any]:
-        return {}
+        return dict(self._user_state.get((app_name, user_id), {}))
 
     async def append_event(self, session: Session, event: Event) -> Event:
         # get_session may return a filtered copy; always persist to the stored
         # session so events survive across turns.
         stored = self._sessions.get(session.id, session)
-        return await super().append_event(stored, event)
+        result = await super().append_event(stored, event)
+        # Mirror ADK InMemorySessionService: extract user:-prefixed deltas into
+        # a separate map so get_user_state can serve them across sessions.
+        if event.actions and event.actions.state_delta:
+            for k, v in event.actions.state_delta.items():
+                if k.startswith("user:"):
+                    key = (stored.app_name, stored.user_id)
+                    self._user_state.setdefault(key, {})[k[len("user:"):]] = v
+        return result
 ```
 
 ### Example 2 — `GetSessionConfig` to limit events returned
@@ -1155,6 +1165,8 @@ class DictArtifactService(BaseArtifactService):
             mime_type = artifact.inline_data.mime_type
         elif artifact.text is not None:
             mime_type = "text/plain"
+        elif artifact.file_data is not None:
+            mime_type = artifact.file_data.mime_type  # None for artifact reference URIs
         av = ArtifactVersion(
             version=version,
             canonical_uri=f"mem://{filename}/{version}",
