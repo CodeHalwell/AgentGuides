@@ -1073,7 +1073,7 @@ from agent_framework.azure import AzureAISearchContextProvider
 
 # Any BaseEmbeddingClient works here — swap SentenceTransformersClient with
 # OpenAIEmbeddingClient, OllamaEmbeddingClient, or your custom class
-async def main(embedding_client, azure_search_endpoint, index_name):
+async def main(chat_client, embedding_client, azure_search_endpoint, index_name):
     provider = AzureAISearchContextProvider(
         endpoint=azure_search_endpoint,
         index_name=index_name,
@@ -1082,7 +1082,7 @@ async def main(embedding_client, azure_search_endpoint, index_name):
         top_k=5,
     )
     agent = Agent(
-        client=your_chat_client,  # type: ignore
+        client=chat_client,
         name="rag-agent",
         instructions="Answer questions using the provided context.",
         context_providers=[provider],
@@ -1090,7 +1090,7 @@ async def main(embedding_client, azure_search_endpoint, index_name):
     response = await agent.run("What is the refund policy?")
     print(response.text)
 
-# asyncio.run(main(your_embedding_client, "https://...", "docs-index"))
+# asyncio.run(main(your_chat_client, your_embedding_client, "https://...", "docs-index"))
 ```
 
 ---
