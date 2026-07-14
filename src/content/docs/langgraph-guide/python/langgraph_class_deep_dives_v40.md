@@ -1231,7 +1231,7 @@ print(mermaid)
 ### Example 1 — `RunnableSeq` for multi-stage node pipelines
 
 ```python
-from langgraph._internal._runnable import RunnableSeq, RunnableCallable
+from langgraph._internal._runnable import RunnableSeq
 
 
 def normalise(text: str) -> str:
@@ -1256,8 +1256,6 @@ print(result)
 ### Example 2 — `_RunnableWithWriter` for mid-node streaming
 
 ```python
-from typing import Any
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import StreamWriter
 from typing_extensions import TypedDict
