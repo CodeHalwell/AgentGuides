@@ -530,12 +530,12 @@ print(rouge_metric.metric_name)  # response_match_score
 ### Example 3 — serialising `EvalMetric` to JSON (camelCase aliases)
 
 ```python
-from google.adk.evaluation.eval_metrics import EvalMetric, LlmAsAJudgeCriterion
+from google.adk.evaluation.eval_metrics import EvalMetric, RubricsBasedCriterion
 
 metric = EvalMetric(
     metric_name="custom_accuracy",
     threshold=0.8,
-    criterion=LlmAsAJudgeCriterion(
+    criterion=RubricsBasedCriterion(
         threshold=0.8,
         rubrics=["The answer is numerically accurate."],
     ),
