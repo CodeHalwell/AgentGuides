@@ -402,12 +402,16 @@ from google.adk.tools.mcp_tool.mcp_session_manager import (
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
 
-def private_ca_factory(**kwargs) -> httpx.AsyncClient:
-    """Returns an AsyncClient trusting a private CA certificate."""
+def private_ca_factory(headers=None, timeout=None, **_) -> httpx.AsyncClient:
+    """Returns an AsyncClient trusting a private CA certificate.
+
+    ADK passes headers= and timeout= from MCPSessionManager._create_client;
+    accept them explicitly so our own timeout wins without a duplicate-kwarg error.
+    """
     return httpx.AsyncClient(
         verify="/etc/ssl/private-ca.pem",
-        timeout=httpx.Timeout(60.0),
-        **kwargs,
+        timeout=httpx.Timeout(60.0),   # override framework timeout
+        headers=headers or {},
     )
 
 
@@ -454,7 +458,7 @@ class LlmAsAJudgeCriterion(BaseCriterion):
 
 class RubricsBasedCriterion(BaseCriterion):
     judge_model_options: JudgeModelOptions = JudgeModelOptions()
-    rubrics: list[str] = []                # natural-language rubric statements
+    rubrics: list[Rubric] = []             # Rubric(rubric_id, rubric_content) objects
 
 class LlmBackedUserSimulatorCriterion(BaseCriterion):
     pass
@@ -490,6 +494,7 @@ from google.adk.evaluation.eval_metrics import (
     EvalMetric, JudgeModelOptions, RubricsBasedCriterion,
     PrebuiltMetrics,
 )
+from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 from google.genai import types as genai_types
 
 metric = EvalMetric(
@@ -498,9 +503,9 @@ metric = EvalMetric(
     criterion=RubricsBasedCriterion(
         threshold=3.5,
         rubrics=[
-            "Is the response factually correct?",
-            "Is the response concise and well-structured?",
-            "Does the response fully address the user's question?",
+            Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="Is the response factually correct?")),
+            Rubric(rubric_id="r2", rubric_content=RubricContent(text_property="Is the response concise and well-structured?")),
+            Rubric(rubric_id="r3", rubric_content=RubricContent(text_property="Does the response fully address the user's question?")),
         ],
         judge_model_options=JudgeModelOptions(
             judge_model="gemini-2.5-flash",
@@ -531,13 +536,16 @@ print(rouge_metric.metric_name)  # response_match_score
 
 ```python
 from google.adk.evaluation.eval_metrics import EvalMetric, RubricsBasedCriterion
+from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 
 metric = EvalMetric(
     metric_name="custom_accuracy",
     threshold=0.8,
     criterion=RubricsBasedCriterion(
         threshold=0.8,
-        rubrics=["The answer is numerically accurate."],
+        rubrics=[
+            Rubric(rubric_id="r1", rubric_content=RubricContent(text_property="The answer is numerically accurate.")),
+        ],
     ),
 )
 
@@ -627,7 +635,7 @@ async def inspect_mcp_tools():
         assert isinstance(tool, McpTool)
         print(f"name={tool.name}")
         print(f"description={tool.description[:60]!r}")
-        print(f"is_long_running={tool.is_long_running_tool}")
+        print(f"is_long_running={tool.is_long_running}")
         print(f"custom_metadata={tool.custom_metadata}")
     await toolset.close()
 
@@ -1011,11 +1019,8 @@ class SimpleSessionService(BaseSessionService):
     async def get_user_state(self, *, app_name, user_id) -> dict[str, Any]:
         return {}
 
-    async def append_event(self, session: Session, event: Event) -> Event:
-        session.events.append(event)
-        if event.actions and event.actions.state_delta:
-            session.state.update(event.actions.state_delta)
-        return event
+    # append_event is NOT overridden: BaseSessionService.append_event handles
+    # partial-event skipping and temp-scoped state trimming before persistence.
 ```
 
 ### Example 2 — `GetSessionConfig` to limit events returned
@@ -1151,8 +1156,13 @@ class DictArtifactService(BaseArtifactService):
         return versions[idx] if 0 <= idx < len(versions) else None
 
     async def list_artifact_keys(self, *, app_name, user_id, session_id=None):
-        prefix = (app_name, user_id, session_id or "__user__")
-        return [k[3] for k in self._store if k[:3] == prefix]
+        # Always include user-scoped artifacts; also session-scoped when session_id given.
+        user_prefix = (app_name, user_id, "__user__")
+        keys = {k[3] for k in self._store if k[:3] == user_prefix}
+        if session_id is not None:
+            session_prefix = (app_name, user_id, session_id)
+            keys |= {k[3] for k in self._store if k[:3] == session_prefix}
+        return sorted(keys)
 
     async def delete_artifact(self, *, app_name, user_id, filename, session_id=None):
         self._store.pop(self._key(app_name, user_id, session_id, filename), None)
