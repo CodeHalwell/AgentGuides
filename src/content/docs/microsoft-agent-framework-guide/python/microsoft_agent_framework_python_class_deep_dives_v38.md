@@ -775,7 +775,7 @@ from agent_framework import ChatMiddleware, ChatContext
 class LatencyLoggingMiddleware(ChatMiddleware):
     async def process(self, context: ChatContext, call_next):
         start = time.monotonic()
-        await call_next(context)
+        await call_next()
         elapsed_ms = (time.monotonic() - start) * 1000
         usage = getattr(context.result, "usage_details", {}) or {}
         print(
@@ -800,12 +800,12 @@ class PIIRedactionMiddleware(ChatMiddleware):
     async def process(self, context: ChatContext, call_next):
         def redact_update(update: ChatResponseUpdate) -> ChatResponseUpdate:
             for content in update.contents or []:
-                if isinstance(content, dict) and content.get("type") == "text":
-                    content["text"] = self.EMAIL_RE.sub("[REDACTED]", content["text"])
+                if content.type == "text":
+                    content.text = self.EMAIL_RE.sub("[REDACTED]", content.text)
             return update
 
         context.stream_transform_hooks.append(redact_update)
-        await call_next(context)
+        await call_next()
 ```
 
 **Example 21 — short-circuit cache via result override**
@@ -832,7 +832,7 @@ class SimpleCacheMiddleware(ChatMiddleware):
             )
             return
 
-        await call_next(context)
+        await call_next()
 
         # Cache the response for next time
         if isinstance(context.result, ChatResponse):
@@ -860,10 +860,12 @@ ResponseStream(
 )
 
 Key methods:
-  async for update in stream:  ...       # iterate updates
-  final = await stream.finalize()        # drain + run finalizer
-  stream.final_result                    # cached final value after finalize()
-  stream.is_consumed                     # True once iteration is complete
+  async for update in stream:  ...              # iterate updates
+  final = await stream.get_final_response()     # drain + run finalizer → FinalT
+  stream.with_result_hook(fn)                   # attach a post-finalizer transform hook
+  stream.with_transform_hook(fn)                # attach a per-update transform hook
+  stream.with_cleanup_hook(fn)                  # attach a post-consumption cleanup hook
+  stream.with_finalizer(fn)                     # replace the finalizer (returns new stream)
 ```
 
 **Example 22 — consume streaming response token-by-token**
@@ -875,11 +877,9 @@ from agent_framework import Agent
 async def stream_to_console(agent: Agent, prompt: str) -> None:
     stream = await agent.run(prompt, stream=True)
     async for update in stream:
-        for content in update.contents or []:
-            if isinstance(content, dict) and content.get("type") == "text":
-                print(content["text"], end="", flush=True)
+        print(update.text, end="", flush=True)
     print()  # newline after stream ends
-    response = await stream.finalize()
+    response = await stream.get_final_response()
     print(f"\n[done — finish_reason: {response.finish_reason}]")
 
 # asyncio.run(stream_to_console(your_agent, "Explain asyncio in 3 points."))
@@ -903,7 +903,7 @@ async def main(agent: Agent) -> None:
 
     async for _ in stream:
         pass  # consume
-    await stream.finalize()
+    await stream.get_final_response()
 
 # asyncio.run(main(your_agent))
 ```
@@ -920,10 +920,10 @@ async def fake_stream_source():
 
 def finalizer(updates):
     full_text = "".join(
-        c["text"]
+        c.text
         for u in updates
         for c in (u.contents or [])
-        if isinstance(c, dict) and c.get("type") == "text"
+        if c.type == "text"
     )
     return ChatResponse(
         messages=[Message(role="assistant", contents=[full_text])],
@@ -935,7 +935,7 @@ async def main():
     chunks = []
     async for update in stream:
         chunks.append(update)
-    response = await stream.finalize()
+    response = await stream.get_final_response()
     print(response.messages[0].content_str)  # "Hello from a test stream"
 
 asyncio.run(main())
