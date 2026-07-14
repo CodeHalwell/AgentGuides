@@ -1,7 +1,8 @@
 ---
-title: "Class Deep Dives Vol. 36 — 10 class groups (v2.9.1)"
+title: "PydanticAI Class Deep Dives Vol. 36"
 description: "Source-verified deep dives into 10 pydantic-ai class groups: streaming event protocol, delta types, DynamicToolset, capability toolset injection, search result DTOs, AnthropicModelSettings, Vercel AI SDK types, ModelResponsePartsManager, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas."
 sidebar:
+  label: "Class deep dives (Vol. 36)"
   order: 62
 ---
 
@@ -337,8 +338,8 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import DynamicToolset, FunctionToolset
 
 
-async def build_db_toolset(ctx: RunContext):
-    """Simulate async toolset initialisation (e.g. open a DB connection pool)."""
+async def build_db_toolset(ctx: RunContext) -> FunctionToolset:
+    """Async factory: simulate opening a DB connection pool once per run."""
     print('Connecting to DB...')
     tools = FunctionToolset()
 
@@ -349,13 +350,9 @@ async def build_db_toolset(ctx: RunContext):
     return tools
 
 
-def sync_factory(ctx: RunContext):
-    import asyncio as _asyncio
-    return _asyncio.get_event_loop().run_until_complete(build_db_toolset(ctx))
-
-
-# per_run_step=False: factory called once at the start of the run
-agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(sync_factory, per_run_step=False)])
+# per_run_step=False: async factory awaited once at run start;
+# DynamicToolset handles async factories directly — no event-loop bridging needed.
+agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(build_db_toolset, per_run_step=False)])
 
 # asyncio.run(agent.run('Query the users table'))
 ```
@@ -829,6 +826,7 @@ deduplication and vendor-ID tracking.
 # Example 1 — Custom streamed response using ModelResponsePartsManager
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from pydantic_ai._parts_manager import ModelResponsePartsManager
 from pydantic_ai.messages import (
     ModelResponseStreamEvent,
@@ -873,8 +871,6 @@ class EchoStreamedResponse(StreamedResponse):
     @property
     def provider_url(self) -> str | None:
         return None
-
-    from datetime import datetime, timezone
 
     @property
     def timestamp(self) -> datetime:
