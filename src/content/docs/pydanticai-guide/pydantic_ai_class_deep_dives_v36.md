@@ -632,7 +632,7 @@ settings: AnthropicModelSettings = {
 
 ---
 
-## 7 · Vercel AI SDK request types: `TextUIPart` + `ReasoningUIPart` + `FileUIPart` + `ToolApprovalRequestedPart` + `ToolApprovalRespondedPart`
+## 7 · Vercel AI SDK request types: `TextUIPart` + `ReasoningUIPart` + `FileUIPart` + `ToolApprovalRespondedPart`
 
 **Source:** `pydantic_ai/ui/vercel_ai/request_types.py`
 
