@@ -41,7 +41,8 @@ This volume covers **ten class groups** across the Google Vertex AI integration,
 ## 1 · Google Vertex AI — Anthropic Client
 
 **Module:** `agent_framework.google`
-**Install:** `pip install agent-framework`
+**Install:** `pip install agent-framework "anthropic[vertex]"`
+*(base `agent-framework` includes `agent-framework-anthropic`; the `[vertex]` extra adds `google-auth` for Vertex AI)*
 
 The `google` sub-package provides two classes for running Anthropic (Claude) models through **Google Vertex AI** — a fully-featured client with the standard middleware stack, and a raw variant without it.
 
@@ -170,7 +171,8 @@ async def main():
 ## 2 · GAIA Benchmark Harness
 
 **Module:** `agent_framework.lab.gaia`
-**Install:** `pip install agent-framework` (requires `huggingface_hub` for dataset download)
+**Install:** `pip install "agent-framework-lab[gaia]"`
+*(adds `huggingface-hub`, `opentelemetry-sdk`, `pydantic`, `tqdm`, `orjson`, and `pyarrow` needed by the GAIA runner)*
 
 The `gaia` lab module provides types and a runner for the **GAIA** (General AI Assistant) benchmark — a curated set of real-world tasks requiring multi-step reasoning with tool use.
 
@@ -874,7 +876,7 @@ import asyncio
 from agent_framework import Agent
 
 async def stream_to_console(agent: Agent, prompt: str) -> None:
-    stream = await agent.run(prompt, stream=True)
+    stream = agent.run(prompt, stream=True)
     async for update in stream:
         print(update.text, end="", flush=True)
     print()  # newline after stream ends
@@ -891,7 +893,7 @@ import asyncio
 from agent_framework import Agent, AgentResponse
 
 async def main(agent: Agent) -> None:
-    stream = await agent.run("What is machine learning?", stream=True)
+    stream = agent.run("What is machine learning?", stream=True)
 
     async def log_usage(response: AgentResponse) -> AgentResponse:
         if response.usage_details:
