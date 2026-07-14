@@ -917,9 +917,7 @@ from pydantic_ai.messages import TextPart
 
 
 async def inspect_manager() -> None:
-    # ModelResponsePartsManager requires ModelRequestParameters but accepts None for testing
     from pydantic_ai.models import ModelRequestParameters
-    from pydantic_ai.tools import ToolDefinition
 
     params = ModelRequestParameters(
         function_tools=[],
