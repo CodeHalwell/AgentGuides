@@ -1079,8 +1079,8 @@ async def main(chat_client, embedding_client, azure_search_endpoint, index_name)
     provider = AzureAISearchContextProvider(
         endpoint=azure_search_endpoint,
         index_name=index_name,
-        embedding_client=embedding_client,
-        vector_field="content_vector",
+        embedding_function=embedding_client,
+        vector_field_name="content_vector",
         top_k=5,
     )
     agent = Agent(
