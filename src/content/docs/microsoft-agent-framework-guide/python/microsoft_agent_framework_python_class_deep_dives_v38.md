@@ -254,13 +254,12 @@ async def main():
 
     gaia = GAIA(hf_token=os.environ["HF_TOKEN"])
 
-    # Run only the first 5 level-1 tasks in validation split
+    # Run only the first 5 level-1 tasks
     results = await gaia.run(
         runner,
-        split="validation",
         level=1,
-        max_tasks=5,
-        concurrency=2,
+        max_n=5,
+        parallel=2,
         timeout=120,
     )
     correct = sum(1 for r in results if r.evaluation and r.evaluation.is_correct)
@@ -708,7 +707,7 @@ async def main():
 
     response = await agent.run(
         "Plan a 3-step process to deploy a FastAPI service.",
-        response_format=TaskPlan,
+        options={"response_format": TaskPlan},
     )
     plan: TaskPlan = response.value  # fully typed Pydantic model
     for i, step in enumerate(plan.steps, 1):
@@ -1110,7 +1109,7 @@ BaseChatClient(
 )
 
 Abstract method (must implement):
-  def _inner_get_response(
+  def _inner_get_response(       # must be a regular def, NOT async def
       self,
       *,
       messages: list[Message],
@@ -1118,8 +1117,8 @@ Abstract method (must implement):
       options: dict[str, Any],
       **kwargs,
   ) -> Awaitable[ChatResponse] | ResponseStream[ChatResponseUpdate, ChatResponse]:
-      # stream=False → return an Awaitable[ChatResponse]  (async def works)
-      # stream=True  → return self._build_response_stream(async_gen())
+      # stream=False → return a coroutine/awaitable (nest async logic in inner async def)
+      # stream=True  → return self._build_response_stream(async_gen()) directly
 
 Public API (inherited):
   await client.get_response(messages, *, stream=False, options=None, **kwargs)
@@ -1132,19 +1131,20 @@ Public API (inherited):
 
 ```python
 import asyncio
+from collections.abc import Awaitable
 from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate as Update, Message, ResponseStream
 
 class EchoClient(BaseChatClient):
     """Trivial client that echoes the last user message — useful for testing."""
 
-    async def _inner_get_response(
+    def _inner_get_response(
         self,
         *,
         messages: list[Message],
         stream: bool,
         options: dict,
         **kwargs,
-    ) -> ChatResponse | ResponseStream[Update, ChatResponse]:
+    ) -> Awaitable[ChatResponse] | ResponseStream[Update, ChatResponse]:
         last_user = next(
             (m.content_str for m in reversed(messages) if m.role == "user"),
             "(no user message)",
@@ -1156,10 +1156,12 @@ class EchoClient(BaseChatClient):
                 yield Update(role="assistant", contents=[{"type": "text", "text": reply}])
             return self._build_response_stream(_stream())
         else:
-            return ChatResponse(
-                messages=[Message(role="assistant", contents=[reply])],
-                response_id="echo-001",
-            )
+            async def _response():
+                return ChatResponse(
+                    messages=[Message(role="assistant", contents=[reply])],
+                    response_id="echo-001",
+                )
+            return _response()
 
 async def main():
     from agent_framework import Agent
@@ -1173,7 +1175,8 @@ asyncio.run(main())
 **Example 29 — streaming provider with model routing**
 
 ```python
-import asyncio, httpx
+import asyncio, httpx, json
+from collections.abc import Awaitable
 from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate, Message, ResponseStream
 
 class CustomLLMClient(BaseChatClient):
@@ -1184,14 +1187,14 @@ class CustomLLMClient(BaseChatClient):
         self._base_url = base_url.rstrip("/")
         self._model = model
 
-    async def _inner_get_response(
+    def _inner_get_response(
         self,
         *,
         messages: list[Message],
         stream: bool,
         options: dict,
         **kwargs,
-    ) -> ChatResponse | ResponseStream[ChatResponseUpdate, ChatResponse]:
+    ) -> Awaitable[ChatResponse] | ResponseStream[ChatResponseUpdate, ChatResponse]:
         payload = {
             "model": options.get("model", self._model),
             "messages": [{"role": m.role, "content": m.content_str} for m in messages],
@@ -1203,7 +1206,6 @@ class CustomLLMClient(BaseChatClient):
                     async with http.stream("POST", f"{self._base_url}/v1/chat/completions", json=payload) as r:
                         async for line in r.aiter_lines():
                             if line.startswith("data: ") and line != "data: [DONE]":
-                                import json
                                 chunk = json.loads(line[6:])
                                 delta = chunk["choices"][0]["delta"]
                                 if text := delta.get("content", ""):
@@ -1213,15 +1215,16 @@ class CustomLLMClient(BaseChatClient):
                                     )
             return self._build_response_stream(_stream())
         else:
-            import json
-            async with httpx.AsyncClient() as http:
-                r = await http.post(f"{self._base_url}/v1/chat/completions", json=payload)
-                data = r.json()
-            text = data["choices"][0]["message"]["content"]
-            return ChatResponse(
-                messages=[Message(role="assistant", contents=[text])],
-                response_id=data.get("id"),
-            )
+            async def _response():
+                async with httpx.AsyncClient() as http:
+                    r = await http.post(f"{self._base_url}/v1/chat/completions", json=payload)
+                    data = r.json()
+                text = data["choices"][0]["message"]["content"]
+                return ChatResponse(
+                    messages=[Message(role="assistant", contents=[text])],
+                    response_id=data.get("id"),
+                )
+            return _response()
 
 # asyncio.run(Agent(client=CustomLLMClient("http://localhost:8000"), ...).run("Hello!"))
 ```
