@@ -226,7 +226,7 @@ print(personalised.invoke("Alice", config, context={"user_id": "u42", "role": "a
 
 **Key source facts** (from `langgraph/channels/last_value.py`):
 
-- `LastValue.update(values)` raises `InvalidUpdateError` if `len(values) != 1`. The error message instructs using an `Annotated` key with a reducer.
+- `LastValue.update(values)` raises `InvalidUpdateError` if `len(values) > 1`. An empty update (`len(values) == 0`) is a valid no-op — it returns `False` and leaves the stored value unchanged, which is the normal path Pregel takes for channels with no writes at the end of a step. The error message instructs using an `Annotated` key with a reducer.
 - `LastValue.get()` raises `EmptyChannelError` when `self.value is MISSING` (before any write). `is_available()` is a cheap non-raising alternative.
 - `LastValue.checkpoint()` returns `self.value`, which may be `MISSING` — callers that persist channels must handle `MISSING` as an absent entry.
 - `LastValueAfterFinish.finish()` sets `self.finished = True` and returns `True` only if a value is already stored and not yet finished. The runtime calls `finish()` at the end of the super-step before exposing the channel to reads.
@@ -437,7 +437,7 @@ laf: LastValueAfterFinish[int] = LastValueAfterFinish(int, "counter")
 print(laf.ValueType)   # <class 'int'>
 print(laf.UpdateType)  # <class 'int'>
 
-agg: BinaryOperatorAggregate[list, list] = BinaryOperatorAggregate(list, operator.add)
+agg: BinaryOperatorAggregate[list] = BinaryOperatorAggregate(list, operator.add)
 agg.key = "items"
 print(agg.ValueType)   # <class 'list'>
 print(agg.UpdateType)  # <class 'list'>
