@@ -644,6 +644,7 @@ so JSON keys are `camelCase` on the wire but `snake_case` in Python.
 # Example 1 — Parse a full UIMessage payload from a Vercel AI SDK frontend request
 from pydantic_ai.ui.vercel_ai.request_types import (
     TextUIPart,
+    ReasoningUIPart,
     FileUIPart,
     UIMessage,
     SubmitMessage,
@@ -654,6 +655,7 @@ user_msg = UIMessage(
     id='msg-1',
     role='user',
     parts=[
+        ReasoningUIPart(text='I should describe the image contents.'),
         TextUIPart(text='Explain this image.'),
         FileUIPart(media_type='image/png', url='data:image/png;base64,iVBORw0KGgo='),
     ],
@@ -663,7 +665,9 @@ user_msg = UIMessage(
 submit = SubmitMessage(id='req-1', messages=[user_msg])
 
 for part in submit.messages[0].parts:
-    if isinstance(part, TextUIPart):
+    if isinstance(part, ReasoningUIPart):
+        print('Reasoning:', part.text)
+    elif isinstance(part, TextUIPart):
         print('Text:', part.text)
     elif isinstance(part, FileUIPart):
         print('File:', part.media_type, part.url[:30])
