@@ -824,8 +824,8 @@ class SimpleCacheMiddleware(ChatMiddleware):
         )
         key = last_user.content_str if last_user else ""
 
-        if key in self._cache:
-            # Set result directly — call_next is NOT called; LLM is skipped
+        if key in self._cache and not context.stream:
+            # Short-circuit non-streaming requests only; streaming requires ResponseStream
             context.result = ChatResponse(
                 messages=[Message(role="assistant", contents=[self._cache[key]])],
                 response_id="cached",
@@ -1110,14 +1110,16 @@ BaseChatClient(
 )
 
 Abstract method (must implement):
-  async def _inner_get_response(
+  def _inner_get_response(
       self,
       *,
       messages: list[Message],
       stream: bool,
       options: dict[str, Any],
       **kwargs,
-  ) -> ChatResponse | AsyncIterable[ChatResponseUpdate]: ...
+  ) -> Awaitable[ChatResponse] | ResponseStream[ChatResponseUpdate, ChatResponse]:
+      # stream=False → return an Awaitable[ChatResponse]  (async def works)
+      # stream=True  → return self._build_response_stream(async_gen())
 
 Public API (inherited):
   await client.get_response(messages, *, stream=False, options=None, **kwargs)
@@ -1130,8 +1132,7 @@ Public API (inherited):
 
 ```python
 import asyncio
-from collections.abc import AsyncIterable
-from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate as Update, Message
+from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate as Update, Message, ResponseStream
 
 class EchoClient(BaseChatClient):
     """Trivial client that echoes the last user message — useful for testing."""
@@ -1143,7 +1144,7 @@ class EchoClient(BaseChatClient):
         stream: bool,
         options: dict,
         **kwargs,
-    ) -> ChatResponse | AsyncIterable[Update]:
+    ) -> ChatResponse | ResponseStream[Update, ChatResponse]:
         last_user = next(
             (m.content_str for m in reversed(messages) if m.role == "user"),
             "(no user message)",
@@ -1153,7 +1154,7 @@ class EchoClient(BaseChatClient):
         if stream:
             async def _stream():
                 yield Update(role="assistant", contents=[{"type": "text", "text": reply}])
-            return _stream()
+            return self._build_response_stream(_stream())
         else:
             return ChatResponse(
                 messages=[Message(role="assistant", contents=[reply])],
@@ -1173,8 +1174,7 @@ asyncio.run(main())
 
 ```python
 import asyncio, httpx
-from collections.abc import AsyncIterable
-from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate, Message
+from agent_framework import BaseChatClient, ChatResponse, ChatResponseUpdate, Message, ResponseStream
 
 class CustomLLMClient(BaseChatClient):
     """Calls a self-hosted OpenAI-compatible endpoint."""
@@ -1191,7 +1191,7 @@ class CustomLLMClient(BaseChatClient):
         stream: bool,
         options: dict,
         **kwargs,
-    ) -> ChatResponse | AsyncIterable[ChatResponseUpdate]:
+    ) -> ChatResponse | ResponseStream[ChatResponseUpdate, ChatResponse]:
         payload = {
             "model": options.get("model", self._model),
             "messages": [{"role": m.role, "content": m.content_str} for m in messages],
@@ -1211,7 +1211,7 @@ class CustomLLMClient(BaseChatClient):
                                         role="assistant",
                                         contents=[{"type": "text", "text": text}],
                                     )
-            return _stream()
+            return self._build_response_stream(_stream())
         else:
             import json
             async with httpx.AsyncClient() as http:
