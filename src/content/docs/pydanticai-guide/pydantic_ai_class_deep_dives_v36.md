@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI Class Deep Dives Vol. 36"
-description: "Source-verified deep dives into 10 pydantic-ai class groups: streaming event protocol, delta types, DynamicToolset, capability toolset injection, search result DTOs, AnthropicModelSettings, Vercel AI SDK types, ModelResponsePartsManager, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas."
+description: "Source-verified deep dives into 10 pydantic-ai 2.9.1 class groups: streaming event protocol, delta types, DynamicToolset, capability toolset injection, search result DTOs, AnthropicModelSettings, Vercel AI SDK types, ModelResponsePartsManager, AG-UI HITL interrupt translation, and IncludeToolReturnSchemas."
 sidebar:
   label: "Class deep dives (Vol. 36)"
   order: 62
