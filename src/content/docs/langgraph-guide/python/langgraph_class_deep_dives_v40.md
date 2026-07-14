@@ -323,7 +323,7 @@ print(signal.is_available())  # False — consumed
 
 - `__slots__ = ("key", "typ")` — lightweight; `key` is the state-field name injected by `StateGraph` at build time, `typ` is the raw Python type annotation.
 - `checkpoint()` defaults to `self.get()` — subclasses that store intermediate state (e.g. `LastValueAfterFinish`) must override it.
-- `from_checkpoint(checkpoint)` is an abstract classmethod-style factory that returns a *new* channel instance pre-loaded with the checkpoint value. Returning `self` would break replay semantics.
+- `from_checkpoint(checkpoint)` is an abstract **instance method** (not a classmethod) that must return a *new* `Self` instance pre-loaded with the checkpoint value — mutating `self` and returning it would break replay semantics because the runtime may hold references to the original instance.
 - `copy()` defaults to `from_checkpoint(self.checkpoint())` but subclasses may override for efficiency (e.g. `LastValue.copy()` sets `value` directly).
 - `is_available()` defaults to a try/except around `get()` — override with a cheap flag check for hot paths.
 - Channels *must not* be shared between threads without copying; each `PregelRunner` task receives its own channel copy.
@@ -1112,17 +1112,21 @@ for name, ch in graph.channels.items():
 ### Example 2 — time-travel with `get_state_history` and `update_state`
 
 ```python
+import operator
+from typing import Annotated, List
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 
 
 class State(TypedDict):
-    steps: list
+    # Annotated with operator.add so each run appends rather than replaces.
+    steps: Annotated[List[int], operator.add]
 
 
 def add_step(state: State) -> dict:
-    return {"steps": state["steps"] + [len(state["steps"]) + 1]}
+    # Return only the new element; the reducer concatenates it.
+    return {"steps": [len(state["steps"]) + 1]}
 
 
 builder = StateGraph(State)
@@ -1134,24 +1138,28 @@ checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 config = {"configurable": {"thread_id": "history_demo"}}
 
-# Run 3 times
-for _ in range(3):
-    graph.invoke({"steps": []}, config)
+# Seed once, then invoke two more times — steps accumulate: [1], [1, 2], [1, 2, 3].
+graph.invoke({"steps": []}, config)
+graph.invoke({"steps": []}, config)
+graph.invoke({"steps": []}, config)
 
 # Time-travel: inspect history
 print("State history (newest first):")
 for snapshot in graph.get_state_history(config):
     print(f"  step={snapshot.metadata.get('step')} values={snapshot.values}")
+# step=7 values={'steps': [1, 2, 3]}
+# step=6 values={'steps': [1, 2]}
+# ...
 
-# Rewind to step 1 and patch state
+# Rewind to before the first add_step and inject different values
 history = list(graph.get_state_history(config))
-checkpoint_at_step1 = history[-2]  # second-to-last is after step 1
+checkpoint_before_start = history[-2]  # step=0: steps=[], next=('add_step',)
 
 patched_config = graph.update_state(
-    checkpoint_at_step1.config,
-    {"steps": [10, 20]},  # inject different values
+    checkpoint_before_start.config,
+    {"steps": [10, 20]},  # injected via operator.add: [] + [10, 20] = [10, 20]
 )
-result = graph.invoke(None, patched_config)
+result = graph.invoke({"steps": []}, patched_config)
 print("After time-travel patch:", result["steps"])  # [10, 20, 3]
 ```
 
