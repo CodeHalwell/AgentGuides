@@ -46,6 +46,8 @@ This volume covers **ten class groups** across the Google Vertex AI integration,
 
 The `google` sub-package provides two classes for running Anthropic (Claude) models through **Google Vertex AI** — a fully-featured client with the standard middleware stack, and a raw variant without it.
 
+> **Import note:** Both classes are also importable from `agent_framework.anthropic` (e.g. `from agent_framework.anthropic import AnthropicVertexClient`) — the two paths resolve to the same class. Other volumes in this guide use `agent_framework.anthropic`; `agent_framework.google` is the namespace grouping used in this section.
+
 ### `RawAnthropicVertexClient`
 
 Thin wrapper around `anthropic.AsyncAnthropicVertex` that maps the framework's `Message`/`ChatOptions` contract onto the Vertex REST API.  Sets `OTEL_PROVIDER_NAME = "google.vertex.ai"` so telemetry labels route to the correct provider bucket.
