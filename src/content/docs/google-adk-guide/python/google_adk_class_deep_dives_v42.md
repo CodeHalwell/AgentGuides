@@ -69,8 +69,8 @@ resilient_model = Gemini(
     retry_options=types.HttpRetryOptions(
         attempts=4,
         initial_delay=1.0,
-        multiplier=2.0,
-        maximum_delay=30.0,
+        exp_base=2.0,
+        max_delay=30.0,
     ),
 )
 
@@ -989,7 +989,7 @@ class SimpleSessionService(BaseSessionService):
         config: Optional[GetSessionConfig] = None
     ) -> Optional[Session]:
         session = self._sessions.get(session_id)
-        if session is None:
+        if session is None or session.app_name != app_name or session.user_id != user_id:
             return None
         if config is None:
             return session
