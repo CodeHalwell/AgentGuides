@@ -104,7 +104,7 @@ limits = UsageLimits(
 
 ```python
 # Example 1 — Rename a subset of tools from a FunctionToolset
-from pydantic_ai import Agent, FunctionToolset, RenamedToolset, RunContext
+from pydantic_ai import Agent, FunctionToolset, RenamedToolset
 
 tools = FunctionToolset[None]()
 
@@ -436,7 +436,7 @@ spec2 = AgentSpec.from_text(yaml_multi)
 ```python
 # Example 1 — Limit concurrent agent.run() calls across multiple callers
 import asyncio
-from pydantic_ai import Agent, FunctionToolset, RunContext, ConcurrencyLimiter
+from pydantic_ai import Agent, FunctionToolset, ConcurrencyLimiter
 
 tools = FunctionToolset[None]()
 
@@ -467,7 +467,7 @@ limit_config = ConcurrencyLimit(max_running=5, max_queued=20)
 # Build a named limiter from config
 limiter = ConcurrencyLimiter.from_limit(limit_config, name='db-pool')
 print(limiter.max_running)    # 5
-print(limiter.available_count)# 5
+print(limiter.available_count)  # 5
 print(limiter.running_count)  # 0
 print(limiter.waiting_count)  # 0
 ```
