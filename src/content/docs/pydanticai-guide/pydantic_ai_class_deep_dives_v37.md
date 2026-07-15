@@ -599,7 +599,7 @@ union_agent = Agent(
 
 **Source:** `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/exceptions.py`, `pydantic_ai/tools.py`
 
-`ApprovalRequiredToolset` wraps any toolset and intercepts tool calls before execution. The agent graph catches `ApprovalRequired` internally and returns a `DeferredToolRequests` output instead of finishing the run. The caller inspects the pending `approvals` list, calls `build_results()` with `ToolApproved`/`ToolDenied` decisions, then passes those results to the *next* `agent.run()` via `deferred_tool_results=`. The optional `approval_required_func` predicate lets you gate only specific calls. `DeferredToolRequests` **must** be in `output_type` for this pattern to work.
+`ApprovalRequiredToolset` wraps any toolset and intercepts tool calls before execution. The agent graph catches `ApprovalRequired` internally and returns a `DeferredToolRequests` output instead of finishing the run. The caller inspects the pending `approvals` list, calls `build_results()` with `ToolApproved`/`ToolDenied` decisions, then passes those results to the *next* `agent.run()` via `deferred_tool_results=` **and** `message_history=result1.all_messages()`. The graph needs the prior message history to locate the pending `ModelResponse` with tool calls — omitting it raises `UserError("message history is empty")`. The optional `approval_required_func` predicate lets you gate only specific calls. `DeferredToolRequests` **must** be in `output_type` for this pattern to work.
 
 ```python
 # Example 1 — Two-round HITL: first run yields DeferredToolRequests, second run executes
@@ -633,8 +633,13 @@ async def run_with_approval():
     # or deny: pending.build_results(approvals={c.tool_call_id: ToolDenied('Not authorised')
     #                                           for c in pending.approvals})
 
-    # Round 2: resume with approval decisions — agent re-executes the approved tools
-    result2 = await agent.run('Delete the file /tmp/report.pdf', deferred_tool_results=deferred_results)
+    # Round 2: resume with approval decisions — must pass message_history so the graph
+    # can locate the pending ModelResponse with tool calls; omitting it raises UserError.
+    result2 = await agent.run(
+        'Delete the file /tmp/report.pdf',
+        deferred_tool_results=deferred_results,
+        message_history=result1.all_messages(),
+    )
     return result2.output
 ```
 
@@ -690,7 +695,11 @@ async def supervised_run(prompt: str, daily_limit: float = 1000.0) -> str:
             else:
                 approval_map[call.tool_call_id] = ToolDenied(f'£{amount:.2f} exceeds daily limit')
                 print(f'Denied {call.tool_name}: £{amount:.2f}')
-        result = await agent.run(prompt, deferred_tool_results=pending.build_results(approvals=approval_map))
+        result = await agent.run(
+            prompt,
+            deferred_tool_results=pending.build_results(approvals=approval_map),
+            message_history=result.all_messages(),  # required: graph needs prior ModelResponse with tool calls
+        )
     return result.output
 ```
 
