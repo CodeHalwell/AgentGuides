@@ -711,7 +711,7 @@ asyncio.run(main())
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream import ValuesTransformer
+from langgraph.stream.transformers import ValuesTransformer
 
 class State(TypedDict):
     count: int
@@ -741,7 +741,7 @@ with compiled.stream_events(
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream import UpdatesTransformer
+from langgraph.stream.transformers import UpdatesTransformer
 
 class State(TypedDict):
     x: int
@@ -778,7 +778,7 @@ with compiled.stream_events(
 import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream import ValuesTransformer, UpdatesTransformer
+from langgraph.stream.transformers import ValuesTransformer, UpdatesTransformer
 
 class State(TypedDict):
     messages: list[str]
@@ -801,7 +801,7 @@ compiled = g.compile()
 # the second channel's push() calls are no-ops (not yet subscribed) and
 # all events are lost. astream_events + asyncio.gather solves this.
 async def main():
-    async with compiled.astream_events(
+    async with await compiled.astream_events(
         {"messages": []},
         version="v3",
         transformers=[ValuesTransformer, UpdatesTransformer],   # classes, not instances
