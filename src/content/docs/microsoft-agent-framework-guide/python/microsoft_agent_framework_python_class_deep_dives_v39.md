@@ -74,21 +74,21 @@ class CheckpointStorage(Protocol):
 **Custom backend example — SQLite:**
 
 ```python
-import asyncio, json, sqlite3
+import asyncio, json, sqlite3, threading
 from agent_framework._workflows._checkpoint import CheckpointStorage, WorkflowCheckpoint
 
 class SQLiteCheckpointStorage:
     """Minimal SQLite-backed checkpoint storage.
 
-    Blocking sqlite3 calls are wrapped in asyncio.to_thread so they don't
-    stall the event loop. check_same_thread=False is required because the
-    thread pool may pick a different OS thread for each call.
+    Blocking sqlite3 calls are offloaded to a thread via asyncio.to_thread.
+    A threading.Lock serialises all DB access so the shared connection is
+    never used from two threads simultaneously (sqlite3 is not thread-safe
+    for concurrent writes and can release the GIL during I/O).
     """
 
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
-        # Open once; check_same_thread=False is safe because asyncio.to_thread
-        # serialises calls through the GIL and we use a single connection.
+        self._lock = threading.Lock()
         self._db = sqlite3.connect(db_path, check_same_thread=False)
         self._db.execute(
             """CREATE TABLE IF NOT EXISTS checkpoints
@@ -97,21 +97,23 @@ class SQLiteCheckpointStorage:
         self._db.commit()
 
     def _save_sync(self, checkpoint: WorkflowCheckpoint) -> str:
-        data = json.dumps(checkpoint.to_dict(), default=str)
-        self._db.execute(
-            "INSERT OR REPLACE INTO checkpoints VALUES (?,?,?,?)",
-            (checkpoint.checkpoint_id, checkpoint.workflow_name, data, checkpoint.timestamp),
-        )
-        self._db.commit()
-        return checkpoint.checkpoint_id
+        with self._lock:
+            data = json.dumps(checkpoint.to_dict(), default=str)
+            self._db.execute(
+                "INSERT OR REPLACE INTO checkpoints VALUES (?,?,?,?)",
+                (checkpoint.checkpoint_id, checkpoint.workflow_name, data, checkpoint.timestamp),
+            )
+            self._db.commit()
+            return checkpoint.checkpoint_id
 
     async def save(self, checkpoint: WorkflowCheckpoint) -> str:
         return await asyncio.to_thread(self._save_sync, checkpoint)
 
     def _load_sync(self, checkpoint_id: str) -> WorkflowCheckpoint:
-        row = self._db.execute(
-            "SELECT data FROM checkpoints WHERE id=?", (checkpoint_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._db.execute(
+                "SELECT data FROM checkpoints WHERE id=?", (checkpoint_id,)
+            ).fetchone()
         if not row:
             from agent_framework.exceptions import WorkflowCheckpointException
             raise WorkflowCheckpointException(f"Checkpoint {checkpoint_id} not found")
@@ -121,38 +123,42 @@ class SQLiteCheckpointStorage:
         return await asyncio.to_thread(self._load_sync, checkpoint_id)
 
     def _list_sync(self, workflow_name: str) -> list[WorkflowCheckpoint]:
-        rows = self._db.execute(
-            "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts",
-            (workflow_name,),
-        ).fetchall()
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts",
+                (workflow_name,),
+            ).fetchall()
         return [WorkflowCheckpoint.from_dict(json.loads(r[0])) for r in rows]
 
     async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
         return await asyncio.to_thread(self._list_sync, workflow_name)
 
     def _delete_sync(self, checkpoint_id: str) -> bool:
-        cur = self._db.execute("DELETE FROM checkpoints WHERE id=?", (checkpoint_id,))
-        self._db.commit()
+        with self._lock:
+            cur = self._db.execute("DELETE FROM checkpoints WHERE id=?", (checkpoint_id,))
+            self._db.commit()
         return cur.rowcount > 0
 
     async def delete(self, checkpoint_id: str) -> bool:
         return await asyncio.to_thread(self._delete_sync, checkpoint_id)
 
     def _get_latest_sync(self, workflow_name: str) -> WorkflowCheckpoint | None:
-        row = self._db.execute(
-            "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts DESC LIMIT 1",
-            (workflow_name,),
-        ).fetchone()
+        with self._lock:
+            row = self._db.execute(
+                "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts DESC LIMIT 1",
+                (workflow_name,),
+            ).fetchone()
         return WorkflowCheckpoint.from_dict(json.loads(row[0])) if row else None
 
     async def get_latest(self, *, workflow_name: str) -> WorkflowCheckpoint | None:
         return await asyncio.to_thread(self._get_latest_sync, workflow_name)
 
     def _list_ids_sync(self, workflow_name: str) -> list[str]:
-        rows = self._db.execute(
-            "SELECT id FROM checkpoints WHERE workflow_name=? ORDER BY ts",
-            (workflow_name,),
-        ).fetchall()
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id FROM checkpoints WHERE workflow_name=? ORDER BY ts",
+                (workflow_name,),
+            ).fetchall()
         return [r[0] for r in rows]
 
     async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]:
@@ -562,18 +568,25 @@ class CachingMiddleware(AgentMiddleware):
 
 ```python
 import re
-from agent_framework import AgentMiddleware, AgentContext, AgentResponseUpdate
+from agent_framework import AgentMiddleware, AgentContext, AgentResponseUpdate, Content
 
 class PIIRedactionMiddleware(AgentMiddleware):
     _CARD_RE = re.compile(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b")
 
     async def process(self, context: AgentContext, call_next):
         def redact(update: AgentResponseUpdate) -> AgentResponseUpdate:
-            if update.text:
-                clean = self._CARD_RE.sub("[CARD REDACTED]", update.text)
-                if clean != update.text:
-                    update = AgentResponseUpdate(contents=[clean])
-            return update
+            if not update.text:
+                return update
+            # Rebuild contents, redacting text within each Content item.
+            # AgentResponseUpdate.contents is Sequence[Content]; pass Content
+            # objects (not bare strings) to avoid a TypeError.
+            new_contents = [
+                Content.from_text(text=self._CARD_RE.sub("[CARD REDACTED]", item.text))
+                if hasattr(item, "text") and item.text
+                else item
+                for item in (update.contents or [])
+            ]
+            return AgentResponseUpdate(contents=new_contents)
 
         context.stream_transform_hooks.append(redact)
         await call_next()
@@ -1189,7 +1202,8 @@ async def internal_log(message: str, level: str = "info") -> str:
     return "logged"
 
 client = OpenAIChatClient(model="gpt-4o")
-client.function_invocation_configuration["additional_tools"] = [FunctionTool(internal_log)]
+# @tool already returns a FunctionTool — no wrapper needed
+client.function_invocation_configuration["additional_tools"] = [internal_log]
 ```
 
 ### 10b · `FunctionRequestResult` — TypedDict
