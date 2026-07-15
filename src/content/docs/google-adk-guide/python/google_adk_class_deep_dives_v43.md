@@ -1153,12 +1153,20 @@ async def approval_gate(ctx):
     request = RequestInput(
         interrupt_id="approval-001",
         message="Please approve or reject this action (approve/reject):",
-        response_schema={"type": "string", "enum": ["approve", "reject"]},
+        # Use an object schema — create_request_input_response takes a
+        # Mapping[str, Any], so the resume payload must be a dict.
+        # Wrap the user's choice under the conventional "result" key.
+        response_schema={
+            "type": "object",
+            "properties": {"result": {"type": "string", "enum": ["approve", "reject"]}},
+            "required": ["result"],
+        },
     )
     event = create_request_input_event(request)
     yield event
-    # The workflow pauses here; resume_inputs will contain the response
-    approval = ctx.resume_inputs.get("approval-001")
+    # The workflow pauses here; resume_inputs will contain the response dict
+    response = ctx.resume_inputs.get("approval-001") or {}
+    approval = response.get("result")
     if approval != "approve":
         raise ValueError("Action rejected by human operator.")
 
@@ -1190,7 +1198,7 @@ async def main():
 
     # Resume with human's response
     if interrupt_id:
-        resume_part = create_request_input_response(interrupt_id, "approve")
+        resume_part = create_request_input_response(interrupt_id, {"result": "approve"})
         resume_message = types.Content(role="user", parts=[resume_part])
         async for event in runner.run_async(user_id="u1", session_id=session.id, new_message=resume_message):
             if event.output:
