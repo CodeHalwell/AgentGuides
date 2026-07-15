@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 41"
-description: "Source-verified deep dives (langgraph==1.2.9) into 10 class groups: BinaryOperatorAggregate/Overwrite (operator.add reducer channel with per-step overwrite bypass, _get_overwrite/seen_overwrite guard, _operators_equal lambda detection), Topic (PubSub accumulate channel — accumulate flag, _flatten list-of-lists support, EmptyChannelError when empty, consume() reset), EphemeralValue (single-step value — guard=True single-write enforcement, MISSING sentinel on clear), NamedBarrierValue/NamedBarrierValueAfterFinish (fan-in synchronization — names set/seen set semantics, finish() deferred unlock, InvalidUpdateError on unknown names), AnyValue (multi-source convergence channel — last-write-wins, MISSING clear on zero updates), BaseCache/InMemoryCache (task result cache abstraction — FullKey namespace tuple, TTL-aware expiry, thread-safe RLock, serde layer), StreamChannel (drainable single-consumer queue — push/close/fail lifecycle, tee(n)/atee(n) fan-out, _bind sync/async mode, caller-driven pump wiring), ValuesTransformer/UpdatesTransformer (native stream projections for values/updates — scope filtering, interrupted/interrupts tracking, StreamChannel log push), IsLastStepManager/RemainingStepsManager/PregelScratchpad (managed step-count values — ManagedValue.get() scratchpad read, Annotated injection pattern, step/stop/counters dataclass), and build_serde_allowlist/curated_core_allowlist/apply_checkpointer_allowlist (_internal/_serde.py strict-msgpack security layer — Pydantic/dataclass/Enum/TypedDict traversal, BaseMessage curated set, with_allowlist checkpointer wrapping)."
+description: "Source-verified deep dives (langgraph==1.2.9) into 10 class groups: BinaryOperatorAggregate/Overwrite (operator.add reducer channel with per-step overwrite bypass, _get_overwrite/seen_overwrite guard, _operators_equal lambda detection), Topic (PubSub accumulate channel — accumulate flag, _flatten list-of-lists support, EmptyChannelError when empty, per-step buffer reset when accumulate=False), EphemeralValue (single-step value — guard=True single-write enforcement, MISSING sentinel on clear), NamedBarrierValue/NamedBarrierValueAfterFinish (fan-in synchronization — names set/seen set semantics, finish() deferred unlock, InvalidUpdateError on unknown names), AnyValue (multi-source convergence channel — last-write-wins, MISSING clear on zero updates), BaseCache/InMemoryCache (task result cache abstraction — FullKey namespace tuple, TTL-aware expiry, thread-safe RLock, serde layer), StreamChannel (drainable single-consumer queue — push/close/fail lifecycle, tee(n)/atee(n) fan-out, _bind sync/async mode, caller-driven pump wiring), ValuesTransformer/UpdatesTransformer (native stream projections for values/updates — scope filtering, interrupted/interrupts tracking, StreamChannel log push), IsLastStepManager/RemainingStepsManager/PregelScratchpad (managed step-count values — ManagedValue.get() scratchpad read, Annotated injection pattern, step/stop/counters dataclass), and build_serde_allowlist/curated_core_allowlist/apply_checkpointer_allowlist (_internal/_serde.py strict-msgpack security layer — Pydantic/dataclass/Enum/TypedDict traversal, BaseMessage curated set, with_allowlist checkpointer wrapping)."
 framework: langgraph
 language: python
 sidebar:
@@ -127,7 +127,7 @@ print(restored.get())    # ['a', 'b', 'c', 'd', 'e']
 - `update(values)` calls `_flatten(values)` which unwraps nested `list[Value]` items. This means a node can send either a single item or a list of items and both are appended flat.
 - When `accumulate=False`, `update()` resets `self.values = list()` before appending — giving per-step semantics.
 - `get()` raises `EmptyChannelError` when `self.values` is empty. `is_available()` returns `bool(self.values)`.
-- `consume()` is a no-op by design (not defined on `Topic`); items only disappear on the next `update()` when `accumulate=False`.
+- `Topic` does not implement `consume()`. With `accumulate=False`, the buffer is reset at the start of each `update()` call, so stale items disappear naturally when the next step writes to the channel.
 - `__eq__` compares only `accumulate` so two `Topic(int)` and `Topic(str)` channels with the same `accumulate` setting are considered equal by the graph's type checker.
 
 ### Example 1 — fan-in with Topic (per-step reset)
@@ -506,15 +506,15 @@ ns = ("my_app", "embeddings")
 key = "doc-42"
 
 # Store with a 30-second TTL
-cache.set({((ns), key): ({"vec": [0.1, 0.2]}, 30)})
+cache.set({(ns, key): ({"vec": [0.1, 0.2]}, 30)})
 
-result = cache.get([((ns), key)])
+result = cache.get([(ns, key)])
 print(result)
 # {(('my_app', 'embeddings'), 'doc-42'): {'vec': [0.1, 0.2]}}
 
 # Clear just this namespace
 cache.clear([ns])
-print(cache.get([((ns), key)]))   # {}
+print(cache.get([(ns, key)]))   # {}
 ```
 
 ### Example 3 — implement a custom `BaseCache` with a size cap
@@ -635,7 +635,9 @@ from langgraph.stream.stream_channel import StreamChannel
 
 ch: StreamChannel[int] = StreamChannel()
 ch._is_async = False
-ch._subscribed = True
+# _subscribed must be False before __iter__ — the iterator sets it to True.
+# Pre-populating _items directly bypasses push() so we can seed the buffer
+# without a running mux.
 ch._closed = False
 
 ch._items.extend([(0, 1), (1, 2)])
@@ -643,7 +645,7 @@ ch.fail(ValueError("upstream error"))
 
 results = []
 try:
-    for item in ch:
+    for item in ch:   # __iter__ sets _subscribed=True, then drains _items
         results.append(item)
 except ValueError as e:
     print(f"caught: {e}")
@@ -698,6 +700,7 @@ asyncio.run(main())
 
 - Both inherit `StreamTransformer` and set `_native = True` — LangGraph binds their channels as direct attributes on the run stream (`run.values`, `run.updates`).
 - `required_stream_modes` tells the `StreamMux` which underlying stream modes to activate. `ValuesTransformer` requires `("values",)`; `UpdatesTransformer` requires `("updates",)`.
+- **Pass classes, not instances.** `_normalize_stream_transformer_factories` (called internally by `stream_events`) **rejects pre-built `StreamTransformer` instances** with `TypeError`. Always pass the class (e.g. `ValuesTransformer`) so the mux can call `factory(scope)` for each subgraph namespace independently.
 - **Scope filtering**: both transformers compare `event["params"]["namespace"]` against `self._scope_list` (a `list[str]` copy of the tuple scope). Events from deeper subgraphs are left in the main event log but not pushed to the projection.
 - `ValuesTransformer` also tracks `_interrupted` and `_interrupts`: whenever a `values` event carries `params["interrupts"]`, the transformer caches them so `run.interrupted` / `run.interrupts` stay in sync without a second event.
 - `UpdatesTransformer` is simpler — it pushes `params["data"]` straight to `self._log` (a `StreamChannel[dict[str, Any]]`).
@@ -722,11 +725,11 @@ g.add_edge(START, "inc")
 g.add_edge("inc", END)
 compiled = g.compile()
 
-# stream_events(version="v3") returns a GraphRunStream context manager
+# Pass the class, not an instance — the mux calls ValuesTransformer(scope)
 with compiled.stream_events(
     {"count": 0},
     version="v3",
-    transformers=[ValuesTransformer()],
+    transformers=[ValuesTransformer],
 ) as run:
     for snapshot in run.values:
         print("values snapshot:", snapshot)
@@ -761,7 +764,7 @@ compiled = g.compile()
 with compiled.stream_events(
     {"x": 0, "y": 0},
     version="v3",
-    transformers=[UpdatesTransformer()],
+    transformers=[UpdatesTransformer],   # pass class, not instance
 ) as run:
     for update in run.updates:
         print("node update:", update)
@@ -801,7 +804,7 @@ async def main():
     async with compiled.astream_events(
         {"messages": []},
         version="v3",
-        transformers=[ValuesTransformer(), UpdatesTransformer()],
+        transformers=[ValuesTransformer, UpdatesTransformer],   # classes, not instances
     ) as run:
         async def drain_updates():
             async for upd in run.updates:
@@ -861,8 +864,8 @@ g.add_conditional_edges(
     lambda s: "loop" if not s["is_last"] else END,
 )
 
-g.compile(recursion_limit=5).invoke({"count": 0})
-# step count=0 / step count=1 / ... / Reached last step at count=5 — stopping
+g.compile().invoke({"count": 0}, {"recursion_limit": 5})
+# step count=0 / step count=1 / ... / Reached last step at count=4 — stopping
 ```
 
 ### Example 2 — countdown with `RemainingSteps`
@@ -884,7 +887,7 @@ g.add_node("status", status_node)
 g.add_edge(START, "status")
 g.add_edge("status", END)
 
-g.compile(recursion_limit=10).invoke({})
+g.compile().invoke({}, {"recursion_limit": 10})
 # remaining steps: 10
 ```
 
@@ -917,7 +920,7 @@ g.add_node("show", show_fraction)
 g.add_edge(START, "show")
 g.add_edge("show", END)
 
-g.compile(recursion_limit=4).invoke({})
+g.compile().invoke({}, {"recursion_limit": 4})
 # progress: 0%
 ```
 
@@ -989,11 +992,10 @@ class User(BaseModel):
     address: Address
     tags: list[str]
 
-allowlist: set[tuple[str, ...]] = set()
 result = collect_allowlist_from_schemas(schemas=[User])
 
 # Both User and Address are collected (nested model traversal)
-names = {name for _, name in result if "langchain" not in _}
+names = {name for module, name in result if "langchain" not in module}
 print(sorted(names))
 # ['Address', 'User']
 ```
