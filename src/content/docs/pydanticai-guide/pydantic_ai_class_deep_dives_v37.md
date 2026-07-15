@@ -255,8 +255,7 @@ deps_schema:
 capabilities:
   - WebSearch:
       search_context_size: medium
-  - Instrumentation:
-      position: outermost
+  - Instrumentation: {}
 """
 
 spec = AgentSpec.from_text(yaml_with_caps, fmt='yaml')
@@ -687,7 +686,7 @@ async def supervised_run(prompt: str, daily_limit: float = 1000.0) -> str:
         pending = result.output
         approval_map = {}
         for call in pending.approvals:
-            args = call.args if isinstance(call.args, dict) else {}
+            args = call.args_as_dict()
             amount = float(args.get('amount', 0))
             if amount <= daily_limit:
                 approval_map[call.tool_call_id] = ToolApproved()
