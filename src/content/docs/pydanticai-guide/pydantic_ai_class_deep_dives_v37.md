@@ -148,12 +148,14 @@ bad_map = RenamedToolset(
     name_map={'lookup': 'search'},
 )
 
-# The collision is detected lazily at get_tools() time (inside an agent run).
-# import asyncio, pydantic_ai
-# try:
-#     asyncio.run(bad_map.get_tools(some_ctx))
-# except UserError as e:
-#     print(e)  # 'Renaming tool "search" to "lookup" conflicts with existing tool.'
+# The collision is detected lazily when the agent calls get_tools() at run time.
+from pydantic_ai.models.test import TestModel
+import asyncio
+collision_agent = Agent(TestModel(), toolsets=[bad_map])
+try:
+    asyncio.run(collision_agent.run('test'))
+except UserError as e:
+    print(e)  # Tool name conflicts with previously renamed tool: 'lookup'.
 ```
 
 ```python
@@ -253,10 +255,10 @@ deps_schema:
       type: integer
       default: 10
 capabilities:
-  - type: web-search
-    search_context_size: medium
-  - type: instrumentation
-    position: outermost
+  - WebSearch:
+      search_context_size: medium
+  - Instrumentation:
+      position: outermost
 """
 
 spec = AgentSpec.from_text(yaml_with_caps, fmt='yaml')
@@ -450,13 +452,10 @@ async def slow_api_call(resource_id: str) -> str:
 # Allow at most 3 simultaneous calls; queue up to 10 more
 limiter = ConcurrencyLimiter(max_running=3, max_queued=10, name='external-api')
 
-agent = Agent('openai:gpt-4o', toolsets=[tools])
+# Pass the limiter at Agent construction via max_concurrency (not as a per-run kwarg)
+agent = Agent('openai:gpt-4o', toolsets=[tools], max_concurrency=limiter)
 
-# The agent passes the limiter to each tool execution slot.
-# result = asyncio.run(agent.run(
-#     'Fetch data for resources A, B, C, D, E simultaneously.',
-#     concurrency_limiter=limiter,
-# ))
+# result = asyncio.run(agent.run('Fetch data for resources A, B, C, D, E simultaneously.'))
 print(f'Capacity: {limiter.max_running}, waiting: {limiter.waiting_count}')
 ```
 
@@ -600,15 +599,15 @@ union_agent = Agent(
 
 ## 8. `ApprovalRequiredToolset` + `ApprovalRequired` + `ToolApproved` + `ToolDenied`
 
-**Source:** `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/exceptions.py`
+**Source:** `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/exceptions.py`, `pydantic_ai/tools.py`
 
-`ApprovalRequiredToolset` wraps any toolset and pauses execution before a tool call, raising `ApprovalRequired`. The caller catches this exception, inspects the pending call, and resumes the agent run by passing either a `ToolApproved` or `ToolDenied` continuation into `AgentRun.enqueue()`. The optional `approval_required_func` predicate lets you gate only high-risk calls.
+`ApprovalRequiredToolset` wraps any toolset and intercepts tool calls before execution. The agent graph catches `ApprovalRequired` internally and returns a `DeferredToolRequests` output instead of finishing the run. The caller inspects the pending `approvals` list, calls `build_results()` with `ToolApproved`/`ToolDenied` decisions, then passes those results to the *next* `agent.run()` via `deferred_tool_results=`. The optional `approval_required_func` predicate lets you gate only specific calls. `DeferredToolRequests` **must** be in `output_type` for this pattern to work.
 
 ```python
-# Example 1 — Simple all-calls HITL approval
+# Example 1 — Two-round HITL: first run yields DeferredToolRequests, second run executes
 import asyncio
-from pydantic_ai import Agent, FunctionToolset, RunContext, ApprovalRequiredToolset
-from pydantic_ai.exceptions import ApprovalRequired
+from pydantic_ai import Agent, FunctionToolset, ToolApproved, ToolDenied, ApprovalRequiredToolset
+from pydantic_ai.tools import DeferredToolRequests
 
 tools = FunctionToolset[None]()
 
@@ -617,26 +616,34 @@ def delete_file(path: str) -> str:
     """Permanently delete a file from the filesystem."""
     return f'Deleted {path}'
 
-# All calls to any tool in this toolset require human approval
 gated = ApprovalRequiredToolset(wrapped=tools)
-agent = Agent('openai:gpt-4o', toolsets=[gated])
+# DeferredToolRequests must be in output_type to capture approval-pending calls
+agent = Agent('openai:gpt-4o', toolsets=[gated], output_type=[DeferredToolRequests, str])
 
 async def run_with_approval():
-    async with agent.run_stream('Delete the file /tmp/report.pdf') as agent_run:
-        try:
-            async for _ in agent_run:
-                pass
-        except ApprovalRequired as e:
-            print(f'Approval needed: tool={e.tool_name!r}, args={e.tool_args}')
-            # Human reviews, then approves or denies (enqueue is synchronous — no await)
-            # agent_run.enqueue(ToolApproved())
-            # or: agent_run.enqueue(ToolDenied(message='Not authorised'))
+    # Round 1: agent hits the gated tool and returns DeferredToolRequests
+    result1 = await agent.run('Delete the file /tmp/report.pdf')
+    if not isinstance(result1.output, DeferredToolRequests):
+        return result1.output  # no approval needed, already done
+
+    pending = result1.output
+    for call in pending.approvals:
+        print(f'Approval needed: tool={call.tool_name!r}, args={call.args}')
+
+    # Human reviews; approve all pending calls
+    deferred_results = pending.build_results(approve_all=True)
+    # or deny: pending.build_results(approvals={c.tool_call_id: ToolDenied('Not authorised')
+    #                                           for c in pending.approvals})
+
+    # Round 2: resume with approval decisions — agent re-executes the approved tools
+    result2 = await agent.run('Delete the file /tmp/report.pdf', deferred_tool_results=deferred_results)
+    return result2.output
 ```
 
 ```python
-# Example 2 — Selective approval via approval_required_func
+# Example 2 — Selective approval: read-only tools run freely, write tools are gated
 from pydantic_ai import Agent, FunctionToolset, RunContext, ApprovalRequiredToolset
-from pydantic_ai.toolsets.abstract import ToolsetTool
+from pydantic_ai.tools import DeferredToolRequests
 
 tools = FunctionToolset[None]()
 
@@ -649,23 +656,18 @@ def send_email(to: str, body: str) -> str:
     return f'Email sent to {to}'
 
 def needs_approval(ctx: RunContext, tool_def, tool_args: dict) -> bool:
-    # Only require approval for write/send operations, not reads
     return tool_def.name in {'send_email', 'delete_file', 'write_db'}
 
-selective = ApprovalRequiredToolset(
-    wrapped=tools,
-    approval_required_func=needs_approval,
-)
-
-agent = Agent('openai:gpt-4o', toolsets=[selective])
-# search_web runs freely; send_email pauses for approval
+selective = ApprovalRequiredToolset(wrapped=tools, approval_required_func=needs_approval)
+# search_web calls complete immediately; send_email returns DeferredToolRequests
+agent = Agent('openai:gpt-4o', toolsets=[selective], output_type=[DeferredToolRequests, str])
 ```
 
 ```python
-# Example 3 — Full HITL loop with ToolApproved / ToolDenied
+# Example 3 — Per-call approve/deny with a budget limit
 import asyncio
 from pydantic_ai import Agent, FunctionToolset, ToolApproved, ToolDenied, ApprovalRequiredToolset
-from pydantic_ai.exceptions import ApprovalRequired
+from pydantic_ai.tools import DeferredToolRequests
 
 tools = FunctionToolset[None]()
 
@@ -674,19 +676,24 @@ def transfer_funds(account_from: str, account_to: str, amount: float) -> str:
     return f'Transferred £{amount:.2f} from {account_from} to {account_to}'
 
 gated = ApprovalRequiredToolset(wrapped=tools)
-agent = Agent('openai:gpt-4o', toolsets=[gated])
+agent = Agent('openai:gpt-4o', toolsets=[gated], output_type=[DeferredToolRequests, str])
 
-async def supervised_run(prompt: str) -> str:
-    async with agent.iter(prompt) as agent_run:
-        try:
-            async for node in agent_run:
-                pass  # normal iteration until approval is needed
-        except ApprovalRequired as e:
-            print(f'Approval needed: tool={e.tool_name!r}, args={e.tool_args}')
-            # Approve or deny before continuing:
-            # agent_run.enqueue(ToolApproved())
-            # agent_run.enqueue(ToolDenied(message='Transfer exceeds daily limit'))
-    return agent_run.result.output if agent_run.result else ''
+async def supervised_run(prompt: str, daily_limit: float = 1000.0) -> str:
+    result = await agent.run(prompt)
+    while isinstance(result.output, DeferredToolRequests):
+        pending = result.output
+        approval_map = {}
+        for call in pending.approvals:
+            args = call.args if isinstance(call.args, dict) else {}
+            amount = float(args.get('amount', 0))
+            if amount <= daily_limit:
+                approval_map[call.tool_call_id] = ToolApproved()
+                print(f'Approved {call.tool_name}: £{amount:.2f}')
+            else:
+                approval_map[call.tool_call_id] = ToolDenied(f'£{amount:.2f} exceeds daily limit')
+                print(f'Denied {call.tool_name}: £{amount:.2f}')
+        result = await agent.run(prompt, deferred_tool_results=pending.build_results(approvals=approval_map))
+    return result.output
 ```
 
 ---
