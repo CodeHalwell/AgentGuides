@@ -762,14 +762,23 @@ class PurviewPolicyMiddleware(AgentMiddleware):
 ```python
 from azure.identity import DefaultAzureCredential
 from agent_framework import Agent
-from agent_framework.microsoft import PurviewPolicyMiddleware, PurviewSettings
+from agent_framework.microsoft import (
+    PurviewPolicyMiddleware,
+    PurviewSettings,
+    PurviewAppLocation,
+    PurviewLocationType,
+)
 from agent_framework.openai import OpenAIChatClient
 
 credential = DefaultAzureCredential()
 purview_settings = PurviewSettings(
     app_name="ContosoAssistant",
     app_version="2.0.0",
-    purview_app_location="Teams",
+    # purview_app_location must be a PurviewAppLocation model, not a bare string
+    purview_app_location=PurviewAppLocation(
+        location_type=PurviewLocationType.APPLICATION,
+        location_value="ContosoAssistant",
+    ),
     blocked_prompt_message="Your message was blocked by company policy.",
     blocked_response_message="The response was blocked by company policy.",
     ignore_payment_required=True,           # don't crash if Purview billing is not set up
@@ -812,8 +821,14 @@ class RedisCache(CacheProvider):
     async def get(self, key: str) -> bytes | None:
         return await self._r.get(key)
 
-    async def set(self, key: str, value: bytes, ttl: int) -> None:
-        await self._r.setex(key, ttl, value)
+    async def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> None:
+        if ttl_seconds is not None:
+            await self._r.setex(key, ttl_seconds, value)
+        else:
+            await self._r.set(key, value)
+
+    async def remove(self, key: str) -> None:
+        await self._r.delete(key)
 
 cache = RedisCache(aioredis.from_url("redis://localhost:6379", decode_responses=False))
 policy = PurviewPolicyMiddleware(
@@ -877,7 +892,7 @@ class DevServer:
 ### Quickstart
 
 ```python
-import asyncio
+import uvicorn
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework.devui import DevServer
@@ -896,7 +911,16 @@ server = DevServer(
 )
 server.set_pending_entities([agent])
 
-asyncio.run(server.start())
+# get_app() returns the FastAPI application; run it with any ASGI server
+uvicorn.run(server.get_app(), host="127.0.0.1", port=8080, log_level="info")
+```
+
+Alternatively, use the convenience wrapper `serve()` which handles server construction, entity registration, and uvicorn launch in one call:
+
+```python
+from agent_framework.devui import serve
+
+serve(entities=[agent], port=8080, host="127.0.0.1", auth_enabled=False)
 ```
 
 The DevUI is then available at `http://127.0.0.1:8080` and the responses API at `http://127.0.0.1:8080/v1/responses`.
