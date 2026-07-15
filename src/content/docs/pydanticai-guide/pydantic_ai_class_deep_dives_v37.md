@@ -322,15 +322,16 @@ print(merged['temperature'])  # 0.3  (override wins)
 # Example 3 — tool_choice and extra_headers for fine-grained model control
 from pydantic_ai import Agent, ModelSettings, ToolOrOutput
 
-# Force the model to call a specific tool on the next step
-force_tool: ModelSettings = {
-    'tool_choice': 'required',   # 'auto'|'none'|'required'|list[str]|ToolOrOutput
-}
-
-# Or restrict to specific function tools while keeping output tools available:
+# WARNING: 'required' cannot be set as a static agent model_settings — it
+# prevents the agent from ever producing a final response (no output step).
+# Use ToolOrOutput to allow specific function tools *and* output capability:
 selective: ModelSettings = {
     'tool_choice': ToolOrOutput(function_tools=['search', 'calculate']),
 }
+
+# For a single-step forced tool call use pydantic_ai.direct.model_request,
+# or pass tool_choice='required' as a per-run override inside a capability's
+# get_model_settings() so it only applies to intermediate steps.
 
 # Custom headers (e.g. for Anthropic beta features or tracking IDs):
 with_headers: ModelSettings = {
@@ -340,7 +341,7 @@ with_headers: ModelSettings = {
     'presence_penalty': 0.2,
 }
 
-agent = Agent('openai:gpt-4o', model_settings=force_tool)
+agent = Agent('openai:gpt-4o', model_settings=selective)
 ```
 
 ---
@@ -849,7 +850,7 @@ async def flaky_lookup(ctx: RunContext[None], key: str) -> str:
 ```python
 # Example 3 — enqueue, usage_limits budget-awareness, and observability fields
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.messages import TextPart, UserPromptPart
+from pydantic_ai.messages import UserPromptPart
 
 agent = Agent('openai:gpt-4o')
 
@@ -869,7 +870,7 @@ async def check_budget(ctx: RunContext[None]) -> str:
     )
     # Inject extra context into the next model request without ending the turn
     ctx.enqueue(
-        UserPromptPart(parts=[TextPart(content=f'Remaining requests: {remaining_requests}')]),
+        UserPromptPart(content=f'Remaining requests: {remaining_requests}'),
         priority='when_idle',
     )
     return f'Budget check complete. Run ID: {ctx.run_id}'
