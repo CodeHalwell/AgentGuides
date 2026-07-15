@@ -81,23 +81,23 @@ Fully linear, no duplication, no orphans. Can merge in numeric order.
 
 ```
 #267 (Vol. 31, main) ─┐  ← orphan: no PR is based on #267's branch
-                       ├─ content-identical
+                       ├─ same branch history
 #271 (Vol. 31+32, main) → #275 → #279 → #283 → #287 → #291 → #295 → #299
 ```
 
-`#271`'s head branch (`claude/adoring-hawking-facwkn`) was branched directly from `#267`'s head (`claude/relaxed-clarke-tph1zi`) — confirmed by `#271`'s own PR description ("Branch lineage: ... started from `claude/adoring-hawking-jrx64m`... Vol. 31") and by its file list: `#271`'s diff to `main` adds **both** `microsoft_agent_framework_python_class_deep_dives_v31.md` (1,618 additions — byte-identical line count to `#267`'s own addition of the same file) **and** `..._v32.md` (1,574 additions). `#267` has no downstream PR — nothing in the open set is based on its branch. The real, continuing chain is `#271 → #275 → ... → #299`.
+`#271`'s head branch (`claude/adoring-hawking-facwkn`) was branched directly from `#267`'s head (`claude/relaxed-clarke-tph1zi`) — confirmed by `#271`'s own PR description ("This branch was started from `claude/relaxed-clarke-tph1zi` (PR #267, Vol. 31) to include those changes, then adds Vol. 32 on top"). Consistent with that lineage, `#271`'s diff to `main` adds **both** `microsoft_agent_framework_python_class_deep_dives_v31.md` (1,618 additions — the same addition count as `#267`'s own addition of that file, though content wasn't hash-compared) **and** `..._v32.md` (1,574 additions). `#267` has no downstream PR — nothing in the open set is based on its branch. The real, continuing chain is `#271 → #275 → ... → #299`.
 
-**Consequence:** `#267` is now redundant. Because its content is a strict subset of `#271`'s (same commits, not a re-implementation), merging both is not a hard conflict risk — but whichever of the two merges **second** will most likely present GitHub with a zero-diff / "nothing to merge" state rather than a clean merge, since the file content will already be identical in `main`. This needs a maintainer decision, not a code fix.
+**Consequence:** `#267` is now redundant. Since `#271` was branched directly from `#267`'s commit (per the lineage above, not merely similar-looking diffs), merging both is not a hard conflict risk — but whichever of the two merges **second** will most likely present GitHub with a zero-diff / "nothing to merge" state rather than a clean merge, since that file's content will already be present in `main`. This needs a maintainer decision, not a code fix.
 
 ### 3.4 PydanticAI — orphaned root + restart chain ⚠️
 
 ```
 #266 (Vol. 30, main) → #270 → #274 → #278 (Vol. 33) ─┐  ← orphan: no PR is based on #278's branch
-                                                       ├─ content-identical
+                                                       ├─ same branch history
                             #282 (Vol. 30–34, main) → #286 → #290 → #294 → #298
 ```
 
-`#282`'s head branch (`claude/sharp-edison-bn4itt`) was branched from `#278`'s head (`claude/sharp-edison-8av469`) — `#282`'s own description says as much ("this branch was based on the prior PR branch `claude/sharp-edison-8av469` (which has since merged separately)"), though `#278` is in fact still open, not merged. `#282`'s diff to `main` adds all five volume files at once: `v30.md` (1,614 add), `v31.md` (1,248 add), `v32.md` (1,586 add), `v33.md` (1,341 add — identical line count to `#278`'s own `v33.md` addition), and the new `v34.md` (1,565 add). `#278` has no downstream PR. The real, continuing chain is `#282 → #286 → ... → #298`.
+`#282`'s head branch (`claude/sharp-edison-bn4itt`) was branched from `#278`'s head (`claude/sharp-edison-8av469`) — `#282`'s own description says as much ("this branch was based on the prior PR branch `claude/sharp-edison-8av469` (which has since merged separately)"), though `#278` is in fact still open, not merged. Consistent with that lineage, `#282`'s diff to `main` adds all five volume files at once: `v30.md` (1,614 add), `v31.md` (1,248 add), `v32.md` (1,586 add), `v33.md` (1,341 add — the same addition count as `#278`'s own `v33.md` addition, though content wasn't hash-compared), and the new `v34.md` (1,565 add). `#278` has no downstream PR. The real, continuing chain is `#282 → #286 → ... → #298`.
 
 **Consequence:** same as §3.3 — `#266`, `#270`, `#274`, and `#278` (the first three are *not* orphaned themselves, but their whole sub-chain terminates at the orphaned `#278`) are functionally superseded by `#282`'s cumulative branch. Whichever path merges second will likely hit a zero-diff / "nothing to merge" outcome on the overlapping files rather than a true conflict.
 
@@ -112,8 +112,8 @@ No urgent action is required — nothing is broken today, and no PR currently sh
 Before merging, the maintainer should:
 
 1. **LangGraph (`#264`→`#296`) and Google ADK (`#265`→`#297`)**: merge in numeric order, no other action needed.
-2. **Microsoft Agent Framework**: close `#267` as superseded by `#271` (or merge `#267` first, then retarget `#271`'s base to `main` — GitHub will auto-shrink its diff to just Vol. 32 once `#267` lands), then continue `#271 → #275 → ... → #299` in order.
-3. **PydanticAI**: close `#266`, `#270`, `#274`, `#278` as superseded by `#282` (or merge that sub-chain first, then retarget `#282`'s base to `main` — its diff will auto-shrink to just Vol. 34), then continue `#282 → #286 → ... → #298` in order.
+2. **Microsoft Agent Framework**: close `#267` as superseded by `#271` (or merge `#267` first — `#271` is already based on `main`, so GitHub will auto-shrink its diff to just Vol. 32 once `#267` lands, no retargeting needed), then continue `#271 → #275 → ... → #299` in order.
+3. **PydanticAI**: close `#266`, `#270`, `#274`, `#278` as superseded by `#282` (or merge that sub-chain first — `#282` is already based on `main`, so its diff will auto-shrink to just Vol. 34, no retargeting needed), then continue `#282 → #286 → ... → #298` in order.
 4. In all four series, merging **out of numeric order** within a chain (e.g. landing `#295` before `#291`) will strand the skipped PR's base branch and likely turn everything above it "behind" or "dirty" against `main`, since each PR only carries a one-step diff from its immediate parent.
 
 Affected PRs needing a decision: **Microsoft Agent Framework** `#267`, `#271` (2 PRs); **PydanticAI** `#266`, `#270`, `#274`, `#278`, `#282` (5 PRs) — 7 total.
