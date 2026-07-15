@@ -13,8 +13,6 @@ A *toolset* is a reusable, named collection of tools with a shared policy (retri
 
 > **2.10.0 changes:**
 > - `RenamedToolset` now raises `UserError` on name collisions instead of silently dropping the conflicting tool.
-> - `UsageBase.has_values()` (affects `RunUsage` and `RequestUsage`) was fixed to correctly return `False` when all counters are zero.
-> - `run_stream_sync` event-loop affinity was corrected.
 
 ## Minimal runnable example
 
