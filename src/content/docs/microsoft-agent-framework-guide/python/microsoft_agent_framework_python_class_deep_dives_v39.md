@@ -439,7 +439,7 @@ response = await client.get_response(
 )
 ```
 
-### Compaction and tokeniser injection
+### Compaction and tokenizer injection
 
 ```python
 from agent_framework._compaction import TruncationStrategy, CharacterEstimatorTokenizer
@@ -858,7 +858,7 @@ class DevServer:
 | `entities_dir` | `None` | Directory to scan for `.agent.py` / `.workflow.py` files |
 | `port` | `8080` | TCP port |
 | `host` | `"127.0.0.1"` | Bind address. Non-loopback hosts **require** `auth_enabled=True` and an explicit token |
-| `cors_origins` | `[]` | Explicit CORS allowlist. Empty = same-origin only (no wildcard) |
+| `cors_origins` | `None` | Explicit CORS allowlist. `None` is treated as an empty allowlist — same-origin only, no wildcard |
 | `ui_enabled` | `True` | Whether to serve the built-in DevUI web interface |
 | `mode` | `"developer"` | `"developer"` = verbose error details; `"user"` = generic errors only |
 | `auth_enabled` | `True` | Require `Authorization: Bearer <token>` on all `/v1/*` endpoints |
