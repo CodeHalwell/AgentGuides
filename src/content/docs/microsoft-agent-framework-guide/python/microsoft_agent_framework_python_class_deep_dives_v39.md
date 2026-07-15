@@ -73,21 +73,29 @@ class CheckpointStorage(Protocol):
 **Custom backend example — SQLite:**
 
 ```python
-import asyncio, json, sqlite3, uuid
+import asyncio, json, sqlite3
 from agent_framework._workflows._checkpoint import CheckpointStorage, WorkflowCheckpoint
 
 class SQLiteCheckpointStorage:
-    """Minimal SQLite-backed checkpoint storage."""
+    """Minimal SQLite-backed checkpoint storage.
+
+    Blocking sqlite3 calls are wrapped in asyncio.to_thread so they don't
+    stall the event loop. check_same_thread=False is required because the
+    thread pool may pick a different OS thread for each call.
+    """
 
     def __init__(self, db_path: str) -> None:
-        self._db = sqlite3.connect(db_path)
+        self._db_path = db_path
+        # Open once; check_same_thread=False is safe because asyncio.to_thread
+        # serialises calls through the GIL and we use a single connection.
+        self._db = sqlite3.connect(db_path, check_same_thread=False)
         self._db.execute(
             """CREATE TABLE IF NOT EXISTS checkpoints
                (id TEXT PRIMARY KEY, workflow_name TEXT, data TEXT, ts TEXT)"""
         )
         self._db.commit()
 
-    async def save(self, checkpoint: WorkflowCheckpoint) -> str:
+    def _save_sync(self, checkpoint: WorkflowCheckpoint) -> str:
         data = json.dumps(checkpoint.to_dict(), default=str)
         self._db.execute(
             "INSERT OR REPLACE INTO checkpoints VALUES (?,?,?,?)",
@@ -96,7 +104,10 @@ class SQLiteCheckpointStorage:
         self._db.commit()
         return checkpoint.checkpoint_id
 
-    async def load(self, checkpoint_id: str) -> WorkflowCheckpoint:
+    async def save(self, checkpoint: WorkflowCheckpoint) -> str:
+        return await asyncio.to_thread(self._save_sync, checkpoint)
+
+    def _load_sync(self, checkpoint_id: str) -> WorkflowCheckpoint:
         row = self._db.execute(
             "SELECT data FROM checkpoints WHERE id=?", (checkpoint_id,)
         ).fetchone()
@@ -105,31 +116,46 @@ class SQLiteCheckpointStorage:
             raise WorkflowCheckpointException(f"Checkpoint {checkpoint_id} not found")
         return WorkflowCheckpoint.from_dict(json.loads(row[0]))
 
-    async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
+    async def load(self, checkpoint_id: str) -> WorkflowCheckpoint:
+        return await asyncio.to_thread(self._load_sync, checkpoint_id)
+
+    def _list_sync(self, workflow_name: str) -> list[WorkflowCheckpoint]:
         rows = self._db.execute(
             "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts",
             (workflow_name,),
         ).fetchall()
         return [WorkflowCheckpoint.from_dict(json.loads(r[0])) for r in rows]
 
-    async def delete(self, checkpoint_id: str) -> bool:
+    async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
+        return await asyncio.to_thread(self._list_sync, workflow_name)
+
+    def _delete_sync(self, checkpoint_id: str) -> bool:
         cur = self._db.execute("DELETE FROM checkpoints WHERE id=?", (checkpoint_id,))
         self._db.commit()
         return cur.rowcount > 0
 
-    async def get_latest(self, *, workflow_name: str) -> WorkflowCheckpoint | None:
+    async def delete(self, checkpoint_id: str) -> bool:
+        return await asyncio.to_thread(self._delete_sync, checkpoint_id)
+
+    def _get_latest_sync(self, workflow_name: str) -> WorkflowCheckpoint | None:
         row = self._db.execute(
             "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts DESC LIMIT 1",
             (workflow_name,),
         ).fetchone()
         return WorkflowCheckpoint.from_dict(json.loads(row[0])) if row else None
 
-    async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]:
+    async def get_latest(self, *, workflow_name: str) -> WorkflowCheckpoint | None:
+        return await asyncio.to_thread(self._get_latest_sync, workflow_name)
+
+    def _list_ids_sync(self, workflow_name: str) -> list[str]:
         rows = self._db.execute(
             "SELECT id FROM checkpoints WHERE workflow_name=? ORDER BY ts",
             (workflow_name,),
         ).fetchall()
         return [r[0] for r in rows]
+
+    async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]:
+        return await asyncio.to_thread(self._list_ids_sync, workflow_name)
 
 # isinstance works because it's a @runtime_checkable Protocol
 storage: CheckpointStorage = SQLiteCheckpointStorage("agents.db")
@@ -323,9 +349,11 @@ async def run_with_events(workflow, prompt: str) -> None:
                 print(f"Done: {event.type}")
                 break
 
-    # Run workflow and consume events concurrently
+    # Run workflow and consume events concurrently.
+    # runner_context=ctx links ctx's event queue to this workflow run;
+    # without it ctx.next_event() would block indefinitely.
     task = asyncio.create_task(consume_events())
-    result = await workflow.run(prompt)
+    result = await workflow.run(prompt, runner_context=ctx)
     await task
 ```
 
@@ -757,19 +785,19 @@ Supply a `CacheProvider` to share the Purview policy cache across agent instance
 
 ```python
 from agent_framework import CacheProvider     # Protocol
-import redis
+import redis.asyncio as aioredis             # async client — never blocks the event loop
 
 class RedisCache(CacheProvider):
-    def __init__(self, r: redis.Redis):
+    def __init__(self, r: aioredis.Redis):
         self._r = r
 
     async def get(self, key: str) -> bytes | None:
-        return self._r.get(key)
+        return await self._r.get(key)
 
     async def set(self, key: str, value: bytes, ttl: int) -> None:
-        self._r.setex(key, ttl, value)
+        await self._r.setex(key, ttl, value)
 
-cache = RedisCache(redis.Redis())
+cache = RedisCache(aioredis.Redis())
 policy = PurviewPolicyMiddleware(
     credential,
     PurviewSettings(app_name="ContosoAssistant", cache_ttl_seconds=3600),
@@ -1232,9 +1260,10 @@ async def call_specialist_agent(question: str) -> str:
     session = AgentSession()
     response = await specialist.run(question, session=session)
 
-    # Check if the specialist needs user input (e.g. OAuth consent, tool approval)
+    # Check if the specialist needs user input (e.g. OAuth consent, tool approval).
+    # AgentResponse.messages is a list; the final message is messages[-1].
     user_input_items = [
-        c for c in response.message.contents
+        c for c in response.messages[-1].contents
         if hasattr(c, "type") and c.type in ("oauth_consent_request", "function_approval_request")
     ]
     if user_input_items:
