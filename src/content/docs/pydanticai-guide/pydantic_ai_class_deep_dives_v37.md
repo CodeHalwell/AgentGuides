@@ -20,7 +20,7 @@ Ten class groups covering the usage-tracking and budget system (with 2.10.0 `has
 
 **Source:** `pydantic_ai/usage.py`
 
-`UsageLimits` is a plain dataclass that enforces four orthogonal budgets — requests, tool calls, input tokens, and total tokens — checked at three injection points inside the agent graph. `RunUsage` accumulates across the whole run; `RequestUsage` represents a single model response and is also a `genai-prices` `AbstractUsage` so cost can be computed directly from it.
+`UsageLimits` is a plain dataclass that enforces five orthogonal budgets — requests, tool calls, input tokens, output tokens, and total tokens — checked at three injection points inside the agent graph. `RunUsage` accumulates across the whole run; `RequestUsage` represents a single model response and is also a `genai-prices` `AbstractUsage` so cost can be computed directly from it.
 
 **2.10.0 change:** `UsageBase.has_values()` was fixed to return `False` when all counters are zero (previously it could return `True` due to details-dict truthiness).
 
