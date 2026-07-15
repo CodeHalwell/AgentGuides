@@ -20,7 +20,7 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 
 **Key source facts** (from `langgraph/channels/binop.py`, `langgraph/types.py`):
 
-- `__init__(typ, operator)` initialises `self.value` by calling `typ()`. Special abstract types (`Sequence`, `MutableSequence`, `Set`, `Mapping`, …) are mapped to their concrete counterparts (`list`, `set`, `dict`) before instantiation.
+- `__init__(typ, operator)` initializes `self.value` by calling `typ()`. Special abstract types (`Sequence`, `MutableSequence`, `Set`, `Mapping`, …) are mapped to their concrete counterparts (`list`, `set`, `dict`) before instantiation.
 - `_operators_equal(a, b)` treats any lambda (`__name__ == "<lambda>"`) as equal to any other operator. This prevents false inequality when the same anonymous reducer is defined twice.
 - `update(values)` iterates writes in order. Before the first write, if `self.value is MISSING`, the first value *becomes* the current value (no `operator` call). Subsequent writes fold in with `self.operator(self.value, value)`.
 - `Overwrite` is a `dataclass` that wraps a replacement value. Detected by `_get_overwrite` in three forms: an `Overwrite` instance, a `{"__overwrite__": v}` dict, or a JSON-serialised `{"value": v, "type": "__overwrite__"}` dict. The last form preserves semantics across JSON API boundaries.
