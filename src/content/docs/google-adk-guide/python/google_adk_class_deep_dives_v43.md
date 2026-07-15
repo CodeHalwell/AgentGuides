@@ -678,7 +678,6 @@ deterministic_retry = RetryConfig(
 )
 
 # Verify the schedule manually
-from google.adk.workflow._node_state import NodeState
 from google.adk.workflow.utils._retry_utils import _get_retry_delay
 
 class FakeState:
