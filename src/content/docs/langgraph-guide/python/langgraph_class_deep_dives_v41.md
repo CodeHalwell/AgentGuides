@@ -833,7 +833,7 @@ Managed values are singletons injected by the Pregel runtime into a node's state
 **Key source facts** (from `langgraph/managed/is_last_step.py`, `langgraph/_internal/_scratchpad.py`):
 
 - `ManagedValue.get(scratchpad)` is the single `@staticmethod` every managed value must implement. The runtime calls it once per step and injects the result into the state dict under the annotated key.
-- `IsLastStepManager.get(scratchpad)` returns `scratchpad.step == scratchpad.stop - 1`. `step` is zero-indexed; `stop` is `recursion_limit + 1`.
+- `IsLastStepManager.get(scratchpad)` returns `scratchpad.step == scratchpad.stop - 1`. `step` is zero-indexed starting at 0 for the first node; `stop` is `recursion_limit` on a fresh run (so `IsLastStep` becomes `True` at `step == recursion_limit - 1`).
 - `RemainingStepsManager.get(scratchpad)` returns `scratchpad.stop - scratchpad.step` — the number of steps remaining including the current one.
 - `PregelScratchpad` fields: `step` (int, current step), `stop` (int, exclusive upper bound), `call_counter` / `interrupt_counter` / `subgraph_counter` (callables that return monotonically increasing IDs for calls, interrupts, and subgraphs), `get_null_resume` (callable for generating null resume placeholders), `resume` (list of resume values from `Command(resume=...)`).
 - The `Annotated[bool, IsLastStepManager]` pattern is the canonical way to declare a managed value field. `StateGraph` detects the second `Annotated` argument is a `ManagedValueSpec` and excludes the field from the regular channel map.
