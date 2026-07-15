@@ -675,11 +675,14 @@ agent = Agent('openai:gpt-4o', toolsets=[gated])
 
 async def supervised_run(prompt: str) -> str:
     async with agent.iter(prompt) as agent_run:
-        async for node in agent_run:
-            pass  # normal iteration until approval is needed
-    # If ApprovalRequired was raised, handle it here:
-    # agent_run.enqueue(ToolApproved())   # approve
-    # agent_run.enqueue(ToolDenied(message='Transfer exceeds daily limit'))
+        try:
+            async for node in agent_run:
+                pass  # normal iteration until approval is needed
+        except ApprovalRequired as e:
+            print(f'Approval needed: tool={e.tool_name!r}, args={e.tool_args}')
+            # Approve or deny before continuing:
+            # agent_run.enqueue(ToolApproved())
+            # agent_run.enqueue(ToolDenied(message='Transfer exceeds daily limit'))
     return agent_run.result.output if agent_run.result else ''
 ```
 
