@@ -52,6 +52,7 @@ Workflow checkpointing lets you pause graph execution, persist all state (messag
 ```python
 from typing import Protocol, runtime_checkable
 
+@runtime_checkable
 class CheckpointStorage(Protocol):
     async def save(self, checkpoint: WorkflowCheckpoint) -> CheckpointID: ...
     async def load(self, checkpoint_id: CheckpointID) -> WorkflowCheckpoint: ...
@@ -1250,7 +1251,7 @@ class UserInputRequiredException(ToolException):
 When a `@tool` function wraps a sub-agent that enters a HITL state, the sub-agent's response may contain `oauth_consent_request` or `function_approval_request` content items. `UserInputRequiredException` is raised to propagate those content items back to the parent agent's response rather than swallowing them as a generic tool error.
 
 ```python
-from agent_framework import tool, Agent
+from agent_framework import tool, Agent, AgentSession
 from agent_framework._tools import UserInputRequiredException
 
 @tool(name="call_specialist_agent")
