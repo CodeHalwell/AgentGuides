@@ -526,10 +526,10 @@ the value under a sentinel key (e.g. `"__value__"`). The loop unwraps it so
 
 > **Important:** `mode='task'` agents cannot be placed directly as static
 > workflow graph nodes. `Workflow.__init__` raises `ValueError` if it detects
-> one. Task-mode agents must be used either (a) as sub-agents delegated by a
-> `mode='chat'` coordinator via `AgentTool`, or (b) dispatched dynamically
-> from a `FunctionNode` via `ctx.run_node()`. Option (a) is the canonical
-> pattern:
+> one. Task-mode agents must be used either (a) as entries in a `mode='chat'`
+> coordinator's `sub_agents` list (the model validator wraps them as
+> `_TaskAgentTool` automatically), or (b) dispatched dynamically from a
+> `FunctionNode` via `ctx.run_node()`. Option (a) is the canonical pattern:
 
 ```python
 from pydantic import BaseModel
