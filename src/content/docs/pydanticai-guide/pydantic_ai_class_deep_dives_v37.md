@@ -128,7 +128,7 @@ agent = Agent('openai:gpt-4o', toolsets=[renamed])
 
 ```python
 # Example 2 — 2.10.0 collision detection raises UserError
-from pydantic_ai import FunctionToolset, RenamedToolset, RunContext
+from pydantic_ai import Agent, FunctionToolset, RenamedToolset
 from pydantic_ai.exceptions import UserError
 
 tools = FunctionToolset[None]()
@@ -193,8 +193,6 @@ Capabilities are expressed as `CapabilitySpec` entries — a flexible short-form
 
 ```python
 # Example 1 — Load agent from a YAML config file
-import yaml
-from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.agent import AgentSpec
 
 yaml_text = """
@@ -434,10 +432,10 @@ spec2 = AgentSpec.from_text(yaml_multi)
 
 **Source:** `pydantic_ai/concurrency.py`
 
-`ConcurrencyLimiter` wraps an `anyio.CapacityLimiter` to bound how many concurrent tool calls (or model requests) may run at once. When a caller has to wait it creates an OpenTelemetry span so wait-time is visible in traces. `max_queued` adds backpressure — callers over the queue cap get `ConcurrencyLimitExceeded` immediately. Subclass `AbstractConcurrencyLimiter` for distributed limiting (e.g., Redis semaphore).
+`ConcurrencyLimiter` wraps an `anyio.CapacityLimiter` to bound how many concurrent agent runs (`run()`/`iter()` calls) may be active at once. The limiter is acquired at the start of each agent run and released when the run ends, so it governs whole-run concurrency across multiple callers, not tool-call parallelism within a single run. When a caller has to wait it creates an OpenTelemetry span so wait-time is visible in traces. `max_queued` adds backpressure — callers over the queue cap get `ConcurrencyLimitExceeded` immediately. Subclass `AbstractConcurrencyLimiter` for distributed limiting (e.g., Redis semaphore).
 
 ```python
-# Example 1 — Limit concurrent tool calls within a single agent run
+# Example 1 — Limit concurrent agent.run() calls across multiple callers
 import asyncio
 from pydantic_ai import Agent, FunctionToolset, RunContext, ConcurrencyLimiter
 
