@@ -97,7 +97,7 @@ breaks out of the outer loop early.
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
-from google.adk.workflow import Workflow, END
+from google.adk.workflow import Workflow, START
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -110,10 +110,12 @@ summariser = LlmAgent(
     output_key="summary",
 )
 
-workflow = Workflow(name="summarise_wf")
-workflow.add_node(summariser)
-workflow.add_edge("START", "summariser")
-workflow.add_edge("summariser", END)
+# Nodes are declared through the edges list passed to the Workflow constructor.
+# There is no END sentinel — nodes with no outgoing edges are terminal automatically.
+workflow = Workflow(
+    name="summarise_wf",
+    edges=[(START, summariser)],
+)
 
 async def main():
     session_svc = InMemorySessionService()
@@ -258,7 +260,7 @@ ensuring only the agent's final response is promoted as output.
 ```python
 from pydantic import BaseModel
 from google.adk.agents import LlmAgent
-from google.adk.workflow import Workflow, END
+from google.adk.workflow import Workflow, START
 
 class SentimentResult(BaseModel):
     sentiment: str        # "positive" | "neutral" | "negative"
@@ -275,10 +277,10 @@ analyser = LlmAgent(
     output_key="sentiment_result",
 )
 
-wf = Workflow(name="sentiment_wf")
-wf.add_node(analyser)
-wf.add_edge("START", "sentiment")
-wf.add_edge("sentiment", END)
+wf = Workflow(
+    name="sentiment_wf",
+    edges=[(START, analyser)],
+)
 # process_llm_agent_output will call validate_schema and write the
 # parsed SentimentResult into ctx.state["sentiment_result"]
 ```
@@ -393,7 +395,7 @@ def _synthesize_task_fr_event(fc, output) -> Event:
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.workflow import Workflow, END
+from google.adk.workflow import Workflow, START
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -425,10 +427,10 @@ coordinator = LlmAgent(
     tools=[researcher, writer],  # _TaskAgentTool wrappers are created automatically
 )
 
-wf = Workflow(name="research_wf")
-wf.add_node(coordinator)
-wf.add_edge("START", "coordinator")
-wf.add_edge("coordinator", END)
+wf = Workflow(
+    name="research_wf",
+    edges=[(START, coordinator)],
+)
 
 async def main():
     svc = InMemorySessionService()
@@ -516,10 +518,17 @@ the value under a sentinel key (e.g. `"__value__"`). The loop unwraps it so
 
 ### Example — task-mode agent with structured output
 
+> **Important:** `mode='task'` agents cannot be placed directly as static
+> workflow graph nodes. `Workflow.__init__` raises `ValueError` if it detects
+> one. Task-mode agents must be used either (a) as sub-agents delegated by a
+> `mode='chat'` coordinator via `AgentTool`, or (b) dispatched dynamically
+> from a `FunctionNode` via `ctx.run_node()`. Option (a) is the canonical
+> pattern:
+
 ```python
 from pydantic import BaseModel
 from google.adk.agents import LlmAgent
-from google.adk.workflow import Workflow, END
+from google.adk.workflow import Workflow, START
 
 class TravelPlan(BaseModel):
     destination: str
@@ -527,25 +536,39 @@ class TravelPlan(BaseModel):
     highlights: list[str]
     estimated_budget_usd: float
 
+# Task-mode agent: uses the finish_task FC/FR handshake for schema validation.
+# It CANNOT be a static workflow graph node — it must run as a sub-agent.
 planner = LlmAgent(
     name="planner",
     model="gemini-2.5-pro",
-    mode="task",            # enables the FC/FR handshake
+    mode="task",            # enables the finish_task FC/FR handshake
     instruction=(
-        "Create a detailed travel plan for the destination in node_input. "
+        "Create a detailed travel plan for the destination provided. "
         "Return a valid TravelPlan object."
     ),
     output_schema=TravelPlan,
     output_key="travel_plan",
 )
 
-wf = Workflow(name="travel_wf")
-wf.add_node(planner)
-wf.add_edge("START", "planner")
-wf.add_edge("planner", END)
+# Chat coordinator dispatches the planner as a sub-agent via AgentTool.
+coordinator = LlmAgent(
+    name="coordinator",
+    model="gemini-2.5-flash",
+    mode="chat",
+    instruction=(
+        "Ask the travel planner to create a plan for the user's destination, "
+        "then summarise the result."
+    ),
+    tools=[planner],  # planner is wrapped as a _TaskAgentTool automatically
+)
+
+wf = Workflow(
+    name="travel_wf",
+    edges=[(START, coordinator)],
+)
 # After the workflow runs, ctx.state["travel_plan"] holds a TravelPlan dict.
 # The finish_task tool validates the schema; if invalid, the LLM retries
-# automatically before the workflow node completes.
+# automatically before the coordinator receives the result.
 ```
 
 ---
@@ -671,8 +694,10 @@ print(f"1st retry delay: {delay}s")   # 1.0 (exponent=0, no jitter)
 
 **Source:** `google/adk/workflow/_retry_config.py`
 
-`RetryConfig` is the Pydantic model you attach to any workflow node via
-`Graph.add_node(..., retry_config=...)` or `build_node(..., retry_config=...)`.
+`RetryConfig` is the Pydantic model you attach to any workflow node, either
+directly on the node constructor (`LlmAgent(..., retry_config=...)`) or via
+`build_node(node_like, retry_config=...)` before passing the node into a
+`Workflow`'s `edges` list.
 
 ### Full model
 
@@ -724,19 +749,17 @@ def _normalize_exceptions(cls, v):
 
 ### Attaching `RetryConfig` to nodes
 
+The simplest approach is to pass `retry_config` directly to the node
+constructor — all `BaseNode` subclasses (including `LlmAgent`) accept it:
+
 ```python
-from google.adk.workflow import Workflow, RetryConfig, END
+from google.adk.workflow import Workflow, RetryConfig, START
 from google.adk.agents import LlmAgent
 
 flaky_agent = LlmAgent(
     name="flaky",
     model="gemini-2.5-flash",
     instruction="Call an unreliable external API and return the result.",
-)
-
-wf = Workflow(name="resilient_wf")
-wf.add_node(
-    flaky_agent,
     retry_config=RetryConfig(
         max_attempts=4,
         initial_delay=2.0,
@@ -746,8 +769,11 @@ wf.add_node(
         exceptions=[TimeoutError, "ConnectionRefusedError"],
     ),
 )
-wf.add_edge("START", "flaky")
-wf.add_edge("flaky", END)
+
+wf = Workflow(
+    name="resilient_wf",
+    edges=[(START, flaky_agent)],
+)
 ```
 
 ### Using class objects and strings together
@@ -772,9 +798,10 @@ print(retry.exceptions)
 
 **Source:** `google/adk/workflow/utils/_graph_validation.py`
 
-`validate_graph` is called by `Workflow.compile()` (or automatically on first
-run) to catch structural errors early. It delegates to seven specialised
-validators, each raising `ValueError` with a descriptive message.
+`validate_graph` is called automatically at `Workflow` construction time (in
+`model_post_init` → `_build_graph`) to catch structural errors early. It
+delegates to seven specialised validators, each raising `ValueError` with a
+descriptive message.
 
 ### `validate_graph` — entry point
 
@@ -925,35 +952,39 @@ def _validate_chat_agent_wiring(edges):
 
 ### Triggering validation errors intentionally (for testing)
 
+Validation runs at `Workflow(...)` construction time, so `pytest.raises` wraps
+the constructor call:
+
 ```python
-from google.adk.workflow import Workflow, END
+from google.adk.workflow import Workflow, START, Edge
 from google.adk.agents import LlmAgent
 import pytest
 
 def test_unconditional_cycle_detected():
     a = LlmAgent(name="a", model="gemini-2.5-flash", instruction="step a")
     b = LlmAgent(name="b", model="gemini-2.5-flash", instruction="step b")
-    wf = Workflow(name="bad_wf")
-    wf.add_node(a)
-    wf.add_node(b)
-    wf.add_edge("START", "a")
-    wf.add_edge("a", "b")
-    wf.add_edge("b", "a")  # unconditional back-edge → cycle
-    wf.add_edge("b", END)
     with pytest.raises(ValueError, match="Unconditional cycle detected"):
-        wf.compile()  # or first run triggers validation
+        Workflow(
+            name="bad_wf",
+            edges=[
+                (START, a, b),              # START → a → b
+                Edge(from_node=b, to_node=a),  # b → a: unconditional back-edge
+            ],
+        )
 
-def test_unreachable_node_detected():
+def test_unreachable_nodes_detected():
     a = LlmAgent(name="a", model="gemini-2.5-flash", instruction="step a")
-    orphan = LlmAgent(name="orphan", model="gemini-2.5-flash", instruction="never reached")
-    wf = Workflow(name="bad_wf2")
-    wf.add_node(a)
-    wf.add_node(orphan)
-    wf.add_edge("START", "a")
-    wf.add_edge("a", END)
-    # orphan has no incoming edge → unreachable
+    b = LlmAgent(name="b", model="gemini-2.5-flash", instruction="unreachable")
+    c = LlmAgent(name="c", model="gemini-2.5-flash", instruction="also unreachable")
+    # b and c form a subgraph not connected to START
     with pytest.raises(ValueError, match="unreachable from START"):
-        wf.compile()
+        Workflow(
+            name="bad_wf2",
+            edges=[
+                (START, a),                    # only a is reachable
+                Edge(from_node=b, to_node=c),  # b→c subgraph disconnected from START
+            ],
+        )
 ```
 
 ---
@@ -962,7 +993,7 @@ def test_unreachable_node_detected():
 
 **Source:** `google/adk/workflow/utils/_workflow_graph_utils.py`
 
-`build_node` is the factory used internally by `Workflow.add_node` (and by
+`build_node` is the factory called internally by the graph edge parser (and by
 `_dispatch_task_fc`) to turn any valid node-like object into a concrete
 `BaseNode`. It also applies mode defaults for `LlmAgent` instances.
 
@@ -1021,8 +1052,15 @@ async def enrich(ctx, session_id: str) -> dict:
 async def transform(text: str, max_words: int = 50) -> str:
     ...
 
-wf = Workflow(name="wf")
-wf.add_node(transform, parameter_binding='node_input')
+from google.adk.workflow import Workflow, START, FunctionNode
+
+# Build a FunctionNode explicitly to set parameter_binding
+transform_node = FunctionNode(func=transform, parameter_binding='node_input')
+
+wf = Workflow(
+    name="wf",
+    edges=[(START, transform_node)],
+)
 ```
 
 ### LlmAgent mode defaults in practice
@@ -1142,14 +1180,34 @@ from google.adk.workflow.utils._workflow_hitl_utils import (
     has_request_input_function_call,
     get_request_input_interrupt_ids,
 )
-from google.adk.workflow import Workflow, END
+from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-# A node that emits a HITL interrupt by yielding a request_input event
+# A node that emits a HITL interrupt.
+#
+# IMPORTANT: the NodeRunner does NOT stop consuming the async generator when
+# it sees long_running_tool_ids.  Code placed *after* a yield inside the
+# generator runs immediately in the same invocation with empty resume_inputs.
+#
+# The correct pattern:
+#   1. Check ctx.resume_inputs at the TOP of the function (populated on resume).
+#   2. If present → process the answer and return.
+#   3. If absent  → yield the interrupt event and let the generator end.
+# On resume the Workflow re-invokes the node from scratch, ctx.resume_inputs
+# is pre-populated, and the early-return branch handles the answer.
 async def approval_gate(ctx):
+    # Step 1: on resume, ctx.resume_inputs is populated — handle the answer.
+    response = ctx.resume_inputs.get("approval-001")
+    if response is not None:
+        approval = response.get("result")
+        if approval != "approve":
+            raise ValueError("Action rejected by human operator.")
+        return  # completed; downstream node is triggered by the graph edge
+
+    # Step 2: first run — request user input and end the generator.
     request = RequestInput(
         interrupt_id="approval-001",
         message="Please approve or reject this action (approve/reject):",
@@ -1162,13 +1220,11 @@ async def approval_gate(ctx):
             "required": ["result"],
         },
     )
-    event = create_request_input_event(request)
-    yield event
-    # The workflow pauses here; resume_inputs will contain the response dict
-    response = ctx.resume_inputs.get("approval-001") or {}
-    approval = response.get("result")
-    if approval != "approve":
-        raise ValueError("Action rejected by human operator.")
+    yield create_request_input_event(request)
+    # Generator ends here. NodeRunner registers the interrupt_id from
+    # long_running_tool_ids and the Workflow marks this node WAITING.
+    # When the user sends a matching FunctionResponse, the node re-runs
+    # from the top with ctx.resume_inputs["approval-001"] populated.
 
 downstream = LlmAgent(
     name="action",
@@ -1176,12 +1232,10 @@ downstream = LlmAgent(
     instruction="Perform the approved action.",
 )
 
-wf = Workflow(name="hitl_wf")
-wf.add_node(approval_gate)
-wf.add_node(downstream)
-wf.add_edge("START", "approval_gate")
-wf.add_edge("approval_gate", "action")
-wf.add_edge("action", END)
+wf = Workflow(
+    name="hitl_wf",
+    edges=[(START, approval_gate, downstream)],
+)
 
 async def main():
     svc = InMemorySessionService()
