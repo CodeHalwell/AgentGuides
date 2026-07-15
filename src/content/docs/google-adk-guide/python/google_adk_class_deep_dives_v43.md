@@ -403,19 +403,21 @@ import asyncio
 
 # Two specialist sub-agents — mode='task' so the coordinator's dispatch
 # loop wraps them as _TaskAgentTool via sub_agents processing.
+# NOTE: output_key is NOT supported in task mode. The run_llm_agent_as_node
+# task branch only sets event.output from finish_task args; it never calls
+# process_llm_agent_output, so state_delta is not written. Results flow via
+# event.output which the coordinator receives through the FR synthesis step.
 researcher = LlmAgent(
     name="researcher",
     model="gemini-2.5-flash",
     mode="task",
     instruction="Research the topic provided and return key facts.",
-    output_key="research_notes",
 )
 writer = LlmAgent(
     name="writer",
     model="gemini-2.5-flash",
     mode="task",
-    instruction="Write a short article based on the research_notes in state.",
-    output_key="article",
+    instruction="Write a short article based on the research provided.",
 )
 
 # Coordinator delegates to researcher first, then writer.
@@ -553,7 +555,10 @@ planner = LlmAgent(
         "Return a valid TravelPlan object."
     ),
     output_schema=TravelPlan,
-    output_key="travel_plan",
+    # NOTE: output_key has no effect in task mode. The task branch of
+    # run_llm_agent_as_node sets event.output from finish_task args
+    # but never writes state_delta. The TravelPlan result is available
+    # on the event whose event.output is a TravelPlan-shaped dict.
 )
 
 # Chat coordinator dispatches the planner via sub_agents (not tools).
@@ -574,9 +579,9 @@ wf = Workflow(
     name="travel_wf",
     edges=[(START, coordinator)],
 )
-# After the workflow runs, ctx.state["travel_plan"] holds a TravelPlan dict.
-# The finish_task tool validates the schema; if invalid, the LLM retries
-# automatically before the coordinator receives the result.
+# After the workflow runs the TravelPlan result is in event.output (a dict),
+# not in ctx.state. The finish_task tool validates the schema; if invalid,
+# the LLM retries automatically before the coordinator receives the result.
 ```
 
 ---
