@@ -534,22 +534,30 @@ class LRUCache(BaseCache):
         self._lock = threading.RLock()
 
     def get(self, keys):
+        import datetime
         with self._lock:
+            now = datetime.datetime.now(datetime.timezone.utc).timestamp()
             out = {}
             for k in keys:
                 if k in self._store:
-                    enc, val, _ = self._store[k]
-                    self._store.move_to_end(k)   # mark as recently used
-                    out[k] = self.serde.loads_typed((enc, val))
+                    enc, val, expiry = self._store[k]
+                    if expiry is None or now < expiry:
+                        self._store.move_to_end(k)   # mark as recently used
+                        out[k] = self.serde.loads_typed((enc, val))
+                    else:
+                        del self._store[k]           # lazy TTL eviction
             return out
 
     async def aget(self, keys):
         return self.get(keys)
 
     def set(self, pairs):
+        import datetime
         with self._lock:
+            now = datetime.datetime.now(datetime.timezone.utc).timestamp()
             for k, (value, ttl) in pairs.items():
-                self._store[k] = (*self.serde.dumps_typed(value), ttl)
+                expiry = (now + ttl) if ttl is not None else None
+                self._store[k] = (*self.serde.dumps_typed(value), expiry)
                 self._store.move_to_end(k)
                 if len(self._store) > self._maxsize:
                     self._store.popitem(last=False)   # evict oldest
@@ -598,25 +606,20 @@ print(lru.get([(("ns",), "c")]))   # {(('ns',), 'c'): 'value-c'}
 ### Example 1 — iterate a `StreamChannel` via `tee` fan-out
 
 ```python
-# Note: in production, StreamChannel is bound and driven by StreamMux.
-# This example shows the public API in isolation.
+# Note: StreamChannel is normally bound and driven by StreamMux.
+# This example accesses private internals (_is_async, _subscribed,
+# _items, _closed) to demonstrate tee() behaviour in isolation —
+# production code never manipulates these fields directly.
 
-from collections import deque
 from langgraph.stream.stream_channel import StreamChannel
 
 ch: StreamChannel[str] = StreamChannel()
-ch._is_async = False          # manually bind to sync mode
-ch._subscribed = False
+ch._is_async = False          # bind to sync mode (done by StreamMux normally)
 
-# tee produces two independent sync iterators
+# tee() subscribes the channel and returns n independent iterators
 it1, it2 = ch.tee(2)
 
-# Push items (simulating transformer.process calls)
-# Since tee() subscribed, push goes to the internal buffer
-ch._subscribed = True         # tee sets this internally; shown for clarity
-ch._closed = False
-
-# In production the mux drives this; here we directly feed the buffer:
+# Directly populate the buffer (simulating StreamMux-driven push calls)
 ch._items.extend([(0, "alpha"), (1, "beta"), (2, "gamma")])
 ch._closed = True             # signal end-of-stream
 
@@ -719,15 +722,14 @@ g.add_edge(START, "inc")
 g.add_edge("inc", END)
 compiled = g.compile()
 
-# stream_events(version="v3") returns a GraphRunStream
-run = compiled.stream_events(
+# stream_events(version="v3") returns a GraphRunStream context manager
+with compiled.stream_events(
     {"count": 0},
     version="v3",
     transformers=[ValuesTransformer()],
-)
-
-for snapshot in run.values:
-    print("values snapshot:", snapshot)
+) as run:
+    for snapshot in run.values:
+        print("values snapshot:", snapshot)
 # values snapshot: {'count': 1}
 ```
 
@@ -756,21 +758,21 @@ g.add_edge("a", "b")
 g.add_edge("b", END)
 compiled = g.compile()
 
-run = compiled.stream_events(
+with compiled.stream_events(
     {"x": 0, "y": 0},
     version="v3",
     transformers=[UpdatesTransformer()],
-)
-
-for update in run.updates:
-    print("node update:", update)
+) as run:
+    for update in run.updates:
+        print("node update:", update)
 # node update: {'a': {'x': 10}}
 # node update: {'b': {'y': 20}}
 ```
 
-### Example 3 — combine both transformers for a rich run view
+### Example 3 — consume updates and values concurrently
 
 ```python
+import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.stream import ValuesTransformer, UpdatesTransformer
@@ -792,21 +794,29 @@ g.add_edge("greet", "farewell")
 g.add_edge("farewell", END)
 compiled = g.compile()
 
-vals_tx = ValuesTransformer()
-upd_tx = UpdatesTransformer()
-run = compiled.stream_events(
-    {"messages": []},
-    version="v3",
-    transformers=[vals_tx, upd_tx],
-)
+# Two channels must be consumed concurrently — if you drain one first,
+# the second channel's push() calls are no-ops (not yet subscribed) and
+# all events are lost. astream_events + asyncio.gather solves this.
+async def main():
+    async with compiled.astream_events(
+        {"messages": []},
+        version="v3",
+        transformers=[ValuesTransformer(), UpdatesTransformer()],
+    ) as run:
+        async def drain_updates():
+            async for upd in run.updates:
+                print("update:", upd)
 
-updates_it, values_it = run.updates.tee(1)[0], run.values
+        async def drain_values():
+            async for val in run.values:
+                print("final state:", val)
 
-# Drain both projections
-for upd in run.updates:
-    print("update:", upd)
-for val in run.values:
-    print("final state:", val)
+        await asyncio.gather(drain_updates(), drain_values())
+
+asyncio.run(main())
+# update: {'greet': {'messages': ['hello']}}
+# update: {'farewell': {'messages': ['hello', 'goodbye']}}
+# final state: {'messages': ['hello', 'goodbye']}
 ```
 
 ---
