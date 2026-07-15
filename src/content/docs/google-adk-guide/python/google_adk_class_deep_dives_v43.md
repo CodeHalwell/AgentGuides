@@ -401,21 +401,27 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 import asyncio
 
-# Two specialist sub-agents
+# Two specialist sub-agents — mode='task' so the coordinator's dispatch
+# loop wraps them as _TaskAgentTool via sub_agents processing.
 researcher = LlmAgent(
     name="researcher",
     model="gemini-2.5-flash",
+    mode="task",
     instruction="Research the topic provided and return key facts.",
     output_key="research_notes",
 )
 writer = LlmAgent(
     name="writer",
     model="gemini-2.5-flash",
+    mode="task",
     instruction="Write a short article based on the research_notes in state.",
     output_key="article",
 )
 
-# Coordinator delegates to researcher first, then writer
+# Coordinator delegates to researcher first, then writer.
+# sub_agents (not tools) is the correct field for agent delegation;
+# LlmAgent.__model_validator_after wraps each mode='task' sub-agent as a
+# _TaskAgentTool so the FC/FR dispatch loop can find and invoke them.
 coordinator = LlmAgent(
     name="coordinator",
     model="gemini-2.5-pro",
@@ -424,7 +430,7 @@ coordinator = LlmAgent(
         "You coordinate research and writing. First call 'researcher' with "
         "the user's topic, then call 'writer' to produce the final article."
     ),
-    tools=[researcher, writer],  # _TaskAgentTool wrappers are created automatically
+    sub_agents=[researcher, writer],
 )
 
 wf = Workflow(
@@ -550,7 +556,9 @@ planner = LlmAgent(
     output_key="travel_plan",
 )
 
-# Chat coordinator dispatches the planner as a sub-agent via AgentTool.
+# Chat coordinator dispatches the planner via sub_agents (not tools).
+# LlmAgent.__model_validator_after wraps each mode='task' entry in
+# sub_agents as a _TaskAgentTool automatically.
 coordinator = LlmAgent(
     name="coordinator",
     model="gemini-2.5-flash",
@@ -559,7 +567,7 @@ coordinator = LlmAgent(
         "Ask the travel planner to create a plan for the user's destination, "
         "then summarise the result."
     ),
-    tools=[planner],  # planner is wrapped as a _TaskAgentTool automatically
+    sub_agents=[planner],
 )
 
 wf = Workflow(
