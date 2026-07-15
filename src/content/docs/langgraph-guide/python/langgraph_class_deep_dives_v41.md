@@ -127,7 +127,7 @@ print(restored.get())    # ['a', 'b', 'c', 'd', 'e']
 - `update(values)` calls `_flatten(values)` which unwraps nested `list[Value]` items. This means a node can send either a single item or a list of items and both are appended flat.
 - When `accumulate=False`, `update()` resets `self.values = list()` before appending — giving per-step semantics.
 - `get()` raises `EmptyChannelError` when `self.values` is empty. `is_available()` returns `bool(self.values)`.
-- `Topic` does not implement `consume()`. With `accumulate=False`, the buffer is reset at the start of each `update()` call, so stale items disappear naturally when the next step writes to the channel.
+- `Topic` does not implement `consume()`. With `accumulate=False`, the buffer is cleared at the start of each super-step: `update()` resets `self.values` before appending, so items from the previous step are never visible alongside items written in the current step.
 - `__eq__` compares only `accumulate` so two `Topic(int)` and `Topic(str)` channels with the same `accumulate` setting are considered equal by the graph's type checker.
 
 ### Example 1 — fan-in with Topic (per-step reset)
@@ -607,14 +607,14 @@ print(lru.get([(("ns",), "c")]))   # {(('ns',), 'c'): 'value-c'}
 
 ```python
 # Note: StreamChannel is normally bound and driven by StreamMux.
-# This example accesses private internals (_is_async, _subscribed,
-# _items, _closed) to demonstrate tee() behaviour in isolation —
-# production code never manipulates these fields directly.
+# This example calls semi-private internals (_bind, _items, _closed) to
+# demonstrate tee() behaviour in isolation — production code never
+# manipulates these directly.
 
 from langgraph.stream.stream_channel import StreamChannel
 
 ch: StreamChannel[str] = StreamChannel()
-ch._is_async = False          # bind to sync mode (done by StreamMux normally)
+ch._bind(is_async=False)      # bind to sync mode (done by StreamMux normally)
 
 # tee() subscribes the channel and returns n independent iterators
 it1, it2 = ch.tee(2)
@@ -634,7 +634,7 @@ print(list(it2))   # ['alpha', 'beta', 'gamma']
 from langgraph.stream.stream_channel import StreamChannel
 
 ch: StreamChannel[int] = StreamChannel()
-ch._is_async = False
+ch._bind(is_async=False)
 # _subscribed must be False before __iter__ — the iterator sets it to True.
 # Pre-populating _items directly bypasses push() so we can seed the buffer
 # without a running mux.
@@ -662,7 +662,7 @@ from langgraph.stream.stream_channel import StreamChannel
 
 async def main():
     ch: StreamChannel[str] = StreamChannel()
-    ch._is_async = True
+    ch._bind(is_async=True)
     ch._subscribed = False
     ch._closed = False
 
