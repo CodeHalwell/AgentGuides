@@ -656,13 +656,16 @@ def _get_retry_delay(
 
 ### Delay schedule with default settings
 
-| Attempt | `attempt_for_calc` | `delay` before jitter |
-|---------|--------------------|-----------------------|
-| 1 (original) | — (no retry yet) | — |
-| 2 (1st retry) | 0 | 1.0 s |
-| 3 (2nd retry) | 1 | 2.0 s |
-| 4 (3rd retry) | 2 | 4.0 s |
-| 5 (4th retry) | 3 | 8.0 s |
+`_get_retry_delay` is called with the `attempt_count` of the attempt that
+*just failed* (1-based, before the runner increments it). Row N below shows
+the delay scheduled after the Nth failure:
+
+| `attempt_count` passed in | `attempt_for_calc` | `delay` before jitter |
+|---------------------------|--------------------|-----------------------|
+| 1 (original failed)       | 0                  | 1.0 s → 1st retry     |
+| 2 (1st retry failed)      | 1                  | 2.0 s → 2nd retry     |
+| 3 (2nd retry failed)      | 2                  | 4.0 s → 3rd retry     |
+| 4 (3rd retry failed)      | 3                  | 8.0 s → 4th retry     |
 
 With `jitter=1.0` (the default) the actual delay is sampled uniformly from
 `[0, 2×delay]`, adding randomness to prevent thundering-herd retries.
@@ -1165,9 +1168,15 @@ def create_request_input_response(
 
 ### `process_auth_resume`
 
-Stores credentials returned from an auth interrupt into session state. Tries
-three formats in order: full `AuthConfig` dict, `AuthCredential` dict, or a
-plain value (API key string):
+Stores credentials returned from an auth interrupt into session state. The
+fallback path after `AuthConfig` validation fails is **auth-type-specific**:
+
+- **All auth types**: first tries `AuthConfig.model_validate(response_data)`.
+- **`API_KEY` fallback**: calls `str(response_data)` directly as the raw key.
+  Passing an `AuthCredential` dict here would stringify the whole dict — not
+  parse it — producing an unusable credential. Pass the plain key string.
+- **OAuth / OIDC fallback**: calls `AuthCredential.model_validate(response_data)`,
+  so an `AuthCredential` dict is valid here.
 
 ```python
 async def process_auth_resume(response_data, auth_config, state) -> None:
