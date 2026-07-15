@@ -811,8 +811,8 @@ client = OpenAIChatClient(
 Supply a `CacheProvider` to share the Purview policy cache across agent instances (e.g. in a multi-worker deployment):
 
 ```python
-from agent_framework import CacheProvider     # Protocol
-import redis.asyncio as aioredis             # async client — never blocks the event loop
+from agent_framework.microsoft import CacheProvider   # Protocol — lives in the Purview namespace
+import redis.asyncio as aioredis                      # async client — never blocks the event loop
 
 class RedisCache(CacheProvider):
     def __init__(self, r: aioredis.Redis):
