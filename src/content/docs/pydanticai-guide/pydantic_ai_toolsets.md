@@ -11,7 +11,7 @@ Verified against **pydantic-ai==2.10.0** — source modules: `pydantic_ai.toolse
 
 A *toolset* is a reusable, named collection of tools with a shared policy (retries, timeout, metadata, instructions). PydanticAI ships 10+ toolset wrappers that let you filter, rename, combine, gate, or lazy-load tools without rewriting the functions. They're the supported way to attach non-code tool sources — MCP servers, remote APIs, human approval — to an agent.
 
-> **2.10.0 changes:** `RenamedToolset` now raises `UserError` on name collisions instead of silently dropping the conflicting tool. `UsageLimits.has_values()` was fixed to correctly return `False` when all counters are zero. `run_stream_sync` event-loop affinity was corrected.
+> **2.10.0 changes:** `RenamedToolset` now raises `UserError` on name collisions instead of silently dropping the conflicting tool. `UsageBase.has_values()` (affects `RunUsage` and `RequestUsage`) was fixed to correctly return `False` when all counters are zero. `run_stream_sync` event-loop affinity was corrected.
 
 ## Minimal runnable example
 

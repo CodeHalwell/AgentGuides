@@ -70,7 +70,7 @@ print(repr(result.output))
 #> Fruit(name='banana', color='yellow')
 ```
 
-Arguments (`output.py` — verified against pydantic-ai 2.8.0):
+Arguments (`output.py` — verified against pydantic-ai 2.10.0):
 
 | Arg | Type | Default | Notes |
 |-----|------|---------|-------|

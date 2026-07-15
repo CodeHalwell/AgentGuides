@@ -589,9 +589,11 @@ class SuccessResult(BaseModel):
     data: dict
     message: str
 
-# Union output — each type becomes a separate output tool
-union_output = ToolOutput[SuccessResult | ErrorResult](SuccessResult | ErrorResult)
-union_agent = Agent('openai:gpt-4o', output_type=union_output)
+# Union output — pass a list of ToolOutput, one per type; model picks which tool to call
+union_agent = Agent(
+    'openai:gpt-4o',
+    output_type=[ToolOutput(SuccessResult), ToolOutput(ErrorResult)],
+)
 ```
 
 ---
@@ -626,9 +628,9 @@ async def run_with_approval():
                 pass
         except ApprovalRequired as e:
             print(f'Approval needed: tool={e.tool_name!r}, args={e.tool_args}')
-            # Human reviews, then approves or denies
-            # await agent_run.enqueue(ToolApproved())
-            # or: await agent_run.enqueue(ToolDenied(message='Not authorised'))
+            # Human reviews, then approves or denies (enqueue is synchronous — no await)
+            # agent_run.enqueue(ToolApproved())
+            # or: agent_run.enqueue(ToolDenied(message='Not authorised'))
 ```
 
 ```python
@@ -857,7 +859,7 @@ agent = Agent('openai:gpt-4o')
 @agent.tool
 async def check_budget(ctx: RunContext[None]) -> str:
     """Report remaining budget to the agent."""
-    limits = ctx.usage_limits      # always set during a real run (2.10.0)
+    limits = ctx.usage_limits      # None only on bare/synthetic RunContext outside a real run
     usage = ctx.usage
 
     if limits is None:
