@@ -452,7 +452,8 @@ limiter = ConcurrencyLimiter(max_running=3, max_queued=10, name='external-api')
 # Pass the limiter at Agent construction via max_concurrency (not as a per-run kwarg)
 agent = Agent('openai:gpt-4o', toolsets=[tools], max_concurrency=limiter)
 
-# result = asyncio.run(agent.run('Fetch data for resources A, B, C, D, E simultaneously.'))
+# Five concurrent callers — limiter lets at most 3 run at once across all of them:
+# results = asyncio.run(asyncio.gather(*[agent.run(f'Fetch resource {r}') for r in 'ABCDE']))
 print(f'Capacity: {limiter.max_running}, waiting: {limiter.waiting_count}')
 ```
 
