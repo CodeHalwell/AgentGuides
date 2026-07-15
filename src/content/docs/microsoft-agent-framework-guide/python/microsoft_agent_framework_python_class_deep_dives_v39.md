@@ -705,7 +705,7 @@ async def main():
 ```python
 async def stream_copilot():
     agent = CopilotStudioAgent(name="support")
-    async for update in await agent.run("Check order status", stream=True):
+    async for update in agent.run("Check order status", stream=True):
         print(update.text, end="", flush=True)
     print()
 ```
