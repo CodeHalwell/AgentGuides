@@ -47,12 +47,11 @@ Workflow checkpointing lets you pause graph execution, persist all state (messag
 
 ### 1a · `CheckpointStorage` — Protocol
 
-`CheckpointStorage` is a `@runtime_checkable` Protocol. Any object that implements its six methods is a valid backend — no inheritance required.
+`CheckpointStorage` is a structural `Protocol` — any object that implements its six methods is a valid backend, no inheritance required. The protocol is **not** decorated with `@runtime_checkable`, so `isinstance()` checks will raise `TypeError`; use `typing.cast()` or plain duck typing instead.
 
 ```python
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
-@runtime_checkable
 class CheckpointStorage(Protocol):
     async def save(self, checkpoint: WorkflowCheckpoint) -> CheckpointID: ...
     async def load(self, checkpoint_id: CheckpointID) -> WorkflowCheckpoint: ...
@@ -76,6 +75,7 @@ class CheckpointStorage(Protocol):
 ```python
 import asyncio, json, sqlite3, threading
 from agent_framework._workflows._checkpoint import CheckpointStorage, WorkflowCheckpoint
+from agent_framework._workflows._checkpoint_encoding import encode_checkpoint_value, decode_checkpoint_value
 
 class SQLiteCheckpointStorage:
     """Minimal SQLite-backed checkpoint storage.
@@ -98,7 +98,10 @@ class SQLiteCheckpointStorage:
 
     def _save_sync(self, checkpoint: WorkflowCheckpoint) -> str:
         with self._lock:
-            data = json.dumps(checkpoint.to_dict(), default=str)
+            # encode_checkpoint_value handles pickle/base64 for complex objects,
+            # matching the format FileCheckpointStorage uses.
+            encoded = encode_checkpoint_value(checkpoint.to_dict())
+            data = json.dumps(encoded)
             self._db.execute(
                 "INSERT OR REPLACE INTO checkpoints VALUES (?,?,?,?)",
                 (checkpoint.checkpoint_id, checkpoint.workflow_name, data, checkpoint.timestamp),
@@ -117,7 +120,8 @@ class SQLiteCheckpointStorage:
         if not row:
             from agent_framework.exceptions import WorkflowCheckpointException
             raise WorkflowCheckpointException(f"Checkpoint {checkpoint_id} not found")
-        return WorkflowCheckpoint.from_dict(json.loads(row[0]))
+        decoded = decode_checkpoint_value(json.loads(row[0]))
+        return WorkflowCheckpoint.from_dict(decoded)
 
     async def load(self, checkpoint_id: str) -> WorkflowCheckpoint:
         return await asyncio.to_thread(self._load_sync, checkpoint_id)
@@ -128,7 +132,7 @@ class SQLiteCheckpointStorage:
                 "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts",
                 (workflow_name,),
             ).fetchall()
-        return [WorkflowCheckpoint.from_dict(json.loads(r[0])) for r in rows]
+        return [WorkflowCheckpoint.from_dict(decode_checkpoint_value(json.loads(r[0]))) for r in rows]
 
     async def list_checkpoints(self, *, workflow_name: str) -> list[WorkflowCheckpoint]:
         return await asyncio.to_thread(self._list_sync, workflow_name)
@@ -148,7 +152,7 @@ class SQLiteCheckpointStorage:
                 "SELECT data FROM checkpoints WHERE workflow_name=? ORDER BY ts DESC LIMIT 1",
                 (workflow_name,),
             ).fetchone()
-        return WorkflowCheckpoint.from_dict(json.loads(row[0])) if row else None
+        return WorkflowCheckpoint.from_dict(decode_checkpoint_value(json.loads(row[0]))) if row else None
 
     async def get_latest(self, *, workflow_name: str) -> WorkflowCheckpoint | None:
         return await asyncio.to_thread(self._get_latest_sync, workflow_name)
@@ -164,9 +168,9 @@ class SQLiteCheckpointStorage:
     async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]:
         return await asyncio.to_thread(self._list_ids_sync, workflow_name)
 
-# isinstance works because it's a @runtime_checkable Protocol
-storage: CheckpointStorage = SQLiteCheckpointStorage("agents.db")
-assert isinstance(storage, CheckpointStorage)
+# CheckpointStorage is not @runtime_checkable — use typing.cast() to satisfy type-checkers
+import typing
+storage: CheckpointStorage = typing.cast(CheckpointStorage, SQLiteCheckpointStorage("agents.db"))
 ```
 
 ### 1b · `FileCheckpointStorage` — File-Based Backend
@@ -597,7 +601,7 @@ class PIIRedactionMiddleware(AgentMiddleware):
 ## 5 · `CopilotStudioAgent` — Microsoft Copilot Studio Bridge
 
 **Module:** `agent_framework.microsoft`
-**Install:** `pip install agent-framework-copilot-studio`
+**Install:** `pip install agent-framework-copilotstudio`
 
 `CopilotStudioAgent` wraps a published Copilot Studio app as a framework-native agent. It handles authentication via MSAL, routes each turn as a DirectLine conversation, and supports the same `context_providers` and `middleware` as any other agent.
 
@@ -895,7 +899,7 @@ server.set_pending_entities([agent])
 asyncio.run(server.start())
 ```
 
-The DevUI is then available at `http://127.0.0.1:8080` and the OpenAI-compatible API at `http://127.0.0.1:8080/v1/chat/completions`.
+The DevUI is then available at `http://127.0.0.1:8080` and the responses API at `http://127.0.0.1:8080/v1/responses`.
 
 ### Network-accessible server (team shared dev)
 
