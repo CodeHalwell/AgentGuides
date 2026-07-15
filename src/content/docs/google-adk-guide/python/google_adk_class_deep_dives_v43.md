@@ -689,10 +689,10 @@ deterministic_retry = RetryConfig(
 from google.adk.workflow.utils._retry_utils import _get_retry_delay
 
 class FakeState:
-    attempt_count = 2   # simulates the first retry
+    attempt_count = 1   # attempt 1 just failed; computing delay before retry 1
 
 delay = _get_retry_delay(deterministic_retry, FakeState())
-print(f"1st retry delay: {delay}s")   # 1.0 (exponent=0, no jitter)
+print(f"1st retry delay: {delay}s")   # 1.0 (attempt_for_calc=0, no jitter)
 ```
 
 ---
@@ -711,7 +711,8 @@ directly on the node constructor (`LlmAgent(..., retry_config=...)`) or via
 ```python
 class RetryConfig(BaseModel):
     max_attempts: int | None = None
-    """Max attempts including the original. 0 or 1 = no retries. Default: 5."""
+    """Max attempts including the original. Use 1 to disable retries; 0 is
+    falsy and falls back to the runtime default of 5. Default: 5."""
 
     initial_delay: float | None = None
     """Seconds before first retry. Default: 1.0."""
@@ -1187,7 +1188,7 @@ from google.adk.workflow.utils._workflow_hitl_utils import (
     has_request_input_function_call,
     get_request_input_interrupt_ids,
 )
-from google.adk.workflow import Workflow, START
+from google.adk.workflow import Workflow, START, FunctionNode
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -1195,11 +1196,13 @@ from google.genai import types
 
 # A node that emits a HITL interrupt.
 #
-# IMPORTANT: the NodeRunner does NOT stop consuming the async generator when
-# it sees long_running_tool_ids.  Code placed *after* a yield inside the
-# generator runs immediately in the same invocation with empty resume_inputs.
+# IMPORTANT: must be wrapped as FunctionNode(rerun_on_resume=True).
+# Without it, the replay interceptor (Case 4 in _replay_interceptor.py)
+# fast-forwards by setting node output to the resolved response dict
+# directly — the generator is never rerun and the approve/reject branch
+# below never executes.
 #
-# The correct pattern:
+# With rerun_on_resume=True the correct pattern is:
 #   1. Check ctx.resume_inputs at the TOP of the function (populated on resume).
 #   2. If present → process the answer and return.
 #   3. If absent  → yield the interrupt event and let the generator end.
@@ -1239,9 +1242,11 @@ downstream = LlmAgent(
     instruction="Perform the approved action.",
 )
 
+gate_node = FunctionNode(func=approval_gate, rerun_on_resume=True)
+
 wf = Workflow(
     name="hitl_wf",
-    edges=[(START, approval_gate, downstream)],
+    edges=[(START, gate_node, downstream)],
 )
 
 async def main():
