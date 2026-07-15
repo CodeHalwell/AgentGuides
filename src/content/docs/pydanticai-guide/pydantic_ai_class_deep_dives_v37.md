@@ -141,10 +141,11 @@ def search(query: str) -> str:
 def lookup(key: str) -> str:
     return f'value for {key}'
 
-# Both tools renamed to 'find' — 2.10.0 raises instead of silently dropping
+# Rename 'search' to 'lookup', which conflicts with the existing 'lookup' tool.
+# 2.10.0 raises UserError instead of silently dropping the conflicting tool.
 bad_map = RenamedToolset(
     wrapped=tools,
-    name_map={'find': 'search', 'find': 'lookup'},  # type: ignore[dict-item]
+    name_map={'lookup': 'search'},
 )
 
 # The collision is detected lazily at get_tools() time (inside an agent run).
@@ -152,7 +153,7 @@ bad_map = RenamedToolset(
 # try:
 #     asyncio.run(bad_map.get_tools(some_ctx))
 # except UserError as e:
-#     print(e)  # 'Renaming tool "lookup" to "find" conflicts with existing tool.'
+#     print(e)  # 'Renaming tool "search" to "lookup" conflicts with existing tool.'
 ```
 
 ```python
@@ -618,9 +619,9 @@ gated = ApprovalRequiredToolset(wrapped=tools)
 agent = Agent('openai:gpt-4o', toolsets=[gated])
 
 async def run_with_approval():
-    async with agent.run_stream('Delete the file /tmp/report.pdf') as stream:
+    async with agent.run_stream('Delete the file /tmp/report.pdf') as agent_run:
         try:
-            async for _ in stream:
+            async for _ in agent_run:
                 pass
         except ApprovalRequired as e:
             print(f'Approval needed: tool={e.tool_name!r}, args={e.tool_args}')
@@ -849,7 +850,7 @@ from pydantic_ai.messages import TextPart, UserPromptPart
 
 agent = Agent('openai:gpt-4o')
 
-@agent.tool_plain
+@agent.tool
 async def check_budget(ctx: RunContext[None]) -> str:
     """Report remaining budget to the agent."""
     limits = ctx.usage_limits      # always set during a real run (2.10.0)
