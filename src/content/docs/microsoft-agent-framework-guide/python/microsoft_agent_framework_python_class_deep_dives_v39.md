@@ -811,7 +811,7 @@ class RedisCache(CacheProvider):
     async def set(self, key: str, value: bytes, ttl: int) -> None:
         await self._r.setex(key, ttl, value)
 
-cache = RedisCache(aioredis.Redis())
+cache = RedisCache(aioredis.from_url("redis://localhost:6379", decode_responses=False))
 policy = PurviewPolicyMiddleware(
     credential,
     PurviewSettings(app_name="ContosoAssistant", cache_ttl_seconds=3600),
