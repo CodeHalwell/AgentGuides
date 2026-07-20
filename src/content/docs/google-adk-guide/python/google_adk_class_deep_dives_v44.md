@@ -593,7 +593,7 @@ from google.genai import types
 
 # Register the OpenAI backend once at startup
 from google.adk.models.registry import LLMRegistry
-LLMRegistry().register(OpenAILlm)
+LLMRegistry.register(OpenAILlm)
 
 agent = LlmAgent(
     name="gpt-agent",
