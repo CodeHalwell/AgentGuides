@@ -86,21 +86,22 @@ def speculative_work(label: str) -> str:
         time.sleep(2)  # long-running; still pending when context exits and cancels it
     return f"done:{label}"
 
-# max_concurrency=1 means only one task runs at a time; speculative queues behind fast
+# max_concurrency=1: fast occupies the only thread; speculative stays in the queue.
+# Exit the context WITHOUT calling fast.result() — __exit__ cancels speculative
+# (still pending/unstarted) and waits for fast before returning.
 config: RunnableConfig = {"max_concurrency": 1}
 
 with BackgroundExecutor(config) as submit:
-    # fast occupies the single thread slot immediately
     fast = submit(speculative_work, "fast")
-    # speculative is queued (pending, not yet running) — can be cancelled
     speculative = submit(
         speculative_work, "slow",
         __cancel_on_exit__=True,
         __reraise_on_exit__=False,
     )
-    fast_result = fast.result()  # returns instantly; speculative still pending
-    # context exit: speculative is still pending → Future.cancel() succeeds
+    # leave immediately — speculative is still in the queue, not running
 
+# __exit__ has already: (1) cancelled speculative (pending → cancelled), (2) drained fast
+fast_result = fast.result()  # retrieves the completed value
 print("Fast path won:", fast_result)
 print("Speculative cancelled:", speculative.cancelled())  # True
 ```
@@ -1020,7 +1021,7 @@ graph.invoke({"proposal": "", "outcome": ""}, config)
 
 # Inspect the pending interrupt from the saved state
 pending = graph.get_state(config).interrupts
-print(pending)  # (Interrupt(value={'proposal': 'DELETE all temp files'}, ...),)
+print(pending)  # (Interrupt(value={'action': 'DELETE all temp files'}, ...),)
 
 # Resume with 'accept' response
 from langgraph.types import Command
@@ -1060,10 +1061,8 @@ graph = (
 )
 
 config = {"configurable": {"thread_id": "edit-demo"}}
-try:
-    graph.invoke({"command": "rm -rf /tmp/old_cache", "executed": ""}, config)
-except Exception:
-    pass  # GraphInterrupt — graph paused waiting for human review
+# With a checkpointer, invoke() returns normally; interrupt is persisted in checkpoint
+graph.invoke({"command": "rm -rf /tmp/old_cache", "executed": ""}, config)
 
 # Human edits the command to a safer scoped path before execution
 edited_request: ActionRequest = {"action": "rm -rf /tmp/old_cache/session_42", "args": {}}
