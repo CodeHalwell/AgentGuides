@@ -86,22 +86,23 @@ def speculative_work(label: str) -> str:
         time.sleep(2)  # long-running; still pending when context exits and cancels it
     return f"done:{label}"
 
-config: RunnableConfig = {}
+# max_concurrency=1 means only one task runs at a time; speculative queues behind fast
+config: RunnableConfig = {"max_concurrency": 1}
 
 with BackgroundExecutor(config) as submit:
-    # This task will be cancelled when the fast path wins
+    # fast occupies the single thread slot immediately
+    fast = submit(speculative_work, "fast")
+    # speculative is queued (pending, not yet running) — can be cancelled
     speculative = submit(
         speculative_work, "slow",
         __cancel_on_exit__=True,
         __reraise_on_exit__=False,
     )
-    # Simulate the fast path completing immediately
-    fast = submit(speculative_work, "fast")
-    fast_result = fast.result()  # blocks until done
-    # context exit: cancels speculative task, does not reraise CancelledError
+    fast_result = fast.result()  # returns instantly; speculative still pending
+    # context exit: speculative is still pending → Future.cancel() succeeds
 
 print("Fast path won:", fast_result)
-print("Speculative cancelled:", speculative.cancelled())
+print("Speculative cancelled:", speculative.cancelled())  # True
 ```
 
 ---
@@ -293,11 +294,15 @@ class State(TypedDict):
     output: str
     recovered: bool
 
+handler_calls = []
+
 def fallback_handler(state: State) -> dict:
     """Applied to every node that doesn't set its own error_handler."""
+    handler_calls.append("fallback")
     return {"output": "fallback", "recovered": True}
 
 def custom_handler(state: State) -> dict:
+    handler_calls.append("custom")
     return {"output": "custom_recovery", "recovered": True}
 
 def node_a(state: State) -> dict:
@@ -314,15 +319,17 @@ print("before:", builder._node_defaults)  # _NodeDefaults(retry_policy=None, ...
     builder
     .set_node_defaults(error_handler=fallback_handler)
     .add_node("a", node_a)                              # uses default handler
-    .add_node("b", node_b, error_handler=custom_handler)  # override
+    .add_node("b", node_b, error_handler=custom_handler)  # per-node override
     .add_edge(START, "a")
-    .add_edge("a", END)
+    .add_edge("a", "b")   # route through b so both handlers are exercised
+    .add_edge("b", END)
 )
 print("after:", builder._node_defaults.error_handler)  # <function fallback_handler>
 
 graph = builder.compile()
-result_a = graph.invoke({})
-print(result_a)  # {'output': 'fallback', 'recovered': True}
+result = graph.invoke({})
+print(handler_calls)       # ['fallback', 'custom']  — both handlers ran
+print(result["output"])    # 'custom_recovery'  — b's custom_handler ran last
 ```
 
 ### Example 3 — chain `set_node_defaults` with multiple policies
@@ -408,7 +415,7 @@ builder.add_conditional_edges("high", route)
 spec = builder.branches["high"]["route"]
 print(type(spec).__name__)   # BranchSpec
 print(spec.ends)             # {'high': 'high', 'low': 'low', '__end__': '__end__'}
-print(spec.input_schema)     # None  (infer_schema=False by default)
+print(spec.input_schema)     # <class 'State'>  (inferred from route's State annotation)
 ```
 
 ### Example 2 — `from_path` with Literal auto-inference
@@ -674,7 +681,7 @@ builder.add_node(
     "summarise",
     slow_summarise,
     defer=True,          # runs after all non-deferred nodes in the same super-step
-    destinations=("end_node",),  # restrict outgoing edges
+    destinations=("end_node",),  # visualization hint for graph diagrams; does not restrict routing
 )
 builder.add_node("end_node", lambda s: s)
 builder.add_edge(START, "tokenise")
