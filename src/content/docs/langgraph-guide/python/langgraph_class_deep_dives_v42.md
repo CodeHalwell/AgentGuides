@@ -390,7 +390,7 @@ print("double retry:", double_node.retry_policy[0].max_attempts)  # 3
 **Key source facts:**
 
 - Fields: `path` (the routing `Runnable`), `ends` (`dict[Hashable, str] | None` mapping return values to node names), `input_schema` (optional narrowed input type).
-- `BranchSpec.from_path(path, path_map, infer_schema=False)` — factory used internally by `add_conditional_edges`. When `path_map=None` and the function has a `Literal` return type annotation, it **auto-infers** `ends` from the `Literal` args.
+- `BranchSpec.from_path(path, path_map, infer_schema=False)` — factory used internally by `add_conditional_edges`. When `infer_schema=False` (the direct-call default), `input_schema` is `None`; `add_conditional_edges` passes `infer_schema=True`, so public-API specs infer `input_schema` from the routing function's annotation. When `path_map=None` and the function has a `Literal` return type annotation, it **auto-infers** `ends` from the `Literal` args.
 - `run(writer, reader)` — compiles to a `RunnableCallable` that invokes the routing function and writes the selected destination to the appropriate channel.
 - `_route` / `_aroute` — sync/async routing implementations. When `reader` is present (i.e. `then=` was set), it merges the current state with the node output before invoking the routing function.
 
@@ -414,14 +414,14 @@ def route(state: State) -> Literal["high", "low", "__end__"]:
 builder = StateGraph(State)
 builder.add_node("high", lambda s: {"score": s["score"] + 100})
 builder.add_node("low",  lambda s: {"score": s["score"] - 5})
-builder.add_edge(START, "high")  # just for compilation
+builder.add_edge(START, "high")  # required for a structurally valid graph
 builder.add_conditional_edges("high", route)
 
-# Inspect the BranchSpec BEFORE compiling
+# Branches are registered on the builder immediately — inspect BEFORE compiling
 spec = builder.branches["high"]["route"]
 print(type(spec).__name__)   # BranchSpec
 print(spec.ends)             # {'high': 'high', 'low': 'low', '__end__': '__end__'}
-print(spec.input_schema)     # <class 'State'>  (inferred from route's State annotation)
+print(spec.input_schema)     # <class 'State'>  (add_conditional_edges uses infer_schema=True)
 ```
 
 ### Example 2 — `from_path` with Literal auto-inference
@@ -1302,6 +1302,6 @@ for s in summary:
 
 ## Revision history
 
-| Date | Version | Change |
+| Date | Version | Changes |
 |---|---|---|
-| 2026-07-20 | langgraph 1.2.9 | Initial publication |
+| 2026-07-20 | 1.2.9 | Initial publication |
