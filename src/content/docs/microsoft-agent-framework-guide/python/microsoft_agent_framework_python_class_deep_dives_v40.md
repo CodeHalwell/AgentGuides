@@ -109,7 +109,8 @@ async def main() -> None:
 
     workflow = builder.build()
     result = await workflow.run("Write a Python script that computes the 100th Fibonacci number.")
-    print(result.text)
+    # workflow.run() returns WorkflowRunResult — extract outputs via get_outputs()
+    print(result.get_outputs()[-1].agent_response.text)
 
 asyncio.run(main())
 ```
@@ -277,7 +278,7 @@ async def main() -> None:
     workflow.add_request_info_handler(MagenticPlanReviewRequest, human_plan_review)
 
     result = await workflow.run("Summarise Q1 revenue trends.")
-    print(result.text)
+    print(result.get_outputs()[-1].agent_response.text)
 
 asyncio.run(main())
 ```
@@ -455,7 +456,7 @@ async def main() -> None:
     )
 
     result = await workflow.run("Write a haiku about autumn leaves.")
-    print(result.text)
+    print(result.get_outputs()[-1].agent_response.text)
 
 asyncio.run(main())
 ```
@@ -1052,10 +1053,15 @@ async def main() -> None:
         ),
     )
 
-    # TaskRunner adapter — wraps Agent.run into the (Task) -> Prediction protocol
+    # TaskRunner adapter — wraps Agent.run into the (Task) -> Prediction protocol.
+    # Include file_name in the prompt when the task ships an attachment; production
+    # adapters should read/upload the file so the agent can access its contents.
     async def run_task(task: Task) -> Prediction:
         session = agent.create_session()
-        result = await agent.run(task.question, session=session)
+        prompt = task.question
+        if task.file_name:
+            prompt = f"{task.question}\n\nAttached file: {task.file_name}"
+        result = await agent.run(prompt, session=session)
         return Prediction(prediction=result.text)
 
     telemetry = GAIATelemetryConfig(
@@ -1123,7 +1129,10 @@ async def main() -> None:
 
     async def run_task(task: Task) -> Prediction:
         session = agent.create_session()
-        result = await agent.run(task.question, session=session)
+        prompt = task.question
+        if task.file_name:
+            prompt = f"{task.question}\n\nAttached file: {task.file_name}"
+        result = await agent.run(prompt, session=session)
         return Prediction(prediction=result.text)
 
     task = Task(
