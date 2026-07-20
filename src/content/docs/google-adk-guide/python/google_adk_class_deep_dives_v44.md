@@ -684,9 +684,8 @@ def _get_last_human_messages(events):
 ```python
 import asyncio
 from langgraph.graph import StateGraph, MessagesState, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage
 
 from google.adk.agents.langgraph_agent import LangGraphAgent
 from google.adk.runners import InMemoryRunner
@@ -703,7 +702,7 @@ builder = StateGraph(MessagesState)
 builder.add_node("model", call_model)
 builder.set_entry_point("model")
 builder.add_edge("model", END)
-graph = builder.compile(checkpointer=MemorySaver())
+graph = builder.compile(checkpointer=InMemorySaver())
 
 agent = LangGraphAgent(
     name="lg-agent",
@@ -812,6 +811,7 @@ async def stream_audio(queue: LiveRequestQueue, wav_path: str) -> None:
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.agents.live_request_queue import LiveRequestQueue
+from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 agent = LlmAgent(
@@ -820,12 +820,14 @@ agent = LlmAgent(
     instruction="You are a live assistant. Respond concisely.",
 )
 
+runner = InMemoryRunner(agent=agent, app_name="live-demo")
 queue = LiveRequestQueue()
 
 
-async def run():
-    async for event in agent.run_live(
-        session=session,
+async def run(session_id):
+    async for event in runner.run_live(
+        user_id="u1",
+        session_id=session_id,
         live_request_queue=queue,
     ):
         if event.content and event.content.parts:
@@ -840,6 +842,16 @@ async def send_messages():
             )
         await asyncio.sleep(1.5)
     queue.close()
+
+
+async def main():
+    session = await runner.session_service.create_session(
+        app_name="live-demo", user_id="u1"
+    )
+    await asyncio.gather(run(session.id), send_messages())
+
+
+asyncio.run(main())
 ```
 
 ---
@@ -901,8 +913,8 @@ Transfer directions allowed by `AutoFlow`:
 | `LlmAgent` configuration | Flow assigned |
 |---|---|
 | Has `sub_agents` | `AutoFlow` |
-| No `sub_agents`, `disallow_transfer_to_peers=True` | `SingleFlow` |
-| Standalone agent | `SingleFlow` |
+| `disallow_transfer_to_parent=True` AND `disallow_transfer_to_peers=True` AND no `sub_agents` | `SingleFlow` |
+| Any other configuration (including standalone agents by default) | `AutoFlow` |
 
 ### Example — explicitly disabling peer transfers
 
@@ -1167,14 +1179,13 @@ async def classify_and_route(ctx):
         instruction="Classify the input as 'billing', 'tech', or 'other'.",
         output_key="category",
     )
-    # ctx.run_node is backed by DynamicNodeScheduler
-    child_ctx = await ctx.run_node(
+    # ctx.run_node is backed by DynamicNodeScheduler; returns the node output directly
+    category = await ctx.run_node(
         classifier,
         node_input=ctx.input,
         node_name="classify",
         run_id="r1",
     )
-    category = child_ctx.output
     ctx.output = f"Routed to: {category}"
 
 
