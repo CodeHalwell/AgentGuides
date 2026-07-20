@@ -788,7 +788,7 @@ from google.genai import types as genai_types
 
 async def stream_audio(queue: LiveRequestQueue, wav_path: str) -> None:
     with wave.open(wav_path, "rb") as f:
-        chunk_size = f.getframerate() * 2 * f.getsampwidth() // 10  # 100 ms
+        chunk_size = f.getframerate() // 10  # 100 ms worth of frames
         queue.send_activity_start()
         while True:
             data = f.readframes(chunk_size)
@@ -1171,8 +1171,12 @@ from google.adk.workflow import Workflow, FunctionNode
 from google.genai import types
 
 
-async def classify_and_route(ctx):
-    """Dynamically dispatches to a classifier node, then routes."""
+async def classify_and_route(ctx, node_input=None):
+    """Dynamically dispatches to a classifier node, then routes.
+
+    FunctionNode passes the workflow edge value as the ``node_input`` parameter
+    — there is no ``ctx.input`` or ``ctx.node_input`` attribute on Context.
+    """
     classifier = LlmAgent(
         name="classifier",
         model="gemini-2.5-flash",
@@ -1182,7 +1186,7 @@ async def classify_and_route(ctx):
     # ctx.run_node is backed by DynamicNodeScheduler; returns the node output directly
     category = await ctx.run_node(
         classifier,
-        node_input=ctx.input,
+        node_input=node_input,
         node_name="classify",
         run_id="r1",
     )
