@@ -239,7 +239,7 @@ workflow = (
 )
 
 result = await workflow.run("Write a research memo on post-training alignment.")
-print(result.output)
+print(result.get_outputs()[-1].agent_response.text)
 ```
 
 Alternative: bring your own manager by subclassing `MagenticManagerBase` and wrapping it instead of `StandardMagenticManager`. Use this when you want deterministic planning logic rather than an LLM-driven coordinator.
