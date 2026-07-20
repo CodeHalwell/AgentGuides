@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.8.0 (July 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.10.0 (July 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 2.8.0 | Updated: July 10, 2026
+Latest: 2.10.0 | Updated: July 15, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.8.0 (July 2026)  
+**Version:** 2.10.0 (July 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -462,7 +462,7 @@ article_agent = Agent(
     instructions='Write comprehensive technical articles.'
 )
 
-# ── UsageLimits (verified against pydantic-ai 2.8.0 usage.py) ──────────────────
+# ── UsageLimits (verified against pydantic-ai 2.10.0 usage.py) ──────────────────
 
 # All fields — every limit defaults to None (disabled) except request_limit=50
 from pydantic_ai import UsageLimits
@@ -482,7 +482,7 @@ result = article_agent.run_sync(
     usage_limits=limits,
 )
 
-# RunUsage — inspect what was consumed (pydantic-ai 2.8.0 adds tool_calls field)
+# RunUsage — inspect what was consumed (tool_calls field added in 2.8.0)
 from pydantic_ai import Agent
 from pydantic_ai.usage import RunUsage
 
@@ -495,7 +495,7 @@ def get_fact() -> str:
 result2 = agent.run_sync('Tell me a fact.', usage_limits=UsageLimits(request_limit=3))
 usage: RunUsage = result2.usage()
 print(f"requests={usage.requests}")           # total LLM API calls made
-print(f"tool_calls={usage.tool_calls}")       # total successful tool executions (new in 2.8.0)
+print(f"tool_calls={usage.tool_calls}")       # total successful tool executions (added in 2.8.0)
 print(f"input_tokens={usage.input_tokens}")   # cumulative prompt tokens
 print(f"output_tokens={usage.output_tokens}") # cumulative completion tokens
 print(f"total_tokens={usage.total_tokens}")   # property: input + output
