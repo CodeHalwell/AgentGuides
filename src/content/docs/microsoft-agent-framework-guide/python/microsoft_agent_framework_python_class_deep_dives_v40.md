@@ -1107,22 +1107,22 @@ class FuzzyMatchEvaluator:
 gaia = GAIA(evaluator=FuzzyMatchEvaluator())
 ```
 
-### Running a single task
+### Running a single custom task
+
+`GAIA.run()` loads tasks from the HuggingFace benchmark dataset. For a one-off custom task, call the `TaskRunner` adapter directly — no `GAIA` instance needed:
 
 ```python
-from agent_framework.lab.gaia import GAIA, Task
+from agent_framework.lab.gaia import Task, Prediction
 
-gaia = GAIA()
+# Reuse the same adapter defined in the multi-task example
 task = Task(
     task_id="custom-001",
     question="What is the capital city of France?",
     answer="Paris",
     level=1,
 )
-result = await gaia.run_task(agent, task)
-print(f"Correct: {result.evaluation.is_correct}, "
-      f"Answer: {result.prediction.prediction!r}, "
-      f"Runtime: {result.runtime_seconds:.1f}s")
+prediction = await run_task(task)
+print(f"Answer: {prediction.prediction!r}")
 ```
 
 ---
@@ -1146,6 +1146,6 @@ print(f"Correct: {result.evaluation.is_correct}, "
 | `FileMemoryProvider` | 7-tool file scratchpad per session; `scope` for cross-session sharing. |
 | `FileStoreEntry` | Typed directory-listing entry (`FILE` / `DIRECTORY`). |
 | `AgentModeProvider` | Plan/execute (or any custom) mode switching persisted in session state. |
-| `GAIA` | End-to-end GAIA benchmark runner; `run_benchmark()` or `run_task()`. |
+| `GAIA` | End-to-end GAIA benchmark runner; `run(task_runner, level, max_n, parallel)`. |
 | `GAIATelemetryConfig` | OTLP or file-based tracing for benchmark runs. |
 | `Task` / `TaskResult` / `Evaluator` | Data model + protocol for custom GAIA scoring. |
