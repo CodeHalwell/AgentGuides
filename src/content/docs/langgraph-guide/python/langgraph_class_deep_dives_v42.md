@@ -598,8 +598,8 @@ for ns, expected in visits:
 **Key source facts:**
 
 - Fields: `runnable`, `metadata`, `input_schema`, `retry_policy`, `cache_policy`, `is_error_handler`, `error_handler_node`, `ends`, `defer`, `timeout`.
-- `is_error_handler=True` when the node was registered via `error_handler=` on another node.
-- `error_handler_node` holds the name of the node this spec is an error handler for.
+- `is_error_handler=True` marks the auto-generated handler node created when `error_handler=` is passed to `add_node`.
+- `error_handler_node` is set on the **regular** node and holds the auto-generated handler node's name; the handler node itself has `error_handler_node=None`.
 - `ends=EMPTY_SEQ` (a sentinel `tuple()`) by default; set to a `tuple[str]` or `dict[str,str]` when `destinations=` is passed to `add_node`.
 - `defer=True` means the node runs only after all non-deferred nodes in the same super-step have completed.
 - Access via `builder.nodes[name]` (returns the `StateNodeSpec`) **before** compilation.
@@ -661,8 +661,8 @@ builder.add_edge("main", END)
 for name, spec in builder.nodes.items():
     print(f"{name!r}: is_error_handler={spec.is_error_handler}, "
           f"error_handler_node={spec.error_handler_node!r}")
-# 'main'         : is_error_handler=False, error_handler_node=None
-# '__main_eh__'  : is_error_handler=True, error_handler_node='main'
+# 'main'         : is_error_handler=False, error_handler_node='__main_eh__'
+# '__main_eh__'  : is_error_handler=True,  error_handler_node=None
 ```
 
 ### Example 3 — deferred nodes and `destinations`
