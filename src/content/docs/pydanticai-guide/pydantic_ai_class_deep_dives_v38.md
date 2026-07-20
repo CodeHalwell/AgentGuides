@@ -145,7 +145,7 @@ def echo_function(messages: list[ModelMessage], info: AgentInfo) -> ModelRespons
             break
     return ModelResponse(
         parts=[TextPart(content=f'Echo: {last_text}')],
-        usage=RequestUsage(requests=1, input_tokens=10, output_tokens=5),
+        usage=RequestUsage(input_tokens=10, output_tokens=5),
     )
 
 
@@ -177,12 +177,12 @@ async def tool_calling_function(messages: list[ModelMessage], info: AgentInfo) -
                     tool_call_id='call-001',
                 )
             ],
-            usage=RequestUsage(requests=1, input_tokens=15, output_tokens=8),
+            usage=RequestUsage(input_tokens=15, output_tokens=8),
         )
     # After tool result is returned, emit final text
     return ModelResponse(
         parts=[TextPart(content='Greeted successfully.')],
-        usage=RequestUsage(requests=1, input_tokens=20, output_tokens=4),
+        usage=RequestUsage(input_tokens=20, output_tokens=4),
     )
 
 
@@ -303,7 +303,7 @@ from pydantic_ai.usage import RequestUsage
 
 
 def always_fails(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-    raise ModelAPIError('Simulated provider failure')
+    raise ModelAPIError('primary', 'Simulated provider failure')
 
 
 model = FallbackModel(
@@ -318,12 +318,10 @@ agent = Agent(model)
 async def demonstrate_exhausted_fallback():
     try:
         await agent.run('Hello')
-    except* ModelAPIError as eg:
+    except FallbackExceptionGroup as eg:
         print(f'All {len(eg.exceptions)} models failed:')
         for exc in eg.exceptions:
             print(f'  • {exc}')
-    except FallbackExceptionGroup as eg:
-        print(f'Fallback group: {eg}')
 
 asyncio.run(demonstrate_exhausted_fallback())
 ```
@@ -426,7 +424,7 @@ config = RetryConfig(
 
 transport = TenacityTransport(config, HTTPTransport(), validate_response=lambda r: r.raise_for_status())
 
-with TenacityTransport(config) as t:
+with transport as t:
     # Use as a context manager — delegates __enter__/__exit__ to wrapped transport
     client = Client(transport=t)
     # client.get('https://api.example.com/endpoint')
@@ -903,7 +901,7 @@ class LoggingModel(WrapperModel):
 def simple_fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     return ModelResponse(
         parts=[TextPart(content='Logged response.')],
-        usage=RequestUsage(requests=1, input_tokens=5, output_tokens=3),
+        usage=RequestUsage(input_tokens=5, output_tokens=3),
     )
 
 
@@ -949,7 +947,7 @@ class RateLimitedModel(WrapperModel):
 def mock_fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     return ModelResponse(
         parts=[TextPart(content='ok')],
-        usage=RequestUsage(requests=1, input_tokens=3, output_tokens=1),
+        usage=RequestUsage(input_tokens=3, output_tokens=1),
     )
 
 
@@ -975,7 +973,7 @@ from pydantic_ai.models import ModelRequestParameters
 # Simulate a response that was consumed inside a Temporal activity
 stored_response = ModelResponse(
     parts=[TextPart(content='Result from completed activity.')],
-    usage=RequestUsage(requests=1, input_tokens=20, output_tokens=5),
+    usage=RequestUsage(input_tokens=20, output_tokens=5),
     model_name='openai:gpt-4o-mini',
 )
 
@@ -1016,7 +1014,8 @@ from typing import Any
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.wrapper import WrapperCapability
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.tools import RunContext, ToolCallPart, ToolDefinition
+from pydantic_ai.tools import RunContext, ToolDefinition
+from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.models import ModelRequestContext
 from pydantic_ai.messages import ModelResponse
 
@@ -1122,7 +1121,8 @@ from dataclasses import dataclass
 from typing import Any
 from pydantic_ai.capabilities.wrapper import WrapperCapability
 from pydantic_ai.capabilities.hooks import Hooks
-from pydantic_ai.tools import RunContext, ToolCallPart, ToolDefinition
+from pydantic_ai.tools import RunContext, ToolDefinition
+from pydantic_ai.messages import ToolCallPart
 
 
 @dataclass
