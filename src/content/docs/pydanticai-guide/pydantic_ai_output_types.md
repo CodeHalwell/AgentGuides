@@ -7,7 +7,7 @@ language: python
 
 # Output Types & Validators
 
-Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
 
 The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. PydanticAI ships five "marker" wrappers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — plus a plain type / union shortcut. The right one depends on what the model natively supports.
 
@@ -70,13 +70,63 @@ print(repr(result.output))
 #> Fruit(name='banana', color='yellow')
 ```
 
-Arguments (`output.py:76`):
+Arguments (`output.py` — verified against pydantic-ai 2.8.0):
 
-- `type_` — the Pydantic model, dataclass, or callable.
-- `name` — tool name sent to the model. Default is `final_result` for single outputs; for multi-type outputs, the type's name is appended.
-- `description` — overrides the docstring as the tool's description.
-- `max_retries` — output-tool-specific retry budget; overrides the agent-level `retries` / `output_retries`.
-- `strict` — forwarded to providers that support strict JSON schema (OpenAI).
+| Arg | Type | Default | Notes |
+|-----|------|---------|-------|
+| `output` | `type \| callable` | required | Pydantic model, dataclass, or async callable |
+| `name` | `str \| None` | `None` | Tool name sent to the model; auto-derived if unset |
+| `description` | `str \| None` | `None` | Overrides the type's docstring as the tool description |
+| `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level `retries` / `output_retries` |
+| `strict` | `bool \| None` | `None` | Forwarded to providers that support strict JSON schema (OpenAI) |
+
+### `ToolOutput.max_retries` — per-output retry budgets
+
+`max_retries` lets you set a _different_ retry budget for each output branch. Expensive routes get fewer retries; cheap ones can afford more:
+
+```python
+from pydantic import BaseModel, field_validator
+from pydantic_ai import Agent, ToolOutput
+
+class QuickAnswer(BaseModel):
+    """A short factual answer."""
+    text: str
+
+    @field_validator('text')
+    @classmethod
+    def non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('text must not be empty')
+        return v
+
+class DetailedReport(BaseModel):
+    """A structured report with sections and citations."""
+    title: str
+    sections: list[str]
+    citations: list[str]
+
+    @field_validator('citations')
+    @classmethod
+    def requires_citations(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError('At least one citation is required')
+        return v
+
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[
+        ToolOutput(QuickAnswer,     name='quick',  max_retries=3),   # more forgiving
+        ToolOutput(DetailedReport,  name='report', max_retries=1),   # expensive, fail fast
+    ],
+)
+
+# The agent chooses which output tool to call based on the question
+result = agent.run_sync('What year was Python created?')
+print(repr(result.output))  # QuickAnswer(text='1991')
+
+result2 = agent.run_sync('Give me a detailed report on Python history with sources.')
+print(repr(result2.output))  # DetailedReport(title=..., sections=[...], citations=[...])
+```
 
 ## `NativeOutput` — provider-native JSON schema
 

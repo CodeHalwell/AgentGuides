@@ -7,7 +7,7 @@ language: python
 
 # Message History & Multi-Turn Conversations
 
-Verified against **pydantic-ai==1.102.0** — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
+Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
 
 Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that list (or the serialised form) back into the next run to keep a multi-turn conversation. Message history is what makes chat applications possible on top of PydanticAI's otherwise stateless `Agent`.
 
@@ -97,29 +97,35 @@ async with agent.run_stream(
 
 When `message_history` is provided, the agent's system prompt is **not** re-sent — the list is assumed to already contain it. If you want to layer a new system-level instruction on top of an existing history, use `agent.override(instructions=...)` or a run-level `instructions=` argument.
 
-## `HistoryProcessor` — trim, summarise, or redact in flight
+## `ProcessHistory` — trim, summarise, or redact in flight
 
-`HistoryProcessor` is a callable that runs _before_ each model request (`_history_processor.py`). Signatures (all accepted):
+`ProcessHistory` is a `capabilities=` entry that wraps a `HistoryProcessorFunc` and runs it _before_ each model request (`pydantic_ai.capabilities`). Signatures (all accepted):
 
 ```python
+from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage
 
 def last_n(msgs: list[ModelMessage]) -> list[ModelMessage]:
     return msgs[-10:]
 
+@dataclass
+class WindowConfig:
+    window: int = 10
+
 async def async_ctx(
-    ctx: RunContext[None], msgs: list[ModelMessage]
+    ctx: RunContext[WindowConfig], msgs: list[ModelMessage]
 ) -> list[ModelMessage]:
-    return msgs[-ctx.deps.window:] if ctx.deps else msgs
+    return msgs[-ctx.deps.window:]
 
 agent = Agent(
     'openai:gpt-5.2',
-    history_processors=[last_n],
+    capabilities=[ProcessHistory(last_n)],
 )
 ```
 
-Processors run in the order given; each one receives the output of the previous. They can:
+Add multiple `ProcessHistory` entries to chain processors — each receives the output of the previous. They can:
 
 - Drop messages (context window management).
 - Collapse long tool outputs into summaries.
@@ -127,6 +133,126 @@ Processors run in the order given; each one receives the output of the previous.
 - Rewrite system messages on a per-deps basis (async + ctx variant).
 
 Processors are **not** applied to the stored `all_messages()`; they only affect what goes over the wire to the model.
+
+### Pattern 1 — sliding window (keep last N turns)
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse
+
+def sliding_window(max_turns: int):
+    """Keep only the most recent `max_turns` request/response pairs, plus system prompts."""
+    def processor(msgs: list[ModelMessage]) -> list[ModelMessage]:
+        system_prompts: list[ModelMessage] = []
+        pairs: list[tuple[ModelRequest, ModelResponse]] = []
+        pending_request: ModelRequest | None = None
+
+        for msg in msgs:
+            if isinstance(msg, ModelRequest):
+                # Split system-prompt parts from user/tool parts so they survive trimming
+                system_parts = [p for p in msg.parts if getattr(p, 'part_kind', None) == 'system-prompt']
+                non_system_parts = [p for p in msg.parts if getattr(p, 'part_kind', None) != 'system-prompt']
+
+                if system_parts:
+                    system_prompts.append(ModelRequest(parts=system_parts))
+
+                if non_system_parts:
+                    pending_request = ModelRequest(parts=non_system_parts, instructions=msg.instructions)
+
+            elif isinstance(msg, ModelResponse) and pending_request is not None:
+                pairs.append((pending_request, msg))
+                pending_request = None
+
+        # Trim to the last max_turns pairs and flatten; always keep system prompts first
+        trimmed = pairs[-max_turns:]
+        result: list[ModelMessage] = list(system_prompts)
+        for req, resp in trimmed:
+            result.append(req)
+            result.append(resp)
+        if pending_request:  # pending request without a response yet (current turn)
+            result.append(pending_request)
+        return result
+
+    return processor
+
+agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[ProcessHistory(sliding_window(max_turns=5))],
+)
+```
+
+### Pattern 2 — PII redaction before the wire
+
+```python
+import re
+from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
+
+_EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
+_CARD_RE  = re.compile(r'\b(?:\d[ \-]?){13,16}\b')
+
+def redact_pii(msgs: list[ModelMessage]) -> list[ModelMessage]:
+    """Scrub emails and card numbers from all user-prompt text before sending to the model."""
+    cleaned: list[ModelMessage] = []
+    for msg in msgs:
+        if isinstance(msg, ModelRequest):
+            new_parts = []
+            for part in msg.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    text = _EMAIL_RE.sub('[EMAIL]', part.content)
+                    text = _CARD_RE.sub('[CARD]', text)
+                    new_parts.append(UserPromptPart(content=text))
+                else:
+                    new_parts.append(part)
+            cleaned.append(ModelRequest(parts=new_parts, instructions=msg.instructions))
+        else:
+            cleaned.append(msg)
+    return cleaned
+
+agent = Agent('openai:gpt-4o', capabilities=[ProcessHistory(redact_pii)])
+```
+
+### Pattern 3 — chained processors (window → redact)
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessHistory
+
+agent = Agent(
+    'openai:gpt-4o',
+    capabilities=[
+        ProcessHistory(sliding_window(max_turns=10)),  # trim first …
+        ProcessHistory(redact_pii),                    # … then scrub what remains
+    ],
+)
+# Each ProcessHistory receives the output of the previous one.
+```
+
+### Pattern 4 — async processor with context (per-user window size)
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.messages import ModelMessage
+
+@dataclass
+class ChatConfig:
+    context_turns: int = 8   # per-user setting fetched from the DB
+
+async def dynamic_window(
+    ctx: RunContext[ChatConfig], msgs: list[ModelMessage]
+) -> list[ModelMessage]:
+    n = ctx.deps.context_turns
+    return msgs[-n * 2:]  # each turn = 1 request + 1 response
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=ChatConfig,
+    capabilities=[ProcessHistory(dynamic_window)],
+)
+```
 
 ## `capture_run_messages` — inspect mid-failure
 
@@ -163,7 +289,9 @@ for msg in result.all_messages():
 
 ## Patterns
 
-### 1. DB-backed conversation store
+### 1. DB-backed conversation store (add `ProcessHistory` to the agent)
+
+Wrap any processor function in `ProcessHistory` and pass it via `capabilities=`:
 
 ```python
 def load(session_id: str) -> list[ModelMessage]:
@@ -190,7 +318,7 @@ def window(n: int):
         return msgs[:2] + msgs[-n:] if len(msgs) > n + 2 else msgs
     return _proc
 
-agent = Agent('openai:gpt-5.2', history_processors=[window(20)])
+agent = Agent('openai:gpt-5.2', capabilities=[ProcessHistory(window(20))])
 ```
 
 ### 3. Summarise-on-overflow
@@ -233,7 +361,7 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 
 - **Don't mutate `result.all_messages()` in place if you plan to re-use it.** The list is owned by the run context; copy via `list(...)` before modifying.
 - **System prompt is in the list.** When concatenating histories across agents, drop the leading `SystemPromptPart`s from the imported history and let the receiving agent add its own.
-- **`HistoryProcessor` runs on every step** of a multi-step (tool-calling) run, not just once per user turn. Keep them cheap.
+- **`ProcessHistory` runs on every step** of a multi-step (tool-calling) run, not just once per user turn. Keep processors cheap.
 - **Images / files in history**: binaries are base64-encoded in JSON. Large attachments bloat the stored blob — consider storing a reference (`ImageUrl`) instead of `BinaryImage` if you re-send across turns.
 
 ## Reference
@@ -242,5 +370,6 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 - `ModelMessagesTypeAdapter` — `messages.py:2034`
 - `AgentRunResult.all_messages()` / `.new_messages()` / `.all_messages_json()` — `run.py`
 - `capture_run_messages()` — `_agent_graph.py:1791`
-- `HistoryProcessor` — `_history_processor.py:17`
-- `Agent(history_processors=...)` — `agent/__init__.py:220`
+- `HistoryProcessorFunc` — `_history_processor.py:17`
+- `ProcessHistory` — `pydantic_ai.capabilities`
+- `Agent(capabilities=[ProcessHistory(...)])` — `agent/__init__.py`

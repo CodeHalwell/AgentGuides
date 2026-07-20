@@ -7,7 +7,7 @@ language: python
 
 # Toolsets
 
-Verified against **pydantic-ai==1.103.0** — source modules: `pydantic_ai.toolsets.*`.
+Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.toolsets.*`.
 
 A *toolset* is a reusable, named collection of tools with a shared policy (retries, timeout, metadata, instructions). PydanticAI ships 10+ toolset wrappers that let you filter, rename, combine, gate, or lazy-load tools without rewriting the functions. They're the supported way to attach non-code tool sources — MCP servers, remote APIs, human approval — to an agent.
 
@@ -292,14 +292,128 @@ result_reader = agent.run_sync('Delete record_1', deps=UserDeps(role='reader'))
 
 ## Instructions that follow a toolset
 
+`FunctionToolset.instructions` (verified in `toolsets/function.py`) auto-injects guidance into the model request whenever any tool from the set is active. Four forms are accepted:
+
 ```python
-tools = FunctionToolset(
-    [...],
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, RunContext
+
+# 1. Plain string — always injected
+db_tools = FunctionToolset(
     instructions='When using DB tools, prefer read-only unless the user explicitly asks to write.',
+)
+
+# 2. Sync callable — computed at run time from RunContext
+@dataclass
+class Locale:
+    lang: str
+
+def locale_hint(ctx: RunContext[Locale]) -> str:
+    return f'Always respond in {ctx.deps.lang}.'
+
+kb_tools = FunctionToolset[Locale](instructions=locale_hint)
+
+# 3. Async callable — same shape, awaited before the request
+async def async_locale_hint(ctx: RunContext[Locale]) -> str:
+    # fetch from a config service, etc.
+    return f'Preferred language: {ctx.deps.lang}.'
+
+kb_tools_async = FunctionToolset[Locale](instructions=async_locale_hint)
+
+# 4. Sequence — multiple instructions combined in order
+mixed_tools = FunctionToolset[Locale](
+    instructions=[
+        'Be concise.',
+        locale_hint,          # sync callable
+        async_locale_hint,    # async callable
+    ]
 )
 ```
 
-The string is automatically appended to the model's instructions when any tool in this set is active. You can also pass a callable `(ctx) -> str` or an async one.
+### Async `FilteredToolset` — context-aware tool visibility
+
+`FilteredToolset` (verified in `toolsets/filtered.py`) evaluates a predicate _per run step_ using the live `RunContext`. Both sync and async predicates are accepted:
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, FunctionToolset, FilteredToolset, RunContext
+from pydantic_ai.tools import ToolDefinition
+
+@dataclass
+class UserSession:
+    user_id: str
+    scopes: list[str]   # e.g. ['read', 'write', 'admin']
+
+write_ops = FunctionToolset[UserSession]()
+
+@write_ops.tool
+async def delete_record(ctx: RunContext[UserSession], record_id: str) -> str:
+    return f'Deleted {record_id}'
+
+@write_ops.tool
+async def bulk_export(ctx: RunContext[UserSession], table: str) -> str:
+    return f'Exporting {table}'
+
+# Async predicate — can hit a permissions service
+async def scope_check(ctx: RunContext[UserSession], tool_def: ToolDefinition) -> bool:
+    metadata = tool_def.metadata or {}   # metadata is None when not set at registration
+    required = metadata.get('required_scope', 'read')
+    return required in ctx.deps.scopes
+
+# Tag tools at registration with metadata
+@write_ops.tool(metadata={'required_scope': 'admin'})
+async def drop_table(ctx: RunContext[UserSession], table: str) -> str:
+    return f'Dropped {table}'
+
+agent = Agent(
+    'openai:gpt-4o',
+    deps_type=UserSession,
+    toolsets=[FilteredToolset(write_ops, filter_func=scope_check)],
+)
+
+# Reader only sees tools where 'read' is the required scope (or no scope set)
+reader = UserSession(user_id='u1', scopes=['read'])
+# Admin sees every tool including drop_table
+admin  = UserSession(user_id='u2', scopes=['read', 'write', 'admin'])
+
+# The filter runs before every model request — tool visibility can change mid-run
+async def demo():
+    r1 = await agent.run('List options', deps=reader)
+    r2 = await agent.run('Drop the logs table', deps=admin)
+    return r1.output, r2.output
+```
+
+### `PrefixedToolset` — collision-free namespace isolation
+
+`PrefixedToolset` (verified in `toolsets/prefixed.py`) prepends `{prefix}_` to every tool name and transparently strips it when dispatching. This lets two toolsets that share a tool name coexist:
+
+```python
+from pydantic_ai import Agent, FunctionToolset, PrefixedToolset, CombinedToolset
+
+postgres_tools = FunctionToolset()
+sqlite_tools   = FunctionToolset()
+
+@postgres_tools.tool_plain
+def query(sql: str) -> str:
+    return f'pg: {sql}'
+
+@sqlite_tools.tool_plain
+def query(sql: str) -> str:          # same name — would clash without prefix
+    return f'sqlite: {sql}'
+
+agent = Agent(
+    'openai:gpt-4o',
+    toolsets=[
+        CombinedToolset([
+            PrefixedToolset(postgres_tools, prefix='pg'),    # → pg_query
+            PrefixedToolset(sqlite_tools,   prefix='sqlite'), # → sqlite_query
+        ])
+    ],
+)
+# Model sees pg_query and sqlite_query — no collision.
+# When it calls pg_query, PrefixedToolset strips the prefix and routes to the original `query`.
+```
 
 ## Using an agent _as_ a toolset
 
