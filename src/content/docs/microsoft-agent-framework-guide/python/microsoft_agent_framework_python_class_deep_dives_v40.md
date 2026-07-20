@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Class Deep Dives Vol. 40"
-description: "Source-verified deep dives into 10 class groups from agent-framework 1.11.0: MagenticOrchestrator (outer/inner loop, stall detection, require_plan_signoff HITL gate); MagenticContext+MagenticResetSignal (orchestrator state dataclass, task/round/stall/reset counts, reset trigger); MagenticPlanReviewRequest+MagenticPlanReviewResponse (HITL plan approval — approve()/revise() helpers, feedback message injection, replanning loop); StandardMagenticManager+MagenticProgressLedger (LLM-driven planning — 8 prompt overrides, max_stall_count/max_reset_count/max_round_count, 5-field progress ledger with is_request_satisfied/is_in_loop/is_progress_being_made/next_speaker/instruction); GroupChatOrchestrator (selection-function-driven round-robin — selection_func protocol, max_rounds, termination_condition); ContentVariableStore+VariableReferenceContent (prompt-injection guard — store/retrieve/exists/list_variables, variable ID indirection, ContentLabel); LabelTrackingFunctionMiddleware (3-tier integrity label propagation — embedded > source_integrity > join, auto_hide_untrusted, context_label accumulation); PolicyEnforcementFunctionMiddleware (tool execution policy — allow_untrusted_tools whitelist, block_on_violation, audit_log, approval_on_violation); FileMemoryProvider+FileStoreEntry (session-scoped file memory — 7 tools: write/read/delete/ls/grep/replace/replace_lines, scope= user grouping); AgentModeProvider (plan/execute mode switching — mode_descriptions, default_mode, mode_set/mode_get tools, get_agent_mode/set_agent_mode helpers); GAIA+GAIATelemetryConfig+Task+TaskResult+Evaluator (GAIA benchmark harness — hf_token, telemetry tracing, custom Evaluator protocol, per-task TaskResult with runtime/error) — source-verified at agent-framework 1.11.0."
+description: "Source-verified deep dives into 11 class groups from agent-framework 1.11.0: MagenticOrchestrator (outer/inner loop, stall detection, require_plan_signoff HITL gate); MagenticContext+MagenticResetSignal (orchestrator state dataclass, task/round/stall/reset counts, reset trigger); MagenticPlanReviewRequest+MagenticPlanReviewResponse (HITL plan approval — approve()/revise() helpers, feedback message injection, replanning loop); StandardMagenticManager+MagenticProgressLedger (LLM-driven planning — 8 prompt overrides, max_stall_count/max_reset_count/max_round_count, 5-field progress ledger with is_request_satisfied/is_in_loop/is_progress_being_made/next_speaker/instruction); GroupChatOrchestrator (selection-function-driven round-robin — selection_func protocol, max_rounds, termination_condition); ContentVariableStore+VariableReferenceContent (prompt-injection guard — store/retrieve/exists/list_variables, variable ID indirection, ContentLabel); LabelTrackingFunctionMiddleware (3-tier integrity label propagation — embedded > source_integrity > join, auto_hide_untrusted, context_label accumulation); PolicyEnforcementFunctionMiddleware (tool execution policy — allow_untrusted_tools whitelist, block_on_violation, audit_log, approval_on_violation); FileMemoryProvider+FileStoreEntry (session-scoped file memory — 7 tools: write/read/delete/ls/grep/replace/replace_lines, scope= user grouping); AgentModeProvider (plan/execute mode switching — mode_descriptions, default_mode, mode_set/mode_get tools, get_agent_mode/set_agent_mode helpers); GAIA+GAIATelemetryConfig+Task+TaskResult+Evaluator (GAIA benchmark harness — hf_token, telemetry tracing, custom Evaluator protocol, per-task TaskResult with runtime/error) — source-verified at agent-framework 1.11.0."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -14,14 +14,13 @@ Verified against **agent-framework 1.11.0** (installed July 2026). Every constru
 Sub-packages introspected:
 `agent_framework.orchestrations`,
 `agent_framework.security`,
-`agent_framework.observability`,
 `agent_framework._harness._file_memory`,
 `agent_framework._harness._mode`,
 `agent_framework.lab.gaia`.
 
 **Previous volumes:** [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) through [Vol. 39](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v39/) — 390+ classes covered.
 
-This volume covers **ten class groups** across the Magentic orchestration system, the FIDES security subsystem, session-scoped file memory, agent mode switching, and the GAIA benchmark integration.
+This volume covers **eleven class groups** across the Magentic orchestration system, the FIDES security subsystem, session-scoped file memory, agent mode switching, and the GAIA benchmark integration.
 
 | # | Class / group | Module |
 |---|---|---|
@@ -832,11 +831,11 @@ asyncio.run(main())
 ### Persistent memory with a real file store
 
 ```python
-from agent_framework._harness._file_access import AgentFileStore
+from agent_framework._harness._file_access import FileSystemAgentFileStore
 from agent_framework._harness._file_memory import FileMemoryProvider
 
-# Persist to disk under /tmp/agent-memory/
-file_store = AgentFileStore(root="/tmp/agent-memory")
+# Persist to disk under /tmp/agent-memory/ (created lazily on first write)
+file_store = FileSystemAgentFileStore(root_directory="/tmp/agent-memory")
 memory = FileMemoryProvider(store=file_store, scope="user-42")
 # Attach to agent as above — memories survive process restarts
 ```
@@ -882,11 +881,11 @@ class AgentModeProvider(ContextProvider):
 ```python
 from agent_framework._harness._mode import get_agent_mode, set_agent_mode
 
-# Read the current mode for a session (returns the mode string or None if not set)
-current = await get_agent_mode(session)
+# Read the current mode for a session (returns the mode string or the default if not set)
+current = get_agent_mode(session)
 
-# Programmatically switch mode from outside the agent loop
-await set_agent_mode(session, "execute")
+# Programmatically switch mode from outside the agent loop — both helpers are synchronous
+set_agent_mode(session, "execute")
 ```
 
 ### Task-completion pattern: plan → execute
@@ -1021,11 +1020,18 @@ class GAIA:
         telemetry_config: GAIATelemetryConfig | None = None,
     ) -> None: ...
 
-    async def run_task(self, agent, task: Task) -> TaskResult: ...
-    async def run_benchmark(self, agent, *, level: int | None = None,
-                            split: str = "validation",
-                            max_tasks: int | None = None) -> list[TaskResult]: ...
+    async def run(
+        self,
+        task_runner: TaskRunner,
+        level: int | list[int] = 1,
+        max_n: int | None = None,
+        parallel: int = 1,
+        timeout: int | None = None,
+        out: str | None = None,
+    ) -> list[TaskResult]: ...
 ```
+
+`TaskRunner` is a protocol — any async callable `(task: Task) -> Prediction` satisfies it. The `Agent` class does **not** satisfy it directly; wrap your agent in a thin adapter that calls the agent and packages the response as a `Prediction`.
 
 ### Running a GAIA evaluation
 
@@ -1034,7 +1040,7 @@ import asyncio
 import os
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework.lab.gaia import GAIA, GAIATelemetryConfig
+from agent_framework.lab.gaia import GAIA, GAIATelemetryConfig, Task, Prediction
 
 async def main() -> None:
     client = OpenAIChatClient("gpt-4o")
@@ -1045,6 +1051,12 @@ async def main() -> None:
             "Think carefully, use all available tools, and give precise final answers."
         ),
     )
+
+    # TaskRunner adapter — wraps Agent.run into the (Task) -> Prediction protocol
+    async def run_task(task: Task) -> Prediction:
+        session = agent.create_session()
+        result = await agent.run(task.question, session=session)
+        return Prediction(prediction=result.text)
 
     telemetry = GAIATelemetryConfig(
         enable_tracing=True,
@@ -1057,12 +1069,12 @@ async def main() -> None:
         telemetry_config=telemetry,
     )
 
-    # Run level-1 validation tasks (up to 20)
-    results = await gaia.run_benchmark(
-        agent,
+    # Run level-1 tasks (up to 20), 4 in parallel
+    results = await gaia.run(
+        run_task,
         level=1,
-        split="validation",
-        max_tasks=20,
+        max_n=20,
+        parallel=4,
     )
 
     correct = sum(1 for r in results if r.evaluation.is_correct)

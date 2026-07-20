@@ -253,6 +253,7 @@ from agent_framework_orchestrations import (
     MagenticBuilder,
     StandardMagenticManager,
     MagenticPlanReviewRequest,
+    MagenticPlanReviewResponse,
 )
 
 workflow = (
@@ -264,15 +265,14 @@ workflow = (
     .build()
 )
 
-async def human_plan_review(request: MagenticPlanReviewRequest) -> None:
+async def human_plan_review(request: MagenticPlanReviewRequest) -> MagenticPlanReviewResponse:
     print("Proposed plan:")
-    for step in request.plan:
-        print(f"  • {step}")
+    print(request.plan.text)           # plan is a Message, not an iterable
     approved = input("Approve? [y/n] ").strip().lower() == "y"
     if approved:
-        await request.reply()              # continue
+        return request.approve()
     else:
-        await request.reply(feedback="Please break the plan into smaller steps.")
+        return request.revise("Please break the plan into smaller steps.")
 
 workflow.add_request_info_handler(MagenticPlanReviewRequest, human_plan_review)
 result = await workflow.run("Analyse LLM safety benchmarks for 2025.")
