@@ -125,7 +125,6 @@ print("Speculative cancelled:", speculative.cancelled())  # True
 ### Example 1 — basic `DeltaChannel` with an append reducer
 
 ```python
-import operator
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -182,7 +181,6 @@ def reset_node(state: State) -> dict:
     return {"text": Overwrite("RESET"), "step": 0}
 
 # Run only the first two steps to see Overwrite in action
-from langgraph.graph import END
 graph2 = (
     StateGraph(State)
     .add_node("append", append_node)
@@ -311,25 +309,34 @@ def node_a(state: State) -> dict:
 def node_b(state: State) -> dict:
     raise RuntimeError("node_b always fails (uses custom handler)")
 
-# Inspect the _NodeDefaults before and after
-builder = StateGraph(State)
-print("before:", builder._node_defaults)  # _NodeDefaults(retry_policy=None, ...)
+# When a node raises, its outgoing edges are NOT followed — the error handler
+# runs and the graph ends there. Use two separate graphs to show both handlers.
 
-(
-    builder
+# Graph 1: route through a → uses the global default fallback_handler
+graph_a = (
+    StateGraph(State)
     .set_node_defaults(error_handler=fallback_handler)
-    .add_node("a", node_a)                              # uses default handler
-    .add_node("b", node_b, error_handler=custom_handler)  # per-node override
+    .add_node("a", node_a)
     .add_edge(START, "a")
-    .add_edge("a", "b")   # route through b so both handlers are exercised
-    .add_edge("b", END)
+    .add_edge("a", END)
+    .compile()
 )
-print("after:", builder._node_defaults.error_handler)  # <function fallback_handler>
+result_a = graph_a.invoke({})
+print(handler_calls)       # ['fallback']
+print(result_a["output"])  # 'fallback'
 
-graph = builder.compile()
-result = graph.invoke({})
-print(handler_calls)       # ['fallback', 'custom']  — both handlers ran
-print(result["output"])    # 'custom_recovery'  — b's custom_handler ran last
+# Graph 2: route through b → uses the per-node custom_handler override
+graph_b = (
+    StateGraph(State)
+    .set_node_defaults(error_handler=fallback_handler)
+    .add_node("b", node_b, error_handler=custom_handler)
+    .add_edge(START, "b")
+    .add_edge("b", END)
+    .compile()
+)
+result_b = graph_b.invoke({})
+print(handler_calls)       # ['fallback', 'custom']
+print(result_b["output"])  # 'custom_recovery'
 ```
 
 ### Example 3 — chain `set_node_defaults` with multiple policies
@@ -721,13 +728,12 @@ These three classes form the **write and scheduling primitives** that underpin t
 - Double-checked locking: outer `if` avoids the lock on the hot path; inner `if` guards against the race.
 - Used to generate unique integer task IDs without a global lock on the hot path.
 
-### Example 1 — inspect `Call` objects from a `@task` graph
+### Example 1 — invoke a `@task` pipeline (Call objects created internally)
 
 ```python
 from typing_extensions import TypedDict
 from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.pregel._algo import Call
 
 @task
 def fetch(url: str) -> str:
@@ -1008,11 +1014,13 @@ graph = (
 
 config = {"configurable": {"thread_id": "hitl-demo"}}
 
-# First run — hits interrupt() and raises GraphInterrupt
-try:
-    graph.invoke({"proposal": "", "outcome": ""}, config)
-except Exception as e:
-    print(f"Interrupted: {e}")  # GraphInterrupt — inspect pending state via get_state
+# First run — hits interrupt(); with a checkpointer, invoke() returns normally
+# (interrupt is persisted in the checkpoint, NOT raised as an exception)
+graph.invoke({"proposal": "", "outcome": ""}, config)
+
+# Inspect the pending interrupt from the saved state
+pending = graph.get_state(config).interrupts
+print(pending)  # (Interrupt(value={'proposal': 'DELETE all temp files'}, ...),)
 
 # Resume with 'accept' response
 from langgraph.types import Command
