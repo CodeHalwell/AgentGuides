@@ -82,7 +82,8 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.pregel._executor import BackgroundExecutor
 
 def speculative_work(label: str) -> str:
-    time.sleep(0.5)   # simulate slow I/O
+    if label != "fast":
+        time.sleep(2)  # long-running; still pending when context exits and cancels it
     return f"done:{label}"
 
 config: RunnableConfig = {}
@@ -137,10 +138,10 @@ class State(TypedDict):
     log: Annotated[list[str], DeltaChannel(list_reducer)]
 
 def step_a(state: State) -> dict:
-    return {"log": ["step_a ran"]}
+    return {"log": "step_a ran"}  # scalar write; reducer receives ["step_a ran"]
 
 def step_b(state: State) -> dict:
-    return {"log": ["step_b ran"]}
+    return {"log": "step_b ran"}  # scalar write; reducer receives ["step_b ran"]
 
 graph = (
     StateGraph(State)
@@ -211,7 +212,7 @@ class State(TypedDict):
     n: int
 
 def emit(state: State) -> dict:
-    return {"events": [f"event-{state['n']}"], "n": state["n"] + 1}
+    return {"events": f"event-{state['n']}", "n": state["n"] + 1}  # scalar write
 
 def should_stop(state: State):
     return END if state["n"] >= 8 else "emit"
@@ -260,7 +261,7 @@ call_count = {"n": 0}
 def flaky_node(state: dict) -> dict:
     call_count["n"] += 1
     if call_count["n"] < 3:
-        raise ValueError(f"transient error #{call_count['n']}")
+        raise ConnectionError(f"transient error #{call_count['n']}")  # retried by default
     return {"result": "ok"}
 
 class State(TypedDict):
@@ -522,30 +523,32 @@ class State(TypedDict):
 def increment(state: State) -> dict:
     return {"count": state["count"] + 1}
 
+def router(state: State) -> str:
+    return "inc" if state["count"] < 3 else END
+
 checkpointer = InMemorySaver()
 graph = (
     StateGraph(State)
     .add_node("inc", increment)
     .add_edge(START, "inc")
-    .add_edge("inc", END)
+    .add_conditional_edges("inc", router, {"inc": "inc", END: END})
     .compile(checkpointer=checkpointer)
 )
 
 config = {"configurable": {"thread_id": "replay-demo"}}
 
-# Run three times to build up checkpoint history
-graph.invoke({"count": 0}, config)  # seed first run with initial state
-for _ in range(2):
-    graph.invoke(None, config)       # resume from checkpoint, incrementing each time
+# Single invoke loops inc three times: 0 → 1 → 2 → 3
+# Each superstep writes a checkpoint, building a rich history
+graph.invoke({"count": 0}, config)
 
-# Retrieve checkpoints in order
+# Checkpoint history, newest first — one snapshot per superstep
 history = list(graph.get_state_history(config))
-print([h.values["count"] for h in history])  # [3, 2, 1]
+print([h.values["count"] for h in history])  # [3, 2, 1, 0]
 
-# Replay from the second checkpoint (count==2)
-past_config = history[1].config
-result = graph.invoke(None, past_config)  # branches from count==2
-print(result["count"])  # 3  — replayed from count==2, incremented once
+# Branch off the checkpoint at count==1 — replay runs: 1→2→3
+past_config = next(h.config for h in history if h.values["count"] == 1)
+result = graph.invoke(None, past_config)
+print(result["count"])  # 3  — replayed from count==1, incremented twice
 ```
 
 ### Example 3 — `ReplayState` shared reference across subgraph configs
@@ -1043,17 +1046,17 @@ graph = (
 
 config = {"configurable": {"thread_id": "edit-demo"}}
 try:
-    graph.invoke({"command": "rm -rf /", "executed": ""}, config)
+    graph.invoke({"command": "rm -rf /tmp/old_cache", "executed": ""}, config)
 except Exception:
     pass  # GraphInterrupt — graph paused waiting for human review
 
-# Human edits the command before execution
-edited_request: ActionRequest = {"action": "rm -rf /tmp/cache", "args": {}}
+# Human edits the command to a safer scoped path before execution
+edited_request: ActionRequest = {"action": "rm -rf /tmp/old_cache/session_42", "args": {}}
 final = graph.invoke(
     Command(resume={"type": "edit", "args": edited_request}),
     config,
 )
-print(final["executed"])  # 'ran edited: rm -rf /tmp/cache'
+print(final["executed"])  # 'ran edited: rm -rf /tmp/old_cache/session_42'
 ```
 
 ### Example 3 — migrate from deprecated `HumanInterrupt` to `interrupt()`
