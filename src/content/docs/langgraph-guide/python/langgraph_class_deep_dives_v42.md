@@ -955,12 +955,12 @@ except EmptyInputError as e:
 
 **Module:** `langgraph.prebuilt.interrupt`
 
-`HumanResponse` is the TypedDict that the graph receives when execution resumes after a `interrupt()` call that requested human input. It has two fields:
+`HumanResponse` is the TypedDict that the graph receives when execution resumes after an `interrupt()` call that requested human input. It has two fields:
 
 - `type`: one of `"accept"` | `"ignore"` | `"response"` | `"edit"`.
 - `args`: `None` (for `accept`/`ignore`), `str` (for `response`), or `ActionRequest` (for `edit`).
 
-> **Migration note:** `HumanInterrupt`, `HumanInterruptConfig`, and `ActionRequest` are all deprecated since langgraph 1.0 and have moved to `langchain.agents.interrupt`. Import them from there for new code.
+> **Migration note:** `HumanResponse`, `HumanInterrupt`, `HumanInterruptConfig`, and `ActionRequest` are all deprecated since LangGraph 1.0 and have moved to `langchain.agents.interrupt`. Import them from there for new code.
 
 **Key source facts:**
 
