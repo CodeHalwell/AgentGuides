@@ -24,8 +24,8 @@ These context-manager classes are the parallel task engine that powers Pregel's 
 - `submit(..., __cancel_on_exit__=True)` — the future is cancelled when the context exits (useful for speculative/fire-and-forget work).
 - `submit(..., __reraise_on_exit__=True)` — default; the first task exception is re-raised on context exit.
 - `submit(..., __next_tick__=True)` — sync: wraps in `next_tick()` to defer one tick; async: noop (always next-tick).
-- `AsyncBackgroundExecutor` respects `config["max_concurrency"]`: if set, a `asyncio.Semaphore` gates concurrent tasks.
-- `GraphBubbleUp` exceptions (interrupts) are silently swallowed by the `done` callback — they are not re-raised.
+- `AsyncBackgroundExecutor` respects `config["max_concurrency"]`: if set, an `asyncio.Semaphore` gates concurrent tasks.
+- `GraphBubbleUp` exceptions (interrupts) are typically swallowed by the `done` callback; behaviour can be timing-dependent — do not rely on them propagating.
 
 ### Example 1 — fan-out with `BackgroundExecutor`
 
@@ -81,29 +81,27 @@ import time
 from langchain_core.runnables import RunnableConfig
 from langgraph.pregel._executor import BackgroundExecutor
 
-def speculative_work(label: str) -> str:
-    if label != "fast":
-        time.sleep(2)  # long-running; still pending when context exits and cancels it
+def do_work(label: str) -> str:
+    time.sleep(0.1)
     return f"done:{label}"
 
-# max_concurrency=1: fast occupies the only thread; speculative stays in the queue.
-# Exit the context WITHOUT calling fast.result() — __exit__ cancels speculative
-# (still pending/unstarted) and waits for fast before returning.
-config: RunnableConfig = {"max_concurrency": 1}
+config: RunnableConfig = {}
 
 with BackgroundExecutor(config) as submit:
-    fast = submit(speculative_work, "fast")
+    main = submit(do_work, "main")
+    # __cancel_on_exit__=True   → Future.cancel() called when context exits
+    # __reraise_on_exit__=False → CancelledError is not propagated to caller
     speculative = submit(
-        speculative_work, "slow",
+        do_work, "slow-branch",
         __cancel_on_exit__=True,
         __reraise_on_exit__=False,
     )
-    # leave immediately — speculative is still in the queue, not running
+    # Exit immediately — __exit__ calls speculative.cancel() then drains main
 
-# __exit__ has already: (1) cancelled speculative (pending → cancelled), (2) drained fast
-fast_result = fast.result()  # retrieves the completed value
-print("Fast path won:", fast_result)
-print("Speculative cancelled:", speculative.cancelled())  # True
+main_result = main.result()
+print("Main result:", main_result)   # 'done:main'
+# best-effort: True if cancel() beat the worker picking up the future
+print("Cancelled:", speculative.cancelled())
 ```
 
 ---
@@ -937,11 +935,11 @@ graph = (
 )
 
 config = {"configurable": {"thread_id": "empty-input-demo"}}
-graph.invoke({"count": 0}, config)  # first run saves checkpoint
+graph.invoke({"count": 0}, config)  # first run: saves terminal checkpoint at count=1
 
-# Resume from checkpoint by passing None (not empty dict) — valid
+# Passing None on a completed thread reloads the terminal state unchanged
 result = graph.invoke(None, config)
-print(result["count"])  # 1 (increments from saved state)
+print(result["count"])  # 1 — terminal state reloaded; bump does not rerun
 
 # EmptyInputError is raised when there is no checkpoint and None is passed as input
 fresh_config = {"configurable": {"thread_id": "new-thread"}}
