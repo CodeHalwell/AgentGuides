@@ -7,7 +7,7 @@ sidebar:
   order: 25
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/workflow/`).
+Verified against google-adk==2.4.0 (`google/adk/workflow/`).
 
 `Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
 
@@ -351,6 +351,287 @@ Wrap the scraper with `retry_config=RetryConfig(max_attempts=5)` and `timeout=20
 ### 5 — HITL review gate
 Insert a `@node(rerun_on_resume=True, auth_config=...)` that yields `RequestInput` between producer and publisher. The workflow pauses, the event is persisted, `Runner.run_async` resumes on the next user turn.
 
+### 6 — `state_schema` — validated shared state
+
+Pass a Pydantic `BaseModel` class as `Workflow.state_schema`. The framework validates every `ctx.state` write against it and raises `StateSchemaError` on unknown keys. Schema fields can be injected directly as `@node` function parameters.
+
+```python
+from pydantic import BaseModel
+from google.adk.workflow import Workflow, node, START
+
+class PipelineState(BaseModel):
+    iteration: int = 0
+    best_score: float = 0.0
+    status: str = "pending"
+
+@node
+def tracker(node_input: str, ctx, iteration: int = 0) -> str:
+    # `iteration` is injected from ctx.state["iteration"]; default 0 for first run
+    # (state_schema validates writes but does not pre-populate state with defaults)
+    ctx.state["iteration"] = iteration + 1
+    ctx.state["status"] = "running"
+    return f"pass {iteration + 1}: {node_input}"
+
+@node
+def scorer(node_input: str, ctx) -> float:
+    score = len(node_input) / 100.0
+    if score > ctx.state.get("best_score", 0.0):
+        ctx.state["best_score"] = score
+    return score
+
+pipeline = Workflow(
+    name="scored_pipeline",
+    state_schema=PipelineState,
+    edges=[(START, tracker, scorer)],
+)
+```
+
+Writing an unknown key (`ctx.state["typo_key"] = 1`) raises `StateSchemaError` at runtime — catching schema drift early.
+
+## Full conditional routing example
+
+A classifier node routes between specialist agents based on detected intent.  `DEFAULT_ROUTE` catches any unrecognised intent so the workflow never deadlocks on missing edges.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.runners import InMemoryRunner
+from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
+
+billing_agent = LlmAgent(
+    name="billing",
+    model="gemini-2.5-flash",
+    instruction="Handle billing questions. Be concise.",
+    mode="single_turn",
+)
+support_agent = LlmAgent(
+    name="support",
+    model="gemini-2.5-flash",
+    instruction="Handle technical support questions. Be concise.",
+    mode="single_turn",
+)
+general_agent = LlmAgent(
+    name="general",
+    model="gemini-2.5-flash",
+    instruction="Handle general queries. Be concise.",
+    mode="single_turn",
+)
+
+@node
+def classify(node_input: str, ctx) -> str:
+    lower = node_input.lower()
+    if any(w in lower for w in ("invoice", "payment", "charge", "refund")):
+        ctx.route = "billing"
+    elif any(w in lower for w in ("error", "bug", "crash", "broken", "help")):
+        ctx.route = "support"
+    else:
+        ctx.route = DEFAULT_ROUTE
+    return node_input   # pass through to the selected agent
+
+triage_wf = Workflow(
+    name="triage",
+    edges=[
+        (START, classify, {
+            "billing": billing_agent,
+            "support": support_agent,
+            DEFAULT_ROUTE: general_agent,
+        }),
+    ],
+)
+
+async def main():
+    app = App(name="triage_app", root_agent=triage_wf)
+    runner = InMemoryRunner(app=app)
+    await runner.session_service.create_session(
+        app_name="triage_app", user_id="u1", session_id="s1"
+    )
+    events = await runner.run_debug(
+        "I need a refund for invoice #1234", user_id="u1", session_id="s1"
+    )
+    print(events[-1].content.parts[0].text)
+
+asyncio.run(main())
+```
+
+## Fan-out / join (map-reduce)
+
+Spawn multiple specialist agents in parallel, then aggregate with a `JoinNode` and a summary node.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.runners import InMemoryRunner
+from google.adk.workflow import JoinNode, Workflow, node, START
+
+security_reviewer = LlmAgent(
+    name="security",
+    model="gemini-2.5-flash",
+    instruction="Review the code for security issues only. List findings as bullet points.",
+    mode="single_turn",
+)
+perf_reviewer = LlmAgent(
+    name="performance",
+    model="gemini-2.5-flash",
+    instruction="Review the code for performance issues only. List findings as bullet points.",
+    mode="single_turn",
+)
+style_reviewer = LlmAgent(
+    name="style",
+    model="gemini-2.5-flash",
+    instruction="Review the code for style/readability issues only. List findings as bullet points.",
+    mode="single_turn",
+)
+
+join = JoinNode(name="join_reviews")
+
+@node
+def summarize(node_input: dict) -> str:
+    # node_input is {predecessor_name: output} — one key per fan-out branch
+    parts = []
+    for reviewer, findings in node_input.items():
+        parts.append(f"### {reviewer.capitalize()}\n{findings}")
+    return "\n\n".join(parts)
+
+review_wf = Workflow(
+    name="code_review",
+    edges=[
+        # Fan-out to all three reviewers in parallel, then fan-in via join
+        (START, (security_reviewer, perf_reviewer, style_reviewer), join, summarize),
+    ],
+)
+
+async def main():
+    # Intentionally vulnerable SQL — this is the code the review agents will catch
+    code = "def get_user(id): return db.query(f'SELECT * FROM users WHERE id={id}')"
+    app = App(name="review_app", root_agent=review_wf)
+    runner = InMemoryRunner(app=app)
+    await runner.session_service.create_session(
+        app_name="review_app", user_id="u1", session_id="s1"
+    )
+    events = await runner.run_debug(code, user_id="u1", session_id="s1")
+    print(events[-1].content.parts[0].text)
+
+asyncio.run(main())
+```
+
+`JoinNode` waits for **all** predecessor branches before forwarding a `{name: output}` dict to the next node.
+
+## HITL with persisted sessions
+
+For real pause/resume you need a `DatabaseSessionService` so state survives the process restart between user turns.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.apps import App, ResumabilityConfig
+from google.adk.runners import Runner
+from google.adk.sessions import DatabaseSessionService
+from google.adk.events.request_input import RequestInput
+from google.adk.workflow import Workflow, node, START
+from google.adk.workflow.utils._workflow_hitl_utils import has_request_input_function_call
+from google.genai import types
+
+drafter = LlmAgent(
+    name="drafter",
+    model="gemini-2.5-flash",
+    instruction="Write a short marketing email for the product described in the input.",
+    mode="single_turn",
+)
+
+@node(rerun_on_resume=True)
+async def human_review(node_input: str, ctx):
+    # Pause the workflow and wait for the user to approve or reject.
+    decision = yield RequestInput(
+        interrupt_id="email_review",
+        message=f"Draft:\n\n{node_input}\n\nApprove? (yes/no)",
+    )
+    # decision is the FunctionResponse payload dict, e.g. {"result": "yes"}
+    result = decision.get("result", "") if isinstance(decision, dict) else str(decision)
+    if result.strip().lower() == "yes":
+        ctx.state["approved_email"] = node_input
+        ctx.output = node_input
+        return
+    ctx.route = "revise"
+    ctx.output = node_input
+    return   # send back for another draft pass
+
+approval_wf = Workflow(
+    name="email_approval",
+    edges=[
+        # drafter → human_review on every pass (chain handles re-review automatically)
+        # human_review routing: "revise" loops back to drafter; no route = approved = done
+        (START, drafter, human_review, {
+            "revise": drafter,   # rejection: loop back for another draft
+            # No DEFAULT_ROUTE — when human_review sets no route, the workflow ends
+        }),
+    ],
+)
+
+async def main():
+    session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
+    await session_svc.prepare_tables()   # public method (source: database_session_service.py:403); also called lazily on first use
+
+    app = App(
+        name="email_app",
+        root_agent=approval_wf,
+        resumability_config=ResumabilityConfig(is_resumable=True),
+    )
+    runner = Runner(app=app, session_service=session_svc)
+
+    await session_svc.create_session(
+        app_name="email_app", user_id="u1", session_id="s1"
+    )
+
+    # First run — triggers the HITL pause
+    # run_async is keyword-only; wrap the user text in types.Content
+    user_msg = types.Content(
+        role="user",
+        parts=[types.Part(text="noise-cancelling headphones for office workers")],
+    )
+    async for event in runner.run_async(
+        new_message=user_msg,
+        user_id="u1", session_id="s1",
+    ):
+        # Use has_request_input_function_call to detect a RequestInput pause
+        # (event.actions.requested_auth_configs is for OAuth, not HITL interrupts)
+        if has_request_input_function_call(event):
+            print("Workflow paused. Waiting for human approval.")
+        if hasattr(event, "content") and event.content:
+            print(event.content.parts[0].text if event.content.parts else "")
+
+asyncio.run(main())
+```
+
+To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. Use `get_request_input_interrupt_ids(event)` to capture the ID during the first run, then build the response:
+
+```python
+from google.adk.workflow.utils._workflow_hitl_utils import (
+    get_request_input_interrupt_ids,
+    create_request_input_response,
+)
+
+# Collect the interrupt_id emitted during the first run
+interrupt_id = None
+async for event in runner.run_async(new_message=user_msg, user_id="u1", session_id="s1"):
+    ids = get_request_input_interrupt_ids(event)
+    if ids:
+        interrupt_id = ids[0]
+
+# Resume with a matching FunctionResponse
+approval_response = types.Content(
+    role="user",
+    parts=[create_request_input_response(interrupt_id, {"result": "yes"})],
+)
+async for event in runner.run_async(
+    new_message=approval_response,
+    user_id="u1", session_id="s1",
+):
+    if event.content:
+        print(event.content.parts[0].text if event.content.parts else "")
+```
+
 ## Gotchas
 
 - Nodes are **Pydantic models** — if you subclass `Node`, annotate fields or they won't serialise.
@@ -359,3 +640,4 @@ Insert a `@node(rerun_on_resume=True, auth_config=...)` that yields `RequestInpu
 - `wait_for_output=True` means a node *must* yield output/route before it's marked complete. Forget that and the workflow deadlocks.
 - When a tuple contains only one element (e.g. `(START, single_node)`), you still get a single edge — not sugar for fan-out. Fan-out needs a **nested** tuple: `(START, (a, b))`.
 - Setting `nodes=` explicitly on `Workflow` raises — nodes are inferred from `edges`.
+- `state_schema` validates `ctx.state` writes — fields on the schema class can be injected directly as node parameters; this is the recommended way to thread typed state through a pipeline.

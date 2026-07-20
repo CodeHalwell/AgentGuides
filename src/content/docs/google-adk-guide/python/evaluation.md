@@ -7,7 +7,7 @@ sidebar:
   order: 75
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/evaluation/`).
+Verified against google-adk==2.4.0 (`google/adk/evaluation/`).
 
 ADK ships a first-class evaluation framework built around three concepts: **`EvalCase`** (a single conversation to run), **`EvalSet`** (a collection of cases), and **`AgentEvaluator`** (the engine that runs cases against a live agent and scores the results). The framework integrates with `pytest` and supports custom metrics.
 
@@ -634,6 +634,193 @@ Set `agent_name="specialist_bot"` on `evaluate_eval_set` to evaluate a sub-agent
 ### 5 — End-to-end state assertion
 Populate `final_session_state={"order_confirmed": True}` in the `EvalCase`. ADK asserts the session state matches after the conversation completes. Combine with tool trajectory to verify both the path and the outcome.
 
+## Multi-turn evaluators (2.4.0)
+
+Three Vertex AI–backed evaluators score entire conversations holistically, rather than scoring individual turn responses. All require either `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` (Vertex AI) or `GOOGLE_API_KEY` (AI Studio) in your environment.
+
+| Class | `PrebuiltMetrics` key | What it scores |
+|---|---|---|
+| `MultiTurnTaskSuccessV1Evaluator` | `multi_turn_task_success_v1` | Did the agent achieve the user's goal by the end of the conversation? |
+| `MultiTurnToolUseQualityV1Evaluator` | `multi_turn_tool_use_quality_v1` | Did the agent call the right tools across all turns? |
+| `MultiTurnTrajectoryQualityV1Evaluator` | `multi_turn_trajectory_quality_v1` | Was the path the agent took to reach the goal reasonable? |
+
+All three are **reference-free** — they do not need `final_response` or `intermediate_data` in your `EvalCase`; the Vertex AI rubric model judges based on the conversation transcript and the `ConversationScenario` context you supply.
+
+### `ConversationScenario`
+
+`ConversationScenario` describes the task the agent was meant to solve. The multi-turn evaluators use it to judge whether the agent succeeded. It lives in `google.adk.evaluation.conversation_scenarios` with two required fields: `starting_prompt` (the first user message) and `conversation_plan` (the evaluator's guide to what a successful conversation looks like).
+
+```python
+from google.adk.evaluation.conversation_scenarios import ConversationScenario
+
+scenario = ConversationScenario(
+    starting_prompt="Book a restaurant table for 2 people at 7pm on Friday.",
+    conversation_plan=(
+        "User wants a table for 2 at 7pm Friday. "
+        "A successful conversation ends with the agent confirming the booking details."
+    ),
+)
+```
+
+Attach it to an `EvalCase` using `conversation_scenario`. **Important:** `EvalCase` enforces an XOR constraint — you must set exactly one of `conversation` (static turns) or `conversation_scenario` (scenario-driven); setting both raises `ValueError`.
+
+```python
+from google.adk.evaluation.eval_case import EvalCase
+
+case = EvalCase(
+    eval_id="restaurant_booking",
+    conversation_scenario=scenario,   # ← scenario only; no conversation= here
+)
+```
+
+### Full multi-turn eval example
+
+```python
+import asyncio
+import os
+from google.adk.evaluation.agent_evaluator import AgentEvaluator
+from google.adk.evaluation.conversation_scenarios import ConversationScenario
+from google.adk.evaluation.eval_case import EvalCase
+from google.adk.evaluation.eval_set import EvalSet
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.eval_metrics import PrebuiltMetrics
+
+# Required for the Vertex AI evaluators
+os.environ["GOOGLE_CLOUD_PROJECT"] = "my-gcp-project"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
+
+# ConversationScenario uses starting_prompt + conversation_plan (source-verified)
+scenario = ConversationScenario(
+    starting_prompt="Find me a flight from London to Tokyo for August 10th.",
+    conversation_plan=(
+        "User wants to book a direct flight from London to Tokyo on August 10th. "
+        "They will pick an option from the agent's search results and confirm the booking. "
+        "A successful conversation ends with a booking confirmation."
+    ),
+)
+
+# EvalCase enforces XOR: set conversation_scenario OR conversation, never both
+case = EvalCase(
+    eval_id="flight_booking_multi_turn",
+    conversation_scenario=scenario,
+)
+
+eval_set = EvalSet(eval_set_id="flight_booking_suite", eval_cases=[case])
+
+eval_config = EvalConfig(
+    criteria={
+        # Reference-free multi-turn metrics — no expected responses needed
+        PrebuiltMetrics.MULTI_TURN_TASK_SUCCESS_V1.value: 0.7,
+        PrebuiltMetrics.MULTI_TURN_TOOL_USE_QUALITY_V1.value: 0.7,
+        PrebuiltMetrics.MULTI_TURN_TRAJECTORY_QUALITY_V1.value: 0.7,
+    }
+)
+
+
+async def main():
+    await AgentEvaluator.evaluate_eval_set(
+        agent_module="my_package.flight_agent",
+        eval_set=eval_set,
+        eval_config=eval_config,
+        num_runs=1,                 # multi-turn rubric metrics are expensive; 1 run is typical
+        print_detailed_results=True,
+    )
+
+
+asyncio.run(main())
+```
+
+### Choosing between multi-turn and per-turn metrics
+
+| Situation | Recommended approach |
+|---|---|
+| Fast CI checks — did the agent call the right tools? | `TOOL_TRAJECTORY_AVG_SCORE` (per-turn, cheap, reference-based) |
+| Overnight quality gate — did the conversation end well? | `MULTI_TURN_TASK_SUCCESS_V1` (holistic, reference-free, Vertex AI) |
+| Investigating agent reasoning path | `MULTI_TURN_TRAJECTORY_QUALITY_V1` (judges whether the path made sense) |
+| Tool selection across a dialogue | `MULTI_TURN_TOOL_USE_QUALITY_V1` (rubric over entire tool-call log) |
+
+## `ConversationGenerationConfig` and `ScenarioGenerator` (2.4.0)
+
+Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them. This is **synchronous** (not async). It requires either `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` (Vertex AI) or `GOOGLE_API_KEY` (AI Studio). The correct module path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
+
+`ConversationGenerationConfig` lives in `google.adk.evaluation.conversation_scenarios` with fields: `count` (required), `model_name` (required), `generation_instruction` (optional), `environment_context` (optional).
+
+```python
+import os
+from google.adk.agents import LlmAgent
+from google.adk.evaluation.conversation_scenarios import ConversationGenerationConfig
+from google.adk.evaluation._vertex_ai_scenario_generation_facade import ScenarioGenerator
+
+os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
+
+travel_agent = LlmAgent(
+    name="travel_agent",
+    model="gemini-2.5-flash",
+    description="Books flights and checks weather.",
+    tools=[],  # your actual tools here
+)
+
+gen_config = ConversationGenerationConfig(
+    count=3,                          # number of scenarios to generate
+    model_name="gemini-2.5-flash",
+    environment_context=(
+        "Available flights: LHR→NRT on 2026-08-10 at 09:00 (ANA, £620), 14:00 (BA, £580)."
+    ),
+)
+
+generator = ScenarioGenerator()
+
+# generate_scenarios is synchronous — no await needed
+scenarios = generator.generate_scenarios(agent=travel_agent, config=gen_config)
+
+for s in scenarios:
+    print(s.starting_prompt)
+    print(s.conversation_plan)
+```
+
+Combine with `EvalCase` to build a full synthetic eval set:
+
+```python
+from google.adk.evaluation.eval_case import EvalCase
+from google.adk.evaluation.eval_set import EvalSet
+
+cases = [
+    EvalCase(
+        eval_id=f"generated_{i}",
+        conversation_scenario=s,   # XOR constraint: no conversation= when using scenario
+    )
+    for i, s in enumerate(scenarios)
+]
+eval_set = EvalSet(eval_set_id="synthetic_travel_suite", eval_cases=cases)
+```
+
+## `AppDetails` and `AgentDetails` (2.4.0)
+
+`AppDetails` and `AgentDetails` capture a lightweight snapshot of the agent tree at eval time. Both live in `google.adk.evaluation.app_details`. `AppDetails` has a single field: `agent_details: dict[str, AgentDetails]`. `AgentDetails` has: `name: str`, `instructions: str`, `tool_declarations: list`.
+
+```python
+from google.adk.evaluation.app_details import AppDetails, AgentDetails
+
+# Typically you don't construct these manually — AgentEvaluator populates them
+# automatically from the running agent tree. But you can supply them explicitly
+# when replaying recorded conversations for offline eval.
+snapshot = AppDetails(
+    agent_details={
+        "travel_assistant": AgentDetails(
+            name="travel_assistant",
+            instructions="You are a travel booking assistant.",
+            tool_declarations=[],   # list of tool FunctionDeclarations if known
+        ),
+        "flight_sub_agent": AgentDetails(
+            name="flight_sub_agent",
+            instructions="Search and book flights.",
+            tool_declarations=[],
+        ),
+    }
+)
+```
+
 ## Gotchas
 
 - `agent_module` must be an **importable dotted path** (e.g. `"my_package.agent"`), not a file path. The module must be on `sys.path`.
@@ -642,3 +829,7 @@ Populate `final_session_state={"order_confirmed": True}` in the `EvalCase`. ADK 
 - `RESPONSE_EVALUATION_SCORE` is inherently unstable — the docstring in source says "this evaluation is not very stable". Treat it as a soft signal, not a hard gate.
 - Old `.test.json` files are accepted but emit a deprecation warning. Migrate to `EvalSet` JSON to suppress the warning.
 - `SessionInput.state` sets the **initial** session state before the first turn. Mutations during the conversation are not reflected back to `session_input`.
+- Multi-turn Vertex AI evaluators (`multi_turn_task_success_v1`, etc.) incur Vertex AI API calls per evaluation run. Cache results with `LocalEvalSetResultsManager` and avoid running them on every PR commit.
+- `ScenarioGenerator.generate_scenarios()` is **synchronous** (source-verified: plain `def`, not `async def`). It takes `agent` and `config` as positional/keyword arguments. The correct import path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
+- `ConversationScenario` fields are `starting_prompt` and `conversation_plan` (from `google.adk.evaluation.conversation_scenarios`), not `scenario_description`/`task_description`.
+- `EvalCase` enforces `conversation` XOR `conversation_scenario` — passing both raises `ValueError` at construction time.
