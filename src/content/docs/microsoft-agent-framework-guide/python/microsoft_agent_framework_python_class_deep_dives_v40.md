@@ -1112,17 +1112,30 @@ gaia = GAIA(evaluator=FuzzyMatchEvaluator())
 `GAIA.run()` loads tasks from the HuggingFace benchmark dataset. For a one-off custom task, call the `TaskRunner` adapter directly — no `GAIA` instance needed:
 
 ```python
+import asyncio
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 from agent_framework.lab.gaia import Task, Prediction
 
-# Reuse the same adapter defined in the multi-task example
-task = Task(
-    task_id="custom-001",
-    question="What is the capital city of France?",
-    answer="Paris",
-    level=1,
-)
-prediction = await run_task(task)
-print(f"Answer: {prediction.prediction!r}")
+async def main() -> None:
+    client = OpenAIChatClient("gpt-4o")
+    agent = Agent(client=client, instructions="You are a precise general assistant.")
+
+    async def run_task(task: Task) -> Prediction:
+        session = agent.create_session()
+        result = await agent.run(task.question, session=session)
+        return Prediction(prediction=result.text)
+
+    task = Task(
+        task_id="custom-001",
+        question="What is the capital city of France?",
+        answer="Paris",
+        level=1,
+    )
+    prediction = await run_task(task)
+    print(f"Answer: {prediction.prediction!r}")
+
+asyncio.run(main())
 ```
 
 ---
