@@ -502,7 +502,15 @@ class MyEvalSampler(Sampler[UnstructuredSamplingResult]):
         )
         # run candidate against your evaluation harness …
         scores = {uid: 0.85 for uid in ids}   # placeholder
-        return UnstructuredSamplingResult(scores=scores)
+        # GEPARootAgentOptimizer sets capture_full_eval_data=True during its
+        # reflection phase; data must be provided or the optimizer has no
+        # trajectory artifacts to construct its reflective dataset.
+        data = (
+            {uid: {"score": 0.85, "output": "placeholder response"} for uid in ids}
+            if capture_full_eval_data
+            else None
+        )
+        return UnstructuredSamplingResult(scores=scores, data=data)
 
 
 async def main():
@@ -1193,7 +1201,7 @@ async def classify_and_route(ctx, node_input=None):
     ctx.output = f"Routed to: {category}"
 
 
-router = FunctionNode(name="router", func=classify_and_route)
+router = FunctionNode(name="router", func=classify_and_route, rerun_on_resume=True)
 wf = Workflow(name="dispatch_wf", edges=[("START", router)])
 
 
