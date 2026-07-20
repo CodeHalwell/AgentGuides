@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Multi-Agent Orchestration"
-description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders — all from agent-framework-orchestrations 1.0.0b260429. Real signatures and runnable examples."
+description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders — verified against agent-framework 1.11.0. Real signatures and runnable examples."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 Five built-in orchestration patterns ship in `agent-framework-orchestrations`. Each is a fluent builder that produces a `Workflow` — the same object type returned by `WorkflowBuilder`. Once you have a workflow, run it with `workflow.run(...)` or stream events with `workflow.run(..., stream=True)`.
 
-All signatures below are verified against `agent-framework-orchestrations==1.0.0b260429`.
+All signatures below are verified against `agent-framework==1.11.0`.
 
 | Pattern | Builder | Topology | Use case |
 |---|---|---|---|
@@ -218,52 +218,82 @@ Optional:
 
 Magentic adds a **task ledger** and **progress ledger**. A manager plans the task, dispatches subtasks to participants, re-plans on stalls, and synthesises a final answer. This is the pattern used in Microsoft's Magentic-One research system.
 
+The builder takes a `StandardMagenticManager` (wrapping your manager agent) as its sole positional argument; participants are added fluently with `.add_participant()`.
+
 ```python
-from agent_framework_orchestrations import MagenticBuilder
+from agent_framework_orchestrations import MagenticBuilder, StandardMagenticManager
 
 # The manager is itself an Agent — give it a capable model.
 manager_agent = Agent(
-    client=OpenAIChatClient(model="gpt-5"),
+    client=OpenAIChatClient(model="gpt-4o"),
     name="magentic-manager",
-    instructions="You coordinate specialists. Be concise.",
+    instructions="You coordinate specialists. Produce a task ledger, assign subtasks, and synthesise results.",
 )
 
 workflow = (
-    MagenticBuilder(
-        participants=[researcher, analyst, writer],
-        manager_agent=manager_agent,
-        max_stall_count=3,      # replan after 3 rounds without progress
-        max_round_count=20,
-        enable_plan_review=True,  # HITL — approve the initial plan
-    )
+    MagenticBuilder(StandardMagenticManager(manager_agent))
+    .add_participant(researcher)
+    .add_participant(analyst)
+    .add_participant(writer)
     .build()
 )
 
 result = await workflow.run("Write a research memo on post-training alignment.")
+print(result.get_outputs()[-1].agent_response.text)
 ```
 
-Alternative: bring your own manager by subclassing `MagenticManagerBase` and passing `manager=`. Use this when the default LLM-driven manager doesn't match your domain (e.g. you want deterministic planning).
+Alternative: bring your own manager by subclassing `MagenticManagerBase` and wrapping it instead of `StandardMagenticManager`. Use this when you want deterministic planning logic rather than an LLM-driven coordinator.
+
+### HITL — plan sign-off
+
+Call `.require_plan_signoff()` on the builder before `.build()` to pause after the manager produces the initial task ledger. Register a handler for `MagenticPlanReviewRequest` on the resulting workflow:
+
+```python
+from agent_framework_orchestrations import (
+    MagenticBuilder,
+    StandardMagenticManager,
+    MagenticPlanReviewRequest,
+    MagenticPlanReviewResponse,
+)
+
+workflow = (
+    MagenticBuilder(StandardMagenticManager(manager_agent))
+    .add_participant(researcher)
+    .add_participant(analyst)
+    .add_participant(writer)
+    .require_plan_signoff()   # pause for human approval
+    .build()
+)
+
+async def human_plan_review(request: MagenticPlanReviewRequest) -> MagenticPlanReviewResponse:
+    print("Proposed plan:")
+    print(request.plan.text)           # plan is a Message, not an iterable
+    approved = input("Approve? [y/n] ").strip().lower() == "y"
+    if approved:
+        return request.approve()
+    else:
+        return request.revise("Please break the plan into smaller steps.")
+
+workflow.add_request_info_handler(MagenticPlanReviewRequest, human_plan_review)
+result = await workflow.run("Analyse LLM safety benchmarks for 2025.")
+```
 
 ### Observability
 
-Magentic emits structured events you can hook into:
+Stream events from a running workflow to observe plan updates, participant turns, and the final output:
 
 ```python
-from agent_framework_orchestrations import MagenticOrchestratorEventType
-
 async for event in workflow.run("…", stream=True):
-    if event.type == "orchestrator" and event.data.kind == MagenticOrchestratorEventType.TASK_LEDGER:
-        print("Plan:", event.data.payload)
-    elif event.type == "output":
-        print("Final:", event.data)
+    match event.type:
+        case "orchestrator":
+            print("[manager]", event.data)
+        case "agent":
+            print(f"[{event.agent_name}]", event.data)
+        case "output":
+            print("Final answer:", event.data)
 ```
 
-### HITL specialist hooks
-
-- `enable_plan_review=True` — human approves the plan before execution begins.
-- `.with_human_input_on_stall()` — human intervenes when the workflow stalls instead of auto-replanning.
-
-See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for how to respond to these events from your caller.
+See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for how to respond to request-info events from your caller.
 
 ## Picking a pattern
 
