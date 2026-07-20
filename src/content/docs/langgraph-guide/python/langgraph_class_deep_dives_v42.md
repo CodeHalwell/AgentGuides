@@ -179,16 +179,6 @@ def reset_node(state: State) -> dict:
     # Overwrite(value) replaces the current state entirely
     return {"text": Overwrite("RESET"), "step": 0}
 
-graph = (
-    StateGraph(State)
-    .add_node("append", append_node)
-    .add_node("reset", reset_node)
-    .add_edge(START, "append")
-    .add_edge("append", "reset")
-    .add_edge("reset", "append")  # loops once
-    .compile()
-)
-
 # Run only the first two steps to see Overwrite in action
 from langgraph.graph import END
 graph2 = (
@@ -353,7 +343,7 @@ graph = (
     .set_node_defaults(
         retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.05),
         cache_policy=CachePolicy(ttl=300),
-        timeout=TimeoutPolicy(idle=30.0),
+        timeout=TimeoutPolicy(idle_timeout=30.0),
     )
     .add_node("double", compute)
     .add_node(
@@ -544,8 +534,9 @@ graph = (
 config = {"configurable": {"thread_id": "replay-demo"}}
 
 # Run three times to build up checkpoint history
-for _ in range(3):
-    graph.invoke({"count": 0}, config)
+graph.invoke({"count": 0}, config)  # seed first run with initial state
+for _ in range(2):
+    graph.invoke(None, config)       # resume from checkpoint, incrementing each time
 
 # Retrieve checkpoints in order
 history = list(graph.get_state_history(config))
@@ -616,16 +607,16 @@ builder.add_node(
     worker,
     retry_policy=RetryPolicy(max_attempts=4),
     cache_policy=CachePolicy(ttl=120),
-    timeout=TimeoutPolicy(idle=10.0),
+    timeout=TimeoutPolicy(idle_timeout=10.0),
     metadata={"team": "backend"},
 )
 builder.add_edge(START, "worker")
 builder.add_edge("worker", END)
 
 spec = builder.nodes["worker"]  # StateNodeSpec
-print(f"retry max_attempts : {spec.retry_policy.max_attempts}")  # 4
-print(f"cache ttl          : {spec.cache_policy.ttl}")           # 120
-print(f"timeout idle       : {spec.timeout.idle}")               # 10.0
+print(f"retry max_attempts : {spec.retry_policy.max_attempts}")          # 4
+print(f"cache ttl          : {spec.cache_policy.ttl}")                   # 120
+print(f"timeout idle       : {spec.timeout.idle_timeout}")               # 10.0
 print(f"metadata           : {spec.metadata}")                   # {'team': 'backend'}
 print(f"defer              : {spec.defer}")                      # False
 print(f"is_error_handler   : {spec.is_error_handler}")          # False
@@ -727,8 +718,6 @@ from typing_extensions import TypedDict
 from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.pregel._algo import Call
-
-results_from_task = []
 
 @task
 def fetch(url: str) -> str:
@@ -937,10 +926,10 @@ graph.invoke({"count": 0}, config)  # first run saves checkpoint
 result = graph.invoke(None, config)
 print(result["count"])  # 1 (increments from saved state)
 
-# EmptyInputError is raised when there is no state at all and input is empty
+# EmptyInputError is raised when there is no checkpoint and None is passed as input
 fresh_config = {"configurable": {"thread_id": "new-thread"}}
 try:
-    graph.invoke({}, fresh_config)
+    graph.invoke(None, fresh_config)  # no checkpoint exists → EmptyInputError
 except EmptyInputError as e:
     print(f"EmptyInputError: {e}")
 ```
@@ -1009,9 +998,11 @@ graph = (
 
 config = {"configurable": {"thread_id": "hitl-demo"}}
 
-# First run — hits interrupt, returns interrupt value
-result = graph.invoke({"proposal": "", "outcome": ""}, config)
-print(result)  # GraphInterrupt raised — inspect it via get_state
+# First run — hits interrupt() and raises GraphInterrupt
+try:
+    graph.invoke({"proposal": "", "outcome": ""}, config)
+except Exception as e:
+    print(f"Interrupted: {e}")  # GraphInterrupt — inspect pending state via get_state
 
 # Resume with 'accept' response
 from langgraph.types import Command
@@ -1051,7 +1042,10 @@ graph = (
 )
 
 config = {"configurable": {"thread_id": "edit-demo"}}
-graph.invoke({"command": "rm -rf /", "executed": ""}, config)
+try:
+    graph.invoke({"command": "rm -rf /", "executed": ""}, config)
+except Exception:
+    pass  # GraphInterrupt — graph paused waiting for human review
 
 # Human edits the command before execution
 edited_request: ActionRequest = {"action": "rm -rf /tmp/cache", "args": {}}
@@ -1157,7 +1151,7 @@ graph = (
     .add_edge(START, "agent")
     .add_edge("agent", "tools")
     .add_edge("tools", END)
-    .compile(stream_mode=["tools"], transformers=[ToolCallTransformer])
+    .compile(transformers=[ToolCallTransformer])
 )
 
 with graph.stream({"messages": []}, stream_mode="tools") as run:
@@ -1207,7 +1201,7 @@ graph = (
     .add_edge(START, "agent")
     .add_edge("agent", "tools")
     .add_edge("tools", END)
-    .compile(stream_mode=["tools"], transformers=[ToolCallTransformer])
+    .compile(transformers=[ToolCallTransformer])
 )
 
 async def stream_tools() -> None:
@@ -1266,7 +1260,7 @@ graph = (
     .add_edge(START, "agent")
     .add_edge("agent", "tools")
     .add_edge("tools", END)
-    .compile(stream_mode=["tools"], transformers=[ToolCallTransformer])
+    .compile(transformers=[ToolCallTransformer])
 )
 
 summary = []
