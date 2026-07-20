@@ -1155,9 +1155,7 @@ sessions resumable.
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
-from google.adk.workflow import Workflow
-from google.adk.workflow._node import START
-from google.adk.workflow._function_node import FunctionNode
+from google.adk.workflow import Workflow, FunctionNode
 from google.genai import types
 
 
@@ -1181,7 +1179,7 @@ async def classify_and_route(ctx):
 
 
 router = FunctionNode(name="router", func=classify_and_route)
-wf = Workflow(name="dispatch_wf", edges=[(START, router)])
+wf = Workflow(name="dispatch_wf", edges=[("START", router)])
 
 
 async def main():
