@@ -684,9 +684,11 @@ async def main() -> None:
     )
 
     session = agent.create_session()
+    session.state["mistral_memory_owner"] = "user-alice"
     await agent.run("My favourite language is Python.", session=session)
 
     session2 = agent.create_session()
+    session2.state["mistral_memory_owner"] = "user-alice"
     response = await agent.run("What is my favourite language?", session=session2)
     print(response.text)
 
@@ -885,17 +887,19 @@ cached_source = CachingSkillsSource(
 client = OpenAIChatClient("gpt-4o")
 agent = Agent(
     client=client,
-    context_providers=[SkillsProvider(sources=[cached_source])],
+    context_providers=[SkillsProvider(cached_source)],
 )
 ```
 
 ### Per-agent cache isolation
 
 ```python
+from datetime import timedelta
 from agent_framework import CachingSkillsSource, SkillsSourceContext, MCPSkillsSource
 
-# Suppose different agents have different sets of MCP skills.
-mcp_source = MCPSkillsSource(...)
+# MCPSkillsSource requires an initialized mcp.client.session.ClientSession.
+# `mcp_session` is assumed to be an already-initialized ClientSession here.
+mcp_source = MCPSkillsSource(client=mcp_session)
 
 def isolate_by_agent(ctx: SkillsSourceContext) -> str | None:
     # Cache key is the agent's name — each agent gets its own cached list.
@@ -923,8 +927,10 @@ from agent_framework import (
 from datetime import timedelta
 
 # Compose a full skills pipeline: aggregate → cache each → dedup → filter.
+# MCPSkillsSource requires an initialized mcp.client.session.ClientSession.
+# `mcp_session` is assumed to be an already-initialized ClientSession here.
 file_source = FileSkillsSource(paths=["./skills/"])
-mcp_source = MCPSkillsSource(url="http://localhost:8080/mcp")
+mcp_source = MCPSkillsSource(client=mcp_session)
 
 cached_file = CachingSkillsSource(file_source, refresh_interval=timedelta(minutes=5))
 cached_mcp  = CachingSkillsSource(mcp_source,  refresh_interval=timedelta(minutes=1))
@@ -933,10 +939,10 @@ aggregated = AggregatingSkillsSource(sources=[cached_file, cached_mcp])
 deduped    = DeduplicatingSkillsSource(aggregated)
 filtered   = FilteringSkillsSource(
     deduped,
-    predicate=lambda skill, _ctx: skill.name.startswith("python_"),
+    predicate=lambda skill, _ctx: skill.frontmatter.name.startswith("python_"),
 )
 
-provider = SkillsProvider(sources=[filtered])
+provider = SkillsProvider(filtered)
 ```
 
 ---
