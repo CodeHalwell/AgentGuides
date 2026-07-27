@@ -352,7 +352,7 @@ override_feature_enabled(FeatureName._MCP_GRACEFUL_ERROR_HANDLING, False)
 
 ```python
 import pytest
-from google.adk.features import FeatureName, temporary_feature_override
+from google.adk.features import FeatureName, is_feature_enabled, temporary_feature_override
 
 @pytest.fixture
 def with_progressive_streaming():
@@ -891,8 +891,10 @@ search_node = FunctionNode(
 )
 ```
 
-When `parameter_binding='node_input'` the dict `{"query": "ADK tutorial", "max_results": 5}`
-is coerced to `SearchRequest` before calling `search`.
+With `parameter_binding='node_input'` the node receives a dict keyed by parameter name.
+Because the function has one parameter named `request`, the caller passes
+`{"request": {"query": "ADK tutorial", "max_results": 5}}` and ADK coerces
+the inner dict to `SearchRequest` before calling `search`.
 
 ### Example 3 — auth gate
 
@@ -979,10 +981,13 @@ class _RequestIntercepterPlugin(BasePlugin):
 ### Example 1 — build your own request-tracing plugin
 
 ```python
-from google.adk.plugins.base_plugin import BasePlugin
+import asyncio
+import uuid
+from google.adk.agents import LlmAgent
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
-import uuid
+from google.adk.plugins.base_plugin import BasePlugin
+from google.adk.runners import Runner
 
 class RequestTracingPlugin(BasePlugin):
     """Captures LlmRequest alongside each LlmResponse for debugging."""
@@ -1017,15 +1022,18 @@ runner = Runner(
     app_name="my_app",
     agent=agent,
     plugins=[tracer],
+    auto_create_session=True,
 )
 
-# After a run, retrieve the request for any response
-# Event IS an LlmResponse subclass — pass event directly, not event.llm_response
-async for event in runner.run_async(...):
-    if event.is_final_response():
-        req = tracer.lookup_request(event)
-        if req:
-            print("System instruction:", req.config.system_instruction)
+async def main():
+    # Event IS an LlmResponse subclass — pass event directly, not event.llm_response
+    async for event in runner.run_async(user_id="u1", session_id="s1", new_message="Hello"):
+        if event.is_final_response():
+            req = tracer.lookup_request(event)
+            if req:
+                print("System instruction:", req.config.system_instruction)
+
+asyncio.run(main())
 ```
 
 ### Example 2 — inspect tools presented to the model
