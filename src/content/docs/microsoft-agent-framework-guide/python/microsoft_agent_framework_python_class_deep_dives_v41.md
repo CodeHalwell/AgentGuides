@@ -876,7 +876,7 @@ from agent_framework import (
 from agent_framework.openai import OpenAIChatClient
 
 # FileSkillsSource walks the filesystem on every call — expensive at scale.
-file_source = FileSkillsSource(paths=["./skills/"])
+file_source = FileSkillsSource(skill_paths=["./skills/"])
 
 # Wrap in a cache that refreshes every 10 minutes.
 cached_source = CachingSkillsSource(
@@ -929,7 +929,7 @@ from datetime import timedelta
 # Compose a full skills pipeline: aggregate → cache each → dedup → filter.
 # MCPSkillsSource requires an initialized mcp.client.session.ClientSession.
 # `mcp_session` is assumed to be an already-initialized ClientSession here.
-file_source = FileSkillsSource(paths=["./skills/"])
+file_source = FileSkillsSource(skill_paths=["./skills/"])
 mcp_source = MCPSkillsSource(client=mcp_session)
 
 cached_file = CachingSkillsSource(file_source, refresh_interval=timedelta(minutes=5))
