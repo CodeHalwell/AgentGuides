@@ -268,7 +268,7 @@ async def run_for_user(prompt: str, is_premium: bool) -> str:
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import HandleDeferredToolCalls
-from pydantic_ai.toolsets import ApprovalRequiredToolset
+from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
 
 async def approve_all(ctx: RunContext, requests: DeferredToolRequests) -> DeferredToolResults:
@@ -277,9 +277,10 @@ async def approve_all(ctx: RunContext, requests: DeferredToolRequests) -> Deferr
 def search_web(query: str) -> str:
     return f"Results for: {query}"
 
+# ApprovalRequiredToolset wraps an AbstractToolset; pass a FunctionToolset, not a list.
 agent = Agent(
     'openai:gpt-5.2',
-    toolsets=[ApprovalRequiredToolset([search_web])],
+    toolsets=[ApprovalRequiredToolset(wrapped=FunctionToolset([search_web]))],
     capabilities=[HandleDeferredToolCalls(handler=approve_all)],
 )
 # result = await agent.run("Search for pydantic-ai documentation")
@@ -292,20 +293,22 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import HandleDeferredToolCalls
 from pydantic_ai.toolsets import ApprovalRequiredToolset
-from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext, ToolDenied
 
 SAFE_TOOLS = {'search_web', 'get_weather', 'read_file'}
 
 async def selective_handler(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
-    results = requests.build_results()
-    for call in requests.calls:
+    # Build an approvals dict keyed by tool_call_id; items are in requests.approvals.
+    # True = ToolApproved(), ToolDenied(...) carries a custom denial message.
+    approvals: dict = {}
+    for call in requests.approvals:
         if call.tool_name in SAFE_TOOLS:
-            results.approve(call.tool_call_id)
+            approvals[call.tool_call_id] = True
         else:
-            results.deny(call.tool_call_id, "Tool requires manual review")
-    return results
+            approvals[call.tool_call_id] = ToolDenied("Tool requires manual review")
+    return requests.build_results(approvals=approvals)
 
 agent = Agent(
     'openai:gpt-5.2',
@@ -366,7 +369,8 @@ agent = Agent('openai:gpt-5.2')
 @agent.tool
 async def check_server_status(ctx: RunContext[None]) -> str:
     # Enqueue an urgent system message to be delivered before the next model call.
-    await ctx.enqueue("SYSTEM: Database connection pool exhausted", priority='asap')
+    # enqueue() is synchronous — do NOT await it.
+    ctx.enqueue("SYSTEM: Database connection pool exhausted", priority='asap')
     return "Server status checked"
 
 # When the agent calls check_server_status, PendingMessageDrainCapability
@@ -385,7 +389,7 @@ agent = Agent('openai:gpt-5.2')
 @agent.tool
 async def schedule_followup(ctx: RunContext[None], message: str) -> str:
     # Enqueue a follow-up only if the agent otherwise terminates.
-    await ctx.enqueue(message, priority='when_idle')
+    ctx.enqueue(message, priority='when_idle')
     return "Follow-up scheduled"
 
 # The 'when_idle' message causes a new ModelRequestNode at end-of-run,
@@ -404,12 +408,14 @@ agent = Agent('openai:gpt-5.2')
 
 @agent.tool
 async def inject_alert(ctx: RunContext[None]) -> str:
-    await ctx.enqueue("ALERT: Rate limit approaching 90%", priority='asap')
+    ctx.enqueue("ALERT: Rate limit approaching 90%", priority='asap')
     return "Alert queued"
 
 async def run_and_watch():
-    async with agent.iter("Monitor the system") as agent_run:
-        async for event in agent_run:
+    # agent.iter() yields graph nodes, not stream events. Use run_stream_events()
+    # to observe AgentStreamEvent instances such as EnqueuedMessagesEvent.
+    async with agent.run_stream_events("Monitor the system") as event_stream:
+        async for event in event_stream:
             if isinstance(event, EnqueuedMessagesEvent):
                 print(f"Enqueued id={event.enqueue_id}, msgs={len(event.messages)}")
 
@@ -779,13 +785,13 @@ executor = ThreadPoolExecutor(max_workers=16)
 toolset_a = FunctionToolset()
 toolset_b = FunctionToolset()
 
-@toolset_a.tool
+@toolset_a.tool_plain  # tool_plain: no RunContext first arg; use tool() only when ctx is needed
 def read_file(path: str) -> str:
     """Read a local file (sync I/O)."""
     # In production, this runs in the bounded ThreadPoolExecutor
     return f"Contents of {path}"
 
-@toolset_b.tool
+@toolset_b.tool_plain
 def write_file(path: str, content: str) -> bool:
     """Write a file (sync I/O)."""
     return True
