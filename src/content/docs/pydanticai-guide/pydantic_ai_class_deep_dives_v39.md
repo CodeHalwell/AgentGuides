@@ -336,11 +336,17 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import HandleDeferredToolCalls
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext
 
+from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
+
+def search_web_ch3(query: str) -> str:
+    return f"Results for: {query}"
+
 async def audit_only_handler(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
     """Log the request but let the next handler decide."""
-    print(f"Deferred tools requested: {[c.tool_name for c in requests.calls]}")
+    # Approval-required calls are in requests.approvals, not requests.calls.
+    print(f"Deferred tools requested: {[c.tool_name for c in requests.approvals]}")
     return None  # Decline: pass to next HandleDeferredToolCalls capability
 
 async def default_approve(
@@ -350,6 +356,7 @@ async def default_approve(
 
 agent = Agent(
     'openai:gpt-5.2',
+    toolsets=[ApprovalRequiredToolset(wrapped=FunctionToolset([search_web_ch3]))],
     capabilities=[
         HandleDeferredToolCalls(handler=audit_only_handler),   # logs first
         HandleDeferredToolCalls(handler=default_approve),      # then approves
