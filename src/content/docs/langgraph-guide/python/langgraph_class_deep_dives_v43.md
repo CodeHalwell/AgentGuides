@@ -183,6 +183,7 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import InjectedState
 
 class AppState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -192,13 +193,11 @@ class AppState(TypedDict):
 @tool
 def greet(greeting: str, full_state: Annotated[dict, InjectedState()]) -> str:
     """Greet using full state context."""
-    from langgraph.prebuilt.tool_node import InjectedState  # re-import for clarity
     return f"{greeting}, {full_state['user_name']}! Session #{full_state['session_count']}"
 
 @tool
 def count_messages(name: Annotated[str, InjectedState("user_name")]) -> str:
     """Return the user name (injected from state field)."""
-    from langgraph.prebuilt.tool_node import InjectedState  # re-import for clarity
     return f"User: {name}"
 ```
 
@@ -240,9 +239,12 @@ for msg in result["messages"]:
 
 ```python
 from typing import Annotated, Any
+from typing_extensions import TypedDict
 from langgraph.prebuilt.tool_node import InjectedStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.prebuilt import ToolNode
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 from langchain_core.tools import tool
 from langchain_core.messages import AIMessage
 
@@ -260,20 +262,26 @@ def recall(key: str, store: Annotated[Any, InjectedStore()]) -> str:
     item = store.get(("facts",), key)
     return item.value["fact"] if item else "Not found"
 
-node = ToolNode([remember, recall])
+class MemState(TypedDict):
+    messages: Annotated[list, add_messages]
+
+tool_node = ToolNode([remember, recall])
+
+builder = StateGraph(MemState)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "tools")
+builder.add_edge("tools", END)
+
+# compile(store=store) installs the store so InjectedStore can find it
+graph = builder.compile(store=store)
 
 tc_put = {"name": "remember", "args": {"fact": "Python 3.14 released", "key": "py_news"}, "id": "r1", "type": "tool_call"}
-state = {"messages": [AIMessage("", tool_calls=[tc_put])]}
-# Inject store via configurable — ToolNode reads it from config["configurable"]["store"]
-from langchain_core.runnables import RunnableConfig
-config = RunnableConfig(configurable={"store": store})
-result = node.invoke(state, config=config)
-print(result["messages"][0].content)  # Remembered: py_news = Python 3.14 released
+result = graph.invoke({"messages": [AIMessage("", tool_calls=[tc_put])]})
+print(result["messages"][-1].content)  # Remembered: py_news = Python 3.14 released
 
 tc_get = {"name": "recall", "args": {"key": "py_news"}, "id": "r2", "type": "tool_call"}
-state2 = {"messages": [AIMessage("", tool_calls=[tc_get])]}
-result2 = node.invoke(state2, config=config)
-print(result2["messages"][0].content)  # Python 3.14 released
+result2 = graph.invoke({"messages": [AIMessage("", tool_calls=[tc_get])]})
+print(result2["messages"][-1].content)  # Python 3.14 released
 ```
 
 ### Example 3 — inspecting `_InjectedArgs` built by `ToolNode`
@@ -685,21 +693,22 @@ def process(state: State) -> dict:
 # Add a ChannelWrite with mapper: write uppercased items to upper_items channel
 # and item count to count channel, both derived from the items list
 write = ChannelWrite([
-    ChannelWriteEntry("upper_items", mapper=lambda items: [i.upper() for i in items]),
-    ChannelWriteEntry("count", mapper=lambda items: len(items)),
+    ChannelWriteEntry("upper_items", mapper=lambda s: [i.upper() for i in s["items"]]),
+    ChannelWriteEntry("count", mapper=lambda s: len(s["items"])),
 ])
 
 builder = StateGraph(State)
 builder.add_node("process", process)
-# The ChannelWrite is chained after the process node's return value
 builder.add_node("write_extras", write)
 builder.add_edge(START, "process")
-# In practice, mappers are used when wiring nodes; here shown standalone for illustration
-builder.add_edge("process", END)
+builder.add_edge("process", "write_extras")
+builder.add_edge("write_extras", END)
 graph = builder.compile()
 
 result = graph.invoke({"items": ["apple", "banana", "cherry"], "count": 0, "upper_items": []})
-print(result["items"])  # ['apple', 'banana', 'cherry']
+print(result["items"])        # ['apple', 'banana', 'cherry']
+print(result["upper_items"])  # ['APPLE', 'BANANA', 'CHERRY']
+print(result["count"])        # 3
 ```
 
 ### Example 3 — `ChannelWriteTupleEntry` for dynamic channel routing
@@ -762,7 +771,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import interrupt
+from langgraph.types import interrupt, Command
 
 class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -802,8 +811,8 @@ print("Interrupt value:", snapshot.interrupts[0].value)
 print("Tasks:", [(t.name, t.error) for t in snapshot.tasks])
 # [('gate', None)]
 
-# Resume with approval
-graph.invoke({"messages": []}, config={**config, "input": {"resume": "yes"}})
+# Resume with approval — pass Command(resume=...) as the invocation input
+graph.invoke(Command(resume="yes"), config=config)
 ```
 
 ### Example 2 — walking history with `parent_config`
@@ -944,9 +953,9 @@ builder.add_edge("B", END)
 graph = builder.compile(checkpointer=InMemorySaver())
 config = {"configurable": {"thread_id": "branch-demo"}}
 
-# First run goes to A
-result1 = graph.invoke({"messages": [HumanMessage("Go to A")], "path": ""}, config=config)
-print("Run 1:", result1["path"])  # ->route->A
+# First run: seed path with "A" so the conditional routes to node A
+result1 = graph.invoke({"messages": [HumanMessage("Go to A")], "path": "A"}, config=config)
+print("Run 1:", result1["path"])  # A->route->A
 
 # Get the checkpoint just after the START node (before route)
 history = list(graph.get_state_history(config))
@@ -1257,7 +1266,7 @@ print("After remove:", [m.content for m in state.values["messages"]])
 ```python
 from typing import Annotated
 from typing_extensions import TypedDict
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, RemoveMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages, REMOVE_ALL_MESSAGES
 from langgraph.checkpoint.memory import InMemorySaver
@@ -1272,7 +1281,7 @@ def chat_node(state: State) -> dict:
 def reset_node(state: State) -> dict:
     """Wipe all messages and start a new session."""
     return {
-        "messages": REMOVE_ALL_MESSAGES,  # clears the entire list
+        "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)],  # clears the entire list
         "session": state["session"] + 1,
     }
 
@@ -1293,7 +1302,7 @@ state = graph.get_state(config)
 print(f"Before reset: {len(state.values['messages'])} messages")
 
 # Apply the wipe via update_state
-graph.update_state(config, {"messages": REMOVE_ALL_MESSAGES, "session": 2})
+graph.update_state(config, {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)], "session": 2})
 
 state = graph.get_state(config)
 print(f"After reset: {len(state.values['messages'])} messages, session={state.values['session']}")
@@ -1308,22 +1317,20 @@ from typing import Annotated
 from typing_extensions import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.graph.message import push_message
+from langgraph.graph.message import add_messages, push_message
 from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.runnables import RunnableConfig
 
 class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
-def streaming_node(state: State, config: RunnableConfig) -> dict:
+def streaming_node(state: State) -> dict:
     """Node that streams token-by-token via push_message."""
     tokens = ["Hello", ", ", "streaming", " user", "!"]
     full_content = ""
     for token in tokens:
         full_content += token
-        # push_message writes to the stream immediately AND queues for state
-        push_message(AIMessage(full_content, id="stream-msg"), config)
+        # push_message reads the active config from the LangGraph ContextVar
+        push_message(AIMessage(full_content, id="stream-msg"))
     # Final return is not needed — push_message handled state write
     return {}
 
@@ -1445,7 +1452,8 @@ class State(TypedDict):
 def slow_node(state: State, runtime: Runtime[Ctx]) -> dict:
     """Simulates slow work; checks drain signal between steps."""
     time.sleep(0.05)  # simulate work
-    if runtime.drain_requested:
+    # runtime.context.control is the user-provided RunControl shared with the background thread
+    if runtime.context.control.drain_requested:
         return {"messages": [AIMessage("Drain requested — stopping")], "step": -1}
     return {"messages": [AIMessage(f"Step {state['step'] + 1}")], "step": state["step"] + 1}
 
