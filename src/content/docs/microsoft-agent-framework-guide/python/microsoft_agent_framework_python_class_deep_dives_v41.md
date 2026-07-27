@@ -321,9 +321,9 @@ class GoogleGeminiSettings(TypedDict, total=False):
 |---|---|---|
 | API key | `GOOGLE_API_KEY` | `GEMINI_API_KEY` |
 | Model | `GOOGLE_MODEL` | `GEMINI_MODEL` |
-| Vertex AI | `GOOGLE_GENAI_USE_VERTEXAI` | explicit `vertexai=` arg |
-| Project | `GOOGLE_CLOUD_PROJECT` | explicit `project=` arg |
-| Location | `GOOGLE_CLOUD_LOCATION` | explicit `location=` arg |
+| Vertex AI | explicit `vertexai=` arg | `GOOGLE_GENAI_USE_VERTEXAI` |
+| Project | explicit `project=` arg | `GOOGLE_CLOUD_PROJECT` |
+| Location | explicit `location=` arg | `GOOGLE_CLOUD_LOCATION` |
 
 ### Minimal `.env` for Developer API
 
@@ -669,7 +669,7 @@ from agent_framework.mistral import MistralEmbeddingClient
 
 async def main() -> None:
     embedding_client = MistralEmbeddingClient(model="mistral-embed")
-    memory_store = MemoryFileStore(root_directory="/tmp/agent-memory")
+    memory_store = MemoryFileStore(base_path="/tmp/agent-memory", owner_state_key="mistral_memory_owner")
     memory = MemoryContextProvider(
         store=memory_store,
         embedding_client=embedding_client,
@@ -885,7 +885,7 @@ cached_source = CachingSkillsSource(
 client = OpenAIChatClient("gpt-4o")
 agent = Agent(
     client=client,
-    skills=SkillsProvider(sources=[cached_source]),
+    context_providers=[SkillsProvider(sources=[cached_source])],
 )
 ```
 
@@ -899,7 +899,7 @@ mcp_source = MCPSkillsSource(...)
 
 def isolate_by_agent(ctx: SkillsSourceContext) -> str | None:
     # Cache key is the agent's name — each agent gets its own cached list.
-    return ctx.agent_name if ctx.agent_name else None
+    return ctx.agent.name if ctx.agent else None
 
 cached = CachingSkillsSource(
     mcp_source,
