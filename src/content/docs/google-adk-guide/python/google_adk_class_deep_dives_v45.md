@@ -262,7 +262,10 @@ oidc_credential = AuthCredential(
     ),
 )
 
-oidc_scheme = OpenIdConnectWithConfig(openIdConnectUrl="https://auth.example.com/.well-known/openid-configuration")
+oidc_scheme = OpenIdConnectWithConfig(
+    authorization_endpoint="https://auth.example.com/oauth2/authorize",
+    token_endpoint="https://auth.example.com/oauth2/token",
+)
 exchanger = AutoAuthCredentialExchanger()
 token_credential = exchanger.exchange_credential(oidc_scheme, oidc_credential)
 # OAuth2CredentialExchanger handles OIDC by exchanging the auth code
@@ -1047,9 +1050,9 @@ async def audit_tool_declarations(agent, user_message):
     ):
         # Event IS an LlmResponse subclass — pass event directly
         req = tracer.lookup_request(event)
-        if req and req.tools:
-                for tool_decl in req.tools:
-                    print(f"Tool presented to model: {tool_decl.name}")
+        if req and req.tools_dict:
+            for name in req.tools_dict:
+                print(f"Tool presented to model: {name}")
 ```
 
 ---
