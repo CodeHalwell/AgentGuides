@@ -573,9 +573,11 @@ fetch = LlmAgent(name="fetch", model="gemini-2.5-flash", instruction="Fetch data
 process = LlmAgent(name="process", model="gemini-2.5-flash", instruction="Process")
 store = LlmAgent(name="store", model="gemini-2.5-flash", instruction="Store")
 
+# "START" (string sentinel) must be the first element so the graph has an
+# entry edge — parse_edge_items does not auto-synthesise START → first_node.
 wf = Workflow(
     name="pipeline",
-    edges=[(fetch, process, store)],   # linear chain
+    edges=[("START", fetch, process, store)],
 )
 ```
 
@@ -595,7 +597,8 @@ merge = LlmAgent(name="merge", ...)
 wf = Workflow(
     name="branching",
     edges=[
-        (classifier, {"A": path_a, "B": path_b}),
+        # Chain: START → classifier, then conditional routing from classifier
+        ("START", classifier, {"A": path_a, "B": path_b}),
         (path_a, merge),
         (path_b, merge),
     ],
@@ -607,13 +610,11 @@ wf = Workflow(
 ### Example 3 — fan-out to multiple nodes on one route
 
 ```python
-from google.adk.workflow._graph import Edge
-
 # Both validator_1 and validator_2 run when classifier routes "VALIDATE"
 wf = Workflow(
     name="fan_out",
     edges=[
-        (classifier, {"VALIDATE": (validator_1, validator_2)}),
+        ("START", classifier, {"VALIDATE": (validator_1, validator_2)}),
         (validator_1, aggregator),
         (validator_2, aggregator),
     ],
@@ -624,13 +625,12 @@ wf = Workflow(
 
 ```python
 from google.adk.workflow._graph import Edge
-from google.adk.workflow._base_node import START
 
 wf = Workflow(
     name="mixed",
     edges=[
-        (fetch, process),             # chain
-        Edge(from_node=process, to_node=store, route="ok"),    # explicit with route
+        ("START", fetch, process),    # chain establishes START→fetch→process
+        Edge(from_node=process, to_node=store, route="ok"),
         Edge(from_node=process, to_node=error_handler, route="error"),
     ],
 )
@@ -771,13 +771,13 @@ eval_set = EvalSet(
 )
 
 from google.adk.evaluation.eval_config import EvalConfig
-from google.adk.evaluation.eval_metrics import EvalMetric
 
-# evaluate_eval_set is async; agent_module is a dotted import path, not an object
-# Use reference-free multi-turn metrics since generated scenarios have no golden response
+# evaluate_eval_set is async; agent_module is a dotted import path, not an object.
+# Generated scenarios have no golden tool calls or final responses, so use a
+# scenario-aware reference-free multi-turn metric.
 eval_config = EvalConfig(
     criteria={
-        "tool_trajectory_avg_score": 1.0,
+        "multi_turn_task_success_v1": 0.7,
     }
 )
 
@@ -890,8 +890,11 @@ is coerced to `SearchRequest` before calling `search`.
 ### Example 3 — auth gate
 
 ```python
+from fastapi.openapi.models import OAuthFlows, OAuthFlowAuthorizationCode
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
+from google.adk.auth.auth_schemes import ExtendedOAuth2
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import OAuthGrantType, ExtendedOAuth2
+from google.adk.workflow._function_node import FunctionNode
 
 oauth_config = AuthConfig(
     auth_scheme=ExtendedOAuth2(
@@ -905,7 +908,7 @@ oauth_config = AuthConfig(
     ),
     raw_auth_credential=AuthCredential(
         auth_type=AuthCredentialTypes.OAUTH2,
-        oauth2=OAuth2Credential(client_id="...", client_secret="..."),
+        oauth2=OAuth2Auth(client_id="...", client_secret="..."),
     ),
 )
 
