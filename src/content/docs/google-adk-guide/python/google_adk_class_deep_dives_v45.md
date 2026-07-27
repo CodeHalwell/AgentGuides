@@ -988,6 +988,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.runners import Runner
+from google.genai import types
 
 class RequestTracingPlugin(BasePlugin):
     """Captures LlmRequest alongside each LlmResponse for debugging."""
@@ -1027,7 +1028,8 @@ runner = Runner(
 
 async def main():
     # Event IS an LlmResponse subclass — pass event directly, not event.llm_response
-    async for event in runner.run_async(user_id="u1", session_id="s1", new_message="Hello"):
+    msg = types.Content(role="user", parts=[types.Part(text="Hello")])
+    async for event in runner.run_async(user_id="u1", session_id="s1", new_message=msg):
         if event.is_final_response():
             req = tracer.lookup_request(event)
             if req:
@@ -1040,8 +1042,9 @@ asyncio.run(main())
 
 ```python
 from google.adk.runners import Runner
+from google.genai import types
 
-async def audit_tool_declarations(agent, user_message):
+async def audit_tool_declarations(agent, user_message: types.Content):
     """Log every tool declaration sent to the model."""
     tracer = RequestTracingPlugin()
     runner = Runner(
