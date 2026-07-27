@@ -770,10 +770,21 @@ eval_set = EvalSet(
     eval_cases=eval_cases,
 )
 
-# evaluate_eval_set accepts an in-memory EvalSet and an importable agent module path
-AgentEvaluator.evaluate_eval_set(
-    agent_module="my_package.agents.bank_agent",  # dotted import path to agent module
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.eval_metrics import EvalMetric
+
+# evaluate_eval_set is async; agent_module is a dotted import path, not an object
+# Use reference-free multi-turn metrics since generated scenarios have no golden response
+eval_config = EvalConfig(
+    criteria={
+        "tool_trajectory_avg_score": 1.0,
+    }
+)
+
+await AgentEvaluator.evaluate_eval_set(
+    agent_module="my_package.agents.bank_agent",  # dotted import path to module
     eval_set=eval_set,
+    eval_config=eval_config,
     num_runs=1,
 )
 ```
@@ -902,6 +913,7 @@ drive_node = FunctionNode(
     func=list_drive_files,
     name="drive_lister",
     auth_config=oauth_config,   # interrupts first call if no credential in state
+    rerun_on_resume=True,       # required so the node reruns after credential is supplied
 )
 ```
 
@@ -998,9 +1010,10 @@ runner = Runner(
 )
 
 # After a run, retrieve the request for any response
+# Event IS an LlmResponse subclass — pass event directly, not event.llm_response
 async for event in runner.run_async(...):
     if event.is_final_response():
-        req = tracer.lookup_request(event.llm_response)
+        req = tracer.lookup_request(event)
         if req:
             print("System instruction:", req.config.system_instruction)
 ```
@@ -1024,9 +1037,9 @@ async def audit_tool_declarations(agent, user_message):
         session_id="audit_session",
         new_message=user_message,
     ):
-        if event.llm_response:
-            req = tracer.lookup_request(event.llm_response)
-            if req and req.tools:
+        # Event IS an LlmResponse subclass — pass event directly
+        req = tracer.lookup_request(event)
+        if req and req.tools:
                 for tool_decl in req.tools:
                     print(f"Tool presented to model: {tool_decl.name}")
 ```
@@ -1237,7 +1250,7 @@ agent = LlmAgent(name="openai_agent", instruction="Use GPT-4o.")
 ### Example 5 — reset to ADK default
 
 ```python
-# Restore the built-in default (gemini-3.5-flash)
+# Restore the built-in defaults
 LlmAgent.set_default_model("gemini-3.5-flash")
-LlmAgent.set_default_live_model("gemini-2.0-flash-live-001")
+LlmAgent.set_default_live_model("gemini-live-2.5-flash-native-audio")  # LlmAgent.DEFAULT_LIVE_MODEL
 ```
