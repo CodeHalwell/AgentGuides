@@ -114,7 +114,7 @@ research_agent = LlmAgent(
 
 server = to_mcp_server(research_agent, name="research")
 # Exposes POST /mcp  (Streamable-HTTP transport)
-app = server.http_app()          # returns a Starlette ASGI app
+app = server.streamable_http_app()   # returns a Starlette ASGI app
 uvicorn.run(app, host="0.0.0.0", port=8080)
 ```
 
@@ -183,7 +183,12 @@ override existing ones.
 ### Example 1 — service account → bearer token
 
 ```python
-from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+from google.adk.auth.auth_credential import (
+    AuthCredential,
+    AuthCredentialTypes,
+    ServiceAccount,
+    ServiceAccountCredential,
+)
 from google.adk.auth.auth_schemes import HttpAuthScheme, HttpCredentials
 from google.adk.tools.openapi_tool.auth.credential_exchangers.auto_auth_credential_exchanger import (
     AutoAuthCredentialExchanger,
@@ -191,8 +196,21 @@ from google.adk.tools.openapi_tool.auth.credential_exchangers.auto_auth_credenti
 
 sa_credential = AuthCredential(
     auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
-    service_account=ServiceAccountCredential(
-        service_account_json={...},  # parsed service account JSON
+    service_account=ServiceAccount(
+        service_account_credential=ServiceAccountCredential(
+            type_="service_account",
+            project_id="my-project",
+            private_key_id="key-id",
+            private_key="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+            client_email="sa@my-project.iam.gserviceaccount.com",
+            client_id="123456",
+            auth_uri="https://accounts.google.com/o/oauth2/auth",
+            token_uri="https://oauth2.googleapis.com/token",
+            auth_provider_x509_cert_url="https://www.googleapis.com/oauth2/v1/certs",
+            client_x509_cert_url="https://www.googleapis.com/robot/v1/metadata/x509/...",
+            universe_domain="googleapis.com",
+        ),
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
     ),
 )
 
@@ -300,8 +318,11 @@ def temporary_feature_override(
             _FEATURE_OVERRIDES.pop(feature_name, None)
 ```
 
-The context manager saves and restores the override state, making it safe for
-concurrent test suites that flip the same flag.
+The context manager saves and restores the override state for **non-overlapping
+(nested or sequential) uses**. Because `_FEATURE_OVERRIDES` is a plain `dict`
+mutated without a lock, two async tasks or threads overriding the *same* feature
+simultaneously can restore each other's values out of order. Use it in
+single-threaded tests or ensure no two concurrent tasks touch the same flag.
 
 ### Example 1 — check feature at runtime
 
@@ -356,20 +377,28 @@ ADK_DISABLE_PROGRESSIVE_SSE_STREAMING=1 python my_agent.py
 
 ### The `@experimental`, `@stable`, `@working_in_progress` decorators
 
-These class/function decorators register a feature in `_FEATURE_REGISTRY` (on
-first use) and guard instantiation or invocation:
+These class/function decorators register a `FeatureConfig` in `_FEATURE_REGISTRY`
+(on first use) and **wrap `__init__` / the function** to call
+`check_feature_enabled()` at invocation time — raising `RuntimeError` if the
+feature is disabled. They are used internally by ADK on its own classes; the
+`feature_name` argument must be a real `FeatureName` enum member.
 
 ```python
-from google.adk.features import experimental, stable, working_in_progress, FeatureName
+from google.adk.features._feature_decorator import experimental, stable, working_in_progress
+from google.adk.features._feature_registry import FeatureName
 
-@experimental(FeatureName.MY_FEATURE)
-class MyExperimentalTool:
-    def __init__(self, ...):
-        ...  # raised RuntimeError if MY_FEATURE is disabled
+# @experimental wraps __init__: raises RuntimeError if feature is disabled
+# (TOOL_CONFIRMATION defaults to default_on=False)
+@experimental(FeatureName.TOOL_CONFIRMATION)
+class ToolConfirmationVariant:
+    def __init__(self):
+        ...  # RuntimeError raised here when TOOL_CONFIRMATION is disabled
 
+# @stable wraps a function: raises RuntimeError only if explicitly disabled
 @stable(FeatureName.SKILL_TOOLSET)
-def create_skill_toolset(...): ...
+def create_skill_toolset_instance(): ...
 
+# @working_in_progress: same guard, always default_on=False
 @working_in_progress(FeatureName.IN_MEMORY_SESSION_SERVICE_LIGHT_COPY)
 class _LightCopyVariant: ...
 ```
@@ -717,32 +746,35 @@ config = ConversationGenerationConfig(
 scenarios = generator.generate_scenarios(agent=bank_agent, config=config)
 ```
 
-### Example 3 — wire scenarios into `AgentEvaluator`
+### Example 3 — wire scenarios into `evaluate_eval_set`
 
 ```python
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
-from google.adk.evaluation.eval_case import EvalCase, Invocation
-from google.genai import types
+from google.adk.evaluation.eval_case import EvalCase
+from google.adk.evaluation.eval_set import EvalSet
 
+# Pass the ConversationScenario directly so the multi-turn plan is preserved.
+# Use reference-free multi-turn metrics — response_match_score requires a
+# golden final_response, which generated scenarios don't provide.
 eval_cases = [
     EvalCase(
         eval_id=f"auto_{i}",
-        conversation=[
-            Invocation(
-                user_content=types.Content(
-                    role="user",
-                    parts=[types.Part(text=s.starting_prompt)],
-                )
-            )
-        ],
+        conversation_scenario=s,  # keeps conversation_plan intact
     )
     for i, s in enumerate(scenarios)
 ]
 
-await AgentEvaluator.evaluate(
-    agent_module=research_agent,
-    eval_dataset=eval_cases,
-    metrics=["response_match_score"],
+eval_set = EvalSet(
+    eval_set_id="generated_banking_scenarios",
+    name="Generated banking support scenarios",
+    eval_cases=eval_cases,
+)
+
+# evaluate_eval_set accepts an in-memory EvalSet and an importable agent module path
+AgentEvaluator.evaluate_eval_set(
+    agent_module="my_package.agents.bank_agent",  # dotted import path to agent module
+    eval_set=eval_set,
+    num_runs=1,
 )
 ```
 
@@ -956,9 +988,14 @@ class RequestTracingPlugin(BasePlugin):
         meta = llm_response.custom_metadata or {}
         return self._cache.get(meta.get(self._REQUEST_KEY))
 
-# Attach to agent
+# Plugins are registered on Runner, not LlmAgent
 tracer = RequestTracingPlugin()
-agent = LlmAgent(name="agent", model="gemini-2.5-flash", plugins=[tracer])
+agent = LlmAgent(name="agent", model="gemini-2.5-flash")
+runner = Runner(
+    app_name="my_app",
+    agent=agent,
+    plugins=[tracer],
+)
 
 # After a run, retrieve the request for any response
 async for event in runner.run_async(...):
@@ -971,10 +1008,16 @@ async for event in runner.run_async(...):
 ### Example 2 — inspect tools presented to the model
 
 ```python
-async def audit_tool_declarations(agent, runner, user_message):
+from google.adk.runners import Runner
+
+async def audit_tool_declarations(agent, user_message):
     """Log every tool declaration sent to the model."""
     tracer = RequestTracingPlugin()
-    agent = agent.model_copy(update={"plugins": [*agent.plugins, tracer]})
+    runner = Runner(
+        app_name="audit_app",
+        agent=agent,
+        plugins=[tracer],
+    )
 
     async for event in runner.run_async(
         user_id="audit_user",
