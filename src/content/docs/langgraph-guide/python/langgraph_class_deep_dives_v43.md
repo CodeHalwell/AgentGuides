@@ -627,7 +627,7 @@ for r in results:
 - `ChannelWriteEntry(channel, value=PASSTHROUGH, skip_none=False, mapper=None)` — `PASSTHROUGH` means "use the node's output value"; a concrete `value` overrides. `skip_none=True` suppresses the write when the value is `None`. `mapper` is a `Callable` applied before writing.
 - `ChannelWriteTupleEntry(mapper, value=PASSTHROUGH)` — the mapper receives the node output and returns a `Sequence[tuple[str, Any]]`, enabling dynamic channel → value pairs from a single write.
 - `ChannelWrite.do_write(config, writes)` — static method that calls `config["configurable"][CONFIG_KEY_SEND](writes)` after validating each entry. Can be called imperatively from within a node.
-- `ChannelWrite.get_static_writes(writes)` — static method used during graph compilation to infer topology (which channels a node writes to without running it).
+- `ChannelWrite.get_static_writes(runnable)` — static method used during graph compilation to infer topology: accepts a runnable and returns the `ChannelWriteEntry` list it declares statically, without executing it.
 - `register_writer(cls, runnable)` — class method marking a `Runnable` as a write-emitting node so the graph topology analysis recognises it.
 - The `TASKS` reserved channel cannot be written to via `ChannelWriteEntry` — `do_write` raises `InvalidUpdateError`.
 
@@ -1067,7 +1067,7 @@ print("Count:", final.values["count"])
 
 - `InMemoryStore(index=None)` — without `index`, search by `filter` only (no semantic query). With `index`, both filter and semantic query work.
 - `put(namespace, key, value, index=True)` — stores the item; if `index` is configured, embeds the `fields` paths and stores vectors in `self._vectors[namespace][key]`.
-- `search(namespace_prefix, query=None, filter=None, limit=10, offset=0)` — `query` triggers embedding + cosine similarity ranking. `filter` is applied after ranking. Returns `list[SearchItem]`.
+- `search(namespace_prefix, query=None, filter=None, limit=10, offset=0)` — `filter` narrows the namespace candidates first; then `query` triggers embedding + cosine similarity ranking on that filtered set. Returns `list[SearchItem]`.
 - `SearchItem.score: float | None` — cosine similarity score; `None` when no vector query was made.
 - `IndexConfig.fields` — list of dot-path / array-index / multi-field selectors. The default `["$"]` embeds the serialised JSON string of the entire `value`.
 - `get_text_at_path(value, path)` extracts text at the given path for embedding.
@@ -1209,8 +1209,8 @@ print(result2["response"])  # Hello! Your theme is dark (updated to dark).
 - **ID deduplication**: if the incoming list contains a message whose `id` matches an existing message, the existing message is replaced (not appended). This powers "edit in place" patterns.
 - **`RemoveMessage(id=...)`**: a tombstone that deletes the message with that id. Raises `ValueError` if the id is not found.
 - **`REMOVE_ALL_MESSAGES`**: a sentinel that clears the entire messages list in one update.
-- **`format='langchain-openai'`**: calls `_format_messages` converting LangChain-style messages (with `type` field) to OpenAI-style messages (with `role` field). Passed as `add_messages.format` at graph compile time.
-- **`push_message(msg, config)`**: writes `msg` to both the **custom stream** (immediately visible to streaming consumers) and the `messages` channel (persisted in state). Requires a `StreamWriter` context.
+- **`format='langchain-openai'`**: calls `_format_messages` converting LangChain-style messages (with `type` field) to OpenAI-style messages (with `role` field). Bound when defining the reducer: `Annotated[list, add_messages(format="langchain-openai")]` — `add_messages` has no `.format` attribute to set later.
+- **`push_message(message, *, state_key="messages")`**: writes `message` to both the **custom stream** (immediately visible to streaming consumers) and the `messages` channel (persisted in state). Reads the active node config from the LangGraph ContextVar — no `config` argument needed.
 - `_messages_delta_reducer` is the internal function that applies the full dedup/delete logic.
 
 ### Example 1 — ID deduplication and `RemoveMessage`
