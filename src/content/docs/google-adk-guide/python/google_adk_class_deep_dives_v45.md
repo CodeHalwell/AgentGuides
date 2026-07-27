@@ -189,7 +189,7 @@ from google.adk.auth.auth_credential import (
     ServiceAccount,
     ServiceAccountCredential,
 )
-from google.adk.auth.auth_schemes import HttpAuthScheme, HttpCredentials
+from fastapi.openapi.models import HTTPBearer
 from google.adk.tools.openapi_tool.auth.credential_exchangers.auto_auth_credential_exchanger import (
     AutoAuthCredentialExchanger,
 )
@@ -214,7 +214,7 @@ sa_credential = AuthCredential(
     ),
 )
 
-bearer_scheme = HttpAuthScheme(http=HttpCredentials(scheme="bearer"))
+bearer_scheme = HTTPBearer()
 
 exchanger = AutoAuthCredentialExchanger()
 result = exchanger.exchange_credential(
@@ -234,11 +234,11 @@ from google.adk.tools.openapi_tool.auth.credential_exchangers.base_credential_ex
 
 class ApiKeyRefresher(BaseAuthCredentialExchanger):
     def exchange_credential(self, auth_scheme, auth_credential=None):
-        # Fetch a fresh API key from a secrets vault
-        new_key = fetch_from_vault(auth_credential.api_key.value)
+        # api_key is str | None — access it directly
+        new_key = fetch_from_vault(auth_credential.api_key)
         return AuthCredential(
             auth_type=AuthCredentialTypes.API_KEY,
-            api_key=ApiKey(value=new_key),
+            api_key=new_key,
         )
 
 exchanger = AutoAuthCredentialExchanger(
@@ -249,12 +249,12 @@ exchanger = AutoAuthCredentialExchanger(
 ### Example 3 — OpenID Connect flow
 
 ```python
-from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
-from google.adk.auth.auth_schemes import OpenIdConnectScheme
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
+from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 
 oidc_credential = AuthCredential(
     auth_type=AuthCredentialTypes.OPEN_ID_CONNECT,
-    oauth2=OAuth2Credential(
+    oauth2=OAuth2Auth(
         client_id="...",
         client_secret="...",
         auth_response_uri="https://auth.example.com/callback?code=abc",
@@ -262,7 +262,7 @@ oidc_credential = AuthCredential(
     ),
 )
 
-oidc_scheme = OpenIdConnectScheme(openIdConnectUrl="https://auth.example.com/.well-known/openid-configuration")
+oidc_scheme = OpenIdConnectWithConfig(openIdConnectUrl="https://auth.example.com/.well-known/openid-configuration")
 exchanger = AutoAuthCredentialExchanger()
 token_credential = exchanger.exchange_credential(oidc_scheme, oidc_credential)
 # OAuth2CredentialExchanger handles OIDC by exchanging the auth code
@@ -749,6 +749,7 @@ scenarios = generator.generate_scenarios(agent=bank_agent, config=config)
 ### Example 3 — wire scenarios into `evaluate_eval_set`
 
 ```python
+import asyncio
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
 from google.adk.evaluation.eval_case import EvalCase
 from google.adk.evaluation.eval_set import EvalSet
@@ -781,12 +782,15 @@ eval_config = EvalConfig(
     }
 )
 
-await AgentEvaluator.evaluate_eval_set(
-    agent_module="my_package.agents.bank_agent",  # dotted import path to module
-    eval_set=eval_set,
-    eval_config=eval_config,
-    num_runs=1,
-)
+async def main():
+    await AgentEvaluator.evaluate_eval_set(
+        agent_module="my_package.agents.bank_agent",  # dotted import path to module
+        eval_set=eval_set,
+        eval_config=eval_config,
+        num_runs=1,
+    )
+
+asyncio.run(main())
 ```
 
 ---
@@ -1033,6 +1037,7 @@ async def audit_tool_declarations(agent, user_message):
         app_name="audit_app",
         agent=agent,
         plugins=[tracer],
+        auto_create_session=True,
     )
 
     async for event in runner.run_async(
@@ -1230,12 +1235,12 @@ agent = LlmAgent(name="worker", instruction="Do the task.")
 from google.adk.agents import LlmAgent
 
 LlmAgent.set_default_model("gemini-2.5-pro")
-LlmAgent.set_default_live_model("gemini-2.5-flash-live")
+LlmAgent.set_default_live_model("gemini-live-2.5-flash-native-audio")
 
 # Text agent uses gemini-2.5-pro
 text_agent = LlmAgent(name="text_worker", instruction="Answer questions.")
 
-# Live agent uses gemini-2.5-flash-live (for real-time audio)
+# Live agent uses gemini-live-2.5-flash-native-audio (for real-time audio)
 live_agent = LlmAgent(name="voice_worker", instruction="Handle voice input.")
 ```
 
