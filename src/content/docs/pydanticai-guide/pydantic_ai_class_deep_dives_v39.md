@@ -105,12 +105,13 @@ def inspect_filter_error(exc: ContentFilterError) -> dict:
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.models import ModelResolutionContext
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel  # the concrete chat-completions class
 
 def my_resolver(ctx: ModelResolutionContext, model_id: str):
     # Intercept a custom alias and return a concrete Model instance.
+    # ModelResolutionContext has no http_client; pass provider= to OpenAIChatModel instead.
     if model_id == 'gpt-5-fast':
-        return OpenAIModel('gpt-5.2', http_client=ctx.http_client)
+        return OpenAIChatModel('gpt-5.2')  # uses the default 'openai' provider
     return None  # Let the default infer_model handle everything else
 
 agent = Agent(
@@ -192,12 +193,15 @@ from pydantic_ai.models import ModelSelectionContext
 
 def model_ladder(ctx: ModelSelectionContext) -> str:
     """Use a fast model first; upgrade to a capable model once tools have run."""
+    # ctx.messages is the history field on ModelSelectionContext.
+    # ToolReturnPart also has tool_name, so hasattr would double-count; use isinstance.
+    from pydantic_ai.messages import ToolCallPart
     tool_calls = sum(
         1
-        for msg in ctx.message_history
+        for msg in ctx.messages
         if hasattr(msg, 'parts')
         for part in msg.parts
-        if hasattr(part, 'tool_name')
+        if isinstance(part, ToolCallPart)
     )
     if tool_calls >= 2:
         return 'anthropic:claude-sonnet-5-20251101'
@@ -293,7 +297,8 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import HandleDeferredToolCalls
 from pydantic_ai.toolsets import ApprovalRequiredToolset
-from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext, ToolDenied
+from pydantic_ai.toolsets import ApprovalRequiredToolset, FunctionToolset
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, RunContext, ToolApproved, ToolDenied
 
 SAFE_TOOLS = {'search_web', 'get_weather', 'read_file'}
 
@@ -301,17 +306,25 @@ async def selective_handler(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
     # Build an approvals dict keyed by tool_call_id; items are in requests.approvals.
-    # True = ToolApproved(), ToolDenied(...) carries a custom denial message.
+    # Use ToolApproved() / ToolDenied(...) rather than bare booleans.
     approvals: dict = {}
     for call in requests.approvals:
         if call.tool_name in SAFE_TOOLS:
-            approvals[call.tool_call_id] = True
+            approvals[call.tool_call_id] = ToolApproved()
         else:
             approvals[call.tool_call_id] = ToolDenied("Tool requires manual review")
     return requests.build_results(approvals=approvals)
 
+def search_web(query: str) -> str:
+    return f"Results for: {query}"
+
+def delete_record(record_id: str) -> bool:
+    return True
+
+# Both tools require approval; the handler decides per-tool which to allow.
 agent = Agent(
     'openai:gpt-5.2',
+    toolsets=[ApprovalRequiredToolset(wrapped=FunctionToolset([search_web, delete_record]))],
     capabilities=[HandleDeferredToolCalls(handler=selective_handler)],
 )
 ```
