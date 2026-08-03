@@ -408,7 +408,8 @@ def dynamic_query(query: str, filters: dict) -> str:
     return f'Results for {query} with {filters}'
 
 # `dict` with arbitrary keys can't be represented in VALIDATED strict mode.
-# strict=False forces AUTO mode for just this tool; other tools remain strict.
+# strict=False on any tool causes the *entire request* to fall back to AUTO —
+# all tools share one Gemini function-calling mode per request.
 tool = Tool(dynamic_query, strict=False)
 
 agent = Agent(
@@ -956,12 +957,33 @@ agent = Agent('openai:gpt-5.2', toolsets=[toolset])
 
 ```python
 # Example 3 — selective retry: re-attempt a specific tool on empty results
+import json
 from typing import Any
+from mcp.types import TextContent
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.mcp import CallToolFunc, MCPToolset, ToolResult
 
 MAX_EMPTY_RETRIES = 2
+
+def _has_results(result: ToolResult) -> bool:
+    """Return True when the result contains at least one non-empty search item.
+
+    result.content being non-empty is not sufficient — a search server may
+    return a TextContent block whose text is '[]' (empty JSON list) or an
+    EmbeddedResource with an empty structuredContent payload.  Decode the
+    first text block to check for actual items.
+    """
+    if not result.content:
+        return False
+    first = result.content[0]
+    if isinstance(first, TextContent):
+        try:
+            payload = json.loads(first.text)   # most search servers return JSON
+            return bool(payload)
+        except (json.JSONDecodeError, ValueError):
+            return bool(first.text.strip())
+    return True  # non-text blocks (images, resources) are treated as non-empty
 
 async def retry_empty_results(
     ctx: RunContext[None],
@@ -972,13 +994,11 @@ async def retry_empty_results(
     """Retry search tools that return empty results up to MAX_EMPTY_RETRIES times."""
     result = await call_tool(name, tool_args)
 
-    # ToolResult is a wrapper object; inspect .content (the list of MCP items)
-    # rather than the wrapper itself, which is always truthy even when empty.
-    if name == 'search' and not result.content:
+    if name == 'search' and not _has_results(result):
         for attempt in range(1, MAX_EMPTY_RETRIES + 1):
             print(f'Empty results from {name}, retry {attempt}/{MAX_EMPTY_RETRIES}')
             result = await call_tool(name, tool_args)
-            if result.content:
+            if _has_results(result):
                 return result
         # Tell the model to try a different query
         raise ModelRetry(f'Tool "{name}" returned no results after {MAX_EMPTY_RETRIES} retries. '
