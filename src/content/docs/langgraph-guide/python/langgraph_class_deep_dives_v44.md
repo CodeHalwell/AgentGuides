@@ -140,32 +140,27 @@ print(graph.invoke({"counter": 10}))
 - `get()` raises `EmptyChannelError` when `self.values` is empty — route around it or use `is_available()` before reading.
 - `ValueType` resolves to `Sequence[T]`; `UpdateType` resolves to `T | list[T]`.
 
-### Example 1 — per-step fan-in collector
+### Example 1 — per-step fan-in collector with `Topic`
+
+`Topic` is the right annotation when parallel nodes each contribute a **single item**. Declare the field as `Annotated[Sequence[str], Topic(str)]` and write a scalar string — the channel collects all writes from the same super-step into a sequence.
 
 ```python
 from typing import Annotated, Sequence, TypedDict
 from langgraph.channels.topic import Topic
 from langgraph.graph import StateGraph, START, END
 
-# Use Topic via Annotated — any list-append semantics work
-class State(TypedDict):
-    results: Annotated[list[str], lambda a, b: a + b]   # standard add reducer
-    events: list[str]   # we'll wire Topic manually below
-
-# For demonstration, let's use standard list + add which compiles to BinaryOperatorAggregate
-# If you need Topic directly, use the low-level Pregel API or wire channels explicitly.
-
 class FanInState(TypedDict):
-    items: Annotated[list[str], lambda a, b: a + b]
+    # Topic(str) gathers one string per parallel writer into a sequence
+    items: Annotated[Sequence[str], Topic(str)]
 
 def worker_a(state: FanInState) -> dict:
-    return {"items": ["result-from-a"]}
+    return {"items": "result-from-a"}   # single scalar, not a list
 
 def worker_b(state: FanInState) -> dict:
-    return {"items": ["result-from-b"]}
+    return {"items": "result-from-b"}
 
 def aggregator(state: FanInState) -> dict:
-    print("All items:", state["items"])
+    print("All items:", list(state["items"]))
     return {}
 
 builder = StateGraph(FanInState)
@@ -342,7 +337,22 @@ ev.update([])
 print(ev.is_available())   # False
 ```
 
-**Design note:** `EphemeralValue` is most useful in the low-level Pregel/functional API — e.g. the `START` channel is an `EphemeralValue(input_type)`. In a `StateGraph`, the equivalent pattern is returning a value that gets routed to a conditional edge and then explicitly reset; the channel itself doesn't auto-clear between StateGraph invocations unless wired as `EphemeralValue` at the Pregel level.
+**Design note:** `EphemeralValue` works in **both** the low-level Pregel API and `StateGraph`. Pass a channel instance as the `Annotated` metadata and `StateGraph` uses it directly — no manual resets needed:
+
+```python
+from typing import Annotated
+from langgraph.channels.ephemeral_value import EphemeralValue
+
+class MyState(TypedDict):
+    # auto-clears to MISSING after every super-step
+    signal: Annotated[str | None, EphemeralValue(str)]
+    result: str
+
+# StateGraph compiles `signal` as EphemeralValue; Pregel calls update([]) at
+# super-step boundaries so the value is gone before the next node reads it.
+```
+
+The `START` channel is itself an `EphemeralValue(input_type)`, so the pattern is native to LangGraph at every level.
 
 ---
 

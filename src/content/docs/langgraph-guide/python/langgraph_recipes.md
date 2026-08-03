@@ -2820,6 +2820,7 @@ import hashlib
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import RetryPolicy, TimeoutPolicy, CachePolicy
+from langgraph.errors import NodeTimeoutError
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
 from langgraph.runtime import get_runtime
@@ -2841,7 +2842,7 @@ fetch_retry = RetryPolicy(
     initial_interval=0.1,
     backoff_factor=2.0,
     jitter=True,
-    retry_on=lambda e: isinstance(e, (ConnectionError, TimeoutError)),
+    retry_on=lambda e: isinstance(e, (ConnectionError, TimeoutError, NodeTimeoutError)),
 )
 
 # --- Timeout: 10 s total, 3 s idle (refreshed by heartbeat) ---
