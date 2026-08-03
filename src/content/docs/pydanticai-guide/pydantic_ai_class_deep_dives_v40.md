@@ -202,9 +202,10 @@ async def run_with_rate_limit_handling(prompt: str) -> str:
             result = await agent.run(prompt)
             return result.output
         except ModelHTTPError as exc:
-            if exc.status_code == 429:
+            # Only sleep when a subsequent attempt will actually be made.
+            if exc.status_code == 429 and attempt + 1 < max_attempts:
                 wait = exc.retry_after or 5.0   # fall back to 5 s if header absent
-                print(f'Rate limited. Waiting {wait}s (attempt {attempt + 1})')
+                print(f'Rate limited. Waiting {wait}s (attempt {attempt + 1}/{max_attempts})')
                 await asyncio.sleep(wait)
             else:
                 raise
@@ -258,11 +259,16 @@ retry_config: RetryConfig = {
     'reraise': True,
 }
 
-# validate_response raises on 4xx/5xx so Tenacity sees the exception and retries.
-# Without it httpx returns a response object and Tenacity never observes a failure.
+def _raise_if_transient(r: httpx.Response) -> None:
+    """Raise only for retriable responses (429, 5xx); let permanent 4xx pass through."""
+    if r.status_code == 429 or r.status_code >= 500:
+        r.raise_for_status()
+
+# validate_response makes Tenacity observe transient failures.
+# Narrowing to 429 + 5xx avoids retrying permanent errors like 400 or 401.
 transport = AsyncTenacityTransport(
     config=retry_config,
-    validate_response=lambda r: r.raise_for_status(),
+    validate_response=_raise_if_transient,
 )
 http_client = httpx.AsyncClient(transport=transport)
 
@@ -413,25 +419,19 @@ agent = Agent(
 ```
 
 ```python
-# Example 3 — per-tool strict override alongside a strict structured-output agent
-from typing import Literal
-from pydantic import BaseModel
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
+# Example 3 — request-level mode: all-strict keeps VALIDATED; any strict=False forces AUTO
+#
+# Gemini's function_calling_config mode is a single request-level setting, not
+# per-tool.  pydantic-ai selects VALIDATED when every tool in the request uses
+# strict=True (or strict=None with a compatible schema) and falls back to AUTO
+# the moment any tool uses strict=False.  You cannot mix modes in one agent run.
+from pydantic_ai import Agent
+from pydantic_ai.models.google import GoogleModel
 
-class WeatherReport(BaseModel):
-    city: str
-    temperature_c: float
-    condition: Literal['sunny', 'cloudy', 'rainy', 'snowy']
-    humidity_pct: int
+# Agent A: all tools strict=True → Gemini uses VALIDATED mode for the whole request.
+agent_validated = Agent(GoogleModel('gemini-2.5-flash'))
 
-agent = Agent(
-    GoogleModel('gemini-2.5-flash'),
-    output_type=WeatherReport,
-    model_settings=GoogleModelSettings(temperature=0.1),
-)
-
-@agent.tool_plain(strict=True)          # explicit: enforce VALIDATED schema on Gemini
+@agent_validated.tool_plain(strict=True)
 def get_weather_data(city: str) -> dict:
     """Fetch live weather data for a city.
 
@@ -440,18 +440,31 @@ def get_weather_data(city: str) -> dict:
     """
     return {'city': city, 'temp_c': 22.5, 'cond': 'sunny', 'humidity': 58}
 
-@agent.tool_plain(strict=False)         # open-ended tool: use AUTO mode
-def log_query(metadata: dict) -> str:
-    """Log arbitrary query metadata for audit purposes.
+@agent_validated.tool_plain(strict=True)
+def get_forecast(city: str, days: int) -> list:
+    """Return a multi-day weather forecast.
 
     Args:
-        metadata: Arbitrary metadata to record.
+        city: The city name to look up.
+        days: Number of forecast days (1-7).
     """
-    print(f'Query logged: {metadata}')
+    return [{'day': i + 1, 'temp_c': 20.0 + i, 'cond': 'sunny'} for i in range(days)]
+
+# Agent B: one tool uses strict=False → entire request falls back to AUTO mode.
+agent_auto = Agent(GoogleModel('gemini-2.5-flash'))
+
+@agent_auto.tool_plain(strict=False)    # open schema forces the request into AUTO
+def log_metadata(metadata: dict) -> str:
+    """Log arbitrary metadata — open-ended schema incompatible with VALIDATED mode.
+
+    Args:
+        metadata: Arbitrary key-value metadata to record.
+    """
+    print(f'Logged: {metadata}')
     return 'logged'
 
-# result = agent.run_sync('What is the weather in Paris?')
-# print(result.output)  # WeatherReport(city='Paris', temperature_c=22.5, ...)
+# result = agent_validated.run_sync('Weather in Paris for 3 days?')
+# result = agent_auto.run_sync('Log some diagnostics.')
 ```
 
 ---
