@@ -311,7 +311,7 @@ app = App(
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
 from google.adk.models import Gemini
 
-summarizer = LlmEventSummarizer(llm=Gemini("gemini-2.5-flash"))
+summarizer = LlmEventSummarizer(llm=Gemini(model="gemini-2.5-flash"))
 
 from google.adk.apps import EventsCompactionConfig
 cfg = EventsCompactionConfig(
@@ -332,7 +332,7 @@ CUSTOM_TEMPLATE = (
 )
 
 summarizer = LlmEventSummarizer(
-    llm=Gemini("gemini-2.5-flash"),
+    llm=Gemini(model="gemini-2.5-flash"),
     prompt_template=CUSTOM_TEMPLATE,
 )
 ```
@@ -502,8 +502,9 @@ agent = ManagedAgent(
 
 ### Example 2 — single-turn composition inside an LlmAgent
 
-`mode='single_turn'` makes `ManagedAgent` behave like an inline tool of its
-parent `LlmAgent`, preserving internal events in the shared session.
+`mode='single_turn'` marks the `ManagedAgent` as a single-turn sub-agent.
+Place it in `sub_agents` of the parent `LlmAgent` — ADK converts sub-agents
+automatically to `_SingleTurnAgentTool`, making them callable by the LLM.
 
 ```python
 from google.adk.agents import LlmAgent, ManagedAgent
@@ -521,7 +522,7 @@ orchestrator = LlmAgent(
     name="orchestrator",
     model="gemini-2.5-pro",
     instruction="Use the code_executor to run computations.",
-    tools=[coder],          # ManagedAgent is valid in LlmAgent.tools
+    sub_agents=[coder],     # BaseAgent instances belong in sub_agents, not tools
 )
 ```
 
@@ -882,8 +883,18 @@ skills/
       setup.sh
 ```
 
-`SKILL.md` frontmatter may include `adk_additional_tools: [tool_name]` to
-unlock extra tools from `additional_tools` when the skill is activated.
+`SKILL.md` frontmatter may include an `adk_additional_tools` key nested under
+`metadata:` to unlock extra tools from `additional_tools` when the skill is
+activated. `SkillToolset` reads `skill.frontmatter.metadata["adk_additional_tools"]`,
+so the key must be inside the `metadata:` block:
+
+```yaml
+---
+name: my-skill
+metadata:
+  adk_additional_tools: [send_email]
+---
+```
 
 ### Example 1 — local skills only
 
