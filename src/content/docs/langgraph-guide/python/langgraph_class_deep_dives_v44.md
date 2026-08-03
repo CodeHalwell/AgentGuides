@@ -946,7 +946,10 @@ print(result["processed"])
 
 ### Example 2 — conditional fan-out with per-`Send` timeout
 
+Per-`Send` timeouts require an **async** node — LangGraph cannot cancel a running synchronous function, so it raises `sync_timeout_unsupported` if the target is sync. Use `async def` and `ainvoke()`.
+
 ```python
+import asyncio
 import operator
 from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -960,17 +963,15 @@ class TaskState(TypedDict):
     task_id: str
     priority: str
 
-def run_task(state: TaskState) -> dict:
+# Must be async — sync nodes cannot be cancelled on timeout
+async def run_task(state: TaskState) -> dict:
     return {"results": [f"done:{state['task_id']}"]}
 
 def dispatch(state: State) -> list:
     sends = []
     for t in state["tasks"]:
         # High-priority tasks get a longer timeout budget
-        if t["priority"] == "high":
-            timeout = TimeoutPolicy(run_timeout=30.0)
-        else:
-            timeout = TimeoutPolicy(run_timeout=5.0)
+        timeout = TimeoutPolicy(run_timeout=30.0 if t["priority"] == "high" else 5.0)
         sends.append(Send("run_task", t, timeout=timeout))
     return sends
 
@@ -980,15 +981,19 @@ builder.add_conditional_edges(START, dispatch)
 builder.add_edge("run_task", END)
 
 graph = builder.compile()
-result = graph.invoke({
-    "tasks": [
-        {"task_id": "t1", "priority": "high"},
-        {"task_id": "t2", "priority": "low"},
-    ],
-    "results": [],
-})
-print(result["results"])
-# ['done:t1', 'done:t2']
+
+async def main():
+    result = await graph.ainvoke({
+        "tasks": [
+            {"task_id": "t1", "priority": "high"},
+            {"task_id": "t2", "priority": "low"},
+        ],
+        "results": [],
+    })
+    print(result["results"])
+    # ['done:t1', 'done:t2']
+
+asyncio.run(main())
 ```
 
 ### Example 3 — two-phase map-reduce (map → aggregate → reduce)
