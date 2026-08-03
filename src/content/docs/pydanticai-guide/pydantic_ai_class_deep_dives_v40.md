@@ -9,7 +9,7 @@ sidebar:
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="tip">
-All examples verified against **pydantic-ai 2.22.0** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.22.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation. Live API calls are commented out — uncomment to run.
+All examples verified against **pydantic-ai 2.22.0** source installed directly from PyPI. Every class signature, field name, and method in this volume reflects the 2.22.x API. Three examples per class group; all code blocks pass `ast.parse()` syntax validation. Statements that make live provider API calls are commented out or placed inside a `main()` — uncomment or call `asyncio.run(main())` to run them.
 </Aside>
 
 Ten class groups spanning the 2.19.0–2.22.0 release window: durable background MCP task execution (`MCPToolset.prefer_tasks` + `direct_call_tool`), per-request context-size budgets (`UsageLimits.per_request_input_tokens_limit`), enriched HTTP error surfaces (`ModelHTTPError.headers` + `retry_after`), OpenAI Responses API reasoning configuration (`OpenAIResponsesModelSettings`), Gemini schema-validated function calling (strict `VALIDATED` mode), Anthropic mid-conversation system messages (`SystemPromptPart` enqueue), server-side context compaction (`AnthropicCompaction`), MCP sampling (server-driven LLM calls via the client), the new `RunContext.is_tool_available` guard, and the `MCPToolset.process_tool_call` intercept hook.
@@ -99,39 +99,47 @@ async def health_check() -> bool:
 
 ```python
 # Example 1 — per_request_input_tokens_limit raises UsageLimitExceeded on oversized context
+import asyncio
 from pydantic_ai import Agent, UsageLimitExceeded, UsageLimits
 
 agent = Agent('anthropic:claude-sonnet-4-6')
 
-try:
-    result = agent.run_sync(
-        'What is the capital of Italy? Answer with just the city.',
-        usage_limits=UsageLimits(per_request_input_tokens_limit=10),
-    )
-    print(result.output)
-except UsageLimitExceeded as exc:
-    print(exc)
-    # Exceeded the per_request_input_tokens_limit of 10 (request_input_tokens=62).
+async def main():
+    try:
+        result = await agent.run(
+            'What is the capital of Italy? Answer with just the city.',
+            usage_limits=UsageLimits(per_request_input_tokens_limit=10),
+        )
+        print(result.output)
+    except UsageLimitExceeded as exc:
+        print(exc)
+        # Exceeded the per_request_input_tokens_limit of 10 (request_input_tokens=62).
+
+# asyncio.run(main())
 ```
 
 ```python
 # Example 2 — count_tokens_before_request prevents the request from ever being sent
+import asyncio
 from pydantic_ai import Agent, UsageLimitExceeded, UsageLimits
 
 agent = Agent('openai:gpt-5.2')
 
-# count_tokens_before_request=True calls the token-counting API first.
-# The request is rejected before being dispatched — no billing for the blocked call.
-try:
-    result = agent.run_sync(
-        'Explain the history of the Roman Empire in detail.',
-        usage_limits=UsageLimits(
-            per_request_input_tokens_limit=20,
-            count_tokens_before_request=True,
-        ),
-    )
-except UsageLimitExceeded as exc:
-    print(f'Blocked before dispatch: {exc}')
+async def main():
+    # count_tokens_before_request=True calls the token-counting API first.
+    # The request is rejected before being dispatched — no billing for the blocked call.
+    try:
+        result = await agent.run(
+            'Explain the history of the Roman Empire in detail.',
+            usage_limits=UsageLimits(
+                per_request_input_tokens_limit=20,
+                count_tokens_before_request=True,
+            ),
+        )
+    except UsageLimitExceeded as exc:
+        print(f'Blocked before dispatch: {exc}')
+
+# asyncio.run(main())
 ```
 
 ```python
@@ -233,25 +241,27 @@ def diagnose_http_error(exc: ModelHTTPError) -> dict:
 ```
 
 ```python
-# Example 3 — use ModelHTTPError.headers with TenacityTransport for smart retries
+# Example 3 — use AsyncTenacityTransport for smart Retry-After-aware retries
+import httpx
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.http_client import RetryConfig, wait_retry_after
-from tenacity import stop_after_attempt, wait_exponential
-
-# wait_retry_after honours the Retry-After header when present,
-# falling back to exponential back-off when it is absent.
-retry_config = RetryConfig(
-    stop=stop_after_attempt(5),
-    wait=wait_retry_after(fallback=wait_exponential(multiplier=1, min=2, max=60)),
-    reraise=True,
-)
-
-# Attach the retry transport to an OpenAI-compatible provider
+from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from tenacity import stop_after_attempt, wait_exponential
 
-provider = OpenAIProvider(http_client=retry_config.build_async_client())
+# RetryConfig is a TypedDict — pass it directly to AsyncTenacityTransport.
+# wait_retry_after honours the Retry-After header when present,
+# falling back to exponential back-off when it is absent.
+retry_config: RetryConfig = {
+    'stop': stop_after_attempt(5),
+    'wait': wait_retry_after(fallback=wait_exponential(multiplier=1, min=2, max=60)),
+    'reraise': True,
+}
+
+transport = AsyncTenacityTransport(config=retry_config)
+http_client = httpx.AsyncClient(transport=transport)
+
+provider = OpenAIProvider(http_client=http_client)
 model = OpenAIModel('gpt-5.2', provider=provider)
 agent = Agent(model)
 
@@ -755,7 +765,20 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.messages import ModelRequest
 
-agent = Agent('anthropic:claude-sonnet-4-6')
+hooks = Hooks()
+
+@hooks.before_model_request
+async def log_dangerous_tools(ctx, request: ModelRequest) -> None:
+    """Warn if high-privilege tools are exposed to the model."""
+    if ctx.is_tool_available('send_email'):
+        print('WARNING: send_email is available to the model in this request.')
+
+# Register the hook on the same agent that owns the tool so
+# ctx.is_tool_available('send_email') reflects the actual tool list.
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    capabilities=[hooks],
+)
 
 @agent.tool_plain
 def send_email(recipient: str, body: str) -> str:
@@ -767,21 +790,8 @@ def send_email(recipient: str, body: str) -> str:
     """
     return f'Email sent to {recipient}.'
 
-hooks = Hooks()
-
-@hooks.before_model_request
-async def log_dangerous_tools(ctx, request: ModelRequest) -> None:
-    """Warn if high-privilege tools are exposed to the model."""
-    if ctx.is_tool_available('send_email'):
-        print('WARNING: send_email is available to the model in this request.')
-
-agent_with_hooks = Agent(
-    'anthropic:claude-sonnet-4-6',
-    capabilities=[hooks],
-)
-
 # async def main():
-#     result = await agent_with_hooks.run('Draft and send a status report.')
+#     result = await agent.run('Draft and send a status report.')
 #     print(result.output)
 ```
 
@@ -804,9 +814,12 @@ def delete_record(ctx: RunContext[dict], record_id: int) -> str:
     Args:
         record_id: The ID of the record to delete.
     """
-    # Guard: only proceed if the calling context confirms privilege
-    if not ctx.is_tool_available('delete_record'):
-        return 'delete_record is not available in the current run.'
+    # The FilteredToolset prevents non-admins from seeing this tool at all.
+    # If the tool is executing, ctx.deps should already be admin — but we
+    # double-check deps directly here rather than is_tool_available(), because
+    # is_tool_available('delete_record') is always True inside a running tool call.
+    if ctx.deps.get('role') != 'admin':
+        return 'Permission denied: admin role required to delete records.'
     return f'Record {record_id} deleted.'
 
 # Restrict delete_record to admin users via a filtered toolset
@@ -940,7 +953,10 @@ async def retry_empty_results(
     """Retry search tools that return empty results up to MAX_EMPTY_RETRIES times."""
     result = await call_tool(name, tool_args)
 
-    if name == 'search' and result == []:
+    # ToolResult is a list of MCP content items (TextContent, ImageContent, etc.).
+    # Use `not result` to check emptiness — it handles both an empty list and any
+    # falsy wrapper without relying on `result == []` which may not match the type.
+    if name == 'search' and not result:
         for attempt in range(1, MAX_EMPTY_RETRIES + 1):
             print(f'Empty results from {name}, retry {attempt}/{MAX_EMPTY_RETRIES}')
             result = await call_tool(name, tool_args)
