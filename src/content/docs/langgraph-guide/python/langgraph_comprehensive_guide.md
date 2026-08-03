@@ -1,31 +1,46 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.2.7 (June 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Latest Version: LangGraph 1.2.10 (August 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
 framework: langgraph
 language: python
 ---
 
-Latest: 1.2.7 | Updated: June 29, 2026
+Latest: 1.2.10 | Updated: August 3, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.2.7 (June 2026)
+**Latest Version**: LangGraph 1.2.10 (August 2026)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
 > **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.7 (verified June 2026):**
+**What's real in v1.2.10 (verified August 2026):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
 - `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
 - `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
 - `Overwrite` (`langgraph.types`) — bypass a reducer and replace a channel value directly
 - `MessagesState` (`langgraph.graph`) — built-in TypedDict with `add_messages` reducer, ready to subclass
 - `CheckpointMetadata` / `CheckpointTuple` (`langgraph.types`, `langgraph.checkpoint.base`) — inspect and traverse checkpoint history
+- `BinaryOperatorAggregate` (`langgraph.channels.binop`) — underlying channel for `Annotated[T, reducer_fn]` fields; supports `Overwrite` bypass
+- `Topic` channel (`langgraph.channels.topic`) — multi-value pub/sub with `accumulate` mode for event logs
+- `EphemeralValue` channel (`langgraph.channels.ephemeral_value`) — per-step temporary state, auto-clears, used for `START` channel
+- `NamedBarrierValue` (`langgraph.channels.named_barrier_value`) — synchronisation barrier that fires when all named writers signal
+- `entrypoint` + `task` Functional API (`langgraph.func`) — build workflows without `StateGraph`; `entrypoint.final` for decoupled save value
+- `RetryPolicy` / `TimeoutPolicy` / `CachePolicy` (`langgraph.types`) — per-node / per-task resilience and caching configuration
+- `Send` with per-instance timeout override (`langgraph.types`) — dynamic map-reduce dispatch; `timeout` kwarg per `Send`
+- `Command.PARENT` (`langgraph.types`) — signal parent graph's state from inside a subgraph
 - Type-safe v2 streaming / invoke API (`version="v2"`)
 - Pydantic / dataclass auto-coercion on input
 - Python 3.10 – 3.14 support (Python 3.9 dropped)
 - Cross-thread memory via `Store` + `InjectedStore`
 - Fixed time-travel replays with interrupts and subgraphs
+
+**Deprecated in v1.2.10:**
+- `langgraph.prebuilt.HumanInterrupt` → `langchain.agents.interrupt.HumanInterrupt`
+- `langgraph.prebuilt.HumanInterruptConfig` → `langchain.agents.interrupt.HumanInterruptConfig`
+- `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
+- `langgraph.prebuilt.ValidationNode` → use `create_agent` from `langchain.agents` with custom error handling
+- `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 
 ---
 
