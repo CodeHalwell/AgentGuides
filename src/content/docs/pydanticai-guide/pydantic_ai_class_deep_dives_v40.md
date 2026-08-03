@@ -975,11 +975,12 @@ def _payload_has_items(decoded: object) -> bool:
     if isinstance(decoded, list):
         return bool(decoded)
     if isinstance(decoded, dict):
-        # Unwrap {"results": [...]} / {"items": [...]} / {"data": [...]} etc.
+        # Scan all list-typed values; {"warnings": [], "results": [...]} must
+        # not short-circuit on the empty "warnings" field before reaching "results".
         for value in decoded.values():
-            if isinstance(value, list):
-                return bool(value)
-        return False  # dict with no list values → treat as empty
+            if isinstance(value, list) and value:
+                return True
+        return False  # no non-empty list field found
     return bool(decoded)
 
 def _has_results(result: ToolResult) -> bool:
