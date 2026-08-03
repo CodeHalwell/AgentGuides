@@ -1,15 +1,15 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.4 (June 2026)"
+description: "Updated for LangGraph 1.2.10 (August 2026)"
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.2.4 (June 2026)**
+**Updated for LangGraph 1.2.10 (August 2026)**
 
-This guide includes recipes demonstrating the latest v1.2.4 features:
+This guide includes recipes demonstrating the latest v1.2.10 features:
 - Node Caching for performance
 - Deferred Nodes for fan-in patterns
 - Pre/Post Model Hooks for LLM customization
@@ -20,6 +20,11 @@ This guide includes recipes demonstrating the latest v1.2.4 features:
 - `Overwrite` for resetting accumulated channels (Recipe 10)
 - `CheckpointTuple` for checkpoint history browsing and time-travel (Recipe 11)
 - `update_state` / `StateUpdate` for human-in-the-loop approval flows (Recipe 12)
+- Functional API (`@entrypoint` + `@task`) for workflow-without-StateGraph (Recipe 13)
+- `RetryPolicy` + `TimeoutPolicy` + `CachePolicy` for resilient, cached nodes (Recipe 14)
+- `BinaryOperatorAggregate` custom reducer patterns (Recipe 15)
+- `Send` with per-instance timeout for safe parallel map-reduce (Recipe 16)
+- `Command` with `Command.PARENT` for subgraph-to-parent signalling (Recipe 17)
 
 ---
 
@@ -2720,3 +2725,383 @@ result = app.invoke({
 print(result["response_status"], result["response_body"])
 # 200  Action 'create_order' processed for user alice
 ```
+
+---
+
+## Recipe 13: Functional API — `@entrypoint` + `@task` Workflow
+
+Use the Functional API when you want a plain-Python workflow with full LangGraph checkpoint/interrupt support, without declaring a `StateGraph`:
+
+```python
+import asyncio
+from typing import Optional
+from langgraph.func import entrypoint, task
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
+
+@task
+async def web_search(query: str) -> list[str]:
+    """Simulate searching the web — runs concurrently with other tasks."""
+    await asyncio.sleep(0.05)
+    return [f"Result 1 for {query}", f"Result 2 for {query}"]
+
+@task
+async def summarise(docs: list[str]) -> str:
+    """Summarise retrieved documents."""
+    await asyncio.sleep(0.02)
+    return " | ".join(docs)
+
+@entrypoint(checkpointer=checkpointer)
+async def research_workflow(question: str, *, previous: Optional[dict] = None) -> dict:
+    """
+    Full research workflow:
+    1. Fan out to web_search (returns SyncAsyncFuture)
+    2. Await future and summarise
+    3. Interrupt for human review
+    4. Return approved answer
+    """
+    # Check cache from a prior run on the same thread
+    if previous and previous.get("question") == question:
+        return previous
+
+    # Parallel async fan-out
+    search_future = web_search(question)
+    docs = await search_future
+    summary_future = summarise(docs)
+    summary = await summary_future
+
+    # Pause for human review
+    approved = interrupt({
+        "summary": summary,
+        "prompt": "Is this summary accurate?",
+    })
+
+    result = {
+        "question": question,
+        "summary": summary,
+        "approved": approved,
+    }
+    return result
+
+async def run():
+    config = {"configurable": {"thread_id": "research-1"}}
+
+    # First run — pauses at interrupt
+    async for event in research_workflow.astream("What is LangGraph?", config):
+        if "__interrupt__" in event:
+            print("Interrupted — awaiting approval")
+            print("Summary:", event["__interrupt__"][0].value["summary"])
+
+    # Resume with approval
+    async for event in research_workflow.astream(Command(resume=True), config):
+        if "research_workflow" in event:
+            print("Final:", event["research_workflow"])
+
+asyncio.run(run())
+```
+
+**Key points:**
+- `@task` functions return a `SyncAsyncFuture` — call `.result()` (sync) or `await` it (async).
+- The entire workflow is checkpointed: replaying after an interrupt re-uses cached task results.
+- `previous` holds the saved return value from the previous invocation on the same `thread_id`.
+- `entrypoint.final(value=..., save=...)` lets you return one thing to the caller and persist something else to the checkpoint.
+
+---
+
+## Recipe 14: Resilient Nodes — `RetryPolicy`, `TimeoutPolicy`, `CachePolicy`
+
+Attach policies at the node level (or task level) to get automatic retries, timeouts, and memoisation without wrapping every function in try/except:
+
+```python
+import asyncio
+import hashlib
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import RetryPolicy, TimeoutPolicy, CachePolicy
+from langgraph.errors import NodeTimeoutError
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+from langgraph.runtime import get_runtime
+
+class PipelineState(TypedDict):
+    query: str
+    raw_data: str
+    enriched: str
+
+# --- Cache policy: skip re-fetching identical queries ---
+def query_cache_key(state: PipelineState) -> str:
+    return hashlib.sha256(state["query"].encode()).hexdigest()
+
+fetch_cache = CachePolicy(key_func=query_cache_key, ttl=120)  # 2 min TTL
+
+# --- Retry policy: up to 4 attempts, exponential backoff ---
+fetch_retry = RetryPolicy(
+    max_attempts=4,
+    initial_interval=0.1,
+    backoff_factor=2.0,
+    jitter=True,
+    retry_on=lambda e: isinstance(e, (ConnectionError, TimeoutError, NodeTimeoutError)),
+)
+
+# --- Timeout: 10 s total, 3 s idle (refreshed by heartbeat) ---
+fetch_timeout = TimeoutPolicy(run_timeout=10.0, idle_timeout=3.0, refresh_on="heartbeat")
+
+fetch_attempts = 0
+
+async def fetch_data(state: PipelineState) -> dict:
+    global fetch_attempts
+    fetch_attempts += 1
+    runtime = get_runtime()
+
+    for chunk_idx in range(3):
+        await asyncio.sleep(0.05)
+        runtime.heartbeat()   # reset idle_timeout every chunk
+
+    if fetch_attempts < 2:
+        raise ConnectionError("Simulated transient failure")
+
+    return {"raw_data": f"data for '{state['query']}'"}
+
+async def enrich(state: PipelineState) -> dict:
+    return {"enriched": state["raw_data"].upper()}
+
+cache = InMemoryCache()
+checkpointer = InMemorySaver()
+
+builder = StateGraph(PipelineState)
+builder.add_node(
+    "fetch",
+    fetch_data,
+    retry_policy=fetch_retry,
+    cache_policy=fetch_cache,
+    timeout=fetch_timeout,
+)
+builder.add_node("enrich", enrich)
+builder.add_edge(START, "fetch")
+builder.add_edge("fetch", "enrich")
+builder.add_edge("enrich", END)
+
+graph = builder.compile(checkpointer=checkpointer, cache=cache)
+
+async def main():
+    cfg1 = {"configurable": {"thread_id": "pipe-1"}}
+    cfg2 = {"configurable": {"thread_id": "pipe-2"}}
+
+    r1 = await graph.ainvoke({"query": "langgraph", "raw_data": "", "enriched": ""}, cfg1)
+    print(r1["enriched"])         # "DATA FOR 'LANGGRAPH'"
+    print("Attempts so far:", fetch_attempts)  # 2 (retried once)
+
+    # Same query on a different thread — served from cache, fetch_attempts stays 2
+    r2 = await graph.ainvoke({"query": "langgraph", "raw_data": "", "enriched": ""}, cfg2)
+    print(r2["enriched"])         # "DATA FOR 'LANGGRAPH'"
+    print("Attempts after cache hit:", fetch_attempts)  # still 2
+
+asyncio.run(main())
+```
+
+---
+
+## Recipe 15: Custom Reducer Channels with `BinaryOperatorAggregate` and `Overwrite`
+
+`Annotated[T, fn]` state fields compile to `BinaryOperatorAggregate` channels. Use `Overwrite` to bypass the accumulator when you need a force-set:
+
+```python
+import operator
+from typing import Annotated, TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send, Overwrite
+
+class ScoreboardState(TypedDict):
+    # Accumulated metrics — each parallel worker contributes a delta
+    total_tokens: Annotated[int, operator.add]
+    errors: Annotated[int, operator.add]
+    tags: Annotated[set[str], lambda a, b: a | b]
+    # Also a reducing field — concatenates phase labels; Overwrite bypasses the concat
+    phase: Annotated[str, lambda a, b: f"{a}>{b}"]
+
+class WorkerInput(TypedDict):
+    task_id: str
+    tokens: int
+    tags: set[str]
+
+def run_worker(state: WorkerInput) -> dict:
+    # Simulate some work that may fail
+    failed = state["tokens"] > 1000
+    return {
+        "total_tokens": state["tokens"],
+        "errors": 1 if failed else 0,
+        "tags": state["tags"],
+    }
+
+def dispatch(state: ScoreboardState):
+    tasks = [
+        {"task_id": "t1", "tokens": 800, "tags": {"nlp", "summarise"}},
+        {"task_id": "t2", "tokens": 1200, "tags": {"nlp", "classify"}},  # will error
+        {"task_id": "t3", "tokens": 300, "tags": {"search"}},
+    ]
+    return [Send("worker", t) for t in tasks]
+
+def finalise(state: ScoreboardState) -> dict:
+    print(f"Tokens: {state['total_tokens']}, Errors: {state['errors']}, Tags: {state['tags']}")
+    # Overwrite bypasses the concat reducer and force-sets phase to "complete"
+    # Without Overwrite, returning "complete" would concat: "running>complete"
+    return {"phase": Overwrite("complete")}
+
+# Demonstrate: without Overwrite the reducer would concat phases
+# e.g. returning {"phase": "complete"} → "running>complete"
+# With Overwrite → "complete" (reducer bypassed)
+
+builder = StateGraph(ScoreboardState)
+builder.add_node("worker", run_worker)
+builder.add_node("finalise", finalise)
+builder.add_conditional_edges(START, dispatch)
+builder.add_edge("worker", "finalise")
+builder.add_edge("finalise", END)
+
+graph = builder.compile()
+result = graph.invoke({
+    "total_tokens": 0,
+    "errors": 0,
+    "tags": set(),
+    "phase": "running",
+})
+print(result)
+# Tokens: 2300, Errors: 1, Tags: {'nlp', 'summarise', 'classify', 'search'}
+# {'total_tokens': 2300, 'errors': 1, 'tags': {...}, 'phase': 'complete'}
+# Note: phase is 'complete' (not 'running>complete') because Overwrite bypassed the concat reducer
+```
+
+---
+
+## Recipe 16: Safe Parallel Map-Reduce with `Send` + Per-Instance Timeout
+
+`Send` supports a `timeout` kwarg so you can give individual tasks different time budgets based on their priority or expected cost:
+
+```python
+import asyncio
+import operator
+from typing import Annotated, TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send, TimeoutPolicy
+
+class PipelineState(TypedDict):
+    jobs: list[dict]
+    results: Annotated[list[str], operator.add]
+    failed: Annotated[list[str], operator.add]
+
+class JobState(TypedDict):
+    job_id: str
+    priority: str
+    work_seconds: float
+
+async def execute_job(state: JobState) -> dict:
+    await asyncio.sleep(state["work_seconds"])
+    return {"results": [f"done:{state['job_id']}"]}
+
+def dispatch_jobs(state: PipelineState):
+    sends = []
+    for job in state["jobs"]:
+        # High-priority jobs get 30 s; low-priority get 5 s
+        if job["priority"] == "high":
+            timeout = TimeoutPolicy(run_timeout=30.0)
+        else:
+            timeout = TimeoutPolicy(run_timeout=5.0)
+        sends.append(Send("execute_job", job, timeout=timeout))
+    return sends
+
+builder = StateGraph(PipelineState)
+builder.add_node("execute_job", execute_job)
+builder.add_conditional_edges(START, dispatch_jobs)
+builder.add_edge("execute_job", END)
+
+graph = builder.compile()
+
+async def main():
+    result = await graph.ainvoke({
+        "jobs": [
+            {"job_id": "j1", "priority": "high", "work_seconds": 0.05},
+            {"job_id": "j2", "priority": "low", "work_seconds": 0.02},
+            {"job_id": "j3", "priority": "high", "work_seconds": 0.1},
+        ],
+        "results": [],
+        "failed": [],
+    })
+    print(result["results"])
+    # ['done:j1', 'done:j2', 'done:j3']
+
+asyncio.run(main())
+```
+
+---
+
+## Recipe 17: `Command.PARENT` — Subgraph Writing to Parent State
+
+When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., graph=Command.PARENT)`. Omit `goto` to let the parent's defined edges handle routing — setting `goto=END` would terminate the parent immediately and bypass any downstream nodes. Adding `goto="some_node"` in a `Command.PARENT` schedules that node in the parent alongside any static edges already defined there:
+
+```python
+from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command
+
+# --- Subgraph ---
+class ReviewState(TypedDict):
+    draft: str
+    reviewer: str
+
+def approve_draft(state: ReviewState) -> Command:
+    cleaned = state["draft"].strip().upper()
+    # Write "approved_content" directly into the PARENT graph's state.
+    # No `goto` here — the parent's "review" → "publish" edge takes over.
+    return Command(
+        update={"approved_content": cleaned, "reviewer": state["reviewer"]},
+        graph=Command.PARENT,
+    )
+
+sub = StateGraph(ReviewState)
+sub.add_node("approve", approve_draft)
+sub.add_edge(START, "approve")
+sub.add_edge("approve", END)   # subgraph must have an explicit exit
+subgraph = sub.compile()
+
+# --- Parent graph ---
+class WorkflowState(TypedDict):
+    draft: str
+    approved_content: str
+    reviewer: str
+    status: str
+
+def prepare(state: WorkflowState) -> dict:
+    return {"draft": state["draft"].strip()}
+
+def mark_done(state: WorkflowState) -> dict:
+    return {"status": "published"}
+
+parent = StateGraph(WorkflowState)
+parent.add_node("prepare", prepare)
+# Pass the subgraph's *input* keys when invoking as a node
+parent.add_node("review", subgraph)
+parent.add_node("publish", mark_done)
+parent.add_edge(START, "prepare")
+parent.add_edge("prepare", "review")
+parent.add_edge("review", "publish")
+parent.add_edge("publish", END)
+
+workflow = parent.compile()
+result = workflow.invoke({
+    "draft": "  hello world  ",
+    "approved_content": "",
+    "reviewer": "alice",
+    "status": "draft",
+})
+print(result)
+# {'draft': 'hello world', 'approved_content': 'HELLO WORLD',
+#  'reviewer': 'alice', 'status': 'published'}
+```
+
+**When to use `Command.PARENT`:**
+- A subgraph computes something that belongs in the parent's state schema.
+- You want to decouple the subgraph's internal state from what it exposes upward.
+- Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
+- Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.
