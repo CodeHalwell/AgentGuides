@@ -24,7 +24,7 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 - `update()` applies `operator` left-to-right over all values written in the same super-step. If the accumulator is still `MISSING` (channel never written) it adopts `values[0]` first.
 - `Overwrite` check is done via `_get_overwrite(value)` — if `True` and there's already an earlier `Overwrite` in the same step, `InvalidUpdateError` is raised.
 - `checkpoint()` returns the raw accumulated value; `from_checkpoint()` restores it so time-travel replays work correctly.
-- Channel equality is based on `_operators_equal()` — two `operator.add` references compare equal; lambdas never do.
+- Channel equality is based on `_operators_equal()` — two `operator.add` references compare equal (identity check). Any lambda operator also compares equal to **any** other operator (named or lambda), because all lambdas share `__name__ == "<lambda>"` and the comparator short-circuits to `True` on that condition alone.
 
 ### Example 1 — numeric aggregation with `operator.add`
 
@@ -215,24 +215,27 @@ t2.update(["event-2"])
 print(list(t2.get()))   # ['event-2']  — event-1 cleared
 ```
 
-### Example 3 — fan-out to `Topic` then fan-in to aggregate
+### Example 3 — `Send` fan-out with `Topic` collecting parallel results
+
+`Topic` is the right channel when parallel workers each contribute a **single item** and the graph needs to gather them all. Each worker writes one string; `Topic` accumulates every write from the same super-step into a sequence — no list-wrapping or `operator.add` needed.
 
 ```python
-import operator
-from typing import Annotated, TypedDict
+from typing import Annotated, Sequence, TypedDict
+from langgraph.channels.topic import Topic
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
 class OverallState(TypedDict):
     urls: list[str]
-    summaries: Annotated[list[str], operator.add]
+    # Topic(str) collects individual string writes from all parallel workers
+    summaries: Annotated[Sequence[str], Topic(str)]
 
 class WorkerState(TypedDict):
     url: str
 
 def summarise(state: WorkerState) -> dict:
-    # Simulate fetching a summary
-    return {"summaries": [f"Summary of {state['url']}"]}
+    # Write a single string — Topic gathers all parallel writes into a list
+    return {"summaries": f"Summary of {state['url']}"}
 
 def fan_out(state: OverallState) -> list:
     return [Send("summarise", {"url": u}) for u in state["urls"]]
@@ -244,8 +247,9 @@ builder.add_edge("summarise", END)
 
 graph = builder.compile()
 result = graph.invoke({"urls": ["http://a.com", "http://b.com"], "summaries": []})
-print(result["summaries"])
+print(list(result["summaries"]))
 # ['Summary of http://a.com', 'Summary of http://b.com']
+# Both strings were written in the same super-step; Topic collected them.
 ```
 
 ---
