@@ -251,14 +251,19 @@ from tenacity import stop_after_attempt, wait_exponential
 
 # RetryConfig is a TypedDict — pass it directly to AsyncTenacityTransport.
 # wait_retry_after honours the Retry-After header when present,
-# falling back to exponential back-off when it is absent.
+# falling back to exponential back-off when it is absent (keyword: fallback_strategy).
 retry_config: RetryConfig = {
     'stop': stop_after_attempt(5),
-    'wait': wait_retry_after(fallback=wait_exponential(multiplier=1, min=2, max=60)),
+    'wait': wait_retry_after(fallback_strategy=wait_exponential(multiplier=1, min=2, max=60)),
     'reraise': True,
 }
 
-transport = AsyncTenacityTransport(config=retry_config)
+# validate_response raises on 4xx/5xx so Tenacity sees the exception and retries.
+# Without it httpx returns a response object and Tenacity never observes a failure.
+transport = AsyncTenacityTransport(
+    config=retry_config,
+    validate_response=lambda r: r.raise_for_status(),
+)
 http_client = httpx.AsyncClient(transport=transport)
 
 provider = OpenAIProvider(http_client=http_client)
