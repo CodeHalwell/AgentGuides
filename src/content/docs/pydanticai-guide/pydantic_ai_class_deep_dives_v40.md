@@ -959,7 +959,7 @@ agent = Agent('openai:gpt-5.2', toolsets=[toolset])
 # Example 3 — selective retry: re-attempt a specific tool on empty results
 import json
 from typing import Any
-from mcp.types import TextContent
+from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.mcp import CallToolFunc, MCPToolset, ToolResult
@@ -969,21 +969,30 @@ MAX_EMPTY_RETRIES = 2
 def _has_results(result: ToolResult) -> bool:
     """Return True when the result contains at least one non-empty search item.
 
-    result.content being non-empty is not sufficient — a search server may
-    return a TextContent block whose text is '[]' (empty JSON list) or an
-    EmbeddedResource with an empty structuredContent payload.  Decode the
-    first text block to check for actual items.
+    A non-empty content list is not sufficient: servers may return a TextContent
+    block whose text is '[]', or an EmbeddedResource whose text resource is empty.
+    Decode text payloads explicitly; only fall back to True for binary blobs and
+    ImageContent, which cannot meaningfully represent an empty result set.
     """
     if not result.content:
         return False
     first = result.content[0]
+
     if isinstance(first, TextContent):
         try:
-            payload = json.loads(first.text)   # most search servers return JSON
-            return bool(payload)
+            return bool(json.loads(first.text))
         except (json.JSONDecodeError, ValueError):
             return bool(first.text.strip())
-    return True  # non-text blocks (images, resources) are treated as non-empty
+
+    # Some servers embed results in a TextResourceContents inside EmbeddedResource
+    if isinstance(first, EmbeddedResource) and isinstance(first.resource, TextResourceContents):
+        try:
+            return bool(json.loads(first.resource.text))
+        except (json.JSONDecodeError, ValueError):
+            return bool(first.resource.text.strip())
+
+    # ImageContent / BlobResourceContents cannot represent an empty result set
+    return True
 
 async def retry_empty_results(
     ctx: RunContext[None],
