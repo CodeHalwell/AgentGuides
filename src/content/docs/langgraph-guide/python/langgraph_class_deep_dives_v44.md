@@ -392,7 +392,9 @@ except InvalidUpdateError as e:
     # Caught: At key '...': Value c not in {'a', 'b'}
 ```
 
-### Example 3 — barrier-style join in `StateGraph` using a router
+### Example 3 — fan-in join using direct multi-source edges
+
+In a `StateGraph`, the correct way to join parallel branches is with direct edges from each branch to a common downstream node. Conditional routing functions run *inside* each node's own super-step, before sibling writes are merged — so a conditional edge on `fetcher` cannot see `analyser`'s output. Using explicit edges creates an implicit barrier: `combine` only starts once **both** `fetcher` and `analyser` have completed and their writes have been folded into the merged state.
 
 ```python
 import operator
@@ -400,23 +402,16 @@ from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, START, END
 
 class State(TypedDict):
-    done_nodes: Annotated[set[str], lambda a, b: a | b]
     results: Annotated[list[str], operator.add]
 
-REQUIRED = {"fetcher", "analyser"}
-
 def fetcher(state: State) -> dict:
-    return {"done_nodes": {"fetcher"}, "results": ["fetch-result"]}
+    return {"results": ["fetch-result"]}
 
 def analyser(state: State) -> dict:
-    return {"done_nodes": {"analyser"}, "results": ["analysis-result"]}
-
-def all_done(state: State) -> str:
-    if REQUIRED.issubset(state["done_nodes"]):
-        return "combine"
-    return END   # not all branches signalled yet
+    return {"results": ["analysis-result"]}
 
 def combine(state: State) -> dict:
+    # Runs only after BOTH fetcher and analyser complete — state is merged here
     print("All done. Results:", state["results"])
     return {}
 
@@ -426,12 +421,13 @@ builder.add_node("analyser", analyser)
 builder.add_node("combine", combine)
 builder.add_edge(START, "fetcher")
 builder.add_edge(START, "analyser")
-builder.add_conditional_edges("fetcher", all_done)
-builder.add_conditional_edges("analyser", all_done)
+# Both sources must finish before "combine" starts — this is the implicit barrier
+builder.add_edge("fetcher", "combine")
+builder.add_edge("analyser", "combine")
 builder.add_edge("combine", END)
 
 graph = builder.compile()
-graph.invoke({"done_nodes": set(), "results": []})
+graph.invoke({"results": []})
 # All done. Results: ['fetch-result', 'analysis-result']
 ```
 
@@ -596,9 +592,13 @@ async def async_fetch(url: str) -> str:
 
 @entrypoint(checkpointer=InMemorySaver())
 async def crawl(urls: list[str]) -> list[str]:
+    # Dispatch all tasks first — they run in parallel immediately
     futures = [async_fetch(u) for u in urls]
-    results = await asyncio.gather(*futures)   # SyncAsyncFuture supports __await__
-    return list(results)
+    # Collect results by awaiting each future sequentially.
+    # NOTE: asyncio.gather() is incompatible with SyncAsyncFuture — it yields
+    # LangGraph's scheduler sentinel, not an asyncio-native coroutine.
+    results = [await f for f in futures]
+    return results
 
 async def main():
     config = {"configurable": {"thread_id": "crawl-1"}}
@@ -675,7 +675,8 @@ def unreliable_node(state: State) -> dict:
     global call_count
     call_count += 1
     if call_count < 3:
-        raise RuntimeError(f"Transient failure #{call_count}")
+        # ConnectionError is retried by default_retry_on; RuntimeError is not
+        raise ConnectionError(f"Transient network failure #{call_count}")
     return {"result": "success after retries"}
 
 policy = RetryPolicy(
