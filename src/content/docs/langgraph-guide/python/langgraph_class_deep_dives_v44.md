@@ -348,8 +348,10 @@ class MyState(TypedDict):
     signal: Annotated[str | None, EphemeralValue(str)]
     result: str
 
-# StateGraph compiles `signal` as EphemeralValue; Pregel calls update([]) at
-# super-step boundaries so the value is gone before the next node reads it.
+# StateGraph compiles `signal` as EphemeralValue. A value written in super-step N
+# is available to downstream nodes in super-step N+1; at the end of super-step N+1
+# (if `signal` receives no further writes) Pregel calls update([]) and it clears.
+# This makes EphemeralValue ideal for one-shot handoffs between sequential nodes.
 ```
 
 The `START` channel is itself an `EphemeralValue(input_type)`, so the pattern is native to LangGraph at every level.
@@ -435,9 +437,8 @@ builder.add_node("analyser", analyser)
 builder.add_node("combine", combine)
 builder.add_edge(START, "fetcher")
 builder.add_edge(START, "analyser")
-# Both sources must finish before "combine" starts — this is the implicit barrier
-builder.add_edge("fetcher", "combine")
-builder.add_edge("analyser", "combine")
+# Multi-source edge: "combine" is scheduled only after BOTH sources complete
+builder.add_edge(["fetcher", "analyser"], "combine")
 builder.add_edge("combine", END)
 
 graph = builder.compile()
@@ -563,7 +564,7 @@ for event in email_workflow.stream(Command(resume=True), config):
 
 - `task(func)` / `task(name=..., retry_policy=..., cache_policy=..., timeout=...)` — all kwargs are optional.
 - Calling `my_task(args)` dispatches `_call_with_options(...)` and returns a `SyncAsyncFuture[T]`.
-- `SyncAsyncFuture.__await__` is a generator that yields the future once and then returns its result — plugs directly into `asyncio.gather()` and `await`.
+- `SyncAsyncFuture.__await__` is a generator that yields LangGraph's scheduler sentinel and then returns its result. It supports `await` directly but is **not** compatible with `asyncio.gather()` — `gather()` wraps awaitables in asyncio tasks which fail with `RuntimeError: Task got bad yield` on the sentinel. Await each future individually: `[await f for f in futures]`.
 - Tasks can only be called from inside an `entrypoint` or a `StateGraph` node; calling outside raises `RuntimeError`.
 - `cache_policy` on a task uses the same `CachePolicy` dataclass as nodes — `key_func` maps `(args, kwargs)` to a cache key string or bytes.
 - Timeout on tasks requires Python ≥ 3.11 async; sync tasks cannot be cancelled safely.
@@ -1061,7 +1062,7 @@ print(result["final"])
 
 - `Command(update=..., goto=..., resume=..., graph=...)` — all fields are optional.
 - `update`: applied to the graph's state exactly like a normal node return dict.
-- `goto`: `str | list[str | Send]` — navigates directly. Bypasses any defined edges for the current node.
+- `goto`: `str | list[str | Send]` — schedules additional routing. `Command(goto=...)` is **additive**: any static `add_edge` for the returning node is still executed alongside `goto`. To make routing fully dynamic, ensure no static `add_edge` exits from that node.
 - `resume`: value(s) to resume a pending `interrupt()`. Map of interrupt IDs or single value for the next pending interrupt.
 - `graph`: `None` (current graph, default) or `Command.PARENT` (send to the nearest parent graph — used in subgraphs).
 - `_update_as_tuples()` supports dicts, `(key, value)` lists, Pydantic models with annotated keys, and a root `"__root__"` key for flat states.
