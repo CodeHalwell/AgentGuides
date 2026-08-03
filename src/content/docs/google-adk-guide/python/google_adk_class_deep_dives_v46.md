@@ -101,7 +101,10 @@ any `BaseAgent`, so you can use the same container for graph-based orchestration
 from google.adk.apps import App
 from google.adk.workflow import Workflow
 
-workflow = Workflow(name="pipeline", ...)
+workflow = Workflow(
+    name="pipeline",
+    # ... nodes and edges defined elsewhere ...
+)
 
 app = App(name="workflow_app", root_agent=workflow)
 # model_validator accepts BaseNode; "root_agent" is the field name regardless.
@@ -470,7 +473,7 @@ class ManagedAgent(BaseAgent):
     environment: Optional[CreateAgentInteractionEnvironmentParam] = None
     agent_config: Optional[CreateAgentInteractionAgentConfigParam] = None
     instruction: Union[str, InstructionProvider] = ''
-    tools: list[Union[types.Tool, BaseTool, Callable, RemoteMcpServer]] = []
+    tools: list[Union[types.Tool, BaseTool, RemoteMcpServer]] = []
     mode: Literal['single_turn'] | None = None
 ```
 
@@ -642,6 +645,13 @@ sends back a `ToolConfirmation(confirmed=True, payload=...)` to **resume**.
 ### Class signature
 
 ```python
+import json
+from typing import Any, Optional
+
+from pydantic import alias_generators, BaseModel, ConfigDict
+
+from google.adk.features import experimental, FeatureName
+
 @experimental(FeatureName.TOOL_CONFIRMATION)
 class ToolConfirmation(BaseModel):
     model_config = ConfigDict(
@@ -663,25 +673,25 @@ class ToolConfirmation(BaseModel):
 
 ### Example 1 — tool that requires confirmation before deletion
 
+The correct pattern is to call `tool_context.request_confirmation(hint=...)` on the
+first invocation, which pauses the turn. The runner re-invokes the tool once the
+frontend responds; the reply is available via `tool_context.tool_confirmation`.
+
 ```python
-from google.adk.tools.tool_confirmation import ToolConfirmation
 from google.adk.tools.tool_context import ToolContext
 
 async def delete_record(record_id: str, tool_context: ToolContext) -> dict:
-    # Check if confirmation has arrived.
-    if "confirm_delete" not in tool_context.state:
-        # First call: park a hint and pause.
-        return ToolConfirmation(
+    if not tool_context.tool_confirmation:
+        # First call: request approval and pause.
+        tool_context.request_confirmation(
             hint=f"Are you sure you want to delete record '{record_id}'?",
-            confirmed=False,
-        ).model_dump()
+        )
+        return {"pending": "Awaiting confirmation before deleting record."}
 
-    # Second call: confirmation payload is in state.
-    conf = ToolConfirmation.from_response_dict(tool_context.state["confirm_delete"])
-    if not conf.confirmed:
+    if not tool_context.tool_confirmation.confirmed:
         return {"status": "cancelled"}
 
-    # Proceed with deletion.
+    # Confirmed — proceed with deletion.
     _db.delete(record_id)
     return {"status": "deleted", "id": record_id}
 ```
@@ -774,10 +784,10 @@ If the MCP Prompt declares an argument named `user_role`, ADK automatically
 looks up `context.state["user_role"]` and passes it to the server.
 
 ```python
-from mcp.client.sse import SseServerParams
+from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
 
 provider = McpInstructionProvider(
-    connection_params=SseServerParams(url="https://prompts.internal/mcp"),
+    connection_params=SseConnectionParams(url="https://prompts.internal/mcp"),
     prompt_name="role_aware_prompt",
 )
 
@@ -880,10 +890,10 @@ from google.adk.skills import Skill, SkillFrontmatter
 from google.adk.tools.skill_toolset import SkillToolset
 from google.adk.agents import LlmAgent
 
-# Build skill from directory (SKILL.md auto-loaded).
-from google.adk.skills import load_skill_from_directory
+# Build skill from directory (SKILL.md auto-loaded). load_skill_from_dir is synchronous.
+from google.adk.skills import load_skill_from_dir
 
-email_skill = load_skill_from_directory("skills/email_drafter")
+email_skill = load_skill_from_dir("skills/email_drafter")
 
 toolset = SkillToolset(skills=[email_skill])
 
@@ -900,11 +910,28 @@ agent = LlmAgent(
 
 ### Example 2 — remote SkillRegistry with search
 
-```python
-from google.adk.skills import SkillRegistry
-from google.adk.tools.skill_toolset import SkillToolset
+`SkillRegistry` is an abstract base class. To connect to a remote catalogue,
+implement `get_skill` and `search_skills` against your own backend.
 
-registry = SkillRegistry(endpoint="https://skills.internal/api")
+```python
+from typing import Optional
+from google.adk.skills import Skill, SkillRegistry
+from google.adk.tools.skill_toolset import SkillToolset
+import httpx
+
+class HttpSkillRegistry(SkillRegistry):
+    def __init__(self, endpoint: str):
+        self._endpoint = endpoint
+
+    async def get_skill(self, name: str) -> Optional[Skill]:
+        resp = httpx.get(f"{self._endpoint}/skills/{name}")
+        return Skill.model_validate(resp.json()) if resp.is_success else None
+
+    async def search_skills(self, query: str) -> list[Skill]:
+        resp = httpx.get(f"{self._endpoint}/skills", params={"q": query})
+        return [Skill.model_validate(s) for s in resp.json()]
+
+registry = HttpSkillRegistry(endpoint="https://skills.internal/api")
 toolset = SkillToolset(registry=registry)
 
 # Agent can now call search_skills(query="send email") to find remote skills
