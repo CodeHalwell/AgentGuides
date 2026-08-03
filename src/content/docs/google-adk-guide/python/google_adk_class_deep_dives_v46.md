@@ -638,9 +638,11 @@ pipeline = SequentialAgent(
 
 `ToolConfirmation` is the data model that flows between the agent runtime and
 a human (or automated policy) when a tool requires explicit approval before
-execution. A tool returns a `ToolConfirmation(confirmed=False, hint="...")` to
+execution. A tool calls `tool_context.request_confirmation(hint="...")` to
 **pause** the turn; the runner surfaces the hint to the frontend; the frontend
-sends back a `ToolConfirmation(confirmed=True, payload=...)` to **resume**.
+sends back a response that is read from `tool_context.tool_confirmation` on
+re-entry — if `tool_context.tool_confirmation.confirmed` is `True`, the tool
+proceeds; otherwise it cancels.
 
 ### Class signature
 
@@ -740,7 +742,7 @@ values into the prompt's arguments automatically.
 class McpInstructionProvider(InstructionProvider):
     def __init__(
         self,
-        connection_params: Any,         # e.g. StdioServerParameters or SseServerParams
+        connection_params: Any,         # e.g. StdioServerParameters or SseConnectionParams
         prompt_name: str,               # MCP Prompt name
         errlog: TextIO = sys.stderr,
     ): ...
@@ -886,13 +888,11 @@ unlock extra tools from `additional_tools` when the skill is activated.
 ### Example 1 — local skills only
 
 ```python
-from google.adk.skills import Skill, SkillFrontmatter
+from google.adk.skills import load_skill_from_dir
 from google.adk.tools.skill_toolset import SkillToolset
 from google.adk.agents import LlmAgent
 
-# Build skill from directory (SKILL.md auto-loaded). load_skill_from_dir is synchronous.
-from google.adk.skills import load_skill_from_dir
-
+# load_skill_from_dir is synchronous — no await needed.
 email_skill = load_skill_from_dir("skills/email_drafter")
 
 toolset = SkillToolset(skills=[email_skill])
