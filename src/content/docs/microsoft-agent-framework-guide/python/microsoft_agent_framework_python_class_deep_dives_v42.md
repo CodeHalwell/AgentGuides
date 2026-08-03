@@ -1394,7 +1394,7 @@ async def round_robin_group_chat() -> None:
 
     workflow = builder.build()
     result = await workflow.run(
-        messages=[{"role": "user", "content": "Discuss AI safety in three rounds"}]
+        message="Discuss AI safety in three rounds"
     )
     print(result)
 
@@ -1448,7 +1448,7 @@ async def keyword_termination() -> None:
 
     workflow = builder.build()
     result = await workflow.run(
-        messages=[{"role": "user", "content": "Plan and execute a simple data pipeline"}]
+        message="Plan and execute a simple data pipeline"
     )
     print(result)
 
@@ -1489,7 +1489,7 @@ async def llm_orchestrated_group_chat() -> None:
 
     workflow = builder.build()
     result = await workflow.run(
-        messages=[{"role": "user", "content": "Analyse Q2 sales trends"}]
+        message="Analyse Q2 sales trends"
     )
     print(result)
 
