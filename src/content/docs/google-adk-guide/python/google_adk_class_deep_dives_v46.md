@@ -916,6 +916,7 @@ implement `get_skill` and `search_skills` against your own backend.
 ```python
 from typing import Optional
 from google.adk.skills import Skill, SkillRegistry
+from google.adk.skills.models import Frontmatter
 from google.adk.tools.skill_toolset import SkillToolset
 import httpx
 
@@ -923,13 +924,15 @@ class HttpSkillRegistry(SkillRegistry):
     def __init__(self, endpoint: str):
         self._endpoint = endpoint
 
-    async def get_skill(self, name: str) -> Optional[Skill]:
-        resp = httpx.get(f"{self._endpoint}/skills/{name}")
+    async def get_skill(self, *, name: str) -> Optional[Skill]:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{self._endpoint}/skills/{name}")
         return Skill.model_validate(resp.json()) if resp.is_success else None
 
-    async def search_skills(self, query: str) -> list[Skill]:
-        resp = httpx.get(f"{self._endpoint}/skills", params={"q": query})
-        return [Skill.model_validate(s) for s in resp.json()]
+    async def search_skills(self, *, query: str) -> list[Frontmatter]:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{self._endpoint}/skills", params={"q": query})
+        return [Frontmatter.model_validate(s) for s in resp.json()]
 
 registry = HttpSkillRegistry(endpoint="https://skills.internal/api")
 toolset = SkillToolset(registry=registry)
