@@ -269,7 +269,7 @@ async def reject_traversal(tmp_path: Path) -> None:
         try:
             store._session_file_path("session-abc")
             print("ERROR: should have raised")
-        except (ValueError, Exception) as exc:
+        except ValueError as exc:
             print("Blocked path traversal:", type(exc).__name__)
 
 
@@ -476,8 +476,9 @@ Helper methods: `is_trusted()`, `is_public()`, `is_compatible_with(other: Conten
 ### Example 1 — Label taxonomy and compatibility
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     ContentLabel,
@@ -510,8 +511,9 @@ print("user_restricted metadata:", user_restricted.metadata["user_ids"])
 ### Example 2 — Labels on tool results
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import tool
 from agent_framework.security import (
@@ -550,8 +552,9 @@ print("News tool label — trusted:", news_label.is_trusted())  # False
 ### Example 3 — Serialization round-trip
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import ContentLabel, IntegrityLabel, ConfidentialityLabel
 
@@ -599,8 +602,9 @@ LabeledMessage(
 ### Example 1 — Create and inspect labeled messages
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     LabeledMessage,
@@ -632,8 +636,9 @@ print("Source labels count:", len(assistant_msg.source_labels))            # 1
 ### Example 2 — Provenance chain through tool calls
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     LabeledMessage,
@@ -664,8 +669,9 @@ print("Metadata:", assistant_response.metadata)
 ### Example 3 — Filter conversation history by trust level
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     LabeledMessage,
@@ -739,8 +745,9 @@ Useful accessor methods:
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import LabelTrackingFunctionMiddleware
@@ -787,8 +794,9 @@ asyncio.run(run_agent())
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import (
@@ -832,8 +840,9 @@ asyncio.run(inspect_store())
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import (
@@ -907,8 +916,9 @@ PolicyEnforcementFunctionMiddleware(
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import (
@@ -960,8 +970,9 @@ asyncio.run(allow_list_demo())
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import (
@@ -1010,8 +1021,9 @@ asyncio.run(audit_inspection())
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import (
@@ -1085,8 +1097,9 @@ Attributes after construction:
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import SecureAgentConfig
@@ -1126,8 +1139,9 @@ asyncio.run(one_liner_security())
 ### Example 2 — Access injected middleware attributes
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     SecureAgentConfig,
@@ -1156,8 +1170,9 @@ if policy:
 
 ```python
 import asyncio
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework import Agent, tool
 from agent_framework.security import SecureAgentConfig
@@ -1224,8 +1239,9 @@ These three classes form the **variable indirection layer** — the core mechani
 ### Example 1 — Store and retrieve untrusted content
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     ContentVariableStore,
@@ -1256,8 +1272,9 @@ print("Label trusted:", label.is_trusted())     # False
 ### Example 2 — VariableReferenceContent prevents injection
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import (
     ContentVariableStore,
@@ -1286,8 +1303,9 @@ print("Raw content NOT here:", "INJECTION" not in str(ref.to_dict()))  # True
 ### Example 3 — InspectVariableInput schema
 
 ```python
+from agent_framework._feature_stage import ExperimentalWarning
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 from agent_framework.security import InspectVariableInput
 
