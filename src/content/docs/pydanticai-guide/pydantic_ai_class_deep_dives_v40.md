@@ -20,7 +20,7 @@ Ten class groups spanning the 2.19.0–2.22.0 release window: durable background
 
 **Source:** `pydantic_ai/mcp.py`
 
-`MCPToolset` connects a pydantic-ai agent to an MCP server. In **2.22.0** it gained `prefer_tasks` (default `True`): when the server marks a tool with `taskSupport='optional'`, the client sends the call wrapped in a durable MCP task (SEP-1686), making it cancellable and pollable. Set `prefer_tasks=False` to opt back into standard one-shot execution for every tool, regardless of the server's task preference. The companion method `direct_call_tool(name, args, *, metadata, use_task)` lets you invoke a server tool outside of any agent run — useful for health checks, pre-flight validation, and batch jobs.
+`MCPToolset` connects a pydantic-ai agent to an MCP server. In **2.22.0** it gained `prefer_tasks` (default `True`): when the server marks a tool with `taskSupport='optional'`, the client sends the call wrapped in a durable MCP task (SEP-1686), making it cancellable and pollable. Set `prefer_tasks=False` to skip task-wrapped execution for tools whose task support is declared as `optional`; tools with `taskSupport='required'` still run as durable tasks regardless of this setting. The companion method `direct_call_tool(name, args, *, metadata, use_task)` lets you invoke a server tool outside of any agent run — useful for health checks, pre-flight validation, and batch jobs.
 
 ```python
 # Example 1 — prefer_tasks=False: always use standard execution (no background tasks)
@@ -28,7 +28,8 @@ from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
 # By default prefer_tasks=True sends optional-task tools as durable tasks.
-# Set prefer_tasks=False to force standard one-shot calls for all tools.
+# prefer_tasks=False skips task execution only for tools with optional task support;
+# tools declared as taskSupport='required' still run as durable tasks.
 toolset = MCPToolset(
     'http://localhost:8000/mcp',
     prefer_tasks=False,
@@ -204,7 +205,7 @@ async def run_with_rate_limit_handling(prompt: str) -> str:
         except ModelHTTPError as exc:
             # Only sleep when a subsequent attempt will actually be made.
             if exc.status_code == 429 and attempt + 1 < max_attempts:
-                wait = exc.retry_after or 5.0   # fall back to 5 s if header absent
+                wait = exc.retry_after if exc.retry_after is not None else 5.0
                 print(f'Rate limited. Waiting {wait}s (attempt {attempt + 1}/{max_attempts})')
                 await asyncio.sleep(wait)
             else:
@@ -971,14 +972,13 @@ async def retry_empty_results(
     """Retry search tools that return empty results up to MAX_EMPTY_RETRIES times."""
     result = await call_tool(name, tool_args)
 
-    # ToolResult is a list of MCP content items (TextContent, ImageContent, etc.).
-    # Use `not result` to check emptiness — it handles both an empty list and any
-    # falsy wrapper without relying on `result == []` which may not match the type.
-    if name == 'search' and not result:
+    # ToolResult is a wrapper object; inspect .content (the list of MCP items)
+    # rather than the wrapper itself, which is always truthy even when empty.
+    if name == 'search' and not result.content:
         for attempt in range(1, MAX_EMPTY_RETRIES + 1):
             print(f'Empty results from {name}, retry {attempt}/{MAX_EMPTY_RETRIES}')
             result = await call_tool(name, tool_args)
-            if result:
+            if result.content:
                 return result
         # Tell the model to try a different query
         raise ModelRetry(f'Tool "{name}" returned no results after {MAX_EMPTY_RETRIES} retries. '
