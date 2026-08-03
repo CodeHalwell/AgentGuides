@@ -336,7 +336,7 @@ async def secure_stdio_mcp() -> None:
         response = await agent.run(
             messages=[{"role": "user", "content": "List my open issues"}]
         )
-        print(response.response)
+        print(response.text)
 
 
 asyncio.run(secure_stdio_mcp())
@@ -375,7 +375,7 @@ async def secure_http_mcp(token: str) -> None:
         response = await agent.run(
             messages=[{"role": "user", "content": "Get me the latest sales figures"}]
         )
-        print(response.response)
+        print(response.text)
 
 
 asyncio.run(secure_http_mcp("my-token"))
@@ -432,7 +432,7 @@ async def annotation_overrides() -> None:
         response = await agent.run(
             messages=[{"role": "user", "content": "Summarise the internal report"}]
         )
-        print(response.response)
+        print(response.text)
 
 
 asyncio.run(annotation_overrides())
@@ -777,7 +777,7 @@ async def run_agent() -> None:
     response = await agent.run(
         messages=[{"role": "user", "content": "Get my balance and the latest MSFT news"}]
     )
-    print(response.response)
+    print(response.text)
 
 
 asyncio.run(run_agent())
@@ -949,7 +949,7 @@ async def allow_list_demo() -> None:
     response = await agent.run(
         messages=[{"role": "user", "content": "Search for Python news"}]
     )
-    print(response.response)
+    print(response.text)
     print("Policy violations logged:", len(policy.audit_log))
 
 
@@ -1048,7 +1048,7 @@ async def hitl_approval() -> None:
     response = await agent.run(
         messages=[{"role": "user", "content": "Write hello.txt with 'Hello World'"}]
     )
-    print("Response:", response.response)
+    print("Response:", response.text)
     print("Audit entries:", len(policy.audit_log))
 
 
@@ -1117,7 +1117,7 @@ async def one_liner_security() -> None:
     response = await agent.run(
         messages=[{"role": "user", "content": "Summarise https://example.com/article"}]
     )
-    print(response.response)
+    print(response.text)
 
 
 asyncio.run(one_liner_security())
@@ -1192,7 +1192,7 @@ async def quarantine_demo() -> None:
     response = await agent.run(
         messages=[{"role": "user", "content": "Look up 'agent security best practices'"}]
     )
-    print(response.response)
+    print(response.text)
 
 
 asyncio.run(quarantine_demo())
