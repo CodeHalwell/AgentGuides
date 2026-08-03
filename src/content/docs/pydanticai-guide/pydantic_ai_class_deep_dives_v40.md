@@ -966,33 +966,47 @@ from pydantic_ai.mcp import CallToolFunc, MCPToolset, ToolResult
 
 MAX_EMPTY_RETRIES = 2
 
+def _payload_has_items(decoded: object) -> bool:
+    """Unwrap common server response shapes and test for non-empty results.
+
+    Handles bare lists ([...]) and wrapped dicts ({"results": [...]} etc.).
+    Adapt to your server's actual schema in production.
+    """
+    if isinstance(decoded, list):
+        return bool(decoded)
+    if isinstance(decoded, dict):
+        # Unwrap {"results": [...]} / {"items": [...]} / {"data": [...]} etc.
+        for value in decoded.values():
+            if isinstance(value, list):
+                return bool(value)
+        return False  # dict with no list values → treat as empty
+    return bool(decoded)
+
 def _has_results(result: ToolResult) -> bool:
     """Return True when any content block in the result contains search items.
 
-    Inspects every block: a non-empty content list is not sufficient because
-    servers may include metadata TextContent blocks before the actual payload,
-    or return '[]' / empty text in a TextResourceContents.  Binary blocks
-    (ImageContent, BlobResourceContents) cannot represent an empty result set
-    and are treated as non-empty on sight.
+    Inspects every block and unwraps common JSON wrapper shapes so that
+    payloads like {"results": []} are correctly treated as empty even though
+    the outer dict is truthy.  Binary blocks (ImageContent, BlobResourceContents)
+    are treated as non-empty on sight.
     """
     for block in result.content:
         if isinstance(block, TextContent):
             try:
-                if json.loads(block.text):
+                if _payload_has_items(json.loads(block.text)):
                     return True
             except (json.JSONDecodeError, ValueError):
                 if block.text.strip():
                     return True
         elif isinstance(block, EmbeddedResource) and isinstance(block.resource, TextResourceContents):
             try:
-                if json.loads(block.resource.text):
+                if _payload_has_items(json.loads(block.resource.text)):
                     return True
             except (json.JSONDecodeError, ValueError):
                 if block.resource.text.strip():
                     return True
         else:
-            # ImageContent / BlobResourceContents — treat as non-empty
-            return True
+            return True  # ImageContent / BlobResourceContents
     return False
 
 async def retry_empty_results(
