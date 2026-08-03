@@ -41,6 +41,7 @@ Latest: 1.2.10 | Updated: August 3, 2026
 - `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
 - `langgraph.prebuilt.ValidationNode` → use `create_agent` from `langchain.agents` with custom error handling
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
+- `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
 
 ---
 

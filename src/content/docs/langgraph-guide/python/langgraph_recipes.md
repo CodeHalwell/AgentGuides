@@ -3038,7 +3038,7 @@ asyncio.run(main())
 
 ## Recipe 17: `Command.PARENT` — Subgraph Writing to Parent State
 
-When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., graph=Command.PARENT)`. Omit `goto` (or set `goto="publish"` explicitly) to let the parent's defined edges handle routing — setting `goto=END` would terminate the parent immediately and bypass any downstream nodes:
+When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., graph=Command.PARENT)`. Omit `goto` to let the parent's defined edges handle routing — setting `goto=END` would terminate the parent immediately and bypass any downstream nodes. Adding `goto="some_node"` in a `Command.PARENT` schedules that node in the parent alongside any static edges already defined there:
 
 ```python
 from typing import TypedDict
@@ -3062,6 +3062,7 @@ def approve_draft(state: ReviewState) -> Command:
 sub = StateGraph(ReviewState)
 sub.add_node("approve", approve_draft)
 sub.add_edge(START, "approve")
+sub.add_edge("approve", END)   # subgraph must have an explicit exit
 subgraph = sub.compile()
 
 # --- Parent graph ---
