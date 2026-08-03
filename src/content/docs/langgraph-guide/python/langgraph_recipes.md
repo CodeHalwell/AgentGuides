@@ -2737,9 +2737,9 @@ import asyncio
 from typing import Optional
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 @task
 async def web_search(query: str) -> list[str]:
@@ -2754,7 +2754,7 @@ async def summarise(docs: list[str]) -> str:
     return " | ".join(docs)
 
 @entrypoint(checkpointer=checkpointer)
-async def research_workflow(question: str, previous: Optional[dict] = None) -> dict:
+async def research_workflow(question: str, *, previous: Optional[dict] = None) -> dict:
     """
     Full research workflow:
     1. Fan out to web_search (returns SyncAsyncFuture)
@@ -2817,11 +2817,10 @@ Attach policies at the node level (or task level) to get automatic retries, time
 ```python
 import asyncio
 import hashlib
-import json
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import RetryPolicy, TimeoutPolicy, CachePolicy
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
 from langgraph.runtime import get_runtime
 
@@ -2868,14 +2867,14 @@ async def enrich(state: PipelineState) -> dict:
     return {"enriched": state["raw_data"].upper()}
 
 cache = InMemoryCache()
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 builder = StateGraph(PipelineState)
 builder.add_node(
     "fetch",
     fetch_data,
-    retry=fetch_retry,
-    cache=fetch_cache,
+    retry_policy=fetch_retry,
+    cache_policy=fetch_cache,
     timeout=fetch_timeout,
 )
 builder.add_node("enrich", enrich)
@@ -2918,8 +2917,8 @@ class ScoreboardState(TypedDict):
     total_tokens: Annotated[int, operator.add]
     errors: Annotated[int, operator.add]
     tags: Annotated[set[str], lambda a, b: a | b]
-    # Scalar reset-able field — any node can force a new value with Overwrite
-    phase: str
+    # Also a reducing field — concatenates phase labels; Overwrite bypasses the concat
+    phase: Annotated[str, lambda a, b: f"{a}>{b}"]
 
 class WorkerInput(TypedDict):
     task_id: str
@@ -2945,8 +2944,13 @@ def dispatch(state: ScoreboardState):
 
 def finalise(state: ScoreboardState) -> dict:
     print(f"Tokens: {state['total_tokens']}, Errors: {state['errors']}, Tags: {state['tags']}")
-    # Force-set phase bypassing any prior accumulated value
+    # Overwrite bypasses the concat reducer and force-sets phase to "complete"
+    # Without Overwrite, returning "complete" would concat: "running>complete"
     return {"phase": Overwrite("complete")}
+
+# Demonstrate: without Overwrite the reducer would concat phases
+# e.g. returning {"phase": "complete"} → "running>complete"
+# With Overwrite → "complete" (reducer bypassed)
 
 builder = StateGraph(ScoreboardState)
 builder.add_node("worker", run_worker)
@@ -2965,6 +2969,7 @@ result = graph.invoke({
 print(result)
 # Tokens: 2300, Errors: 1, Tags: {'nlp', 'summarise', 'classify', 'search'}
 # {'total_tokens': 2300, 'errors': 1, 'tags': {...}, 'phase': 'complete'}
+# Note: phase is 'complete' (not 'running>complete') because Overwrite bypassed the concat reducer
 ```
 
 ---
@@ -3032,10 +3037,10 @@ asyncio.run(main())
 
 ## Recipe 17: `Command.PARENT` — Subgraph Writing to Parent State
 
-When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., goto=END, graph=Command.PARENT)`:
+When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., graph=Command.PARENT)`. Omit `goto` (or set `goto="publish"` explicitly) to let the parent's defined edges handle routing — setting `goto=END` would terminate the parent immediately and bypass any downstream nodes:
 
 ```python
-from typing import Literal, TypedDict
+from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 
@@ -3044,12 +3049,12 @@ class ReviewState(TypedDict):
     draft: str
     reviewer: str
 
-def approve_draft(state: ReviewState) -> Command[Literal["__end__"]]:
+def approve_draft(state: ReviewState) -> Command:
     cleaned = state["draft"].strip().upper()
-    # Write "approved_content" directly into the PARENT graph's state
+    # Write "approved_content" directly into the PARENT graph's state.
+    # No `goto` here — the parent's "review" → "publish" edge takes over.
     return Command(
         update={"approved_content": cleaned, "reviewer": state["reviewer"]},
-        goto=END,
         graph=Command.PARENT,
     )
 
@@ -3096,4 +3101,5 @@ print(result)
 **When to use `Command.PARENT`:**
 - A subgraph computes something that belongs in the parent's state schema.
 - You want to decouple the subgraph's internal state from what it exposes upward.
+- Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
 - Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.

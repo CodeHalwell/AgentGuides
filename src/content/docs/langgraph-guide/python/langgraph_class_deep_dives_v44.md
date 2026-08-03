@@ -306,41 +306,39 @@ ev2.update(["value-a", "value-b"])
 print(ev2.get())    # 'value-b'
 ```
 
-### Example 3 — using `EphemeralValue` as a one-shot signal between nodes
+### Example 3 — `EphemeralValue` checkpoint round-trip and restore
+
+`EphemeralValue` participates in checkpointing via `checkpoint()` / `from_checkpoint()`, but is designed to hold a value for one super-step only. This example exercises the checkpoint/restore cycle directly and shows that a restored value persists until the *next* `update([])` clear:
 
 ```python
-from typing import TypedDict, Optional, Annotated
-from langgraph.graph import StateGraph, START, END
+from langgraph.channels.ephemeral_value import EphemeralValue
 
-# Pattern: a transient "trigger" key that only exists in the step it's written
-class State(TypedDict):
-    data: str
-    error_message: Optional[str]    # ephemeral-like: only set on error path
+ev = EphemeralValue(str, guard=True)
 
-def process(state: State) -> dict:
-    if "bad" in state["data"]:
-        return {"error_message": "Invalid input detected"}
-    return {"error_message": None, "data": state["data"].upper()}
+# Write a value (simulates a node writing to this channel in step N)
+ev.update(["signal-from-node-A"])
+print(ev.get())            # 'signal-from-node-A'
+print(ev.is_available())   # True
 
-def handle_error(state: State) -> dict:
-    print(f"Error handler received: {state['error_message']}")
-    return {"data": "RECOVERED", "error_message": None}
+# Checkpoint the value (e.g. before saving to a checkpointer)
+saved = ev.checkpoint()
+print("Checkpointed:", saved)   # 'signal-from-node-A'
 
-def route(state: State) -> str:
-    return "handle_error" if state.get("error_message") else END
+# Restore from checkpoint into a fresh instance (simulates loading state)
+ev2 = EphemeralValue(str, guard=True)
+ev2_loaded = ev2.from_checkpoint(saved)
+print(ev2_loaded.get())    # 'signal-from-node-A' — value restored
 
-builder = StateGraph(State)
-builder.add_node("process", process)
-builder.add_node("handle_error", handle_error)
-builder.add_edge(START, "process")
-builder.add_conditional_edges("process", route)
-builder.add_edge("handle_error", END)
+# Simulate next super-step starting: Pregel calls update([]) to auto-clear
+ev2_loaded.update([])
+print(ev2_loaded.is_available())  # False — cleared, as expected for ephemeral data
 
-graph = builder.compile()
-print(graph.invoke({"data": "bad input", "error_message": None}))
-# Error handler received: Invalid input detected
-# {'data': 'RECOVERED', 'error_message': None}
+# The original instance is also cleared after its own next step
+ev.update([])
+print(ev.is_available())   # False
 ```
+
+**Design note:** `EphemeralValue` is most useful in the low-level Pregel/functional API — e.g. the `START` channel is an `EphemeralValue(input_type)`. In a `StateGraph`, the equivalent pattern is returning a value that gets routed to a conditional edge and then explicitly reset; the channel itself doesn't auto-clear between StateGraph invocations unless wired as `EphemeralValue` at the Pregel level.
 
 ---
 
@@ -459,9 +457,9 @@ graph.invoke({"done_nodes": set(), "results": []})
 ```python
 from typing import Optional
 from langgraph.func import entrypoint, task
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 @task
 def fetch_data(query: str) -> str:
@@ -489,9 +487,9 @@ print(second)  # "Cached: data for 'langgraph'"
 ```python
 from typing import Any
 from langgraph.func import entrypoint
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 @entrypoint(checkpointer=checkpointer)
 def counter(increment: int, *, previous: Any = None) -> entrypoint.final[str, int]:
@@ -510,9 +508,9 @@ print(counter.invoke(2, config))   # "Counter is now 10"
 ```python
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 @task
 def draft_email(topic: str) -> str:
@@ -564,14 +562,14 @@ for event in email_workflow.stream(Command(resume=True), config):
 
 ```python
 from langgraph.func import entrypoint, task
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 @task
 def score_document(doc: str) -> float:
     # Simulate scoring — runs in parallel via future
     return float(len(doc)) / 100
 
-@entrypoint(checkpointer=MemorySaver())
+@entrypoint(checkpointer=InMemorySaver())
 def rank_docs(docs: list[str]) -> list[tuple[str, float]]:
     futures = [score_document(d) for d in docs]
     scores  = [f.result() for f in futures]
@@ -589,14 +587,14 @@ for doc, score in result:
 ```python
 import asyncio
 from langgraph.func import entrypoint, task
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 @task
 async def async_fetch(url: str) -> str:
     await asyncio.sleep(0.01)   # simulate I/O
     return f"content from {url}"
 
-@entrypoint(checkpointer=MemorySaver())
+@entrypoint(checkpointer=InMemorySaver())
 async def crawl(urls: list[str]) -> list[str]:
     futures = [async_fetch(u) for u in urls]
     results = await asyncio.gather(*futures)   # SyncAsyncFuture supports __await__
@@ -617,7 +615,7 @@ asyncio.run(main())
 import random
 from langgraph.func import entrypoint, task
 from langgraph.types import RetryPolicy
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 attempt_counts: dict[str, int] = {}
 
@@ -631,7 +629,7 @@ def call_flaky_api(endpoint: str) -> str:
         raise ConnectionError(f"Timeout on {endpoint}")
     return f"Success from {endpoint}"
 
-@entrypoint(checkpointer=MemorySaver())
+@entrypoint(checkpointer=InMemorySaver())
 def resilient_workflow(endpoints: list[str]) -> list[str]:
     futures = [call_flaky_api(ep) for ep in endpoints]
     return [f.result() for f in futures]
@@ -655,11 +653,11 @@ print("Attempts:", attempt_counts)
 **Key source facts (`langgraph/types.py`):**
 
 - `RetryPolicy` is a `NamedTuple`. Backoff formula: `min(max_interval, initial_interval * backoff_factor ** (attempt - 1))`. With `jitter=True` a uniform random factor is applied.
-- Default `retry_on` = `default_retry_on`: retries any `Exception` except `GraphBubbleUp` subclasses (which include `GraphInterrupt`).
+- Default `retry_on` = `default_retry_on` (from `langgraph._internal._retry`): retries `ConnectionError`, HTTP 5xx (`httpx.HTTPStatusError` / `requests.HTTPError`), and any other exception **not** in the explicit blocklist (`ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, `StopAsyncIteration`, `OSError`). Use a custom callable when you need different semantics.
 - `TimeoutPolicy` is a frozen dataclass with `run_timeout: float | None`, `idle_timeout: float | None`, `refresh_on: Literal["auto", "heartbeat"]`.
 - `run_timeout`: hard wall-clock cap, **never** refreshed. If exceeded, `NodeTimeoutError` is raised.
 - `idle_timeout`: refreshed on each graph progress signal (with `"auto"`) or only on `runtime.heartbeat()` (with `"heartbeat"`).
-- Pass `retry_policy` and `timeout` to `StateGraph.add_node(node, retry=..., ...)` or to `@entrypoint(retry_policy=..., timeout=...)`.
+- Pass `retry_policy=` and `timeout=` to `StateGraph.add_node(node, retry_policy=..., timeout=...)` or to `@entrypoint(retry_policy=..., timeout=...)`. Note: `retry=` is a deprecated alias for `retry_policy=`.
 
 ### Example 1 — `RetryPolicy` on a `StateGraph` node
 
@@ -688,7 +686,7 @@ policy = RetryPolicy(
 )
 
 builder = StateGraph(State)
-builder.add_node("work", unreliable_node, retry=policy)
+builder.add_node("work", unreliable_node, retry_policy=policy)
 builder.add_edge(START, "work")
 builder.add_edge("work", END)
 
@@ -732,7 +730,7 @@ policy = RetryPolicy(
 )
 
 builder = StateGraph(State)
-builder.add_node("risky", risky_node, retry=policy)
+builder.add_node("risky", risky_node, retry_policy=policy)
 builder.add_edge(START, "risky")
 builder.add_edge("risky", END)
 
@@ -794,7 +792,7 @@ asyncio.run(run())
 - `default_cache_key` uses `pickle` hashing of the input — works for most serialisable types.
 - Provide a custom `key_func` that receives the same positional and keyword arguments as the node function and must return `str | bytes`.
 - `ttl=None` means the cache entry never expires; `ttl=60` expires after 60 seconds.
-- Attach to a node: `builder.add_node("n", fn, cache=CachePolicy())`.
+- Attach to a node: `builder.add_node("n", fn, cache_policy=CachePolicy())`.
 - Attach to a task: `@task(cache_policy=CachePolicy(ttl=120))`.
 - Clear per-task cache: `my_task.clear_cache(cache_instance)` (async: `await my_task.aclear_cache(...)`).
 
@@ -804,7 +802,7 @@ asyncio.run(run())
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import CachePolicy
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
 
 invocation_count = 0
@@ -822,11 +820,11 @@ def expensive_search(state: State) -> dict:
 cache = InMemoryCache()
 
 builder = StateGraph(State)
-builder.add_node("search", expensive_search, cache=CachePolicy())
+builder.add_node("search", expensive_search, cache_policy=CachePolicy())
 builder.add_edge(START, "search")
 builder.add_edge("search", END)
 
-graph = builder.compile(checkpointer=MemorySaver(), cache=cache)
+graph = builder.compile(checkpointer=InMemorySaver(), cache=cache)
 
 cfg1 = {"configurable": {"thread_id": "t1"}}
 cfg2 = {"configurable": {"thread_id": "t2"}}
@@ -870,7 +868,7 @@ print(query_only_key(s1) == query_only_key(s2))   # True — same key
 import time
 from langgraph.func import entrypoint, task
 from langgraph.types import CachePolicy
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
 
 cache = InMemoryCache()
@@ -881,7 +879,7 @@ def fetch_price(symbol: str) -> float:
     call_log.append(symbol)
     return 42.0 if symbol == "BTC" else 1.0
 
-@entrypoint(checkpointer=MemorySaver(), cache=cache)
+@entrypoint(checkpointer=InMemorySaver(), cache=cache)
 def price_workflow(symbols: list[str]) -> dict:
     futures = {s: fetch_price(s) for s in symbols}
     return {s: f.result() for s, f in futures.items()}
@@ -1138,9 +1136,9 @@ print(result)
 ```python
 from langgraph.func import entrypoint
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 @entrypoint(checkpointer=checkpointer)
 def approval_workflow(request: str) -> dict:
