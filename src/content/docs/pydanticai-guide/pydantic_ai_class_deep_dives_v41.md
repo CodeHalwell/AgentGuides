@@ -233,7 +233,7 @@ async def hide_thinking(
     ctx: RunContext,
     stream: AsyncIterable[AgentStreamEvent],
 ) -> AsyncIterator[AgentStreamEvent]:
-    skip_part_id: str | None = None
+    skip_part_id: int | None = None
     async for event in stream:
         if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
             skip_part_id = event.index
@@ -473,10 +473,10 @@ def list_tables() -> list:
 
 ```python
 # Example 1 — ApprovalRequiredToolset: require approval for destructive operations
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
-from pydantic_ai.tools import ToolDefinition, RunContext
+from pydantic_ai.tools import ToolDefinition
 
 def needs_approval(ctx: RunContext, tool_def: ToolDefinition, args: dict) -> bool:
     return tool_def.name in {'delete_record', 'drop_table'}
@@ -493,16 +493,17 @@ dangerous_toolset = ApprovalRequiredToolset(
 )
 
 agent = Agent('openai:gpt-5', toolsets=[dangerous_toolset])
-# list_records runs freely; delete_record raises ApprovalRequired until
-# the caller sets ctx.tool_call_approved = True.
+# list_records runs freely; delete_record raises ApprovalRequired.
+# To approve: first run returns DeferredToolRequests; build_results(approve_all=True)
+# produces ToolApproved results; second run with deferred_tool_results= proceeds.
 ```
 
 ```python
 # Example 2 — FilteredToolset: expose only read-only tools to the model
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
-from pydantic_ai.tools import ToolDefinition, RunContext
+from pydantic_ai.tools import ToolDefinition
 
 READ_ONLY = {'get_user', 'list_orders', 'search_products'}
 
