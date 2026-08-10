@@ -798,6 +798,7 @@ toolset = SpannerToolset(
 
 ```python
 from google.adk.tools.spanner import SpannerToolset
+from google.adk.tools.spanner.settings import SpannerToolSettings
 
 # Expose only the schema-introspection tools, hide data-read tools.
 toolset = SpannerToolset(
@@ -903,7 +904,9 @@ wf = Workflow(
 ### Example 3 — conditional routing
 
 ```python
+from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow
+from google.adk.workflow._function_node import FunctionNode
 
 classify = FunctionNode(name="classify", func=classify_intent)
 handle_faq  = LlmAgent(name="faq",  model="gemini-2.5-flash",
@@ -1080,12 +1083,13 @@ import asyncio
 from google.adk.sessions import InMemorySessionService
 from google.adk.utils.cache_performance_analyzer import CachePerformanceAnalyzer
 
-session_service = InMemorySessionService()
-analyzer = CachePerformanceAnalyzer(session_service)
-
-async def report():
+# Call this after the session has been populated by actual Runner turns.
+# The analyzer reads event history from the session service; an empty or
+# non-existent session yields no data.
+async def report(session_service: InMemorySessionService, session_id: str):
+    analyzer = CachePerformanceAnalyzer(session_service)
     stats = await analyzer.analyze_agent_cache_performance(
-        session_id="session-123",
+        session_id=session_id,
         user_id="user-456",
         app_name="finance_app",
         agent_name="analyst",
@@ -1098,7 +1102,10 @@ async def report():
         print(f"Avg cached tokens: {stats['avg_cached_tokens_per_request']:.0f}")
         print(f"Cache refreshes:   {stats['cache_refreshes']}")
 
-asyncio.run(report())
+# Typical integration: run your agent through a Runner, then inspect the session:
+#   session = await session_service.create_session(app_name="finance_app", user_id="user-456")
+#   async for event in runner.run_async(..., session_id=session.id): ...
+#   await report(session_service, session.id)
 ```
 
 ### Example 2 — tune cache_intervals based on analysis
@@ -1117,10 +1124,21 @@ async def auto_tune_cache_config(
     if stats["status"] == "no_cache_data":
         return ContextCacheConfig()   # use defaults
 
-    # If each cache is only used once on average, reduce cache_intervals
-    # so stale caches are evicted faster.
+    # Only increase cache_intervals when the cache is provably well-used.
+    # Reducing intervals when avg_invocations_used is low amplifies churn
+    # (low reuse usually means short sessions or TTL expiry, not stale content).
     avg_use = stats["avg_invocations_used"]
-    intervals = max(1, min(50, int(avg_use * 1.5)))
+    hit_ratio = stats["cache_hit_ratio_percent"]
+
+    if hit_ratio >= 60 and avg_use >= 3:
+        # Cache is performing well and being reused across multiple turns —
+        # extend intervals to reduce unnecessary refreshes.
+        intervals = min(50, int(avg_use * 2))
+    else:
+        # Poor hit ratio or low reuse: keep the default (10) so we don't
+        # lock in stale cached content for longer than needed.
+        intervals = 10
+
     return ContextCacheConfig(cache_intervals=intervals, ttl_seconds=1800)
 ```
 
