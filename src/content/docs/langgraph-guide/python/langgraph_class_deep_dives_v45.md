@@ -178,8 +178,14 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 
 def event_reducer(state: list[str], writes: list[str]) -> list[str]:
-    """Batching-invariant: order is preserved across batches."""
-    return state + writes
+    """Batching-invariant: each write may be a list of events — flatten all."""
+    result = list(state)
+    for w in writes:
+        if isinstance(w, list):
+            result.extend(w)  # node returned a list; unpack into the log
+        else:
+            result.append(w)
+    return result
 
 class LogState(TypedDict):
     events: Annotated[list[str], DeltaChannel(event_reducer)]
@@ -492,8 +498,9 @@ async def main():
         print(f"[{key}] {chunk}")
 
 asyncio.run(main())
-# [messages] ChatModelStream(...)
 # [values] {'messages': [HumanMessage('Hi'), AIMessage('Hello from the graph!')]}
+# Note: [messages] ChatModelStream events only appear when a real chat model is invoked;
+# a plain AIMessage state update produces values snapshots, not streaming token events.
 ```
 
 ### Example 3 — opt-in `updates` projection + detecting interrupts
@@ -520,20 +527,24 @@ builder.add_edge("check", END)
 graph = builder.compile(checkpointer=InMemorySaver())
 config = {"configurable": {"thread_id": "v3-t1"}}
 
-run = graph.stream_events({"data": "payload", "approved": False}, config, version="v3")
+from langgraph.stream._types import StreamTransformer
 
-# Iterate updates projection — available via extensions for opt-in projections
-updates_stream = run.extensions.get("updates")
+run = graph.stream_events({"data": "payload", "approved": False}, config, version="v3")
 
 # Drive via values; check interrupted state after exhaustion
 for val in run.values:
     print("snapshot:", val)
 
+# run.interrupted and run.interrupts are available on GraphRunStream after iteration
 if run.interrupted:
     print("Graph paused at interrupt!")
     print("Interrupt details:", run.interrupts)
 # Graph paused at interrupt!
 # Interrupt details: [Interrupt(value='Approve?', id='...')]
+
+# Opt-in projections (updates, checkpoints, debug) require explicit transformer registration
+# at run construction time via the transformers= parameter; omitting them means
+# run.extensions will not contain those keys.
 ```
 
 ---
@@ -997,11 +1008,12 @@ class BudgetState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     tokens_used: int
     budget: int
+    remaining_steps: int  # required field injected by create_react_agent
 
 def enforce_budget(state: BudgetState) -> dict | Command:
     """Post-hook: stop the agent if token budget is exceeded."""
     last_msg = state["messages"][-1]
-    # Approximate: count words * 1.3 as token estimate
+    # Approximate: count characters * 0.33 as token estimate
     used = int(len(str(getattr(last_msg, "content", ""))) * 0.33)
     total = state["tokens_used"] + used
     if total >= state["budget"]:
@@ -1009,9 +1021,11 @@ def enforce_budget(state: BudgetState) -> dict | Command:
         return Command(goto="__end__", update={"tokens_used": total})
     return {"tokens_used": total}
 
+# Pass state_schema= so create_react_agent knows about the extra fields:
 # agent = create_react_agent(
 #     model=model,
 #     tools=tools,
+#     state_schema=BudgetState,
 #     post_model_hook=enforce_budget,
 #     version="v2",
 # )
@@ -1081,7 +1095,7 @@ except ImportError:
     pass
 
 try:
-    from langgraph_checkpoint_redis import RedisCache
+    from langgraph.cache.redis import RedisCache
     backends.append("RedisCache (production, TTL via Redis EXPIRE)")
 except ImportError:
     pass
