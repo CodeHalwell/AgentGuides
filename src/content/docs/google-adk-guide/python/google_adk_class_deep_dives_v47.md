@@ -324,6 +324,7 @@ class RunConfig(BaseModel):
 ### Example 1 — SSE streaming with budget cap
 
 ```python
+from google.genai import types
 from google.adk.agents.run_config import RunConfig, StreamingMode
 
 run_config = RunConfig(
@@ -605,6 +606,7 @@ def publish_message(
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.tools.pubsub import PubSubToolset
+from google.adk.tools.pubsub.config import PubSubToolConfig
 from google.adk.features import temporary_feature_override, FeatureName
 
 with temporary_feature_override(FeatureName.PUBSUB_TOOLSET, True):
@@ -627,6 +629,7 @@ with temporary_feature_override(FeatureName.PUBSUB_TOOLSET, True):
 
 ```python
 from google.adk.tools.pubsub import PubSubToolset
+from google.adk.tools.pubsub.config import PubSubToolConfig
 
 toolset = PubSubToolset(
     tool_filter=["publish_message"],  # only expose publish; hide pull/ack
@@ -637,6 +640,10 @@ toolset = PubSubToolset(
 ### Example 3 — ordered messaging agent
 
 ```python
+from google.adk.agents import LlmAgent
+from google.adk.tools.pubsub import PubSubToolset
+from google.adk.tools.pubsub.config import PubSubToolConfig
+
 # The model can call publish_message with an ordering_key to guarantee
 # in-order delivery within the same key on an ordering-enabled publisher.
 
@@ -780,7 +787,7 @@ toolset = SpannerToolset(
 
 ### Why it matters
 
-`Workflow` is an `BaseNode` subclass that replaces `SequentialAgent` and
+`Workflow` is a `BaseNode` subclass that replaces `SequentialAgent` and
 `ParallelAgent` for complex, branching pipelines. You declare edges
 (using `parse_edge_items` chain syntax covered in vol. 45) and the
 workflow engine fans them out to parallel `NodeRunner` tasks, handles
@@ -874,13 +881,13 @@ from google.adk.workflow import Workflow
 classify = FunctionNode(name="classify", func=classify_intent)
 handle_faq  = LlmAgent(name="faq",  model="gemini-2.5-flash",
                         instruction="Answer FAQ questions.")
-handle_escl = LlmAgent(name="escalate", model="gemini-2.5-pro",
-                        instruction="Handle complex escalations.")
+handle_escalate = LlmAgent(name="escalate", model="gemini-2.5-pro",
+                           instruction="Handle complex escalations.")
 
 wf = Workflow(
     name="router",
     edges=[
-        (classify, {"faq": handle_faq, "escalate": handle_escl}),
+        (classify, {"faq": handle_faq, "escalate": handle_escalate}),
     ],
 )
 ```
