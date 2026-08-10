@@ -106,11 +106,13 @@ print(final)
 
 ```python
 import asyncio
-from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.errors import GraphInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt, Command
+
+checkpointer = InMemorySaver()
 
 @task
 async def approve_item(item: str) -> str:
@@ -118,19 +120,32 @@ async def approve_item(item: str) -> str:
     decision = interrupt(f"Approve '{item}'?")
     return f"{item}: {decision}"
 
-@entrypoint(checkpointer=InMemorySaver())
+@entrypoint(checkpointer=checkpointer)
 async def workflow(items: list[str]) -> list[str]:
     futures = [approve_item(item) for item in items]
-    return await asyncio.gather(*futures)
+    # SyncAsyncFuture objects must be awaited individually — asyncio.gather() is not compatible
+    return [await f for f in futures]
 
 config = {"configurable": {"thread_id": "t3"}}
 
 async def run():
-    # All tasks pause simultaneously
-    await workflow.ainvoke(["report", "email"], config)
+    # First call: all tasks pause simultaneously and raise GraphInterrupt
+    try:
+        await workflow.ainvoke(["report", "email"], config)
+    except GraphInterrupt:
+        pass  # expected — both approve_item tasks are paused
 
-    # Resume both by providing a list — one resume value per task (in order)
-    result = await workflow.ainvoke(Command(resume=["yes", "no"]), config)
+    # Inspect the saved state to find each task's unique interrupt ID
+    state = workflow.get_state(config)
+    all_interrupts = [iv for t in state.tasks for iv in t.interrupts]
+    # Build {interrupt_id: resume_value} — one entry per parallel task
+    resume_map = {
+        iv.id: ("yes" if "report" in str(iv.value) else "no")
+        for iv in all_interrupts
+    }
+
+    # Resume: each task gets its own answer via the ID-keyed mapping
+    result = await workflow.ainvoke(Command(resume=resume_map), config)
     print(result)
     # ['report: yes', 'email: no']
 
@@ -467,7 +482,8 @@ builder.add_edge("respond", END)
 graph = builder.compile()
 
 async def main():
-    run = graph.stream_events(
+    # Use astream_events to get an AsyncGraphRunStream — required for async for
+    run = await graph.astream_events(
         {"messages": [HumanMessage("Hi")]},
         version="v3",
     )
@@ -619,8 +635,9 @@ def low_path(state: RouteState) -> dict:
     StateGraph(RouteState)
     .add_node("high_path", high_path)
     .add_node("low_path", low_path)
-    .add_edge(START, "normalize")
+    # add_sequence registers normalize + score as nodes first, then add_edge wires START in
     .add_sequence([normalize, score])
+    .add_edge(START, "normalize")
     .add_conditional_edges("score", route, {"high": "high_path", "low": "low_path"})
     .add_edge("high_path", END)
     .add_edge("low_path", END)
@@ -799,9 +816,12 @@ except GraphRecursionError as e:
     print(f"Caught: {type(e).__name__}: {e}")
     # Caught: GraphRecursionError: Recursion limit of 5 reached ...
 
-# Raise the limit for deep-but-finite graphs
-result = graph.invoke({"count": 0}, config={"recursion_limit": 3})
-print(result)  # {'count': 3}  (runs 3 steps then hits limit again — for demo)
+# This graph loops forever — a higher limit still hits the ceiling
+try:
+    graph.invoke({"count": 0}, config={"recursion_limit": 3})
+except GraphRecursionError as e:
+    print(f"Still raises at lower limit: {type(e).__name__}")
+    # Still raises at lower limit: GraphRecursionError
 ```
 
 ### Example 2 — `InvalidUpdateError` from concurrent channel writes
@@ -911,11 +931,12 @@ try:
         return "12:00 UTC"
 
     def inject_role_prompt(state: AgentState) -> dict:
-        """Pre-hook: prepend a role-specific system message."""
+        """Pre-hook: prepend a role-specific system message for this LLM call only."""
         role = state.get("user_role", "user")
         sys_msg = SystemMessage(f"You are an assistant for a {role}. Be concise.")
-        # Return updated messages; this replaces what the model receives
-        return {"messages": [sys_msg] + state["messages"]}
+        # Use llm_input_messages — passed directly to the model without going through
+        # the add_messages reducer, so it does NOT accumulate in persistent state.
+        return {"llm_input_messages": [sys_msg] + state["messages"]}
 
     # agent = create_react_agent(
     #     model="anthropic:claude-3-5-haiku-20241022",
@@ -948,7 +969,9 @@ def trim_to_window(state: TrimState) -> dict:
         system = [m for m in msgs if m.type == "system"]
         rest = [m for m in msgs if m.type != "system"]
         trimmed = system + rest[-9:]
-        return {"messages": trimmed}
+        # Use llm_input_messages to pass a trimmed view to the model this call only,
+        # avoiding accumulation via the add_messages reducer on the messages field.
+        return {"llm_input_messages": trimmed}
     return {}
 
 # Usage pattern (no live model needed to illustrate):
@@ -1026,20 +1049,21 @@ except ImportError:
     cache_available = False
 
 if cache_available:
+    # Create the cache first — it must be wired at construction time via @entrypoint(cache=)
+    cache = InMemoryCache()
+
     @task(cache_policy=CachePolicy(ttl=60))
     def slow_fetch(url: str) -> str:
         """Simulated slow fetch — result cached for 60 s."""
         time.sleep(0.01)
         return f"data_from_{url}"
 
-    @entrypoint()
+    @entrypoint(cache=cache)
     def pipeline(urls: list[str]) -> list[str]:
         return [slow_fetch(u).result() for u in urls]
 
-    cache = InMemoryCache()
-    graph = pipeline  # entrypoint already compiled
-    # To pass cache at compile time for StateGraph:
-    # graph = builder.compile(cache=cache)
+    graph = pipeline
+    # For StateGraph: graph = builder.compile(cache=cache)
     print("InMemoryCache wired; repeated calls to slow_fetch with same url return cached result")
 else:
     print("langgraph.cache not available in this build; use langgraph-checkpoint-redis for RedisCache")
@@ -1114,8 +1138,8 @@ Beyond the basic `add_node(name, fn)` call, three parameters extend node behavio
 **Key source facts (`langgraph/graph/state.py`):**
 
 - `error_handler: StateNode | None` — a callable that receives the full state **plus** a `NodeError` dataclass injected as an extra keyword argument. If the main node raises, the error-handler node is run in its place; its output is written to the checkpoint. The error-handler itself is added as a special node with `is_error_handler=True` in `StateNodeSpec`, so it does not itself accept a nested `error_handler`.
-- `destinations: dict[str, str] | tuple[str, ...] | None` — documents the node's possible routing targets for graph rendering (Mermaid / ASCII). Values are target node names; dict keys are the labels shown on edges. This has **no effect on runtime routing** — it only improves topology visualization when nodes return `Command` objects instead of using explicit edges.
-- `defer: bool = False` — marks the node as deferred. Deferred nodes are scheduled at the very end of the current super-step, after all non-deferred nodes have finished. Useful for cleanup, aggregation, or summary nodes that should see the final state of the step.
+- `destinations: dict[str, str] | tuple[str, ...] | None` — documents the node's possible routing targets for graph rendering (Mermaid / ASCII). Dict **keys are target node names**; values are the labels shown on edges. This has **no effect on runtime routing** — it only improves topology visualization when nodes return `Command` objects instead of using explicit edges.
+- `defer: bool = False` — marks the node as deferred. Deferred nodes run when **all non-deferred graph work has drained** across the entire graph — not merely at the end of the current super-step. Useful for cleanup, aggregation, or summary nodes that must see the final state after all parallel branches complete.
 - All three can be combined: `add_node("cleanup", fn, defer=True, error_handler=recover)`.
 
 ### Example 1 — `error_handler` for graceful recovery
