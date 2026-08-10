@@ -98,7 +98,7 @@ No urgent action required — nothing is broken and no PR shows a real text conf
 3. **PydanticAI**: `#313` then `#318`.
 4. **Microsoft Agent Framework**: `#314` then `#319`.
 5. **`#315`** (prior review) can be merged or closed independently, whenever convenient — it has been open since 2026-08-03 with no conflicts and touches no shared files.
-6. Merging a stacked PR (`#316`/`#317`/`#318`/`#319`) **before** its root will not corrupt anything, but GitHub will need to auto-retarget its base once the root merges — merging in root-then-stack order avoids any manual retargeting.
+6. Merging a stacked PR (`#316`/`#317`/`#318`/`#319`) **before** its root is safe but pointless as a shortcut: since its base is the root's branch (not `main`), merging it lands its commits on the root's branch and closes the child PR — the root PR then carries both volumes, and there is no longer a stacked PR left to retarget once the root merges to `main`. Auto-retargeting only comes into play in the opposite order: if the **root** merges first and its branch is deleted, GitHub will retarget the still-open child PR's base to `main` automatically. Either order is safe; root-then-stack is simply the more natural sequence.
 
 ---
 
