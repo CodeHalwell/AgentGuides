@@ -916,7 +916,7 @@ print(result["result"])
 - `pre_model_hook(state) -> dict | None` runs before every LLM call. Return `{"messages": [...]}` to replace/trim the message list the model sees. Return `None` or `{}` to pass through unchanged.
 - `post_model_hook(state) -> dict | None` runs after every LLM call. Receives state including the fresh AI message appended. Useful for token-budget enforcement, logging, or appending metadata.
 - Both `version="v1"` and `version="v2"` support pre/post hooks. The version switch controls tool-call dispatch: `v1` routes all tool calls to a single batched `ToolNode`; `v2` distributes each tool call as an individual `Send` task. `v2` is the default since 1.0.
-- `response_format: StructuredResponseSchema | tuple[str, StructuredResponseSchema]` attaches a structured output schema to the final turn. The agent will call a dummy tool that captures the structured result in `state["structured_response"]`.
+- `response_format: StructuredResponseSchema | tuple[str, StructuredResponseSchema]` adds a `generate_structured_response` node that makes a **separate** model call via `with_structured_output()` after the agent loop completes. The result is stored in `state["structured_response"]`. Note the extra model call's latency and cost.
 - `prompt: str | SystemMessage | Callable` prepends a system message or dynamically constructs the prompt on each LLM call.
 
 ### Example 1 — `pre_model_hook` to inject a system prompt dynamically
@@ -927,13 +927,15 @@ from typing_extensions import TypedDict
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
+from langgraph.managed.is_last_step import RemainingSteps
 
 try:
     from langgraph.prebuilt import create_react_agent
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
-        user_role: str  # injected at invocation time
+        user_role: str  # custom field — must pass state_schema=AgentState to create_react_agent
+        remaining_steps: RemainingSteps  # managed value required by the prebuilt executor
 
     @tool
     def get_time() -> str:
@@ -948,9 +950,11 @@ try:
         # the add_messages reducer, so it does NOT accumulate in persistent state.
         return {"llm_input_messages": [sys_msg] + state["messages"]}
 
+    # state_schema= is required so create_react_agent exposes user_role to the hook
     # agent = create_react_agent(
     #     model="anthropic:claude-3-5-haiku-20241022",
     #     tools=[get_time],
+    #     state_schema=AgentState,
     #     pre_model_hook=inject_role_prompt,
     #     version="v2",
     # )
