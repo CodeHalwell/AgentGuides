@@ -1067,7 +1067,7 @@ Key methods:
 | Method | Description |
 |---|---|
 | `await ctx.request_info(request_data, *, response_type)` | Pause the workflow and request a human response. Raises `WorkflowInterrupted`. |
-| `ctx.add_event(event_type, data)` | Emit a custom event into the run stream. |
+| `await ctx.add_event(WorkflowEvent(type=..., data=...))` | Emit a custom event into the run stream. |
 | `ctx.get_state(key, default=None)` | Read workflow-scoped key/value state (survives checkpoints). |
 | `ctx.set_state(key, value)` | Write workflow-scoped state. |
 
@@ -1158,16 +1158,16 @@ async def approval_workflow(requirements: str, ctx: RunContext) -> str:
     return await draft_proposal(f"{requirements}\n\nFeedback: {approval}")
 
 async def main():
-    # First run — workflow pauses at request_info
+    # First run — workflow pauses at request_info and auto-saves a checkpoint
     result = await approval_workflow.run("Build a new feature")
-    # result contains the interrupt signal; extract checkpoint_id
-    checkpoint_id = result.checkpoint_id
 
-    # Resume with human response keyed by the request_id set above
+    # Retrieve the checkpoint saved by the interrupted run
+    cp = await storage.get_latest(workflow_name="approval_workflow")
+
+    # Resume: message is mutually exclusive with checkpoint_id, so omit it
     result = await approval_workflow.run(
-        "Build a new feature",
-        checkpoint_id=checkpoint_id,
-        responses={"approval": "Approved!"},
+        checkpoint_id=cp.checkpoint_id,
+        responses={"approval": "Approved!"},  # keyed by the request_id set above
     )
     print(result.get_outputs())
 
