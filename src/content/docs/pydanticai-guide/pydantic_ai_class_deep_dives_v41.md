@@ -227,7 +227,7 @@ import asyncio
 from collections.abc import AsyncIterable, AsyncIterator
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessEventStream
-from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPartDelta
+from pydantic_ai.messages import AgentStreamEvent, PartStartEvent, ThinkingPart, ThinkingPartDelta
 
 async def hide_thinking(
     ctx: RunContext,
@@ -235,7 +235,7 @@ async def hide_thinking(
 ) -> AsyncIterator[AgentStreamEvent]:
     skip_part_id: str | None = None
     async for event in stream:
-        if isinstance(event, PartStartEvent) and hasattr(event.part, 'thinking'):
+        if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
             skip_part_id = event.index
             continue  # drop the PartStartEvent for thinking parts
         if skip_part_id is not None and hasattr(event, 'index') and event.index == skip_part_id:
@@ -654,11 +654,12 @@ agent = Agent('openai:gpt-5', toolsets=[safe_toolset])
 # Model sees: retrieve_remote and retrieve_local
 # Underlying functions: fetch_data and load_data — ctx.tool_name reflects original names.
 
-# Attempting to rename two tools to the SAME new name raises UserError at get_tools time:
+# Attempting to rename a tool to a name already held by another tool raises UserError:
 # conflicting_toolset = RenamedToolset(
 #     FunctionToolset([fetch_data, load_data]),
-#     name_map={'same_name': 'fetch_data', 'same_name': 'load_data'},  # collision!
+#     name_map={'load_data': 'fetch_data'},  # renames fetch_data → load_data, but load_data exists!
 # )
+# → UserError: "Renaming tool 'fetch_data' to 'load_data' conflicts with existing tool."
 ```
 
 ---
@@ -782,7 +783,7 @@ sonnet6_overrides: ModelProfile = {
     'tool_deferral_mode': 'standalone',
 }
 
-effective_profile = merge_profile(DEFAULT_PROFILE, anthropic_base, sonnet6_overrides)
+effective_profile = merge_profile(merge_profile(DEFAULT_PROFILE, anthropic_base), sonnet6_overrides)
 print(effective_profile['supports_json_schema_output'])  # True  (override wins)
 print(effective_profile['tool_addition_mode'])            # 'by_reference'
 print(effective_profile['tool_deferral_mode'])            # 'standalone'
