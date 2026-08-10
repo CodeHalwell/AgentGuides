@@ -108,7 +108,6 @@ print(final)
 import asyncio
 from typing_extensions import TypedDict
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.errors import GraphInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt, Command
 
@@ -129,11 +128,9 @@ async def workflow(items: list[str]) -> list[str]:
 config = {"configurable": {"thread_id": "t3"}}
 
 async def run():
-    # First call: all tasks pause simultaneously and raise GraphInterrupt
-    try:
-        await workflow.ainvoke(["report", "email"], config)
-    except GraphInterrupt:
-        pass  # expected — both approve_item tasks are paused
+    # First call: LangGraph consumes the interrupt internally and saves checkpoint;
+    # ainvoke returns normally — do not expect GraphInterrupt to reach the caller.
+    await workflow.ainvoke(["report", "email"], config)
 
     # Inspect the saved state to find each task's unique interrupt ID
     state = workflow.get_state(config)
@@ -764,10 +761,12 @@ sub.add_edge(START, "lookup")
 sub.add_edge("lookup", END)
 sub_graph = sub.compile()
 
-# Expose sub-graph as a tool
+# Expose sub-graph as a tool; use arg_types to expose only the input key,
+# not the output 'value' field (which is part of graph state, not tool input)
 lookup_tool = sub_graph.as_tool(
     name="lookup_role",
     description="Look up a person's role by name.",
+    arg_types={"key": str},
 )
 
 # Parent graph that uses the sub-graph tool
@@ -798,7 +797,7 @@ LangGraph surfaces execution failures through a typed error hierarchy. Understan
 - `GraphRecursionError` is a `RecursionError` subclass. The `recursion_limit` is set via `config["recursion_limit"]` (default 25). Increase it or add a truncation node using `RemainingSteps`.
 - `EmptyInputError` is raised on the first invocation when the graph receives no state and no initial value can be inferred.
 - `NodeError` is a frozen `@dataclass` with `node: str` and `error: BaseException` fields, injected into error-handler nodes via `add_node(error_handler=...)`.
-- `create_error_message(error, input, config)` formats a standardized error string for `ToolMessage` content when `ToolNode` hits an error.
+- `create_error_message(message, *, error_code=None)` appends the troubleshooting URL for the given `ErrorCode` to `message`; used internally by `ToolNode` to format `ToolMessage` content when node execution fails.
 
 ### Example 1 — catching `GraphRecursionError` and raising the limit
 
@@ -1002,13 +1001,14 @@ from typing import Annotated, Any
 from typing_extensions import TypedDict
 from langchain_core.messages import BaseMessage, AIMessage
 from langgraph.graph.message import add_messages
+from langgraph.managed.is_last_step import RemainingSteps
 from langgraph.types import Command
 
 class BudgetState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     tokens_used: int
     budget: int
-    remaining_steps: int  # required field injected by create_react_agent
+    remaining_steps: RemainingSteps  # managed value injected by the Pregel executor
 
 def enforce_budget(state: BudgetState) -> dict | Command:
     """Post-hook: stop the agent if token budget is exceeded."""
@@ -1045,7 +1045,7 @@ The `compile()` method has two less-documented parameters: `transformers` (a seq
 - `transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None` — each factory receives the checkpoint-namespace tuple `(graph_name, ...)` and should return a `StreamTransformer` subclass. These are added to the `StreamMux` alongside built-in transformers, allowing custom `stream_mode` projections to be registered at compile time rather than per-call.
 - `cache: BaseCache | None` — passed to `Pregel` and stored as `graph.cache`. When `@task` nodes run, this cache satisfies `CachePolicy` lookups. `InMemoryCache` works out of the box; `RedisCache` (from `langgraph-checkpoint-redis`) is the production option.
 - Both parameters complement per-call options: `compile(cache=c)` sets a graph-wide default, but individual calls to `stream_events(transformers=[...])` add more transformers on top.
-- `cache` does NOT affect nodes built with `add_node(cache_policy=...)` directly — it is the backing store that `CachePolicy.key_func` writes into. Without `cache=`, `CachePolicy` silently no-ops.
+- `cache` is the **backing store** for all nodes that declare `cache_policy=` via `add_node`. The two are complementary: `compile(cache=backend)` without any `cache_policy=` node caches nothing; a `cache_policy=` node without `compile(cache=backend)` silently no-ops. Both must be set for memoization to work.
 
 ### Example 1 — graph-level `InMemoryCache` for `@task` memoization
 
