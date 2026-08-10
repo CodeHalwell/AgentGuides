@@ -20,7 +20,7 @@ Ten class groups covering server-side system-prompt authority (`ReinjectSystemPr
 
 **Source:** `pydantic_ai/capabilities/reinject_system_prompt.py`
 
-`ReinjectSystemPrompt` is a `before_model_request` capability that guarantees the agent's configured `system_prompt` appears at the head of the first `ModelRequest` on every call, even when the `message_history` was reconstructed from a source that stripped system prompts (a database row, a UI frontend, a compaction pipeline). By default it is a no-op when any `SystemPromptPart` is already present anywhere in the history — the existing prompt is treated as authoritative. Set `replace_existing=True` to strip all `SystemPromptPart`s before prepending the agent's prompt; this is what the built-in UI adapters use in `manage_system_prompt='server'` mode.
+`ReinjectSystemPrompt` is a `before_model_request` capability that ensures the agent's configured `system_prompt` is present at the head of each `ModelRequest`. With the default `replace_existing=False`, it is a no-op when any `SystemPromptPart` already exists anywhere in the history — the existing prompt is treated as authoritative — and it prepends the agent's prompt only when the history has none (for example, after a round-trip through a database or UI frontend that strips system prompts). Set `replace_existing=True` to strip all `SystemPromptPart`s first and then prepend the agent's prompt unconditionally; this is what the built-in UI adapters use in `manage_system_prompt='server'` mode to prevent clients from injecting untrusted system prompts.
 
 ```python
 # Example 1 — Minimal: ensure a system prompt survives round-trips through a DB layer
