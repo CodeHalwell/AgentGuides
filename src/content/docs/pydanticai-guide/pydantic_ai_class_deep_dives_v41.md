@@ -333,7 +333,7 @@ def get_profile(ctx: RunContext[UserDeps]) -> str:
 ```
 
 ```python
-# Example 2 — Step-gated output tool: only offer structured output after at least one tool call
+# Example 2 — Step-gated output tool: only offer structured output after at least one round-trip
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import PrepareOutputTools
 from pydantic_ai.output import ToolOutput
@@ -344,17 +344,21 @@ class Answer(BaseModel):
     summary: str
     confidence: float
 
+def search_web(query: str) -> str:
+    return f'Results for: {query}'
+
 async def only_after_tools(
     ctx: RunContext,
     tool_defs: list[ToolDefinition],
 ) -> list[ToolDefinition]:
-    # ctx.run_step starts at 0; tool calls increment it.
-    # Suppress the output tool until the agent has made at least one tool call.
+    # ctx.run_step increments each model round-trip (after any model response, including retries).
+    # Suppress the output tool on the first step so the model must call search_web before answering.
     return tool_defs if ctx.run_step > 0 else []
 
 agent = Agent(
     'openai:gpt-5',
     output_type=ToolOutput(Answer),
+    tools=[search_web],
     capabilities=[PrepareOutputTools(only_after_tools)],
 )
 ```
@@ -473,7 +477,7 @@ def list_tables() -> list:
 
 ```python
 # Example 1 — ApprovalRequiredToolset: require approval for destructive operations
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, DeferredToolRequests
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
@@ -492,10 +496,14 @@ dangerous_toolset = ApprovalRequiredToolset(
     approval_required_func=needs_approval,
 )
 
-agent = Agent('openai:gpt-5', toolsets=[dangerous_toolset])
-# list_records runs freely; delete_record raises ApprovalRequired.
-# To approve: first run returns DeferredToolRequests; build_results(approve_all=True)
-# produces ToolApproved results; second run with deferred_tool_results= proceeds.
+agent = Agent('openai:gpt-5', output_type=[str, DeferredToolRequests], toolsets=[dangerous_toolset])
+# list_records runs freely; delete_record is deferred for approval.
+# Full two-run flow:
+# result1 = await agent.run('delete record X')
+# assert isinstance(result1.output, DeferredToolRequests)
+# deferred = result1.output.build_results(approve_all=True)
+# result2 = await agent.run('', message_history=result1.all_messages(),
+#                           deferred_tool_results=deferred)
 ```
 
 ```python
@@ -603,7 +611,7 @@ agent = Agent('openai:gpt-5', toolsets=[clean_toolset])
 
 ```python
 # Example 2 — ExternalToolset: human-in-the-loop tool resolution
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.toolsets.external import ExternalToolset
 from pydantic_ai.tools import ToolDefinition
 
@@ -625,9 +633,10 @@ human_tools = ExternalToolset(
     id='human-approval-toolset',
 )
 
-agent = Agent('openai:gpt-5', toolsets=[human_tools])
-# When the model calls approve_payment, the agent pauses.
-# The caller inspects the tool call, gets human approval, and re-runs with the result.
+agent = Agent('openai:gpt-5', output_type=[str, DeferredToolRequests], toolsets=[human_tools])
+# When the model calls approve_payment, the run returns DeferredToolRequests.
+# The caller inspects the tool call, gets human approval, then re-runs with
+# deferred_tool_results=result.output.build_results(...) and message_history=result.all_messages().
 ```
 
 ```python
@@ -751,7 +760,7 @@ async def embed_batch(texts: list[str]) -> dict:
 
 **Source:** `pydantic_ai/profiles/__init__.py`
 
-`ModelProfile` is a `TypedDict` (all keys optional) that describes how a specific model or model family needs to be addressed: whether it supports tools, JSON schema output, thinking/reasoning, image output, and the modes for structured output, tool deferral, and mid-conversation tool addition. `merge_profile` performs a dict-spread merge (later overrides win) and translates deprecated keys (`tool_additions` → `tool_addition_mode`, `deferred_tools_require_tool_search` → `tool_deferral_mode`). `DEFAULT_PROFILE` is the fully-populated base layer.
+`ModelProfile` is a `TypedDict` (all keys optional) that describes how a specific model or model family needs to be addressed: whether it supports tools, JSON schema output, thinking/reasoning, image output, and the modes for structured output, tool deferral, and mid-conversation tool addition. `merge_profile` performs a dict-spread merge (later overrides win); a `None` *argument* is treated as an empty dict (no-op — the base value is preserved), whereas a key explicitly set to `None` within an override dict IS spread (field becomes `None`). Translates deprecated keys (`tool_additions` → `tool_addition_mode`, `deferred_tools_require_tool_search` → `tool_deferral_mode`). `DEFAULT_PROFILE` is the fully-populated base layer. Profiles belong on provider model constructors (`OpenAIChatModel`, `AnthropicModel`, etc.) rather than on `Agent` directly.
 
 ```python
 # Example 1 — Inspect the DEFAULT_PROFILE
@@ -791,20 +800,18 @@ print(effective_profile['tool_deferral_mode'])            # 'standalone'
 ```
 
 ```python
-# Example 3 — Pass a callable profile to Agent for full control
+# Example 3 — Pass a callable profile to a model constructor for full control
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles import ModelProfile
 
 def always_use_prompted_output(base: ModelProfile) -> ModelProfile:
-    """Force prompted structured output regardless of the provider's default."""
     return {**base, 'default_structured_output_mode': 'prompted'}
 
-agent = Agent(
-    'openai:gpt-5',
-    profile=always_use_prompted_output,
-)
-# The callable receives the provider's resolved profile and returns the final profile.
-# This gives full control: you can override, derive from, or completely replace the base.
+model = OpenAIChatModel('gpt-5', profile=always_use_prompted_output)
+agent = Agent(model)
+# The callable receives the provider's resolved ModelProfile and returns the final profile.
+# Profiles live on model constructors (OpenAIChatModel, AnthropicModel, etc.), not on Agent.
 # Useful when testing how an agent behaves with a weaker model's capability profile.
 ```
 
