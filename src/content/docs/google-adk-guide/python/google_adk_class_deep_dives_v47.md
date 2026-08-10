@@ -221,7 +221,7 @@ agent = LlmAgent(
 
 app = App(
     name="finance_app",
-    agent=agent,
+    root_agent=agent,
     context_cache_config=ContextCacheConfig(
         cache_intervals=20,   # reuse cache across 20 turns
         ttl_seconds=3600,     # 1-hour TTL
@@ -510,12 +510,33 @@ run_config = RunConfig(
 ### Example 2 — high-concurrency live agent
 
 ```python
-from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig, StreamingMode
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+
+agent = LlmAgent(
+    name="live_agent",
+    model="gemini-2.5-flash",
+    instruction="Answer questions using your tools.",
+)
 
 run_config = RunConfig(
-    streaming_mode=StreamingMode.SSE,
     tool_thread_pool_config=ToolThreadPoolConfig(max_workers=16),
 )
+
+async def main():
+    session_service = InMemorySessionService()
+    runner = Runner(agent=agent, app_name="demo", session_service=session_service)
+    session = await session_service.create_session(app_name="demo", user_id="u1")
+    async for event in runner.run_live(
+        user_id="u1",
+        session_id=session.id,
+        run_config=run_config,
+        live_request_queue=...,  # your LiveRequestQueue here
+    ):
+        print(event)
 ```
 
 ### Example 3 — blocking DB tool pattern
@@ -714,21 +735,27 @@ raw row arrays, which is friendlier for LLM consumption.
 ### Example 1 — read-only SQL agent
 
 ```python
+import google.auth
 from google.adk.agents import LlmAgent
 from google.adk.tools.spanner import SpannerToolset
 from google.adk.tools.spanner.settings import SpannerToolSettings
 from google.adk.tools.spanner.spanner_credentials import SpannerCredentialsConfig
+
+# SpannerCredentialsConfig wraps Google auth credentials, not Spanner resource IDs.
+# Use ADC (Application Default Credentials) for service-account environments.
+adc_credentials, _ = google.auth.default(
+    scopes=[
+        "https://www.googleapis.com/auth/spanner.admin",
+        "https://www.googleapis.com/auth/spanner.data",
+    ]
+)
 
 toolset = SpannerToolset(
     spanner_tool_settings=SpannerToolSettings(
         max_executed_query_result_rows=100,
         query_result_mode="dict_list",  # QueryResultMode.DICT_LIST
     ),
-    credentials_config=SpannerCredentialsConfig(
-        project_id="my-proj",
-        instance_id="prod-instance",
-        database_id="analytics",
-    ),
+    credentials_config=SpannerCredentialsConfig(credentials=adc_credentials),
 )
 
 agent = LlmAgent(
@@ -845,7 +872,7 @@ report = FunctionNode(name="report", func=write_report)
 
 pipeline = Workflow(
     name="report_pipeline",
-    edges=[(fetch, analyse, report)],
+    edges=[("START", fetch, analyse, report)],
 )
 ```
 
@@ -864,7 +891,7 @@ merge    = FunctionNode(name="merge",       func=merge_all)
 wf = Workflow(
     name="enrichment",
     edges=[
-        ("START", [enrich_a, enrich_b, enrich_c]),
+        ("START", (enrich_a, enrich_b, enrich_c)),
         (enrich_a, merge),
         (enrich_b, merge),
         (enrich_c, merge),
@@ -958,7 +985,7 @@ node = FunctionNode(
         initial_delay=1.0,
         backoff_factor=2.0,
         jitter=0.5,
-        exceptions=["httpx.HTTPStatusError", "httpx.TimeoutException"],
+        exceptions=["HTTPStatusError", "TimeoutException"],
     ),
 )
 ```
