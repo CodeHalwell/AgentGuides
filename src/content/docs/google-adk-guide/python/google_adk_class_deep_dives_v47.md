@@ -769,6 +769,7 @@ agent = LlmAgent(
 ### Example 2 — vector similarity search
 
 ```python
+from google.adk.tools.spanner import SpannerToolset
 from google.adk.tools.spanner.settings import (
     SpannerToolSettings,
     SpannerVectorStoreSettings,
