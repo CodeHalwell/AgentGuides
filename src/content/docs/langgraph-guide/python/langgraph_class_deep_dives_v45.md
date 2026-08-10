@@ -793,8 +793,8 @@ LangGraph surfaces execution failures through a typed error hierarchy. Understan
 **Key source facts (`langgraph/errors.py`):**
 
 - `ErrorCode` is an `Enum` with 5 members: `GRAPH_RECURSION_LIMIT`, `INVALID_CONCURRENT_GRAPH_UPDATE`, `INVALID_GRAPH_NODE_RETURN_VALUE`, `MULTIPLE_SUBGRAPHS`, `INVALID_CHAT_HISTORY`.
-- `InvalidUpdateError` carries an `ErrorCode` and is raised when two nodes write to a channel that only accepts one writer per step (e.g. `LastValue` with two concurrent writes, or `Overwrite` used twice in the same super-step). Its message includes the error code so you can programmatically inspect it.
-- `GraphRecursionError` is a `RecursionError` subclass. The `recursion_limit` is set via `config["recursion_limit"]` (default 25). Increase it or add a truncation node using `RemainingSteps`.
+- `InvalidUpdateError` is raised when two nodes write to a channel that only accepts one writer per step (e.g. `LastValue` with two concurrent writes, or `Overwrite` used twice in the same super-step). The `ErrorCode` is embedded as a string in the exception message only — the exception has no structured `.error_code` attribute; catch by exception class and parse the message if you need to distinguish codes.
+- `GraphRecursionError` is a `RecursionError` subclass. The `recursion_limit` is set via `config["recursion_limit"]`; the default is `DEFAULT_RECURSION_LIMIT` (10 007 in LangGraph 1.2.10, overridable via the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` env var). Increase it or add a truncation node using `RemainingSteps`.
 - `EmptyInputError` is raised on the first invocation when the graph receives no state and no initial value can be inferred.
 - `NodeError` is a frozen `@dataclass` with `node: str` and `error: BaseException` fields, injected into error-handler nodes via `add_node(error_handler=...)`.
 - `create_error_message(message, *, error_code=None)` appends the troubleshooting URL for the given `ErrorCode` to `message`; used internally by `ToolNode` to format `ToolMessage` content when node execution fails.
@@ -915,7 +915,7 @@ print(result["result"])
 
 - `pre_model_hook(state) -> dict | None` runs before every LLM call. Return `{"messages": [...]}` to replace/trim the message list the model sees. Return `None` or `{}` to pass through unchanged.
 - `post_model_hook(state) -> dict | None` runs after every LLM call. Receives state including the fresh AI message appended. Useful for token-budget enforcement, logging, or appending metadata.
-- `version="v2"` (the default since 1.0) exposes pre/post hooks; `version="v1"` ignores them.
+- Both `version="v1"` and `version="v2"` support pre/post hooks. The version switch controls tool-call dispatch: `v1` routes all tool calls to a single batched `ToolNode`; `v2` distributes each tool call as an individual `Send` task. `v2` is the default since 1.0.
 - `response_format: StructuredResponseSchema | tuple[str, StructuredResponseSchema]` attaches a structured output schema to the final turn. The agent will call a dummy tool that captures the structured result in `state["structured_response"]`.
 - `prompt: str | SystemMessage | Callable` prepends a system message or dynamically constructs the prompt on each LLM call.
 
@@ -999,7 +999,7 @@ print("trim_to_window: returns trimmed messages only when > 10 exist; empty dict
 ```python
 from typing import Annotated, Any
 from typing_extensions import TypedDict
-from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.messages import BaseMessage, AIMessage, RemoveMessage
 from langgraph.graph.message import add_messages
 from langgraph.managed.is_last_step import RemainingSteps
 from langgraph.types import Command
@@ -1017,8 +1017,14 @@ def enforce_budget(state: BudgetState) -> dict | Command:
     used = int(len(str(getattr(last_msg, "content", ""))) * 0.33)
     total = state["tokens_used"] + used
     if total >= state["budget"]:
-        # Force graph to END by returning a Command that ends the loop
-        return Command(goto="__end__", update={"tokens_used": total})
+        updates: dict = {"tokens_used": total}
+        # If the AI response has pending tool_calls, the prebuilt router will
+        # still schedule them even if we Command(goto="__end__").  Strip tool
+        # calls by replacing the message so the router sees none and routes END.
+        if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+            clean = AIMessage(content=last_msg.content, id=last_msg.id)
+            updates["messages"] = [RemoveMessage(id=last_msg.id), clean]
+        return Command(goto="__end__", update=updates)
     return {"tokens_used": total}
 
 # Pass state_schema= so create_react_agent knows about the extra fields:
@@ -1029,7 +1035,7 @@ def enforce_budget(state: BudgetState) -> dict | Command:
 #     post_model_hook=enforce_budget,
 #     version="v2",
 # )
-print("enforce_budget: post_model_hook checks tokens after each LLM call; returns Command to stop if exceeded")
+print("enforce_budget: strips pending tool_calls before ending so the prebuilt router does not reschedule them")
 ```
 
 ---
