@@ -92,8 +92,8 @@ async def main():
         queries=["What's the weather in London?"],
         evaluators=local,
     )
-    results.raise_for_status()  # raises EvalNotPassedError if any item failed
-    print(f"Passed {results.passed}/{results.total}")
+    results[0].raise_for_status()  # raises EvalNotPassedError if any item failed
+    print(f"Passed {results[0].passed}/{results[0].total}")
 
 asyncio.run(main())
 ```
@@ -119,19 +119,23 @@ local = LocalEvaluator(no_hallucination_check)
 ### Example 3 — Mixing local + cloud evaluators
 
 ```python
+import asyncio
 from agent_framework.foundry import FoundryEvals
 from agent_framework import LocalEvaluator, evaluate_agent
 
 local = LocalEvaluator(keyword_check("weather"))
 cloud = FoundryEvals(project_client=foundry_client, model="gpt-4o")
 
-results = await evaluate_agent(
-    agent=agent,
-    queries=queries,
-    evaluators=[local, cloud],   # list → both run, results returned per-provider
-)
-for r in results:
-    print(f"{r.provider}: {r.passed}/{r.total}")
+async def main():
+    results = await evaluate_agent(
+        agent=agent,
+        queries=queries,
+        evaluators=[local, cloud],   # list → both run, results returned per-provider
+    )
+    for r in results:
+        print(f"{r.provider}: {r.passed}/{r.total}")
+
+asyncio.run(main())
 ```
 
 ---
@@ -336,24 +340,29 @@ class RubricScore:
 ### Example — Full result traversal
 
 ```python
-results = await evaluate_agent(agent=agent, queries=queries, evaluators=[local, cloud])
+import asyncio
 
-for r in results:
-    print(f"\n=== {r.provider}: {r.passed}/{r.total} passed ===")
-    for item in r.items:
-        print(f"  [{item.status}] {item.item_id}")
-        if item.is_error:
-            print(f"    ERROR: {item.error_code} — {item.error_message}")
-        for score in item.scores:
-            print(f"    {score.name}: {score.score:.2f}")
-            if score.dimensions:
-                for dim in score.dimensions:
-                    flag = "✓" if dim.applicable and dim.score and dim.score >= 3 else "✗"
-                    print(f"      {flag} {dim.id}: {dim.score} (w={dim.weight}) — {dim.reason}")
+async def main():
+    results = await evaluate_agent(agent=agent, queries=queries, evaluators=[local, cloud])
 
-# Hard CI gate
-for r in results:
-    r.assert_score_at_least(0.70)
+    for r in results:
+        print(f"\n=== {r.provider}: {r.passed}/{r.total} passed ===")
+        for item in r.items:
+            print(f"  [{item.status}] {item.item_id}")
+            if item.is_error:
+                print(f"    ERROR: {item.error_code} — {item.error_message}")
+            for score in item.scores:
+                print(f"    {score.name}: {score.score:.2f}")
+                if score.dimensions:
+                    for dim in score.dimensions:
+                        flag = "✓" if dim.applicable and dim.score and dim.score >= 3 else "✗"
+                        print(f"      {flag} {dim.id}: {dim.score} (w={dim.weight}) — {dim.reason}")
+
+    # Hard CI gate
+    for r in results:
+        r.assert_score_at_least(0.70)
+
+asyncio.run(main())
 ```
 
 ---
@@ -976,7 +985,7 @@ from agent_framework._harness._tool_approval import ToolApprovalMiddleware
 
 def always_approve_read_tools(call_content) -> bool:
     """Auto-approve any function_call whose name starts with 'read_'."""
-    name = getattr(call_content, "name", "") or ""
+    name = call_content.function_call.name
     return name.startswith("read_")
 
 middleware = ToolApprovalMiddleware(auto_approval_rules=[always_approve_read_tools])
@@ -1006,6 +1015,7 @@ FunctionalWorkflow(
 The `@workflow` decorator wraps an `async def` function into a `FunctionalWorkflow` that exposes a `run()` interface compatible with graph-based `Workflow` objects.
 
 ```python
+import asyncio
 from agent_framework import workflow, step
 
 @step
@@ -1016,8 +1026,11 @@ async def to_upper(text: str) -> str:
 async def my_pipeline(data: str) -> str:
     return await to_upper(data)
 
-result = await my_pipeline.run("hello")
-print(result.get_outputs())  # ["HELLO"]
+async def main():
+    result = await my_pipeline.run("hello")
+    print(result.get_outputs())  # ["HELLO"]
+
+asyncio.run(main())
 ```
 
 ### `@step` → `StepWrapper`
@@ -1120,6 +1133,7 @@ asyncio.run(main())
 ### Example 2 — HITL with `RunContext.request_info`
 
 ```python
+import asyncio
 from agent_framework import workflow, step, RunContext
 from agent_framework._workflows._checkpoint import InMemoryCheckpointStorage
 
@@ -1136,24 +1150,28 @@ async def approval_workflow(requirements: str, ctx: RunContext) -> str:
     # Pauses here — raises WorkflowInterrupted internally
     approval = await ctx.request_info(
         {"draft": draft, "instructions": "Approve or revise."},
+        request_id="approval",   # explicit ID so the resume key matches
         response_type=str,
     )
     if approval.lower().startswith("approve"):
         return draft
     return await draft_proposal(f"{requirements}\n\nFeedback: {approval}")
 
-# First run — workflow pauses at request_info
-result = await approval_workflow.run("Build a new feature")
-# result contains the interrupt signal; extract checkpoint_id
-checkpoint_id = result.checkpoint_id
+async def main():
+    # First run — workflow pauses at request_info
+    result = await approval_workflow.run("Build a new feature")
+    # result contains the interrupt signal; extract checkpoint_id
+    checkpoint_id = result.checkpoint_id
 
-# Resume with human response
-result = await approval_workflow.run(
-    "Build a new feature",
-    checkpoint_id=checkpoint_id,
-    responses={"approval": "Approved!"},
-)
-print(result.get_outputs())
+    # Resume with human response keyed by the request_id set above
+    result = await approval_workflow.run(
+        "Build a new feature",
+        checkpoint_id=checkpoint_id,
+        responses={"approval": "Approved!"},
+    )
+    print(result.get_outputs())
+
+asyncio.run(main())
 ```
 
 ### Example 3 — Parallel steps with `asyncio.gather`
