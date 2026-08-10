@@ -99,7 +99,7 @@ from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart
 
 def keep_last_n_turns(messages: list[ModelMessage], n: int = 6) -> list[ModelMessage]:
-    """Keep the system-prompt turn plus the most recent n message pairs."""
+    """Keep the system-prompt turn plus the most recent n messages (individual request/response count)."""
     system_turns = [m for m in messages if isinstance(m, ModelRequest)
                     and any(isinstance(p, SystemPromptPart) for p in m.parts)]
     non_system = [m for m in messages if m not in system_turns]
@@ -137,8 +137,21 @@ async def redact_if_free_tier(
         if isinstance(msg, ModelRequest):
             new_parts = []
             for part in msg.parts:
-                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                    part = UserPromptPart(content=_EMAIL_RE.sub('[EMAIL]', part.content))
+                if isinstance(part, UserPromptPart):
+                    if isinstance(part.content, str):
+                        part = UserPromptPart(content=_EMAIL_RE.sub('[EMAIL]', part.content))
+                    else:
+                        # Sequence content: redact str items and TextContent.content
+                        new_content = []
+                        for item in part.content:
+                            if isinstance(item, str):
+                                new_content.append(_EMAIL_RE.sub('[EMAIL]', item))
+                            elif hasattr(item, 'content') and isinstance(item.content, str):
+                                from dataclasses import replace as dc_replace
+                                new_content.append(dc_replace(item, content=_EMAIL_RE.sub('[EMAIL]', item.content)))
+                            else:
+                                new_content.append(item)
+                        part = UserPromptPart(content=new_content)
                 new_parts.append(part)
             from dataclasses import replace
             msg = replace(msg, parts=new_parts)
@@ -635,8 +648,13 @@ human_tools = ExternalToolset(
 
 agent = Agent('openai:gpt-5', output_type=[str, DeferredToolRequests], toolsets=[human_tools])
 # When the model calls approve_payment, the run returns DeferredToolRequests.
-# The caller inspects the tool call, gets human approval, then re-runs with
-# deferred_tool_results=result.output.build_results(...) and message_history=result.all_messages().
+# ExternalToolset calls land in .calls (not .approvals), so resolve via:
+# result = await agent.run('Approve payment pay_123 for $50')
+# assert isinstance(result.output, DeferredToolRequests)
+# call_id = result.output.calls[0].tool_call_id
+# deferred = result.output.build_results(calls={call_id: True})  # True = approved
+# result2 = await agent.run('', message_history=result.all_messages(),
+#                           deferred_tool_results=deferred)
 ```
 
 ```python
@@ -867,8 +885,9 @@ async def budget_capped_run(prompt: str, budget_usd: float) -> str | None:
         return None
 
 # asyncio.run(budget_capped_run('Write a 10,000-word essay...', budget_usd=0.05))
-# The run is aborted before (check_before_request) or after (check_cost) a request that
-# would push cumulative cost above $0.05.
+# check_before_request compares cost accumulated from *prior* requests and stops if already
+# over budget; a single expensive request's cost is only known after it completes, so the
+# run can overshoot the limit before check_cost raises UsageLimitExceeded post-response.
 ```
 
 ```python
