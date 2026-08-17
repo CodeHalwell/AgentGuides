@@ -629,17 +629,20 @@ Both are `PreparedToolset` subclasses — wrappers that modify an inner toolset'
 # Example 1 — DeferredLoadingToolset: hide all MCP tools until discovered
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.toolsets._tool_search import ToolSearchToolset  # exposes discovery to model
 
 # An MCP server exposing 50+ endpoints would bloat the context if listed upfront.
 mcp = MCPToolset('http://localhost:8000/mcp')
 
+# ToolSearchToolset wraps the deferred toolset and injects a search_tools function so
+# the model can discover and enable individual MCP tools on demand via keyword queries.
 agent = Agent(
     'openai:gpt-5.6-sol',
-    toolsets=[mcp.defer_loading()],  # convenience method returns DeferredLoadingToolset
+    toolsets=[ToolSearchToolset(mcp.defer_loading())],
 )
 
-# The model's first request sees no tool definitions from the MCP server.
-# Only after it calls the built-in tool-search mechanism do specific tools appear.
+# The model's first request sees only the search_tools function, not all MCP endpoints.
+# After calling search_tools the matched tools become available for subsequent steps.
 # result = await agent.run('Find and use the inventory lookup tool.')
 ```
 
@@ -879,12 +882,15 @@ def make_user_part(question: str) -> UserPromptPart:
 from pydantic_ai import Agent
 from pydantic_ai.messages import ToolAvailabilityDeltaPart
 from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.toolsets._tool_search import ToolSearchToolset  # required for discovery
 
 mcp = MCPToolset('http://localhost:8000/mcp')
 
+# ToolSearchToolset provides the search_tools function the model calls to discover
+# deferred tools; without it the model sees no MCP endpoints and no delta events fire.
 agent = Agent(
     'openai:gpt-5.6-sol',
-    toolsets=[mcp.defer_loading()],
+    toolsets=[ToolSearchToolset(mcp.defer_loading())],
 )
 
 # run_stream_events() is the async context manager that yields raw AgentStreamEvents,
