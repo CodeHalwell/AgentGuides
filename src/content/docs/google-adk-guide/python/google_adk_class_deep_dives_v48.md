@@ -1,5 +1,5 @@
 ---
-title: "Class deep dives — volume 48 (ReadonlyContext, ActiveStreamingTool, TranscriptionEntry, JoinNode, Trigger, DynamicNodeScheduler, ToolboxToolset, UrlContextTool, OpenAPIToolset, A2aAgentExecutor + A2aAgentExecutorConfig)"
+title: "Class deep dives — volume 48 (ReadonlyContext, ActiveStreamingTool, TranscriptionEntry, JoinNode, Trigger, DynamicNodeScheduler, ToolboxToolset, UrlContextTool, OpenAPIToolset, A2aAgentExecutor + A2aAgentExecutorConfig + ExecuteInterceptor)"
 description: "10 source-verified deep dives for google-adk 2.7.0: ReadonlyContext (MappingProxyType state; get_credential by key; custom_metadata read-only view; TYPE_CHECKING-only imports), ActiveStreamingTool (Pydantic BaseModel; asyncio.Task + LiveRequestQueue pair; arbitrary_types_allowed; extra='forbid'; streaming tool lifecycle), TranscriptionEntry (role nullable for function calls; Blob|Content union; arbitrary_types_allowed), JoinNode (_requires_all_predecessors=True; dict-keyed input_schema validation; pass-through yield; barrier semantics in Workflow), Trigger (input/use_sub_branch/branch/isolation_scope; ser_json_bytes base64; routing data model for node edges), DynamicNodeScheduler (ScheduleDynamicNode protocol; DynamicNodeRun/DynamicNodeState; dedup/resume/fresh three-phase logic; ReplayManager chronological barrier), ToolboxToolset (toolbox-adk delegate; server_url + toolset_name + tool_names + auth_token_getters + bound_params + credentials + additional_headers; lazy get_tools), UrlContextTool (Gemini 2 built-in; process_llm_request injects types.Tool(url_context); model-check guard; singleton url_context), OpenAPIToolset (spec_dict/spec_str/yaml parsing; ssl_verify + header_provider + httpx_client_factory; preserve_property_names; credential_key; configure_ssl_verify_all), A2aAgentExecutor + A2aAgentExecutorConfig + ExecuteInterceptor (@a2a_experimental; Runner callable resolution; legacy/new version selection via extension; execute_before/after hooks; TaskResultAggregator; ExecuteInterceptor before_agent/after_event/after_agent)."
 framework: google-adk
 language: python
@@ -97,17 +97,20 @@ class RoleBasedToolset(BaseToolset):
 from google.adk.agents.readonly_context import ReadonlyContext
 
 class ApiKeyInstructionProvider:
-    """Inject the resolved API key into the system instruction."""
+    """Confirm whether a credential is configured — without exposing any token value."""
 
     async def get_instruction(self, ctx: ReadonlyContext) -> str:
         cred = ctx.get_credential("my_api_service")
-        if cred and cred.http and cred.http.token:
-            token_snippet = cred.http.token[:8] + "..."
-        else:
-            token_snippet = "<not yet resolved>"
+        configured = (
+            cred is not None
+            and cred.http is not None
+            and bool(cred.http.token)
+        )
+        status = "configured" if configured else "not yet resolved"
         return (
             f"You are a helpful assistant. "
-            f"Use the API key ending in {token_snippet} for external calls."
+            f"The API service credential is {status}. "
+            "Use it for any external calls that require authentication."
         )
 ```
 
@@ -159,26 +162,34 @@ additions that would silently be ignored.
 
 ### Example 1 — building a streaming tool that accepts realtime input
 
+ADK passes the `LiveRequestQueue` for input-streaming tools via a parameter
+named `input_stream` (detected by type annotation). The runner creates and
+registers the `ActiveStreamingTool` automatically; your function just declares
+the parameter.
+
 ```python
-import asyncio
-from google.genai import types
-from google.adk.agents import LlmAgent
 from google.adk.agents.live_request_queue import LiveRequestQueue
 from google.adk.tools.tool_context import ToolContext
 
-async def live_transcription_tool(tool_context: ToolContext):
-    """A streaming tool that receives audio blobs and yields transcriptions."""
-    # ADK creates an ActiveStreamingTool pointing to this coroutine's Task
-    # and to a LiveRequestQueue delivered via tool_context.
-    queue: LiveRequestQueue = tool_context.get_stream()  # type: ignore[attr-defined]
+async def live_transcription_tool(
+    input_stream: LiveRequestQueue,
+    tool_context: ToolContext,
+):
+    """A streaming tool that receives audio blobs and yields transcriptions.
+
+    ADK inspects the signature, detects `input_stream: LiveRequestQueue`,
+    creates a dedicated queue, registers an ActiveStreamingTool(task=...,
+    stream=queue), and starts feeding data into the queue from the live
+    model stream.
+    """
     transcript_parts = []
 
     while True:
-        req = await queue.get()
+        req = await input_stream.get()
         if req.close:
             break
         if req.blob:
-            # In a real app: call a speech API here.
+            # In a real app: call a speech-to-text API here.
             transcript_parts.append(f"[audio:{len(req.blob.data)}bytes]")
 
     return {"transcript": " ".join(transcript_parts)}
@@ -270,6 +281,7 @@ print(f"Entries: {len(transcript)}")  # 3
 
 ```python
 import json
+from google.genai import types
 from google.adk.agents.transcription_entry import TranscriptionEntry
 
 entry = TranscriptionEntry(
@@ -324,14 +336,20 @@ class JoinNode(BaseNode):
         yield Event(output=node_input, branch=ctx._invocation_context.branch)
 ```
 
-The aggregated `node_input` is a `dict` keyed by branch strings when multiple
-predecessors are present. The node itself does no transformation — it passes the
-collected data straight through for downstream nodes to consume.
+The aggregated `node_input` is a `dict` keyed by **branch identifiers** when
+multiple predecessors are present. In the common case (no custom routing), a
+branch identifier equals the predecessor node's name, which is why the example
+below uses keys like `"fetch_weather"`. If a node uses `Trigger(branch=…)` or
+sub-branch routing the key will differ from the node name, so always inspect
+the actual branch strings in production code rather than assuming they match
+names. The `JoinNode` itself does no transformation — it passes the collected
+dict straight through for downstream nodes to consume.
 
 ### Example 1 — fan-out / fan-in workflow
 
 ```python
 from google.adk.workflow import Workflow
+from google.adk.workflow._base_node import START
 from google.adk.workflow._join_node import JoinNode
 from google.adk.workflow._function_node import FunctionNode
 
@@ -342,20 +360,30 @@ async def fetch_news(node_input):
     return {"headlines": ["ADK 2.7 ships", "AI news"], "city": node_input["city"]}
 
 async def combine_results(node_input):
-    # node_input is a dict: {"fetch_weather": {...}, "fetch_news": {...}}
+    # node_input is a dict keyed by branch identifier (usually node name).
     return {
         "weather": node_input.get("fetch_weather", {}).get("weather"),
         "headlines": node_input.get("fetch_news", {}).get("headlines"),
     }
 
-fetch_weather_node = FunctionNode(name="fetch_weather", func=fetch_weather)
-fetch_news_node    = FunctionNode(name="fetch_news",    func=fetch_news)
-join               = JoinNode(name="join")
-combine_node       = FunctionNode(name="combine", func=combine_results)
+# parameter_binding='node_input' passes the predecessor's output dict
+# as the single `node_input` argument (default 'state' binds from session state).
+fetch_weather_node = FunctionNode(
+    name="fetch_weather", func=fetch_weather, parameter_binding="node_input"
+)
+fetch_news_node = FunctionNode(
+    name="fetch_news", func=fetch_news, parameter_binding="node_input"
+)
+join         = JoinNode(name="join")
+combine_node = FunctionNode(
+    name="combine", func=combine_results, parameter_binding="node_input"
+)
 
 workflow = Workflow(
     name="briefing",
     edges=[
+        # Fan out from START to both fetch nodes in parallel.
+        (START, (fetch_weather_node, fetch_news_node)),
         (fetch_weather_node, join),
         (fetch_news_node,    join),
         (join,               combine_node),
@@ -509,13 +537,16 @@ class DynamicNodeScheduler(ScheduleDynamicNode):
 ```python
 import asyncio
 from google.adk.workflow import Workflow
+from google.adk.workflow._base_node import START
 from google.adk.workflow._function_node import FunctionNode
 from google.adk.agents.context import Context
 
 async def search(node_input):
     return {"results": [f"result for {node_input['query']}"]}
 
-search_node = FunctionNode(name="search", func=search)
+search_node = FunctionNode(
+    name="search", func=search, parameter_binding="node_input"
+)
 
 async def orchestrate(node_input, ctx: Context):
     queries = node_input.get("queries", [])
@@ -529,8 +560,11 @@ async def orchestrate(node_input, ctx: Context):
         results.append(child_ctx.output)
     return {"all_results": results}
 
-orchestrator = FunctionNode(name="orchestrate", func=orchestrate)
-workflow = Workflow(name="multi_search", edges=[(orchestrator,)])
+orchestrator = FunctionNode(
+    name="orchestrate", func=orchestrate, parameter_binding="node_input"
+)
+# Every workflow must have a START edge to seed the initial nodes.
+workflow = Workflow(name="multi_search", edges=[(START, orchestrator)])
 ```
 
 ### Example 2 — `use_as_output` to propagate child output
@@ -755,20 +789,43 @@ agent = LlmAgent(
 
 ### Example 3 — non-Gemini model guard
 
+`UrlContextTool` checks the model at request time (inside `process_llm_request`),
+not at agent construction time. The `ValueError` is therefore raised when the
+runner sends the first message, not when `LlmAgent` is created.
+
 ```python
+import asyncio
+from google.genai import types
 from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 from google.adk.tools.url_context_tool import url_context
 
-try:
-    agent = LlmAgent(
-        name="bad_agent",
-        model="gpt-4o",      # not a Gemini model
-        tools=[url_context],
-    )
-    # ValueError raised during process_llm_request when runner invokes the tool
-except ValueError as e:
-    print(e)
-    # "Url context tool is not supported for model gpt-4o"
+agent = LlmAgent(
+    name="bad_agent",
+    model="gpt-4o",      # not a Gemini model — check fires at run time
+    instruction="Answer questions.",
+    tools=[url_context],
+)
+session_service = InMemorySessionService()
+runner = Runner(app_name="demo", agent=agent, session_service=session_service)
+
+async def run():
+    session = await session_service.create_session(app_name="demo", user_id="u1")
+    try:
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id=session.id,
+            new_message=types.Content(
+                role="user", parts=[types.Part(text="Hello")]
+            ),
+        ):
+            pass
+    except ValueError as e:
+        print(e)
+        # "Url context tool is not supported for model gpt-4o"
+
+asyncio.run(run())
 ```
 
 ---
@@ -844,16 +901,15 @@ agent = LlmAgent(
 
 ```python
 from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
-from google.adk.tools.openapi_tool.auth.auth_helpers import (
-    bearer_token_scheme,
-    token_to_scheme_credential,
-)
+from google.adk.tools.openapi_tool.auth.auth_helpers import token_to_scheme_credential
 
+# token_type must be "oauth2Token" for Authorization header bearer tokens.
+# Positional arg order: token_type, location, header_name, credential_value.
 scheme, credential = token_to_scheme_credential(
-    "Bearer",
+    "oauth2Token",
     "header",
     "Authorization",
-    "my-secret-token",
+    "my-bearer-token",
 )
 
 toolset = OpenAPIToolset(
@@ -1005,7 +1061,6 @@ class ExecuteInterceptor:
 ### Example 1 — minimal A2A server setup
 
 ```python
-import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -1013,6 +1068,7 @@ from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 import uvicorn
 
@@ -1029,16 +1085,28 @@ runner = Runner(
 
 executor = A2aAgentExecutor(runner=runner)
 
+# AgentCard uses protobuf — no 'url' field; use documentation_url if needed.
+# AgentSkill requires at minimum id, name, description, and tags.
 card = AgentCard(
     name="assistant",
     description="A helpful assistant exposed via A2A.",
-    url="http://localhost:8080/",
     version="1.0.0",
     capabilities=AgentCapabilities(streaming=True),
-    skills=[AgentSkill(id="general", name="General")],
+    default_input_modes=["text"],
+    default_output_modes=["text"],
+    skills=[AgentSkill(
+        id="general",
+        name="General",
+        description="General-purpose conversational assistant.",
+        tags=["general"],
+    )],
 )
 
-handler = DefaultRequestHandler(agent_executor=executor, task_store=None)  # type: ignore[arg-type]
+# DefaultRequestHandler requires a concrete TaskStore — not None.
+handler = DefaultRequestHandler(
+    agent_executor=executor,
+    task_store=InMemoryTaskStore(),
+)
 app = A2AStarletteApplication(agent_card=card, http_handler=handler)
 
 if __name__ == "__main__":
@@ -1052,9 +1120,12 @@ from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 from google.adk.runners import Runner
 
 async def build_runner() -> Runner:
-    # Expensive setup: load config, open connections, etc.
+    # Expensive async setup: load config, open other connections, etc.
+    # DatabaseSessionService is constructed directly (no async .create() method).
     from google.adk.sessions import DatabaseSessionService
-    session_service = await DatabaseSessionService.create("postgresql://...")
+    session_service = DatabaseSessionService(
+        db_url="postgresql+asyncpg://user:pass@localhost/mydb"
+    )
     agent = ...
     return Runner(app_name="app", agent=agent, session_service=session_service)
 
@@ -1096,7 +1167,7 @@ config = A2aAgentExecutorConfig(
 executor = A2aAgentExecutor(runner=my_runner, config=config)
 ```
 
-### Example 4 — filtering sensitive events
+### Example 4 — filtering internal tool events from the A2A stream
 
 ```python
 from google.adk.a2a.executor.config import A2aAgentExecutorConfig, ExecuteInterceptor
@@ -1104,7 +1175,7 @@ from typing import Union
 from a2a.server.events import Event as A2AEvent
 from google.adk.events.event import Event as AdkEvent
 
-async def redact_pii(
+async def filter_internal_events(
     executor_ctx, a2a_event: A2AEvent, adk_event: AdkEvent
 ) -> Union[A2AEvent, None]:
     # Return None to drop the event entirely from the A2A stream.
@@ -1114,7 +1185,7 @@ async def redact_pii(
 
 config = A2aAgentExecutorConfig(
     execute_interceptors=[
-        ExecuteInterceptor(after_event=redact_pii),
+        ExecuteInterceptor(after_event=filter_internal_events),
     ]
 )
 ```
