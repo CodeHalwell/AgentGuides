@@ -161,6 +161,8 @@ class AsyncAuditTransformer(StreamTransformer):
     """Log every update event to an async audit store without blocking."""
 
     required_stream_modes = ("updates",)  # auto-enable the updates protocol in the mux
+    _native = True          # expose run.audit as a direct attribute (not run.extensions["audit"])
+    requires_async = True   # schedule() needs an async mux; reject accidental sync use
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
