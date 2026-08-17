@@ -1559,7 +1559,7 @@ async def safe_database_operation(
 
 ### Native Tool Library
 
-Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). In 2.31.0 they are passed via `capabilities=[NativeTool(...)]` — the old `builtin_tools=[...]` parameter is removed. All tools are importable from `pydantic_ai`.
+Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). In 2.31.0 they are passed via `capabilities=[NativeTool(...)]` — the old `builtin_tools=[...]` parameter is removed. All native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`; the `NativeTool` wrapper that registers them as capabilities lives in `pydantic_ai.capabilities`.
 
 **Supported native tools (2.31.0):**
 
