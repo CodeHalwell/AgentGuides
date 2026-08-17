@@ -1,6 +1,6 @@
 ---
 title: "LangGraph Class Deep-Dives Vol. 46"
-description: "Source-verified deep dives (langgraph==1.2.11) into 10 class groups: StreamTransformer + LifecycleTransformer (custom projection extension point, sync/async lanes, schedule()), ToolCallTransformer (tool lifecycle ToolCallStream handles, required_stream_modes), SubgraphTransformer (in-process SubgraphRunStream drill-down, child mini-mux scoping), TracePolicy (per-node process_inputs/process_outputs, PII redaction, payload summarisation), RetryPolicy (exponential backoff, custom retry_on callable, per-node vs per-task usage), TimeoutPolicy (run_timeout + idle_timeout dual-timer, refresh_on heartbeat, NodeTimeoutError), EncryptedSerializer (AES-256-GCM checkpoint encryption, from_pycryptodome_aes, CipherProtocol), InMemoryCache + BaseCache + CachePolicy (@task result reuse, TTL, compile(cache=)), InMemoryStore with semantic vector search (index= config, put(index=[...]), search(query=)), and ToolRuntime + InjectedState + InjectedStore (complete tool-injection API, field extraction, invisible-to-LLM params, runtime context access)."
+description: "Source-verified deep dives (langgraph==1.2.11) into 10 class groups: StreamTransformer + LifecycleTransformer (custom projection extension point, sync/async lanes, schedule()), ToolCallTransformer (tool lifecycle ToolCallStream handles, required_stream_modes), SubgraphTransformer (in-process SubgraphRunStream drill-down, child mini-mux scoping), TracePolicy (per-node process_inputs/process_outputs, PII redaction, payload summarisation), RetryPolicy (exponential backoff, custom retry_on callable, per-node vs per-task usage), TimeoutPolicy (run_timeout + idle_timeout dual-timer, refresh_on heartbeat, NodeTimeoutError), EncryptedSerializer (AES-EAX checkpoint encryption, from_pycryptodome_aes, CipherProtocol), InMemoryCache + BaseCache + CachePolicy (@task result reuse, TTL, compile(cache=)), InMemoryStore with semantic vector search (index= config, put(index=[...]), search(query=)), and ToolRuntime + InjectedState + InjectedStore (complete tool-injection API, field extraction, invisible-to-LLM params, runtime context access)."
 framework: langgraph
 language: python
 sidebar:
@@ -66,7 +66,7 @@ for event in run.lifecycle:
     ns = tuple(event["namespace"])
     if event["event"] == "started":
         start_times[str(ns)] = time.monotonic()
-    elif event["event"] in ("finished", "failed"):
+    elif event["event"] in ("completed", "failed", "interrupted", "drained"):
         started = start_times.pop(str(ns), None)
         if started is not None:
             timings.append({
@@ -89,9 +89,10 @@ from langgraph.stream.transformers import StreamTransformer
 from langgraph.stream.stream_channel import StreamChannel
 
 class NodeCountTransformer(StreamTransformer):
-    """Count how many times each named node starts executing."""
+    """Count how many times each named node executes."""
 
     _native = True  # expose as run.node_counts
+    required_stream_modes = ("updates",)  # auto-enable the updates protocol in the mux
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
@@ -102,13 +103,14 @@ class NodeCountTransformer(StreamTransformer):
         return {"node_counts": self._channel}
 
     def process(self, event: dict) -> bool:
-        # Protocol events for node starts have method="updates" and a "node" key
+        # Updates events carry params["data"] — a dict mapping node name → update
         if event.get("method") == "updates":
             params = event.get("params", {})
-            node = params.get("node")
-            if node:
+            data = params.get("data", {})
+            for node in data.keys():
                 self._counts[node] = self._counts.get(node, 0) + 1
-                self._channel.push(dict(self._counts))  # push snapshot
+            if self._counts:
+                self._channel.push(dict(self._counts))  # push snapshot after each step
         return True  # always pass events downstream
 
     def finalize(self) -> None:
@@ -158,6 +160,8 @@ audit_log: list[dict] = []
 class AsyncAuditTransformer(StreamTransformer):
     """Log every update event to an async audit store without blocking."""
 
+    required_stream_modes = ("updates",)  # auto-enable the updates protocol in the mux
+
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
         self._channel: StreamChannel[str] = StreamChannel()
@@ -173,9 +177,12 @@ class AsyncAuditTransformer(StreamTransformer):
 
     async def _log_event(self, event: dict) -> None:
         await asyncio.sleep(0)  # simulate async I/O (DB write, HTTP call, etc.)
-        entry = {"method": event.get("method"), "node": event.get("params", {}).get("node")}
-        audit_log.append(entry)
-        self._channel.push(f"logged: {entry['node']}")
+        # params["data"] is a dict mapping node name → update value
+        data = event.get("params", {}).get("data", {})
+        for node in data.keys():
+            entry = {"method": "updates", "node": node}
+            audit_log.append(entry)
+            self._channel.push(f"logged: {node}")
 
 
 class State(TypedDict):
@@ -269,7 +276,7 @@ async def main():
     )
     async for handle in run.tool_calls:
         print(f"Tool started: {handle.tool_name} (id={handle.tool_call_id})")
-        print(f"  Input: {handle.tool_input}")
+        print(f"  Input: {handle.input}")
         # Drain output deltas
         async for delta in handle.output_deltas:
             print(f"  Delta: {delta!r}")
@@ -338,7 +345,7 @@ with graph.stream(
         completed_handles.append(handle)
 
 for h in completed_handles:
-    print(f"{h.tool_name}({h.tool_input}) → {h.output}")
+    print(f"{h.tool_name}({h.input}) → {h.output}")
 # add({'a': 3, 'b': 4}) → 7
 # multiply({'a': 5, 'b': 6}) → 30
 ```
@@ -587,6 +594,7 @@ asyncio.run(main())
 ### Example 1 — summarise large message history in traces
 
 ```python
+from typing import Any
 from typing_extensions import TypedDict, Annotated
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
@@ -602,8 +610,6 @@ def compress_for_trace(value: Any) -> Any:
         msgs = value["messages"]
         return {**value, "messages": msgs[-2:] if len(msgs) > 2 else msgs}
     return value
-
-from typing import Any
 
 def my_llm_node(state: State) -> dict:
     # Simulate an LLM response
@@ -993,11 +999,11 @@ asyncio.run(main())
 
 - Implements `SerializerProtocol`: `dumps_typed(obj) -> (type_str, bytes)` and `loads_typed((type_str, bytes)) -> obj`.
 - The cipher name is appended to the type string as `"<typ>+<ciphername>"`, so the correct cipher is selected on load.
-- `from_pycryptodome_aes(**kwargs)` is a factory that builds an AES-256-GCM cipher from a 16/24/32-byte key; reads `LANGGRAPH_AES_KEY` env var when no explicit `key` kwarg is provided.
+- `from_pycryptodome_aes(**kwargs)` is a factory that builds an AES-EAX authenticated cipher from a 16/24/32-byte key; reads `LANGGRAPH_AES_KEY` env var when no explicit `key` kwarg is provided. (Default mode is `AES.MODE_EAX` — not GCM; pass `mode=AES.MODE_GCM` to override.)
 - Pass to `InMemorySaver(serde=EncryptedSerializer(...))` or any `BaseCheckpointSaver` that accepts a `serde` argument.
 - Old unencrypted blobs (no `+` in type string) are loaded transparently, enabling zero-downtime migration.
 
-### Example 1 — AES-256 encrypted in-memory checkpointer
+### Example 1 — AES-EAX encrypted in-memory checkpointer
 
 ```python
 import os
@@ -1446,7 +1452,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMe
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import InjectedStore, ToolNode
+from langgraph.prebuilt import InjectedState, InjectedStore, ToolNode
 from langgraph.store.memory import InMemoryStore
 
 store = InMemoryStore()
