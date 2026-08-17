@@ -135,8 +135,9 @@ its resolved argument dict, and a `ToolContext`. `ToolContext` inherits
 
 ```python
 from typing import Any, Optional
+from google.adk.agents import LlmAgent
 from google.adk.tools.base_tool import BaseTool
-from google.adk.agents.context import ToolContext
+from google.adk.tools.tool_context import ToolContext
 
 def log_invocation(
     tool: BaseTool,
@@ -396,18 +397,14 @@ async def combine_results(node_input):
         "headlines": node_input.get("fetch_news", {}).get("headlines"),
     }
 
-# parameter_binding='node_input' passes the predecessor's output dict
-# as the single `node_input` argument (default 'state' binds from session state).
-fetch_weather_node = FunctionNode(
-    name="fetch_weather", func=fetch_weather, parameter_binding="node_input"
-)
-fetch_news_node = FunctionNode(
-    name="fetch_news", func=fetch_news, parameter_binding="node_input"
-)
-join         = JoinNode(name="join")
-combine_node = FunctionNode(
-    name="combine", func=combine_results, parameter_binding="node_input"
-)
+# parameter_binding='node_input' binds input-dict *keys* to matching
+# function-parameter names (e.g. city= from {"city": "Paris"}).
+# Functions that accept a single `node_input` arg use the default 'state'
+# binding, where the entire incoming payload is passed through directly.
+fetch_weather_node = FunctionNode(name="fetch_weather", func=fetch_weather)
+fetch_news_node    = FunctionNode(name="fetch_news",    func=fetch_news)
+join               = JoinNode(name="join")
+combine_node       = FunctionNode(name="combine",       func=combine_results)
 
 workflow = Workflow(
     name="briefing",
@@ -937,13 +934,12 @@ agent = LlmAgent(
 from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
 from google.adk.tools.openapi_tool.auth.auth_helpers import token_to_scheme_credential
 
-# token_type must be "oauth2Token" for Authorization header bearer tokens.
-# Positional arg order: token_type, location, header_name, credential_value.
+# token_type is the only positional arg; pass the rest as keyword arguments.
 scheme, credential = token_to_scheme_credential(
     "oauth2Token",
-    "header",
-    "Authorization",
-    "my-bearer-token",
+    location="header",
+    name="Authorization",
+    credential_value="my-bearer-token",
 )
 
 toolset = OpenAPIToolset(
@@ -992,9 +988,9 @@ toolset = OpenAPIToolset(
 toolset = OpenAPIToolset(
     spec_dict=my_spec_dict,
     tool_filter=["list_pets", "create_pet"],   # only expose these two operations
-    tool_name_prefix="petstore_",              # avoid name collisions
+    tool_name_prefix="petstore",              # avoid name collisions
 )
-# tool names become "petstore_list_pets", "petstore_create_pet"
+# get_tools_with_prefix adds "_" automatically: "petstore_list_pets", "petstore_create_pet"
 ```
 
 ---
@@ -1103,7 +1099,7 @@ from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 import uvicorn
 
 agent = LlmAgent(
@@ -1119,12 +1115,18 @@ runner = Runner(
 
 executor = A2aAgentExecutor(runner=runner)
 
-# AgentCard uses protobuf — no 'url' field; use documentation_url if needed.
+# AgentCard uses protobuf — no top-level 'url' field.
+# supported_interfaces declares the endpoint and protocol binding; without it
+# card validation fails and the server cannot start.
 # AgentSkill requires at minimum id, name, description, and tags.
 card = AgentCard(
     name="assistant",
     description="A helpful assistant exposed via A2A.",
     version="1.0.0",
+    supported_interfaces=[AgentInterface(
+        url="http://0.0.0.0:8080/",
+        protocol_binding="JSONRPC",
+    )],
     capabilities=AgentCapabilities(streaming=True),
     default_input_modes=["text"],
     default_output_modes=["text"],
