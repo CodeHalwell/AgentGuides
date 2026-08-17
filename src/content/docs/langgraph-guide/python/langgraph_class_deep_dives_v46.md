@@ -196,8 +196,8 @@ async def main():
         .add_edge("inc", END)
         .compile(transformers=[AsyncAuditTransformer])
     )
-    # astream_events(version="v3") returns an AsyncGraphRunStream with the .audit projection
-    run = graph.astream_events({"x": 0}, version="v3")
+    # astream_events() is a coroutine — await it to get AsyncGraphRunStream with projections
+    run = await graph.astream_events({"x": 0}, version="v3")
     async for _ in run.audit:
         pass
     print("Audit log:", audit_log)
@@ -272,8 +272,8 @@ graph = (
 )
 
 async def main():
-    # astream_events(version="v3") returns AsyncGraphRunStream with .tool_calls projection
-    run = graph.astream_events(
+    # await astream_events() — it is a coroutine that returns AsyncGraphRunStream
+    run = await graph.astream_events(
         {"messages": [HumanMessage(content="count these words")]},
         version="v3",
     )
@@ -395,8 +395,8 @@ graph = (
 )
 
 async def main():
-    # astream_events(version="v3") exposes both .tool_calls and .lifecycle projections
-    run = graph.astream_events(
+    # await astream_events() — coroutine returns AsyncGraphRunStream with both projections
+    run = await graph.astream_events(
         {"messages": [HumanMessage(content="say hi")]},
         version="v3",
     )
@@ -462,15 +462,21 @@ parent.add_edge("sub", END)
 graph = parent.compile()
 
 async def main():
-    # astream_events(version="v3") returns AsyncGraphRunStream with .subgraphs projection
-    run = graph.astream_events({"count": 0}, version="v3")
-    async for handle in run.subgraphs:
-        print(f"Subgraph namespace: {handle.namespace}")
-        async for value in handle.values:
-            print(f"  subgraph value: {value}")
-    # Also consume root values
-    async for root_value in run.values:
-        print(f"Root value: {root_value}")
+    # await astream_events() — coroutine returns AsyncGraphRunStream
+    run = await graph.astream_events({"count": 0}, version="v3")
+    # Drain subgraphs and root values concurrently — StreamChannel does not buffer
+    # events for late subscribers, so both must be consumed at the same time.
+    async def drain_subgraphs():
+        async for handle in run.subgraphs:
+            print(f"Subgraph namespace: {handle.namespace}")
+            async for value in handle.values:
+                print(f"  subgraph value: {value}")
+
+    async def drain_root():
+        async for root_value in run.values:
+            print(f"Root value: {root_value}")
+
+    await asyncio.gather(drain_subgraphs(), drain_root())
 
 asyncio.run(main())
 ```
@@ -523,7 +529,7 @@ async def traverse(handle, depth: int = 0) -> None:
         await traverse(child, depth + 1)
 
 async def main():
-    run = graph.astream_events({"items": []}, version="v3")
+    run = await graph.astream_events({"items": []}, version="v3")
     async for handle in run.subgraphs:
         await traverse(handle)
 
@@ -567,7 +573,7 @@ root.add_edge("pipeline", END)
 graph = root.compile()
 
 async def main():
-    run = graph.astream_events(
+    run = await graph.astream_events(
         {"messages": [HumanMessage(content="What is LangGraph?")]},
         version="v3",
     )
@@ -1130,11 +1136,12 @@ aes_key = b"migration-key-32bytes-exact!!!!!"
 enc_serde = EncryptedSerializer.from_pycryptodome_aes(key=aes_key)
 enc_saver = InMemorySaver(serde=enc_serde)
 
-# Copy raw checkpoint storage so the old thread is accessible through enc_saver.
-# EncryptedSerializer can fall back to plain-serde for blobs whose type tag lacks
-# the '+aes' suffix, so existing unencrypted blobs are still readable.
+# Copy all three internal InMemorySaver mappings so the old thread is accessible.
+# EncryptedSerializer falls back to plain-serde for blobs whose type tag lacks the
+# '+aes' suffix, so existing unencrypted blobs are still readable after the copy.
 enc_saver.storage = plain_saver.storage.copy()  # type: ignore[attr-defined]
 enc_saver.writes = plain_saver.writes.copy()     # type: ignore[attr-defined]
+enc_saver.blobs = plain_saver.blobs.copy()       # type: ignore[attr-defined]
 
 enc_graph = graph_def.compile(checkpointer=enc_saver)
 
@@ -1142,9 +1149,11 @@ enc_graph = graph_def.compile(checkpointer=enc_saver)
 snapshot = enc_graph.get_state(config)
 print(snapshot.values["n"])  # 1 — old plaintext checkpoint is still readable
 
-# Continue the thread; new checkpoints are written with AES encryption
-result = enc_graph.invoke(None, config)
-print(result["n"])  # 2 — subsequent checkpoint is encrypted
+# Start a new encrypted thread from the migrated value; invoke(None) on a terminal
+# checkpoint only reloads state without running nodes, so use a fresh thread_id.
+enc_config = {"configurable": {"thread_id": "migration-encrypted"}}
+result = enc_graph.invoke({"n": snapshot.values["n"]}, enc_config)
+print(result["n"])  # 2 — new checkpoint is written with AES encryption
 ```
 
 ---
@@ -1353,7 +1362,7 @@ for r in results:
     print(f"[score={r.score:.3f}] {r.value['text']}")
 ```
 
-### Example 3 — cross-thread long-term memory with `InjectedStore` in a node
+### Example 3 — cross-thread long-term memory via `get_store()` in graph nodes
 
 ```python
 from typing import Any
@@ -1362,32 +1371,36 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.store.memory import InMemoryStore
-from langgraph.prebuilt import InjectedStore
+from langgraph.config import get_store  # context-var accessor; works inside any node
 
+# Note: InjectedStore is for @tool functions run by ToolNode, not for plain
+# StateGraph node functions. Use get_store() instead inside ordinary nodes.
 store = InMemoryStore()
 
 class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     user_id: str
 
-def remember_preference(state: State, store: Annotated[InMemoryStore, InjectedStore()]) -> dict:
+def remember_preference(state: State) -> dict:
     """Read user preferences from the store and inject into the reply."""
-    item = store.get(("user_prefs",), state["user_id"])
+    s = get_store()
+    item = s.get(("user_prefs",), state["user_id"]) if s else None
     prefs = item.value if item else {}
     reply_text = f"Your prefs: {prefs}" if prefs else "No preferences stored yet."
     return {"messages": [AIMessage(content=reply_text)]}
 
-def save_preference(state: State, store: Annotated[InMemoryStore, InjectedStore()]) -> dict:
+def save_preference(state: State) -> dict:
     """Write the latest preference back to the store."""
+    s = get_store()
     last_human = next(
         (m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None
     )
-    if last_human and "theme:" in last_human.content:
+    if s and last_human and "theme:" in last_human.content:
         theme = last_human.content.split("theme:")[-1].strip()
-        existing = store.get(("user_prefs",), state["user_id"])
+        existing = s.get(("user_prefs",), state["user_id"])
         prefs = existing.value if existing else {}
         prefs["theme"] = theme
-        store.put(("user_prefs",), state["user_id"], prefs)
+        s.put(("user_prefs",), state["user_id"], prefs)
     return {}
 
 graph = (
