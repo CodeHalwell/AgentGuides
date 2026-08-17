@@ -34,8 +34,6 @@ Source-verified deep dives into **10 class groups**, each with **3 runnable exam
 import time
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream.transformers import LifecycleTransformer
-
 class State(TypedDict):
     value: int
 
@@ -55,13 +53,14 @@ parent.add_node("sub", sub_compiled)
 parent.add_edge(START, "sub")
 parent.add_edge("sub", END)
 
-# LifecycleTransformer is registered at compile time
-graph = parent.compile(transformers=[LifecycleTransformer])
+# LifecycleTransformer is built-in to stream_events(version="v3") — compile() with no transformers arg
+graph = parent.compile()
 
 timings: list[dict] = []
 start_times: dict[str, float] = {}
 
-run = graph.stream({"value": 3}, stream_mode="custom")
+# stream_events(version="v3") returns a GraphRunStream with .lifecycle projection
+run = graph.stream_events({"value": 3}, version="v3")
 for event in run.lifecycle:
     ns = tuple(event["namespace"])
     if event["event"] == "started":
@@ -136,7 +135,8 @@ graph = (
     .compile(transformers=[NodeCountTransformer])
 )
 
-run = graph.stream({"steps": []}, stream_mode="custom")
+# stream_events(version="v3") exposes custom transformer projections via _native attributes
+run = graph.stream_events({"steps": []}, version="v3")
 final_counts: dict[str, int] = {}
 for snapshot in run.node_counts:
     final_counts = snapshot
@@ -196,7 +196,9 @@ async def main():
         .add_edge("inc", END)
         .compile(transformers=[AsyncAuditTransformer])
     )
-    async for _ in graph.astream({"x": 0}, stream_mode="custom"):
+    # astream_events(version="v3") returns an AsyncGraphRunStream with the .audit projection
+    run = graph.astream_events({"x": 0}, version="v3")
+    async for _ in run.audit:
         pass
     print("Audit log:", audit_log)
 
@@ -216,7 +218,7 @@ asyncio.run(main())
 - `required_stream_modes = ("tools",)` — the `tools` channel must be opted into at stream/invoke time for this transformer to receive events.
 - `_native = True` — `run.tool_calls` is a first-class attribute on the run stream.
 - `process()` returns `True` (pass-through) so the raw `tools` channel events still flow through to wire consumers.
-- `ToolCallStream` exposes: `tool_call_id`, `tool_name`, `tool_input`, `output` (final), `completed` (bool), `output_deltas` (async-iterable `StreamChannel`).
+- `ToolCallStream` exposes: `tool_call_id`, `tool_name`, `input`, `output` (final), `completed` (bool), `output_deltas` (async-iterable `StreamChannel`).
 - Active handles are tracked in `_active: dict[str, ToolCallStream]`; `finalize()` closes any still-open handles after the run ends.
 - Register by passing `transformers=[ToolCallTransformer]` to `compile()`.
 
@@ -270,9 +272,10 @@ graph = (
 )
 
 async def main():
-    run = graph.astream(
+    # astream_events(version="v3") returns AsyncGraphRunStream with .tool_calls projection
+    run = graph.astream_events(
         {"messages": [HumanMessage(content="count these words")]},
-        stream_mode=["tools", "updates"],
+        version="v3",
     )
     async for handle in run.tool_calls:
         print(f"Tool started: {handle.tool_name} (id={handle.tool_call_id})")
@@ -335,14 +338,14 @@ graph = (
     .compile(transformers=[ToolCallTransformer])
 )
 
-# Consume the stream synchronously; collect handles after the run
+# stream_events(version="v3") returns GraphRunStream with .tool_calls projection
 completed_handles = []
-with graph.stream(
+run = graph.stream_events(
     {"messages": [HumanMessage(content="math")]},
-    stream_mode=["tools", "updates"],
-) as run:
-    for handle in run.tool_calls:
-        completed_handles.append(handle)
+    version="v3",
+)
+for handle in run.tool_calls:
+    completed_handles.append(handle)
 
 for h in completed_handles:
     print(f"{h.tool_name}({h.input}) → {h.output}")
@@ -360,7 +363,6 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
-from langgraph.stream.transformers import LifecycleTransformer
 
 @tool
 def greet(name: str) -> str:
@@ -388,13 +390,15 @@ graph = (
     .add_edge(START, "agent")
     .add_edge("agent", "tools")
     .add_edge("tools", END)
-    .compile(transformers=[ToolCallTransformer, LifecycleTransformer])
+    # ToolCallTransformer must be registered at compile; LifecycleTransformer is built-in to v3
+    .compile(transformers=[ToolCallTransformer])
 )
 
 async def main():
-    run = graph.astream(
+    # astream_events(version="v3") exposes both .tool_calls and .lifecycle projections
+    run = graph.astream_events(
         {"messages": [HumanMessage(content="say hi")]},
-        stream_mode=["tools", "updates"],
+        version="v3",
     )
     # Iterate tool_calls and lifecycle concurrently
     import asyncio
@@ -433,7 +437,6 @@ asyncio.run(main())
 import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream.transformers import SubgraphTransformer
 
 class State(TypedDict):
     count: int
@@ -455,10 +458,12 @@ parent = StateGraph(State)
 parent.add_node("sub", sub_compiled)
 parent.add_edge(START, "sub")
 parent.add_edge("sub", END)
-graph = parent.compile(transformers=[SubgraphTransformer])
+# SubgraphTransformer is built-in to stream_events(version="v3") — no transformers arg needed
+graph = parent.compile()
 
 async def main():
-    run = graph.astream({"count": 0}, stream_mode="values")
+    # astream_events(version="v3") returns AsyncGraphRunStream with .subgraphs projection
+    run = graph.astream_events({"count": 0}, version="v3")
     async for handle in run.subgraphs:
         print(f"Subgraph namespace: {handle.namespace}")
         async for value in handle.values:
@@ -476,7 +481,6 @@ asyncio.run(main())
 import asyncio
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.stream.transformers import SubgraphTransformer
 
 class State(TypedDict):
     items: list[str]
@@ -508,7 +512,8 @@ root = StateGraph(State)
 root.add_node("middle", middle_compiled)
 root.add_edge(START, "middle")
 root.add_edge("middle", END)
-graph = root.compile(transformers=[SubgraphTransformer])
+# SubgraphTransformer is built-in to stream_events(version="v3")
+graph = root.compile()
 
 async def traverse(handle, depth: int = 0) -> None:
     indent = "  " * depth
@@ -518,7 +523,7 @@ async def traverse(handle, depth: int = 0) -> None:
         await traverse(child, depth + 1)
 
 async def main():
-    run = graph.astream({"items": []}, stream_mode="values")
+    run = graph.astream_events({"items": []}, version="v3")
     async for handle in run.subgraphs:
         await traverse(handle)
 
@@ -534,7 +539,6 @@ from typing_extensions import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.stream.transformers import SubgraphTransformer
 
 class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -559,12 +563,13 @@ root = StateGraph(State)
 root.add_node("pipeline", response_compiled)
 root.add_edge(START, "pipeline")
 root.add_edge("pipeline", END)
-graph = root.compile(transformers=[SubgraphTransformer])
+# SubgraphTransformer is built-in to stream_events(version="v3")
+graph = root.compile()
 
 async def main():
-    run = graph.astream(
+    run = graph.astream_events(
         {"messages": [HumanMessage(content="What is LangGraph?")]},
-        stream_mode="messages",
+        version="v3",
     )
     print("Root messages:")
     async for handle in run.subgraphs:
@@ -670,7 +675,10 @@ compiled = graph.compile()
 
 out = compiled.invoke({"username": "alice", "api_key": "sk-secret-123", "result": ""})
 print(out["result"])
-# Trace records show api_key=***REDACTED***
+# The `fetch` node's own run trace records api_key=***REDACTED***
+# Note: scope is the node's span only. The root graph run still receives the original
+# invocation payload. For full-graph hiding use LangSmith's hide_inputs/hide_outputs
+# or the anonymizer feature rather than relying on TracePolicy alone.
 ```
 
 ### Example 3 — omit outputs entirely for a privacy-sensitive node
@@ -1041,7 +1049,7 @@ snapshot = compiled.get_state(config)
 print(snapshot.values["processed"])  # True — decrypted on access
 ```
 
-### Example 2 — environment-variable-driven key rotation
+### Example 2 — environment-variable-driven key (with rotation caveat)
 
 ```python
 import os
@@ -1050,7 +1058,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 
-# Key is read from environment — rotate by changing LANGGRAPH_AES_KEY
+# Read AES key from environment at startup
 os.environ["LANGGRAPH_AES_KEY"] = "another-32-byte-key-for-env-var!"
 
 class State(TypedDict):
@@ -1072,6 +1080,20 @@ graph = (
 config = {"configurable": {"thread_id": "env-key-thread"}}
 result = graph.invoke({"value": 0}, config)
 print(result["value"])  # 1
+
+# ⚠ Key rotation caveat: EncryptedSerializer stores no key-ID in the ciphertext type
+# suffix — it only tags the cipher ("aes"). Replacing LANGGRAPH_AES_KEY while keeping
+# existing checkpoints means the serializer has only the new key and cannot decrypt
+# old blobs, which become permanently inaccessible.
+#
+# Safe rotation requires a multi-key migration strategy:
+#   1. Keep the OLD key accessible (e.g. LANGGRAPH_AES_KEY_OLD).
+#   2. Read each existing checkpoint through the old serde, re-encrypt with the new
+#      serde, and write back — this must complete before the old key is removed.
+#   3. Only retire the old key once all blobs have been migrated.
+#
+# This is a storage-layer concern outside EncryptedSerializer's scope; implement it
+# in your checkpoint backend (database migration script, dual-read adapter, etc.).
 ```
 
 ### Example 3 — transparent migration from unencrypted to encrypted
@@ -1081,7 +1103,6 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 class State(TypedDict):
     n: int
@@ -1096,20 +1117,34 @@ graph_def = (
     .add_edge("step", END)
 )
 
-# Phase 1: unencrypted checkpoints
+# Phase 1: write a checkpoint with the unencrypted (default) serde
 plain_saver = InMemorySaver()  # default JsonPlusSerializer
 plain_graph = graph_def.compile(checkpointer=plain_saver)
 config = {"configurable": {"thread_id": "migration-demo"}}
 plain_graph.invoke({"n": 0}, config)
 
-# Phase 2: swap in encrypted serde; old blobs still load (no '+' in type → plain path)
-enc_serde = EncryptedSerializer.from_pycryptodome_aes(key=b"migration-key-32bytes-exact!!!!!")
+# Phase 2: migrate blobs to a new saver backed by the encrypted serde.
+# In production this would be a database migration; here we copy InMemorySaver's
+# internal storage directly so the same thread ID is accessible via enc_saver.
+aes_key = b"migration-key-32bytes-exact!!!!!"
+enc_serde = EncryptedSerializer.from_pycryptodome_aes(key=aes_key)
 enc_saver = InMemorySaver(serde=enc_serde)
-# Copy existing checkpoint data (in practice you'd migrate blobs in a DB)
+
+# Copy raw checkpoint storage so the old thread is accessible through enc_saver.
+# EncryptedSerializer can fall back to plain-serde for blobs whose type tag lacks
+# the '+aes' suffix, so existing unencrypted blobs are still readable.
+enc_saver.storage = plain_saver.storage.copy()  # type: ignore[attr-defined]
+enc_saver.writes = plain_saver.writes.copy()     # type: ignore[attr-defined]
+
 enc_graph = graph_def.compile(checkpointer=enc_saver)
-enc_graph.invoke({"n": 0}, {"configurable": {"thread_id": "migration-new"}})
-snapshot = enc_graph.get_state({"configurable": {"thread_id": "migration-new"}})
-print(snapshot.values["n"])  # 1 — encrypted checkpoint read back successfully
+
+# Read the old (unencrypted) checkpoint through the new encrypted saver
+snapshot = enc_graph.get_state(config)
+print(snapshot.values["n"])  # 1 — old plaintext checkpoint is still readable
+
+# Continue the thread; new checkpoints are written with AES encryption
+result = enc_graph.invoke(None, config)
+print(result["n"])  # 2 — subsequent checkpoint is encrypted
 ```
 
 ---
