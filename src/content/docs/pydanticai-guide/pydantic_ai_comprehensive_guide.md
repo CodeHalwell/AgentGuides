@@ -1575,21 +1575,28 @@ Pydantic AI provides native tools that delegate to model-provider capabilities (
 | `XSearchTool` | `from pydantic_ai import XSearchTool` | xAI |
 
 > **Migration (2.31.0):** `Agent(builtin_tools=[...])` → `Agent(capabilities=[NativeTool(...)])`. `UrlContextTool` is removed — use `WebFetchTool` instead.
+>
+> **Import note:** Native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`. The `NativeTool` wrapper capability lives under `pydantic_ai.capabilities`.
 
 ```python
-from pydantic_ai import Agent, WebSearchTool, WebFetchTool, CodeExecutionTool
+# Native tools must be paired with a provider that supports them — not all tools
+# work with every provider (e.g. WebFetchTool is Anthropic/Google-only).
+from pydantic_ai import Agent, WebSearchTool, CodeExecutionTool
 from pydantic_ai.capabilities import NativeTool
 
+# WebSearchTool and CodeExecutionTool are supported on OpenAI Responses models.
 agent = Agent(
     'openai:gpt-4o',
     capabilities=[
         NativeTool(WebSearchTool()),     # model-native web search
-        NativeTool(WebFetchTool()),      # fetch URL content
         NativeTool(CodeExecutionTool()), # sandboxed code execution
     ],
 )
 
-# The agent can now search the web, fetch pages, and execute code
+# For WebFetchTool (Anthropic/Google only), use a compatible provider:
+# from pydantic_ai import Agent, WebFetchTool
+# agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[NativeTool(WebFetchTool())])
+
 result = agent.run_sync('Search for the latest Python release and show a hello-world snippet')
 print(result.output)
 ```

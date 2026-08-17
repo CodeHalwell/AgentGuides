@@ -446,9 +446,12 @@ async def cache_interceptor(ctx, messages):
     # Cache miss — let the real model call proceed
 
 
+# Register via Hooks capability so the interceptor is actually invoked
+from pydantic_ai.capabilities import Hooks
+
 agent = Agent(
     'openai:gpt-5.6-luna',
-    # Hooks are attached via capabilities in 2.31.0
+    capabilities=[Hooks(before_model_request=cache_interceptor)],
 )
 # Populate the cache:
 RESPONSE_CACHE['What is 2+2?'] = 'The answer is 4.'
@@ -769,17 +772,21 @@ agent = Agent(
 
 ```python
 # Example 3 — OpenRouter gateway: advisor via OpenRouter model catalog
+# Set OPENROUTER_API_KEY in the environment; the 'openrouter:' prefix resolves it automatically.
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import AdvisorTool
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 # OpenRouter exposes advisor as a gateway server tool.
 # It honours `model` and `max_tokens`; other fields are silently ignored.
+# Pass the provider explicitly so a runtime-supplied key is actually used.
 provider = OpenRouterProvider(api_key='or-...')
+model = OpenAIChatModel('meta-llama/llama-3.3-70b-instruct', provider=provider)
 
 agent = Agent(
-    'openrouter:meta-llama/llama-3.3-70b-instruct',  # fast executor via OpenRouter
+    model,
     capabilities=[
         NativeTool(
             AdvisorTool(
@@ -864,11 +871,14 @@ agent = Agent(
     toolsets=[mcp.defer_loading()],
 )
 
-# async with agent.run_stream('Find and use the best tool for inventory lookup.') as stream:
-#     async for event in stream:
+# run_stream_events() is the async context manager that yields raw AgentStreamEvents,
+# which include PartStartEvent / PartEndEvent wrappers carrying model-response parts.
+# async with agent.run_stream_events('Find and use the best tool for inventory lookup.') as events:
+#     async for event in events:
 #         # ToolAvailabilityDeltaPart fires when deferred tools are injected mid-stream
-#         if hasattr(event, 'part') and isinstance(event.part, ToolAvailabilityDeltaPart):
-#             newly_available = [t.name for t in event.part.tools]
+#         part = getattr(event, 'part', None)
+#         if isinstance(part, ToolAvailabilityDeltaPart):
+#             newly_available = [t.name for t in part.tools]
 #             print(f'Tools now available: {newly_available}')
 
 # This lets you log or display tool-discovery events to the user in real time.
