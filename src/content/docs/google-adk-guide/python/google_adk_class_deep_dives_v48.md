@@ -820,43 +820,27 @@ agent = LlmAgent(
 
 ### Example 3 — non-Gemini model guard
 
-`UrlContextTool` checks the model at request time (inside `process_llm_request`),
-not at agent construction time. The `ValueError` is therefore raised when the
-runner sends the first message, not when `LlmAgent` is created.
+`UrlContextTool` checks the model inside `process_llm_request`, not at agent
+construction time. Calling the method directly lets you observe the guard
+without needing a registered LLM backend:
 
 ```python
 import asyncio
-from google.genai import types
-from google.adk.agents import LlmAgent
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.adk.tools.url_context_tool import url_context
+from google.adk.models import LlmRequest
+from google.adk.tools.url_context_tool import UrlContextTool
 
-agent = LlmAgent(
-    name="bad_agent",
-    model="gpt-4o",      # not a Gemini model — check fires at run time
-    instruction="Answer questions.",
-    tools=[url_context],
-)
-session_service = InMemorySessionService()
-runner = Runner(app_name="demo", agent=agent, session_service=session_service)
+tool = UrlContextTool()
 
-async def run():
-    session = await session_service.create_session(app_name="demo", user_id="u1")
+async def check_guard():
+    req = LlmRequest(model="gpt-4o")   # any non-Gemini model string
     try:
-        async for _ in runner.run_async(
-            user_id="u1",
-            session_id=session.id,
-            new_message=types.Content(
-                role="user", parts=[types.Part(text="Hello")]
-            ),
-        ):
-            pass
+        # tool_context is not used by this check, so None is fine here.
+        await tool.process_llm_request(tool_context=None, llm_request=req)
     except ValueError as e:
         print(e)
         # "Url context tool is not supported for model gpt-4o"
 
-asyncio.run(run())
+asyncio.run(check_guard())
 ```
 
 ---
@@ -1124,7 +1108,7 @@ card = AgentCard(
     description="A helpful assistant exposed via A2A.",
     version="1.0.0",
     supported_interfaces=[AgentInterface(
-        url="http://0.0.0.0:8080/",
+        url="http://localhost:8080/",   # client-reachable address, not the bind wildcard
         protocol_binding="JSONRPC",
     )],
     capabilities=AgentCapabilities(streaming=True),
