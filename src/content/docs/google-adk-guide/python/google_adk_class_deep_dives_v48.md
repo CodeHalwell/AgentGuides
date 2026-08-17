@@ -91,27 +91,39 @@ class RoleBasedToolset(BaseToolset):
         pass
 ```
 
-### Example 2 — credential lookup in a custom `InstructionProvider`
+### Example 2 — credential lookup in an `InstructionProvider`
+
+`InstructionProvider` is a type alias for
+`Callable[[ReadonlyContext], str | Awaitable[str]]` — any async (or sync)
+function that accepts a `ReadonlyContext` and returns a string. The HTTP
+credential token lives at `cred.http.credentials.token` (not `cred.http.token`).
 
 ```python
+from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 
-class ApiKeyInstructionProvider:
+async def api_key_instruction(ctx: ReadonlyContext) -> str:
     """Confirm whether a credential is configured — without exposing any token value."""
+    cred = ctx.get_credential("my_api_service")
+    configured = (
+        cred is not None
+        and cred.http is not None
+        and cred.http.credentials is not None
+        and bool(cred.http.credentials.token)
+    )
+    status = "configured" if configured else "not yet resolved"
+    return (
+        f"You are a helpful assistant. "
+        f"The API service credential is {status}. "
+        "Use it for any external calls that require authentication."
+    )
 
-    async def get_instruction(self, ctx: ReadonlyContext) -> str:
-        cred = ctx.get_credential("my_api_service")
-        configured = (
-            cred is not None
-            and cred.http is not None
-            and bool(cred.http.token)
-        )
-        status = "configured" if configured else "not yet resolved"
-        return (
-            f"You are a helpful assistant. "
-            f"The API service credential is {status}. "
-            "Use it for any external calls that require authentication."
-        )
+# Wire the callable directly as instruction= — it is called each turn.
+agent = LlmAgent(
+    name="api_agent",
+    model="gemini-2.5-flash",
+    instruction=api_key_instruction,
+)
 ```
 
 ### Example 3 — reading custom metadata
@@ -557,11 +569,12 @@ async def orchestrate(node_input, ctx: Context):
             node_input={"query": q},
             run_id=str(i),   # deterministic for resume
         )
-        results.append(child_ctx.output)
+        results.append(child_ctx)
     return {"all_results": results}
 
 orchestrator = FunctionNode(
-    name="orchestrate", func=orchestrate, parameter_binding="node_input"
+    name="orchestrate", func=orchestrate, parameter_binding="node_input",
+    rerun_on_resume=True,
 )
 # Every workflow must have a START edge to seed the initial nodes.
 workflow = Workflow(name="multi_search", edges=[(START, orchestrator)])
@@ -596,7 +609,7 @@ async def safe_idempotent_node(node_input, ctx: Context):
         node_input=node_input,
         run_id="step-1",
     )
-    return child.output
+    return child
 ```
 
 ---
@@ -675,6 +688,7 @@ runner = Runner(
 ### Example 2 — specific tools with auth token getters
 
 ```python
+from google.adk.tools.toolbox_toolset import ToolboxToolset
 import google.auth
 import google.auth.transport.requests
 
