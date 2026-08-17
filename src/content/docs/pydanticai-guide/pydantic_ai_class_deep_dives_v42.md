@@ -142,11 +142,11 @@ class Deps:
 agent = Agent(
     'openai:gpt-5.6-luna',
     deps_type=Deps,
-    # Strings with {{ are auto-compiled to TemplateStr during Agent construction
-    instructions='You are a helpful assistant for {{user_name}}, who is a {{role}}.',
+    # Must wrap in TemplateStr — plain strings are always treated as static text by Agent
+    instructions=TemplateStr('You are a helpful assistant for {{user_name}}, who is a {{role}}.'),
 )
 
-# At run time the template is rendered before the first model request:
+# At run time the TemplateStr is rendered against deps before the first model request:
 # result = agent.run_sync('What should I focus on this week?', deps=Deps('Alice', 'product manager'))
 # The model sees: "You are a helpful assistant for Alice, who is a product manager."
 ```
@@ -191,17 +191,16 @@ agent = Agent(
     'anthropic:claude-sonnet-4-6',
     deps_type=Ctx,
     instructions=[
-        # Static instruction — always included verbatim
+        # Static strings — always included verbatim; no rendering
         'You are a translation assistant.',
-        # Templated instruction — rendered against deps at run time
-        'Always translate into {{language}} and keep your reply under {{max_words}} words.',
-        # Another static guard
+        # TemplateStr — rendered against deps at run time; plain str would not be rendered
+        TemplateStr('Always translate into {{language}} and keep your reply under {{max_words}} words.'),
         'Never include the original text in your response.',
     ],
 )
 
 # result = agent.run_sync('Hello, world!', deps=Ctx(language='Spanish', max_words=50))
-# The assembled system prompt concatenates all three instructions, with the second rendered.
+# The assembled system prompt concatenates all three, with the TemplateStr rendered against deps.
 ```
 
 ---
@@ -650,6 +649,7 @@ agent = Agent(
 # Example 2 — DeferredLoadingToolset with tool_names: defer only large/expensive tools
 from pydantic_ai import Agent, FunctionToolset
 from pydantic_ai.toolsets import DeferredLoadingToolset
+from pydantic_ai.toolsets._tool_search import ToolSearchToolset
 
 toolset = FunctionToolset()
 
@@ -666,13 +666,16 @@ def expensive_analysis(dataset_id: str, depth: int) -> dict:
     return {'result': 'analysis', 'dataset': dataset_id}
 
 
-# Only expensive_analysis is deferred; quick_lookup is visible from the first request.
+# quick_lookup is visible from the first request; expensive_analysis is deferred.
+# ToolSearchToolset wraps the whole toolset so the model can discover the deferred tool.
 agent = Agent(
     'anthropic:claude-sonnet-4-6',
     toolsets=[
-        DeferredLoadingToolset(
-            toolset,
-            tool_names=frozenset({'expensive_analysis'}),
+        ToolSearchToolset(
+            DeferredLoadingToolset(
+                toolset,
+                tool_names=frozenset({'expensive_analysis'}),
+            )
         )
     ],
 )
