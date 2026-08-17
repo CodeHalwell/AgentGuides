@@ -75,6 +75,7 @@ class RoleBasedToolset(BaseToolset):
     """Only expose admin tools when the session marks the user as an admin."""
 
     def __init__(self, all_tools: list[BaseTool], admin_tools: list[BaseTool]):
+        super().__init__()   # required: initialises invocation cache and tool filter
         self._all_tools = all_tools
         self._admin_tools = admin_tools
 
@@ -126,16 +127,33 @@ agent = LlmAgent(
 )
 ```
 
-### Example 3 — reading custom metadata
+### Example 3 — reading custom metadata in a `before_tool_callback`
+
+ADK calls `before_tool_callback` with three arguments: the tool being invoked,
+its resolved argument dict, and a `ToolContext`. `ToolContext` inherits
+`ReadonlyContext` and exposes `custom_metadata`.
 
 ```python
-# In a before_tool callback, custom_metadata is also read-only.
-from google.adk.agents.readonly_context import ReadonlyContext
+from typing import Any, Optional
+from google.adk.tools.base_tool import BaseTool
+from google.adk.agents.context import ToolContext
 
-def log_invocation(ctx: ReadonlyContext) -> None:
-    meta = ctx.custom_metadata   # Mapping[str, Any], not mutable
+def log_invocation(
+    tool: BaseTool,
+    args: dict[str, Any],
+    tool_context: ToolContext,
+) -> Optional[dict[str, Any]]:
+    meta = tool_context.custom_metadata   # Mapping[str, Any], not mutable
     request_id = meta.get("request_id", "unknown")
-    print(f"[{ctx.invocation_id}] agent={ctx.agent_name} request_id={request_id}")
+    print(f"[{tool_context.invocation_id}] tool={tool.name} request_id={request_id}")
+    return None  # returning None lets the tool run normally
+
+agent = LlmAgent(
+    name="logged_agent",
+    model="gemini-2.5-flash",
+    instruction="Answer helpfully.",
+    before_tool_callback=log_invocation,
+)
 ```
 
 ---
@@ -301,9 +319,9 @@ entry = TranscriptionEntry(
     data=types.Blob(mime_type="audio/pcm", data=b"\x01\x02\x03"),
 )
 
-# Pydantic serialises bytes as base64 via model_config
+# model_dump_json serialises the entry; how binary data is encoded depends
+# on google.genai's Blob implementation — test with your own payload.
 payload = entry.model_dump_json()
-print(json.loads(payload)["data"]["data"])  # base64-encoded bytes
 
 # Round-trip
 restored = TranscriptionEntry.model_validate_json(payload)
@@ -689,17 +707,19 @@ runner = Runner(
 
 ```python
 from google.adk.tools.toolbox_toolset import ToolboxToolset
-import google.auth
 import google.auth.transport.requests
+import google.oauth2.id_token
+
+TOOLBOX_URL = "https://toolbox.example.com"
 
 def get_google_id_token() -> str:
-    creds, _ = google.auth.default()
+    # Mint an audience-bound OIDC ID token — not the OAuth access token from
+    # google.auth.default(), which Toolbox OIDC auth will reject.
     auth_req = google.auth.transport.requests.Request()
-    creds.refresh(auth_req)
-    return creds.token
+    return google.oauth2.id_token.fetch_id_token(auth_req, audience=TOOLBOX_URL)
 
 toolset = ToolboxToolset(
-    server_url="https://toolbox.example.com",
+    server_url=TOOLBOX_URL,
     tool_names=["search_orders", "get_inventory"],
     auth_token_getters={"google": get_google_id_token},
 )
@@ -779,8 +799,8 @@ agent = LlmAgent(
     name="researcher",
     model="gemini-2.5-flash",
     instruction=(
-        "You are a research assistant. When asked about a topic, "
-        "search for and read relevant web pages to provide accurate answers."
+        "You are a research assistant. When the user provides URLs, "
+        "read and analyse their content to give accurate, detailed answers."
     ),
     tools=[url_context],
 )
@@ -1165,7 +1185,7 @@ async def log_before(ctx: RequestContext) -> RequestContext:
 async def log_after(executor_ctx, final_event: TaskStatusUpdateEvent) -> TaskStatusUpdateEvent:
     logger.info(
         "A2A task completed: task_id=%s state=%s",
-        final_event.id,
+        final_event.task_id,
         final_event.status.state if final_event.status else "unknown",
     )
     return final_event
@@ -1192,9 +1212,11 @@ from google.adk.events.event import Event as AdkEvent
 async def filter_internal_events(
     executor_ctx, a2a_event: A2AEvent, adk_event: AdkEvent
 ) -> Union[A2AEvent, None]:
-    # Return None to drop the event entirely from the A2A stream.
-    if adk_event.author == "internal_tool":
-        return None   # hide internal tool events from the A2A client
+    # Drop function-call and function-response events from the A2A stream.
+    # Detect them by inspecting the event content, not event.author (which
+    # ADK does not set to a sentinel value for tool events).
+    if adk_event.get_function_calls() or adk_event.get_function_responses():
+        return None   # hide tool-call events from the A2A client
     return a2a_event
 
 config = A2aAgentExecutorConfig(
