@@ -1,29 +1,50 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.10.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, and observability."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.14.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest verified release: 1.10.0 | Python 3.10+
+Latest verified release: 1.14.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version:** 1.10.0 (`agent-framework` and `agent-framework-core`)
+**Framework Version:** 1.14.0 (`agent-framework` and `agent-framework-core`)
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework-core==1.10.0`).**
+> **API reference (verified against `agent-framework==1.14.0`).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
 > - **Chat clients:** `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, plus Bedrock / Ollama in the `1.0.0b` provider line.
 > - **Tool decorator:** `@tool` from `agent_framework`.
 > - **Multi-turn state:** `session = agent.create_session()`, then `await agent.run(prompt, session=session)`.
-> - **Workflows:** `WorkflowBuilder` (with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_chain` / `.add_multi_selection_edge_group`) and the experimental `@workflow` / `@step` functional API from `agent_framework`.
-> - **Long-term memory (experimental):** `MemoryStore` + `MemoryContextProvider` from `agent_framework`.
+> - **Workflows:** `WorkflowBuilder` (with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_chain` / `.add_multi_selection_edge_group`) and the experimental `@workflow` / `@step` functional API from `agent_framework`. Visualise any workflow with `WorkflowViz`.
+> - **Long-term memory (experimental):** `MemoryStore` + `MemoryContextProvider` from `agent_framework`. File-backed memory: `FileMemoryProvider`.
+> - **File access (experimental):** `FileAccessProvider` + `AgentFileStore` — shared, persistent CRUD/grep access for agents across sessions.
+> - **Agent mode (experimental):** `AgentModeProvider` — plan/execute mode switching, persisted in session state.
+> - **Security (experimental — FIDES):** `agent_framework.security` — `LabelTrackingFunctionMiddleware`, `PolicyEnforcementFunctionMiddleware`, `SecureMCPToolProxy`, `SecureAgentConfig` for prompt-injection defence.
+> - **Settings:** `load_settings` + `SecretString` — `TypedDict`-based settings from env vars, `.env` files, and overrides with masked secret values.
+> - **Evaluation:** `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `AgentEvalConverter` from `agent_framework`.
 > - **Declarative YAML agents (beta):** `AgentFactory` / `WorkflowFactory` from `agent_framework.declarative`.
+
+---
+
+## What's new in 1.14.0
+
+| Area | What changed |
+|---|---|
+| **Workflow events** | `WorkflowEvent[DataT]` unified event bus with factory methods (`started`, `status`, `failed`, `executor_invoked`, `executor_bypassed`, etc.). Replaces ad-hoc callbacks. `WorkflowEvent.emit()` deprecated — use `ctx.yield_output()`. |
+| **Workflow visualization** | `WorkflowViz` — export any `Workflow` to Mermaid, DOT, SVG, PNG, or PDF. No extra dependencies for DOT/Mermaid. |
+| **File access provider** | `FileAccessProvider` + `AgentFileStore` hierarchy (`InMemoryAgentFileStore`, `FileSystemAgentFileStore`). 7 agent-facing tools (write, read, delete, ls, grep, replace, replace_lines). Configurable approval modes. |
+| **File memory provider** | `FileMemoryProvider` — session-scoped file-based memory with descriptions index (`memories.md`), `scope` override for cross-session sharing. |
+| **Agent mode** | `AgentModeProvider` — plan/execute modes (fully customisable), `get_agent_mode` / `set_agent_mode` helpers for external orchestrators. |
+| **Settings** | `SecretString` replaces `pydantic.SecretStr` — masked repr, `get_secret_value()` shim. `load_settings` — TypedDict-based config from env/dotenv with `required_fields` validation. |
+| **Compaction** | `ToolResultCompactionStrategy` (replace old tool-call groups with summary messages) and `TokenBudgetComposedStrategy` (pipeline multiple strategies under a token budget cap). |
+| **FIDES security** | `agent_framework.security` promoted to public experimental: `LabelTrackingFunctionMiddleware` (3-tier label propagation), `PolicyEnforcementFunctionMiddleware` (block/approve on violation), `SecureMCPToolProxy` (local MCP enforcement), `SecureAgentConfig` (all-in-one context provider). |
+| **Workflow evaluation** | `evaluate_workflow` — post-hoc or run+evaluate, per-agent `sub_results` breakdown. `AgentEvalConverter` — message/tool conversion to Foundry evaluator format. |
 
 ---
 
@@ -90,6 +111,11 @@ pip install agent-framework
 pip install agent-framework-azure-ai       # Azure AI Foundry chat client
 pip install agent-framework-openai         # OpenAI / Azure OpenAI chat clients
 pip install azure-identity                 # DefaultAzureCredential, managed identity
+
+# 4. Optional extras (1.14.0+)
+pip install agent-framework[security]      # FIDES prompt-injection defence
+pip install agent-framework[evals]         # Evaluation tooling (evaluate_workflow, AgentEvalConverter)
+pip install graphviz>=0.20.0               # WorkflowViz SVG/PNG/PDF export (also needs system graphviz)
 ```
 
 ### Authentication and Configuration
@@ -107,12 +133,35 @@ AZURE_OPENAI_API_KEY="your-api-key"
 AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o"
 ```
 
-**2. Loading Configuration:**
+**2. Loading Configuration (1.14.0+ preferred — `load_settings`):**
 
-Use a library like `python-dotenv` to load these variables.
+Use the built-in `load_settings` helper, which reads from env vars, an optional `.env` file, and explicit overrides — no extra library needed.
 
 ```python
 # config.py
+from typing import TypedDict
+from agent_framework import load_settings, SecretString
+
+class AzureSettings(TypedDict, total=False):
+    endpoint: str | None
+    api_key: SecretString | None
+    deployment_name: str | None
+
+settings = load_settings(
+    AzureSettings,
+    env_prefix="AZURE_OPENAI_",         # reads AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, etc.
+    env_file_path=".env",               # optional; omit to use only process env vars
+    required_fields=["endpoint", "deployment_name"],
+)
+
+AZURE_OPENAI_ENDPOINT = settings["endpoint"]
+AZURE_OPENAI_KEY = SecretString(settings["api_key"] or "")
+AZURE_OPENAI_DEPLOYMENT = settings["deployment_name"]
+```
+
+Alternatively, use `python-dotenv` + `os.getenv` for simpler cases:
+
+```python
 import os
 from dotenv import load_dotenv
 
