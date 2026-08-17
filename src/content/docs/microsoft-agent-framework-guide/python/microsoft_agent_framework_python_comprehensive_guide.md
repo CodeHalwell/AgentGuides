@@ -22,7 +22,7 @@ Latest verified release: 1.14.0 | Python 3.10+
 > - **Tool decorator:** `@tool` from `agent_framework`.
 > - **Multi-turn state:** `session = agent.create_session()`, then `await agent.run(prompt, session=session)`.
 > - **Workflows:** `WorkflowBuilder` (with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_chain` / `.add_multi_selection_edge_group`) and the experimental `@workflow` / `@step` functional API from `agent_framework`. Visualise any workflow with `WorkflowViz`.
-> - **Long-term memory (experimental):** `MemoryStore` + `MemoryContextProvider` from `agent_framework`. File-backed memory: `FileMemoryProvider`.
+> - **Long-term memory (experimental):** `MemoryStore` + `MemoryContextProvider` from `agent_framework`. File-backed memory: `FileMemoryProvider` (direct import: `from agent_framework._harness._file_memory import FileMemoryProvider` — not yet re-exported from `agent_framework` in 1.14.0).
 > - **File access (experimental):** `FileAccessProvider` + `AgentFileStore` — shared, persistent CRUD/grep access for agents across sessions.
 > - **Agent mode (experimental):** `AgentModeProvider` — plan/execute mode switching, persisted in session state.
 > - **Security (experimental — FIDES):** `agent_framework.security` — `LabelTrackingFunctionMiddleware`, `PolicyEnforcementFunctionMiddleware`, `SecureMCPToolProxy`, `SecureAgentConfig` for prompt-injection defence.
@@ -115,7 +115,7 @@ pip install azure-identity                 # DefaultAzureCredential, managed ide
 # 4. Optional extras (1.14.0+)
 pip install agent-framework[security]      # FIDES prompt-injection defence
 pip install agent-framework[evals]         # Evaluation tooling (evaluate_workflow, AgentEvalConverter)
-pip install graphviz>=0.20.0               # WorkflowViz SVG/PNG/PDF export (also needs system graphviz)
+pip install "graphviz>=0.20.0"             # WorkflowViz SVG/PNG/PDF export (also needs system graphviz)
 ```
 
 ### Authentication and Configuration
@@ -144,18 +144,19 @@ from agent_framework import load_settings, SecretString
 
 class AzureSettings(TypedDict, total=False):
     endpoint: str | None
-    api_key: SecretString | None
+    api_key: str | None          # plain str in the TypedDict; wrap in SecretString after loading
     deployment_name: str | None
 
 settings = load_settings(
     AzureSettings,
     env_prefix="AZURE_OPENAI_",         # reads AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, etc.
-    env_file_path=".env",               # optional; omit to use only process env vars
+    env_file_path=".env",               # optional, but the file must exist if this path is provided
     required_fields=["endpoint", "deployment_name"],
 )
 
 AZURE_OPENAI_ENDPOINT = settings["endpoint"]
-AZURE_OPENAI_KEY = SecretString(settings["api_key"] or "")
+# Only wrap in SecretString when a value is actually present — avoids masking a missing key
+AZURE_OPENAI_KEY = SecretString(settings["api_key"]) if settings.get("api_key") else None
 AZURE_OPENAI_DEPLOYMENT = settings["deployment_name"]
 ```
 

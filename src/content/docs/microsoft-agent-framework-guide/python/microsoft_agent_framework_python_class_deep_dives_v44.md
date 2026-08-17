@@ -524,7 +524,7 @@ file_provider = FileAccessProvider(
 
 ## 5 · `FileMemoryProvider`
 
-**Package:** `agent_framework._harness._file_memory` (import via `from agent_framework import FileMemoryProvider` — not yet re-exported in 1.14.0; use direct import)
+**Package:** `agent_framework._harness._file_memory` — import directly: `from agent_framework._harness._file_memory import FileMemoryProvider` (not yet re-exported from the top-level `agent_framework` namespace in 1.14.0)
 
 `FileMemoryProvider` is the session-scoped counterpart to `FileAccessProvider`. Memories are isolated per session (or per `scope`) — each agent turn reads and writes under a folder derived from the session ID.
 
