@@ -432,8 +432,9 @@ from pydantic_ai.messages import ModelResponse, TextPart
 RESPONSE_CACHE: dict[str, str] = {}
 
 
-async def cache_interceptor(ctx, messages):
+async def cache_interceptor(ctx, request_context):
     # Derive a cache key from the last user message
+    messages = request_context.messages
     last_user = next(
         (p.content for m in reversed(messages) for p in m.parts if hasattr(p, 'content') and isinstance(p.content, str)),
         None,
@@ -443,7 +444,7 @@ async def cache_interceptor(ctx, messages):
         raise SkipModelRequest(
             ModelResponse(parts=[TextPart(content=cached_text)])
         )
-    # Cache miss — let the real model call proceed
+    return request_context  # cache miss — return context so the real model call proceeds
 
 
 # Register via Hooks capability so the interceptor is actually invoked
@@ -824,9 +825,9 @@ large_policy_document = 'POLICY: ' + ('word ' * 5000)  # ~5000-token document
 # Content before the last CachePoint is eligible for caching.
 prompt_part = UserPromptPart(
     content=[
-        TextContent(text=large_policy_document),
+        TextContent(content=large_policy_document),
         CachePoint(ttl='1h'),   # cache for 1 hour (Anthropic / Bedrock)
-        TextContent(text='Given the policy above, answer the following question: '),
+        TextContent(content='Given the policy above, answer the following question: '),
     ]
 )
 
@@ -846,9 +847,9 @@ shared_context = 'CONTEXT: ' + ('data ' * 2000)
 def make_user_part(question: str) -> UserPromptPart:
     return UserPromptPart(
         content=[
-            TextContent(text=shared_context),
+            TextContent(content=shared_context),
             CachePoint(ttl='5m'),
-            TextContent(text=question),
+            TextContent(content=question),
         ]
     )
 
@@ -955,7 +956,7 @@ code_agent = Agent(
 
 # ImageGenerationTool: generate images (OpenAI Responses + Google)
 image_agent = Agent(
-    'openai:gpt-5.6-sol',
+    'openai-responses:gpt-5.6-sol',
     capabilities=[
         NativeTool(
             ImageGenerationTool(action='generate')  # 'generate', 'edit', or 'auto'
@@ -987,7 +988,7 @@ memory_agent = Agent(
 
 # FileSearchTool: managed RAG over a vector store (OpenAI Responses / Google / xAI)
 rag_agent = Agent(
-    'openai:gpt-5.6-sol',
+    'openai-responses:gpt-5.6-sol',
     system_prompt='You are a document assistant. Search the knowledge base to answer questions.',
     capabilities=[
         NativeTool(

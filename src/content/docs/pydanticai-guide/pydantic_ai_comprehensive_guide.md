@@ -1584,9 +1584,9 @@ Pydantic AI provides native tools that delegate to model-provider capabilities (
 from pydantic_ai import Agent, WebSearchTool, CodeExecutionTool
 from pydantic_ai.capabilities import NativeTool
 
-# WebSearchTool and CodeExecutionTool are supported on OpenAI Responses models.
+# WebSearchTool and CodeExecutionTool require OpenAI Responses models (not plain Chat).
 agent = Agent(
-    'openai:gpt-4o',
+    'openai-responses:gpt-4o',
     capabilities=[
         NativeTool(WebSearchTool()),     # model-native web search
         NativeTool(CodeExecutionTool()), # sandboxed code execution
