@@ -571,9 +571,7 @@ from google.adk.agents.context import Context
 async def search(node_input):
     return {"results": [f"result for {node_input['query']}"]}
 
-search_node = FunctionNode(
-    name="search", func=search, parameter_binding="node_input"
-)
+search_node = FunctionNode(name="search", func=search)
 
 async def orchestrate(node_input, ctx: Context):
     queries = node_input.get("queries", [])
@@ -587,9 +585,9 @@ async def orchestrate(node_input, ctx: Context):
         results.append(child_ctx)
     return {"all_results": results}
 
+# rerun_on_resume=True is required when a FunctionNode calls ctx.run_node().
 orchestrator = FunctionNode(
-    name="orchestrate", func=orchestrate, parameter_binding="node_input",
-    rerun_on_resume=True,
+    name="orchestrate", func=orchestrate, rerun_on_resume=True,
 )
 # Every workflow must have a START edge to seed the initial nodes.
 workflow = Workflow(name="multi_search", edges=[(START, orchestrator)])
