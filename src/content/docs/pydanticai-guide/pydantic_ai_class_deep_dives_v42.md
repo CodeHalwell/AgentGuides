@@ -462,33 +462,55 @@ RESPONSE_CACHE['What is 2+2?'] = 'The answer is 4.'
 ```python
 # Example 2 — SkipToolExecution: sandbox tool calls in test environments
 import os
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import SkipToolExecution
 
-agent = Agent('openai:gpt-5.6-luna')
+
+async def email_interceptor(ctx, *, call, tool_def, args):
+    """Skip send_email and return a stub result when TESTING=1."""
+    if os.getenv('TESTING') == '1' and tool_def.name == 'send_email':
+        raise SkipToolExecution({'status': 'stubbed', 'to': args['to']})
+    return args  # pass through unchanged on all other calls
+
+
+agent = Agent(
+    'openai:gpt-5.6-luna',
+    capabilities=[Hooks(before_tool_execute=email_interceptor)],
+)
 
 
 @agent.tool_plain
 def send_email(to: str, subject: str, body: str) -> str:
     """Send an email to the given recipient."""
-    # Real implementation would call an SMTP server
     return f'Email sent to {to}'
 
 
-# In tests, wrap the tool to skip execution and return a stub:
-# async def email_interceptor(ctx: RunContext, tool_name: str, args: dict):
-#     if os.getenv('TESTING') == '1' and tool_name == 'send_email':
-#         raise SkipToolExecution({'status': 'stubbed', 'to': args['to']})
-
-# result = agent.run_sync('Send a welcome email to alice@example.com', ...)
+# With TESTING=1 set, the interceptor fires and send_email body never runs:
+# os.environ['TESTING'] = '1'
+# result = agent.run_sync('Send a welcome email to alice@example.com')
 ```
 
 ```python
 # Example 3 — SkipToolValidation: inject pre-coerced args bypassing schema validation
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import SkipToolValidation
 
-agent = Agent('anthropic:claude-haiku-4-5')
+
+async def coerce_ids(ctx, *, call, tool_def, args):
+    """Coerce string record_id to int before Pydantic validation runs."""
+    if tool_def.name == 'lookup_record' and 'record_id' in args:
+        # raw_args may arrive as strings from certain providers
+        coerced = {**args, 'record_id': int(args['record_id'])}
+        raise SkipToolValidation(coerced)
+    return args  # pass through for all other tools
+
+
+agent = Agent(
+    'anthropic:claude-haiku-4-5',
+    capabilities=[Hooks(before_tool_validate=coerce_ids)],
+)
 
 
 @agent.tool_plain
@@ -497,15 +519,8 @@ def lookup_record(record_id: int) -> dict:
     return {'id': record_id, 'name': f'Record {record_id}'}
 
 
-# Suppose upstream pre-processing has already coerced and validated the args.
-# A before_tool_validation hook can skip re-validation:
-# async def skip_validation_hook(ctx, tool_name, raw_args):
-#     if tool_name == 'lookup_record':
-#         # raw_args may arrive as strings from certain providers
-#         coerced = {'record_id': int(raw_args.get('record_id', 0))}
-#         raise SkipToolValidation(coerced)
-
 # result = agent.run_sync('Look up record 42')
+# coerce_ids fires before validation, converting '42' → 42 so the int check passes.
 ```
 
 ---
