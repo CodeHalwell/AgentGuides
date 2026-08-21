@@ -50,7 +50,7 @@ asyncio.run(main())
 
 The deprecation notices are emitted via `typing_extensions.deprecated` at class level (see `sequential_agent.py:48`, `parallel_agent.py:150`, `loop_agent.py:52`).
 
-> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/).
+> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) and [— A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) sections.
 
 ## LlmAgent
 
@@ -583,7 +583,7 @@ agent = LangGraphAgent(
 
 **Memory rules:** If `graph.checkpointer` is set, ADK sends only the latest user messages and LangGraph manages history via its checkpointer. If no checkpointer, ADK sends the full conversation for that agent.
 
-> For detailed examples — multi-turn with `MemorySaver`, as a sub-agent in a multi-agent system — see [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#2--langgraphagent).
+> For detailed examples — multi-turn with `MemorySaver`, as a sub-agent in a multi-agent system — see the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) section.
 
 ## RemoteA2aAgent
 
@@ -607,7 +607,7 @@ root = LlmAgent(
 )
 ```
 
-> For full constructor reference and examples (signed requests, file-based cards, interceptors) — see [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#1--remotea2aagent).
+> For full constructor reference and examples (signed requests, file-based cards, interceptors) — see the [Class & API Reference — A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) section.
 
 ## Gotchas
 

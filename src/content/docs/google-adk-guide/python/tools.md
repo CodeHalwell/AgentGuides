@@ -1283,7 +1283,7 @@ agent = LlmAgent(
 )
 ```
 
-> Full constructor reference, message tool signatures, and more examples → [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#5--pubsubtoolset-experimental).
+> Full constructor reference, message tool signatures, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## SpannerToolset (experimental)
 
@@ -1312,7 +1312,7 @@ agent = LlmAgent(
 )
 ```
 
-> Full constructor reference, vector similarity search setup, and more examples → [Class deep dives — vol. 2](./google_adk_class_deep_dives_v2/#6--spannertoolset-experimental).
+> Full constructor reference, vector similarity search setup, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## SkillToolset (experimental)
 
