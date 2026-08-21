@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.27.0 (August 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.31.0 (August 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 2.27.0 | Updated: August 10, 2026
+Latest: 2.31.0 | Updated: August 17, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.27.0 (August 2026)  
+**Version:** 2.31.0 (August 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -158,8 +158,8 @@ result = agent.run_sync('What is 2 + 2?')
 print(result.output)
 #> 2 + 2 equals 4.
 
-# Check token usage
-print(result.usage())
+# Check token usage (usage is a property in 2.31.0, not a method)
+print(result.usage)
 #> RunUsage(input_tokens=14, output_tokens=5, requests=1)
 ```
 
@@ -493,9 +493,9 @@ def get_fact() -> str:
     return 'Python was created in 1991.'
 
 result2 = agent.run_sync('Tell me a fact.', usage_limits=UsageLimits(request_limit=3))
-usage: RunUsage = result2.usage()
+usage: RunUsage = result2.usage   # property in 2.31.0
 print(f"requests={usage.requests}")           # total LLM API calls made
-print(f"tool_calls={usage.tool_calls}")       # total successful tool executions (added in 2.8.0)
+print(f"tool_calls={usage.tool_calls}")       # total successful tool executions
 print(f"input_tokens={usage.input_tokens}")   # cumulative prompt tokens
 print(f"output_tokens={usage.output_tokens}") # cumulative completion tokens
 print(f"total_tokens={usage.total_tokens}")   # property: input + output
@@ -503,7 +503,7 @@ print(f"cache_read_tokens={usage.cache_read_tokens}")   # tokens served from pro
 print(f"cache_write_tokens={usage.cache_write_tokens}") # tokens written to provider cache
 
 # Combine usage across multiple independent runs
-combined: RunUsage = result.usage() + result2.usage()
+combined: RunUsage = result.usage + result2.usage
 print(f"combined requests: {combined.requests}")
 
 # Handle UsageLimitExceeded gracefully
@@ -539,8 +539,8 @@ result = agent.run_sync('What is the capital of France?')
 print(f"Answer: {result.output}")
 #> Answer: The capital of France is Paris.
 
-# 3. Access usage information
-usage = result.usage()
+# 3. Access usage information (property in 2.31.0)
+usage = result.usage
 print(f"Tokens: {usage.input_tokens} input, {usage.output_tokens} output")
 #> Tokens: 18 input, 8 output
 
@@ -746,8 +746,8 @@ result_full = agent.run_sync('What is type coercion?')
 messages = result_full.all_messages()
 print(f"Total messages: {len(messages)}")
 
-# Check usage
-usage = result_full.usage()
+# Check usage (property in 2.31.0)
+usage = result_full.usage
 print(f"Used {usage.input_tokens} input tokens, {usage.output_tokens} output tokens")
 ```
 
@@ -1557,46 +1557,51 @@ async def safe_database_operation(
         raise ModelRetry(f"Database operation failed: {str(e)}")
 ```
 
-### Built-in Tool Library
+### Native Tool Library
 
-Pydantic AI provides built-in tools that delegate to model-native capabilities (e.g. OpenAI's built-in tools).
-They are passed via the `builtin_tools` parameter on `Agent`. All are importable directly from `pydantic_ai`.
+Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). In 2.31.0 they are passed via `capabilities=[NativeTool(...)]` — the old `builtin_tools=[...]` parameter is removed. All native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`; the `NativeTool` wrapper that registers them as capabilities lives in `pydantic_ai.capabilities`.
 
-**Supported built-in tools (v1.85.x):**
+**Supported native tools (2.31.0):**
 
-| Tool | Import | Notes |
-|------|--------|-------|
-| `WebSearchTool` | `from pydantic_ai import WebSearchTool` | Model-native web search |
-| `WebFetchTool` | `from pydantic_ai import WebFetchTool` | Fetch and read URL content |
-| `CodeExecutionTool` | `from pydantic_ai import CodeExecutionTool` | Sandboxed code execution |
-| `ImageGenerationTool` | `from pydantic_ai import ImageGenerationTool` | Image generation |
-| `FileSearchTool` | `from pydantic_ai import FileSearchTool` | File/vector-store search (requires config) |
-| `MemoryTool` | `from pydantic_ai import MemoryTool` | Persistent memory (requires config) |
-| `MCPServerTool` | `from pydantic_ai import MCPServerTool` | MCP server integration (requires config) |
-| `XSearchTool` | `from pydantic_ai import XSearchTool` | xAI (Grok) web search |
+| Tool | Import | Providers |
+|------|--------|-----------|
+| `WebSearchTool` | `from pydantic_ai import WebSearchTool` | OpenAI Responses, Google, Bedrock |
+| `WebFetchTool` | `from pydantic_ai import WebFetchTool` | Anthropic, Google |
+| `CodeExecutionTool` | `from pydantic_ai import CodeExecutionTool` | Anthropic, OpenAI Responses, Google, Bedrock, xAI |
+| `ImageGenerationTool` | `from pydantic_ai import ImageGenerationTool` | OpenAI Responses, Google |
+| `FileSearchTool` | `from pydantic_ai import FileSearchTool` | OpenAI Responses, Google, xAI |
+| `MemoryTool` | `from pydantic_ai import MemoryTool` | Anthropic |
+| `AdvisorTool` | `from pydantic_ai import AdvisorTool` | Anthropic, OpenRouter |
+| `XSearchTool` | `from pydantic_ai import XSearchTool` | xAI |
 
-> **Deprecation (v1.85.0):** `UrlContextTool` is deprecated — use `WebFetchTool` instead.
+> **Migration (2.31.0):** `Agent(builtin_tools=[...])` → `Agent(capabilities=[NativeTool(...)])`. `UrlContextTool` is removed — use `WebFetchTool` instead.
+>
+> **Import note:** Native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`. The `NativeTool` wrapper capability lives under `pydantic_ai.capabilities`.
 
 ```python
-# Installed: pydantic-ai==1.101.0
-# Verified against installed package — run with uv pip install pydantic-ai==1.99.0
-from pydantic_ai import Agent, WebSearchTool, WebFetchTool, CodeExecutionTool
+# Native tools must be paired with a provider that supports them — not all tools
+# work with every provider (e.g. WebFetchTool is Anthropic/Google-only).
+from pydantic_ai import Agent, WebSearchTool, CodeExecutionTool
+from pydantic_ai.capabilities import NativeTool
 
+# WebSearchTool and CodeExecutionTool require OpenAI Responses models (not plain Chat).
 agent = Agent(
-    'openai:gpt-4o',
-    builtin_tools=[
-        WebSearchTool(),                    # model-native web search
-        WebFetchTool(enable_citations=True), # fetch URL content with citation metadata
-        CodeExecutionTool(),                 # sandboxed code execution
-    ]
+    'openai-responses:gpt-4o',
+    capabilities=[
+        NativeTool(WebSearchTool()),     # model-native web search
+        NativeTool(CodeExecutionTool()), # sandboxed code execution
+    ],
 )
 
-# The agent can now search the web, fetch pages, and execute code
+# For WebFetchTool (Anthropic/Google only), use a compatible provider:
+# from pydantic_ai import Agent, WebFetchTool
+# agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[NativeTool(WebFetchTool())])
+
 result = agent.run_sync('Search for the latest Python release and show a hello-world snippet')
 print(result.output)
 ```
 
-Tools requiring additional provider configuration (`FileSearchTool`, `MemoryTool`, `MCPServerTool`) must be
+Tools requiring additional provider configuration (`FileSearchTool`, `MemoryTool`) must be
 set up via the model provider's API before use. See the
 [official docs](https://ai.pydantic.dev) for provider-specific configuration.
 
