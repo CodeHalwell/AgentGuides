@@ -581,4 +581,4 @@ asyncio.run(main())
 - `output_validator` decorator — `agent/__init__.py:1911`
 - `OutputSpec` type alias — `output.py`
 - `TextOutputFunc` — `output.py` — `Callable[[str], T] | Callable[[RunContext, str], T]`
-- Advanced patterns with `AgentSpec` and output — `pydantic_ai_advanced_classes_part2.md`
+- Advanced patterns with `AgentSpec` and output — see [Class & API Reference](./pydantic_ai_comprehensive_guide/#class--api-reference) in the comprehensive guide

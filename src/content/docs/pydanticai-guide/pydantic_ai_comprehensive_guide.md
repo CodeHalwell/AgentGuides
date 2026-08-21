@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.31.0 (August 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.33.0 (August 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: 2.31.0 | Updated: August 17, 2026
+Latest: 2.33.0 | Updated: August 21, 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.31.0 (August 2026)  
+**Version:** 2.33.0 (August 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -158,7 +158,7 @@ result = agent.run_sync('What is 2 + 2?')
 print(result.output)
 #> 2 + 2 equals 4.
 
-# Check token usage (usage is a property in 2.31.0, not a method)
+# Check token usage (usage is a property in 2.33.0, not a method)
 print(result.usage)
 #> RunUsage(input_tokens=14, output_tokens=5, requests=1)
 ```
@@ -493,7 +493,7 @@ def get_fact() -> str:
     return 'Python was created in 1991.'
 
 result2 = agent.run_sync('Tell me a fact.', usage_limits=UsageLimits(request_limit=3))
-usage: RunUsage = result2.usage   # property in 2.31.0
+usage: RunUsage = result2.usage   # property in 2.33.0
 print(f"requests={usage.requests}")           # total LLM API calls made
 print(f"tool_calls={usage.tool_calls}")       # total successful tool executions
 print(f"input_tokens={usage.input_tokens}")   # cumulative prompt tokens
@@ -539,7 +539,7 @@ result = agent.run_sync('What is the capital of France?')
 print(f"Answer: {result.output}")
 #> Answer: The capital of France is Paris.
 
-# 3. Access usage information (property in 2.31.0)
+# 3. Access usage information (property in 2.33.0)
 usage = result.usage
 print(f"Tokens: {usage.input_tokens} input, {usage.output_tokens} output")
 #> Tokens: 18 input, 8 output
@@ -746,7 +746,7 @@ result_full = agent.run_sync('What is type coercion?')
 messages = result_full.all_messages()
 print(f"Total messages: {len(messages)}")
 
-# Check usage (property in 2.31.0)
+# Check usage (property in 2.33.0)
 usage = result_full.usage
 print(f"Used {usage.input_tokens} input tokens, {usage.output_tokens} output tokens")
 ```
@@ -1559,9 +1559,9 @@ async def safe_database_operation(
 
 ### Native Tool Library
 
-Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). In 2.31.0 they are passed via `capabilities=[NativeTool(...)]` — the old `builtin_tools=[...]` parameter is removed. All native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`; the `NativeTool` wrapper that registers them as capabilities lives in `pydantic_ai.capabilities`.
+Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). In 2.33.0 they are passed via `capabilities=[NativeTool(...)]` — the old `builtin_tools=[...]` parameter is removed. All native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`; the `NativeTool` wrapper that registers them as capabilities lives in `pydantic_ai.capabilities`.
 
-**Supported native tools (2.31.0):**
+**Supported native tools (2.33.0):**
 
 | Tool | Import | Providers |
 |------|--------|-----------|
@@ -1574,7 +1574,7 @@ Pydantic AI provides native tools that delegate to model-provider capabilities (
 | `AdvisorTool` | `from pydantic_ai import AdvisorTool` | Anthropic, OpenRouter |
 | `XSearchTool` | `from pydantic_ai import XSearchTool` | xAI |
 
-> **Migration (2.31.0):** `Agent(builtin_tools=[...])` → `Agent(capabilities=[NativeTool(...)])`. `UrlContextTool` is removed — use `WebFetchTool` instead.
+> **Migration (2.33.0):** `Agent(builtin_tools=[...])` → `Agent(capabilities=[NativeTool(...)])`. `UrlContextTool` is removed — use `WebFetchTool` instead.
 >
 > **Import note:** Native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`. The `NativeTool` wrapper capability lives under `pydantic_ai.capabilities`.
 
@@ -1709,7 +1709,7 @@ This comprehensive guide continues with:
 - `pydantic_ai_production_guide.md` - Deployment, scaling, architecture patterns
 - `pydantic_ai_recipes.md` - Real-world code examples and patterns
 - `pydantic_ai_diagrams.md` - Architecture and flow diagrams
-- `pydantic_ai_class_deep_dives.md` - Source-verified deep dives: AgentRun.iter(), AgentRunResult, ConcurrencyLimiter, Direct API, capture_run_messages, format_as_xml, common_tools, ExternalToolset, FilteredToolset, FunctionToolset+instructions
+- The [Class & API Reference](#class--api-reference) section below - the consolidated, source-verified class/API reference for this guide (folds in what used to be 44 separate "class deep dive" volumes)
 
 ---
 
@@ -2310,10 +2310,4646 @@ Three new exceptions enable short-circuiting the normal execution pipeline from 
 
 ---
 
+## Class & API Reference
+
+Verified against **pydantic-ai 2.33.0** (installed and cross-checked via `inspect.signature`, `dataclasses.fields`, and direct source reads). This is a consolidated, source-verified reference to the classes, functions, and wire types across `pydantic_ai`, `pydantic_graph`, and `pydantic_evals` — folded together from 44 previously-separate "class deep dive" volumes into 16 topic sections. Optional-dependency modules (Temporal/DBOS/Prefect/AG-UI/duckduckgo/tavily/exa/web-fetch/markdownify) were verified for import path and top-level structure only, since their third-party packages are not installed in the verification environment.
+
+### Agents & Execution Core
+
+#### `Agent` — constructor reference
+
+The central entry point. Everything else in this reference attaches to it via `tools=`, `toolsets=`, or `capabilities=`.
+
+```python
+Agent(
+    model: Model | KnownModelName | str | None = None,
+    *,
+    output_type: OutputSpec[OutputDataT] = str,
+    instructions: AgentInstructions[AgentDepsT] = None,
+    system_prompt: str | Sequence[str] = (),
+    deps_type: type[AgentDepsT] = NoneType,
+    name: str | None = None,
+    description: TemplateStr[AgentDepsT] | str | None = None,
+    model_settings: AgentModelSettings[AgentDepsT] | None = None,
+    retries: int | AgentRetries | None = None,
+    validation_context: Any | Callable[[RunContext[AgentDepsT]], Any] = None,
+    tools: Sequence[Tool[AgentDepsT] | ToolFuncEither[AgentDepsT, ...]] = (),
+    toolsets: Sequence[AgentToolset[AgentDepsT]] | None = None,
+    defer_model_check: bool = False,
+    end_strategy: EndStrategy = 'early',
+    metadata: AgentMetadata[AgentDepsT] | None = None,
+    tool_timeout: float | None = None,
+    max_concurrency: AnyConcurrencyLimit = None,
+    capabilities: Sequence[AgentCapability[AgentDepsT]] | None = None,
+)
+```
+
+`tool_timeout` sets a global per-tool-call deadline (individual `Tool(timeout=...)` overrides win).
+`max_concurrency` caps simultaneous model requests for this agent — pass an `int`,
+`ConcurrencyLimit`, or `AbstractConcurrencyLimiter` (see Concurrency section). `capabilities`
+accepts `AbstractCapability` instances *or* `RunContext`-aware callables (`AgentCapability`).
+
+```python
+import asyncio
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext, ConcurrencyLimit
+
+@dataclass
+class Deps:
+    tenant_id: str
+
+def adaptive_settings(ctx: RunContext[Deps]):
+    from pydantic_ai import ModelSettings
+    return ModelSettings(temperature=0.2, max_tokens=1000)
+
+agent: Agent[Deps, str] = Agent(
+    'openai:gpt-4o',
+    deps_type=Deps,
+    model_settings=adaptive_settings,   # callable form — AgentModelSettings
+    tool_timeout=15.0,
+    max_concurrency=ConcurrencyLimit(max_running=10, max_queued=50),
+)
+
+async def main() -> None:
+    result = await agent.run('Summarise Q3 revenue.', deps=Deps(tenant_id='acme'))
+    print(result.output)
+
+asyncio.run(main())
+```
+
+#### `Agent` deployment & iteration surface (`to_web`, `to_cli`, `run_stream_events`, node-type helpers)
+
+`Agent` exposes several v2.x additions beyond the core `run`/`run_sync`/`run_stream`: `to_web()` returns a Starlette chat app; `to_cli()`/`to_cli_sync()` start a Rich terminal chat; `run_stream_events()` combines streaming and the final result in one async context manager; `parallel_tool_call_execution_mode()` is a static wrapper around `ToolManager.parallel_execution_mode()`; and `is_call_tools_node`/`is_end_node`/`is_model_request_node`/`is_user_prompt_node` are `TypeIs`-based static helpers for exhaustive `async for node in agent.iter(...)` type narrowing.
+
+```python
+class Agent:
+    def to_web(self, *, models=None, deps=None, model_settings=None, instructions=None, html_source=None) -> Starlette: ...
+    async def to_cli(self, *, deps=None, prog_name='pydantic-ai', message_history=None, model_settings=None, usage_limits=None) -> None: ...
+    def run_stream_events(self, user_prompt, **kwargs) -> AbstractAsyncContextManager[AsyncIterator[AgentStreamEvent | AgentRunResultEvent]]: ...
+    @staticmethod
+    def parallel_tool_call_execution_mode(mode: ParallelExecutionMode = 'parallel') -> Generator[None]: ...
+    @staticmethod
+    def is_call_tools_node(node) -> TypeIs[CallToolsNode]: ...
+    @staticmethod
+    def is_end_node(node) -> TypeIs[End[FinalResult]]: ...
+```
+
+```python
+import asyncio
+from pydantic_ai import Agent, AgentRunResultEvent
+from pydantic_ai.messages import PartDeltaEvent, TextPartDelta
+
+agent = Agent('openai:gpt-4o-mini')
+
+async def main() -> None:
+    async with agent.run_stream_events("Tell me a short joke") as events:
+        async for event in events:
+            if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+                print(event.delta.content_delta, end="", flush=True)
+            elif isinstance(event, AgentRunResultEvent):
+                print(f"\nFinal: {event.result.output}")
+
+asyncio.run(main())
+```
+
+#### `AgentInstructions` + `AgentMetadata`
+
+Type aliases for the `instructions=` and `metadata=` parameters on `Agent()` and `agent.run()`.
+`AgentInstructions` accepts a literal string, a `TemplateStr`, a sync/async callable (with or
+without `RunContext`), or a sequence mixing any of those — sequences let you combine a static
+prefix (cacheable) with a dynamic suffix. `AgentMetadata` is a `dict` or a callable producing one;
+metadata flows through `RunContext.metadata` but is **never sent to the model**.
+
+```python
+AgentInstructions = (
+    TemplateStr[AgentDepsT] | str
+    | Callable[[RunContext[AgentDepsT]], str | None]
+    | Callable[[RunContext[AgentDepsT]], Awaitable[str | None]]
+    | Sequence[...] | None
+)
+AgentMetadata = dict[str, Any] | Callable[[RunContext[AgentDepsT]], dict[str, Any]]
+```
+
+```python
+from pydantic_ai import Agent, RunContext
+
+def build_metadata(ctx: RunContext) -> dict:
+    return {'run_id': ctx.run_id, 'tenant': getattr(ctx.deps, 'tenant_id', None)}
+
+agent = Agent(
+    'openai:gpt-4o',
+    instructions=['Always respond in Markdown.', lambda ctx: f'Conversation: {ctx.run_id}'],
+    metadata=build_metadata,
+)
+```
+
+#### `AgentModelSettings` + `AgentNativeTool`
+
+`AgentModelSettings = ModelSettings | Callable[[RunContext[DepsT]], ModelSettings]` — lets
+`model_settings=` be resolved per-run from `deps`. `AgentNativeTool` is the analogous alias for
+per-run native-tool selection (`AbstractNativeTool | Callable[[RunContext], AbstractNativeTool | None]`),
+used when authoring custom `NativeTool` capability wrappers.
+
+```python
+from pydantic_ai import Agent, RunContext, ModelSettings
+
+def settings_for(ctx: RunContext) -> ModelSettings:
+    return ModelSettings(temperature=0.0) if ctx.deps.get('mode') == 'strict' else ModelSettings(temperature=0.8)
+
+agent = Agent('openai:gpt-4o', model_settings=settings_for)
+```
+
+#### `AgentCapability` + `AgentToolset` + `ToolsetFunc`
+
+Type aliases that let `Agent(capabilities=[...])` and `Agent(toolsets=[...])` accept either a
+static instance or a `RunContext`-aware factory, enabling per-run feature flags without
+subclassing `Agent`.
+
+```python
+AgentToolset = AbstractToolset[DepsT] | ToolsetFunc[DepsT]
+ToolsetFunc = Callable[[RunContext[DepsT]], AbstractToolset[DepsT] | None | Awaitable[...]]
+AgentCapability = AbstractCapability[DepsT] | Callable[[RunContext[DepsT]], AbstractCapability[DepsT] | None | Awaitable[...]]
+```
+
+```python
+from pydantic_ai import Agent, RunContext, FunctionToolset
+
+async def premium_toolset(ctx: RunContext) -> FunctionToolset | None:
+    if not getattr(ctx.deps, 'is_premium', False):
+        return None
+    ts = FunctionToolset()
+    @ts.tool_plain
+    def advanced_forecast(city: str) -> str:
+        return f'7-day forecast for {city}'
+    return ts
+
+agent = Agent('openai:gpt-4o', toolsets=[premium_toolset])
+```
+
+#### `AgentRun` — node-level iteration
+
+`agent.iter(prompt)` returns an async-context-managed `AgentRun`. Iterate it to walk the graph
+node by node (`UserPromptNode → ModelRequestNode → CallToolsNode → End`), or drive it manually
+with `.next(node)` so capability hooks fire on every step (bare `async for` skips
+`before_node_run`/`wrap_node_run`/`after_node_run`). `AgentRunResultEvent` is the final event
+emitted by `agent.run_stream_events()`, carrying the completed `AgentRunResult`; `.enqueue(...)`
+injects a `PendingMessage` mid-run (see `PendingMessage` below).
+
+```python
+Members: next_node, result, run_id, conversation_id, metadata, ctx,
+         all_messages(), new_messages(), all_messages_json(), new_messages_json(),
+         next(node), enqueue(content, priority='asap'|'when_idle')
+```
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.iter('What is the capital of France?') as run:
+        node = run.next_node
+        while not isinstance(node, End):
+            node = await run.next(node)   # fires capability hooks each step
+        print(run.result.output, run.run_id)
+
+asyncio.run(main())
+```
+
+#### `AgentRunResult` — the non-streaming result
+
+Returned by `agent.run()` / `agent.run_sync()`. `usage` is a **property**, not a method call.
+
+```python
+Fields/methods: output, usage, run_id, conversation_id, timestamp, response,
+                 all_messages(output_tool_return_content=None), new_messages(),
+                 all_messages_json(), new_messages_json(), metadata
+```
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o', output_type=str)
+result = agent.run_sync('Explain Python in one sentence.')
+print(result.output, result.usage.total_tokens, result.run_id)
+
+# Continue a conversation, injecting a custom "what we did with the output" note
+history = result.all_messages(output_tool_return_content='Accepted; proceeding.')
+follow_up = agent.run_sync('Now add a caveat.', message_history=history)
+```
+
+#### `UserPromptNode` + `ModelRequestNode` + `CallToolsNode`
+
+The three public graph nodes an `AgentRun` walks through, promoted to top-level `pydantic_ai`
+exports. `ModelRequestNode.last_request_context` exposes the actual `model`/`messages`/
+`model_settings`/`model_request_parameters` sent. `CallToolsNode.stream(ctx)` yields
+`HandleResponseEvent` items (tool call/result events) for that step.
+
+```python
+from pydantic_ai import Agent, UserPromptNode, ModelRequestNode, CallToolsNode
+
+agent = Agent('openai:gpt-4o')
+
+async def trace():
+    async with agent.iter('Count to 3.') as run:
+        async for node in run:
+            if isinstance(node, ModelRequestNode):
+                print('sending', [type(p).__name__ for p in node.request.parts])
+            elif isinstance(node, CallToolsNode):
+                print('response finish_reason', node.model_response.finish_reason)
+```
+
+#### `WrapperAgent` + `AbstractAgent`
+
+`AbstractAgent` is the ABC that `Agent`, `WrapperAgent`, and custom agent implementations satisfy (model, name, description, deps_type, output_type, event_stream_handler, toolsets, `run`/`run_sync`/`run_stream`). `WrapperAgent` delegates every property and method to `self.wrapped`, leaving no abstract methods unimplemented — subclass it and override only what you need (auth middleware, rate limiting, routing between specialised agents, timing). This is the base every durable-execution wrapper (`TemporalAgent`, `DBOSAgent`, `PrefectAgent`) builds on.
+
+```python
+class WrapperAgent(AbstractAgent[AgentDepsT, OutputDataT]):
+    def __init__(self, wrapped: AbstractAgent[AgentDepsT, OutputDataT]): ...
+    # model, name, description, deps_type, output_type, event_stream_handler,
+    # root_capability, toolsets, run, run_sync, run_stream all delegate to self.wrapped
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.agent import WrapperAgent
+
+class RateLimitedAgent(WrapperAgent):
+    def __init__(self, inner: Agent, max_per_minute: int = 10):
+        super().__init__(inner)
+        self._max_per_minute = max_per_minute
+        self._run_count = 0
+
+    async def run(self, prompt, **kwargs):
+        if self._run_count >= self._max_per_minute:
+            raise RuntimeError('Rate limit exceeded')
+        self._run_count += 1
+        return await self.wrapped.run(prompt, **kwargs)
+
+rate_limited = RateLimitedAgent(Agent('openai:gpt-4o-mini'), max_per_minute=3)
+```
+
+#### Direct API — `model_request`, `model_request_stream`, `StreamedResponseSync`
+
+`pydantic_ai.direct` sends messages to a model **without** an `Agent` — no dependency injection, no tool dispatch, no retries; just the raw model interface with OTel instrumentation wired in. `model_request_sync`/`model_request_stream_sync` are thread-bridged sync wrappers for scripts and notebooks; `model_request_stream_sync` returns a `StreamedResponseSync` that bridges an async model stream via a background thread and a `queue.Queue`, for CLI tools and notebooks that can't `await`.
+
+```python
+async def model_request(model, messages, *, model_settings=None, model_request_parameters=None, instrument=None) -> ModelResponse: ...
+async def model_request_stream(model, messages, **kwargs) -> AbstractAsyncContextManager[StreamedResponse]: ...
+def model_request_sync(model, messages, **kwargs) -> ModelResponse: ...
+def model_request_stream_sync(model, messages, **kwargs) -> StreamedResponseSync: ...
+```
+
+```python
+import asyncio
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request
+
+async def main() -> None:
+    response = await model_request(
+        'openai:gpt-4o-mini',
+        [ModelRequest.user_text_prompt('What is the capital of France?')],
+    )
+    print(response.parts[0].content)
+
+asyncio.run(main())
+```
+
+```python
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream_sync
+
+with model_request_stream_sync('anthropic:claude-haiku-4-5', [ModelRequest.user_text_prompt('Hi')]) as stream:
+    for event in stream:
+        print(event)
+    print(stream.model_name)
+```
+
+#### `PendingMessage` + `RunContext.enqueue` + `PendingMessageDrainCapability`
+
+`PendingMessage` is the object created by `ctx.enqueue(...)` / `agent_run.enqueue(...)`, holding one or more `ModelMessage`s and a `priority`. `'asap'` is delivered before the next model request (or redirects termination into one more request); `'when_idle'` is delivered only when the agent would otherwise finish. `PendingMessage.from_content()` coalesces adjacent user content into one `ModelRequest` and returns `None` for an empty call. The auto-injected `PendingMessageDrainCapability` sits at `position='outermost'` and does the actual draining — `before_model_request` drains `'asap'`, `after_node_run` redirects idle termination to drain `'when_idle'`.
+
+```python
+@dataclass
+class PendingMessage:
+    messages: list[ModelMessage]        # always ends in a ModelRequest
+    priority: PendingMessagePriority = 'asap'   # 'asap' | 'when_idle'
+
+    @classmethod
+    def from_content(cls, *content: EnqueueContent, priority='asap') -> PendingMessage | None: ...
+```
+
+```python
+import asyncio
+from pydantic_ai import Agent, RunContext
+
+agent = Agent('openai:gpt-4o-mini')
+
+@agent.tool
+async def fetch_and_maybe_followup(ctx: RunContext[None], query: str) -> str:
+    # enqueue() is synchronous — do not await it
+    ctx.enqueue('Also double-check that against the latest data.', priority='asap')
+    return f'data for {query}'
+
+asyncio.run(agent.run('Search for AI news'))
+```
+
+Note: a bare `async for node in agent.iter(...)` loop that ends while `'when_idle'`-priority messages are still undrained raises `UndrainedPendingMessagesError` — use `agent.run()` or `AgentRun.next()` instead, both of which drain every priority.
+
+#### `RunContext` — complete field reference
+
+The generic context object injected as the first argument of every tool, output validator,
+system-prompt function, and capability hook.
+
+```python
+class RunContext(Generic[AgentDepsT]):
+    deps: AgentDepsT
+    model: Model
+    usage: RunUsage
+    usage_limits: UsageLimits | None      # always a real UsageLimits() even when the caller passes None (since 2.10)
+    agent: Agent | None
+    prompt: str | Sequence[UserContent] | None
+    messages: list[ModelMessage]
+    tracer: Tracer
+    trace_include_content: bool
+    retries: dict[str, int]
+    tool_call_id: str | None
+    tool_name: str | None
+    retry: int
+    max_retries: int
+    run_step: int
+    tool_call_approved: bool
+    tool_call_metadata: Any
+    partial_output: bool
+    run_id: str | None
+    conversation_id: str | None
+    metadata: dict[str, Any] | None
+    model_settings: ModelSettings | None
+    validation_context: Any
+    pending_messages: list[PendingMessage]
+    tool_manager: ToolManager | None
+    root_capability: AbstractCapability | None
+    capabilities: dict[str, AbstractCapability]
+    loaded_capability_ids: set[str]
+    discovered_tool_names: set[str]
+
+    @property
+    def last_attempt(self) -> bool: ...     # True when retry == max_retries
+    def enqueue(self, *content: EnqueueContent, priority: 'asap' | 'when_idle' = 'asap') -> None: ...
+    def is_tool_available(self, tool: str | ToolDefinition) -> bool: ...   # 2.22+
+```
+
+`is_tool_available()` answers whether a function tool is currently visible to the model,
+accounting for `FilteredToolset`/`PrepareTools`/`DeferredLoadingToolset` mutations.
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext, ModelRetry
+
+@dataclass
+class Deps:
+    api_url: str
+
+agent: Agent[Deps, str] = Agent('openai:gpt-4o', deps_type=Deps)
+
+@agent.tool
+async def fetch_data(ctx: RunContext[Deps], query: str) -> str:
+    if ctx.last_attempt:
+        return f'ERROR: exhausted retries for {query!r}'
+    try:
+        return f'data for {query} from {ctx.deps.api_url}'
+    except Exception as e:
+        raise ModelRetry(f'fetch failed: {e}, attempt {ctx.retry + 1}')
+```
+
+#### `AgentSpec` — YAML/JSON-driven configuration
+
+**Module:** `pydantic_ai._spec` (exported as `pydantic_ai.AgentSpec`). A `BaseModel` describing an
+agent's full config — `model`, `name`, `description`, `instructions` (string or `TemplateStr`),
+`deps_schema`, `output_schema`, `model_settings`, `retries`, `end_strategy`, `tool_timeout`,
+`metadata`, `capabilities: list[CapabilitySpec]`. **Correction:** `AgentSpec` has no `to_agent()`
+method — build the agent via `Agent.from_spec(spec)` or `Agent.from_file(path)`.
+`NamedSpec`/`CapabilitySpec` support three short forms (bare string, `{Name: single_arg}`,
+`{Name: {kwargs}}`) resolved via `build_registry()`/`load_from_registry()`.
+
+```python
+Agent.from_file(path)                      # one-step: parse YAML/JSON, build Agent
+Agent.from_spec(spec_or_dict)
+AgentSpec.from_file(path, fmt=None)
+AgentSpec.from_dict(data)
+AgentSpec.from_text(text, fmt=None)
+spec.to_file(path, fmt=None, schema_path=...)
+```
+
+```python
+from pydantic_ai import Agent, AgentSpec
+
+spec = AgentSpec.from_dict({
+    'model': 'openai:gpt-4o',
+    'name': 'support-agent',
+    'instructions': 'You are a helpful support agent.',
+    'model_settings': {'temperature': 0.3},
+    'retries': 3,
+    'capabilities': [{'WebSearch': {'search_context_size': 'high'}}, 'Thinking'],
+})
+agent = Agent.from_spec(spec)
+result = agent.run_sync('How do I reset my password?')
+```
+
+#### `EndStrategy` + `AgentRetries`
+
+`EndStrategy = Literal['early', 'graceful', 'exhaustive']`, passed as `Agent(end_strategy=...)` or
+`agent.run(end_strategy=...)`: `'early'` (default) stops the moment a final result is available
+even with tools still in flight; `'graceful'` finishes tool calls already dispatched first;
+`'exhaustive'` runs every requested tool call regardless. `AgentRetries = int | None` sets how
+many `ModelRetry` cycles a tool/output gets before the run raises.
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o', retries=3)
+result = agent.run_sync('Fetch three URLs and summarise.', end_strategy='graceful')
+```
+
+#### `capture_run_messages`
+
+Context manager that captures the message history built up to the point of failure, even when
+`agent.run()` raises. Only the *first* `run()`/`run_sync()`/`run_stream()` call inside one
+`with` block is captured — nest separate blocks for separate calls.
+
+```python
+from pydantic_ai import Agent, capture_run_messages, UsageLimits
+from pydantic_ai.exceptions import UsageLimitExceeded
+
+agent = Agent('openai:gpt-4o')
+
+with capture_run_messages() as messages:
+    try:
+        agent.run_sync('Count to 1000.', usage_limits=UsageLimits(request_limit=1))
+    except UsageLimitExceeded:
+        print(f'Captured {len(messages)} messages before the limit hit')
+```
+
+#### `ToolManager` + `ValidatedToolCall` + `ParallelExecutionMode`
+
+**Module:** `pydantic_ai.tool_manager`. The internal engine that resolves, validates, and executes
+every tool call in a step. `ParallelExecutionMode` (`'parallel'` | `'sequential'` | `'parallel_ordered_events'`) controls concurrency and event ordering; `ToolManager.parallel_execution_mode(mode)` is a classmethod context manager, and `Agent.parallel_tool_call_execution_mode(mode)` is a thin static wrapper around it. A tool's own `ToolDefinition.sequential=True` always wins regardless of the mode. `ValidatedToolCall` separates schema validation from execution so hooks can inspect `args_valid` before a tool actually runs.
+
+```python
+ParallelExecutionMode = Literal['parallel', 'sequential', 'parallel_ordered_events']
+
+@dataclass
+class ValidatedToolCall(Generic[AgentDepsT]):
+    call: ToolCallPart
+    tool: ToolsetTool[AgentDepsT] | None
+    args_valid: bool
+    validated_args: dict[str, Any] | None = None
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.tool_manager import ToolManager
+
+agent = Agent('openai:gpt-4o-mini')
+
+@agent.tool_plain
+def step_one() -> str: return 'done'
+
+with ToolManager.parallel_execution_mode('sequential'):
+    result = agent.run_sync('Run step_one twice.')
+```
+
+#### `SkipModelRequest` + `SkipToolExecution` + `SkipToolValidation`
+
+Three plain `Exception` subclasses for short-circuiting hook execution. Raise `SkipModelRequest(response)` inside `before_model_request`/`wrap_model_request` to substitute a synthetic `ModelResponse` (response caching, test injection, circuit breakers). Raise `SkipToolExecution(result)` inside `before_tool_execute`/`wrap_tool_execute` to skip the tool body and return `result` to the model directly (dry-run mode, sandboxing). Raise `SkipToolValidation(validated_args)` inside a `before_tool_validate` hook to bypass Pydantic argument validation with pre-coerced args.
+
+```python
+class SkipModelRequest(Exception):
+    def __init__(self, response: ModelResponse): ...
+class SkipToolExecution(Exception):
+    def __init__(self, result: Any): ...
+class SkipToolValidation(Exception):
+    def __init__(self, validated_args: dict[str, Any]): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import SkipModelRequest
+from pydantic_ai.messages import ModelResponse, TextPart
+
+_cache: dict[str, ModelResponse] = {}
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def return_if_cached(ctx, request_context):
+    key = str(request_context.messages)
+    if key in _cache:
+        raise SkipModelRequest(_cache[key])
+    return request_context
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+```
+
+#### `SelectModel` + `ModelSelectionContext` / `ResolveModelId`
+
+`SelectModel(selector)` invokes a `ModelSelector` callable before every logical model-request step; `selector` receives a frozen `ModelSelectionContext` (`deps`, `model`, `run_step`, `messages`, `usage`) and returns a `Model` instance or a provider-prefixed model-name string — the primary mechanism for per-step routing (cost ladders, capability escalation). `ResolveModelId(resolver)` is the lower-level hook: `resolver(ModelResolutionContext, model_id: str) -> Model | None`, called only when a string model ID isn't already in a registry; returning `None` falls through to the next resolver or `infer_model`. Both accept sync or async callables.
+
+```python
+@dataclass
+class SelectModel(AbstractCapability[AgentDepsT]):
+    selector: ModelSelector[AgentDepsT]
+
+@dataclass(frozen=True)
+class ModelSelectionContext(Generic[DepsT]):
+    deps: DepsT
+    model: Model
+    run_step: int
+    messages: list[ModelMessage]
+    usage: RunUsage
+```
+
+```python
+from pydantic_ai import Agent, ModelSelectionContext
+from pydantic_ai.capabilities import SelectModel
+
+def escalating_selector(ctx: ModelSelectionContext[None]) -> str:
+    return 'anthropic:claude-haiku-4-5' if ctx.run_step == 1 else 'anthropic:claude-opus-4-6'
+
+agent = Agent(capabilities=[SelectModel(escalating_selector)])
+```
+
+#### `CancellationToken`
+
+A thread-safe handle for first-party run cancellation, added 2.26.0. Call `.cancel()` from any thread; the agent translates the resulting cancellation into `RunCancelled` at the `agent.iter()` boundary, and `RunCancelled.all_messages()` preserves partial history for resuming later.
+
+```python
+class CancellationToken:
+    def __init__(self) -> None: ...
+    def cancel(self) -> None: ...
+```
+
+```python
+import asyncio, threading
+from pydantic_ai import Agent, CancellationToken
+from pydantic_ai.exceptions import RunCancelled
+
+agent = Agent('openai:gpt-5')
+
+async def main():
+    token = CancellationToken()
+    threading.Thread(target=lambda: (__import__('time').sleep(2), token.cancel()), daemon=True).start()
+    try:
+        result = await agent.run('Write a long report.', cancellation_token=token)
+    except RunCancelled as exc:
+        print('Cancelled, partial messages:', len(exc.all_messages()))
+```
+
+#### `MessagesBuilder` + `BuilderCheckpoint`
+
+`MessagesBuilder` (`pydantic_ai.ui._messages_builder`) constructs `ModelRequest`/`ModelResponse` sequences incrementally from individual message parts: `add()` extends the last message if the new part matches its type, otherwise appends a fresh message. `BuilderCheckpoint` is an opaque snapshot used with `last_modified(checkpoint, of_type=...)` to find which message was created/extended since the snapshot — the plumbing behind `UIEventStream` and custom streaming adapters.
+
+```python
+class MessagesBuilder:
+    def add(self, part: ModelRequestPart | ModelResponsePart) -> None: ...
+    def checkpoint(self) -> BuilderCheckpoint: ...
+    def last_modified(self, checkpoint: BuilderCheckpoint, *, of_type: type) -> ModelMessage | None: ...
+    messages: list[ModelMessage]
+```
+
+```python
+from pydantic_ai.ui._messages_builder import MessagesBuilder
+from pydantic_ai.messages import UserPromptPart, TextPart
+
+builder = MessagesBuilder()
+builder.add(UserPromptPart(content='What is the capital of France?'))
+builder.add(TextPart(content='Paris.'))
+print(len(builder.messages))   # 2: one ModelRequest, one ModelResponse
+```
+
+#### `SystemPromptRunner`
+
+The internal wrapper pydantic-ai stores for each `@agent.system_prompt`-registered function. It inspects the function signature at construction (`_takes_ctx`, `_is_async`) to dispatch correctly: sync/no-arg via a thread executor, `RunContext`-aware via the same executor with context passed, async called directly. `dynamic=True` forces re-evaluation before every model request rather than once at run start.
+
+```python
+@dataclass
+class SystemPromptRunner(Generic[AgentDepsT]):
+    function: SystemPromptFunc[AgentDepsT]
+    dynamic: bool = False
+```
+
+```python
+from pydantic_ai import Agent, RunContext
+
+agent = Agent('openai:gpt-4o', deps_type=dict)
+
+@agent.system_prompt(dynamic=True)
+def budget_aware_prompt(ctx: RunContext[dict]) -> str:
+    if ctx.deps.get('budget_remaining', 1.0) < 0.10:
+        return 'Low-budget mode: keep answers under 50 words.'
+    return 'You are a helpful, detailed assistant.'
+```
+
+#### `ModelSettings` — cross-provider reference
+
+`ModelSettings` is a `TypedDict` (all keys optional) providing portable model configuration; unsupported keys are silently ignored by a given provider's adapter. Notable fields: `temperature`, `top_p`, `max_tokens`, `seed`, `parallel_tool_calls`, `thinking` (`ThinkingLevel`), `tool_choice`, `service_tier`, `stop_sequences`, `extra_headers`, `extra_body`. Use `merge_model_settings(base, overrides)` to layer agent-level settings with per-run overrides (override wins per key).
+
+```python
+from pydantic_ai import Agent, ModelSettings
+from pydantic_ai.settings import merge_model_settings
+
+base: ModelSettings = {'temperature': 0.0, 'seed': 42, 'parallel_tool_calls': False}
+agent = Agent('openai:gpt-4o', model_settings=base)
+merged = merge_model_settings(base, {'temperature': 0.9})   # per-run override wins
+```
+
+#### `TemplateStr` — Handlebars instructions
+
+`TemplateStr[AgentDepsT]` compiles a Handlebars template against the agent's `deps_type` (via pydantic-handlebars) and re-renders per model request against the live `RunContext.deps`. Any string containing `{{` inside a field typed `TemplateStr[...]` is auto-compiled during Pydantic validation — this is how `AgentSpec` YAML instructions get template rendering without extra ceremony. `.render(deps)` renders standalone, outside an `Agent`.
+
+```python
+class TemplateStr(Generic[AgentDepsT]):
+    def __init__(self, template: str, *, deps_type: type[AgentDepsT] | None = None) -> None: ...
+    def render(self, deps: AgentDepsT) -> str: ...
+```
+
+```python
+from dataclasses import dataclass
+from pydantic_ai import Agent, TemplateStr
+
+@dataclass
+class UserProfile:
+    name: str
+    language: str
+
+agent = Agent(
+    'openai:gpt-4o-mini',
+    deps_type=UserProfile,
+    instructions=TemplateStr('Hello {{name}}! Always respond in {{language}}.'),
+)
+result = agent.run_sync('What is a decorator?', deps=UserProfile(name='Alice', language='French'))
+```
+
+---
+
+### Models & Providers
+
+#### `ModelProfile` + `DEFAULT_PROFILE` + `ModelProfileSpec` + `merge_profile`
+
+As of pydantic-ai 2.23+, `ModelProfile` is a **`TypedDict`** (`total=False`), not a `@dataclass`. There is no `.update()` instance method any more — the canonical way to layer profiles is the module-level `merge_profile()` function. `ModelProfileSpec` is `ModelProfile | Callable[[ModelProfile], ModelProfile]` (the callable receives the provider's already-resolved default profile and returns the final one).
+
+```python
+class ModelProfile(TypedDict, total=False):
+    supports_tools: bool                              # default True
+    supports_tool_return_schema: bool                 # default False
+    supports_json_schema_output: bool                 # default False
+    supports_json_object_output: bool                 # default False
+    supports_image_output: bool                       # default False
+    supports_audio_input: bool                        # default False
+    supports_inline_system_prompts: bool               # default False
+    default_structured_output_mode: StructuredOutputMode  # default 'tool'
+    prompted_output_template: str
+    native_output_requires_schema_in_instructions: bool
+    json_schema_transformer: type[JsonSchemaTransformer] | None
+    supports_thinking: bool
+    thinking_always_enabled: bool
+    thinking_tags: tuple[str, str]                    # default ('<think>', '</think>')
+    ignore_streamed_leading_whitespace: bool
+    supported_native_tools: frozenset[type[AbstractNativeTool]]
+    tool_deferral_mode: Literal['standalone', 'with_tool_search'] | None
+    tool_addition_mode: Literal['by_reference', 'with_definitions'] | None
+    # tool_additions / deferred_tools_require_tool_search: deprecated aliases, still accepted
+
+ModelProfileSpec = ModelProfile | Callable[[ModelProfile], ModelProfile]
+
+def merge_profile(base: ModelProfile | None, *overrides: ModelProfile | None) -> ModelProfile: ...
+```
+
+```python
+from pydantic_ai.profiles import ModelProfile, merge_profile, DEFAULT_PROFILE
+from pydantic_ai.profiles.harmony import harmony_model_profile
+
+my_override: ModelProfile = {'supports_json_schema_output': True, 'supports_thinking': True}
+merged = merge_profile(DEFAULT_PROFILE, my_override)   # dict-spread merge, replaces the old .update()
+print(merged['supports_json_schema_output'])   # True
+
+merged2 = merge_profile(DEFAULT_PROFILE, harmony_model_profile('gpt-4o'))
+print(merged2['ignore_streamed_leading_whitespace'])   # True
+
+# ModelProfileSpec as a callable: receives the resolved default, returns the final profile
+def my_profile_factory(default: ModelProfile) -> ModelProfile:
+    return merge_profile(default, {'supports_thinking': True})
+```
+
+`supported_builtin_tools` (the pre-1.104 field name) is no longer available even as a deprecated
+alias — code still reading `profile.supported_builtin_tools` must migrate to
+`profile['supported_native_tools']`. `harmony_model_profile`, `moonshotai_model_profile`, and
+`amazon_model_profile` are additional provider-profile functions layered the same way as any other.
+
+#### Per-provider `ModelProfile` families — Anthropic / OpenAI / Grok / Google
+
+Each provider module exposes a `TypedDict` subclass of `ModelProfile` with `<provider>_`-prefixed fields plus a `<provider>_model_profile(model_name)` function, all mergeable via plain dict-spread or `merge_profile`:
+
+- **`AnthropicModelProfile`** (`profiles.anthropic`): `anthropic_supports_fast_speed`, `anthropic_supports_adaptive_thinking`, `anthropic_supports_effort`, `anthropic_supports_xhigh_effort`, `anthropic_disallows_budget_thinking`, `anthropic_disallows_sampling_settings`, `anthropic_supports_forced_tool_choice`, `anthropic_supports_task_budgets`, `anthropic_default_code_execution_tool_version` / `anthropic_supported_code_execution_tool_versions` (`Literal['20250825','20260120']`). `resolve_anthropic_effort(level, *, supports_xhigh) -> AnthropicEffort` maps the unified thinking level to Anthropic's API string.
+- **`OpenAIModelProfile`** (`profiles.openai`): `openai_chat_thinking_field`, `openai_chat_send_back_thinking_parts` (`'auto'|'tags'|'field'|False`), `openai_supports_strict_tool_definition`, `openai_supports_tool_choice_required`. `OPENAI_REASONING_EFFORT_MAP` maps unified `ThinkingLevel` → `reasoning_effort` string; `SAMPLING_PARAMS` lists params dropped during reasoning mode.
+- **`GrokModelProfile`** (`profiles.grok`): `grok_supports_builtin_tools`, `grok_supports_tool_choice_required`, `grok_reasoning_efforts: frozenset[GrokReasoningEffort]` (`'none'|'low'|'medium'|'high'`) — Grok 4.3 gets the full set, Grok 3 Mini gets `{low, high}` only (so `thinking_always_enabled=True`).
+- **`GoogleModelProfile`** (`profiles.google`): `google_supports_tool_combination`, `google_supports_server_side_tool_invocations`, `google_supports_thinking_level` (Gemini 3+ uses `thinking_level` enum instead of `thinking_budget` int). `GoogleJsonSchemaTransformer` strips `$schema`/`discriminator`/`examples`/`title` and rewrites `const` → `enum`.
+
+```python
+from pydantic_ai.profiles.anthropic import anthropic_model_profile, resolve_anthropic_effort
+from pydantic_ai.profiles.google import GoogleJsonSchemaTransformer
+from pydantic_ai.profiles.openai import OpenAIModelProfile
+from pydantic_ai.providers.openai import OpenAIProvider
+
+profile = anthropic_model_profile('claude-opus-4-8')
+print(resolve_anthropic_effort('xhigh', supports_xhigh=profile.get('anthropic_supports_xhigh_effort', False)))
+
+schema = GoogleJsonSchemaTransformer({'const': 'active'}).walk()
+print(schema)   # {'enum': ['active'], 'type': 'string'}
+
+class MyVLLMProvider(OpenAIProvider):
+    @staticmethod
+    def model_profile(model_name: str) -> ModelProfile | None:
+        if 'qwen3' in model_name.lower():
+            return OpenAIModelProfile(
+                supports_thinking=True,
+                openai_chat_thinking_field='reasoning',
+                openai_chat_send_back_thinking_parts='field',
+            )
+        return None
+```
+
+#### `Provider` ABC + `infer_provider` / `infer_provider_class`
+
+**Module:** `pydantic_ai.providers`. Every first-party provider implements this ABC: `name`,
+`base_url`, `client`, and `model_profile(model_name) -> ModelProfile | None` (returning `None`
+means "use the built-in default for this model family"). `infer_provider('openai')` /
+`infer_provider_class('openai')` resolve a provider string to an instance or class.
+
+```python
+from pydantic_ai.providers import infer_provider
+
+openai_provider = infer_provider('openai')
+gateway_anthropic = infer_provider('gateway/anthropic')
+```
+
+#### `FallbackModel` (+ `ResponseRejected`, `FallbackExceptionGroup`)
+
+Wraps two or more models and tries them in order until one succeeds (or on a custom response predicate). `fallback_on` accepts exception types, exception handlers, **response handlers**, or a sequence mixing all three — auto-detected by inspecting whether the callable's first parameter is type-hinted `ModelResponse`. `ResponseRejected` is raised inside `FallbackExceptionGroup` when a response handler rejects every model's output. `model_name` reports `fallback:<model1>,<model2>,...`.
+
+```python
+class ResponseHandler: Callable[[ModelResponse], bool | Awaitable[bool]]
+class ExceptionHandler: Callable[[Exception], bool | Awaitable[bool]]
+FallbackOn = type[Exception] | tuple[type[Exception], ...] | ExceptionHandler | ResponseHandler | Sequence[...]
+
+class FallbackModel(Model):
+    def __init__(self, default_model, *fallback_models, fallback_on: FallbackOn = (ModelAPIError,)): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.fallback import FallbackModel, FallbackExceptionGroup
+from pydantic_ai.messages import ModelResponse
+
+def response_too_short(response: ModelResponse) -> bool:
+    text = response.text or ''
+    return len(text.strip()) < 10
+
+model = FallbackModel('openai:gpt-4o-mini', 'openai:gpt-4o', 'anthropic:claude-opus-4-8', fallback_on=response_too_short)
+agent = Agent(model)
+
+try:
+    result = agent.run_sync('Hello')
+except* FallbackExceptionGroup as eg:
+    for exc in eg.exceptions:
+        print(type(exc).__name__, exc)
+```
+
+#### `WrapperModel` + `CompletedStreamedResponse`
+
+`WrapperModel` is the base class for models that wrap another model — delegating every `Model` method to `self.wrapped` via `__getattr__` for anything not explicitly overridden. `CompletedStreamedResponse` presents an already-consumed `ModelResponse` as a `StreamedResponse`, used by Temporal/Prefect/DBOS wrappers that ran the real model inside an activity/task and must replay the result at the workflow layer. **Import note:** `CompletedStreamedResponse` moved from `pydantic_ai.models.wrapper` to `pydantic_ai.models` — the old path still works but emits `PydanticAIDeprecationWarning`.
+
+```python
+class WrapperModel(Model):
+    def __init__(self, wrapped: Model | KnownModelName): ...
+    # request, request_stream, count_tokens, prepare_messages, customize_request_parameters
+    # all delegate to self.wrapped unless overridden
+
+from pydantic_ai.models import CompletedStreamedResponse   # current import path
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.wrapper import WrapperModel
+
+class LoggingModel(WrapperModel):
+    async def request(self, messages, model_settings, model_request_parameters):
+        print(f"→ {len(messages)} messages")
+        response = await super().request(messages, model_settings, model_request_parameters)
+        print(f"← {response.parts}")
+        return response
+
+agent = Agent(LoggingModel("openai:gpt-4o-mini"))
+```
+
+#### `MistralModel` + `MistralModelSettings`
+
+**Module:** `pydantic_ai.models.mistral`. Talks to Mistral's API (`mistral-large-latest`,
+`pixtral-large-latest` for vision, `mistral-embed`). `json_mode_schema_prompt` templates the
+schema-in-instructions fallback for structured output.
+
+```python
+MistralModel(model_name: MistralModelName, *, provider='mistral', profile=None,
+             json_mode_schema_prompt: str = "...", settings=None)
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.mistral import MistralModel
+
+agent = Agent(MistralModel('mistral-large-latest'))
+result = agent.run_sync('Explain RAG in three sentences.')
+```
+
+#### `OllamaModel` — self-hosted vs. Cloud `NativeOutput`
+
+Extends `OpenAIChatModel` for Ollama's OpenAI-compatible endpoint. Self-hosted Ollama enforces
+`response_format` grammar-style, so `NativeOutput` is schema-safe; Ollama Cloud (`base_url`
+containing `ollama.com`, or model name ending `-cloud`) accepts the same request but does **not**
+enforce the schema, so PydanticAI auto-disables `supports_json_schema_output` for detected Cloud
+models — `NativeOutput` then raises `UserError` there. Use `ToolOutput`/`PromptedOutput` instead,
+or manually override the profile once Ollama Cloud fixes enforcement upstream.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.ollama import OllamaModel
+from pydantic_ai.output import NativeOutput
+from pydantic import BaseModel
+
+class Recipe(BaseModel):
+    name: str
+    steps: list[str]
+
+agent = Agent(OllamaModel('qwen3'), output_type=NativeOutput(Recipe))  # self-hosted: schema-enforced
+```
+
+#### `OpenRouterModel` + `OpenRouterModelSettings` (+ `OpenRouterReasoning`, `OpenRouterProviderConfig`, `OpenRouterUsageConfig`)
+
+`OpenRouterModel` extends `OpenAIChatModel` with OpenRouter-specific metadata, routing to 200+ models via `provider/model` names. `OpenRouterModelSettings` adds five fields: `openrouter_models` (provider-side fallback chain), `openrouter_provider` (routing constraints — `order`, `allow_fallbacks`, `require_parameters`, `data_collection`, `only`, `quantizations`), `openrouter_reasoning` (`effort` OR `max_tokens`, `exclude`, `enabled`), `openrouter_transforms`, `openrouter_usage`, `openrouter_cache_ttl` (`'5m'|'1h'`).
+
+```python
+class OpenRouterModel(OpenAIChatModel):
+    def __init__(self, model_name: str, *, provider='openrouter', profile=None, settings=None): ...
+class OpenRouterModelSettings(ModelSettings, total=False):
+    openrouter_models: list[str]
+    openrouter_provider: OpenRouterProviderConfig
+    openrouter_reasoning: OpenRouterReasoning
+    openrouter_cache_ttl: Literal['5m', '1h']
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.openrouter import OpenRouterModel, OpenRouterModelSettings
+
+agent = Agent(
+    OpenRouterModel('anthropic/claude-sonnet-4-6'),
+    model_settings=OpenRouterModelSettings(
+        openrouter_models=['anthropic/claude-sonnet-4-6', 'openai/gpt-5.2'],
+    ),
+)
+```
+
+#### `HuggingFaceModel` + `HuggingFaceModelSettings` + `HuggingFaceStreamedResponse`
+
+**Extra:** `pip install "pydantic-ai-slim[huggingface]"`. Inference against any HF Hub model
+(DeepSeek-R1, Llama-4, Qwen3, QwQ). Thinking models need `profile=ModelProfile(supports_thinking=True,
+thinking_always_enabled=True, thinking_tags=('<think>', '</think>'))` set explicitly.
+
+```python
+HuggingFaceModel(model_name: str, *, provider='huggingface', profile=None, settings=None)
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.huggingface import HuggingFaceModel
+
+agent = Agent(HuggingFaceModel('meta-llama/Llama-4-Scout-17B-16E-Instruct'))
+result = agent.run_sync('Explain transformers in 2 sentences.')
+```
+
+#### `BedrockConverseModel` + `BedrockModelSettings` + `BedrockProvider`
+
+The only first-party AWS model, adapting boto3's synchronous `converse`/`converse_stream` to the
+async `Model` interface. Every `BedrockModelSettings` field carries a `bedrock_` prefix.
+`BedrockProvider` supports three auth paths: bring-your-own boto3 client, bearer-token
+(`AWS_BEARER_TOKEN_BEDROCK`), or standard AWS credentials; `provider.client = new_client` hot-swaps
+for credential rotation without recreating the model.
+
+```python
+BedrockConverseModel(model_name, *, provider='bedrock', profile=None, settings=None)
+
+class BedrockModelSettings(ModelSettings, total=False):
+    bedrock_cache_tool_definitions: bool | Literal['5m', '1h']
+    bedrock_cache_instructions: bool | Literal['5m', '1h']
+    bedrock_cache_messages: bool | Literal['5m', '1h']
+    bedrock_guardrail_config: dict
+    bedrock_performance_configuration: dict
+    bedrock_request_metadata: dict[str, str]
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.bedrock import BedrockConverseModel, BedrockModelSettings
+from pydantic_ai.providers.bedrock import BedrockProvider
+
+provider = BedrockProvider(region_name='us-east-1')
+agent = Agent(
+    BedrockConverseModel('us.anthropic.claude-sonnet-4-6', provider=provider),
+    model_settings=BedrockModelSettings(bedrock_cache_instructions=True, bedrock_cache_messages=True),
+)
+```
+
+`bedrock_*_model_profile` factory functions (anthropic/amazon/deepseek/mistral/qwen/google/minimax/
+nvidia) map each vendor's Bedrock model IDs to a `BedrockModelProfile`; `_without_builtin_tools`
+strips native tools from any profile since Bedrock's Converse API has none.
+
+#### `GoogleProvider` + `GoogleCloudProvider` + `GoogleModel` + `GoogleModelSettings`
+
+`GoogleProvider` targets the Gemini API (`GOOGLE_API_KEY`); `GoogleCloudProvider` targets Vertex AI
+(Application Default Credentials, or Express Mode with `api_key=`). Both extend
+`BaseGoogleProvider[Client]` from `google-genai`.
+
+```python
+GoogleProvider(*, api_key=None, client=None, http_client=None, base_url=None)
+GoogleCloudProvider(*, api_key=None, credentials=None, project=None, location=None, client=None)
+
+class GoogleModelSettings(ModelSettings, total=False):
+    google_safety_settings: list[SafetySettingDict]
+    google_thinking_config: ThinkingConfigDict
+    google_cached_content: str      # NOTE: strips system_instruction/tools/tool_config from the request
+    google_cloud_service_tier: GoogleCloudServiceTier
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.models.google import GoogleModel
+
+agent = Agent(GoogleModel('gemini-2.5-pro', provider=GoogleProvider(api_key='AIza...')))
+result = agent.run_sync('Explain federated learning.')
+```
+
+**Removed:** `GoogleGLAProvider` and `GoogleVertexProvider` (and the `GeminiModel` they paired
+with) are gone. Migrate `GoogleGLAProvider(api_key=...)` → `GoogleProvider(api_key=...)` (env var
+`GEMINI_API_KEY` → `GOOGLE_API_KEY`), and `GoogleVertexProvider(project_id=..., region=...)` →
+`GoogleCloudProvider(project=..., location=...)`.
+
+#### `CohereModel` + `CohereProvider` + `CohereModelSettings`
+
+Drives Cohere's v2 chat API via `cohere.AsyncClientV2`. `CO_API_KEY` / `CO_BASE_URL` env vars.
+
+```python
+CohereModel(model_name: CohereModelName, *, provider='cohere', profile=None, settings=None)
+CohereProvider(*, api_key=None, cohere_client=None, http_client=None)
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.cohere import CohereModel
+from pydantic_ai.providers.cohere import CohereProvider
+
+agent = Agent(CohereModel('command-r-plus-08-2024', provider=CohereProvider(api_key='...')))
+```
+
+#### `XaiProvider` + `XaiModel`
+
+The only gRPC-transport model (`xai-sdk`, not HTTP). `_LazyAsyncClient` defers channel creation
+per-event-loop to avoid the classic "gRPC channel bound to the wrong asyncio loop" `RuntimeError`.
+`GrokModelProfile` adds `grok_supports_builtin_tools` / `grok_supports_tool_choice_required` /
+`grok_reasoning_efforts: frozenset[GrokReasoningEffort]` (`Literal['none','low','medium','high']`).
+
+```python
+XaiProvider(*, api_key=None, api_host=None, timeout=None, xai_client=None)
+```
+
+```python
+from pydantic_ai import Agent, ModelSettings
+from pydantic_ai.providers.xai import XaiProvider
+from pydantic_ai.models.xai import XaiModel
+
+agent = Agent(
+    XaiModel('grok-4.3', provider=XaiProvider(api_key='xai-...')),
+    model_settings=ModelSettings(thinking='high'),
+)
+```
+
+#### `ZaiModel` + `ZaiModelSettings` + `ZaiProvider` + `ZaiModelProfile`
+
+Z.AI (Zhipu AI) GLM family support (`pydantic_ai.models.zai`, `pydantic_ai.providers.zai`). Z.AI sends thinking as a separate `reasoning_content` field rather than inline text; by default prior-turn reasoning is preserved across turns (`zai_clear_thinking=False`, matching Z.AI's "preserved thinking" contract) — set `True` to discard it. GLM-5.2 additionally supports per-request `reasoning_effort` when `ZaiModelProfile.zai_supports_reasoning_effort=True`.
+
+```python
+class ZaiModelSettings(ModelSettings, total=False):
+    zai_clear_thinking: bool
+class ZaiModelProfile(ModelProfile, total=False):
+    zai_supports_reasoning_effort: bool
+class ZaiModel(OpenAIChatModel):
+    def __init__(self, model_name, *, provider='zai', profile=None, settings: ZaiModelSettings | None = None): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.zai import ZaiModel
+
+agent = Agent(ZaiModel('glm-5', settings={'thinking': True}))
+result = agent.run_sync('Explain why 0.1 + 0.2 != 0.3 in IEEE 754.')
+```
+
+#### `VercelProvider` — Vercel AI Gateway
+
+Routes through `https://ai-gateway.vercel.sh/v1`, proxying 8+ upstream providers under one auth surface (`VERCEL_AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`). Model naming is `provider/model` (e.g. `anthropic/claude-opus-4-8`); `VercelProvider.model_profile()` dispatches to the matching upstream profile function, merged over `OpenAIModelProfile(json_schema_transformer=OpenAIJsonSchemaTransformer)`.
+
+```python
+class VercelProvider(Provider[AsyncOpenAI]):
+    base_url = 'https://ai-gateway.vercel.sh/v1'
+    def __init__(self, *, api_key=None, openai_client=None, http_client=None) -> None: ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.vercel import VercelProvider
+
+model = OpenAIChatModel('anthropic/claude-opus-4-8', provider=VercelProvider())
+agent = Agent(model)
+```
+
+#### `MCPSamplingModel` + `MCPSamplingModelSettings`
+
+**Module:** `pydantic_ai.models.mcp_sampling`. Routes an agent's LLM calls back through the *MCP
+client's* sampling API — used when writing an MCP **server** that needs to call an LLM using the
+connected client's credentials/model choice, per the [MCP sampling spec](https://modelcontextprotocol.io/docs/concepts/sampling).
+`default_max_tokens` (default `16_384`) is required because MCP's `create_message` mandates
+`max_tokens` while `ModelSettings.max_tokens` is optional. No streaming support —
+`request_stream` raises `NotImplementedError`.
+
+```python
+class MCPSamplingModel(Model):
+    session: ServerSession
+    default_max_tokens: int = 16_384
+```
+
+```python
+from mcp.server.session import ServerSession
+from pydantic_ai import Agent
+from pydantic_ai.models.mcp_sampling import MCPSamplingModel
+
+async def summarise_tool(session: ServerSession, document: str) -> str:
+    agent = Agent(MCPSamplingModel(session=session), system_prompt='Summarise concisely.')
+    result = await agent.run(document)   # non-streaming only
+    return result.output
+```
+
+#### `AnthropicModelSettings`
+
+Extends `ModelSettings` with `anthropic_`-prefixed fields, all ignored by non-Anthropic providers so they merge safely cross-provider: `anthropic_cache` / `anthropic_cache_tool_definitions` / `anthropic_cache_instructions` (`bool | Literal['5m','1h']`), `anthropic_thinking` (low-level budget config), `anthropic_metadata` (`user_id` for abuse detection), `anthropic_service_tier` (`'auto'|'standard_only'`).
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.anthropic import AnthropicModelSettings
+
+settings: AnthropicModelSettings = {
+    'anthropic_cache_instructions': '1h',
+    'anthropic_cache_tool_definitions': True,
+    'anthropic_service_tier': 'standard_only',
+}
+agent = Agent('anthropic:claude-opus-4-5', model_settings=settings)
+```
+
+#### `OpenAIResponsesModelSettings` — reasoning context, mode, replay
+
+Controls the OpenAI Responses API for reasoning models. `openai_reasoning_context` (`'auto'|'current_turn'|'all_turns'`, default `'all_turns'` on supported models) selects which prior-turn reasoning items the model replays. `openai_reasoning_mode` (`'standard'|'pro'`) trades latency for reliability. `openai_send_reasoning_ids: bool` — set `False` to strip reasoning-part IDs from history when a custom `ProcessHistory` removes thinking parts, avoiding history-mismatch errors.
+
+```python
+class OpenAIResponsesModelSettings(ModelSettings, total=False):
+    openai_reasoning_effort: str
+    openai_reasoning_context: Literal['auto', 'current_turn', 'all_turns']
+    openai_reasoning_mode: Literal['standard', 'pro']
+    openai_send_reasoning_ids: bool
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
+
+model = OpenAIResponsesModel('gpt-5.6-sol')
+agent = Agent(model, model_settings=OpenAIResponsesModelSettings(
+    openai_reasoning_effort='high', openai_reasoning_context='all_turns',
+))
+```
+
+#### `ModelHTTPError` — `headers` + `retry_after`
+
+Raised on 4xx/5xx provider responses. Carries `headers: Mapping[str, str] | None` (lowercased keys; `None` for gRPC-based paths like xAI) and the derived `retry_after: float | None` property that parses RFC-7231 `Retry-After` (delta-seconds or HTTP-date). Propagated by all built-in HTTP-based providers.
+
+```python
+class ModelHTTPError(Exception):
+    def __init__(self, status_code: int, model_name: str, body=None, *, headers=None, suggested_model_id=None): ...
+    @property
+    def retry_after(self) -> float | None: ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelHTTPError
+import asyncio
+
+agent = Agent('openai:gpt-5.2')
+
+async def run_with_retry(prompt: str) -> str:
+    try:
+        return (await agent.run(prompt)).output
+    except ModelHTTPError as exc:
+        if exc.status_code == 429:
+            await asyncio.sleep(exc.retry_after or 5.0)
+            return (await agent.run(prompt)).output
+        raise
+```
+
+#### `RaiseContentFilterError`
+
+An `after_model_request` capability that turns `finish_reason='content_filter'` into a `ContentFilterError` exception instead of passing the filtered response through silently. The full `ModelResponse` is serialised into `ContentFilterError.body` for inspection.
+
+```python
+@dataclass
+class RaiseContentFilterError(AbstractCapability[AgentDepsT]):
+    id: str | None = None
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import RaiseContentFilterError
+from pydantic_ai.exceptions import ContentFilterError
+
+agent = Agent('openai:gpt-5.2', capabilities=[RaiseContentFilterError()])
+try:
+    result = agent.run_sync('...')
+except ContentFilterError as exc:
+    print('Filtered:', exc.body[:200])
+```
+
+#### `JsonSchemaTransformer` + `InlineDefsJsonSchemaTransformer`
+
+Every provider calls `JsonSchemaTransformer.walk()` on each tool's JSON schema during `prepare_request()` to normalise it for that provider's requirements. Subclass and implement `transform(schema)`; set `self.is_strict_compatible = False` inside it to signal a schema can't be used in strict mode. `InlineDefsJsonSchemaTransformer` expands all `$ref`/`$defs` inline (used by Amazon/Bedrock profiles and providers without `$ref` support, e.g. Qwen); recursive types keep a minimal `$defs`/`$ref` (unavoidable for cycles).
+
+```python
+class JsonSchemaTransformer(ABC):
+    def __init__(self, schema, *, strict=None, prefer_inlined_defs=False): ...
+    def walk(self) -> JsonSchema: ...
+    @abstractmethod
+    def transform(self, schema: JsonSchema) -> JsonSchema: ...
+```
+
+```python
+from pydantic_ai._json_schema import InlineDefsJsonSchemaTransformer
+
+schema = {'$defs': {'Address': {'type': 'object', 'properties': {'city': {'type': 'string'}}}},
+          'type': 'object', 'properties': {'home': {'$ref': '#/$defs/Address'}}}
+inlined = InlineDefsJsonSchemaTransformer(schema).walk()
+# 'home' now contains the full Address object inline, no $defs/$ref
+```
+
+#### Community OpenAI-compatible providers
+
+All of these are `Provider[AsyncOpenAI]` implementations paired with `OpenAIChatModel` — they
+differ only in endpoint URL, env var, model-name convention, and which `*_model_profile` family
+functions get dispatched based on the model-name prefix.
+
+| Provider | Module | Env var | Base URL | Naming | Notes |
+|---|---|---|---|---|---|
+| `LiteLLMProvider` | `.litellm` | — (proxy key) | `api_base=` (your proxy) | `provider/model` | Auto-dispatches profile by prefix (`anthropic/`, `google/`, `bedrock/`, etc.) |
+| `AzureProvider` | `.azure` | `AZURE_OPENAI_API_KEY` | `azure_endpoint=` | deployment name | `/v1`-suffix endpoints (Express Mode, AI Foundry serverless) must **omit** `api_version` — passing one raises `UserError` |
+| `DeepSeekProvider` | `.deepseek` | `DEEPSEEK_API_KEY` | fixed | `deepseek-chat` / `deepseek-reasoner` | R1 exposes `reasoning_content` field, mapped to `ThinkingPart`; reasoning models reject `tool_choice='required'` |
+| `CerebrasProvider` | `.cerebras` | `CEREBRAS_API_KEY` | fixed | flat | Adds `X-Cerebras-3rd-Party-Integration` header; disables `frequency_penalty`/`logit_bias`/`presence_penalty`/`parallel_tool_calls`/`service_tier` |
+| `GitHubProvider` | `.github` | `GITHUB_API_KEY` (PAT) | `models.github.ai/inference` | `provider/model:tag` | Tag suffix stripped before profile match |
+| `FireworksProvider` | `.fireworks` | `FIREWORKS_API_KEY` | `api.fireworks.ai/inference/v1` | `accounts/fireworks/models/<name>` | Prefix stripped before profile match |
+| `TogetherProvider` | `.together` | `TOGETHER_API_KEY` | `api.together.xyz/v1` | `org/model` | — |
+| `NebiusProvider` | `.nebius` | `NEBIUS_API_KEY` | `api.studio.nebius.com/v1` | `org/model` | No-slash name → plain `OpenAIModelProfile` |
+| `SambaNovaProvider` | `.sambanova` | `SAMBANOVA_API_KEY` | `api.sambanova.ai/v1` or `SAMBANOVA_BASE_URL` | flat | Only one supporting an on-prem `base_url` override |
+| `AlibabaProvider` | `.alibaba` | `ALIBABA_API_KEY`/`DASHSCOPE_API_KEY` | DashScope intl/CN | Qwen model IDs | `*-omni*` models get `openai_chat_audio_input_encoding='uri'` forced |
+| `OVHcloudProvider` | `.ovhcloud` | `OVHCLOUD_API_KEY` | OVH AI Endpoints | vendor-prefixed | Routes `llama`/`deepseek`/`mistral`/`gpt`/`qwen` prefixes to matching profiles |
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.models.openai import OpenAIChatModel
+
+provider = DeepSeekProvider(api_key='sk-...')
+reasoning_agent = Agent(OpenAIChatModel('deepseek-reasoner', provider=provider))
+```
+
+#### `HerokuProvider` — Heroku Managed Inference
+
+An OpenAI-compatible gateway with a multi-family model-profile router: `HerokuProvider.model_profile(model_name)` detects the model family from the bare name (no provider prefix) and applies the correct profile — `claude*` → `anthropic_model_profile`, `gpt-oss*` → `harmony_model_profile`, `qwen*`/`deepseek*`/`kimi*`/`glm*`/`mistral*`/`nova*`/`llama*`/`gemma*` → their respective profiles — all merged over `OpenAIModelProfile`. Base URL defaults to `https://us.inference.heroku.com/v1`.
+
+```python
+class HerokuProvider(Provider[AsyncOpenAI]):
+    def __init__(self, *, base_url=None, api_key=None, openai_client=None, http_client=None) -> None: ...
+    @staticmethod
+    def model_profile(model_name: str) -> ModelProfile | None: ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.providers.heroku import HerokuProvider
+from pydantic_ai.models.openai import OpenAIChatModel
+
+provider = HerokuProvider(api_key='...')
+model = OpenAIChatModel('claude-opus-4-5', provider=provider)   # thinking correctly forwarded
+agent = Agent(model, model_settings={'thinking': True})
+```
+
+#### `gateway_provider` + `normalize_gateway_provider` — Pydantic AI Gateway
+
+`gateway_provider(upstream_provider, ...)` routes through `gateway.pydantic.dev/proxy` (or the deprecated alias, still-working `PYDANTIC_AI_GATEWAY_API_KEY`-keyed proxy), a managed proxy fronting OpenAI/Anthropic/Groq/Bedrock/Google Cloud with one API key. Accepts both model-provider names and API-flavour aliases (`'chat'`, `'responses'`, `'converse'`, `'google-cloud'`); `route=` overrides the default routing group. Region-encoded `pylf_v*` keys let `_infer_base_url` auto-select the nearest regional endpoint.
+
+```python
+def gateway_provider(upstream_provider: str, /, *, route=None, api_key=None, base_url=None, http_client=None) -> Provider[Any]: ...
+def normalize_gateway_provider(provider: str) -> str: ...   # 'chat' -> 'openai-chat', etc.
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.providers.gateway import gateway_provider
+from pydantic_ai.models.openai import OpenAIChatModel
+
+provider = gateway_provider('anthropic', api_key='pylf_v1_us_...')
+agent = Agent(OpenAIChatModel('claude-opus-4-8', provider=provider))
+```
+
+#### Provider-family `*_model_profile` functions
+
+Called internally by the matching `Provider.model_profile()` to set capability flags from the
+model-name string. All return `TypedDict`-shaped `ModelProfile` objects (or `None` for "use
+default").
+
+```python
+grok_model_profile(name) -> GrokModelProfile | None
+groq_model_profile(name) -> GroqModelProfile | None       # groq_always_has_web_search_builtin_tool for compound-*
+deepseek_model_profile(name) -> ModelProfile | None       # R1: thinking_always_enabled=True
+qwen_model_profile(name) -> ModelProfile | None           # always InlineDefsJsonSchemaTransformer
+cohere_model_profile(name) -> ModelProfile | None         # 'reasoning' in name -> thinking_always_enabled
+moonshotai_model_profile(name) -> ModelProfile | None     # ignore_streamed_leading_whitespace=True
+```
+
+```python
+from pydantic_ai.profiles.deepseek import deepseek_model_profile
+
+profile = deepseek_model_profile('deepseek-r1')
+assert profile['thinking_always_enabled'] is True
+```
+
+#### `OutlinesModel` — removed
+
+`OutlinesModel` (local Transformers/LlamaCpp/SGLang/vLLM-offline/MLX grammar-constrained decoding)
+was deprecated as of 1.107.0 and is **fully removed** — no trace remains under
+`pydantic_ai/models/`. For local structured output, use vLLM's structured-output API behind
+`OpenAIProvider(base_url=...)`, or lean on `NativeOutput`/`PromptedOutput` against an API model.
+
+---
+
+### Tools & Toolsets
+
+#### `Tool` — direct construction
+
+`@agent.tool`/`@agent.tool_plain` are sugar over this dataclass.
+
+```python
+Tool(
+    function, *, takes_ctx=None, max_retries=None, name=None, description=None,
+    prepare=None, args_validator=None, docstring_format='auto',
+    require_parameter_descriptions=False, schema_generator=GenerateToolJsonSchema,
+    strict=None, sequential=False, requires_approval=False, metadata=None,
+    timeout=None, defer_loading=False, include_return_schema=None,
+    function_schema: FunctionSchema | None = None,   # pre-built schema, skips re-derivation
+)
+```
+
+```python
+from pydantic_ai import Agent, RunContext, Tool
+from pydantic_ai.exceptions import ModelRetry
+
+def validate_age(ctx: RunContext[None], age: int) -> None:
+    if age < 0 or age > 150:
+        raise ModelRetry(f'Age {age} is not plausible.')
+
+def get_birth_year(ctx: RunContext[None], age: int) -> int:
+    return 2026 - age
+
+agent = Agent('openai:gpt-4o', tools=[Tool(get_birth_year, args_validator=validate_age)])
+```
+
+`prepare=` mutates or hides the `ToolDefinition` before each step (return `None` to hide);
+`requires_approval=True` raises `ApprovalRequired` on call (see Security section);
+`sequential=True` forces the tool to never run in parallel with others in the same step.
+`args_validator` runs after schema validation but before execution — receives schema-validated
+kwargs and should raise `ModelRetry` on failure.
+
+```python
+from pydantic_ai import Agent, ModelRetry, RunContext
+
+agent = Agent("openai:gpt-4o-mini")
+
+def validate_url(ctx: RunContext[None], url: str) -> None:
+    if not url.startswith("https://"):
+        raise ModelRetry("URL must use HTTPS")
+
+@agent.tool(args_validator=validate_url)
+async def fetch_url(ctx: RunContext[None], url: str) -> str:
+    return f"Fetched: {url}"
+```
+
+#### `FunctionToolset` — the primary toolset
+
+The richest toolset — powers `@agent.tool`/`@agent.tool_plain` but also works standalone.
+
+```python
+FunctionToolset(
+    tools=(), *, max_retries=None, timeout=None, docstring_format='auto',
+    require_parameter_descriptions=False, schema_generator=GenerateToolJsonSchema,
+    strict=None, sequential=False, requires_approval=False, metadata=None,
+    defer_loading=False, include_return_schema=None, id=None,
+    instructions: str | SystemPromptFunc | Sequence[...] | None = None,
+)
+```
+
+`timeout` delivers a retry prompt instead of an exception on a slow tool. `sequential=True` is a
+barrier — the tool never runs in parallel with others in the same step. `id` gives the toolset a
+stable identity for durable-execution runtimes. `instructions` injects a system-prompt segment
+whenever any tool in the set is active.
+
+```python
+from pydantic_ai import Agent, FunctionToolset, RunContext
+
+db_tools = FunctionToolset(
+    instructions='When using DB tools, always use read-only queries first.',
+)
+
+@db_tools.tool_plain
+def query_users(sql: str) -> list[dict]:
+    """Execute a read-only SQL query."""
+    return [{'id': 1, 'name': 'Alice'}]
+
+agent = Agent('openai:gpt-4o', toolsets=[db_tools])
+```
+
+#### `AbstractToolset` — custom toolset ABC
+
+Base class every toolset implements. Override `get_tools()` (returning
+`dict[str, ToolsetTool]`) and `call_tool()`; optionally `for_run`/`for_run_step` for per-run state
+isolation, and `get_instructions()` for toolset-scoped system-prompt text.
+
+```python
+class AbstractToolset(ABC, Generic[AgentDepsT]):
+    id: str | None
+    async def get_tools(self, ctx: RunContext) -> dict[str, ToolsetTool]: ...
+    async def call_tool(self, name: str, tool_args: dict, ctx: RunContext, tool: ToolsetTool) -> Any: ...
+    async def for_run(self, ctx: RunContext) -> 'AbstractToolset': ...      # per-run state
+    async def get_instructions(self, ctx: RunContext) -> str | None: ...
+```
+
+```python
+from pydantic_ai.toolsets.abstract import AbstractToolset, ToolsetTool
+from pydantic_ai.tools import ToolDefinition
+
+class CalculatorToolset(AbstractToolset):
+    id = 'calculator'
+    async def get_tools(self, ctx):
+        td = ToolDefinition(
+            name='add', description='Add two numbers.',
+            parameters_json_schema={'type': 'object', 'properties': {'a': {'type': 'number'}, 'b': {'type': 'number'}}, 'required': ['a', 'b']},
+        )
+        return {'add': ToolsetTool(toolset=self, tool_def=td, max_retries=1, args_validator=...)}
+    async def call_tool(self, name, tool_args, ctx, tool):
+        return tool_args['a'] + tool_args['b']
+```
+
+#### `ToolsetTool` + `SchemaValidatorProt`
+
+`ToolsetTool` is the runtime execution wrapper for one tool inside a toolset (`toolset`, `tool_def`, `max_retries`, `args_validator`, `args_validator_func`) — surfaced in `before_tool_validate`/`after_tool_execute` hooks and returned from custom `get_tools()`. `SchemaValidatorProt` is the `Protocol` any custom validator must satisfy (`validate_json`/`validate_python`, compatible with `pydantic_core.SchemaValidator`), letting non-Pydantic validation engines plug in.
+
+```python
+@dataclass(kw_only=True)
+class ToolsetTool(Generic[AgentDepsT]):
+    toolset: AbstractToolset
+    tool_def: ToolDefinition
+    max_retries: int
+    args_validator: SchemaValidator | SchemaValidatorProt
+    args_validator_func: Callable[..., Any] | None = None
+```
+
+#### Toolset composition — `RenamedToolset` / `WrapperToolset` / `FilteredToolset` / `PreparedToolset` / `PrefixedToolset` / `CombinedToolset`
+
+All confirmed present with unchanged constructors. `WrapperToolset` is the delegation base for the rest — subclass it and override `call_tool`/`get_tools` to add cross-cutting behaviour (logging, caching) while delegating everything else; `visit_and_replace(visitor)` recursively traverses a wrapper chain to swap out a specific inner toolset.
+
+```python
+@dataclass
+class WrapperToolset(AbstractToolset[AgentDepsT]):
+    def __init__(self, wrapped: AbstractToolset[AgentDepsT]) -> None: ...
+    def visit_and_replace(self, visitor: Callable[[AbstractToolset], AbstractToolset]) -> AbstractToolset: ...
+```
+
+`RenamedToolset` wraps a toolset and remaps tool names via `name_map: dict[str, str]` (**new name → original name**); unmapped tools pass through unchanged. `call_tool` inverts the map and restores `ctx.tool_name`/`tool.tool_def.name` to the original before delegating. Attempting to rename onto an existing or duplicate name raises `UserError`.
+
+```python
+@dataclass
+class RenamedToolset(WrapperToolset[AgentDepsT]):
+    def __init__(self, wrapped: AbstractToolset[AgentDepsT], name_map: dict[str, str]) -> None: ...
+```
+
+`FilteredToolset` wraps any toolset and calls `filter_func(RunContext, ToolDefinition) -> bool | Awaitable[bool]` on every tool at every `get_tools()` call — both sync and async predicates supported via `inspect.isawaitable()`.
+
+```python
+@dataclass
+class FilteredToolset(WrapperToolset[AgentDepsT]):
+    def __init__(self, wrapped: AbstractToolset[AgentDepsT], filter_func: Callable[[RunContext, ToolDefinition], bool | Awaitable[bool]]) -> None: ...
+```
+
+`PreparedToolset` calls `prepare_func(RunContext, list[ToolDefinition]) -> list[ToolDefinition]` on each step. The function may filter or modify definitions (descriptions, `strict`, metadata) but **cannot** add, rename, or substitute tools — attempting to raises `UserError`.
+
+```python
+@dataclass
+class PreparedToolset(WrapperToolset[AgentDepsT]):
+    def __init__(self, wrapped: AbstractToolset[AgentDepsT], prepare_func: ToolsPrepareFunc[AgentDepsT]) -> None: ...
+```
+
+`PrefixedToolset` prepends `{prefix}_` to every tool name (strips it back off before dispatching `call_tool`) — the standard fix for name collisions between combined toolsets or MCP servers.
+
+```python
+@dataclass
+class PrefixedToolset(WrapperToolset[AgentDepsT]):
+    prefix: str
+    @property
+    def tool_name_conflict_hint(self) -> str: ...
+```
+
+`CombinedToolset` fans out `get_tools()`/`get_instructions()`/`for_run()`/`for_run_step()` across child toolsets in parallel via `gather()`. Detects name collisions eagerly and raises `UserError` naming both conflicting toolsets and pointing at `tool_name_conflict_hint`. `for_run_step` short-circuits (returns `self`) when no child toolset actually changed.
+
+```python
+@dataclass
+class CombinedToolset(AbstractToolset[AgentDepsT]):
+    def __init__(self, toolsets: Sequence[AbstractToolset[AgentDepsT]]) -> None: ...
+```
+
+```python
+from pydantic_ai import Agent, FunctionToolset, RunContext
+from pydantic_ai.toolsets import CombinedToolset, PrefixedToolset, FilteredToolset
+
+db, web = FunctionToolset(), FunctionToolset()
+@db.tool_plain
+def search(query: str) -> str: return f'DB: {query}'
+@web.tool_plain
+def search(query: str) -> str: return f'Web: {query}'   # would collide without prefixing
+
+def read_only(ctx: RunContext, td) -> bool:
+    return not td.name.startswith('delete_')
+
+agent = Agent('openai:gpt-4o', toolsets=[
+    FilteredToolset(
+        CombinedToolset([PrefixedToolset(db, 'db'), PrefixedToolset(web, 'web')]),
+        filter_func=read_only,
+    )
+])
+```
+
+#### `DeferredLoadingToolset`
+
+Hides some or all of a wrapped toolset's tools until the `ToolSearch` capability discovers them.
+`tool_names=None` defers everything; a `frozenset[str]` defers only the named tools. Marks tools
+with `defer_loading=True` on their `ToolDefinition`. `FunctionToolset(defer_loading=True)` is a
+shortcut that wraps itself automatically.
+
+```python
+DeferredLoadingToolset(wrapped: AbstractToolset, *, tool_names: frozenset[str] | None = None)
+```
+
+```python
+from pydantic_ai import Agent, FunctionToolset
+from pydantic_ai.toolsets import DeferredLoadingToolset
+from pydantic_ai.capabilities import ToolSearch
+
+big_toolset = FunctionToolset()   # imagine 50+ tools registered here
+agent = Agent('openai:gpt-4o', toolsets=[DeferredLoadingToolset(big_toolset)], capabilities=[ToolSearch()])
+```
+
+#### `DynamicToolset`
+
+Wraps a factory `Callable[[RunContext], AbstractToolset | None]` (`ToolsetFunc`) and re-evaluates
+it either every step (`per_run_step=True`, default) or once per run (`per_run_step=False`).
+Lifecycle is transition-safe: the old inner toolset's `__aexit__` runs before the new one's
+`__aenter__`.
+
+```python
+class DynamicToolset(AbstractToolset[AgentDepsT]):
+    def __init__(self, toolset_func: ToolsetFunc[AgentDepsT], *, per_run_step: bool = True, id: str | None = None): ...
+```
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.toolsets import FunctionToolset, DynamicToolset
+
+def role_based_toolset(ctx: RunContext) -> FunctionToolset:
+    return admin_tools if ctx.deps.role == 'admin' else user_tools
+
+agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(role_based_toolset)])
+```
+
+#### `IncludeReturnSchemasToolset` (toolset) vs. `IncludeToolReturnSchemas` (capability)
+
+Both exist and do the same job at different layers: `IncludeReturnSchemasToolset`
+(`pydantic_ai.toolsets`) wraps one toolset; `IncludeToolReturnSchemas`
+(`pydantic_ai.capabilities`) applies agent-wide via `capabilities=[...]`. Both set
+`include_return_schema=True` on every `ToolDefinition` whose value is still `None`, so the model
+sees the tool's return-type JSON schema (useful for tool chaining and OpenAI structured outputs).
+
+```python
+from pydantic_ai import Agent, IncludeReturnSchemasToolset, FunctionToolset
+from pydantic_ai.capabilities import IncludeToolReturnSchemas
+
+toolset = FunctionToolset()
+@toolset.tool
+def get_weather(city: str) -> dict:
+    """Get current weather."""
+    return {'temp_c': 22.5, 'condition': 'sunny'}
+
+agent = Agent('openai:gpt-4o', toolsets=[IncludeReturnSchemasToolset(toolset)])
+# or agent-wide: Agent('openai:gpt-4o', toolsets=[toolset], capabilities=[IncludeToolReturnSchemas()])
+```
+
+#### `ExternalToolset` (+ deprecated `DeferredToolset` alias)
+
+Registers tool *schemas* for the model without ever executing them in-process — the calls are
+resolved by an external system and fed back via `deferred_tool_results`. `call_tool()` raises
+`NotImplementedError`; every registered tool gets `tool_kind='external'` via a
+`TOOL_SCHEMA_VALIDATOR = SchemaValidator(schema=core_schema.any_schema())` that accepts any args
+shape. `id=` gives the toolset a stable identity for durable-execution runtimes to match
+activities across replays. `DeferredToolset` is a deprecated alias for backward compatibility —
+migrate to `ExternalToolset`.
+
+```python
+ExternalToolset(tool_defs: list[ToolDefinition], *, id: str | None = None)
+```
+
+```python
+from pydantic_ai import Agent, ExternalToolset, ToolDefinition, DeferredToolRequests, DeferredToolResults, ToolReturn
+
+external = ExternalToolset([
+    ToolDefinition(
+        name='send_email', description='Send an email.',
+        parameters_json_schema={'type': 'object', 'properties': {'to': {'type': 'string'}, 'body': {'type': 'string'}}, 'required': ['to', 'body']},
+    ),
+])
+agent = Agent('openai:gpt-4o', output_type=[str, DeferredToolRequests], toolsets=[external])
+
+result1 = agent.run_sync('Email alice@example.com saying hi.')
+if isinstance(result1.output, DeferredToolRequests):
+    call = result1.output.calls[0]
+    results = {call.tool_call_id: ToolReturn(content=f"Sent to {call.args_as_dict()['to']}")}
+    result2 = agent.run_sync(
+        message_history=result1.all_messages(),
+        deferred_tool_results=DeferredToolResults(calls=results),
+    )
+```
+
+#### `ApprovalRequiredToolset`
+
+Wraps a toolset with an approval gate. Every call to `approval_required_func` (default: approve
+none automatically, i.e. gate everything) decides whether the tool call raises `ApprovalRequired`;
+the constructor field is `wrapped=`, not `toolset=`. See the Security section for the full
+two-round `DeferredToolRequests` resume flow.
+
+```python
+ApprovalRequiredToolset(
+    wrapped: AbstractToolset,
+    approval_required_func: Callable[[RunContext, ToolDefinition, dict], bool] = lambda ctx, td, args: True,
+)
+```
+
+```python
+from pydantic_ai import Agent, FunctionToolset, DeferredToolRequests
+from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
+
+tools = FunctionToolset()
+@tools.tool_plain
+def delete_file(path: str) -> str: return f'Deleted {path}'
+@tools.tool_plain
+def read_file(path: str) -> str: return f'contents of {path}'
+
+def needs_approval(ctx, tool_def, args): return tool_def.name.startswith('delete_')
+
+agent = Agent(
+    'openai:gpt-4o',
+    toolsets=[ApprovalRequiredToolset(wrapped=tools, approval_required_func=needs_approval)],
+    output_type=[str, DeferredToolRequests],
+)
+```
+
+#### `FunctionSchema` + `function_schema()` (+ `GenerateToolJsonSchema` / `DocstringFormat`)
+
+**Module:** `pydantic_ai._function_schema`. The frozen dataclass and factory function that convert
+a Python function into a tool's JSON schema + calling convention — `takes_ctx` auto-detection,
+async/sync dispatch, single-arg model unwrapping, and return-type schema extraction.
+`GenerateToolJsonSchema` strips redundant `title` keys from every property; `DocstringFormat =
+Literal['google', 'numpy', 'sphinx', 'auto']` controls how parameter descriptions are parsed out of
+docstrings (via [griffe](https://mkdocstrings.github.io/griffe/) — `'auto'` uses regex inference:
+Sphinx `:param:`, Google `Args:` block, NumPy `---` underline, falling back to `'google'`).
+
+```python
+@dataclass
+class FunctionSchema:
+    function: Callable
+    description: str | None
+    validator: SchemaValidator
+    json_schema: ObjectJsonSchema
+    single_arg_name: str | None
+    takes_ctx: bool
+    is_async: bool
+    return_schema: ObjectJsonSchema
+```
+
+```python
+from pydantic_ai._function_schema import function_schema
+from pydantic.json_schema import GenerateJsonSchema
+
+def get_weather(city: str, unit: str = 'celsius') -> dict:
+    """Get current weather.
+
+    Args:
+        city: The city to look up.
+        unit: 'celsius' or 'fahrenheit'.
+    """
+    return {'city': city, 'temp': 22}
+
+schema = function_schema(get_weather, schema_generator=GenerateJsonSchema, docstring_format='google')
+print(schema.takes_ctx, schema.is_async)   # False False
+```
+
+#### `ToolChoice` + `ToolOrOutput`
+
+`ToolChoice = Literal['none', 'required', 'auto'] | list[str] | ToolOrOutput | None`, set via
+`ModelSettings(tool_choice=...)`. `ToolOrOutput(function_tools=[...])` restricts which function
+tools are callable while still allowing the model to use output/text/image tools freely.
+
+```python
+from pydantic_ai import Agent, ModelSettings
+from pydantic_ai.settings import ToolOrOutput
+
+agent.run_sync('...', model_settings=ModelSettings(tool_choice='required'))
+agent.run_sync('...', model_settings=ModelSettings(tool_choice=ToolOrOutput(function_tools=['search_kb'])))
+```
+
+#### `PrefixedToolset` / `PrefixTools` capability
+
+`PrefixTools` is the capability-level equivalent of `PrefixedToolset`: it wraps another *capability* and prefixes its contributed tools, delegating to `PrefixedToolset` internally (or `DynamicToolset` first if the wrapped toolset is a callable factory).
+
+```python
+@dataclass
+class PrefixTools(WrapperCapability[AgentDepsT]):
+    prefix: str
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import PrefixTools, Toolset
+from pydantic_ai.toolsets import FunctionToolset
+
+db_toolset = FunctionToolset()
+agent = Agent('openai:gpt-4o-mini', capabilities=[PrefixTools(wrapped=Toolset(db_toolset), prefix='db')])
+# model sees 'db_query', 'db_insert', etc.
+```
+
+#### `ToolSearch` capability + `ToolSearchToolset`
+
+Lazy tool discovery for large toolsets. `ToolSearch` is auto-injected whenever deferred tools exist (zero overhead otherwise). On providers with native tool search (Anthropic BM25/regex, OpenAI Responses) deferred tools are sent on the wire and the provider handles discovery; elsewhere a local `search_tools` function is exposed. `strategy` accepts `None` (auto), `'bm25'`/`'regex'` (Anthropic-only, error elsewhere), `'keywords'` (force the local algorithm everywhere for determinism), or a custom `ToolSearchFunc`; `ToolSearchToolset.enable_fallback=False` disables the local `search_tools` fallback for native-only strategies.
+
+```python
+@dataclass
+class ToolSearch(AbstractCapability[AgentDepsT]):
+    strategy: ToolSearchStrategy | None = None
+    max_results: int = 10
+
+class ToolSearchToolset(WrapperToolset[AgentDepsT]):
+    def __init__(self, wrapped, search_fn=None, max_results=10, enable_fallback=True, ...): ...
+```
+
+```python
+from pydantic_ai import Agent, Tool
+from pydantic_ai.capabilities import ToolSearch
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    tools=[Tool(lambda booking_id: 'ok', defer_loading=True)],
+    capabilities=[ToolSearch()],
+)
+```
+
+#### `LangChainTool` + `LangChainToolset` + `tool_from_langchain`
+
+**Module:** `pydantic_ai.ext.langchain` — the only surviving file under `pydantic_ai/ext/`
+alongside `__init__.py`. Bridges any LangChain `BaseTool` without requiring `langchain` as an
+import-time dependency (`LangChainTool` is a structural `Protocol`: `.name`, `.get_input_jsonschema()`,
+`.description`, `.run()`).
+
+```python
+class LangChainTool(Protocol):
+    @property
+    def name(self) -> str: ...
+    def get_input_jsonschema(self) -> JsonSchemaValue: ...
+    def run(self, *args, **kwargs) -> str: ...
+
+class LangChainToolset(FunctionToolset):
+    def __init__(self, tools: list[LangChainTool], *, id: str | None = None): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.ext.langchain import LangChainToolset
+from langchain_community.tools import DuckDuckGoSearchRun
+
+toolset = LangChainToolset([DuckDuckGoSearchRun()])
+agent = Agent('openai:gpt-4o', toolsets=[toolset])
+```
+
+#### `FunctionSignature` + `FunctionParam` + `TypeSignature` + `TypeExpr`
+
+Power CLI/tool-rendering and "Code Mode": `FunctionSignature` holds a parsed function's name, `params` (`FunctionParam`), `return_type` (`TypeExpr`), and `referenced_types` (nested `TypeSignature`s for TypedDicts). `TypeExpr` is a union of `SimpleTypeExpr | UnionTypeExpr | GenericTypeExpr | LiteralTypeExpr` covering every annotation shape. `.render(body)` produces the Python-source representation.
+
+```python
+@dataclass(kw_only=True)
+class FunctionSignature:
+    name: str
+    params: dict[str, FunctionParam]
+    return_type: TypeExpr
+    referenced_types: list[TypeSignature] = field(default_factory=list)
+    def render(self, body: str) -> str: ...
+```
+
+```python
+from pydantic_ai.function_signature import FunctionSignature, FunctionParam, SimpleTypeExpr
+
+sig = FunctionSignature(
+    name='search',
+    params={'query': FunctionParam(name='query', type=SimpleTypeExpr(name='str'))},
+    return_type=SimpleTypeExpr(name='str'),
+)
+print(sig.render(body='    ...'))
+```
+
+#### `ACIToolset` + `tool_from_aci` — removed
+
+Both were deprecated in 1.107.0 as the ACI.dev bridge; **fully removed** — `pydantic_ai/ext/`
+now contains only `langchain.py`. Migrate to `Tool.from_schema()` built directly from
+`aci.functions.get_definition(...)` output (strip the non-standard `'visible'` key before passing
+the schema through).
+
+---
+
+### Native / Built-in Tools
+
+#### `WebSearchTool` + `WebSearchUserLocation`
+
+Native web search across Anthropic, OpenAI Responses, Groq, Google, xAI, and OpenRouter.
+
+```python
+WebSearchTool(*, search_context_size='medium', user_location=None,
+              blocked_domains=None, allowed_domains=None, max_uses=None,
+              external_web_access: bool | None = None, optional=False)
+
+class WebSearchUserLocation(TypedDict, total=False):
+    city: str; country: str; region: str; timezone: str
+```
+
+```python
+from pydantic_ai import Agent, WebSearchTool, WebSearchUserLocation
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'anthropic:claude-opus-4-5',
+    capabilities=[NativeTool(WebSearchTool(
+        user_location=WebSearchUserLocation(city='London', country='GB'),
+        search_context_size='high',
+    ))],
+)
+```
+
+#### `WebFetchTool` (+ deprecated `UrlContextTool` alias)
+
+Fetches URL content directly into the model's context (Anthropic, Google). `UrlContextTool` is a
+deprecated alias kept only so old serialised payloads (`kind='url_context'`) still deserialise.
+
+```python
+WebFetchTool(*, max_uses=None, allowed_domains=None, blocked_domains=None,
+             enable_citations=False, max_content_tokens=None, optional=False)
+```
+
+```python
+from pydantic_ai import Agent, WebFetchTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-5',
+    capabilities=[NativeTool(WebFetchTool(enable_citations=True, max_content_tokens=4096))],
+)
+```
+
+#### `CodeExecutionTool`
+
+Sandboxed code interpreter (Anthropic, OpenAI Responses, Google, Bedrock Nova 2.0, xAI). Gained a
+`files: list[UploadedFile] | None` field to seed the sandbox with pre-uploaded files.
+
+```python
+CodeExecutionTool(*, files: list[UploadedFile] | None = None, optional=False)
+```
+
+```python
+from pydantic_ai import Agent, CodeExecutionTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent('openai:gpt-4o', capabilities=[NativeTool(CodeExecutionTool())])
+result = agent.run_sync('Verify whether 982,451,653 is prime; show your work.')
+```
+
+#### `MemoryTool`
+
+Native persistent memory (Anthropic only). No parameters beyond the shared `optional` flag.
+
+```python
+from pydantic_ai import Agent, MemoryTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent('anthropic:claude-opus-4-5', capabilities=[NativeTool(MemoryTool(optional=True))])
+```
+
+#### `ImageGenerationTool` + `ImageAspectRatio`
+
+All 12 fields present, including `input_fidelity`, `partial_images`, Google-specific `size`
+literals (`'512'`/`'1K'`/`'2K'`/`'4K'`), and `aspect_ratio`.
+
+```python
+ImageGenerationTool(*, action='auto', background='auto', input_fidelity=None,
+    moderation='auto', model=None, output_compression=None, output_format=None,
+    partial_images=0, quality='auto', size=None, aspect_ratio=None)
+```
+
+```python
+from pydantic_ai import Agent, ImageGenerationTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'openai-responses:gpt-4o',
+    capabilities=[NativeTool(ImageGenerationTool(quality='high', output_format='png', aspect_ratio='1:1'))],
+)
+```
+
+#### `MCPServerTool`
+
+Delegates MCP-server interaction directly to the provider (no PydanticAI proxying), unlike
+`MCPToolset`. `headers: dict[str, str] | None` field. Supported by OpenAI Responses, Anthropic, xAI.
+
+```python
+MCPServerTool(*, id: str, url: str, authorization_token=None, description=None,
+              allowed_tools=None, headers=None, optional=False)
+```
+
+```python
+from pydantic_ai import Agent, MCPServerTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'openai-responses:gpt-4o',
+    capabilities=[NativeTool(MCPServerTool(
+        id='github-mcp', url='https://mcp.github.com/', authorization_token='ghp_...',
+        allowed_tools=['list_repos', 'create_issue'],
+    ))],
+)
+```
+
+#### `FileSearchTool`
+
+Native provider-managed RAG (OpenAI vector stores, Google Gemini Files API, xAI collections).
+
+```python
+FileSearchTool(*, file_store_ids: Sequence[str], max_num_results=None,
+                instructions=None, retrieval_mode=None, optional=False)
+```
+
+```python
+from pydantic_ai import Agent, FileSearchTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'openai-responses:gpt-4o',
+    capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_abc123'], retrieval_mode='hybrid'))],
+)
+```
+
+#### `XSearchTool`
+
+X/Twitter search, native on xAI only; other providers need `XSearch(fallback_model=...)` (see
+Capabilities section).
+
+```python
+XSearchTool(*, allowed_x_handles=None, excluded_x_handles=None, from_date=None,
+            to_date=None, enable_image_understanding=False, enable_video_understanding=False,
+            include_output=False, optional=False)
+```
+
+```python
+from pydantic_ai import Agent, XSearchTool
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent('xai:grok-4', capabilities=[NativeTool(XSearchTool(allowed_x_handles=['openai', 'anthropic']))])
+```
+
+#### `AdvisorTool`
+
+Provider-managed tool letting a fast executor model pause and consult a stronger advisor model
+inline (Anthropic native, OpenRouter gateway). `caching: Literal['5m','1h'] | None` controls
+prompt-cache TTL on the advisor call. **Correction:** the installed `AdvisorTool` has **no
+`system_prompt` field** — earlier docs describing an Anthropic-only `system_prompt` override are
+stale for this version.
+
+```python
+class AdvisorTool(AbstractNativeTool):
+    def __init__(self, *, model: AdvisorModelName, max_uses=None, max_tokens=None, caching=None): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeTool
+from pydantic_ai.native_tools import AdvisorTool
+
+agent = Agent(
+    'anthropic:claude-haiku-4-5',
+    capabilities=[NativeTool(AdvisorTool(model='claude-opus-4-8', max_uses=2, max_tokens=512))],
+)
+```
+
+#### `AbstractNativeTool` — base class for custom native tools
+
+Every built-in native tool subclasses this. `kind` is the wire discriminator (auto-registered into
+`NATIVE_TOOL_TYPES` via `__init_subclass__`); `optional=True` silently drops the tool on models
+that don't support it rather than raising.
+
+```python
+class AbstractNativeTool(ABC):
+    kind: str = 'unknown_native_tool'
+    optional: bool = False
+    @property
+    def unique_id(self) -> str: return self.kind
+```
+
+```python
+from dataclasses import dataclass
+from pydantic_ai.native_tools import AbstractNativeTool
+
+@dataclass(kw_only=True)
+class CompanyKBTool(AbstractNativeTool):
+    kind: str = 'company_kb'
+    index_name: str = 'main'
+    @property
+    def unique_id(self) -> str: return f'company_kb:{self.index_name}'
+```
+
+#### `MCPToolset` + `load_mcp_toolsets`
+
+**Module:** `pydantic_ai.mcp`. The provider-agnostic way to connect to any MCP server — supports
+HTTP/SSE/stdio/in-process transports. The legacy `MCPServer`/`MCPServerStdio`/`MCPServerSSE`/
+`MCPServerStreamableHTTP` classes are **confirmed fully removed** — grep found zero trace of them
+in `pydantic_ai/mcp.py`. `FastMCPToolset` (deprecated in 1.104) is likewise gone entirely.
+
+```python
+MCPToolset(
+    client: MCPToolsetClient, *, id=None, max_retries=None,
+    tool_error_behavior: Literal['retry', 'error', 'failed'] = 'retry',
+    process_tool_call=None, prefer_tasks=True, cache_tools=True,
+    cache_resources=True, cache_prompts=True, include_instructions=False,
+    include_return_schema=None, sampling_model=None, sampling_handler=None,
+    elicitation_handler=None, log_handler=None, log_level=None,
+    progress_handler=None, message_handler=None, client_info=None,
+    init_timeout=..., read_timeout=..., roots=None,
+    auth=None, verify=None, headers=None, http_client=None,
+)
+```
+
+`prefer_tasks` (default `True`) wraps tool calls as durable background tasks per SEP-1686 when
+the server declares `taskSupport='optional'` (tools with `taskSupport='required'` always run as
+tasks regardless). `direct_call_tool(name, args, *, metadata, use_task)` invokes a tool outside
+any agent run. `process_tool_call(ctx, call_tool, name, tool_args) -> ToolResult` intercepts every
+call for metadata injection, audit logging, or selective retry.
+
+```python
+import asyncio
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPToolset
+
+toolset = MCPToolset('http://localhost:8000/mcp', prefer_tasks=False)
+agent = Agent('openai:gpt-4o', toolsets=[toolset])
+
+async def main():
+    async with agent:
+        result = await agent.run('List available tools.')
+        print(result.output)
+
+asyncio.run(main())
+```
+
+`agent.set_mcp_sampling_model()` wires the agent's own model into every attached `MCPToolset` for
+server-driven sampling. `load_mcp_toolsets(config_path)` reads a Claude-Desktop-style
+`mcpServers` JSON config and returns one `PrefixedToolset(MCPToolset(...))` per server, with
+`${VAR}` / `${VAR:-default}` env-var expansion.
+
+#### `common_tools` — ready-made search & fetch factories
+
+**Module:** `pydantic_ai.common_tools`. Lightweight factories returning `Tool`/`FunctionToolset`
+objects, each requiring its optional dependency group.
+
+```python
+duckduckgo_search_tool(duckduckgo_client=None, max_results=None) -> Tool   # pip install "pydantic-ai-slim[duckduckgo]"
+tavily_search_tool(api_key, *, client=None, max_results=None, search_depth=..., topic=..., time_range=..., include_domains=..., exclude_domains=...) -> Tool
+ExaToolset(api_key, *, num_results=5, max_characters=None, include_search=True, include_find_similar=True,
+           include_get_contents=True, include_answer=True) -> FunctionToolset  # 4 tools over one shared AsyncExa client
+web_fetch_tool(*, max_content_length=50_000, allow_local_urls=False, timeout=30,
+               allowed_domains=None, blocked_domains=None, headers=None) -> Tool
+image_generation_tool(model, native_tool: ImageGenerationTool, *, instructions=...) -> Tool
+```
+
+`duckduckgo_search_tool` wraps `DDGS` (from the `ddgs` package) via `anyio.to_thread.run_sync`,
+returning `list[DuckDuckGoResult]` (`title`, `href`, `body`). `tavily_search_tool` freezes any of
+the keyword params you supply via `functools.partial` **and** strips them from `__signature__`, so
+the LLM never sees (or can override) developer-fixed params; unset ones stay LLM-controlled.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
+from pydantic_ai.common_tools.tavily import tavily_search_tool
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
+agent = Agent(
+    'openai:gpt-4o',
+    tools=[
+        duckduckgo_search_tool(max_results=5),
+        # search_depth/topic frozen and hidden from the LLM schema; time_range stays LLM-controlled
+        tavily_search_tool(api_key='tvly-...', max_results=5, search_depth='advanced', topic='news'),
+        web_fetch_tool(max_content_length=5000),
+    ],
+    instructions='Search first, then fetch the most promising URL.',
+)
+```
+
+`image_generation_tool` (from `pydantic_ai.common_tools.image_generation`) spins up a **subagent**
+on an image-capable model so a text-only primary agent can still generate images:
+
+```python
+from pydantic_ai.common_tools.image_generation import image_generation_tool
+from pydantic_ai import ImageGenerationTool
+
+agent = Agent('openai:gpt-4o-mini', tools=[
+    image_generation_tool(model='openai-responses:gpt-5.4', native_tool=ImageGenerationTool(quality='high'))
+])
+```
+
+---
+
+### Streaming & Events
+
+#### `AgentStream` — full streaming API
+
+Returned by `agent.run_stream(...)`.
+
+```python
+class AgentStream(Generic[AgentDepsT, OutputDataT]):
+    async def stream_output(self, debounce_by=0.1) -> AsyncIterator[OutputDataT]: ...
+    async def stream_response(self, debounce_by=0.1) -> AsyncIterator[ModelResponse]: ...
+    async def stream_text(self, delta=False, debounce_by=0.1) -> AsyncIterator[str]: ...
+    async def cancel(self) -> None: ...
+    async def drain(self) -> None: ...
+    async def validate_response_output(self, response, allow_partial=False) -> OutputDataT: ...
+    async def get_output(self) -> OutputDataT: ...
+    response: ModelResponse
+    usage: RunUsage
+    run_id: str; conversation_id: str; metadata: dict | None; cancelled: bool
+```
+
+```python
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+async def main():
+    async with agent.run_stream('Explain recursion in one paragraph.') as stream:
+        async for chunk in stream.stream_text(delta=True):
+            print(chunk, end='', flush=True)
+        print(f'\ntokens: {stream.usage.total_tokens}')
+
+asyncio.run(main())
+```
+
+#### `StreamedRunResult` + `StreamedRunResultSync`
+
+`StreamedRunResult` is the high-level object `agent.run_stream()` yields (wrapping `AgentStream`
+with message-history helpers). `StreamedRunResultSync` (from `agent.run_stream_sync()`) is the
+same API with `_sync` suffixes, run on a background thread via `anyio.from_thread`.
+
+```python
+class StreamedRunResult(Generic[AgentDepsT, OutputDataT]):
+    is_complete: bool
+    stream_output(delta=False, debounce_by=0.1); stream_text(delta=False, debounce_by=0.1)
+    stream_response(debounce_by=0.1); get_output(); cancel(); cancelled
+    usage(); all_messages(); new_messages(); all_messages_json(); new_messages_json()
+```
+
+```python
+with agent.run_stream_sync('Summarise this text') as result:
+    for chunk in result.stream_text_sync(delta=True):
+        print(chunk, end='', flush=True)
+    print(result.usage())
+```
+
+#### `AgentEventStream` + `AgentRunResultEvent`
+
+`agent.run_stream_events()` returns an `AgentEventStream` context manager — **always** use it via
+`async with` (bare `async for` iteration without the context manager is deprecated and will be
+removed). `AgentRunResultEvent` is always the final event, carrying the completed
+`AgentRunResult`.
+
+```python
+from pydantic_ai.run import AgentRunResultEvent
+
+async def full_loop(agent):
+    async with agent.run_stream_events('Name the planets.') as stream:
+        async for event in stream:
+            if isinstance(event, AgentRunResultEvent):
+                print('final:', event.result.output)
+```
+
+#### `PartStartEvent` + `PartDeltaEvent` + `PartEndEvent` + `FinalResultEvent`
+
+The discriminated union `ModelResponseStreamEvent` flowing from `StreamedResponse._get_event_iterator()`. Each carries an `index` identifying which part in the running `parts` list is updated, plus an `event_kind` literal for efficient discrimination. `FinalResultEvent` is fired once per run step when the model's response first matches the output schema, ahead of actual validation; `FinalResult` (the non-event dataclass) wraps the validated output plus the tool name/call ID that produced it (both `None` for plain-text output).
+
+```python
+FinalResult(output: OutputDataT, tool_name: str | None, tool_call_id: str | None)
+FinalResultEvent(tool_name: str | None, tool_call_id: str | None, event_kind='final_result')
+```
+
+```python
+async def main() -> None:
+    async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+        async for event in stream:
+            if isinstance(event, PartStartEvent):
+                print(f'[start idx={event.index}] {event.part.part_kind}')
+            elif isinstance(event, PartDeltaEvent):
+                pass
+            elif isinstance(event, FinalResultEvent):
+                print(f'[result] tool_name={event.tool_name!r}')
+```
+
+#### `TextPartDelta` + `ThinkingPartDelta` + `ToolCallPartDelta`
+
+Incremental delta payloads inside `PartDeltaEvent.delta`. `TextPartDelta.content_delta` appends; `ThinkingPartDelta.signature_delta` **replaces** (never appends); `ToolCallPartDelta.args_delta` appends when a `str`, merges when a `dict`.
+
+```python
+buf: dict[int, list[str]] = {}
+async for event in stream:
+    if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+        buf.setdefault(event.index, []).append(event.delta.content_delta)
+```
+
+#### `HandleResponseEvent` + `ModelResponseStreamEvent`
+
+Discriminated-union type aliases (not classes) used for typed (de)serialisation of event streams.
+`HandleResponseEvent` covers everything `CallToolsNode.stream()` yields (function/output/native
+tool call+result events); `ModelResponseStreamEvent` covers `PartStartEvent`/`PartDeltaEvent`/
+`PartEndEvent`/`FinalResultEvent` from model-response streaming.
+
+```python
+HandleResponseEvent = FunctionToolCallEvent | FunctionToolResultEvent | OutputToolCallEvent | OutputToolResultEvent  # discriminated on event_kind
+ModelResponseStreamEvent = PartStartEvent | PartDeltaEvent | PartEndEvent | FinalResultEvent
+```
+
+#### `ToolCallEvent` / `ToolResultEvent` family
+
+Base classes for the four concrete tool-interaction events.
+
+```python
+ToolCallEvent(part: ToolCallPart, args_valid: bool | None, event_kind: str)
+ToolResultEvent(part: ToolReturnPart | RetryPromptPart, event_kind: str)
+# concretes: FunctionToolCallEvent, FunctionToolResultEvent, OutputToolCallEvent, OutputToolResultEvent
+```
+
+```python
+from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
+
+async def watch(agent, prompt):
+    async with agent.run_stream_events(prompt) as stream:
+        async for event in stream:
+            if isinstance(event, FunctionToolCallEvent):
+                print('call', event.part.tool_name, 'valid=', event.args_valid)
+            elif isinstance(event, FunctionToolResultEvent):
+                print('result', event.part.content)
+```
+
+#### `BuiltinToolCallEvent` / `BuiltinToolResultEvent` — deprecated, migrate now
+
+Deprecated in favour of the richer `PartStartEvent`/`PartEndEvent` pathway (which supports
+streaming deltas for native tool call arguments, unlike the old start/end-only events).
+
+```python
+# Before (deprecated)              # After
+BuiltinToolCallEvent                PartStartEvent + isinstance(event.part, NativeToolCallPart)
+BuiltinToolResultEvent              PartEndEvent   + isinstance(event.part, NativeToolReturnPart)
+```
+
+#### `ModelResponsePartsManager`
+
+The streaming aggregator used internally by every `StreamedResponse` subclass. When writing a custom provider, use `self._parts_manager` (a cached property on `StreamedResponse`) inside `_get_event_iterator()` — never instantiate a local one, since `StreamedResponse.__aiter__` synthesises `PartEndEvent`s by reading that same instance. `handle_text_delta(vendor_part_id, content)` and `handle_tool_call_delta(...)` return correctly-typed events with dedup and vendor-ID tracking; `get_parts()` returns only fully-formed parts (no in-flight deltas).
+
+```python
+class ModelResponsePartsManager:
+    def handle_text_delta(self, *, vendor_part_id: str, content: str) -> Iterator[ModelResponseStreamEvent]: ...
+    def handle_tool_call_delta(self, *, vendor_part_id, tool_name=None, args=None, tool_call_id=None) -> ModelResponseStreamEvent | None: ...
+    def get_parts(self) -> list[ModelResponsePart]: ...
+```
+
+```python
+class EchoStreamedResponse(StreamedResponse):
+    async def _get_event_iterator(self):
+        for word in self._words:
+            for event in self._parts_manager.handle_text_delta(vendor_part_id='text', content=word + ' '):
+                yield event
+```
+
+#### `DeltaToolCall` + `DeltaThinkingPart` + delta type aliases + `FunctionStreamedResponse`
+
+**Module:** `pydantic_ai.models.function`. The chunk types a `FunctionModel(stream_function=...)`
+yields, and the `StreamedResponse` implementation that dispatches them through
+`ModelResponsePartsManager`. You must yield all-`str`, all-`DeltaToolCalls`, or all-
+`DeltaThinkingCalls` within one stream — mixing types is not supported.
+
+```python
+DeltaToolCalls = dict[int, DeltaToolCall]          # DeltaToolCall(name=, json_args=, tool_call_id=)
+DeltaThinkingCalls = dict[int, DeltaThinkingPart]  # DeltaThinkingPart(content=, signature=)
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.function import FunctionModel, AgentInfo
+
+async def word_stream(messages, info: AgentInfo):
+    for word in 'The answer is forty two'.split():
+        yield word + ' '
+
+agent = Agent(FunctionModel(stream_function=word_stream))
+```
+
+#### `ProcessEventStream` capability
+
+Intercepts the `AgentStreamEvent` sequence during a streaming run — or automatically enables streaming inside `agent.run()` when registered, no `run_stream()` needed. Two handler forms: an **observer** (`async def handler(ctx, stream) -> None`, receives a tee'd copy, events pass through unchanged; a slow observer back-pressures) and a **processor** (an async generator whose yielded events *replace* the stream for downstream consumers — can drop, transform, or inject events; dropping a `FinalResultEvent` delays result delivery).
+
+```python
+@dataclass
+class ProcessEventStream(AbstractCapability[AgentDepsT]):
+    handler: EventStreamHandlerFunc[AgentDepsT] | EventStreamProcessorFunc[AgentDepsT]
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessEventStream
+from pydantic_ai.messages import PartStartEvent, PartDeltaEvent, PartEndEvent, ThinkingPart
+
+async def hide_thinking(ctx, stream):
+    skip = None
+    async for event in stream:
+        if isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
+            skip = event.index
+            continue
+        if skip is not None and isinstance(event, (PartDeltaEvent, PartEndEvent)) and event.index == skip:
+            continue
+        yield event
+
+agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[ProcessEventStream(hide_thinking)])
+```
+
+#### `EventStreamHandler` + `EventStreamProcessor` (type aliases)
+
+`EventStreamHandler` is `Callable[[RunContext, AsyncIterable[AgentStreamEvent]], Awaitable[None]]` — a terminal sink used via `agent.run(..., event_stream_handler=...)`. `EventStreamProcessor` is `Callable[[RunContext, AsyncIterable[AgentStreamEvent]], AsyncIterator[AgentStreamEvent]]` — a pass-through transformer used by `ProcessEventStream`.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.tools import RunContext
+from pydantic_ai.messages import AgentStreamEvent, PartDeltaEvent, TextPartDelta
+
+async def my_stream_handler(ctx: RunContext[None], events) -> None:
+    async for event in events:
+        if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+            print(event.delta.content_delta, end='', flush=True)
+
+agent = Agent('openai:gpt-4o-mini')
+result = await agent.run('Count to five', event_stream_handler=my_stream_handler)
+```
+
+#### `split_content_into_text_and_thinking`
+
+Some providers (DeepSeek, Qwen, older Ollama) embed thinking inside `<think>...</think>` tags in the plain text stream rather than as a separate part. This function splits a raw string into an alternating `list[ThinkingPart | TextPart]` using the provider's `thinking_tags` tuple.
+
+```python
+def split_content_into_text_and_thinking(content: str, thinking_tags: tuple[str, str]) -> list[ThinkingPart | TextPart]: ...
+```
+
+```python
+from pydantic_ai._thinking_part import split_content_into_text_and_thinking
+
+parts = split_content_into_text_and_thinking(
+    "<think>Working through it...</think>The answer is 42.", thinking_tags=('<think>', '</think>')
+)
+```
+
+---
+
+### Structured Output
+
+#### `ToolOutput` / `NativeOutput` / `PromptedOutput` / `TextOutput` / `StructuredDict`
+
+Explicit, per-type control over how structured output is delivered. `ToolOutput` — model emits a structured "output tool" call (best for unions/non-native models). `NativeOutput` — provider's native JSON-schema/response-format mode; `template=False` suppresses schema-prompt injection when the provider already handles it natively. `PromptedOutput` — injects the schema as prompt text and parses the reply; `template` accepts a custom `'{schema}'`-style string. `TextOutput(fn)` — plain text passed to a Python parser function, which may optionally take `RunContext` as its first argument and may be async. `StructuredDict` is a factory (not a class) returning a `dict[str, Any]` subclass with a JSON Schema attached — validated structured output without defining a Pydantic `BaseModel`; `name`/`description` fall back to the schema's `title`/`description`.
+
+```python
+ToolOutput(type_, *, name=None, description=None, max_retries=None, strict=None)
+NativeOutput(outputs, *, name=None, description=None, strict=None, template=None)
+PromptedOutput(outputs, *, name=None, description=None, template=None)
+TextOutput(output: TextOutputFunc)
+StructuredDict(json_schema, name=None, description=None) -> type[dict[str, Any]]
+```
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, ToolOutput, StructuredDict
+
+class Fruit(BaseModel):
+    name: str; color: str
+
+person_schema = {'type': 'object', 'properties': {'name': {'type': 'string'}, 'age': {'type': 'integer'}}, 'required': ['name', 'age']}
+PersonDict = StructuredDict(person_schema, name='Person')
+
+agent = Agent('openai:gpt-4o', output_type=[ToolOutput(Fruit), PersonDict])
+result = agent.run_sync('Describe a banana.')
+```
+
+#### `OutputObjectDefinition` + `OutputSchema` + `OutputValidator`
+
+`OutputObjectDefinition` is the internal normalised schema record (`json_schema`, `name`,
+`description`, `strict`) produced from `ToolOutput`/`NativeOutput`/`PromptedOutput`/
+`StructuredDict`; surfaced as `OutputContext.object_def` in output hooks. `OutputSchema.build(type)`
+is the factory resolving `output_type` into one of `TextOutputSchema`/`ToolOutputSchema`/
+`NativeOutputSchema`/`PromptedOutputSchema`/`ImageOutputSchema`/`MultiOutputSchema`.
+`OutputValidator` wraps a user validator function, dispatching sync/async and with/without
+`RunContext` transparently.
+
+```python
+from pydantic_ai.result import OutputSchema
+from pydantic import BaseModel
+
+class MyResult(BaseModel):
+    answer: str
+
+schema = OutputSchema.build(MyResult)
+print(schema.mode, schema.object_def.name)   # 'tool' 'MyResult'
+```
+
+#### `OutputContext`
+
+Read-only context passed to the four output lifecycle hooks
+(`before_output_validate`/`after_output_validate`/`before_output_process`/`after_output_process`).
+
+```python
+class OutputContext:
+    mode: OutputMode
+    output_type: type[Any] | None
+    object_def: OutputObjectDefinition | None
+    has_function: bool
+    tool_call: ToolCallPart | None
+    tool_def: ToolDefinition | None
+    allows_text: bool; allows_image: bool; allows_deferred_tools: bool
+```
+
+```python
+from pydantic_ai.capabilities import Hooks
+
+hooks = Hooks()
+
+@hooks.on.before_output_validate
+def log_mode(ctx, *, output_context, output):
+    print(f'mode={output_context.mode} type={output_context.output_type}')
+    return output
+```
+
+---
+
+### Messages & Multimodal Content
+
+#### `ModelRequest` + `ModelResponse` — wire-format anatomy
+
+The two halves of `ModelMessage`.
+
+```python
+class ModelRequest:
+    parts: Sequence[SystemPromptPart | UserPromptPart | ToolReturnPart | NativeToolReturnPart | RetryPromptPart | InstructionPart]
+    timestamp: datetime | None; instructions: str | None
+    run_id: str | None; conversation_id: str | None; metadata: dict | None   # never sent to the LLM
+    kind: Literal['request']
+
+class ModelResponse:
+    parts: Sequence[TextPart | ThinkingPart | ToolCallPart | NativeToolCallPart | FilePart | CompactionPart]
+    usage: RequestUsage; model_name: str | None; timestamp: datetime
+    finish_reason: Literal['stop','tool_calls','length','content_filter','other'] | None
+    state: Literal['complete','incomplete','interrupted'] | None
+    run_id: str | None; conversation_id: str | None
+    kind: Literal['response']
+```
+
+```python
+from pydantic_ai import ModelMessagesTypeAdapter
+
+blob = ModelMessagesTypeAdapter.dump_json(messages)
+restored = ModelMessagesTypeAdapter.validate_json(blob)
+```
+
+#### `SystemPromptPart` + `UserPromptPart` + `RetryPromptPart`
+
+The three request-side message parts. `UserPromptPart.content` accepts a heterogeneous sequence
+of `UserContent` (str, `TextContent`, `ImageUrl`, `AudioUrl`, `VideoUrl`, `DocumentUrl`,
+`BinaryContent`, `UploadedFile`, `CachePoint`). `RetryPromptPart.model_response()` formats the
+retry-feedback string actually sent to the model.
+
+```python
+SystemPromptPart(content: str, dynamic_ref: str | None = None)
+UserPromptPart(content: str | Sequence[UserContent])
+RetryPromptPart(content: list[ErrorDetails] | str, tool_name: str | None = None)
+```
+
+```python
+from pydantic_ai.messages import UserPromptPart, ImageUrl, CachePoint
+
+part = UserPromptPart(content=['Long static context...', CachePoint(), 'Dynamic question?'])
+```
+
+#### `BaseToolCallPart` / `ToolCallPart` / `NativeToolCallPart` (+ `ToolCallPartDelta`)
+
+Call-part family. `args_as_dict(raise_if_invalid=False)` gracefully returns
+`{'INVALID_JSON': ...}` on malformed streamed JSON unless `raise_if_invalid=True`.
+`narrow_type(part, tool_kind=...)` promotes a raw `NativeToolCallPart` to a typed subclass (e.g.
+`NativeToolSearchCallPart`) for the tool-search protocol.
+
+```python
+BaseToolCallPart: tool_name, args, tool_call_id, tool_kind, id, provider_name, provider_details
+  .args_as_dict(raise_if_invalid=False); .args_as_json_str(); .has_content()
+ToolCallPart(BaseToolCallPart)          # part_kind='tool-call'
+NativeToolCallPart(BaseToolCallPart)    # part_kind='builtin-tool-call'
+```
+
+#### `BaseToolReturnPart` / `ToolReturnPart` / `NativeToolReturnPart`
+
+Return-part family. `outcome: Literal['success', 'failed', 'denied']` tracks HITL/error state.
+The top-level `ToolReturn` message-content dataclass (the thing tools *return*, distinct
+from `ToolReturnPart`) has a `tools` field that lets a tool's return value append additional
+tool-availability deltas (`ToolAvailabilityDeltaEvent`/`Part`) to the run.
+
+```python
+BaseToolReturnPart: tool_name, content, tool_call_id, tool_kind, metadata, outcome
+  .model_response_str(); .model_response_object(); .content_items(mode='raw'|'str'|'jsonable'); .files
+ToolReturnPart(BaseToolReturnPart)          # part_kind='tool-return'
+NativeToolReturnPart(BaseToolReturnPart)    # provider_name, provider_details; part_kind='builtin-tool-return'
+
+ToolReturn(return_value, content=None, metadata=None, tools=None)   # what a tool function returns
+```
+
+```python
+from pydantic_ai.messages import ToolReturnPart
+
+denied = ToolReturnPart(tool_name='delete_file', content='Denied by operator.', outcome='denied')
+```
+
+#### `TextContent`
+
+A string that carries app-only `metadata` never sent to the model — valid inside
+`UserPromptPart.content`.
+
+```python
+TextContent(content: str, metadata: Any = None)
+```
+
+```python
+from pydantic_ai.messages import TextContent
+
+part = [TextContent(content='Pydantic AI was released in 2024.', metadata={'source_url': 'https://docs.ai/'})]
+```
+
+#### `FilePart` + `BinaryImage`
+
+`FilePart` is a **model-response** part carrying a generated file (e.g. an image). `BinaryImage`
+is a `BinaryContent` subclass that validates `media_type.startswith('image/')` at construction.
+
+```python
+FilePart(content: BinaryContent, id=None, provider_name=None, provider_details=None)
+BinaryImage(data: bytes, media_type: str, ...)   # __post_init__ raises if not image/*
+```
+
+```python
+from pydantic_ai.messages import FilePart
+
+images = [p for msg in result.all_messages() for p in getattr(msg, 'parts', []) if isinstance(p, FilePart)]
+```
+
+#### `BinaryContent` + `FileUrl` family (`ImageUrl`/`AudioUrl`/`VideoUrl`/`DocumentUrl`)
+
+Two parallel multimodal systems: raw bytes (`BinaryContent`) vs. URL references (`FileUrl`
+subclasses). `force_download: bool | Literal['allow-local']` controls SSRF-safe fetching for URLs
+(`False`=send URL directly where supported; `True`=always download with full SSRF guard;
+`'allow-local'`=download, allow private IPs, still block cloud metadata).
+
+```python
+BinaryContent(data: bytes, media_type: str, vendor_metadata=None, identifier=None)
+ImageUrl(url, *, force_download=False, vendor_metadata=None, media_type=None, identifier=None)
+# AudioUrl, VideoUrl, DocumentUrl share the same shape
+```
+
+```python
+from pydantic_ai import Agent, BinaryContent
+from pathlib import Path
+
+agent = Agent('anthropic:claude-sonnet-4-5')
+result = agent.run_sync([
+    "What's wrong in this screenshot?",
+    BinaryContent(data=Path('screenshot.png').read_bytes(), media_type='image/png'),
+])
+```
+
+#### `UploadedFile`
+
+A durable reference to a file already uploaded to a provider (skips re-sending bytes every
+request). Supported providers: OpenAI, OpenAI Responses, Anthropic, Bedrock (`s3://`), Google
+(Gemini Files API URI or `gs://`), xAI.
+
+```python
+UploadedFile(file_id: str, provider_name: str, *, media_type=None, vendor_metadata=None, identifier=None)
+```
+
+```python
+from pydantic_ai import Agent, UploadedFile
+
+agent = Agent('openai:gpt-4o')
+result = agent.run_sync([
+    'Summarise the key financials.',
+    UploadedFile(file_id='file-abc123', provider_name='openai', media_type='application/pdf'),
+])
+```
+
+#### `CachePoint` + `CompactionPart` + `ToolAvailabilityDeltaPart`
+
+`CachePoint(ttl='5m' | '1h')` marks a prompt-cache boundary inside `UserPromptPart.content`
+(Anthropic, Bedrock Converse, OpenAI GPT-5.6+; Anthropic/Bedrock support `'1h'`, OpenAI always
+uses `'5m'`; silently dropped elsewhere, so the same message-construction code works everywhere).
+`CompactionPart` carries a provider-produced conversation summary (Anthropic: readable `content`;
+OpenAI: opaque `provider_details`) that must be round-tripped verbatim on the next request — check
+`.has_content()` before displaying it. `ToolAvailabilityDeltaPart` is a streaming part recording
+that new tools became available mid-stream — emitted internally when `DeferredLoadingToolset`
+tools are discovered and injected into a live request.
+
+```python
+CachePoint(ttl: Literal['5m', '1h'] = '5m')
+CompactionPart(content: str | None, id=None, provider_name=None, provider_details=None)
+```
+
+```python
+from pydantic_ai import Agent, CachePoint
+
+agent = Agent('anthropic:claude-sonnet-4-5')
+result = agent.run_sync(['Document:\n' + long_doc, CachePoint(ttl='1h'), 'Summarise it.'])
+```
+
+#### `format_as_xml`
+
+Converts Python objects (dataclasses, `BaseModel`, dicts, lists) into an XML string LLMs often
+parse more reliably than JSON. `root_tag=None` produces rootless sibling elements;
+`include_field_info='once'` includes title/description XML attributes only on a field's first
+occurrence in a list (saves tokens); `indent=None` removes all whitespace.
+
+```python
+format_as_xml(obj, root_tag=None, item_tag='item', none_str='null', indent='  ',
+               include_field_info: Literal['once'] | bool = False) -> str
+```
+
+```python
+from pydantic_ai import format_as_xml
+
+print(format_as_xml({'name': 'Alice', 'age': 30}, root_tag='user'))
+```
+
+#### `ModelRequestContext`
+
+The mutable dataclass passed to `before_model_request`/`after_model_request` capability hooks —
+mutate its fields to change what the model actually sees.
+
+```python
+class ModelRequestContext:
+    model: Model
+    messages: list[ModelMessage]
+    model_settings: ModelSettings | None
+    model_request_parameters: ModelRequestParameters
+```
+
+```python
+from pydantic_ai.capabilities import Hooks
+
+hooks = Hooks()
+
+@hooks.on.before_model_request
+async def log_request(ctx, request_context):
+    print(f'{len(request_context.messages)} messages, model={request_context.model.model_name}')
+    return request_context
+```
+
+#### `ModelRequestParameters`
+
+The wire-format object handed to `Model.request()`/`request_stream()` — everything about response
+shape and available tools.
+
+```python
+class ModelRequestParameters:
+    function_tools: list[ToolDefinition]
+    native_tools: list[AbstractNativeTool]
+    output_mode: Literal['text','tool','native','prompted','auto']
+    output_object: OutputObjectDefinition | None
+    output_tools: list[ToolDefinition]
+    allow_text_output: bool; allow_image_output: bool
+    instruction_parts: list[InstructionPart] | None
+    thinking: ThinkingLevel | None
+    tool_defs: dict[str, ToolDefinition]   # @cached_property, merges function_tools + output_tools
+```
+
+#### `InstructionPart` — cacheable instruction composition
+
+Represents one block of instruction text, tagged `dynamic` (from `@agent.instructions`, `TemplateStr`, or toolset `get_instructions()`) or static (from a literal string). Provider prompt-caching relies on this distinction: static parts are always cached, dynamic ones aren't. `InstructionPart.sorted()` places static parts first (maximises cache-hit rate); `.join()` concatenates with a double newline.
+
+```python
+@dataclass
+class InstructionPart:
+    content: str
+    dynamic: bool = False
+    @staticmethod
+    def sorted(parts: list[InstructionPart]) -> list[InstructionPart]: ...
+    @staticmethod
+    def join(parts: list[InstructionPart]) -> str | None: ...
+```
+
+```python
+from pydantic_ai.messages import InstructionPart
+
+parts = [InstructionPart('Current time: 14:30', dynamic=True), InstructionPart('Be helpful.', dynamic=False)]
+optimised = InstructionPart.sorted(parts)   # static first, dynamic last
+```
+
+#### `AgentInstructions` pipeline
+
+Four-stage pipeline in `pydantic_ai._instructions`: `normalize_instructions()` (`None → []`, `str`/callable → `[it]`, sequence → `list(it)`) → `prepare_instructions()` (wraps each callable, including `TemplateStr`, in a `SystemPromptRunner`) → `resolve_instructions(instructions, run_context)` (awaits runners, returns `list[str]`). Separately, `normalize_toolset_instructions()` turns a toolset's `get_instructions()` return value into `list[InstructionPart]`, dropping whitespace-only content.
+
+```python
+def normalize_instructions(instructions) -> list[str | SystemPromptFunc]: ...
+def prepare_instructions(instructions) -> list[str | SystemPromptRunner]: ...
+async def resolve_instructions(instructions, run_context) -> list[str]: ...
+```
+
+```python
+from pydantic_ai._instructions import normalize_toolset_instructions
+from pydantic_ai.messages import InstructionPart
+
+parts = normalize_toolset_instructions("Use the search tool for factual questions.")
+print(parts[0].dynamic)   # True
+```
+
+#### Anthropic mid-conversation `SystemPromptPart` via `ctx.enqueue`
+
+Anthropic supports native mid-conversation system messages — instructions inserted into the conversation rather than at the initial system-prompt position, preserving the cached prefix while dynamically adjusting behaviour. Enqueue a `SystemPromptPart` with `ctx.enqueue(...)`; on Anthropic it's routed through the native system-in-conversation format (placement auto-adjusted to sit between a user turn and the model's reply), and on other providers it falls back to a tagged user-channel message (`<system>...</system>`) — application code is identical either way.
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import SystemPromptPart
+
+agent = Agent('anthropic:claude-opus-4-8', system_prompt='You are a senior code reviewer.')
+
+@agent.tool
+def require_type_annotations(ctx: RunContext[None]) -> str:
+    ctx.enqueue(SystemPromptPart(content='All suggestions MUST include type annotations.'))
+    return 'Rule added.'
+```
+
+#### Tool-search wire protocol — `ToolSearchCallPart`/`NativeToolSearchCallPart` + `ToolSearchReturnPart`/`NativeToolSearchReturnPart`
+
+When `ToolSearch` / `DeferredLoadingToolset` is active, the model issues a search query before
+picking a tool. Two paths exist: **native** (Anthropic BM25/regex, OpenAI server-side) uses
+`NativeToolSearchCallPart`/`NativeToolSearchReturnPart`; **local** (everyone else, or a custom
+callable) uses `ToolSearchCallPart`/`ToolSearchReturnPart`. Cross-path detection: check
+`part.tool_kind == 'tool-search'` (do **not** branch on `tool_name`, which differs:
+`'search_tools'` local vs. `'tool_search'` native).
+
+```python
+class ToolSearchArgs(TypedDict):
+    queries: list[str]
+class ToolSearchMatch(TypedDict):
+    name: str; description: str | None
+class ToolSearchReturnContent(TypedDict):
+    discovered_tools: list[ToolSearchMatch]
+    message: NotRequired[str]
+```
+
+```python
+def discovered_tools(messages) -> list:
+    out = []
+    for msg in messages:
+        for part in getattr(msg, 'parts', []):
+            if getattr(part, 'tool_kind', None) == 'tool-search' and hasattr(part, 'content'):
+                out.extend(part.content.get('discovered_tools', []))
+    return out
+```
+
+#### `LoadCapabilityCallPart` + `LoadCapabilityReturnPart`
+
+The wire protocol for `defer_loading=True` capabilities — the model calls the hidden
+`load_capability` tool before a deferred capability's tools/instructions become visible.
+Cross-path discriminator: `tool_kind == 'capability-load'`. See `DeferredCapabilityLoader` in
+Capabilities & Extensibility for the loader mechanics that produce these parts.
+
+```python
+LoadCapabilityCallPart(ToolCallPart):    # tool_name='load_capability', tool_kind='capability-load'
+    capability_id: str | None            # @property, parsed from args
+LoadCapabilityReturnPart(ToolReturnPart):
+    instructions: str | None             # @property, from content.get('instructions')
+```
+
+#### Vercel AI SDK wire types — request `UIMessage` parts + response SSE chunks
+
+Request-side (`pydantic_ai.ui.vercel_ai.request_types`): `TextUIPart`, `ReasoningUIPart`, `FileUIPart`, `ToolApprovalRespondedPart`/`ToolApprovalResponded`, `UIMessage`, `SubmitMessage` — all `CamelBaseModel`s with `alias_generator=to_camel` (Python `snake_case` ↔ wire `camelCase`). Assistant messages may carry reasoning parts; user messages may not. Response-side (`...response_types`): `StartChunk`, `TextStartChunk`/`TextDeltaChunk`/`TextEndChunk`, `ToolInputStartChunk`/`ToolInputDeltaChunk`/`ToolInputAvailableChunk`, `ToolApprovalRequestChunk` (SDK v6+ HITL), `FinishChunk`, `DoneChunk` — each has `.encode(sdk_version)` which strips fields unsupported below that version.
+
+```python
+from pydantic_ai.ui.vercel_ai.request_types import UIMessage, TextUIPart, SubmitMessage
+from pydantic_ai.ui.vercel_ai.response_types import StartChunk, TextStartChunk, TextDeltaChunk, DoneChunk
+
+msg = UIMessage(id='m1', role='user', parts=[TextUIPart(type='text', text='Hello')])
+submit = SubmitMessage(id='req-1', messages=[msg])
+
+chunks = [StartChunk(message_id='msg-1'), TextStartChunk(id='t0'), TextDeltaChunk(id='t0', delta='Hi'), DoneChunk()]
+for c in chunks:
+    print(f'data: {c.encode(sdk_version=6)}\n')
+```
+
+#### AG-UI multimodal conversion
+
+`pydantic_ai.ui.ag_ui._multimodal` bridges pydantic-ai's `ImageUrl`/`AudioUrl`/`VideoUrl`/`DocumentUrl`/`BinaryContent` with AG-UI's typed input classes via two dispatch tables: `_URL_TYPE_MAP` (exact type → AG-UI class) for URL-based media, and `_MEDIA_PREFIX_TO_CONTENT` (media-type prefix → AG-UI class, default `DocumentInputContent`) for binary data. `multimodal_input_to_content()` round-trips an AG-UI part back to a pydantic-ai type.
+
+```python
+def media_url_to_multimodal(item: ImageUrl | AudioUrl | VideoUrl | DocumentUrl): ...
+def binary_to_multimodal(item: BinaryContent): ...
+def multimodal_input_to_content(part) -> ImageUrl | AudioUrl | VideoUrl | DocumentUrl | BinaryContent: ...
+```
+
+```python
+from pydantic_ai.messages import ImageUrl
+from pydantic_ai.ui.ag_ui._multimodal import media_url_to_multimodal
+
+ag_img = media_url_to_multimodal(ImageUrl(url='https://example.com/photo.jpg', media_type='image/jpeg'))
+print(type(ag_img).__name__)   # ImageInputContent
+```
+
+#### Multimodal type system — media aliases, `ForceDownloadMode`, `ProviderDetailsDelta`
+
+`AudioMediaType`/`ImageMediaType`/`DocumentMediaType`/`VideoMediaType` (full MIME strings) and
+their `*Format` shorthand siblings (`'jpeg'`, `'mp3'`, `'pdf'`, ...) are `Literal` type aliases used
+throughout tool schemas and `FileUrl` subclasses. `ForceDownloadMode = bool | Literal['allow-local']`
+(see `FileUrl` above). `ProviderDetailsDelta = dict | Callable[[dict | None], dict] | None` updates
+a return part's `provider_details` without wholesale replacement.
+
+---
+
+### Concurrency, Usage & Limits
+
+#### `UsageBase` / `RunUsage` / `RequestUsage` / `UsageLimits`
+
+`UsageBase` fields (shared by `RequestUsage` per-request and `RunUsage` accumulated): `input_tokens`, `cache_write_tokens`, `cache_read_tokens`, `output_tokens`, `input_audio_tokens`, `cache_audio_read_tokens`, `output_audio_tokens`, `details`. `RunUsage` adds `requests`, `tool_calls`, and a top-level **`cost: Decimal | None`** field (best-effort USD cost summed across requests via genai-prices; `None` when the provider exposes no pricing, distinct from `Decimal('0')` for a genuinely free run). `RunUsage.__add__`/`.incr()` accumulate across runs; `.opentelemetry_attributes()` returns GenAI-semconv span attributes. `UsageLimits` fields: `cost_limit: Decimal | None`, `request_limit: int | None = 50` (default is 50, not unlimited), `tool_calls_limit`, `input_tokens_limit`, `output_tokens_limit`, `total_tokens_limit`, `per_request_input_tokens_limit` (per-call cap independent of the cumulative `input_tokens_limit` — useful with prompt caching, where a large cached prefix still counts), `count_tokens_before_request: bool = False` (preflight token-count call before dispatch; enforces both token limits ahead of time on Anthropic/Google/Bedrock/OpenAI Responses). Note: `response_tokens_limit` seen in some old examples was never a real field name — the correct field is `output_tokens_limit`.
+
+```python
+@dataclass(kw_only=True)
+class UsageLimits:
+    cost_limit: Decimal | None = None
+    request_limit: int | None = 50
+    tool_calls_limit: int | None = None
+    input_tokens_limit: int | None = None
+    output_tokens_limit: int | None = None
+    total_tokens_limit: int | None = None
+    per_request_input_tokens_limit: int | None = None
+    count_tokens_before_request: bool = False
+
+@dataclass(kw_only=True)
+class RunUsage(UsageBase):
+    requests: int = 0
+    tool_calls: int = 0
+    cost: Decimal | None = None
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.usage import UsageLimits
+from pydantic_ai.exceptions import UsageLimitExceeded
+
+agent = Agent('anthropic:claude-sonnet-4-5')
+
+try:
+    result = agent.run_sync(
+        'Summarise this 50-page document...',
+        usage_limits=UsageLimits(per_request_input_tokens_limit=8_000, cost_limit=Decimal('0.05')),
+    )
+except UsageLimitExceeded as e:
+    print(f'Budget exceeded: {e}')
+```
+
+`RunUsage` accumulates across an entire run; `RequestUsage` is a single API call's usage and
+implements `genai_prices.types.AbstractUsage` for cost calculation. Pass one `RunUsage` instance
+into successive `agent.run(usage=...)` calls to keep a running session total:
+
+```python
+from pydantic_ai import Agent, RunUsage
+
+agent = Agent('openai:gpt-4o')
+shared = RunUsage()
+for prompt in ['One', 'Two', 'Three']:
+    agent.run_sync(prompt, usage=shared)
+print(shared.total_tokens)
+```
+
+#### `ConcurrencyLimiter` + `AbstractConcurrencyLimiter` + `ConcurrencyLimit` + `ConcurrencyLimitedModel`
+
+Two layers: agent-level (`Agent(max_concurrency=...)`, caps simultaneous *runs*; acquired at run start, released at run end) and model-level (`limit_model_concurrency(model, limiter)` / `ConcurrencyLimitedModel(model, limiter=...)`, caps simultaneous *HTTP requests* to one model endpoint — the two compose, since a shared limiter can back both). `ConcurrencyLimiter` wraps `anyio.CapacityLimiter`; `max_queued` adds backpressure (`ConcurrencyLimitExceeded` for callers over the queue cap); waits emit an OTel span. `AbstractConcurrencyLimiter` is the ABC for distributed (e.g. Redis-backed) implementations. `get_concurrency_context(limiter, source)` returns a no-op context manager when `limiter is None`; `normalize_to_limiter()` coerces `AnyConcurrencyLimit` to `AbstractConcurrencyLimiter | None`.
+
+```python
+class ConcurrencyLimiter(AbstractConcurrencyLimiter):
+    def __init__(self, max_running: int, *, max_queued: int | None = None, name=None, tracer=None): ...
+    @classmethod
+    def from_limit(cls, limit: int | ConcurrencyLimit, *, name=None, tracer=None) -> Self: ...
+
+ConcurrencyLimit(max_running: int, max_queued: int | None = None)          # config dataclass
+
+class ConcurrencyLimitedModel(WrapperModel):
+    def __init__(self, wrapped: Model | KnownModelName, limiter: int | ConcurrencyLimit | AbstractConcurrencyLimiter): ...
+```
+
+```python
+import asyncio
+from pydantic_ai import Agent, ConcurrencyLimiter, limit_model_concurrency
+from pydantic_ai.exceptions import ConcurrencyLimitExceeded
+
+pool = ConcurrencyLimiter(max_running=5, max_queued=20, name='openai-shared-pool')
+agent_a = Agent(limit_model_concurrency('openai:gpt-5', pool))
+agent_b = Agent(limit_model_concurrency('openai:gpt-5.2', pool))
+
+async def safe_run(agent, prompt: str):
+    try:
+        return (await agent.run(prompt)).output
+    except ConcurrencyLimitExceeded:
+        return None
+
+asyncio.run(asyncio.gather(*[safe_run(agent_a, f'Q{i}') for i in range(20)]))
+```
+
+#### `UseThreadExecutor` (capability) — renamed from `ThreadExecutor`
+
+The class documented in older material as `ThreadExecutor` is now `UseThreadExecutor` in
+`pydantic_ai.capabilities`. Replaces PydanticAI's default `anyio.to_thread.run_sync`-per-call
+behaviour with a bounded `ThreadPoolExecutor` scoped to each run — prevents unbounded thread
+creation under load. `Agent.using_thread_executor()` sets it class-wide for every run in context.
+
+```python
+UseThreadExecutor(executor: concurrent.futures.Executor)
+```
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import UseThreadExecutor
+
+pool = ThreadPoolExecutor(max_workers=16)
+agent = Agent('openai:gpt-4o', capabilities=[UseThreadExecutor(pool)])
+```
+
+---
+
+### Hooks, Middleware & Lifecycle
+
+#### `Hooks` + `HookTimeoutError` + `HookNamespace`
+
+`Hooks` registers lifecycle observers via `@hooks.on.<event>` decorators (bare or parameterised with `timeout=`/`tools=`) instead of subclassing `AbstractCapability` — every hook can also be passed directly as a kwarg to the constructor (`Hooks(before_model_request=fn, ...)`). Covers 20+ hook points across four phases: run (`before_run`/`after_run`/`run_error`, or the `run` wrap-handler form for timing/circuit-breakers), node (`before_node_run`/`after_node_run`/`node_run_error`), model request (`before_model_request`/`after_model_request`/`model_request_error`, or `model_request` wrap-form), and tool (`prepare_tools`, `before_tool_validate`/`after_tool_validate`, `before_tool_execute`/`after_tool_execute`/`tool_execute_error`, or `tool_execute` wrap-form with `tools=[...]` scoping), plus the output-validate/process triads and `deferred_tool_calls`. A per-hook `timeout` (seconds) raises `HookTimeoutError` (a `TimeoutError` subclass) via `anyio.fail_after`. Sync hooks run inline on the event loop — use async for anything blocking.
+
+```python
+class HookTimeoutError(TimeoutError):
+    hook_name: str; func_name: str; timeout: float
+
+class Hooks(AbstractCapability[AgentDepsT]):
+    @cached_property
+    def on(self) -> HookNamespace: ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks, HookTimeoutError
+
+hooks = Hooks()
+
+@hooks.on.before_tool_execute(tools=['db_query', 'file_write'], timeout=2.0)
+async def audit_sensitive(ctx, *, call, tool_def, args):
+    print(f'[AUDIT] {tool_def.name}({args})')
+    return args
+
+@hooks.on.run
+async def time_run(ctx, *, handler):
+    import time
+    start = time.perf_counter()
+    try:
+        return await handler()
+    finally:
+        print(f'run took {time.perf_counter() - start:.3f}s')
+
+agent = Agent('openai:gpt-4o', capabilities=[hooks])
+```
+
+#### `AbstractCapability` — extended API
+
+Base class for every capability. Beyond the basic `get_instructions`/`get_model_settings`/
+`get_toolset`/`get_native_tools`, it exposes `defer_loading`, `get_description()` (shown to the
+model's `load_capability` catalog), `get_ordering() -> CapabilityOrdering`, and three-form hooks
+per lifecycle phase (`before_*`, `after_*`, `wrap_*` — the `wrap_*` forms receive a zero-arg
+`handler` to call-or-skip for short-circuiting).
+
+```python
+class AbstractCapability(ABC, Generic[AgentDepsT]):
+    id: str | None; defer_loading: bool = False
+    async def get_instructions(self, agent) -> str | None: ...
+    async def get_toolset(self, agent) -> AbstractToolset | None: ...
+    async def get_ordering(self) -> CapabilityOrdering: ...
+    async def wrap_model_request(self, ctx, *, request_context, handler) -> ModelResponse: ...
+```
+
+```python
+from dataclasses import dataclass
+from pydantic_ai.capabilities.abstract import AbstractCapability
+
+@dataclass
+class CachingCapability(AbstractCapability):
+    _cache: dict = None
+    def __post_init__(self): self._cache = {}
+
+    async def wrap_model_request(self, ctx, *, request_context, handler):
+        key = str(request_context.messages)
+        if key in self._cache:
+            return self._cache[key]
+        response = await handler()
+        self._cache[key] = response
+        return response
+```
+
+#### `CapabilityOrdering` + `CapabilityPosition` + `CapabilityRef` + `sort_capabilities` + `collect_leaves` + `has_capability_type`
+
+Declares where in the middleware chain a capability sits. `position: Literal['outermost',
+'innermost'] | None`; `wraps`/`wrapped_by: Sequence[CapabilityRef]` for relative ordering;
+`requires: Sequence[type[AbstractCapability]]` for presence checks (raises `UserError` if the
+required capability type isn't present) with no ordering implied. `sort_capabilities()` uses
+`graphlib.TopologicalSorter` with original list order as tiebreaker and cycle detection.
+`collect_leaves()` flattens nested capability trees via the visitor pattern; `has_capability_type()`
+checks membership. `CAPABILITY_TYPES` is the name→class registry used by `AgentSpec` YAML
+loading, populated via `__init_subclass__`.
+
+```python
+@dataclass
+class CapabilityOrdering:
+    position: CapabilityPosition | None = None
+    wraps: Sequence[CapabilityRef] = ()
+    wrapped_by: Sequence[CapabilityRef] = ()
+    requires: Sequence[type[AbstractCapability]] = ()
+
+def sort_capabilities(capabilities) -> list[AbstractCapability]: ...
+```
+
+```python
+from dataclasses import dataclass
+from pydantic_ai.capabilities.abstract import AbstractCapability, CapabilityOrdering
+
+@dataclass
+class AuthCapability(AbstractCapability):
+    def get_ordering(self) -> CapabilityOrdering:
+        return CapabilityOrdering(position='outermost')
+```
+
+#### `WrapperCapability`
+
+Transparent delegation base for capability middleware — the capability analogue of
+`WrapperToolset`/`WrapperModel`. `__post_init__` inherits `id`/`defer_loading` from the wrapped
+capability when not explicitly set, so a wrapper over a deferred capability stays deferred, and
+`for_run()` recreates the wrapper around the post-`for_run` wrapped instance.
+
+```python
+@dataclass
+class WrapperCapability(AbstractCapability[AgentDepsT]):
+    wrapped: AbstractCapability[AgentDepsT]
+```
+
+```python
+import dataclasses
+from pydantic_ai.capabilities import Capability, WrapperCapability
+
+@dataclasses.dataclass
+class LoggingCapability(WrapperCapability):
+    async def before_model_request(self, ctx, request_context):
+        print(f'run_step={ctx.run_step}')
+        return await self.wrapped.before_model_request(ctx, request_context)
+
+refunds = Capability(id='refunds', instructions='Confirm the order ID before refunding.')
+wrapped = LoggingCapability(wrapped=refunds)
+```
+
+#### `CombinedCapability`
+
+The composition engine `Agent(capabilities=[...])` builds internally when given a list — flattens
+nested combinations, topologically sorts by `CapabilityOrdering`, and always places the
+auto-injected pending-message drainer outermost. Hook direction is forward for `before_*`/
+`prepare_*`, reverse for `after_*`/`on_*_error`, and reverse-built-closure for `wrap_*` (standard
+middleware onion); `for_run()` runs all children's `for_run()` concurrently via `gather()` and
+short-circuits (returns `self`) if none changed. `has_wrap_node_run` is a cached shortcut property
+that lets the runtime skip the wrap-hook machinery entirely when no child capability defines one.
+
+```python
+from pydantic_ai.capabilities import CombinedCapability, Hooks, Thinking, PrefixTools
+
+combo = CombinedCapability([Hooks(), Thinking(effort='low'), PrefixTools(wrapped=..., prefix='v1')])
+print(type(combo.capabilities[0]).__name__)   # ordering-sensitive capabilities move to the front
+```
+
+#### `DynamicCapability`
+
+Builds another capability per-run from a factory `CapabilityFunc[AgentDepsT]` — a callable
+receiving `RunContext` and returning an `AbstractCapability | None`, sync or async. Bare callables
+passed to `capabilities=[...]` are auto-wrapped in this. Returning `None` makes the wrapper a
+no-op for that run; `defer_loading=True` is rejected on the `DynamicCapability` wrapper itself —
+set it on the capability the factory *returns* instead.
+
+```python
+CapabilityFunc = Callable[[RunContext[AgentDepsT]], AbstractCapability[AgentDepsT] | None | Awaitable[...]]
+
+@dataclass
+class DynamicCapability(AbstractCapability[AgentDepsT]):
+    capability_func: CapabilityFunc[AgentDepsT]
+```
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import WebSearch
+
+def feature_flagged(ctx: RunContext):
+    return WebSearch() if getattr(ctx.deps, 'enable_search', False) else None
+
+agent = Agent('openai:gpt-4o', capabilities=[feature_flagged])   # auto-wrapped as DynamicCapability
+```
+
+#### `ProcessHistory` + `ReinjectSystemPrompt`
+
+Both fire before every model request to transform message history. `ProcessHistory(processor)`
+runs an arbitrary `HistoryProcessorFunc` — four auto-detected calling conventions: sync/async ×
+with/without `RunContext` — for truncation, PII redaction, or compaction; sync callables run
+inline (not thread-offloaded). `ReinjectSystemPrompt(replace_existing=False)` ensures the agent's
+configured system prompt survives history that had it stripped (`replace_existing=False` is a
+no-op if any system prompt is already present anywhere in history); `replace_existing=True` strips
+*any* existing system prompt first, then prepends unconditionally — this is what
+`AGUIAdapter`/`VercelAIAdapter` use under `manage_system_prompt='server'` to stop untrusted
+clients injecting their own prompts. Neither capability is spec-serialisable (both hold a
+callable); the deprecated alias `HistoryProcessor` still works but warns.
+
+```python
+@dataclass
+class ProcessHistory(AbstractCapability[AgentDepsT]):
+    processor: HistoryProcessorFunc[AgentDepsT]
+
+@dataclass
+class ReinjectSystemPrompt(AbstractCapability[AgentDepsT]):
+    replace_existing: bool = False
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessHistory, ReinjectSystemPrompt
+
+def keep_last_n(n):
+    def processor(ctx, messages): return messages[-n:]
+    return processor
+
+agent = Agent(
+    'openai:gpt-4o', instructions='You are a support agent.',
+    capabilities=[ProcessHistory(keep_last_n(15)), ReinjectSystemPrompt(replace_existing=True)],
+)
+```
+
+#### `Instrumentation` capability + `InstrumentationSettings`
+
+The capability-shaped replacement for `Agent(instrument=...)`. Always positioned `'outermost'`
+(`get_ordering()`), so its spans wrap every other capability's. `InstrumentationSettings.version`
+(1–5) selects the OTel GenAI semantic-convention version; v1 is legacy/deprecated, v5 additionally
+stops classifying `CallDeferred`/`ApprovalRequired` as span errors.
+
+```python
+Instrumentation(settings: InstrumentationSettings = InstrumentationSettings(), *, id=None, description=None, defer_loading=False)
+InstrumentationSettings(*, tracer_provider=None, include_content=True, version=..., event_mode='attributes')
+```
+
+```python
+import logfire
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Instrumentation
+from pydantic_ai import InstrumentationSettings
+
+logfire.configure()
+agent = Agent('openai:gpt-4o', capabilities=[Instrumentation(InstrumentationSettings(version=5, include_content=False))])
+```
+
+`InstrumentedModel` wraps a single `Model` with OTel instrumentation without touching `Agent` — the
+lower-level building block `Instrumentation` uses internally: `InstrumentedModel(wrapped: Model, options: InstrumentationSettings)`.
+
+Instrumentation internals (`pydantic_ai._instrumentation`) shared with `InstrumentedModel`: baggage
+keys `AGENT_NAME_BAGGAGE_KEY`/`RUN_ID_BAGGAGE_KEY`/`CONVERSATION_ID_BAGGAGE_KEY` propagate agent
+identity across service boundaries; `TOKEN_HISTOGRAM_BOUNDARIES` (14 boundaries, 1 to 67M tokens)
+configure the `gen_ai.client.token.usage` metric; `DEFAULT_INSTRUMENTATION_VERSION` selects the
+GenAI semconv version. `CostCalculationFailedWarning` (raised when `genai-prices` can't price a
+model) lives in `pydantic_ai.exceptions`, not `_instrumentation`.
+
+```python
+from pydantic_ai._instrumentation import AGENT_NAME_BAGGAGE_KEY, TOKEN_HISTOGRAM_BOUNDARIES, DEFAULT_INSTRUMENTATION_VERSION
+from pydantic_ai.exceptions import CostCalculationFailedWarning   # current location
+```
+
+#### `PrepareTools` + `PrepareOutputTools`
+
+Wraps a `ToolsPrepareFunc` — `(RunContext, list[ToolDefinition]) -> list[ToolDefinition]` — as a capability that filters/mutates **function** tools (`PrepareTools`) or **output** tools (`PrepareOutputTools`, whose `ctx.retry`/`ctx.max_retries` reflect the output retry budget) on every request. Replaces the older pattern of passing `prepare=` directly to `FunctionToolset` when the filter must apply across every toolset on the agent. Cannot add or rename tools (raises `UserError`); neither is spec-serialisable.
+
+```python
+@dataclass
+class PrepareTools(AbstractCapability[AgentDepsT]):
+    prepare_func: ToolsPrepareFunc[AgentDepsT]
+@dataclass
+class PrepareOutputTools(AbstractCapability[AgentDepsT]):
+    prepare_func: ToolsPrepareFunc[AgentDepsT]
+```
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import PrepareTools
+
+async def hide_admin_tools(ctx: RunContext[dict], tool_defs):
+    if ctx.deps.get('is_admin'):
+        return tool_defs
+    return [td for td in tool_defs if not td.name.startswith('admin_')]
+
+agent = Agent('openai:gpt-4o-mini', deps_type=dict, capabilities=[PrepareTools(hide_admin_tools)])
+```
+
+#### `SetToolMetadata`
+
+Merges `**metadata` kwargs into the `metadata` dict of tools matched by `tools: ToolSelector` (`'all'`, a name/list of names, or a sync/async predicate). Internally wraps the toolset in a `PreparedToolset` that overrides `get_tools`. Multiple instances stack additively per tool — most commonly used to flip on Code Mode (`code_mode=True`) or tag tools for provider cache control / OTel attributes.
+
+```python
+@dataclass(init=False)
+class SetToolMetadata(AbstractCapability[AgentDepsT]):
+    def __init__(self, *, tools: ToolSelector[AgentDepsT] = 'all', **metadata: Any) -> None: ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import SetToolMetadata
+
+agent = Agent('openai:gpt-4o-mini', capabilities=[
+    SetToolMetadata(tools=['run_sql', 'execute_python'], code_mode=True),
+])
+```
+
+#### `ModelRetry`
+
+Raise from a tool function, output validator, or capability hook to send a retry prompt back to
+the model instead of propagating a Python exception. Fully Pydantic-serialisable (used internally
+for durable execution).
+
+```python
+ModelRetry(message: str)
+```
+
+```python
+from pydantic_ai import Agent, RunContext, ModelRetry
+import re
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool
+async def lookup_user(ctx: RunContext[None], email: str) -> str:
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        raise ModelRetry(f'{email!r} is not a valid email address.')
+    return f'profile for {email}'
+```
+
+---
+
+### Capabilities & Extensibility
+
+#### `Capability` — no-subclass decorator API
+
+Bundles instructions, tools, and toolsets under one identity without subclassing `AbstractCapability`. Three decorators mirror the `Agent` API: `@cap.tool` (receives `RunContext`), `@cap.tool_plain` (no context), `@cap.instructions` (system-prompt function, sync or async). `defer_loading=True` hides the whole capability (instructions + tools) until the model calls `load_capability`.
+
+```python
+class Capability(AbstractCapability[AgentDepsT]):
+    def __init__(self, *, instructions=None, toolsets=None, tools=(), id=None, description=None, defer_loading=False): ...
+    def tool(self, func=None, /, **kwargs): ...
+    def tool_plain(self, func=None, /, **kwargs): ...
+    def instructions(self, func): ...
+```
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import Capability, ToolSearch
+
+support = Capability(id='customer-support', instructions='Be empathetic and concise.')
+
+@support.tool
+def get_order(ctx: RunContext[str], order_id: str) -> dict:
+    return {'order_id': order_id, 'customer': ctx.deps}
+
+finance_cap = Capability(
+    description='Finance tools: stock prices, portfolio returns.',
+    id='finance-tools', defer_loading=True,
+)
+
+@finance_cap.tool
+def get_stock_price(ctx: RunContext[None], ticker: str) -> float:
+    """Return the latest closing price."""
+    return 150.0
+
+agent = Agent('openai:gpt-4o', deps_type=str, capabilities=[support, ToolSearch(), finance_cap])
+```
+
+#### `NativeTool` + `NativeOrLocalTool` capabilities
+
+`NativeTool(tool)` registers a single provider-native tool (static instance or per-run callable).
+`NativeOrLocalTool` is the architectural base every adaptive capability (`WebSearch`, `WebFetch`,
+`ImageGeneration`, `XSearch`, `MCP`) is built on: pairs a provider-native tool with an optional
+local fallback function, keeping only whichever the active model supports. `native=True` uses the
+subclass's `_default_native()`; `local` accepts a strategy name, `Tool`, callable, `AbstractToolset`,
+or bool (per-subclass). When both are enabled, `get_toolset()` wraps the local toolset in a
+`PreparedToolset` that stamps `unless_native=<uid>` on every local `ToolDefinition`, so capable
+models never see the fallback tools at all. `_requires_native()` returning `True` suppresses local
+entirely (e.g. domain-constraint fields that only the native tool enforces).
+
+```python
+NativeTool(tool: AbstractNativeTool | Callable[[RunContext], AbstractNativeTool | None])
+
+class NativeOrLocalTool(AbstractCapability[AgentDepsT]):
+    def _default_native(self) -> AbstractNativeTool | None: ...
+    def _default_local(self) -> Tool | AbstractToolset | None: ...
+    def _requires_native(self) -> bool: return False
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import NativeOrLocalTool
+from pydantic_ai.native_tools import WebSearchTool
+from pydantic_ai.tools import Tool
+
+cap = NativeOrLocalTool(native=WebSearchTool(), local=Tool(lambda query: f'Results for {query}'))
+agent = Agent('openai:gpt-4o-mini', capabilities=[cap])
+```
+
+#### `WebSearch` capability
+
+`NativeOrLocalTool` subclass — native-first web search with an optional DuckDuckGo (or custom) local fallback. `local` (`WebSearchLocalStrategy='duckduckgo' | Tool | Callable | bool | None`) requires the `duckduckgo` extra when set to `'duckduckgo'`/`True`. `blocked_domains`/`allowed_domains`/`max_uses` require native support and auto-force it via `_requires_native()`.
+
+```python
+class WebSearch(NativeOrLocalTool[AgentDepsT]):
+    def __init__(self, *, native=True, local=None, search_context_size=None, user_location=None,
+                 blocked_domains=None, allowed_domains=None, max_uses=None,
+                 external_web_access=None, id=None, defer_loading=False, description=None): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
+
+agent = Agent('openai:gpt-4o-mini', capabilities=[WebSearch(local=True, search_context_size='high')])
+```
+
+#### `WebFetch` capability
+
+`local=True` activates the SSRF-protected, markdownify-based local fetcher from `pydantic_ai.common_tools.web_fetch` (requires `pip install "pydantic-ai-slim[web-fetch]"`); `allowed_domains`/`blocked_domains` are enforced by the local tool too, while `max_uses`, `enable_citations`, `max_content_tokens` require native.
+
+```python
+class WebFetch(NativeOrLocalTool[AgentDepsT]):
+    def __init__(self, *, native=True, local=None, allowed_domains=None, blocked_domains=None,
+                 max_uses=None, enable_citations=None, max_content_tokens=None,
+                 id=None, defer_loading=False): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebFetch
+
+agent = Agent('anthropic:claude-sonnet-4-5', capabilities=[
+    WebFetch(local=True, allowed_domains=['docs.python.org', 'docs.pydantic.dev']),
+])
+```
+
+#### `ImageGeneration` capability
+
+Capability-level fields (`action`, `background`, `input_fidelity`, `moderation`, `image_model`, `output_compression`, `output_format`, `quality`, `size`, `aspect_ratio`) bridge onto the native tool's constructor, whose corresponding field is named **`model`**, not `image_model`. **Correction:** `local` no longer accepts a bare `True`; its type is `Tool | Callable | Literal[False] | None` — pass an explicit `Tool`/callable or leave it `None`, and rely on `fallback_model` for cross-provider delegation (which cannot be combined with an explicit `local=` — `UserError` if both are set). `ImageGenerationSubagentTool` implements the fallback: it builds `Agent(fallback_model, output_type=BinaryImage, capabilities=[NativeTool(...)])` at call time and wraps `UnexpectedModelBehavior` as `ModelRetry`.
+
+```python
+class ImageGeneration(NativeOrLocalTool[AgentDepsT]):
+    def __init__(self, *, native=True, local=None, fallback_model=None,
+                 action=None, background=None, input_fidelity=None, moderation=None,
+                 image_model=None, output_compression=None, output_format=None,
+                 quality=None, size=None, aspect_ratio=None, ...): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ImageGeneration
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',
+    capabilities=[ImageGeneration(fallback_model='openai-responses:gpt-4o', quality='high', output_format='png')],
+)
+```
+
+#### `XSearch` capability
+
+X/Twitter search — native on xAI models; on any other model `fallback_model` (must be an xAI model) is **required**, or the capability raises `UserError`. `allowed_x_handles`/`excluded_x_handles` (max 20 each), `from_date`/`to_date`, `enable_image_understanding`/`enable_video_understanding`, `include_output` (exposes raw results as `NativeToolReturnPart`). Like `ImageGeneration`, `local` is `Tool | Callable | Literal[False] | None` — no bare `True`.
+
+```python
+class XSearch(NativeOrLocalTool[AgentDepsT]):
+    def __init__(self, *, native=True, local=None, fallback_model=None,
+                 allowed_x_handles=None, excluded_x_handles=None,
+                 from_date=None, to_date=None, enable_image_understanding=None,
+                 enable_video_understanding=None, include_output=None, ...): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import XSearch
+
+agent = Agent('openai:gpt-5.2', capabilities=[
+    XSearch(fallback_model='xai:grok-4.3', enable_image_understanding=True),
+])
+```
+
+#### `Thinking` capability
+
+Single-field convenience capability translating a unified `effort` into `ModelSettings.thinking` across providers; provider-specific settings (`anthropic_thinking`, `openai_reasoning_effort`, etc.) take precedence when both are set. `effort=False` is silently ignored on always-on reasoning models.
+
+```python
+@dataclass
+class Thinking(AbstractCapability[Any]):
+    effort: bool | Literal['minimal', 'low', 'medium', 'high', 'xhigh'] = True
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
+
+agent = Agent('anthropic:claude-opus-4-8', capabilities=[Thinking(effort='high')])
+```
+
+#### `MCP` capability
+
+The recommended capability-first way to attach an MCP server, extending `NativeOrLocalTool`: accepts `url`, `native` (bool or explicit `MCPServerTool`/callable — **requires `url=` when `True`**, and defaults to `False`, not auto-detect), `local` (URL string, `fastmcp.Client`, transport, in-process `FastMCP` server, or pre-built `MCPToolset` — any other non-bool/non-string value is auto-wrapped into an `MCPToolset`), `authorization_token`, `headers`, `allowed_tools`. `MCP.from_spec()` restricts `local=` to JSON/YAML-serialisable types for `AgentSpec` round-tripping.
+
+```python
+class MCP(NativeOrLocalTool[AgentDepsT]):
+    def __init__(self, url: str | None = None, *, native: MCPServerTool | Callable | bool = False,
+                 local: MCPToolsetClient | MCPToolset | Callable | bool | None = None,
+                 id=None, authorization_token=None, headers=None, allowed_tools=None,
+                 description=None, defer_loading=False): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import MCP
+
+agent = Agent('openai:gpt-5.2', capabilities=[
+    MCP(url='https://mcp.example.com/v1', local=True, allowed_tools=['search', 'lookup']),
+])
+```
+
+#### `ToolSearch` capability + strategy types
+
+Lazy tool discovery for large toolsets. `strategy` accepts `None` (auto: native BM25 on
+Anthropic/OpenAI-Responses, local keyword elsewhere), `'bm25'`/`'regex'` (Anthropic-only, error
+elsewhere), `'keywords'` (force the local algorithm everywhere for determinism), or a custom
+`ToolSearchFunc`. The internal `ToolSearchTool` (an `AbstractNativeTool` the capability injects)
+is never constructed directly, and is excluded from `TestModel.supported_native_tools()` (so
+tests always fall back to the local `search_tools` function tool). See `ToolSearch` +
+`ToolSearchToolset` in Tools & Toolsets for the toolset-level mechanics.
+
+```python
+ToolSearch(strategy=None, max_results=10, tool_description=None, parameter_description=None,
+           *, id=None, description=None, defer_loading=False)
+ToolSearchFunc = Callable[[RunContext, Sequence[str], Sequence[ToolDefinition]], Sequence[str] | Awaitable[...]]
+```
+
+```python
+from pydantic_ai import Agent, Tool
+from pydantic_ai.capabilities import ToolSearch
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-5',
+    tools=[Tool(get_weather), Tool(book_flight, defer_loading=True)],
+    capabilities=[ToolSearch(strategy='keywords', max_results=5)],
+)
+```
+
+#### `HandleDeferredToolCalls` capability
+
+Intercepts `DeferredToolRequests` that would otherwise pause the run and resolves them **inline** via a user handler — converting a HITL approval flow into an automated one. `handler(ctx, requests) -> DeferredToolResults | None`; returning `None` declines (falls through to the next `HandleDeferredToolCalls` capability, or bubbles up as the run's output if none handle it). Stack multiple instances for tiered strategies (e.g. auto-approve low-risk tools, defer everything else to a human).
+
+```python
+@dataclass
+class HandleDeferredToolCalls(AbstractCapability[AgentDepsT]):
+    handler: Callable[[RunContext, DeferredToolRequests], DeferredToolResults | None | Awaitable[...]]
+```
+
+```python
+from pydantic_ai import Agent, DeferredToolResults
+from pydantic_ai.capabilities import HandleDeferredToolCalls
+
+def auto_approve(ctx, requests):
+    return requests.build_results(approve_all=True)
+
+agent = Agent('openai:gpt-4o', capabilities=[HandleDeferredToolCalls(handler=auto_approve)])
+```
+
+#### `CapabilityOwnedToolset`
+
+Internal `WrapperToolset` stamping every contributed `ToolDefinition` with the owning `Capability`'s `id`. When `capability.defer_loading=True` it also marks tools with the deferred-capability metadata key and suppresses `get_instructions()` until the capability is explicitly loaded — the plumbing that makes deferred capabilities work (the model sees the description in the catalog but can't call the tools until it calls `load_capability`). `resolve_capability_id()` walks `ctx.capabilities` by identity; `tool_defs_for_loaded_capabilities()` is the wire-side filter `ToolSearchToolset` uses.
+
+```python
+@dataclass
+class CapabilityOwnedToolset(WrapperToolset[AgentDepsT]):
+    capability: AbstractCapability[AgentDepsT]
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Capability
+
+billing = Capability(id='billing', description='Billing tools — load when asked about payments.', defer_loading=True)
+
+@billing.tool_plain
+def get_invoice(invoice_id: str) -> dict:
+    return {'id': invoice_id, 'status': 'pending'}
+
+agent = Agent('openai:gpt-4o-mini', capabilities=[billing])
+```
+
+#### `DeferredCapabilityLoader` + `DeferredCapabilityLoaderToolset` + `LoadCapabilityCallPart`/`LoadCapabilityArgs`/`LoadCapabilityReturn`
+
+`DeferredCapabilityLoader` produces the catalog instructing the model which deferred capabilities exist — deliberately re-listing **every** deferred capability on **every** turn (including already-loaded ones), because instructions sit at the request prefix and mutating that prefix would bust the provider's prompt cache. `DeferredCapabilityLoaderToolset` auto-injects the reserved `load_capability` tool (`tool_kind='capability-load'`); calling it resolves the capability from `ctx.capabilities`, returns its instructions, and raises `ModelRetry` if the model tries to reload an already-loaded capability.
+
+```python
+class LoadCapabilityArgs(TypedDict):
+    id: str
+class LoadCapabilityReturn(TypedDict):
+    instructions: NotRequired[str]
+```
+
+```python
+from pydantic_ai._deferred_capabilities import LoadCapabilityCallPart
+
+# Filter capability-load parts out of message history when replaying a conversation
+def strip_capability_loads(messages):
+    import dataclasses
+    return [
+        dataclasses.replace(m, parts=[p for p in m.parts if not isinstance(p, LoadCapabilityCallPart)])
+        if hasattr(m, 'parts') else m
+        for m in messages
+    ]
+```
+
+#### `NamedSpec` + `CapabilitySpec` + `build_registry` + `load_from_registry`
+
+**Module:** `pydantic_ai._spec`. Powers YAML/JSON-driven capability composition for `AgentSpec`.
+`NamedSpec` accepts three compact forms (bare name string, single-arg dict, kwargs dict).
+`build_registry` builds a name→class map; `load_from_registry` instantiates from a spec, with
+`legacy_aliases` support for renamed classes.
+
+```python
+NamedSpec.model_validate('Instrumentation')
+NamedSpec.model_validate({'WebSearch': {'search_context_size': 'high'}})
+```
+
+#### `Toolset` capability
+
+A lightweight `AbstractCapability` that injects any pre-built `AgentToolset` via the capabilities list rather than the `toolsets=` constructor arg — useful for programmatic capability-chain composition (e.g. combined with `PrefixTools`). Not spec-serialisable (`get_serialization_name()` returns `None`).
+
+```python
+@dataclass
+class Toolset(AbstractCapability[AgentDepsT]):
+    toolset: AgentToolset[AgentDepsT]
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities.toolset import Toolset
+from pydantic_ai.toolsets.function import FunctionToolset
+
+weather_toolset = FunctionToolset()
+weather_toolset.add_function(lambda city: f'Sunny in {city}', name='get_weather')
+agent = Agent('openai:gpt-5.2', capabilities=[Toolset(toolset=weather_toolset)])
+```
+
+#### `doc_descriptions` + `DocstringStyle` + `_infer_docstring_style` — griffe-backed docstring parser
+
+Called by `FunctionToolset`/`Tool` during registration to extract the function description and per-parameter descriptions using [griffe](https://mkdocstrings.github.io/griffe/). Supports `'google'`, `'numpy'`, `'sphinx'`, and `'auto'` (regex-based inference: Sphinx `:param:`, Google `Args:` block, NumPy `---` underline, falling back to `'google'`). When a `Returns` section exists, the description is reformatted as `<summary>`/`<returns>` XML for richer schema descriptions.
+
+```python
+DocstringStyle = Literal['google', 'numpy', 'sphinx']
+def doc_descriptions(func, sig, *, docstring_format: DocstringFormat) -> tuple[str | None, dict[str, str]]: ...
+```
+
+```python
+from inspect import signature
+from pydantic_ai._griffe import doc_descriptions
+
+def search(query: str, max_results: int = 10) -> list[str]:
+    """Search the web.
+
+    Args:
+        query: The search query string.
+        max_results: Maximum results to return.
+    """
+    return []
+
+desc, params = doc_descriptions(search, signature(search), docstring_format='auto')
+```
+
+---
+
+### Durable Execution & Integrations (Temporal, DBOS, Prefect)
+
+> Requires the respective optional dependency group (`temporal`, `dbos`, `prefect`) — not installed in the verification venv, so only import paths and top-level structure were re-confirmed; per-class field details below should be spot-checked against the exact pinned version in production.
+
+#### `TemporalAgent` + `TemporalModel` + `TemporalProviderFactory`
+
+**Extra:** `pip install "pydantic-ai[temporal]"`. Wraps any `Agent`/`WrapperAgent` so model calls, tool calls, and MCP interactions become durable Temporal activities. `TemporalModel` is the `WrapperModel` placed inside every `TemporalAgent`: inside a workflow it serialises the request into a `_RequestParams` dataclass and dispatches via `workflow.execute_activity(...)`; outside a workflow it falls through directly. Supports a `models={id: Model}` registry plus `using_model(id)` context manager for per-step overrides, and a `TemporalProviderFactory` callable (`(RunContext, provider_name) -> Provider`) for dynamic per-tenant credentials on unregistered model IDs. Image output is rejected (`UserError`) due to Temporal's 2MB payload limit. `PydanticAIWorkflow` is a marker base class exposing `__pydantic_ai_agents__` so `TemporalAgent.activities`/`.temporal_activities` can be enumerated automatically.
+
+```python
+TemporalAgent(wrapped, *, name: str, models=None, provider_factory=None,
+              event_stream_handler=None, activity_config=..., model_activity_config={},
+              toolset_activity_config={}, tool_activity_config={}, run_context_type=TemporalRunContext)
+
+class TemporalModel(WrapperModel):
+    def using_model(self, model) -> Generator[None]: ...
+TemporalProviderFactory = Callable[[RunContext[AgentDepsT], str], Provider[Any]]
+```
+
+`TemporalRunContext` serialises only the JSON-safe subset of `RunContext` across the activity
+boundary (excludes the live `capabilities` registry); accessing an excluded attribute inside an
+activity raises `UserError` with a subclassing hint.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.durable_exec.temporal import TemporalAgent
+
+base_agent = Agent('openai:gpt-4.1-mini', name='research-agent')   # name= is required
+temporal_agent = TemporalAgent(base_agent, name='research-agent')
+# register temporal_agent.temporal_activities (or .activities) with your Temporal Worker
+```
+
+#### `TemporalFunctionToolset` + `TemporalWrapperToolset` + `CallToolResult`
+
+`TemporalWrapperToolset` is the abstract base turning `call_tool()` into `@activity.defn` functions. `CallToolResult` is a discriminated union (`kind` field) of `_ApprovalRequired`, `_CallDeferred`, `_ModelRetry`, `_ToolReturn` — serialising every possible tool-call outcome across the activity boundary. Activity config is layered: `activity_config` (base) → `toolset_activity_config` (per toolset ID) → `tool_activity_config` (per tool name, or `False` to skip activity wrapping for fast, in-memory async tools). `TemporalMCPToolset` wraps an `MCPToolset` so `get_tools`/`call_tool` run as activities; when the wrapped `MCPToolset.cache_tools=True`, tool definitions from the first `get_tools` activity are cached on the `TemporalMCPToolset` instance for the **worker process's lifetime** (not per-workflow) — use `cache_tools=False` if the server's tool list changes between runs.
+
+```python
+CallToolResult = Annotated[_ApprovalRequired | _CallDeferred | _ModelRetry | _ToolReturn, Discriminator('kind')]
+```
+
+```python
+from datetime import timedelta
+from temporalio.workflow import ActivityConfig
+from pydantic_ai.durable_exec.temporal import TemporalAgent
+
+temporal_agent = TemporalAgent(
+    agent,
+    activity_config=ActivityConfig(start_to_close_timeout=timedelta(seconds=30)),
+    tool_activity_config={'weather-tools': {'fast_lookup': False}},
+)
+```
+
+#### `LogfirePlugin`
+
+A `temporalio.plugin.SimplePlugin` wiring Logfire into a Temporal `ServiceClient`: installs a `TracingInterceptor` for workflow/activity spans, and optionally an `OpenTelemetryConfig` metrics exporter to Logfire's OTLP endpoint. Must be combined with `PydanticAIPlugin()` (which registers the Pydantic data converter) — using `LogfirePlugin` alone breaks payload serialisation.
+
+```python
+client = await Client.connect("localhost:7233", plugins=[PydanticAIPlugin(), LogfirePlugin(metrics=True)])
+```
+
+#### `DBOSAgent` + `DBOSModel` + `StepConfig`
+
+Wraps any `AbstractAgent` with DBOS durable-step semantics via `@DBOS.dbos_class()` + `DBOSConfiguredInstance`. Model requests and MCP calls are auto-wrapped as `@DBOS.step()`; **`FunctionToolset` tool functions are not** — decorate side-effecting tools with `@DBOS.step()` yourself for checkpoint/replay protection. `DBOSParallelExecutionMode` excludes `'parallel'` (only `'sequential'` and `'parallel_ordered_events'`) because DBOS needs deterministic replay ordering. `DBOSModel` applies its `@DBOS.step()` decorator once at `__init__`, not per-call; the `DBOS.workflow_id is None or DBOS.step_id is not None` guard in `request_stream` lets nested calls (inside an existing step, or outside a workflow) bypass the step wrapper and avoid double-wrapping. Automatically swaps `MCPToolset` → `DBOSMCPToolset` and similar wrapping for toolsets you pass in.
+
+```python
+DBOSParallelExecutionMode = Literal['sequential', 'parallel_ordered_events']
+
+@DBOS.dbos_class()
+class DBOSAgent(WrapperAgent[AgentDepsT, OutputDataT], DBOSConfiguredInstance):
+    def __init__(self, wrapped, *, name: str | None = None, mcp_step_config=None, model_step_config=None,
+                 parallel_execution_mode: DBOSParallelExecutionMode = 'parallel_ordered_events'): ...
+
+class StepConfig(TypedDict, total=False):
+    retries_allowed: bool; interval_seconds: float; max_attempts: int; backoff_rate: float
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.durable_exec.dbos import DBOSAgent
+
+durable = DBOSAgent(Agent('openai:gpt-4o', name='researcher'), name='researcher', model_step_config={'retries': 3})
+```
+
+#### `PrefectAgent` + `TaskConfig` + `PrefectAgentInputs` + `DEFAULT_PYDANTIC_AI_CACHE_POLICY`
+
+**Extra:** `pip install "pydantic-ai-slim[prefect]"`. Wraps any `AbstractAgent` to run model requests, tool calls, and MCP interactions as Prefect tasks with automatic retries and caching. `name` is required. `PrefectModel` turns `request()`/`request_stream()` into `@task`-decorated functions created once at `__init__`, named dynamically per call via `with_options(name=...)`; `request_stream` requires an `event_stream_handler` — without one, `PrefectModel` raises because streaming needs a `run_context`. `PrefectFunctionToolset` (a `PrefectWrapperToolset` subclass) does the same for tool calls; a per-tool config entry of `None` skips task wrapping entirely (plain async call, no Prefect overhead). `PrefectAgentInputs` is a custom Prefect `CachePolicy` that strips non-deterministic `RunContext` fields (`timestamp`, `run_id`) and converts `ToolsetTool`/`RunContext` instances into hashable dicts before computing the cache key — plain Prefect `INPUTS` caching breaks on both. `DEFAULT_PYDANTIC_AI_CACHE_POLICY = PrefectAgentInputs() + TASK_SOURCE + RUN_ID`, giving `persist_result=True` with a `RUN_ID`-scoped policy so a persisted result is reused across a flow *retry* but not across unrelated flow runs.
+
+```python
+PrefectAgent(wrapped, *, name: str, mcp_task_config=None, model_task_config=None,
+             tool_task_config=None, tool_task_config_by_name=None)
+
+class PrefectFunctionToolset(PrefectWrapperToolset[AgentDepsT]):
+    async def call_tool(self, name, tool_args, ctx, tool):
+        cfg = self._tool_task_config.get(name, default_task_config)
+        if cfg is None:
+            return await super().call_tool(name, tool_args, ctx, tool)
+        return await self._call_tool_task.with_options(name=f'Call Tool: {name}', **cfg)(name, tool_args, ctx, tool)
+```
+
+```python
+from prefect import flow
+from pydantic_ai.durable_exec.prefect import PrefectAgent
+
+durable_agent = PrefectAgent(Agent('openai:gpt-4.1-mini', name='research-agent'), name='research-agent')
+
+@flow(name='research-flow')
+async def research_flow(topic: str) -> str:
+    result = await durable_agent.run(f'Research: {topic}')
+    return result.output
+```
+
+#### `RuntimeToolsetKind` + `reject_unsupported_runtime_toolsets`
+
+Durable engines wrap constructor-time toolsets so tool calls become checkpointed activities/tasks; toolsets passed per-run via `run(toolsets=...)` arrive **after** that wrapping and are un-checkpointed. This guard classifies each leaf toolset (`'function'`, `'mcp'`, `'dynamic'`, or `None` for non-executing toolsets like `ExternalToolset`) and raises `UserError` when an engine-unsupported kind is passed per-run.
+
+```python
+RuntimeToolsetKind = Literal['function', 'mcp', 'dynamic']
+def reject_unsupported_runtime_toolsets(toolsets, *, unsupported_kinds: frozenset[RuntimeToolsetKind], engine: str) -> None: ...
+```
+
+#### `agent_to_a2a` / `AgentWorker` — removed
+
+The A2A (Agent-to-Agent protocol) bridge, already marked deprecated in older releases, is
+**confirmed fully removed** — no `_a2a.py` or any A2A-related module remains under `pydantic_ai/`.
+The `fasta2a` package now maintains its own PydanticAI integration independently:
+`pip install "fasta2a[pydantic-ai]"` then `from fasta2a.pydantic_ai import agent_to_a2a`.
+
+---
+
+### Persistence & Graph Support
+
+#### `GraphBuilder` (pydantic_graph)
+
+The current, recommended API for building `pydantic_graph` graphs — a fluent, type-safe builder
+replacing the older `BaseNode`-subclass pattern (which remains fully supported and interoperable).
+
+```python
+GraphBuilder(*, name=None, state_type=NoneType, deps_type=NoneType, input_type=NoneType,
+             output_type=NoneType, auto_instrument=True)
+```
+
+```python
+from pydantic_graph import GraphBuilder
+from dataclasses import dataclass
+
+@dataclass
+class State:
+    value: int
+
+builder = GraphBuilder(state_type=State)
+
+@builder.step
+async def increment(ctx):
+    ctx.state.value += 1
+    return ctx.state.value
+
+builder.add(builder.edge_from(builder.start_node).to(increment))
+builder.add(builder.edge_from(increment).to(builder.end_node))
+graph = builder.build()
+```
+
+#### `Path` + `PathBuilder`
+
+`Path` is a flat `list[PathItem]` encoding transforms, forks, and routing in order; `PathBuilder` is the fluent wrapper. `.to(dest, ...)` routes to one or more destinations (wraps multiple in a `BroadcastMarker`); `.transform(func)` applies a sync step function, changing the output type; `.map()` spreads an iterable into parallel per-item paths (creates a `MapMarker`); `.label()` attaches a debug annotation. `GraphBuilder.add_edge(node)` returns an `EdgePathBuilder`, the entry point in practice.
+
+```python
+class PathBuilder(Generic[StateT, DepsT, OutputT]):
+    def to(self, destination, /, *extra, fork_id=None) -> Path: ...
+    def transform(self, func) -> PathBuilder[StateT, DepsT, T]: ...
+    def map(self, *, fork_id=None, downstream_join_id=None) -> PathBuilder[StateT, DepsT, T]: ...
+```
+
+```python
+builder.add_edge(source_node).label('count-chars').transform(lambda ctx: len(ctx.inputs)).to(sink_node)
+```
+
+#### Marker types: `TransformFunction`/`TransformMarker`/`MapMarker`/`BroadcastMarker`/`LabelMarker`/`DestinationMarker`/`PathItem`
+
+Every `Path` is a list of these dataclasses; `PathItem` is their union. `MapMarker(fork_id, downstream_join_id)` spreads an iterable into parallel forks; `BroadcastMarker(paths, fork_id)` fans out to pre-built sub-paths; `DestinationMarker(destination_id)` is the terminal routing target.
+
+```python
+PathItem = TransformMarker | MapMarker | BroadcastMarker | LabelMarker | DestinationMarker
+```
+
+```python
+from pydantic_graph.paths import Path, LabelMarker, TransformMarker, DestinationMarker
+from pydantic_graph.id_types import NodeID
+
+sample = Path(items=[LabelMarker('process'), TransformMarker(lambda ctx: str(ctx.inputs)), DestinationMarker(NodeID('my_node'))])
+```
+
+#### `EdgePath` + `EdgePathBuilder`
+
+`EdgePath` is a complete edge: source nodes bound to a `Path`, with `destinations` collected. `EdgePathBuilder` (returned by `GraphBuilder.add_edge()`) chains `.map()`/`.transform()`/`.label()`/`.broadcast()` before finalising with `.to(destination)`.
+
+```python
+class EdgePathBuilder(Generic[StateT, DepsT, OutputT]):
+    def to(self, destination, /, *extra, fork_id=None) -> EdgePath: ...
+    def broadcast(self, get_forks, /, *, fork_id=None) -> EdgePath: ...
+```
+
+```python
+edge = (
+    builder.add_edge(splitter)
+    .map()
+    .transform(lambda ctx: len(ctx.inputs.split()))
+    .to(counter)
+)
+```
+
+#### `Fork` + `Join` + `ReducerContext` + `JoinState`
+
+Parallel fan-out/fan-in. `Fork.is_map=True` maps one branch per sequence element (`is_map=False` broadcasts the same value to every branch). `Join` aggregates via a reducer (`(current, item) -> result`, optionally `(ctx: ReducerContext, current, item) -> result`); `JoinState` tracks pending parallel branches per fork. `ReducerContext.cancel_sibling_tasks()` implements first-match-wins early stopping (sets `JoinState.cancelled_sibling_tasks=True`); `preferred_parent_fork='farthest'/'closest'` disambiguates nested-fork topology.
+
+```python
+builder.join(reducer, initial=[], node_id='collect')
+builder.add_mapping_edge(produce, process, downstream_join_id=join.id)
+```
+
+```python
+def first_success(ctx: ReducerContext, current, item):
+    if item is not None and current is None:
+        ctx.cancel_sibling_tasks()
+        return item
+    return current
+```
+
+#### `Decision` + `DecisionBranch` + `Edge` + `TypeExpression`
+
+Conditional routing via `builder.decision().branch(builder.match(Literal['urgent']).to(handler))`
+— `match()` requires **types** (or `Literal[...]`), not raw values; `builder.match('urgent')`
+raises at runtime. `Edge` (`.label(text)` on an edge-path builder) annotates Mermaid diagram output.
+`TypeExpression[T]` works around type-checker limitations for complex union types passed as
+`state_type=`/`output_type=` generic parameters.
+
+```python
+router = (
+    builder.decision()
+    .branch(builder.match(Literal['urgent']).to(handle_urgent))
+    .branch(builder.match(Literal['billing']).to(handle_billing))
+)
+```
+
+#### `Step` + `StepContext` + `StepNode`
+
+The primitives `@builder.step` produces. `StepContext(state, deps, inputs)` is what every step
+function receives. `Step.as_node(inputs)` bridges a builder step into a legacy `BaseNode` runner —
+not a "goto" mechanism inside a step body; dynamic branching goes through `builder.decision()`.
+
+```python
+@builder.step
+async def compute(ctx: builder.Source[int]) -> int:
+    return ctx.inputs * ctx.deps.multiplier
+```
+
+#### `pydantic_graph.id_types`: `NodeID` + `NodeRunID` + `TaskID` + `ForkStackItem` + `ForkStack`
+
+`NewType` wrappers preventing accidental mixing of graph identifiers. `NodeID` (stable, build-time), `NodeRunID` (per-execution, runtime-generated), `TaskID`; `JoinID`/`ForkID` are `NodeID` aliases. `ForkStackItem(fork_id, node_run_id, thread_index)` is a frozen dataclass; `ForkStack = tuple[ForkStackItem, ...]` represents the full parallel-execution ancestry of a thread. `generate_placeholder_node_id(label)`/`replace_placeholder_id(node_id)` handle auto-generated node IDs.
+
+```python
+NodeID = NewType('NodeID', str)
+@dataclass(frozen=True)
+class ForkStackItem:
+    fork_id: ForkID; node_run_id: NodeRunID; thread_index: int
+ForkStack = tuple[ForkStackItem, ...]
+```
+
+#### `node_types` (`is_source`/`is_destination`) + `parent_forks` (`ParentFork`/`ParentForkFinder`)
+
+Type guards classify every node as source (`MiddleNode | StartNode`), destination (`MiddleNode | Decision | EndNode`), or both. `ParentForkFinder.find_parent_fork(join_id, *, parent_fork_id=None)` finds the *dominating fork* of a join node — the fork every path to that join must pass through — the primitive the runtime uses to avoid deadlock in parallel execution; pass `parent_fork_id` explicitly to disambiguate nested-fork diamonds.
+
+```python
+def is_source(node) -> TypeGuard[AnySourceNode]: ...
+@dataclass
+class ParentForkFinder(Generic[T]):
+    def find_parent_fork(self, join_id, *, parent_fork_id=None, prefer_closest=False) -> ParentFork | None: ...
+```
+
+#### `FileStatePersistence` + `SimpleStatePersistence` + `FullStatePersistence`
+
+Three built-in `BaseStatePersistence` implementations. `FileStatePersistence(json_file)` persists
+snapshots to JSON with an advisory `.pydantic-graph-persistence-lock` file, surviving process
+restarts (`graph.iter_from_persistence(persistence)` resumes an interrupted run).
+`SimpleStatePersistence` (the run-time default when no `persistence=` is passed) keeps only the
+latest snapshot — `load_all()` raises `NotImplementedError`. `FullStatePersistence` keeps the whole
+history and supports `dump_json()`/`load_json()` round-trips; `deep_copy=False` skips the
+defensive per-snapshot copy for a performance win when you don't need historical state values.
+
+```python
+FileStatePersistence(json_file: Path)
+FullStatePersistence(deep_copy: bool = True)
+```
+
+```python
+from pydantic_graph.persistence.file import FileStatePersistence
+
+persistence = FileStatePersistence(Path('runs/demo.json'))
+result = await graph.run(StartNode(), state=state, persistence=persistence)
+```
+
+#### `NodeSnapshot` + `EndSnapshot` + `BaseStatePersistence` + exception hierarchy
+
+`NodeSnapshot`/`EndSnapshot` make up the `Snapshot` discriminated union every persistence backend
+stores. `SnapshotStatus` lifecycle: `'created' → 'pending' (load_next) → 'running' (record_run) →
+'success'/'error'`. `BaseStatePersistence` is the ABC custom backends (Redis, DynamoDB) implement —
+requiring all six abstract methods: `should_set_types`, `set_types`, `snapshot_node`,
+`snapshot_node_if_new`, `snapshot_end` (receives the `End` value), `record_run` (async context
+manager), plus `load_next`/`load_all`. `build_snapshot_list_type_adapter(state_type, run_end_type)`
+builds the typed serialiser.
+
+```python
+GraphSetupError(TypeError)          # misconfigured graph
+GraphBuildingError(ValueError)      # error during GraphBuilder.build()
+GraphValidationError(ValueError)    # graph structure validation failure
+GraphRuntimeError(RuntimeError)     # execution error
+GraphNodeStatusError(GraphRuntimeError)   # .check(status) raises unless status in {'created','pending'}
+```
+
+```python
+@dataclass
+class RedisStatePersistence(BaseStatePersistence[Any, Any]):
+    redis_client: Any
+    run_id: str
+    async def snapshot_end(self, state, end) -> None:
+        data = self._adapter.dump_json([EndSnapshot(state=state, result=end)])
+        await self.redis_client.set(f'run:{self.run_id}:final', data)
+```
+
+#### `GraphTaskRequest` + `JoinItem` + `EndMarker`
+
+Low-level primitives driving `pydantic_graph`'s parallel execution engine (same engine powering `Agent.iter()`). `GraphTaskRequest(node_id, inputs, fork_stack)` is a unit of work on the internal task queue. `JoinItem(join_id, inputs, fork_stack)` is emitted when a parallel branch completes and needs to merge at a `Join`; the runtime accumulates them until all expected branches arrive. `EndMarker` is the internal completion signal, converted to `pydantic_graph.End` before yielding — check `isinstance(node, End)` in iteration loops, not `EndMarker`.
+
+```python
+@dataclass
+class GraphTaskRequest:
+    node_id: NodeID; inputs: Any; fork_stack: ForkStack
+@dataclass
+class JoinItem:
+    join_id: JoinID; inputs: Any; fork_stack: ForkStack
+```
+
+#### `GraphRun` + `NodeStep` (pydantic_ai's v2 graph internals)
+
+**Module:** `pydantic_ai.run`. `GraphRun` is the execution-state manager `agent.iter()` builds
+internally — task scheduling, fork/join coordination (`_active_reducers`), terminal-`End` result
+tracking. `NodeStep` bridges any v1 `BaseNode` (like `UserPromptNode`/`ModelRequestNode`/
+`CallToolsNode`) into the v2 execution system. For direct graph usage without an `Agent`, use
+`pydantic_graph.Graph.run()`/`.iter()` — `GraphRun`/`NodeStep` are exposed for introspection, not as
+a primary API.
+
+---
+
+### Testing & Evaluation
+
+#### `TestModel` + `TestStreamedResponse`
+
+Deterministic fake model. By default calls **every** function tool, then returns either an output
+tool call or a JSON summary of tool results. `TestModel.__test__ = False` keeps pytest from
+collecting it as a test class.
+
+```python
+TestModel(call_tools='all', custom_output_text=None, custom_output_args=None, seed=0)
+```
+
+Execution order: call all tools (or re-call failing ones on retry) → `custom_output_text` if set →
+`custom_output_args` if set → JSON summary if `allow_text_output` → else call
+`output_tools[seed % len(output_tools)]`.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+
+agent = Agent('test')
+
+@agent.tool_plain
+def add(a: int, b: int) -> int:
+    return a + b
+
+model = TestModel(custom_output_text='The answer is 42', seed=3)
+result = agent.run_sync('Any question', model=model)
+print(result.output)   # 'The answer is 42'
+print(model.last_model_request_parameters.function_tools)
+```
+
+#### `FunctionModel` + `AgentInfo`
+
+Replaces the LLM with a plain Python function `(messages, agent_info) -> ModelResponse` (or an
+async generator for `stream_function=`). Auto-injects a permissive default profile
+(`supports_json_schema_output=True`, `supports_json_object_output=True`) so structured output
+works without extra setup. Constructor accepts `profile`/`settings` overrides so tests can simulate
+a specific provider's capability profile.
+
+```python
+FunctionModel(function=None, *, stream_function=None, model_name=None, profile=None, settings=None)
+
+@dataclass(frozen=True, kw_only=True)
+class AgentInfo:
+    function_tools: list[ToolDefinition]
+    allow_text_output: bool
+    output_tools: list[ToolDefinition]
+    model_settings: ModelSettings | None
+    model_request_parameters: ModelRequestParameters
+    instructions: str | None
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.function import FunctionModel, AgentInfo
+from pydantic_ai.messages import ModelResponse, TextPart, ModelRequest, UserPromptPart
+
+def echo_model(messages, agent_info: AgentInfo) -> ModelResponse:
+    last = next(p.content for m in reversed(messages) if isinstance(m, ModelRequest)
+                for p in m.parts if isinstance(p, UserPromptPart))
+    return ModelResponse(parts=[TextPart(f'Echo: {last}')])
+
+agent = Agent(FunctionModel(echo_model))
+result = agent.run_sync('Hello, world!')
+assert result.output == 'Echo: Hello, world!'
+```
+
+#### `TestEmbeddingModel`
+
+Deterministic embedding double: returns all-`1.0` vectors of a configurable `dimensions`, and
+records `last_settings` for assertions.
+
+```python
+TestEmbeddingModel(model_name='test', *, provider_name='test', dimensions=8, settings=None)
+```
+
+```python
+from pydantic_ai import Embedder
+from pydantic_ai.embeddings import TestEmbeddingModel
+
+async with Embedder('openai:text-embedding-3-small').override(model=TestEmbeddingModel(dimensions=16)) as e:
+    result = await e.embed_query('hello')
+    assert len(result.embeddings[0]) == 16
+```
+
+#### `Dataset` + `Case` (pydantic_evals)
+
+A typed, YAML/JSON-serialisable collection of `Case`s driving `dataset.evaluate(task)`.
+
+```python
+Case(*, name=None, inputs, metadata=None, expected_output=None, evaluators=())
+Dataset(name=None, cases=[...], evaluators=[...])
+    .evaluate(task, *, max_concurrency=None, retry_task=None, repeat=1) -> EvaluationReport
+    .add_case(...); .add_evaluator(evaluator, specific_case=None)
+    .to_file(path); Dataset[...].from_file(path)
+```
+
+```python
+from dataclasses import dataclass
+from pydantic_evals import Case, Dataset
+from pydantic_evals.evaluators import Evaluator, EvaluatorContext
+
+@dataclass
+class ExactMatch(Evaluator):
+    def evaluate(self, ctx: EvaluatorContext) -> bool:
+        return ctx.output == ctx.expected_output
+
+dataset: Dataset[str, str, None] = Dataset(
+    cases=[Case(name='hello', inputs='hello', expected_output='HELLO')],
+    evaluators=[ExactMatch()],
+)
+report = await dataset.evaluate(lambda text: text.upper())
+report.print()
+```
+
+#### `Evaluator` + `EvaluatorContext` + `EvaluationResult` + `EvaluationReason`
+
+The core evaluator API. `EvaluatorContext` exposes `output`, `expected_output`, `duration`,
+`metrics`/`attributes` (populated by `increment_eval_metric`/`set_eval_attribute` called *inside*
+the task), and `.span_tree` for OTel-based structural assertions.
+
+```python
+class Evaluator(ABC):
+    def evaluate(self, ctx: EvaluatorContext) -> EvaluatorOutput | Awaitable[EvaluatorOutput]: ...
+# EvaluatorOutput = bool | int | float | str | EvaluationReason | Mapping[str, ...]
+EvaluationReason(value: EvaluationScalar, reason: str | None = None)
+```
+
+```python
+from dataclasses import dataclass
+from pydantic_evals.evaluators import Evaluator, EvaluatorContext, EvaluationReason
+
+@dataclass
+class MaxWords(Evaluator):
+    limit: int = 100
+    def evaluate(self, ctx: EvaluatorContext) -> EvaluationReason:
+        count = len(str(ctx.output).split())
+        return EvaluationReason(value=count <= self.limit, reason=None if count <= self.limit else f'{count} words')
+```
+
+#### Built-in evaluators — `Equals` / `EqualsExpected` / `Contains` / `IsInstance` / `MaxDuration` / `HasMatchingSpan`
+
+**Module:** `pydantic_evals.evaluators.common`.
+
+```python
+Equals(value)                                   # ctx.output == value
+EqualsExpected()                                 # ctx.output == ctx.expected_output
+Contains(value, *, case_sensitive=True, as_strings=False)
+IsInstance(type_name: str)                       # type(ctx.output).__name__ == type_name
+MaxDuration(seconds: float | timedelta)          # ctx.duration <= seconds
+HasMatchingSpan(query: SpanQuery)                # ctx.span_tree.any(query)
+```
+
+```python
+from pydantic_evals.evaluators.common import EqualsExpected, MaxDuration, HasMatchingSpan
+
+evaluators = [EqualsExpected(), MaxDuration(seconds=2.0), HasMatchingSpan({'name_contains': 'chat'})]
+```
+
+#### `ToolCorrectness` + `TrajectoryMatch`
+
+Span-based agentic evaluators (`pydantic_evals.evaluators`) reading `ctx.span_tree` — populated only when a tracer provider is registered (`logfire.configure(send_to_logfire=False)` once per process, plus `capabilities=[Instrumentation()]` on the agent under test) and degrading to zero scores otherwise. `ToolCorrectness(expected_tools, allow_extra=False, include_failed=False)` compares the multiset of tool names called — order irrelevant, duplicates require repeated calls. `TrajectoryMatch(expected_trajectory, order='in_order')` enforces ordered sequences: `'exact'` (binary pass/fail), `'in_order'` (LCS-based F1, default), `'any_order'` (multiset F1).
+
+```python
+@dataclass(frozen=True)
+class ToolCorrectness(Evaluator):
+    expected_tools: list[str]
+    allow_extra: bool = False
+    include_failed: bool = False
+@dataclass(frozen=True)
+class TrajectoryMatch(Evaluator):
+    expected_trajectory: list[str]
+    order: Literal['exact', 'in_order', 'any_order'] = 'in_order'
+```
+
+```python
+import logfire
+from pydantic_evals import Case, Dataset
+from pydantic_evals.evaluators import ToolCorrectness
+
+logfire.configure(send_to_logfire=False)   # required so ctx.span_tree is populated
+
+dataset = Dataset(name='demo', cases=[
+    Case(name='calls_weather', inputs='Weather in Paris?', evaluators=[ToolCorrectness(expected_tools=['weather_tool'])]),
+])
+```
+
+#### `ArgumentCorrectness` + `ArgumentMatchMode` + `ArgumentOccurrence` + `MaxToolCalls` + `MaxModelRequests`
+
+`ArgumentCorrectness(tool_name, expected_arguments, match_mode='subset', occurrence='first')` verifies the exact arguments of a specific tool invocation; `match_mode='exact'` requires all keys to match, `'subset'` (default) only requires the expected keys/values to be present. `occurrence` selects which call to inspect: `'first'`, `'last'`, or a 0-based `int` index. `MaxToolCalls(max_calls, include_failed=True)` and `MaxModelRequests(max_requests)` enforce budget caps as pass/fail evaluators — note `MaxToolCalls.include_failed` defaults `True` (opposite of `ToolCorrectness`).
+
+```python
+ArgumentMatchMode = Literal['subset', 'exact']
+@dataclass(frozen=True)
+class ArgumentCorrectness(Evaluator):
+    tool_name: str
+    expected_arguments: dict[str, Any]
+    match_mode: ArgumentMatchMode = 'subset'
+    occurrence: Literal['first', 'last'] | int = 'first'
+```
+
+```python
+from pydantic_evals.evaluators import ArgumentCorrectness, MaxToolCalls, MaxModelRequests
+
+evaluators = [
+    ArgumentCorrectness(tool_name='book_flight', expected_arguments={'origin': 'London'}, match_mode='subset'),
+    MaxToolCalls(max_calls=3),
+    MaxModelRequests(max_requests=2),
+]
+```
+
+#### `GEval` + `HasMatchingSpan` + `OutputConfig`
+
+`GEval(criteria, evaluation_steps, score_range=(1, 5), include_input=False, model=None)` implements a simplified G-Eval chain-of-thought judge: an LLM judge scores against explicit `criteria` + `evaluation_steps` using a direct integer score (rather than the original paper's log-prob expectation) for provider-agnostic simplicity. `HasMatchingSpan(query: SpanQuery)` passes when at least one span in the captured tree matches (delegates to `SpanQuery.any()`). `OutputConfig` is the shared wire `TypedDict` configuring judge model/output format for both `LLMJudge` and `GEval`.
+
+```python
+@dataclass(repr=False)
+class GEval(Evaluator):
+    criteria: str
+    evaluation_steps: list[str]
+    score_range: tuple[int, int] = (1, 5)
+    model: Model | KnownModelName | str | None = None
+```
+
+```python
+from pydantic_evals.evaluators import GEval
+
+coherence = GEval(
+    criteria='Rate the coherence of the poem to the given topic.',
+    evaluation_steps=['Read the poem.', 'Check line-to-line logic.', 'Score 1-5.'],
+    model='openai:gpt-4o-mini',
+)
+```
+
+#### `LLMJudge` + `GradingOutput` + judge functions
+
+LLM-as-judge evaluation. `GradingOutput(reason, pass_, score)`. Four standalone functions cover
+input/output/expected combinations; `set_default_judge_model` picks the model used when `LLMJudge`
+is constructed without an explicit one.
+
+```python
+LLMJudge(rubric: str, *, model=None, score=None, assertion=True, include_input=False, include_expected_output=False)
+judge_output(output, rubric) -> GradingOutput
+judge_input_output(inputs, output, rubric) -> GradingOutput
+judge_output_expected(output, expected_output, rubric) -> GradingOutput
+judge_input_output_expected(inputs, output, expected_output, rubric) -> GradingOutput
+```
+
+```python
+from pydantic_evals.evaluators.common import LLMJudge
+
+judge = LLMJudge(rubric='The answer mentions 42', model='openai:gpt-4o-mini')
+```
+
+#### `generate_dataset`
+
+AI-assisted test case generation from a `Dataset` subclass's schema.
+
+```python
+generate_dataset(*, dataset_type, path=None, custom_evaluator_types=(), model='openai:gpt-5.2', n_examples=3, extra_instructions=None) -> Dataset
+```
+
+```python
+from pydantic_evals import Dataset
+from pydantic_evals.generation import generate_dataset
+
+class MathDataset(Dataset[dict, float, None]):
+    pass
+
+dataset = await generate_dataset(dataset_type=MathDataset, n_examples=5, path='math_cases.yaml')
+```
+
+#### `CaseLifecycle`
+
+Per-case evaluation lifecycle hooks (`pydantic_evals.lifecycle`); a fresh instance is created per case so subclasses hold per-case state safely. `setup()` runs before the task (resource allocation), `prepare_context(ctx)` runs after the task but before evaluators (enrich `EvaluatorContext.metrics`/`attributes`, must return the context), `teardown(result)` always runs after evaluators — even if `setup`/`prepare_context` raised (recorded as `ReportCaseFailure`) — but if `teardown` itself raises, that exception propagates and can abort the whole evaluation run.
+
+```python
+class CaseLifecycle(Generic[InputsT, OutputT, MetadataT]):
+    async def setup(self) -> None: ...
+    async def prepare_context(self, ctx: EvaluatorContext) -> EvaluatorContext: ...
+    async def teardown(self, result: ReportCase | ReportCaseFailure | None) -> None: ...
+```
+
+```python
+from pydantic_evals.lifecycle import CaseLifecycle
+
+class TimingLifecycle(CaseLifecycle[str, str, None]):
+    async def setup(self) -> None:
+        self._start = time.monotonic()
+    async def prepare_context(self, ctx):
+        ctx.metrics['duration_ms'] = (time.monotonic() - self._start) * 1000
+        return ctx
+```
+
+#### `OnlineEvaluation`
+
+Attaches evaluators that fire **asynchronously in the background** after each run completes, wrapping `run()`/`run_stream()`/`iter()` without blocking the caller (streaming runs dispatch only after the context manager exits). `Evaluator` instances are auto-wrapped in `OnlineEvaluator` with default sampling; results emit as OTel `gen_ai.evaluation.result` log events, fannable to a custom `EvaluationSink` via `OnlineEvalConfig(default_sample_rate=..., default_sink=...)`. `disable_evaluation()` context manager suppresses evaluation (e.g. inside deterministic tests); `wait_for_evaluations(timeout=...)` blocks until background evaluations finish. `run_on_errors: bool` controls whether failed runs are still evaluated.
+
+```python
+@dataclass(kw_only=True)
+class OnlineEvaluation(AbstractCapability[AgentDepsT]):
+    evaluators: Sequence[Evaluator | OnlineEvaluator]
+    config: OnlineEvalConfig | None = None
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_evals.online_capability import OnlineEvaluation
+
+agent = Agent('openai:gpt-4o-mini', capabilities=[OnlineEvaluation(evaluators=[OutputNotEmpty()])])
+```
+
+The `evaluate` decorator applies the same `Evaluator` classes to live production traffic outside an
+`Agent` context, emitting the same `gen_ai.evaluation.result` OTel log events:
+
+```python
+@evaluate(IsNonEmpty(), OnlineEvaluator(MaxResponseWords(limit=150), sample_rate=0.5))
+async def summarise(document: str) -> str: ...
+```
+
+#### `SpanTree` + `SpanNode` + `SpanQuery`
+
+Structural OTel span inspection inside an evaluator, via `ctx.span_tree`. `SpanQuery` is a
+`TypedDict` supporting `name_contains`/`has_attribute_keys`/`min_duration`/logical combinators
+(`and_`/`or_`/`not_`)/child- and descendant-count predicates.
+
+```python
+ctx.span_tree.any({'name_contains': 'chat'})
+ctx.span_tree.find_all({'has_attribute_keys': ['gen_ai.request.model']})
+```
+
+---
+
+### Error Handling & Retries
+
+#### Exception hierarchy
+
+```
+AgentRunError (RuntimeError)
+├── UsageLimitExceeded
+├── ConcurrencyLimitExceeded
+├── UnexpectedModelBehavior
+│   ├── ContentFilterError
+│   └── IncompleteToolCall
+└── ModelAPIError
+    └── ModelHTTPError(status_code, model_name, body)
+
+UserError (RuntimeError)
+└── UndrainedPendingMessagesError
+
+TimeoutError
+└── HookTimeoutError(hook_name, func_name, timeout)
+```
+
+`ModelHTTPError.status_code` lets you branch on 429/5xx for retry-with-backoff vs. re-raise.
+`UndrainedPendingMessagesError` fires when a bare `async for node in agent.iter(...)` loop ends
+with `'when_idle'`-priority `ctx.enqueue()` messages never drained — use `agent.run()` or
+`AgentRun.next()` instead, both of which drain every priority.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelHTTPError, ContentFilterError, UsageLimitExceeded
+
+agent = Agent('openai:gpt-4o')
+try:
+    result = agent.run_sync(prompt)
+except ContentFilterError:
+    result = None
+except ModelHTTPError as e:
+    if e.status_code == 429:
+        ...  # backoff and retry
+    else:
+        raise
+```
+
+#### `RetryConfig` + `TenacityTransport` + `AsyncTenacityTransport` + `wait_retry_after`
+
+**Module:** `pydantic_ai.retries`. **Extra:** `pip install "pydantic-ai-slim[retries]"`. Wraps any
+`httpx` transport with tenacity-based retry, including honouring `Retry-After` response headers
+(seconds or HTTP-date format). `RetryConfig` is a `TypedDict` mirroring the tenacity `@retry`
+decorator kwargs (`stop`, `wait`, `retry`, `before_sleep`, `reraise`, ...). `wait_retry_after(
+fallback_strategy=None, max_wait=300)` is a wait-strategy factory reading the HTTP `Retry-After`
+header before falling back to the given strategy.
+
+```python
+class RetryConfig(TypedDict, total=False):
+    stop: StopBaseT; wait: WaitBaseT; retry: RetryBaseT; reraise: bool
+    before_sleep: Callable[[RetryCallState], None] | None
+
+def wait_retry_after(fallback_strategy=None, max_wait: float = 300) -> Callable[[RetryCallState], float]: ...
+```
+
+```python
+import httpx
+from tenacity import retry_if_exception_type, stop_after_attempt
+from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
+
+transport = AsyncTenacityTransport(
+    RetryConfig(
+        retry=retry_if_exception_type(httpx.HTTPStatusError),
+        wait=wait_retry_after(max_wait=120),
+        stop=stop_after_attempt(5),
+        reraise=True,
+    ),
+    validate_response=lambda r: r.raise_for_status(),
+)
+client = httpx.AsyncClient(transport=transport)
+```
+
+#### `PydanticAIDeprecationWarning`
+
+All pydantic-ai deprecations are raised as `PydanticAIDeprecationWarning(UserWarning)` rather than `DeprecationWarning`, so they're visible by default at runtime (Python only shows plain `DeprecationWarning` in `__main__`/test runners). Notable renamed/moved symbols this surfaces: `ThreadExecutor` → `UseThreadExecutor`, `CompletedStreamedResponse` moved from `pydantic_ai.models.wrapper` to `pydantic_ai.models`.
+
+```python
+class PydanticAIDeprecationWarning(UserWarning): ...
+```
+
+```python
+import warnings
+from pydantic_ai import PydanticAIDeprecationWarning
+
+with warnings.catch_warnings():
+    warnings.filterwarnings('error', category=PydanticAIDeprecationWarning)
+    # any deprecated call now raises instead of warning — useful in CI
+```
+
+---
+
+### Security (approval, SSRF, deferred tools)
+
+#### `ApprovalRequiredToolset` + `ApprovalRequired` + `ToolApproved` + `ToolDenied`
+
+Human-in-the-loop tool gating. Wraps a toolset and raises `ApprovalRequired` before executing a call unless `ctx.tool_call_approved` is `True` or `approval_required_func(ctx, tool_def, tool_args)` returns `False` for that call (default: every call requires approval). You can also raise `ApprovalRequired` (optionally with `metadata=`) directly inside a tool body. Either way this suspends the run — with `DeferredToolRequests` in `output_type`, the agent returns that value instead of raising; the caller inspects `.approvals`, builds `DeferredToolResults` via `.build_results(approve_all=True)` or per-call `ToolApproved(override_args=None)`/`ToolDenied(message=...)`, and resumes with **both** `deferred_tool_results=` and `message_history=result1.all_messages()` (the graph needs prior history to locate the pending tool call — omitting it raises `UserError`). Approved calls carry through `ToolApproved(metadata=...)` into `ctx.tool_call_metadata`.
+
+```python
+ApprovalRequired(metadata: dict | None = None)      # Exception
+ToolApproved(override_args: dict | None = None)
+ToolDenied(message: str = 'The tool call was denied.')
+
+@dataclass
+class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
+    def __init__(self, wrapped: AbstractToolset[AgentDepsT],
+                 approval_required_func: Callable[[RunContext, ToolDefinition, dict], bool] = lambda *a: True) -> None: ...
+```
+
+```python
+from pydantic_ai import Agent, ApprovalRequired, DeferredToolRequests, ToolApproved, ToolDenied, DeferredToolResults
+from pydantic_ai.toolsets import FunctionToolset, ApprovalRequiredToolset
+
+agent = Agent('openai:gpt-4o', output_type=[str, DeferredToolRequests])
+
+@agent.tool
+def drop_table(ctx, table_name: str) -> str:
+    if not ctx.tool_call_approved:
+        raise ApprovalRequired
+    return f'Table {table_name} dropped.'
+
+result = agent.run_sync('Drop temp_cache.')
+if isinstance(result.output, DeferredToolRequests):
+    approvals = {c.tool_call_id: ToolApproved() for c in result.output.approvals}
+    final = agent.run_sync(
+        message_history=result.all_messages(),
+        deferred_tool_results=DeferredToolResults(approvals=approvals),
+    )
+
+# Or gate an entire toolset at once, without touching individual tool bodies:
+gated = ApprovalRequiredToolset(wrapped=FunctionToolset([send_email]))
+agent2 = Agent('openai:gpt-4.1', toolsets=[gated], output_type=[str, DeferredToolRequests])
+r1 = agent2.run_sync('Send a welcome email to bob@example.com')
+if isinstance(r1.output, DeferredToolRequests):
+    resumed = agent2.run_sync(
+        message_history=r1.all_messages(),
+        deferred_tool_results=r1.output.build_results(approve_all=True),
+    )
+```
+
+#### `DeferredToolRequests` + `DeferredToolResults` + `CallDeferred`
+
+The general async-execution counterpart to approval: `CallDeferred(metadata=...)` suspends a tool
+call for an external system to resolve later (a webhook, a Temporal workflow, a queue worker).
+
+```python
+DeferredToolRequests(calls: list[ToolCallPart], approvals: list[ToolCallPart], metadata: dict[str, dict])
+DeferredToolResults(calls: dict[str, Any], approvals: dict[str, bool | ToolApproved | ToolDenied], metadata: dict)
+    .build_results(calls=None, approvals=None, approve_all=False)
+    .remaining(results) -> DeferredToolRequests | None
+CallDeferred(metadata: dict | None = None)     # Exception
+```
+
+```python
+from pydantic_ai import Agent, CallDeferred, DeferredToolRequests, DeferredToolResults, ToolReturn
+
+agent = Agent('openai:gpt-4o', output_type=[str, DeferredToolRequests])
+
+@agent.tool_plain
+def run_sql_query(sql: str) -> str:
+    raise CallDeferred(metadata={'sql': sql})
+
+result = agent.run_sync('Count users created in 2025.')
+if isinstance(result.output, DeferredToolRequests):
+    pending = result.output
+    results = {c.tool_call_id: ToolReturn(content='42') for c in pending.calls}
+    final = agent.run_sync(
+        message_history=result.all_messages(),
+        deferred_tool_results=DeferredToolResults(calls=results),
+    )
+```
+
+`ExternalToolset` (see Tools & Toolsets) is the toolset-level building block for this pattern —
+tools registered there are always deferred (`kind='external'`), resolved via `.calls` and
+`build_results(calls={call_id: result_value})`. `HandleDeferredToolCalls` (see Capabilities &
+Extensibility) resolves either flow inline instead of requiring a manual resume loop.
+
+#### `safe_download` + SSRF protection
+
+**Module:** `pydantic_ai._ssrf`. The internal function backing `WebFetch`'s local fallback and
+`web_fetch_tool` — multi-layered SSRF defence: protocol allowlist (`http`/`https` only), DNS
+resolution off the event loop, a hard-coded cloud-metadata-IP blocklist (**always** blocked, even
+with `allow_local=True`), 14 IPv4 + 7 IPv6 private ranges (including decoded 6to4/NAT64/ISATAP/
+Teredo transition forms), per-redirect-hop re-validation (no DNS-rebinding bypass), and stripping
+`Authorization`/`Cookie`/`Proxy-Authorization` on cross-origin redirects.
+
+```python
+async def safe_download(url, *, allow_local=False, timeout=30, max_redirects=10,
+                         allowed_domains=None, blocked_domains=None, headers=None) -> httpx.Response
+```
+
+```python
+from pydantic_ai._ssrf import safe_download
+
+async def fetch(url: str) -> str:
+    try:
+        response = await safe_download(url, allowed_domains=['docs.example.com'], timeout=10)
+        return response.text
+    except ValueError as e:
+        return f'blocked: {e}'
+```
+
+Cloud-metadata IPs blocked unconditionally include `169.254.169.254` (AWS IMDS/GCP/Azure/OCI/
+DigitalOcean/Hetzner), `169.254.170.2`/`169.254.170.23` (AWS ECS/EKS), `168.63.129.16` (Azure
+WireServer), `100.100.100.200` (Alibaba Cloud), `192.0.0.192` (Oracle Cloud), `169.254.42.42`
+(Scaleway).
+
+The local fallback path for the `WebFetch` capability (and the standalone `web_fetch_tool()`)
+routes every fetch through this same function: `allow_local_urls=False` by default blocks
+internal/loopback addresses, and `allowed_domains`/`blocked_domains` are enforced by the local tool
+itself (not just the native provider tool), so an allow-list stays effective even on models
+without native `WebFetchTool` support.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebFetch
+
+internal_agent = Agent('openai:gpt-4o', capabilities=[
+    WebFetch(local=True, allowed_domains=['docs.mycompany.com', 'api.mycompany.com']),
+])
+```
+
+---
+
+### UI / A2A / Adapters (AG-UI, Vercel AI, agent_to_a2a)
+
+#### `UIAdapter` + `UIEventStream` (+ `StateDeps`/`StateHandler`/`OnCompleteFunc`)
+
+**Module:** `pydantic_ai.ui`. Abstract base every frontend protocol adapter (`AGUIAdapter`,
+`VercelAIAdapter`) extends. Owns the request-security policy: `manage_system_prompt: Literal['server',
+'client']` (default `'server'` strips client-sent system prompts and auto-adds
+`ReinjectSystemPrompt`); `allowed_file_url_schemes` (default `{'http','https'}` only — widen only
+after auditing IAM exposure for `s3://`/`gs://`); `allowed_file_url_force_download`;
+`preserve_file_data` (uploaded-file round-trip fidelity).
+
+```python
+class UIAdapter(ABC, Generic[RunInputT, MessageT, EventT, AgentDepsT, OutputDataT]):
+    agent: AbstractAgent; run_input: RunInputT
+    manage_system_prompt: Literal['server', 'client'] = 'server'
+    allowed_file_url_schemes: frozenset[str] = frozenset({'http', 'https'})
+
+    @classmethod
+    async def dispatch_request(cls, request, *, agent, **kwargs) -> Response: ...
+```
+
+```python
+from starlette.applications import Starlette
+from starlette.routing import Route
+from pydantic_ai import Agent
+from pydantic_ai.ui.ag_ui import AGUIAdapter
+
+agent = Agent('anthropic:claude-sonnet-4-6', system_prompt='You are helpful.')
+
+async def handle(request):
+    return await AGUIAdapter.dispatch_request(request, agent=agent)
+
+app = Starlette(routes=[Route('/', handle, methods=['POST'])])
+```
+
+#### `AGUIAdapter` + `_AGUIFrontendToolset` + interrupt handling
+
+Implements the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui): converts `RunAgentInput`'s `Message`s to `ModelMessage`s and streams `BaseEvent`s back. `ag_ui_version` gates event shape: `< 0.1.13` emits `THINKING_*` events; `≥ 0.1.13` emits `REASONING_*` with round-trippable encrypted metadata; `≥ 0.1.15` emits typed multimodal input content instead of a generic binary blob. AG-UI tools declared in the request are exposed via `_AGUIFrontendToolset` (an `ExternalToolset` subclass). When `ag-ui-protocol >= 0.1.19` (`HAS_INTERRUPTS`), `approval_to_interrupt(call, metadata)` converts a pending `ToolCallPart` into an `Interrupt` for the frontend (with a `response_schema` describing `{approved, editedArgs?, reason?}`), and `resume_entry_to_approval(entry)` converts the client's `ResumeEntry` back into `ToolApproved`/`ToolDenied` — denying by default on any ambiguous payload (`status='cancelled'`, missing payload, or `approved` not exactly `True`). The deprecated `handle_ag_ui_request` helper and the `AGUIApp` Starlette wrapper are both superseded by `AGUIAdapter.dispatch_request(request, agent=agent)`.
+
+```python
+AGUIAdapter(agent, run_input, *, ag_ui_version=DEFAULT_AG_UI_VERSION, manage_system_prompt='server', ...)
+
+HAS_INTERRUPTS: bool
+def approval_to_interrupt(call: ToolCallPart, metadata: dict) -> Interrupt: ...
+def resume_entry_to_approval(entry: ResumeEntry) -> DeferredToolApprovalResult: ...
+```
+
+```python
+from fastapi import FastAPI, Request
+from pydantic_ai import Agent
+from pydantic_ai.ui.ag_ui import AGUIAdapter
+
+app = FastAPI()
+agent = Agent('anthropic:claude-sonnet-4-6')
+
+@app.post('/agent')
+async def run_agent(request: Request):
+    return await AGUIAdapter.dispatch_request(request, agent=agent, manage_system_prompt='server')
+```
+
+#### `VercelAIAdapter` + `VercelAIEventStream`
+
+A `UIAdapter` subclass speaking the Vercel AI SDK Data Stream Protocol. Parses inbound `RequestData` (`useChat`/`useCompletion` bodies) and emits `StartChunk` → `TextStartChunk`/`TextDeltaChunk`/`TextEndChunk` → `ToolInput*Chunk`/`ToolOutput*Chunk` → `FinishChunk` → `DoneChunk`. `sdk_version: Literal[5, 6] = 5` — v6 additionally streams `ToolApprovalRequestChunk`s so a frontend can render HITL approval prompts for an `ApprovalRequiredToolset`. `load_messages()`/`dump_messages()` round-trip `UIMessage`s to `ModelMessage`s for storage.
+
+```python
+@dataclass
+class VercelAIAdapter(UIAdapter[RequestData, UIMessage, BaseChunk, AgentDepsT, OutputDataT]):
+    sdk_version: Literal[5, 6] = 5
+    @classmethod
+    async def dispatch_request(cls, request, *, agent, sdk_version=5, **kwargs): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.ui.vercel_ai import VercelAIAdapter
+from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
+from pydantic_ai import FunctionToolset
+
+toolset = FunctionToolset()
+@toolset.tool
+async def delete_record(record_id: str) -> str: return f'Deleted {record_id}'
+
+agent = Agent('openai:gpt-4o', toolsets=[ApprovalRequiredToolset(toolset)])
+
+async def handle(request):
+    return await VercelAIAdapter.dispatch_request(request, agent=agent, sdk_version=6)
+```
+
+#### Web UI API — `create_api_app` + `ModelInfo` + `BuiltinToolInfo` + `ConfigureFrontend` + `ChatRequestExtra`
+
+**Module:** `pydantic_ai.ui._web.api`. Backend for `Agent.to_web()` (see Agents & Execution Core) — a Starlette app with `POST /chat`, `OPTIONS /chat`, `GET /configure`, `GET /health`. `models=` accepts a sequence or a `{label: model}` mapping (mapping keys become the picker's display labels). All response models serialise with `alias_generator=to_camel` (`builtinTools`, not `builtin_tools`). `ModelInfo`/`BuiltinToolInfo` (`id`, `name`) populate `ConfigureFrontend.models`/`builtin_tools`, served at `GET /configure`; `ChatRequestExtra` (`model`, `builtin_tools`) carries the frontend's per-request model/tool selection to `POST /chat`.
+
+```python
+create_api_app(agent, models=[...], native_tools=[...]) -> Starlette
+
+class ModelInfo(BaseModel, alias_generator=to_camel): id: str; name: str
+class ConfigureFrontend(BaseModel, alias_generator=to_camel):
+    models: list[ModelInfo]
+    builtin_tools: list[BuiltinToolInfo]
+class ChatRequestExtra(BaseModel, extra='ignore', alias_generator=to_camel):
+    model: str | None = None
+    builtin_tools: list[str] = []
+```
+
+```python
+import os
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.ui._web.api import create_api_app
+
+agent = Agent(OpenAIModel('gpt-4o'), system_prompt='You are a helpful assistant.')
+app = create_api_app(agent, models={'GPT-4o (fast)': 'openai:gpt-4o', 'GPT-4o-mini (cheap)': 'openai:gpt-4o-mini'})
+```
+
+#### `agent_to_a2a` / `AgentWorker` — see Durable Execution & Integrations
+
+Fully removed from `pydantic_ai`; use `fasta2a.pydantic_ai.agent_to_a2a` from the
+independently-maintained `fasta2a` package instead. Documented once, in the Durable Execution &
+Integrations section, to avoid duplication.
+
+
+---
+
 ## Revision History
 
 | Version | Date | Changes | Reviewer |
 |---------|------|----------|----------|
+| 2.33.0 | August 21, 2026 | Version bumped 2.31.0 → 2.33.0; `Latest:` header and `**Version:**` prose updated throughout, including inline `2.31.0` references. Added a new **Class & API Reference** section (16 subsections: Agents & Execution Core, Models & Providers, Tools & Toolsets, Native/Built-in Tools, Streaming & Events, Structured Output, Messages & Multimodal Content, Concurrency/Usage & Limits, Hooks/Middleware & Lifecycle, Capabilities & Extensibility, Durable Execution & Integrations, Persistence & Graph Support, Testing & Evaluation, Error Handling & Retries, Security, UI/A2A/Adapters) consolidating the 44 separate `pydantic_ai_class_deep_dives*.md` / `pydantic_ai_advanced_classes_part2.md` / `pydantic_ai_source_code_deep_dive.md` volumes, verified against installed pydantic-ai 2.33.0; those 44 files were deleted and `index.mdx` updated to match. | Claude routine |
 | 1.107.0 | June 21, 2026 | Version bumped 1.104.0 → 1.107.0 (three minor releases: 1.105.0, 1.106.0, 1.107.0). New features documented: `RunContext` additions (capabilities, loaded_capability_ids, discovered_tool_names, model_settings, metadata, tool_call_metadata); `AgentSpec` YAML/JSON agent configuration; `TemplateStr` Handlebars system prompts; `DeferredToolRequests`/`CallDeferred` async human-in-the-loop; `SkipModelRequest`/`SkipToolExecution`/`SkipToolValidation` hook short-circuits; `ConcurrencyLimiter` observability enhancements. New Vol. 22 class deep dives added covering 10 class groups verified against installed pydantic-ai 1.107.0. All top-level exports confirmed; no DeprecationWarnings. | Claude routine |
 | 1.104.0 | May 29, 2026 | Version bumped 1.102.0 → 1.104.0 (two minor releases: 1.103.0, 1.104.0); `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.104.0` (`.routine-envs/check-0529-pydantic`); all PASS. 178 top-level exports confirmed. | Claude routine |
 | 1.102.0 | May 23, 2026 | Version bumped 1.101.0 → 1.102.0; `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.102.0` (`.routine-envs/check-0523-pydantic`); all PASS. 179 top-level exports confirmed; API surface unchanged from 1.101.0. | Claude routine |
