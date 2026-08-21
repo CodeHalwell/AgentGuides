@@ -116,5 +116,5 @@ pip install agent-framework-declarative --pre  # Declarative workflows (pre-rele
 
 - [Comprehensive Python guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — full `agent-framework` API reference
 - [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) — `FoundryChatClient`, `OpenAIChatClient`, `AnthropicClient`
-- [azure-ai-agents integration — class reference Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_class_deep_dives/) — `AgentsClient`, `FunctionTool`, `ToolSet`, and more
+- [azure-ai-agents class reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#appendix-azure-ai-agents-add-on-separate-package) — `AgentsClient`, `FunctionTool`, `ToolSet`, and more (now consolidated into the comprehensive guide's appendix)
 - [Official `azure-ai-agents` PyPI page](https://pypi.org/project/azure-ai-agents/)
