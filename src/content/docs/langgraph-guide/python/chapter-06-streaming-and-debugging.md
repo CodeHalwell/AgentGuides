@@ -509,7 +509,7 @@ LangGraph 1.2.11 introduces an experimental v3 streaming protocol built on typed
 | `run.lifecycle` | `StreamChannel[LifecyclePayload]` | Subgraph start/end/error lifecycle events |
 | `run.subgraphs` | `StreamChannel[SubgraphRunStream]` | Nested subgraph run handles |
 
-Additional projections (`updates`, `custom`, `checkpoints`, `tasks`) are available via `run.extensions[...]` if their transformers are registered.
+Opt-in projections (`updates`, `custom`, `checkpoints`, `tasks`) are also exposed as **direct attributes** (`run.updates`, `run.custom`, etc.) when their built-in transformers are registered via `transformers=`. Only user-authored non-native transformers use `run.extensions["channel_name"]`.
 
 ```python
 from typing import Annotated

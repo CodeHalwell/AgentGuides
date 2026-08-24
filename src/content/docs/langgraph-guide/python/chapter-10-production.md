@@ -106,6 +106,12 @@ builder.add_node(
 from datetime import timedelta
 from langgraph.types import TimeoutPolicy
 
+# Timeout requires async nodes — LangGraph cancels via asyncio cancellation.
+# A sync node raises ValueError at compile time when timeout= is set.
+# async def search_node(state): ...    ← must be async
+# async def analysis_node(state): ...
+# async def check_node(state): ...
+
 # Hard 30-second cap — no matter what the node is doing
 builder.add_node(
     "web_search",
@@ -128,7 +134,7 @@ builder.add_node(
 builder.add_node("quick_check", check_node, timeout=10.0)
 ```
 
-`TimeoutPolicy` uses asyncio cancellation — it fires only when the event loop is released. CPU-bound blocking code (e.g. `time.sleep()`) will not be cancelled until it yields.
+`TimeoutPolicy` uses asyncio cancellation — LangGraph raises `ValueError` at compile time if any timeout-bearing node is synchronous.
 
 ### Heartbeating for long-running nodes
 
