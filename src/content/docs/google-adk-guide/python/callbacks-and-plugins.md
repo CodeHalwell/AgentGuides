@@ -340,6 +340,38 @@ import logging
 logging.getLogger("google_adk").setLevel(logging.DEBUG)
 ```
 
+**What it actually logs (source-verified, google-adk==2.7.1).** Each callback prints a compact block with an emoji prefix so you can `grep` it out of noisy stdout:
+
+| Callback | Prefix | Payload |
+|---|---|---|
+| `on_user_message_callback` | 🚀 `USER MESSAGE RECEIVED` | invocation_id, session_id, user_id, app_name, root agent, user content, branch (if any) |
+| `before_run_callback` | 🏃 `INVOCATION STARTING` | invocation_id, starting agent |
+| `on_event_callback` | 📢 `EVENT YIELDED` | event_id, author, content, `is_final_response()`, function calls/responses, `long_running_tool_ids` |
+| `after_run_callback` | ✅ `INVOCATION COMPLETED` | invocation_id |
+
+**Subclass for JSON logs.** `LoggingPlugin.__init__` accepts only `name=`, so any structural change (e.g. redirect to `structlog` or a JSON writer) means subclassing and overriding `_log`. This works because every callback funnels through that one method:
+
+```python
+import json
+import logging
+from google.adk.plugins import LoggingPlugin
+
+class JsonLoggingPlugin(LoggingPlugin):
+    """Route ADK callback logs into a JSON-line writer."""
+
+    def __init__(self, name: str = "json_logging_plugin"):
+        super().__init__(name=name)
+        self._log_impl = logging.getLogger("adk.jsonl")
+
+    # LoggingPlugin's _log is a plain method taking (self, msg: str). Override it.
+    def _log(self, msg: str) -> None:  # noqa: D401
+        # Split the "🚀 USER MESSAGE RECEIVED" prefix from indented "Key: value" lines
+        # emitted by the parent class and shove them into structured logs.
+        self._log_impl.info(json.dumps({"plugin": self.name, "msg": msg}))
+```
+
+**Pick one, not both.** `LoggingPlugin` and `DebugLoggingPlugin` overlap — `DebugLoggingPlugin` re-implements the same callbacks with fuller payload dumps (LLM prompt bodies, tool arg previews). Running both duplicates every line. In dev, prefer `DebugLoggingPlugin`; in prod, prefer `LoggingPlugin` (or your subclass) alone.
+
 ### `DebugLoggingPlugin`
 
 Per-invocation verbose dump — full LLM prompts, responses, and tool I/O. Use in dev only; it writes large payloads.
@@ -438,6 +470,27 @@ runner = Runner(
 ```
 
 After a turn, any `types.Part(inline_data=...)` in the user message is replaced by an artifact reference, keeping the LLM context small.
+
+**Two modes controlled by `attach_file_reference`** (source-verified, google-adk==2.7.1):
+
+```python
+# Default — attach a FileData reference so the model can *use* the artifact.
+plugin = SaveFilesAsArtifactsPlugin(attach_file_reference=True)
+
+# Store-only — replace the blob with a placeholder text part; the model
+# cannot access the file contents unless you expose `load_artifacts`.
+plugin = SaveFilesAsArtifactsPlugin(attach_file_reference=False)
+```
+
+With `attach_file_reference=False` the user message ends up as `[Uploaded Artifact: "invoice-042.pdf"]` — perfect when you want the raw file preserved but consumed by a downstream `FunctionTool` rather than the model itself. Add `load_artifacts` to the agent's `tools=` to let the model pull it back on demand.
+
+**Cross-session persistence via filename prefix.** The plugin uses `Blob.display_name` as the artifact filename. Prefix it with `user:` (e.g. `user:profile-photo.png`) to persist across sessions for that user_id — this is a convention baked into every ADK artifact service, not a plugin flag. Without the prefix the artifact is session-scoped and disappears when the session does.
+
+**Size ceiling — 20 MB inline.** The plugin refuses any inline blob over `_MAX_INLINE_DATA_SIZE_BYTES` (20 MiB), replaces it with `[Upload Error: File ... exceeds the maximum supported size of 20MB. ...]` and logs a warning. Larger files must be uploaded out-of-band and referenced by URI.
+
+**When the artifact_service is missing.** If you register the plugin but the `Runner` has no `artifact_service`, `on_user_message_callback` logs `"Artifact service is not set. SaveFilesAsArtifactsPlugin will not be enabled."` and lets the message pass through unchanged. Safe to leave registered in dev.
+
+**Pending-delta lifecycle.** The plugin writes each save's `{filename: version}` into `session.state["save_files_as_artifacts_plugin:pending_delta"]` during `on_user_message_callback`, then flushes that map into `callback_context.actions.artifact_delta` on the next `before_agent_callback`. That two-step is what makes artifact writes visible to the same-turn UI listener, without a race against the very session_service commit that would persist the pending map itself.
 
 ### `ContextFilterPlugin`
 

@@ -214,6 +214,81 @@ agent = LlmAgent(
 
 Note: when `RunConfig.support_cfc=True` and the agent's model is `gemini-2.*`, the runner swaps in `BuiltInCodeExecutor` automatically (`runners.py:1806-1814`).
 
+### `BuiltInCodeExecutor` — the full signature
+
+Source-verified against `google.adk.code_executors.built_in_code_executor` (google-adk==2.7.1). Every field is inherited from `BaseCodeExecutor`; `BuiltInCodeExecutor` overrides only `process_llm_request` (attaches `types.Tool(code_execution=types.ToolCodeExecution())` to the request) and stubs out `execute_code` because execution happens **inside the Gemini API call**, not client-side.
+
+```python
+from google.adk.code_executors import BuiltInCodeExecutor
+from google.adk.agents import LlmAgent
+
+executor = BuiltInCodeExecutor(
+    optimize_data_file=False,          # no-op for Gemini side execution (CSV path is external-executor only)
+    stateful=False,                    # ignored — Gemini manages its own execution session
+    error_retry_attempts=2,            # tracked by ADK's response processor for external executors; unused here
+    code_block_delimiters=[
+        ("```tool_code\n", "\n```"),
+        ("```python\n",   "\n```"),
+    ],
+    execution_result_delimiters=("```tool_output\n", "\n```"),
+    timeout_seconds=None,              # None = no client-side timeout wrapper
+)
+
+agent = LlmAgent(
+    name="quant",
+    model="gemini-2.5-pro",   # MUST be a Gemini model — raises ValueError otherwise
+    instruction=(
+        "You are a quantitative analyst. Solve numerical problems by "
+        "writing and executing Python. Always show intermediate steps."
+    ),
+    code_executor=executor,
+)
+```
+
+**Model check.** `process_llm_request` calls `is_gemini_model(llm_request.model)` and raises `ValueError("Gemini code execution tool is not supported for model {model}")` for anything else. To silence the check (e.g. when routing through `LiteLlm` to a Gemini-compatible endpoint), set the env var `GOOGLE_ADK_IGNORE_MODEL_ID_CHECK=1` — `is_gemini_model_id_check_disabled()` reads it.
+
+**What actually reaches the model.** Because execution happens server-side, code and output events are **not** yielded as separate `code` / `code_result` parts the way external executors emit them. The model sees code and output inline and produces one final response. If you need step-by-step audit trails, wrap the agent with a `LoggingPlugin` and inspect `event.get_function_calls()`.
+
+### `VertexAiCodeExecutor` — reuse an existing Code Interpreter extension
+
+Source-verified against `google.adk.code_executors.vertex_ai_code_executor`. Unlike `BuiltInCodeExecutor`, this one **actually runs code client-side via a Vertex AI Extension** and turns any file output (images, CSVs, JSON) into ADK artifacts.
+
+```python
+from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
+from google.adk.agents import LlmAgent
+
+# ── Option A: create a fresh extension for this executor ─────────────────────
+executor = VertexAiCodeExecutor(
+    # resource_name=None → creates a new Code Interpreter extension in your project
+    optimize_data_file=True,           # ADK swaps inline CSVs for `data_N_M.csv` placeholders + pandas hints
+    stateful=True,                     # persist a single execution session across turns in a session
+    error_retry_attempts=3,            # ADK retries up to N times when the response processor detects a code error
+    timeout_seconds=60,
+)
+
+# ── Option B: re-use one you already provisioned ─────────────────────────────
+shared_executor = VertexAiCodeExecutor(
+    resource_name=(
+        "projects/123456789/locations/us-central1/extensions/9876543210"
+    ),
+    stateful=True,
+)
+
+agent = LlmAgent(
+    name="charts",
+    model="gemini-2.5-pro",
+    instruction=(
+        "Answer with data analysis. Use pandas + matplotlib. "
+        "Save every chart to a PNG file — I will retrieve it as an artifact."
+    ),
+    code_executor=shared_executor,
+)
+```
+
+**Output file handling** (verified from `_execute_code_interpreter`): image outputs (`.png`, `.jpg`, `.jpeg`, `.gif`) get `mime_type=image/{ext}`; data outputs (`.csv`, `.tsv`, `.json`) get `mime_type=text/{ext}`; everything else falls through `mimetypes.guess_type` with `application/octet-stream` as final fallback. Each output file becomes a `File` on the returned `CodeExecutionResult` and is written to the `artifact_service` bound on the `Runner`. Retrieve them by filename with `artifact_service.load_artifact(...)`.
+
+**Why prefer `resource_name`.** Creating an extension on every `VertexAiCodeExecutor()` construction incurs a several-second cold start and creates a resource you must clean up. Provision one extension per environment (e.g. via Terraform) and pin all executors to that `resource_name`.
+
 ## Deprecated shell agents (still supported)
 
 All three accept `name` and `sub_agents` via `BaseAgent`. They emit `DeprecationWarning` on import and will be removed in a future release.

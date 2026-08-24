@@ -213,6 +213,53 @@ Setting `parallel_worker=True` lets the node be invoked concurrently per trigger
 
 All fields from `BaseNode` (`retry_config`, `timeout`, `wait_for_output`, ...) apply too.
 
+### `Workflow` — `max_concurrency` and `state_schema` in action
+
+Source-verified against `google.adk.workflow._workflow.Workflow` and its `_validate_state_schema` method (google-adk==2.7.1). Two fields deserve dedicated coverage because they change failure modes at graph-build time (`state_schema`) and at runtime (`max_concurrency`).
+
+```python
+from pydantic import BaseModel, Field
+from google.adk.workflow import Workflow, node, START
+
+# ── State schema is a Pydantic model. Every FunctionNode parameter that is
+#    not `ctx` / `node_input` / `self` must appear as a field here, or the
+#    Workflow raises StateSchemaError on construction — *before* it runs. ──
+class ResearchState(BaseModel):
+    topic: str = Field(default="")
+    findings: list[str] = Field(default_factory=list)
+    iteration: int = 0
+
+@node
+async def search(topic: str, ctx) -> list[str]:
+    # `topic` matches a state field → auto-injected from ctx.state at run time.
+    return [f"result about {topic} #{i}" for i in range(3)]
+
+@node
+async def critique(findings: list[str], ctx) -> str:
+    # `findings` matches a state field → auto-injected.
+    return "\n".join(findings)
+
+wf = Workflow(
+    name="research",
+    state_schema=ResearchState,
+    max_concurrency=4,                  # cap graph-scheduled parallel nodes at 4
+    edges=[(START, search, critique)],
+)
+# StateSchemaError would fire here if search() or critique() had a parameter
+# name (say, `authors`) that is not declared on ResearchState.
+```
+
+**Why the check happens at construction, not runtime.** `_validate_state_schema` runs from `model_post_init`, right after `_build_graph` compiles the edge list. That means a mis-named parameter (typo, refactor drift) surfaces the moment you import the module — *not* on the ninetieth production request. The exact error message:
+
+> `FunctionNode 'search' parameter 'authors' is not declared in state_schema 'ResearchState'. Declared fields: ['findings', 'iteration', 'topic']`
+
+**What `max_concurrency` does — and does not.** It caps parallelism for **graph-scheduled** nodes only. `ctx.run_node(...)` dynamic nodes are excluded from the cap because throttling them would deadlock (their parent awaits them inline). So:
+
+- A `(START, (a, b, c, d, e, f), join)` fan-out with `max_concurrency=2` runs `a, b` in parallel, then `c, d`, then `e, f`, then `join`.
+- A single node that internally does `await asyncio.gather(*[ctx.run_node(...) for _ in range(20)])` still fans out to 20 dynamic tasks regardless of `max_concurrency`.
+
+**`rerun_on_resume=True` (workflow level, default).** On session resume, the whole workflow's SETUP → LOOP → FINALIZE re-scans historical events via `_LoopState.replay_manager.scan_workflow_events` to rebuild `recovered_executions`, then only replays nodes whose `run_id` isn't already in the barrier. Set `rerun_on_resume=False` (and set it on individual nodes too) if you have side-effect-heavy nodes you never want to re-execute.
+
 ## Routing and conditions
 
 A node can steer the graph by setting `ctx.route`:
