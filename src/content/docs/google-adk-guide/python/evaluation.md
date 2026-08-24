@@ -459,22 +459,24 @@ from google.genai import types
 # ── artifact_service: preload files that an eval case will reference ─────────
 artifact_service = InMemoryArtifactService()
 
-# Preload one artifact per eval-case session_id — the case must set
-# SessionInput.session_id to the same value for the load to hit.
-await artifact_service.save_artifact(
-    app_name="travel_bench",
-    user_id="eval",
-    session_id="case-booking-01",
-    filename="itinerary_template.txt",
-    artifact=types.Part.from_text(text="Departure: {city}\nDate: {date}\n"),
-)
-
 # ── eval_set_results_manager: persist evalset_result.json to disk ────────────
 results_manager: EvalSetResultsManager = LocalEvalSetResultsManager(
     results_dir="./eval_results"
 )
 
+async def preload_artifacts() -> None:
+    # Preload one artifact per eval-case session_id — the case must set
+    # SessionInput.session_id to the same value for the load to hit.
+    await artifact_service.save_artifact(
+        app_name="travel_bench",
+        user_id="eval",
+        session_id="case-booking-01",
+        filename="itinerary_template.txt",
+        artifact=types.Part.from_text(text="Departure: {city}\nDate: {date}\n"),
+    )
+
 async def main() -> None:
+    await preload_artifacts()
     await AgentEvaluator.evaluate_eval_set(
         agent_module="my_package.travel_agent",
         eval_set=eval_set,
