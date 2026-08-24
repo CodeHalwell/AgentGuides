@@ -4734,7 +4734,7 @@ class UrlContextTool(BaseTool):
 url_context = UrlContextTool()   # module-level singleton — import and use directly
 ```
 
-The `is_gemini_model` guard can be bypassed for testing via `GOOGLE_ADK_DISABLE_GEMINI_MODEL_ID_CHECK` (env var name confirmed in 2.7.1 source; the analogous `ADK_DISABLE_GEMINI_MODEL_ID_CHECK` name is used by the general model-family check in `model_name_utils`, a separate flag — see Runner & Execution Internals).
+The `is_gemini_model` guard can be bypassed for testing via `ADK_DISABLE_GEMINI_MODEL_ID_CHECK=1` — `is_gemini_model_id_check_disabled()` in `google/adk/utils/model_name_utils.py` (2.7.1) reads that single flag via `is_env_enabled` and is the same check every built-in Gemini tool (`UrlContextTool`, `GoogleSearchTool`, `VertexAiSearchTool`, `GoogleMapsGroundingTool`, `EnterpriseSearchTool`, and `BuiltInCodeExecutor`) consults.
 
 ```python
 from google.adk.agents import LlmAgent
