@@ -201,6 +201,7 @@ from google.adk.agents.run_config import (
     ToolThreadPoolConfig,
 )
 from google.adk.sessions.base_session_service import GetSessionConfig
+from google.adk.telemetry.context import TelemetryConfig
 
 cfg = RunConfig(
     # ── Streaming ────────────────────────────────────────────────────────────
@@ -211,9 +212,12 @@ cfg = RunConfig(
     labels={"team": "growth", "cost_center": "b2b"},  # forwarded to Gemini billing
     custom_metadata={"trace_id": "abc-123"},          # merged into every Event
     http_options=types.HttpOptions(timeout=30_000),   # 30 s per LLM call (ms!)
+    telemetry=TelemetryConfig(),                      # OpenTelemetry span/attribute config
 
     # ── Live-mode audio / video ──────────────────────────────────────────────
-    response_modalities=[types.Modality.AUDIO, types.Modality.TEXT],
+    # NOTE: Gemini's live API accepts one modality per session. Pick AUDIO
+    # OR TEXT (not both) — combining them causes the connection to be rejected.
+    response_modalities=[types.Modality.AUDIO],
     speech_config=types.SpeechConfig(
         voice_config=types.VoiceConfig(
             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
@@ -224,6 +228,10 @@ cfg = RunConfig(
     realtime_input_config=types.RealtimeInputConfig(),
     explicit_vad_signal=True,                   # let model decide turn-end
     save_live_blob=True,                        # persist audio/video to artifact_service
+    save_live_audio=True,                       # keep raw audio bytes (in addition to blobs)
+    save_input_blobs_as_artifacts=True,         # persist user-uploaded blobs alongside events
+    avatar_config=types.AvatarConfig(),         # live-mode virtual avatar rendering
+    translation_config=types.TranslationConfig(),  # live-mode translation of user/agent audio
     enable_affective_dialog=True,               # emotion-aware responses
     proactivity=types.ProactivityConfig(),      # allow model-initiated turns
 
