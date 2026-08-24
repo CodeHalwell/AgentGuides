@@ -666,7 +666,8 @@ def smart_error_handler(exc: Exception) -> str:
     if isinstance(exc, ToolInvocationError):
         # The LLM passed the wrong arguments — give it a corrective hint
         errs = exc.filtered_errors or []
-        fields = ", ".join(e.get("loc", ("?",))[0] for e in errs)
+        # loc entries can be strings or ints (nested dict/list paths) — cast to str
+        fields = ", ".join(str(e.get("loc", ("?",))[0]) for e in errs) or "(unknown)"
         return (
             f"Tool '{exc.tool_name}' received invalid arguments for: {fields}. "
             f"Please check the tool's schema and try again with correct types."
