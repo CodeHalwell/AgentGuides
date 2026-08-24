@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
-Verified against **`langgraph==1.2.4`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -632,6 +632,96 @@ tool_node = ToolNode(
 
 ---
 
+## `ToolInvocationError` — Catching Invalid Argument Errors
+
+When `ToolNode` receives a tool call from an LLM but Pydantic validation of the arguments fails (e.g. a required field is missing or the wrong type was passed), it raises `ToolInvocationError` — a subclass of `ToolException`. This is distinct from a `ToolException` raised inside the tool body itself.
+
+`ToolInvocationError` carries:
+- `.tool_name` — the name of the tool that failed
+- `.tool_kwargs` — the raw kwargs that failed validation
+- `.source` — the underlying `pydantic.ValidationError`
+- `.filtered_errors` — validation errors with injected-parameter entries removed (so the LLM only sees errors about the arguments it controls)
+
+By default `ToolNode(handle_tool_errors=True)` catches `ToolInvocationError` and returns a `ToolMessage` with the formatted error message. You can differentiate handling with a callable:
+
+```python
+from pydantic import ValidationError
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolInvocationError
+from langchain_core.tools import tool
+
+
+@tool
+def book_flight(
+    origin: str,
+    destination: str,
+    date: str,
+    cabin_class: str = "economy",
+) -> str:
+    """Book a flight between two airports."""
+    return f"Flight booked: {origin} → {destination} on {date} ({cabin_class})"
+
+
+def smart_error_handler(exc: Exception) -> str:
+    """Return different messages based on the error type."""
+    if isinstance(exc, ToolInvocationError):
+        # The LLM passed the wrong arguments — give it a corrective hint
+        errs = exc.filtered_errors or []
+        fields = ", ".join(e.get("loc", ("?",))[0] for e in errs)
+        return (
+            f"Tool '{exc.tool_name}' received invalid arguments for: {fields}. "
+            f"Please check the tool's schema and try again with correct types."
+        )
+    # For any other exception (tool body raised), give a generic message
+    return f"Tool execution failed: {exc}"
+
+
+tool_node = ToolNode(
+    [book_flight],
+    handle_tool_errors=smart_error_handler,
+)
+```
+
+### Inspecting `ToolInvocationError` in an interceptor
+
+Combine `wrap_tool_call` with `ToolInvocationError` to audit argument errors before the fallback message is generated:
+
+```python
+from typing import Callable
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolCallRequest, ToolInvocationError
+from langgraph.types import Command
+
+
+def audit_and_validate(
+    request: ToolCallRequest,
+    execute: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
+    try:
+        return execute(request)
+    except ToolInvocationError as exc:
+        # Log the bad call for observability
+        print(
+            f"[SCHEMA ERROR] tool={exc.tool_name} "
+            f"kwargs={exc.tool_kwargs} "
+            f"errors={exc.filtered_errors}"
+        )
+        # Re-raise so handle_tool_errors produces the standard ToolMessage
+        raise
+
+
+tool_node = ToolNode(
+    [book_flight],
+    handle_tool_errors=True,
+    wrap_tool_call=audit_and_validate,
+)
+```
+
+> **When you see `ToolInvocationError`:** it almost always means the LLM hallucinated an argument name or passed the wrong type. Check the tool's docstring and Pydantic schema — `filtered_errors` points to exactly which fields caused the failure.
+
+---
+
 ## Summary
 
 | Feature | Class / Import | Key parameter / pattern |
@@ -647,3 +737,4 @@ tool_node = ToolNode(
 | Route from a tool | `Command` from `langgraph.types` | return from `@tool` |
 | Intercept tool calls | `ToolNode` | `wrap_tool_call` / `awrap_tool_call` |
 | Immutable arg mutation in interceptors | `ToolCallRequest` from `langgraph.prebuilt.tool_node` | `.override(tool_call=..., state=...)` — returns a new instance |
+| Catch invalid argument errors | `ToolInvocationError` from `langgraph.prebuilt.tool_node` | Subclass of `ToolException`; `.tool_name`, `.tool_kwargs`, `.filtered_errors` |

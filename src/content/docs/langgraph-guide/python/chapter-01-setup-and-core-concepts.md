@@ -10,7 +10,7 @@ sidebar:
 
 # Chapter 1 — Setup & Core Concepts
 
-**What you'll learn:** install LangGraph, understand the mental model, and learn the four primitives — **state, nodes, edges, compilation** — that every graph builds on. Also covers new 1.2.1 additions: `MessagesState`, `REMOVE_ALL_MESSAGES`, `context_schema`, `add_sequence()`, `push_message()`, and the `add_messages` `format` parameter.
+**What you'll learn:** install LangGraph, understand the mental model, and learn the four primitives — **state, nodes, edges, compilation** — that every graph builds on. Also covers `MessagesState`, `REMOVE_ALL_MESSAGES`, `context_schema`, `add_sequence()`, `push_message()`, the `add_messages` `format` parameter, and the new `set_node_defaults()` method for graph-wide policy defaults (1.2.11).
 
 **Time:** ~20 minutes.
 
@@ -48,11 +48,11 @@ Each node is a Python function. State flows through edges. Conditions route base
 
 ### Basic Installation
 
-LangGraph 1.2.4 is the current release. Install the core package alongside `langchain-core`:
+LangGraph 1.2.11 is the current release. Install the core package alongside `langchain-core`:
 
 ```bash
-# Core LangGraph (1.2.4)
-pip install "langgraph>=1.2.4" langchain-core
+# Core LangGraph (1.2.11)
+pip install "langgraph>=1.2.11" langchain-core
 
 # Async support
 pip install aiosqlite

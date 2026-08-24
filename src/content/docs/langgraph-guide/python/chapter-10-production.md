@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** the node-level reliability primitives (`RetryPolicy`, `TimeoutPolicy`, `CachePolicy`), checkpoint durability modes, loop-safeguard managed values (`IsLastStep`, `RemainingSteps`), the `Topic` channel for fan-in aggregation, per-Send timeouts, async execution, Docker deployment, CLI config, and troubleshooting the most common runtime errors.
 
-Verified against **`langgraph==1.2.6`** (modules: `langgraph.types`, `langgraph.managed`, `langgraph.channels`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.managed`, `langgraph.channels`).
 
 **Time:** ~30 minutes.
 
@@ -197,6 +197,99 @@ builder.add_node(
         key_func=query_cache_key,
         ttl=600,   # 10 minutes
     ),
+)
+```
+
+---
+
+## `set_node_defaults()` — Graph-Wide Policy Defaults
+
+Instead of passing `retry_policy`, `cache_policy`, `error_handler`, and `timeout` to every `add_node()` call individually, `set_node_defaults()` lets you set graph-wide defaults once. Per-node values always take precedence over the graph default.
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+from langgraph.cache.memory import InMemoryCache
+
+class State(TypedDict):
+    query: str
+    result: str
+
+def search_node(state: State) -> dict:
+    return {"result": f"search: {state['query']}"}
+
+def enrich_node(state: State) -> dict:
+    return {"result": f"enriched: {state['result']}"}
+
+def fast_check_node(state: State) -> dict:
+    return {"result": f"checked: {state['result']}"}
+
+def global_error_handler(state: State, exc: Exception) -> dict:
+    """Fallback when any node raises and has no per-node handler."""
+    return {"result": f"error handled: {exc}"}
+
+# set_node_defaults() applies to every node that doesn't override the policy.
+# Returns Self so you can chain add_node/add_edge calls.
+builder = (
+    StateGraph(State)
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
+        cache_policy=CachePolicy(ttl=300),          # 5-minute cache for every node
+        error_handler=global_error_handler,          # fallback handler for all nodes
+        timeout=TimeoutPolicy(run_timeout=30.0),     # 30-second hard cap for all nodes
+    )
+    .add_node("search", search_node)                 # uses all defaults
+    .add_node("enrich", enrich_node)                 # uses all defaults
+    .add_node(
+        "fast_check",
+        fast_check_node,
+        retry_policy=RetryPolicy(max_attempts=1),    # overrides default retry
+        timeout=5.0,                                 # overrides default timeout (5 s)
+        cache_policy=None,                           # opt out of caching for this node
+    )
+    .add_edge(START, "search")
+    .add_edge("search", "enrich")
+    .add_edge("enrich", "fast_check")
+    .add_edge("fast_check", END)
+)
+
+cache = InMemoryCache()
+graph = builder.compile(cache=cache)
+```
+
+**Important rules:**
+
+- `set_node_defaults()` must be called **before** `add_node()` calls that should receive the defaults — or at any point before `compile()`, since defaults are applied at compile time.
+- `cache_policy` and `error_handler` defaults are **not** applied to error-handler nodes (to prevent handlers from catching themselves or caching their own results).
+- `retry_policy` and `timeout` defaults **do** apply to error-handler nodes.
+- Subgraphs do **not** inherit defaults from their parent graph.
+
+### Combining with per-node overrides
+
+```python
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+
+# Graph where most nodes share one retry profile …
+builder = StateGraph(State).set_node_defaults(
+    retry_policy=RetryPolicy(max_attempts=3, backoff_factor=2.0),
+    timeout=TimeoutPolicy(run_timeout=60.0),
+)
+
+# … but the expensive LLM node gets a longer timeout and no cache
+builder.add_node(
+    "llm_call",
+    llm_node,
+    timeout=TimeoutPolicy(run_timeout=300.0, idle_timeout=60.0),  # overrides default
+    cache_policy=None,                                             # explicitly opt out
+)
+
+# … and the cheap lookup node gets a short timeout and strong caching
+builder.add_node(
+    "db_lookup",
+    db_node,
+    timeout=5.0,                               # overrides to 5-second hard cap
+    cache_policy=CachePolicy(ttl=3600),        # 1-hour cache for db results
 )
 ```
 

@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** LangGraph's two memory tiers. **Checkpointers** save graph state at each step so you can resume after a failure. **Stores** provide durable key/value storage (and optional semantic search) that survives across threads and users. You'll also see the **cross-thread memory** pattern that lets one conversation learn from another.
 
-Verified against **`langgraph==1.2.1`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).
 
 **Time:** ~25 minutes.
 
