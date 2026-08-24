@@ -576,7 +576,7 @@ from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     client = OpenAIChatClient()
-    worker_agent = Agent(client=client, instructions="Process documents.")
+    worker_agent = Agent(client=client, name="worker", instructions="Process documents.")
 
     # BackgroundAgentsProvider holds asyncio.Task and AgentSession references.
     # Call release_session() when the parent session is done to prevent leaks.
@@ -687,8 +687,9 @@ def auto_approve_read_only(function_call) -> bool:
 @tool
 def list_files(directory: str) -> list[str]:
     """List files in the given directory (must be under /tmp/workdir)."""
-    full = os.path.realpath(directory)
-    if not full.startswith(os.path.realpath(SAFE_ROOT)):
+    from pathlib import Path
+    full = Path(directory).resolve()
+    if not full.is_relative_to(Path(SAFE_ROOT).resolve()):
         raise ValueError(f"Access denied: {directory}")
     return os.listdir(full)
 
@@ -696,8 +697,9 @@ def list_files(directory: str) -> list[str]:
 @tool
 def read_file(path: str) -> str:
     """Read the contents of a file (must be under /tmp/workdir)."""
-    full = os.path.realpath(path)
-    if not full.startswith(os.path.realpath(SAFE_ROOT)):
+    from pathlib import Path
+    full = Path(path).resolve()
+    if not full.is_relative_to(Path(SAFE_ROOT).resolve()):
         raise ValueError(f"Access denied: {path}")
     with open(full) as f:
         return f.read()
@@ -722,10 +724,10 @@ async def main() -> None:
     )
     session = agent.create_session()
 
-    # list_files and read_file → auto-approved
-    # delete_file → approval_request returned for human confirmation
+    # list_files and read_file → auto-approved (within SAFE_ROOT)
+    # delete_file → function_approval_request returned for human confirmation
     result = await agent.run(
-        "List files in /tmp, then delete /tmp/old_log.txt",
+        "List files in /tmp/workdir, then delete /tmp/workdir/old_log.txt",
         session=session,
     )
     print(result.text)
