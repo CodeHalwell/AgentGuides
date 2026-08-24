@@ -189,6 +189,87 @@ cfg = RunConfig(
 # provide parallelism for pure-Python CPU work (GIL still applies).
 ```
 
+### The full `RunConfig` — every field in one runnable example
+
+Source-verified against `google.adk.agents.run_config` (google-adk==2.7.1). Every field is optional; the example below sets each one at least once so you can see the exact call site and type. Copy-paste-delete to build your own.
+
+```python
+from google.genai import types
+from google.adk.agents.run_config import (
+    RunConfig,
+    StreamingMode,
+    ToolThreadPoolConfig,
+)
+from google.adk.sessions.base_session_service import GetSessionConfig
+from google.adk.telemetry.context import TelemetryConfig
+
+cfg = RunConfig(
+    # ── Streaming ────────────────────────────────────────────────────────────
+    streaming_mode=StreamingMode.SSE,          # NONE | SSE | BIDI
+    max_llm_calls=200,                         # hard cap; <=0 disables
+
+    # ── Attribution & tracing ────────────────────────────────────────────────
+    labels={"team": "growth", "cost_center": "b2b"},  # forwarded to Gemini billing
+    custom_metadata={"trace_id": "abc-123"},          # merged into every Event
+    http_options=types.HttpOptions(timeout=30_000),   # 30 s per LLM call (ms!)
+    telemetry=TelemetryConfig(),                      # OpenTelemetry span/attribute config
+
+    # ── Live-mode audio / video ──────────────────────────────────────────────
+    # NOTE: Gemini's live API accepts one modality per session. Pick AUDIO
+    # OR TEXT (not both) — combining them causes the connection to be rejected.
+    response_modalities=[types.Modality.AUDIO],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
+        ),
+    ),
+    output_audio_transcription=types.AudioTranscriptionConfig(),
+    input_audio_transcription=types.AudioTranscriptionConfig(),
+    realtime_input_config=types.RealtimeInputConfig(),
+    # When True the CLIENT must send activity_start / activity_end (types.ActivityStart /
+    # types.ActivityEnd) to demarcate each user turn — the model will NOT auto-detect
+    # turn-end. Leave False (or unset) unless your live client explicitly emits VAD signals.
+    explicit_vad_signal=False,
+    save_live_blob=True,                        # persist audio/video to artifact_service
+    save_live_audio=True,                       # keep raw audio bytes (in addition to blobs)
+    save_input_blobs_as_artifacts=True,         # persist user-uploaded blobs alongside events
+    avatar_config=types.AvatarConfig(),         # live-mode virtual avatar rendering
+    translation_config=types.TranslationConfig(),  # live-mode translation of user/agent audio
+    enable_affective_dialog=True,               # emotion-aware responses
+    proactivity=types.ProactivityConfig(),      # allow model-initiated turns
+
+    # ── Session handling ─────────────────────────────────────────────────────
+    session_resumption=types.SessionResumptionConfig(),  # transparent resumption
+    history_config=types.HistoryConfig(),                # what history flows to model
+    context_window_compression=types.ContextWindowCompressionConfig(),
+    get_session_config=GetSessionConfig(num_recent_events=50),
+
+    # ── Tool concurrency (live mode only) ────────────────────────────────────
+    tool_thread_pool_config=ToolThreadPoolConfig(max_workers=4),
+
+    # ── Advanced Gemini features ─────────────────────────────────────────────
+    support_cfc=False,                          # experimental compositional function calling
+    include_thoughts_from_other_agents=False,   # share <thinking> across sub-agents
+    model_input_context=None,                   # pre-seed model input with types.Content list
+)
+```
+
+**`custom_metadata` is a first-class tracing hook.** Verified in `runners.py`: every emitted `Event` gets `event.custom_metadata = self.custom_metadata` merged in before yielding. Use it to correlate agent turns with your APM span IDs without wrapping the runner:
+
+```python
+import uuid
+
+trace_id = str(uuid.uuid4())
+cfg = RunConfig(custom_metadata={"trace_id": trace_id, "surface": "web"})
+
+async for event in runner.run_async(user_id="u1", session_id="s1",
+                                    new_message=msg, run_config=cfg):
+    # event.custom_metadata → {"trace_id": "…", "surface": "web"}
+    logger.info("agent_event", extra=event.custom_metadata)
+```
+
+**`get_session_config` — control what history the session service loads.** By default the session service returns every event ever recorded. On a long-lived chat that's expensive both in DB round-trips and in prompt tokens. `GetSessionConfig(num_recent_events=N)` tells the service to fetch only the last N; `after_timestamp` (float, unix seconds) is an alternative window.
+
 ## Session services
 
 All subclass `BaseSessionService` and expose `create_session`, `get_session`, `list_sessions`, `delete_session`, `append_event`.
@@ -628,6 +709,35 @@ runner = Runner(
 - High-frequency, short user messages (chat, Q&A)
 
 > **Experimental**: `ContextCacheConfig` requires `@experimental(FeatureName.AGENT_CONFIG)`. It is only compatible with Gemini models that support context caching (check the Gemini docs for supported model versions).
+
+### `ContextCacheConfig` — the `create_http_options` timeout knob
+
+Source-verified against `google.adk.agents.context_cache_config` (google-adk==2.7.1). `create_http_options` is often overlooked but essential in production: **when Gemini's `CachedContent.create()` call is slow** (network hiccup, quota spike), your first request of a new session would otherwise stall waiting for the cache to be created. Setting a timeout tells ADK to give up on cache creation and just serve the request uncached rather than pinning the request.
+
+```python
+from google.genai import types
+from google.adk.agents.context_cache_config import ContextCacheConfig
+
+cache_cfg = ContextCacheConfig(
+    cache_intervals=25,        # up to 25 invocations reuse the same cache
+    ttl_seconds=3600,           # 1-hour TTL — Gemini also enforces its own model max
+    min_tokens=2048,            # never bother caching prefixes under 2 k prior-request tokens
+    create_http_options=types.HttpOptions(
+        timeout=10_000,          # 10 s cap on CachedContent.create() (milliseconds!)
+        # headers={"x-tenant-id": "acme"},  # custom headers reach the cache-create RPC too
+    ),
+)
+
+# Cache TTL string helper — used internally by ADK when building CachedContent:
+print(cache_cfg.ttl_string)  # → "3600s"
+```
+
+**Two hard rules from the source docstring** you must not confuse:
+
+- **Second-turn earliest.** No cache is created on the first request of a session — Gemini has no prior token count to gate on. Caching begins on turn 2 onwards.
+- **Model minimum floor.** `min_tokens` is a **floor above** Gemini's own model-specific minimum. Verified in the source docstring: Gemini 2.5 requires **2048 tokens** cacheable prefix; Gemini 3 requires **4096**. Setting `min_tokens=0` still respects those floors — it does not opt you into shorter caching.
+
+The `pydantic` `extra="forbid"` config on the class means typos (`ttl_secs=`, `cache_interval=`) raise `ValidationError` immediately at construction time, which is what you want.
 
 ## `run_async` return semantics
 

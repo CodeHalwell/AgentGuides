@@ -444,6 +444,75 @@ async def main():
 asyncio.run(main())
 ```
 
+### `evaluate_eval_set` — CSV output, preloaded artifacts, results manager
+
+Source-verified against `google.adk.evaluation.agent_evaluator.evaluate_eval_set` (google-adk==2.7.1). Three params are worth calling out because they're often ignored and each solves a real reporting problem.
+
+```python
+import asyncio
+from google.adk.evaluation.agent_evaluator import AgentEvaluator
+from google.adk.evaluation.eval_set_results_manager import EvalSetResultsManager
+from google.adk.evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
+from google.adk.artifacts import InMemoryArtifactService
+from google.genai import types
+
+# ── artifact_service: preload files that an eval case will reference ─────────
+artifact_service = InMemoryArtifactService()
+
+# ── eval_set_results_manager: persist evalset_result.json to disk ────────────
+results_manager: EvalSetResultsManager = LocalEvalSetResultsManager(
+    agents_dir="./eval_results"
+)
+
+async def preload_artifacts() -> None:
+    # Preload one artifact per eval-case session_id — the case must set
+    # SessionInput.session_id to the same value for the load to hit.
+    await artifact_service.save_artifact(
+        app_name="travel_bench",
+        user_id="eval",
+        session_id="case-booking-01",
+        filename="itinerary_template.txt",
+        artifact=types.Part.from_text(text="Departure: {city}\nDate: {date}\n"),
+    )
+
+async def main() -> None:
+    await preload_artifacts()
+    await AgentEvaluator.evaluate_eval_set(
+        agent_module="my_package.travel_agent",
+        eval_set=eval_set,
+        eval_config=eval_config,
+        num_runs=3,
+        print_detailed_results=True,
+
+        # Per-invocation results (metric name, value, pass/fail) written as CSV.
+        # Parent directory is created automatically.
+        output_file="./eval_results/travel_bench_20260824.csv",
+
+        # Preloaded artifacts reach eval cases whose SessionInput.session_id matches
+        # the id you used to save_artifact above.
+        artifact_service=artifact_service,
+
+        # Required whenever eval_set_results_manager is provided; otherwise a
+        # ValueError is raised at the top of evaluate_eval_set.
+        app_name="travel_bench",
+        eval_set_results_manager=results_manager,
+    )
+
+asyncio.run(main())
+```
+
+**What ends up on disk:**
+
+- `./eval_results/travel_bench_20260824.csv` — one row per (eval_case, metric, invocation). Columns include the eval_set_id, eval_id, metric name, score, threshold, and pass/fail flag. Written by `_write_results_to_csv` after all cases finish.
+- `./eval_results/travel_bench/.adk/eval_history/<result_id>.evalset_result.json` — the persisted `EvalSetResult` written by `LocalEvalSetResultsManager`. The path is built as `<agents_dir>/<app_name>/.adk/eval_history/<result_id>.evalset_result.json` (see `_get_eval_history_dir` in `local_eval_set_results_manager.py`). This is what the ADK Web UI reads back when browsing historical runs.
+
+**Two hard rules from the source (verified in the docstring & body):**
+
+- `eval_config` is required — passing `None` raises `ValueError("`eval_config` is required.")`.
+- If you set `eval_set_results_manager` but leave `app_name` `None`, the same top-of-function check raises `ValueError("app_name is required when eval_set_results_manager is provided.")`.
+
+**Legacy `criteria=` shortcut.** Still accepted, still deprecated. Verified: `AgentEvaluator` auto-maps `criteria={metric: threshold}` → `EvalConfig(criteria={metric: BaseCriterion(threshold=threshold)})` and logs a `DeprecationWarning`. Migrate anything you own by constructing `EvalConfig` explicitly.
+
 ## Saving eval results
 
 ```python
