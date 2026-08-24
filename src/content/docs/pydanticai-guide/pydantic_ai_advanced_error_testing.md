@@ -321,10 +321,10 @@ except FallbackExceptionGroup as eg:
 Use `Hooks` to handle errors at the capability level for cross-cutting concerns like rate-limit backoff:
 
 ```python
+import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import ModelHTTPError
-import time
 
 retry_hooks = Hooks()
 
@@ -334,7 +334,9 @@ async def retry_on_rate_limit(ctx, *, request_context, error: Exception):
         # `retry_after` is a property returning `float | None` (parses
         # both integer seconds and RFC-9110 date formats).
         wait = error.retry_after if error.retry_after is not None else 5.0
-        time.sleep(min(wait, 30.0))  # back off before raising so the agent can retry
+        # Use `asyncio.sleep` — this hook runs on the event loop, so
+        # `time.sleep` here would block every other coroutine.
+        await asyncio.sleep(min(wait, 30.0))
     raise error
 
 agent = Agent('openai:gpt-4o', capabilities=[retry_hooks])

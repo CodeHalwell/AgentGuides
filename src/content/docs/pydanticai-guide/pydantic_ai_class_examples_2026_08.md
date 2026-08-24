@@ -119,29 +119,48 @@ Two things to notice:
 
 ## 2. `RunContext` — everything a tool can see
 
-`pydantic_ai.RunContext` is the object PydanticAI passes to any tool, output validator, or capability hook whose signature declares it. Every field of `RunContext` is source-verified (`pydantic_ai/_run_context.py`):
+`pydantic_ai.RunContext` is the object PydanticAI passes to any tool, output validator, or capability hook whose signature declares it. The following fields and helpers are source-verified against 2.33.0 (`pydantic_ai/_run_context.py`):
 
 | Field                     | Type / default                          | What it holds                                                       |
 | ------------------------- | --------------------------------------- | ------------------------------------------------------------------- |
 | `deps`                    | `AgentDepsT`                            | The value you passed as `deps=` to the run.                         |
 | `model`                   | `AbstractModel`                         | The active model (may be a `RealtimeModel`).                        |
 | `usage`                   | `RunUsage`                              | Live counters — requests, tokens, cost.                             |
-| `usage_limits`            | `UsageLimits | None`                    | The limits the run is enforcing (see next section).                 |
-| `agent`                   | `Agent | None`                          | Back-reference to the agent (only set inside a run).                |
-| `prompt`                  | `str | Sequence[UserContent] | None`    | The original user prompt.                                           |
+| `usage_limits`            | `UsageLimits \| None`                   | The limits the run is enforcing. During a live run it is **always** a real `UsageLimits` (the default `UsageLimits()` if you passed nothing); only `None` on synthetic contexts not backed by a run (e.g. `Agent.system_prompt_parts`). |
+| `agent`                   | `Agent \| None`                         | Back-reference to the agent (only set inside a run).                |
+| `prompt`                  | `str \| Sequence[UserContent] \| None`  | The original user prompt.                                           |
 | `messages`                | `list[ModelMessage]`                    | Full running message history.                                       |
 | `validation_context`      | `Any`                                   | Passed through to Pydantic validators.                              |
-| `tracer` / `instrumentation_version` | OpenTelemetry plumbing        | Used by `logfire.instrument_pydantic_ai()`.                         |
+| `tracer` / `instrumentation_version` / `trace_include_content` | OpenTelemetry plumbing | Wired by `logfire.instrument_pydantic_ai()`; `trace_include_content=True` embeds message bodies in spans. |
 | `retries`                 | `dict[str, int]`                        | Per-tool retry counts.                                              |
-| `tool_call_id`, `tool_name` | `str | None`                          | Populated **only** while inside a specific tool's execution.        |
+| `tool_call_id`, `tool_name` | `str \| None`                         | Populated **only** while inside a specific tool's execution.        |
 | `retry`, `max_retries`    | `int`                                   | Current / configured retry count for **this** invocation.           |
 | `run_step`                | `int`                                   | 0-based iteration index within the run.                             |
 | `tool_call_approved`      | `bool`                                  | `True` when re-entering after `ToolApproved`.                       |
 | `tool_call_metadata`      | `Any`                                   | Metadata from `DeferredToolResults.metadata[tool_call_id]`.         |
 | `partial_output`          | `bool`                                  | `True` if the validator is running mid-stream.                      |
-| `run_id`, `conversation_id` | `str | None`                          | Correlation ids (auto-generated as UUID7 when not passed).          |
-| `metadata`                | `dict[str, Any] | None`                 | Agent-level metadata plus overrides.                                |
-| `model_settings`          | `ModelSettings | None`                  | The resolved per-run model settings.                                |
+| `run_id`, `conversation_id` | `str \| None`                         | Correlation ids (auto-generated as UUID7 when not passed).          |
+| `metadata`                | `dict[str, Any] \| None`                | Agent-level metadata plus overrides.                                |
+| `model_settings`          | `ModelSettings \| None`                 | The resolved per-run model settings.                                |
+| `pending_messages`        | `list[PendingMessage] \| None`          | The internal drain queue; use `ctx.enqueue(...)` rather than mutating. |
+| `tool_manager`            | `ToolManager \| None`                   | Programmatic tool dispatch (useful for sandboxes). Absent under Temporal. |
+| `realtime_session`        | `RealtimeSession \| None`               | The live realtime session, once connected.                          |
+| `root_capability`         | `AbstractCapability \| None`            | The effective merged capability chain for this run.                 |
+| `capabilities`            | `dict[str, AbstractCapability]`         | All capabilities registered for the run.                            |
+| `loaded_capability_ids`   | `set[str]`                              | Which deferred capabilities the model has explicitly loaded.        |
+| `discovered_tool_names`   | `set[str]`                              | Names of deferred function tools known from history.                |
+| `capability_loaded`       | `bool \| None`                          | Whether the currently-dispatching capability is loaded.             |
+
+Helper properties / methods:
+
+| Member                    | Kind                                          | Purpose                                                       |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
+| `last_attempt`            | property → `bool`                             | `True` when `retry == max_retries` — the final try before failure. |
+| `enqueue(...)`            | method → `str \| None`                        | Append content to `pending_messages` from a tool or hook.     |
+| `is_tool_available(name)` | method → `bool`                               | Whether a tool name is currently callable this step.          |
+| `realtime`                | property → `bool`                             | Whether this is a realtime run (works even before the session connects). |
+
+Private, framework-only attributes (`_cancellation`, `_event_stream_buffer`, `_mcp_tool_defs_cache`, `_anchored_evidence`) exist on the dataclass — they're implementation detail and should not be read from tool code.
 
 ### Runnable example — using every commonly-needed field
 
@@ -278,17 +297,26 @@ from pydantic_ai import Agent, BinaryContent, ToolReturn
 
 agent = Agent('openai:gpt-4o-mini')
 
+CHART_PATH = Path('/tmp/chart.png')
+
 
 @agent.tool_plain
 def render_chart(spec: str) -> ToolReturn:
     """Pretend to render a chart. Return the result value plus the PNG."""
-    png_bytes = Path('/tmp/chart.png').read_bytes() if Path('/tmp/chart.png').exists() else b''
+    # Only send the image when we actually have valid bytes on disk —
+    # a stub payload like b'\x89PNG' is not a real PNG and downstream
+    # providers reject it during content validation.
+    content: list = ['Rendered chart follows:']
+    if CHART_PATH.exists():
+        content.append(
+            BinaryContent(data=CHART_PATH.read_bytes(), media_type='image/png')
+        )
+    else:
+        content.append('(no chart image attached — file was not generated)')
+
     return ToolReturn(
         return_value={'ok': True, 'spec': spec, 'points': 42},
-        content=[
-            'Rendered chart follows:',
-            BinaryContent(data=png_bytes or b'\x89PNG', media_type='image/png'),
-        ],
+        content=content,
         metadata={
             'internal_trace_id': 'chart-8f7a',
             'render_ms': 87,
@@ -389,10 +417,14 @@ Fields:
 ### Runnable example — cache a long system-of-record document
 
 ```python
+from pathlib import Path
 from pydantic_ai import Agent, CachePoint
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-LONG_HANDBOOK = open('/tmp/handbook.txt').read() if False else 'X' * 20_000
+try:
+    LONG_HANDBOOK = Path('/tmp/handbook.txt').read_text()
+except FileNotFoundError:
+    LONG_HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
 
 agent = Agent('anthropic:claude-3-5-sonnet-latest')
 
@@ -487,7 +519,9 @@ The key point missed by many first-time users: **the same underlying `FunctionTo
 
 ## 9. `WebSearchTool` — hosted web search across five providers
 
-`pydantic_ai.WebSearchTool` (`pydantic_ai/native_tools/__init__.py`) is a native tool spec; you add it to `capabilities=[...]`. Fields (all keyword-only):
+`pydantic_ai.WebSearchTool` (`pydantic_ai/native_tools/__init__.py`) is a native-tool _spec_ — a plain dataclass. To register it on an agent you wrap it in the [`NativeTool`][pydantic_ai.capabilities.NativeTool] capability (or the higher-level [`WebSearch`][pydantic_ai.capabilities.WebSearch] capability, which also falls back to a local implementation on providers that lack native web search). Passing a bare `WebSearchTool` into `capabilities=[...]` fails typing at construction time in 2.33.
+
+Fields (all keyword-only):
 
 | Field                  | Type / default                            | Providers that read it                    |
 | ---------------------- | ----------------------------------------- | ----------------------------------------- |
@@ -504,6 +538,7 @@ Note the two mutually exclusive fields: on Anthropic, `blocked_domains` and `all
 
 ```python
 from pydantic_ai import Agent, WebSearchTool, WebSearchUserLocation
+from pydantic_ai.capabilities import NativeTool
 
 portable = WebSearchTool(
     search_context_size='high',
@@ -520,11 +555,14 @@ news_agent = Agent(
     'anthropic:claude-3-5-sonnet-latest',
     capabilities=[
         # Anthropic honours user_location + max_uses + allowed_domains.
-        WebSearchTool(
-            search_context_size='high',
-            max_uses=3,
-            allowed_domains=['bbc.co.uk', 'reuters.com'],
-            user_location=portable.user_location,
+        # The spec must be wrapped in `NativeTool(...)` to become a capability.
+        NativeTool(
+            WebSearchTool(
+                search_context_size='high',
+                max_uses=3,
+                allowed_domains=['bbc.co.uk', 'reuters.com'],
+                user_location=portable.user_location,
+            ),
         ),
     ],
     instructions='Use web search whenever you cite a fact.',
@@ -534,6 +572,8 @@ print(news_agent.run_sync('What did the Bank of England do this week?').output)
 ```
 
 `max_uses` gives the provider a hard budget for how many searches this run may fire; combine it with `UsageLimits(cost_limit=...)` for defence in depth.
+
+For provider-adaptive registration, swap `NativeTool(WebSearchTool(...))` for `WebSearch(...)` from `pydantic_ai.capabilities` — it uses the provider's native tool where available and falls back to a local implementation elsewhere.
 
 ---
 

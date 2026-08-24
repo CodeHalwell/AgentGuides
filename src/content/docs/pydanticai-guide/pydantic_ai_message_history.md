@@ -376,10 +376,14 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 Supported (2.33.0): Anthropic · Amazon Bedrock (Converse API) · OpenAI (GPT-5.6 models) · OpenRouter (Anthropic/Gemini models via `OpenRouterModel`, and OpenAI GPT-5.6 via `OpenAIChatModel`/`OpenAIResponsesModel` with `OpenRouterProvider`).
 
 ```python
+from pathlib import Path
 from pydantic_ai import Agent, CachePoint
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-HANDBOOK = open('/tmp/handbook.txt').read() if False else 'X' * 20_000
+try:
+    HANDBOOK = Path('/tmp/handbook.txt').read_text()
+except FileNotFoundError:
+    HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
 
 agent = Agent('anthropic:claude-3-5-sonnet-latest')
 
