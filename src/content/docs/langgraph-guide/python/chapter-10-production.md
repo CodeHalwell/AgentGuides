@@ -269,7 +269,7 @@ graph = builder.compile(cache=cache)
 - `set_node_defaults()` can be called at **any point before `compile()`** — defaults are resolved at compile time and apply to every node in the graph, regardless of the order `add_node()` and `set_node_defaults()` are called.
 - `cache_policy` and `error_handler` defaults are **not** applied to error-handler nodes (to prevent handlers from catching themselves or caching their own results).
 - `retry_policy` and `timeout` defaults **do** apply to error-handler nodes.
-- **`timeout` requires `async def` nodes.** LangGraph cancels timed-out nodes via asyncio; a timeout on a synchronous node raises `ValueError` at compile time.
+- **`timeout` requires `async def` nodes.** LangGraph cancels timed-out nodes via asyncio cancellation; passing `timeout` for a synchronous node is rejected at compile time.
 - Subgraphs do **not** inherit defaults from their parent graph.
 
 ### Combining with per-node overrides
