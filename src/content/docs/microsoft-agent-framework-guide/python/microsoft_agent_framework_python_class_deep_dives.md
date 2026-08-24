@@ -59,11 +59,9 @@ researcher = Agent(client=client, name="researcher",
 writer     = Agent(client=client, name="writer",
                    instructions="Turn the bullet points into a polished paragraph.")
 
-builder = WorkflowBuilder()
-builder.add_executor(researcher)
-builder.add_executor(writer)
+builder = WorkflowBuilder(start_executor=researcher)
 builder.add_edge(researcher, writer)
-workflow = builder.build(start=researcher)
+workflow = builder.build()
 
 viz = WorkflowViz(workflow)
 
@@ -91,12 +89,10 @@ a = Agent(client=client, name="ingest")
 b = Agent(client=client, name="enrich")
 c = Agent(client=client, name="publish")
 
-builder = WorkflowBuilder()
-for ag in [a, b, c]:
-    builder.add_executor(ag)
+builder = WorkflowBuilder(start_executor=a)
 builder.add_edge(a, b)
 builder.add_edge(b, c)
-workflow = builder.build(start=a)
+workflow = builder.build()
 
 path = WorkflowViz(workflow).save_svg("pipeline.svg")
 print(f"Diagram saved to: {path}")
@@ -113,15 +109,12 @@ classifier = Agent(client=client, name="classifier")
 high_path  = Agent(client=client, name="high_priority_handler")
 low_path   = Agent(client=client, name="low_priority_handler")
 
-builder = WorkflowBuilder()
-for ag in [classifier, high_path, low_path]:
-    builder.add_executor(ag)
-
+builder = WorkflowBuilder(start_executor=classifier)
 builder.add_edge(classifier, high_path,
-                 condition=lambda data: data.get("priority") == "high")
+                 condition=lambda data: "high" in data.agent_response.text.lower())
 builder.add_edge(classifier, low_path,
-                 condition=lambda data: data.get("priority") != "high")
-workflow = builder.build(start=classifier)
+                 condition=lambda data: "high" not in data.agent_response.text.lower())
+workflow = builder.build()
 
 print(WorkflowViz(workflow).to_mermaid())
 # classifier -. conditional .-> high_priority_handler;
@@ -575,26 +568,37 @@ asyncio.run(show_task_management())
 ### Example — Release session to clean up runtime state
 
 ```python
-# BackgroundAgentsProvider holds asyncio.Task and AgentSession references.
-# Call release_session() when the parent session is done to prevent leaks.
+import asyncio
+from agent_framework import Agent, BackgroundAgentsProvider
+from agent_framework.openai import OpenAIChatClient
 
-provider = BackgroundAgentsProvider(agents=[worker_agent])
-agent = Agent(client=client, context_providers=[provider])
-session = agent.create_session()
 
-try:
-    await agent.run("Process these documents in parallel.", session=session)
-finally:
-    await provider.release_session(session, cancel_running=True, timeout=30.0)
+async def main() -> None:
+    client = OpenAIChatClient()
+    worker_agent = Agent(client=client, instructions="Process documents.")
+
+    # BackgroundAgentsProvider holds asyncio.Task and AgentSession references.
+    # Call release_session() when the parent session is done to prevent leaks.
+    provider = BackgroundAgentsProvider(agents=[worker_agent])
+    agent = Agent(client=client, context_providers=[provider])
+    session = agent.create_session()
+
+    try:
+        await agent.run("Process these documents in parallel.", session=session)
+    finally:
+        await provider.release_session(session, cancel_running=True, timeout=30.0)
+
+
+asyncio.run(main())
 ```
 
 ---
 
 ## 5. `ToolApprovalMiddleware`
 
-**Module:** `agent_framework._middleware` (accessed via `agent_framework`)
+**Module:** `agent_framework._harness._tool_approval` (re-exported via `agent_framework`)
 
-`ToolApprovalMiddleware` is an `AgentMiddleware` that **gates tool calls through a human-approval loop**. When the model requests a tool call, the middleware intercepts it, produces an `approval_request` content item, and only executes the tool after the caller confirms. Approvals are stored in session state so the user's decision survives restarts.
+`ToolApprovalMiddleware` is an `AgentMiddleware` that **gates tool calls through a human-approval loop**. When the model requests a tool call, the middleware intercepts it, produces a `function_approval_request` content item, and only executes the tool after the caller confirms. Approvals are stored in session state so the user's decision survives restarts.
 
 ### Constructor
 
@@ -658,13 +662,20 @@ asyncio.run(main())
 
 ### Example — Auto-approve read-only tools
 
+> **Security:** Auto-approving by tool name alone means *any* tool registered under that name is
+> approved without a human prompt. For filesystem tools, always restrict the paths they can access
+> (e.g. require a safe root prefix) before adding them to an auto-approval allowlist — otherwise
+> the model can read `/etc/passwd` or other sensitive files without human review.
+
 ```python
 import asyncio
+import os
 from agent_framework import Agent, ToolApprovalMiddleware
 from agent_framework.openai import OpenAIChatClient
 from agent_framework import tool
 
 READ_ONLY_TOOLS = {"list_files", "read_file", "search_docs"}
+SAFE_ROOT = "/tmp/workdir"  # restrict tools to this directory
 
 
 def auto_approve_read_only(function_call) -> bool:
@@ -674,15 +685,20 @@ def auto_approve_read_only(function_call) -> bool:
 
 @tool
 def list_files(directory: str) -> list[str]:
-    """List files in the given directory."""
-    import os
-    return os.listdir(directory)
+    """List files in the given directory (must be under /tmp/workdir)."""
+    full = os.path.realpath(directory)
+    if not full.startswith(os.path.realpath(SAFE_ROOT)):
+        raise ValueError(f"Access denied: {directory}")
+    return os.listdir(full)
 
 
 @tool
 def read_file(path: str) -> str:
-    """Read the contents of a file."""
-    with open(path) as f:
+    """Read the contents of a file (must be under /tmp/workdir)."""
+    full = os.path.realpath(path)
+    if not full.startswith(os.path.realpath(SAFE_ROOT)):
+        raise ValueError(f"Access denied: {path}")
+    with open(full) as f:
         return f.read()
 
 
@@ -763,9 +779,8 @@ import asyncio
 from agent_framework import (
     Agent,
     WorkflowBuilder,
-    SwitchCaseEdgeGroup,
-    SwitchCaseEdgeGroupCase,
-    SwitchCaseEdgeGroupDefault,
+    Case,
+    Default,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -782,30 +797,27 @@ async def main() -> None:
     text_agent  = Agent(client=client, name="text_processor",
                         instructions="Summarize the text document.")
 
-    builder = WorkflowBuilder()
-    for ag in [classifier, json_agent, csv_agent, text_agent]:
-        builder.add_executor(ag)
-
-    # Route from classifier based on the output text
-    switch_group = SwitchCaseEdgeGroup(
-        source_id=classifier.id,
-        cases=[
-            SwitchCaseEdgeGroupCase(
-                condition=lambda data: "type: json" in (data.text or "").lower(),
-                target_id=json_agent.id,
+    # Route from classifier based on the output text.
+    # Conditions receive AgentExecutorResponse — access text via .agent_response.text.
+    builder = WorkflowBuilder(start_executor=classifier)
+    builder.add_switch_case_edge_group(
+        classifier,
+        [
+            Case(
+                condition=lambda data: "type: json" in data.agent_response.text.lower(),
+                target=json_agent,
             ),
-            SwitchCaseEdgeGroupCase(
-                condition=lambda data: "type: csv" in (data.text or "").lower(),
-                target_id=csv_agent.id,
+            Case(
+                condition=lambda data: "type: csv" in data.agent_response.text.lower(),
+                target=csv_agent,
             ),
-            SwitchCaseEdgeGroupDefault(target_id=text_agent.id),
+            Default(target=text_agent),
         ],
     )
-    builder.add_edge_group(switch_group)
-    workflow = builder.build(start=classifier)
+    workflow = builder.build()
 
     result = await workflow.run('{"name": "Alice", "age": 30}')
-    print(result.get_outputs()[-1].text)
+    print(result.get_outputs()[-1].agent_response.text)
 
 
 asyncio.run(main())
@@ -849,9 +861,27 @@ print(snapshot["cases"])
 ### Example — WorkflowViz shows switch branches correctly
 
 ```python
-from agent_framework import WorkflowViz
+from agent_framework import Agent, WorkflowBuilder, Case, Default, WorkflowViz
+from agent_framework.openai import OpenAIChatClient
 
-# WorkflowViz renders SwitchCaseEdgeGroup edges as dashed (conditional) lines
+client = OpenAIChatClient()
+triage          = Agent(client=client, name="triage")
+emergency       = Agent(client=client, name="emergency_handler")
+priority        = Agent(client=client, name="priority_handler")
+standard        = Agent(client=client, name="standard_handler")
+
+builder = WorkflowBuilder(start_executor=triage)
+builder.add_switch_case_edge_group(
+    triage,
+    [
+        Case(condition=lambda data: "critical" in data.agent_response.text.lower(), target=emergency),
+        Case(condition=lambda data: "high" in data.agent_response.text.lower(), target=priority),
+        Default(target=standard),
+    ],
+)
+workflow = builder.build()
+
+# WorkflowViz renders switch branches as dashed (conditional) lines
 mermaid = WorkflowViz(workflow).to_mermaid()
 # triage -. conditional .-> emergency_handler;
 # triage -. conditional .-> priority_handler;
@@ -1167,7 +1197,7 @@ async def main() -> None:
     summarization = SummarizationStrategy(
         client=summary_client,
         target_count=6,    # keep 6 recent non-system messages verbatim
-        threshold=3,       # trigger when we hit 9 included messages
+        threshold=3,       # triggers when count exceeds 9 (i.e., at 10 messages)
     )
     compaction = CompactionProvider(
         after_strategy=summarization,
