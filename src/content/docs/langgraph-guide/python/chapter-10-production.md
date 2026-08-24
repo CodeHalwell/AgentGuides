@@ -216,13 +216,13 @@ class State(TypedDict):
     query: str
     result: str
 
-def search_node(state: State) -> dict:
+async def search_node(state: State) -> dict:
     return {"result": f"search: {state['query']}"}
 
-def enrich_node(state: State) -> dict:
+async def enrich_node(state: State) -> dict:
     return {"result": f"enriched: {state['result']}"}
 
-def fast_check_node(state: State) -> dict:
+async def fast_check_node(state: State) -> dict:
     return {"result": f"checked: {state['result']}"}
 
 def global_error_handler(state: State, exc: Exception) -> dict:
@@ -263,12 +263,17 @@ graph = builder.compile(cache=cache)
 - `set_node_defaults()` can be called at **any point before `compile()`** — defaults are resolved at compile time and apply to every node in the graph, regardless of the order `add_node()` and `set_node_defaults()` are called.
 - `cache_policy` and `error_handler` defaults are **not** applied to error-handler nodes (to prevent handlers from catching themselves or caching their own results).
 - `retry_policy` and `timeout` defaults **do** apply to error-handler nodes.
+- **`timeout` requires `async def` nodes.** LangGraph cancels timed-out nodes via asyncio; a timeout on a synchronous node raises `ValueError` at compile time.
 - Subgraphs do **not** inherit defaults from their parent graph.
 
 ### Combining with per-node overrides
 
 ```python
 from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+
+# timeout requires async nodes — LangGraph cancels via asyncio.
+# async def llm_node(state): ...
+# async def db_node(state): ...
 
 # Graph where most nodes share one retry profile …
 builder = StateGraph(State).set_node_defaults(

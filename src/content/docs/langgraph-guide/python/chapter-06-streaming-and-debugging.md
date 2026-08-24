@@ -545,11 +545,11 @@ with graph.stream_events(
     cfg,
     version="v3",
 ) as run:
-    # Stream LLM tokens token-by-token via run.messages
+    # run.messages yields ChatModelStream objects — one per LLM response.
+    # Use the .text projection to get string deltas token-by-token.
     for msg_chunk in run.messages:
-        # msg_chunk is a ChatModelStream — iterate its chunks
-        for chunk in msg_chunk:
-            print(chunk.content, end="", flush=True)
+        for delta in msg_chunk.text:
+            print(delta, end="", flush=True)
 print()
 
 # OR: consume final state snapshots via run.values
@@ -578,12 +578,15 @@ with graph.stream_events(
 from langgraph.stream.transformers import LifecyclePayload  # TypedDict
 
 # LifecyclePayload fields:
-#   event: "started" | "done" | "error"   (SubgraphStatus Literal)
-#   namespace: list[str]                   — path to the subgraph
-#   graph_name: str | None                 — compiled graph name if known
-#   trigger_call_id: str | None            — tool_call_id that triggered this subgraph
-#   cause: "interrupt" | "error" | None    — why "done" was emitted
-#   error: str | None                      — error message if event == "error"
+#   event: "started" | "completed" | "failed" | "interrupted" | "drained"
+#          (SubgraphStatus Literal — "drained" = child finished cleanly with no output)
+#   namespace: list[str]       — path to the subgraph (e.g. ['inner_team:abc123'])
+#   graph_name: str | None     — compiled graph name if known
+#   cause: LifecycleCause | None — how the subgraph was triggered:
+#     {"type": "toolCall", "tool_call_id": "..."}  — started by a tool call
+#     {"type": "send",     "from_node": "..."}      — started by Send()
+#     {"type": "edge",     "from_node": "..."}      — started via a graph edge
+#   error: str | None          — error message if event == "failed"
 
 from typing import Annotated
 from typing_extensions import TypedDict
@@ -632,8 +635,8 @@ with outer_graph.stream_events(
     # Lifecycle events tell you exactly when each subgraph starts and ends
     for event in run.lifecycle:
         print(f"[lifecycle] event={event.get('event')} ns={event.get('namespace')} graph={event.get('graph_name')}")
-# [lifecycle] event=started ns=['inner_team:abc123'] graph=inner
-# [lifecycle] event=done ns=['inner_team:abc123'] graph=inner
+# [lifecycle] event=started    ns=['inner_team:abc123'] graph=inner
+# [lifecycle] event=completed  ns=['inner_team:abc123'] graph=inner
 ```
 
 ### `SubgraphRunStream` — per-subgraph run handles
@@ -657,25 +660,28 @@ with outer_graph.stream_events(
 
 `StreamChannel` is a typed single-consumer drainable queue. You can expose a custom projection by passing `transformers=` to `stream_events()`. Custom projections are reached via `run.extensions["my_channel"]`.
 
-The most practical use of `StreamChannel` directly is `stream_channel()` — a context manager that captures all events pushed to a given named channel during a node's execution:
+`StreamChannel` objects are created by transformers and wired into the `StreamMux` before a run starts. They are single-consumer, pull-driven queues — you can't instantiate one standalone and iterate it; the mux must bind it first. As a caller you access channels through `run.extensions[name]` for custom transformers, or via the named native projections (`run.values`, `run.messages`, `run.lifecycle`, `run.subgraphs`) that `stream_events(version="v3")` always wires.
 
 ```python
-from langgraph.stream import stream_channel
+from langgraph.stream.stream_channel import StreamChannel
 
-# stream_channel(name) captures everything written to the "custom" channel
-# within any node that calls writer(data) with the matching channel name.
-# Use inside a sync or async with-block; the context manager returns a
-# StreamChannel[Any] whose items you iterate.
+# StreamChannel[T] is the type of every projection on GraphRunStream.
+# The four native projections are always present:
+#   run.values:    StreamChannel[dict[str, Any]]
+#   run.messages:  StreamChannel[ChatModelStream]
+#   run.lifecycle: StreamChannel[LifecyclePayload]
+#   run.subgraphs: StreamChannel[SubgraphRunStream]
+#
+# Custom transformers may register additional channels, accessed via:
+#   channel: StreamChannel[Any] = run.extensions["my_transformer_name"]
 
-# Example: capture only "custom" events from a specific run
-with stream_channel("custom") as ch:
-    # ... invoke your graph ... (sync or async)
-    pass
-for item in ch:
-    print(item)   # items written by StreamWriter inside nodes
+# Iterating a channel drives the graph pump forward one event at a time:
+with graph.stream_events({"messages": [HumanMessage(content="Hi")]}, cfg, version="v3") as run:
+    for snapshot in run.values:   # StreamChannel[dict] — one snapshot per step
+        print(snapshot)
 ```
 
-For most use cases the built-in `stream_mode="custom"` (v1/v2 API) is simpler. Reach for `StreamChannel` directly when you need fine-grained control over event buffering or fan-out within the v3 protocol.
+For most use cases the built-in `stream_mode="custom"` (v1/v2 API) is simpler than registering a custom transformer. Reach for `StreamChannel` types when you need fine-grained control over event buffering or fan-out within the v3 protocol.
 
 ### v3 vs v1/v2 — when to use which
 
