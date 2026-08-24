@@ -504,13 +504,22 @@ public = (
     .renamed({'crm_lookup': 'crm_get_user'})
 )
 
-reader = Agent('openai:gpt-4o-mini', toolsets=[public])
-print([t for t in reader.run_sync('list tools').all_messages()])
-# Only `crm_lookup` is visible.
+# Use TestModel to deterministically inspect which tool definitions
+# each agent actually exposes to the model (no network, no LLM randomness).
+from pydantic_ai.models.test import TestModel
+
+reader_probe = TestModel()
+Agent(reader_probe, toolsets=[public]).run_sync('probe tool visibility')
+print([td.name for td in reader_probe.last_model_request_parameters.function_tools])
+# → ['crm_lookup']   (only `get_user`, renamed via prefix + rename, survives)
 
 # Admin view for staff — every tool available with a role-tagged prefix.
 admin = core.prefixed('admin')
-writer = Agent('openai:gpt-4o-mini', toolsets=[admin])
+
+admin_probe = TestModel()
+Agent(admin_probe, toolsets=[admin]).run_sync('probe tool visibility')
+print([td.name for td in admin_probe.last_model_request_parameters.function_tools])
+# → ['admin_get_user', 'admin_delete_user', 'admin_create_user']
 ```
 
 The key point missed by many first-time users: **the same underlying `FunctionToolset` can be wrapped multiple ways**, so you don't have to re-declare the tool bodies to expose different subsets to different agents.
