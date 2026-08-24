@@ -631,13 +631,29 @@ from langgraph.stream.transformers import LifecyclePayload  # TypedDict
 #   graph_name: str | None     — compiled graph name if known (defaults to
 #                                "LangGraph" unless `name=...` is passed to
 #                                `StateGraph.compile()`)
-#   trigger_call_id: str | None — correlates a child lifecycle event with the
-#                                tool call that launched it (present only on
-#                                tool-call- and Send-triggered subgraphs)
-#   cause: LifecycleCause | None — how the subgraph was triggered:
-#     {"type": "toolCall", "tool_call_id": "..."}  — started by a tool call
-#     {"type": "send",     "from_node": "..."}      — started by Send()
-#     {"type": "edge",     "from_node": "..."}      — started via a graph edge
+#   trigger_call_id: str | None — parent-graph task_id in the child's namespace
+#                                segment (`node:task_id`, split by
+#                                `_parse_ns_segment`). It is the same id that
+#                                the parent's `TaskResultPayload` carries, so
+#                                consumers can pair a child `started` with the
+#                                parent-task result that closes it. Populated
+#                                whenever the child segment carries a
+#                                `:task_id` suffix (e.g. functional-API
+#                                `@task`/`call()` and subagent-style tool
+#                                dispatch); the LifecycleTransformer skips the
+#                                `started` payload when it is missing.
+#   cause: LifecycleCause | None — how the subgraph was triggered. The
+#                                LifecycleTransformer only attaches `cause`
+#                                for a subagent boundary — a nested run whose
+#                                parent task carries `lc_agent_name` metadata
+#                                (set by `create_agent`) and a harvested
+#                                tool_call_id — and emits it as:
+#     {"type": "toolCall", "tool_call_id": "..."}
+#                                Other `LifecycleCause` variants
+#                                (`{"type": "send", ...}`,
+#                                `{"type": "edge", ...}`) exist in the type
+#                                but are attached by different transformers,
+#                                not by `LifecycleTransformer` itself.
 #   error: str | None          — error message if event == "failed"
 
 from typing import Annotated
