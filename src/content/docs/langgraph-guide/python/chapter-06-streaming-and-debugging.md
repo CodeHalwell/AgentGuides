@@ -579,7 +579,10 @@ from langgraph.stream.transformers import LifecyclePayload  # TypedDict
 
 # LifecyclePayload fields:
 #   event: "started" | "completed" | "failed" | "interrupted" | "drained"
-#          (SubgraphStatus Literal — "drained" = child finished cleanly with no output)
+#          (SubgraphStatus Literal — "drained" = cooperative shutdown via
+#           RunControl.request_drain() (e.g., SIGTERM). The checkpoint is
+#           saved and the run can be resumed later with the same thread_id;
+#           it is NOT a clean end-of-run.)
 #   namespace: list[str]       — path to the subgraph (e.g. ['inner_team:abc123'])
 #   graph_name: str | None     — compiled graph name if known
 #   cause: LifecycleCause | None — how the subgraph was triggered:

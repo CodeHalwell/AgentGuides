@@ -216,6 +216,7 @@ Instead of passing `retry_policy`, `cache_policy`, `error_handler`, and `timeout
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+from langgraph.errors import NodeError
 from langgraph.cache.memory import InMemoryCache
 
 class State(TypedDict):
@@ -231,9 +232,14 @@ async def enrich_node(state: State) -> dict:
 async def fast_check_node(state: State) -> dict:
     return {"result": f"checked: {state['result']}"}
 
-async def global_error_handler(state: State, exc: Exception) -> dict:
-    """Fallback when any node raises and has no per-node handler."""
-    return {"result": f"error handled: {exc}"}
+async def global_error_handler(state: State, error: NodeError) -> dict:
+    """Fallback when any node raises and has no per-node handler.
+
+    Handlers receive a `NodeError` dataclass (injected by the parameter named
+    `error`), not the raw exception. Use `error.node` for the failing node's
+    name and `error.error` for the underlying exception.
+    """
+    return {"result": f"error in {error.node}: {error.error}"}
 
 # set_node_defaults() applies to every node that doesn't override the policy.
 # Returns Self so you can chain add_node/add_edge calls.
