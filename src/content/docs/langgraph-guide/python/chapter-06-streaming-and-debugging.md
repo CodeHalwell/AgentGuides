@@ -628,7 +628,12 @@ from langgraph.stream.transformers import LifecyclePayload  # TypedDict
 #           saved and the run can be resumed later with the same thread_id;
 #           it is NOT a clean end-of-run.)
 #   namespace: list[str]       — path to the subgraph (e.g. ['inner_team:abc123'])
-#   graph_name: str | None     — compiled graph name if known
+#   graph_name: str | None     — compiled graph name if known (defaults to
+#                                "LangGraph" unless `name=...` is passed to
+#                                `StateGraph.compile()`)
+#   trigger_call_id: str | None — correlates a child lifecycle event with the
+#                                tool call that launched it (present only on
+#                                tool-call- and Send-triggered subgraphs)
 #   cause: LifecycleCause | None — how the subgraph was triggered:
 #     {"type": "toolCall", "tool_call_id": "..."}  — started by a tool call
 #     {"type": "send",     "from_node": "..."}      — started by Send()
@@ -656,7 +661,9 @@ inner_graph = (
     .add_node("inner", inner_node)
     .add_edge(START, "inner")
     .add_edge("inner", END)
-    .compile(checkpointer=True)   # inherit parent checkpointer
+    # Pass name= so `LifecyclePayload.graph_name` matches the value shown
+    # in the expected output below; without it the default is "LangGraph".
+    .compile(name="inner", checkpointer=True)   # inherit parent checkpointer
 )
 
 def outer_node(state: OuterState) -> dict:
