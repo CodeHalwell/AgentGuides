@@ -10,9 +10,9 @@ sidebar:
 
 # Chapter 6 — Streaming & Debugging
 
-**What you'll learn:** every streaming mode in langgraph 1.2.x, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
+**What you'll learn:** every streaming mode in langgraph 1.2.x, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, the new experimental v3 `stream_events` API with `GraphRunStream` / `SubgraphRunStream` / `LifecyclePayload` / `StreamChannel`, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
 
-Verified against **`langgraph==1.2.6`** (modules: `langgraph.types`, `langgraph.stream`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.stream`).
 
 **Time:** ~30 minutes.
 
@@ -492,6 +492,294 @@ print(type(result))   # dict
 
 ---
 
+## Experimental v3 Streaming — `stream_events(version="v3")`
+
+LangGraph 1.2.11 introduces an experimental v3 streaming protocol built on typed `StreamChannel` projections. Instead of iterating a flat event stream, you drive the graph by consuming named projections on a `GraphRunStream` context object. Each projection is a **single-consumer drainable queue** — there is no background thread; your `for` loop is the pump.
+
+> **Warning:** `version="v3"` is experimental and may change in future releases. Gate it behind a feature flag in production.
+
+### `GraphRunStream` — the v3 run handle
+
+The v3 protocol has separate sync and async entry points:
+
+- `graph.stream_events(..., version="v3")` returns a `GraphRunStream` you enter with `with ... as run:`.
+- `graph.astream_events(..., version="v3")` is a coroutine — `await` it, then enter with `async with ... as run:` to get an `AsyncGraphRunStream`.
+
+Both handles expose the same four native projections:
+
+| Attribute | Type | What it emits |
+|---|---|---|
+| `run.values` | `StreamChannel[dict]` | Full state snapshot after every step |
+| `run.messages` | `StreamChannel[ChatModelStream]` | LLM token stream |
+| `run.lifecycle` | `StreamChannel[LifecyclePayload]` | Subgraph start/end/error lifecycle events |
+| `run.subgraphs` | `StreamChannel[SubgraphRunStream]` | Nested subgraph run handles |
+
+Opt-in projections (`updates`, `custom`, `checkpoints`, `tasks`) are also exposed as **direct attributes** (`run.updates`, `run.custom`, etc.) when their built-in transformers are registered via `transformers=`. Only user-authored non-native transformers use `run.extensions["channel_name"]`.
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
+
+class ChatState(TypedDict):
+    messages: Annotated[list, add_messages]
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+
+def call_model(state: ChatState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+graph = (
+    StateGraph(ChatState)
+    .add_node("model", call_model)
+    .add_edge(START, "model")
+    .add_edge("model", END)
+    .compile(checkpointer=InMemorySaver())
+)
+
+cfg = {"configurable": {"thread_id": "v3-demo"}}
+
+# stream_events(version="v3") returns a GraphRunStream — not an iterator.
+# Use it as a context manager so cleanup runs on early exit.
+with graph.stream_events(
+    {"messages": [HumanMessage(content="Write a haiku")]},
+    cfg,
+    version="v3",
+) as run:
+    # run.messages yields ChatModelStream objects — one per LLM response.
+    # Use the .text projection to get string deltas token-by-token.
+    for msg_chunk in run.messages:
+        for delta in msg_chunk.text:
+            print(delta, end="", flush=True)
+print()
+
+# OR: consume final state snapshots via run.values
+with graph.stream_events(
+    {"messages": [HumanMessage(content="Hello")]},
+    cfg,
+    version="v3",
+) as run2:
+    for state_snapshot in run2.values:
+        print(f"step_count messages: {len(state_snapshot['messages'])}")
+
+# OR: get final output without iteration
+with graph.stream_events(
+    {"messages": [HumanMessage(content="Hi")]},
+    cfg,
+    version="v3",
+) as run3:
+    final_state = run3.output   # drives graph to completion, returns final state
+```
+
+Async callers use `astream_events()` instead, awaiting it before entering:
+
+```python
+import asyncio
+
+async def main():
+    # astream_events() is a coroutine — await it to get the AsyncGraphRunStream
+    run = await graph.astream_events(
+        {"messages": [HumanMessage(content="Async hi")]},
+        cfg,
+        version="v3",
+    )
+    async with run:
+        async for msg_chunk in run.messages:
+            async for delta in msg_chunk.text:
+                print(delta, end="", flush=True)
+
+asyncio.run(main())
+```
+
+> **Multi-projection consumption.** `StreamChannel` uses **lazy-subscribe** — items are only buffered on a channel after something has subscribed to it. If you drain `run.values` fully before touching `run.messages`, the graph pumps to completion while `run.messages` has no subscriber, and every token pushed to it is silently discarded.
+>
+> Use `run.interleave("values", "messages", ...)` on `GraphRunStream` for the sync case; it yields `(name, item)` tuples in arrival order across the named projections and locks each channel for the duration. For async, subscribe every projection **before** starting the pump (e.g. `asyncio.gather` over per-projection consumer tasks) — `AsyncGraphRunStream` does not expose an `ainterleave` helper in 1.2.11.
+
+```python
+# Sync multi-projection consumption — arrival-ordered, no dropped events.
+with graph.stream_events(
+    {"messages": [HumanMessage(content="Interleave demo")]},
+    cfg,
+    version="v3",
+) as run:
+    for name, item in run.interleave("values", "messages"):
+        if name == "values":
+            print(f"[state] messages={len(item['messages'])}")
+        else:  # "messages"
+            for delta in item.text:
+                print(delta, end="", flush=True)
+```
+
+### `LifecyclePayload` — subgraph lifecycle events
+
+`run.lifecycle` emits a `LifecyclePayload` when a subgraph starts, completes, or errors. This replaces the need to watch `stream_mode="debug"` just to know when nested graphs begin/end.
+
+```python
+from langgraph.stream.transformers import LifecyclePayload  # TypedDict
+
+# LifecyclePayload fields:
+#   event: "started" | "completed" | "failed" | "interrupted" | "drained"
+#          (SubgraphStatus Literal — "drained" = cooperative shutdown via
+#           RunControl.request_drain() (e.g., SIGTERM). The checkpoint is
+#           saved and the run can be resumed later with the same thread_id;
+#           it is NOT a clean end-of-run.)
+#   namespace: list[str]       — path to the subgraph (e.g. ['inner_team:abc123'])
+#   graph_name: str | None     — compiled graph name if known (defaults to
+#                                "LangGraph" unless `name=...` is passed to
+#                                `StateGraph.compile()`)
+#   trigger_call_id: str | None — parent-graph task_id in the child's namespace
+#                                segment (`node:task_id`, split by
+#                                `_parse_ns_segment`). It is the same id that
+#                                the parent's `TaskResultPayload` carries, so
+#                                consumers can pair a child `started` with the
+#                                parent-task result that closes it. Populated
+#                                whenever the child segment carries a
+#                                `:task_id` suffix (e.g. functional-API
+#                                `@task`/`call()` and subagent-style tool
+#                                dispatch); the LifecycleTransformer skips the
+#                                `started` payload when it is missing.
+#   cause: LifecycleCause | None — how the subgraph was triggered. The
+#                                LifecycleTransformer only attaches `cause`
+#                                for a subagent boundary — a nested run whose
+#                                parent task carries `lc_agent_name` metadata
+#                                (set by `create_agent`) and a harvested
+#                                tool_call_id — and emits it as:
+#     {"type": "toolCall", "tool_call_id": "..."}
+#                                Other `LifecycleCause` variants
+#                                (`{"type": "send", ...}`,
+#                                `{"type": "edge", ...}`) exist in the type
+#                                but are attached by different transformers,
+#                                not by `LifecycleTransformer` itself.
+#   error: str | None          — error message if event == "failed"
+
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage, HumanMessage
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+
+class OuterState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+class InnerState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+def inner_node(state: InnerState) -> dict:
+    return {"messages": [("assistant", "inner response")]}
+
+inner_graph = (
+    StateGraph(InnerState)
+    .add_node("inner", inner_node)
+    .add_edge(START, "inner")
+    .add_edge("inner", END)
+    # Pass name= so `LifecyclePayload.graph_name` matches the value shown
+    # in the expected output below; without it the default is "LangGraph".
+    .compile(name="inner", checkpointer=True)   # inherit parent checkpointer
+)
+
+def outer_node(state: OuterState) -> dict:
+    return {"messages": [("assistant", "outer response")]}
+
+outer_graph = (
+    StateGraph(OuterState)
+    .add_node("outer", outer_node)
+    .add_node("inner_team", inner_graph)   # subgraph as node
+    .add_edge(START, "outer")
+    .add_edge("outer", "inner_team")
+    .add_edge("inner_team", END)
+    .compile(checkpointer=InMemorySaver())
+)
+
+cfg = {"configurable": {"thread_id": "lifecycle-demo"}}
+
+with outer_graph.stream_events(
+    {"messages": [HumanMessage(content="Go")]},
+    cfg,
+    version="v3",
+) as run:
+    # Lifecycle events tell you exactly when each subgraph starts and ends
+    for event in run.lifecycle:
+        print(f"[lifecycle] event={event.get('event')} ns={event.get('namespace')} graph={event.get('graph_name')}")
+# [lifecycle] event=started    ns=['inner_team:abc123'] graph=inner
+# [lifecycle] event=completed  ns=['inner_team:abc123'] graph=inner
+```
+
+### `SubgraphRunStream` — per-subgraph run handles
+
+When `run.subgraphs` is consumed, each item is a `SubgraphRunStream` — a `GraphRunStream` subclass that also carries `.path` (the subgraph's namespace tuple), `.graph_name`, and `.status` / `.error`. This lets you consume a nested subgraph's own `values`, `messages`, and `lifecycle` projections independently.
+
+The snippet below reuses `outer_graph` and `cfg` from the `LifecyclePayload` example above:
+
+```python
+with outer_graph.stream_events(
+    {"messages": [HumanMessage(content="Go")]},
+    cfg,
+    version="v3",
+) as run:
+    for subgraph_run in run.subgraphs:
+        print(f"Subgraph discovered: path={subgraph_run.path} name={subgraph_run.graph_name}")
+        # Each SubgraphRunStream has the same projections as GraphRunStream
+        for sub_snapshot in subgraph_run.values:
+            print(f"  inner state messages: {len(sub_snapshot['messages'])}")
+```
+
+### `StreamChannel` — custom named projections
+
+`StreamChannel` is a typed single-consumer drainable queue. You can expose a custom projection by passing `transformers=` to `stream_events()`. Custom projections are reached via `run.extensions["my_channel"]`.
+
+`StreamChannel` objects are created by transformers and wired into the `StreamMux` before a run starts. They are single-consumer, pull-driven queues — you can't instantiate one standalone and iterate it; the mux must bind it first.
+
+There are two kinds of channels on `GraphRunStream`:
+
+- **Native projections** — always present as direct attributes: `run.values`, `run.messages`, `run.lifecycle`, `run.subgraphs`. Opt-in native transformers (when registered via `transformers=`) also appear as direct attributes: `run.updates`, `run.custom`, `run.checkpoints`, `run.tasks`.
+- **Non-native custom channels** — registered by user-authored transformers and accessed via `run.extensions["channel_name"]`.
+
+```python
+from langgraph.stream.stream_channel import StreamChannel
+
+# StreamChannel[T] is the type of every projection on GraphRunStream.
+# Always-present native projections (direct attributes):
+#   run.values:    StreamChannel[dict[str, Any]]
+#   run.messages:  StreamChannel[ChatModelStream]
+#   run.lifecycle: StreamChannel[LifecyclePayload]
+#   run.subgraphs: StreamChannel[SubgraphRunStream]
+#
+# Opt-in native projections (direct attributes when the transformer is registered):
+#   run.updates / run.custom / run.checkpoints / run.tasks
+#
+# Non-native custom transformer channels (accessed via extensions dict):
+#   channel: StreamChannel[Any] = run.extensions["my_transformer_name"]
+
+# Iterating any channel drives the graph pump forward one event at a time.
+# `graph` and `cfg` here are the ones set up in the earlier v3 examples:
+with graph.stream_events({"messages": [HumanMessage(content="Hi")]}, cfg, version="v3") as run:
+    for snapshot in run.values:   # StreamChannel[dict] — one snapshot per step
+        print(snapshot)
+```
+
+For most use cases the built-in `stream_mode="custom"` (v1/v2 API) is simpler than registering a custom transformer. Reach for `StreamChannel` types when you need fine-grained control over event buffering or fan-out within the v3 protocol.
+
+### v3 vs v1/v2 — when to use which
+
+| Concern | v1/v2 (`stream(stream_mode=...)`) | v3 (`stream_events(version="v3")`) |
+|---|---|---|
+| Stability | Stable / production-ready | Experimental — may change |
+| Token streaming | `stream_mode="messages"` | `run.messages` projection |
+| State snapshots | `stream_mode="values"` | `run.values` projection |
+| Subgraph visibility | `subgraphs=True` flag | `run.subgraphs` with typed handles |
+| Lifecycle events | `stream_mode="debug"` | `run.lifecycle` (typed `LifecyclePayload`) |
+| Multiple modes at once | `stream_mode=[...]` → `(mode, data)` tuples | `run.interleave("a", "b", ...)` → arrival-ordered `(name, item)` tuples (sync); concurrent consumer tasks (async) |
+| Type safety | `version="v2"` `StreamPart` TypedDict | Generically typed `StreamChannel[T]` |
+
+Use **v1/v2** for production today. Experiment with **v3** when you need per-subgraph handles or typed lifecycle events, and be ready to adapt when the API stabilises.
+
+---
+
 ## Quick Reference
 
 | Task | Code |
@@ -505,6 +793,14 @@ print(type(result))   # dict
 | Multiple at once | `stream_mode=["values", "messages"]` |
 | Typed stream parts | `astream(..., version="v2")` |
 | Typed final output | `ainvoke(..., version="v2")` → `GraphOutput` |
+| v3 run handle (sync) | `graph.stream_events(input, cfg, version="v3")` → `GraphRunStream` |
+| v3 run handle (async) | `await graph.astream_events(input, cfg, version="v3")` → `AsyncGraphRunStream` |
+| v3 multi-projection (sync) | `for name, item in run.interleave("values", "messages"): ...` |
+| v3 token stream | `for chunk in run.messages: ...` |
+| v3 state snapshots | `for snap in run.values: ...` |
+| v3 lifecycle events | `for ev in run.lifecycle: ...` → `LifecyclePayload` |
+| v3 subgraph handles | `for sub in run.subgraphs: ...` → `SubgraphRunStream` |
+| v3 final output (drives graph) | `run.output` |
 | Visualise graph | `graph.get_graph().draw_mermaid()` |
 | Inspect state | `graph.get_state(cfg)` |
 | History / time-travel | `graph.get_state_history(cfg)` |
