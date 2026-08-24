@@ -258,6 +258,16 @@ asyncio.run(main())
 
 ## `ModelHTTPError` — provider HTTP failures
 
+`ModelHTTPError` (source: `pydantic_ai/exceptions.py` in 2.33.0) exposes:
+
+| Attribute            | Type              | Notes                                                                       |
+| -------------------- | ----------------- | --------------------------------------------------------------------------- |
+| `status_code`        | `int`             | 4xx or 5xx.                                                                 |
+| `body`               | `object | None`   | Provider payload if available.                                              |
+| `headers`            | `dict[str, str] | None` | Lowercased header names — use `.get('retry-after')`.                    |
+| `suggested_model_id` | `str | None`      | Set when the provider returned "did you mean <id>?".                        |
+| `retry_after`        | `float | None`    | **Property**. Parses `Retry-After` (integer seconds *or* RFC-9110 date).    |
+
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, AgentRunError
@@ -268,6 +278,11 @@ try:
     result = agent.run_sync('Hello')
 except ModelHTTPError as e:
     print(f'Provider returned HTTP {e.status_code}: {e}')
+    if e.retry_after is not None:
+        # Property returns float | None — no need to parse the header.
+        print(f'  retry after {e.retry_after:.1f}s')
+    if e.suggested_model_id:
+        print(f'  provider suggested {e.suggested_model_id!r}')
     if e.status_code == 429:
         # Rate limited — implement backoff
         pass
@@ -316,8 +331,10 @@ retry_hooks = Hooks()
 @retry_hooks.on.model_request_error
 async def retry_on_rate_limit(ctx, *, request_context, error: Exception):
     if isinstance(error, ModelHTTPError) and error.status_code == 429:
-        retry_after = int(getattr(error, 'retry_after', 5))
-        time.sleep(retry_after)   # back off before raising so the agent can retry
+        # `retry_after` is a property returning `float | None` (parses
+        # both integer seconds and RFC-9110 date formats).
+        wait = error.retry_after if error.retry_after is not None else 5.0
+        time.sleep(min(wait, 30.0))  # back off before raising so the agent can retry
     raise error
 
 agent = Agent('openai:gpt-4o', capabilities=[retry_hooks])
