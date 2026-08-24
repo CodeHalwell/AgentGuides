@@ -682,7 +682,7 @@ def auto_approve_read_only(function_call) -> bool:
     return function_call.name in READ_ONLY_TOOLS
 
 
-@tool
+@tool(approval_mode="always_require")
 def list_files(directory: str) -> list[str]:
     """List files in the given directory (must be under /tmp/workdir)."""
     from pathlib import Path
@@ -692,7 +692,7 @@ def list_files(directory: str) -> list[str]:
     return os.listdir(full)
 
 
-@tool
+@tool(approval_mode="always_require")
 def read_file(path: str) -> str:
     """Read the contents of a file (must be under /tmp/workdir)."""
     from pathlib import Path
@@ -712,6 +712,13 @@ def delete_file(path: str) -> str:
 
 
 async def main() -> None:
+    # Set up the demo directory and sample files so list_files can find them
+    os.makedirs(SAFE_ROOT, exist_ok=True)
+    with open(os.path.join(SAFE_ROOT, "notes.txt"), "w") as f:
+        f.write("Meeting notes: Q3 budget review\n")
+    with open(os.path.join(SAFE_ROOT, "old_log.txt"), "w") as f:
+        f.write("Old log entry — safe to delete\n")
+
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="You are a file assistant. List and read files freely; always confirm deletes.",
@@ -722,7 +729,7 @@ async def main() -> None:
     )
     session = agent.create_session()
 
-    # list_files and read_file → auto-approved (within SAFE_ROOT)
+    # list_files and read_file → auto-approved by the rule (within SAFE_ROOT)
     # delete_file → function_approval_request returned for human confirmation
     result = await agent.run(
         "List files in /tmp/workdir, then delete /tmp/workdir/old_log.txt",
