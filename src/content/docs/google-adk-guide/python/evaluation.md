@@ -461,7 +461,7 @@ artifact_service = InMemoryArtifactService()
 
 # ── eval_set_results_manager: persist evalset_result.json to disk ────────────
 results_manager: EvalSetResultsManager = LocalEvalSetResultsManager(
-    results_dir="./eval_results"
+    agents_dir="./eval_results"
 )
 
 async def preload_artifacts() -> None:
@@ -504,7 +504,7 @@ asyncio.run(main())
 **What ends up on disk:**
 
 - `./eval_results/travel_bench_20260824.csv` — one row per (eval_case, metric, invocation). Columns include the eval_set_id, eval_id, metric name, score, threshold, and pass/fail flag. Written by `_write_results_to_csv` after all cases finish.
-- `./eval_results/<eval_set_id>/<result_id>.evalset_result.json` — the persisted `EvalSetResult` written by `LocalEvalSetResultsManager`. This is what the ADK Web UI reads back when browsing historical runs.
+- `./eval_results/travel_bench/.adk/eval_history/<result_id>.evalset_result.json` — the persisted `EvalSetResult` written by `LocalEvalSetResultsManager`. The path is built as `<agents_dir>/<app_name>/.adk/eval_history/<result_id>.evalset_result.json` (see `_get_eval_history_dir` in `local_eval_set_results_manager.py`). This is what the ADK Web UI reads back when browsing historical runs.
 
 **Two hard rules from the source (verified in the docstring & body):**
 

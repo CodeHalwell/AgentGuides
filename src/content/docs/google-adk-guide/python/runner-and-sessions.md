@@ -226,7 +226,10 @@ cfg = RunConfig(
     output_audio_transcription=types.AudioTranscriptionConfig(),
     input_audio_transcription=types.AudioTranscriptionConfig(),
     realtime_input_config=types.RealtimeInputConfig(),
-    explicit_vad_signal=True,                   # let model decide turn-end
+    # When True the CLIENT must send activity_start / activity_end (types.ActivityStart /
+    # types.ActivityEnd) to demarcate each user turn — the model will NOT auto-detect
+    # turn-end. Leave False (or unset) unless your live client explicitly emits VAD signals.
+    explicit_vad_signal=False,
     save_live_blob=True,                        # persist audio/video to artifact_service
     save_live_audio=True,                       # keep raw audio bytes (in addition to blobs)
     save_input_blobs_as_artifacts=True,         # persist user-uploaded blobs alongside events
