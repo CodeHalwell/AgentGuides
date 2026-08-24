@@ -660,22 +660,30 @@ with outer_graph.stream_events(
 
 `StreamChannel` is a typed single-consumer drainable queue. You can expose a custom projection by passing `transformers=` to `stream_events()`. Custom projections are reached via `run.extensions["my_channel"]`.
 
-`StreamChannel` objects are created by transformers and wired into the `StreamMux` before a run starts. They are single-consumer, pull-driven queues — you can't instantiate one standalone and iterate it; the mux must bind it first. As a caller you access channels through `run.extensions[name]` for custom transformers, or via the named native projections (`run.values`, `run.messages`, `run.lifecycle`, `run.subgraphs`) that `stream_events(version="v3")` always wires.
+`StreamChannel` objects are created by transformers and wired into the `StreamMux` before a run starts. They are single-consumer, pull-driven queues — you can't instantiate one standalone and iterate it; the mux must bind it first.
+
+There are two kinds of channels on `GraphRunStream`:
+
+- **Native projections** — always present as direct attributes: `run.values`, `run.messages`, `run.lifecycle`, `run.subgraphs`. Opt-in native transformers (when registered via `transformers=`) also appear as direct attributes: `run.updates`, `run.custom`, `run.checkpoints`, `run.tasks`.
+- **Non-native custom channels** — registered by user-authored transformers and accessed via `run.extensions["channel_name"]`.
 
 ```python
 from langgraph.stream.stream_channel import StreamChannel
 
 # StreamChannel[T] is the type of every projection on GraphRunStream.
-# The four native projections are always present:
+# Always-present native projections (direct attributes):
 #   run.values:    StreamChannel[dict[str, Any]]
 #   run.messages:  StreamChannel[ChatModelStream]
 #   run.lifecycle: StreamChannel[LifecyclePayload]
 #   run.subgraphs: StreamChannel[SubgraphRunStream]
 #
-# Custom transformers may register additional channels, accessed via:
+# Opt-in native projections (direct attributes when the transformer is registered):
+#   run.updates / run.custom / run.checkpoints / run.tasks
+#
+# Non-native custom transformer channels (accessed via extensions dict):
 #   channel: StreamChannel[Any] = run.extensions["my_transformer_name"]
 
-# Iterating a channel drives the graph pump forward one event at a time:
+# Iterating any channel drives the graph pump forward one event at a time:
 with graph.stream_events({"messages": [HumanMessage(content="Hi")]}, cfg, version="v3") as run:
     for snapshot in run.values:   # StreamChannel[dict] — one snapshot per step
         print(snapshot)

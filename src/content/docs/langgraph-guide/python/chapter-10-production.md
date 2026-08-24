@@ -225,7 +225,7 @@ async def enrich_node(state: State) -> dict:
 async def fast_check_node(state: State) -> dict:
     return {"result": f"checked: {state['result']}"}
 
-def global_error_handler(state: State, exc: Exception) -> dict:
+async def global_error_handler(state: State, exc: Exception) -> dict:
     """Fallback when any node raises and has no per-node handler."""
     return {"result": f"error handled: {exc}"}
 
