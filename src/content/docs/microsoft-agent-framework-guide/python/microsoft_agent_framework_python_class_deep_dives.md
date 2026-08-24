@@ -624,7 +624,7 @@ from agent_framework.openai import OpenAIChatClient
 from agent_framework import tool
 
 
-@tool
+@tool(approval_mode="always_require")
 def delete_file(path: str) -> str:
     """Delete a file at the given path."""
     import os
@@ -650,12 +650,10 @@ async def main() -> None:
         session=session,
     )
 
-    # The response will contain an approval_request content item
-    for msg in response.messages:
-        for content in msg.contents:
-            if content.type == "function_approval_request":
-                print(f"Approval requested for: {content.name}({content.arguments})")
-                # In a real app, show this to the user and get their decision
+    # Approval requests are surfaced via response.user_input_requests
+    for request in response.user_input_requests:
+        print(f"Approval requested for: {request.function_call.name}({request.function_call.arguments})")
+        # In a real app, show this to the user and get their decision
 
 
 asyncio.run(main())
@@ -705,7 +703,7 @@ def read_file(path: str) -> str:
         return f.read()
 
 
-@tool
+@tool(approval_mode="always_require")
 def delete_file(path: str) -> str:
     """Delete a file — requires explicit approval."""
     import os
@@ -1087,7 +1085,8 @@ def get_population(city: str) -> str:
 
 
 async def main() -> None:
-    history = InMemoryHistoryProvider()
+    # skip_excluded=True ensures compacted (excluded) messages aren't reloaded on subsequent turns
+    history = InMemoryHistoryProvider(skip_excluded=True)
     # Keep only the last 1 tool-call group verbatim; collapse all older ones
     compaction = CompactionProvider(
         after_strategy=ToolResultCompactionStrategy(keep_last_tool_call_groups=1),
@@ -1196,7 +1195,8 @@ async def main() -> None:
     # A dedicated summarization client (can use a cheaper/faster model)
     summary_client = OpenAIChatClient(model="gpt-4o-mini")
 
-    history = InMemoryHistoryProvider()
+    # skip_excluded=True prevents reloading summarized-away messages on subsequent turns
+    history = InMemoryHistoryProvider(skip_excluded=True)
     summarization = SummarizationStrategy(
         client=summary_client,
         target_count=6,    # keep 6 recent non-system messages verbatim
