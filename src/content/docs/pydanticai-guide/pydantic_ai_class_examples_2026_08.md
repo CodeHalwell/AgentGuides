@@ -528,7 +528,7 @@ The key point missed by many first-time users: **the same underlying `FunctionTo
 
 ## 9. `WebSearchTool` — hosted web search across five providers
 
-`pydantic_ai.WebSearchTool` (`pydantic_ai/native_tools/__init__.py`) is a native-tool _spec_ — a plain dataclass. To register it on an agent you wrap it in the [`NativeTool`][pydantic_ai.capabilities.NativeTool] capability (or the higher-level [`WebSearch`][pydantic_ai.capabilities.WebSearch] capability, which also falls back to a local implementation on providers that lack native web search). Passing a bare `WebSearchTool` into `capabilities=[...]` fails typing at construction time in 2.33.
+`pydantic_ai.WebSearchTool` (`pydantic_ai/native_tools/__init__.py`) is a native-tool _spec_ — a plain dataclass. To register it on an agent you wrap it in the `NativeTool` capability from `pydantic_ai.capabilities` (or the higher-level `WebSearch` capability from the same module, which also falls back to a local implementation on providers that lack native web search). Passing a bare `WebSearchTool` into `capabilities=[...]` fails typing at construction time in 2.33.
 
 Fields (all keyword-only):
 
