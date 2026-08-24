@@ -252,7 +252,6 @@ builder = (
         fast_check_node,
         retry_policy=RetryPolicy(max_attempts=1),    # overrides default retry
         timeout=5.0,                                 # overrides default timeout (5 s)
-        cache_policy=None,                           # opt out of caching for this node
     )
     .add_edge(START, "search")
     .add_edge("search", "enrich")
@@ -270,6 +269,7 @@ graph = builder.compile(cache=cache)
 - `cache_policy` and `error_handler` defaults are **not** applied to error-handler nodes (to prevent handlers from catching themselves or caching their own results).
 - `retry_policy` and `timeout` defaults **do** apply to error-handler nodes.
 - **`timeout` requires `async def` nodes.** LangGraph cancels timed-out nodes via asyncio cancellation; passing `timeout` for a synchronous node is rejected at compile time.
+- **Passing `cache_policy=None` (or `retry_policy=None` / `timeout=None`) at `add_node()` does *not* opt a node out of a graph-wide default.** `None` is the unspecified sentinel and gets replaced by the default at compile time. To differentiate per-node behavior, either omit `set_node_defaults()` for that policy and set it explicitly on each node, or pass a permissive override (e.g. `RetryPolicy(max_attempts=1)` for effectively-no-retry).
 - Subgraphs do **not** inherit defaults from their parent graph.
 
 ### Combining with per-node overrides
@@ -287,12 +287,11 @@ builder = StateGraph(State).set_node_defaults(
     timeout=TimeoutPolicy(run_timeout=60.0),
 )
 
-# … but the expensive LLM node gets a longer timeout and no cache
+# … but the expensive LLM node gets a longer timeout
 builder.add_node(
     "llm_call",
     llm_node,
     timeout=TimeoutPolicy(run_timeout=300.0, idle_timeout=60.0),  # overrides default
-    cache_policy=None,                                             # explicitly opt out
 )
 
 # … and the cheap lookup node gets a short timeout and strong caching
