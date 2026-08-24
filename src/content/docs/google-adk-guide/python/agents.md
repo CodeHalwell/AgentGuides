@@ -245,9 +245,9 @@ agent = LlmAgent(
 )
 ```
 
-**Model check.** `process_llm_request` calls `is_gemini_model(llm_request.model)` and raises `ValueError("Gemini code execution tool is not supported for model {model}")` for anything else. To silence the check (e.g. when routing through `LiteLlm` to a Gemini-compatible endpoint), set the env var `GOOGLE_ADK_IGNORE_MODEL_ID_CHECK=1` — `is_gemini_model_id_check_disabled()` reads it.
+**Model check.** `process_llm_request` calls `is_gemini_model(llm_request.model)` and raises `ValueError("Gemini code execution tool is not supported for model {model}")` for anything else. To silence the check (e.g. when routing through `LiteLlm` to a Gemini-compatible endpoint), set the env var `ADK_DISABLE_GEMINI_MODEL_ID_CHECK=1` — `is_gemini_model_id_check_disabled()` reads it via `is_env_enabled` (any truthy string: `1`, `true`, `yes`).
 
-**What actually reaches the model.** Because execution happens server-side, code and output events are **not** yielded as separate `code` / `code_result` parts the way external executors emit them. The model sees code and output inline and produces one final response. If you need step-by-step audit trails, wrap the agent with a `LoggingPlugin` and inspect `event.get_function_calls()`.
+**What actually reaches the model.** Because execution happens server-side, code and output events are **not** emitted as function calls. Gemini returns `types.Part.executable_code` (the program it ran) and `types.Part.code_execution_result` (stdout / stderr) inline in the response content. To audit each step, walk `event.content.parts` and pull those two Part types out — `event.get_function_calls()` returns `[]` for built-in code execution because no tool call was invoked from the client side.
 
 ### `VertexAiCodeExecutor` — reuse an existing Code Interpreter extension
 

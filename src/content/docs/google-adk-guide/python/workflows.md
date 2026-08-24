@@ -232,11 +232,17 @@ class ResearchState(BaseModel):
 @node
 async def search(topic: str, ctx) -> list[str]:
     # `topic` matches a state field → auto-injected from ctx.state at run time.
-    return [f"result about {topic} #{i}" for i in range(3)]
+    results = [f"result about {topic} #{i}" for i in range(3)]
+    # A node's return value becomes event.output — it does NOT auto-populate
+    # ctx.state. Write to state explicitly so the next node's state-bound
+    # `findings` parameter reads the value we just produced instead of the
+    # schema default (empty list).
+    ctx.state["findings"] = results
+    return results
 
 @node
 async def critique(findings: list[str], ctx) -> str:
-    # `findings` matches a state field → auto-injected.
+    # `findings` matches a state field → auto-injected from ctx.state.
     return "\n".join(findings)
 
 wf = Workflow(
