@@ -539,36 +539,35 @@ graph = (
 cfg = {"configurable": {"thread_id": "v3-demo"}}
 
 # stream_events(version="v3") returns a GraphRunStream — not an iterator.
-# Drive it by consuming one of its typed projections.
-run = graph.stream_events(
+# Use it as a context manager so cleanup runs on early exit.
+with graph.stream_events(
     {"messages": [HumanMessage(content="Write a haiku")]},
     cfg,
     version="v3",
-)
-
-# Stream LLM tokens token-by-token via run.messages
-for msg_chunk in run.messages:
-    # msg_chunk is a ChatModelStream — iterate its chunks
-    for chunk in msg_chunk:
-        print(chunk.content, end="", flush=True)
+) as run:
+    # Stream LLM tokens token-by-token via run.messages
+    for msg_chunk in run.messages:
+        # msg_chunk is a ChatModelStream — iterate its chunks
+        for chunk in msg_chunk:
+            print(chunk.content, end="", flush=True)
 print()
 
 # OR: consume final state snapshots via run.values
-run2 = graph.stream_events(
+with graph.stream_events(
     {"messages": [HumanMessage(content="Hello")]},
     cfg,
     version="v3",
-)
-for state_snapshot in run2.values:
-    print(f"step_count messages: {len(state_snapshot['messages'])}")
+) as run2:
+    for state_snapshot in run2.values:
+        print(f"step_count messages: {len(state_snapshot['messages'])}")
 
 # OR: get final output without iteration
-run3 = graph.stream_events(
+with graph.stream_events(
     {"messages": [HumanMessage(content="Hi")]},
     cfg,
     version="v3",
-)
-final_state = run3.output   # drives graph to completion, returns final state
+) as run3:
+    final_state = run3.output   # drives graph to completion, returns final state
 ```
 
 ### `LifecyclePayload` — subgraph lifecycle events
@@ -588,7 +587,8 @@ from langgraph.stream.transformers import LifecyclePayload  # TypedDict
 
 from typing import Annotated
 from typing_extensions import TypedDict
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, HumanMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
@@ -624,15 +624,14 @@ outer_graph = (
 
 cfg = {"configurable": {"thread_id": "lifecycle-demo"}}
 
-run = outer_graph.stream_events(
+with outer_graph.stream_events(
     {"messages": [HumanMessage(content="Go")]},
     cfg,
     version="v3",
-)
-
-# Lifecycle events tell you exactly when each subgraph starts and ends
-for event in run.lifecycle:
-    print(f"[lifecycle] event={event.get('event')} ns={event.get('namespace')} graph={event.get('graph_name')}")
+) as run:
+    # Lifecycle events tell you exactly when each subgraph starts and ends
+    for event in run.lifecycle:
+        print(f"[lifecycle] event={event.get('event')} ns={event.get('namespace')} graph={event.get('graph_name')}")
 # [lifecycle] event=started ns=['inner_team:abc123'] graph=inner
 # [lifecycle] event=done ns=['inner_team:abc123'] graph=inner
 ```
@@ -642,17 +641,16 @@ for event in run.lifecycle:
 When `run.subgraphs` is consumed, each item is a `SubgraphRunStream` — a `GraphRunStream` subclass that also carries `.path` (the subgraph's namespace tuple), `.graph_name`, and `.status` / `.error`. This lets you consume a nested subgraph's own `values`, `messages`, and `lifecycle` projections independently.
 
 ```python
-run = outer_graph.stream_events(
+with outer_graph.stream_events(
     {"messages": [HumanMessage(content="Go")]},
     cfg,
     version="v3",
-)
-
-for subgraph_run in run.subgraphs:
-    print(f"Subgraph discovered: path={subgraph_run.path} name={subgraph_run.graph_name}")
-    # Each SubgraphRunStream has the same projections as GraphRunStream
-    for sub_snapshot in subgraph_run.values:
-        print(f"  inner state messages: {len(sub_snapshot['messages'])}")
+) as run:
+    for subgraph_run in run.subgraphs:
+        print(f"Subgraph discovered: path={subgraph_run.path} name={subgraph_run.graph_name}")
+        # Each SubgraphRunStream has the same projections as GraphRunStream
+        for sub_snapshot in subgraph_run.values:
+            print(f"  inner state messages: {len(sub_snapshot['messages'])}")
 ```
 
 ### `StreamChannel` — custom named projections

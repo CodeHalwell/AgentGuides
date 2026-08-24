@@ -260,7 +260,7 @@ graph = builder.compile(cache=cache)
 
 **Important rules:**
 
-- `set_node_defaults()` must be called **before** `add_node()` calls that should receive the defaults — or at any point before `compile()`, since defaults are applied at compile time.
+- `set_node_defaults()` can be called at **any point before `compile()`** — defaults are resolved at compile time and apply to every node in the graph, regardless of the order `add_node()` and `set_node_defaults()` are called.
 - `cache_policy` and `error_handler` defaults are **not** applied to error-handler nodes (to prevent handlers from catching themselves or caching their own results).
 - `retry_policy` and `timeout` defaults **do** apply to error-handler nodes.
 - Subgraphs do **not** inherit defaults from their parent graph.

@@ -645,7 +645,6 @@ When `ToolNode` receives a tool call from an LLM but Pydantic validation of the 
 By default `ToolNode(handle_tool_errors=True)` catches `ToolInvocationError` and returns a `ToolMessage` with the formatted error message. You can differentiate handling with a callable:
 
 ```python
-from pydantic import ValidationError
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolInvocationError
 from langchain_core.tools import tool
