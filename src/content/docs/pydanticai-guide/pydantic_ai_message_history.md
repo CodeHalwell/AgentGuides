@@ -364,6 +364,54 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 - **`ProcessHistory` runs on every step** of a multi-step (tool-calling) run, not just once per user turn. Keep processors cheap.
 - **Images / files in history**: binaries are base64-encoded in JSON. Large attachments bloat the stored blob — consider storing a reference (`ImageUrl`) instead of `BinaryImage` if you re-send across turns.
 
+## `CachePoint` — provider-native prompt caching
+
+`CachePoint` (`pydantic_ai.messages`, 2.33.0) is a marker part you drop into `UserPromptPart.content` to signal a cache boundary. Providers that don't support caching filter it out silently, so the same code works everywhere.
+
+| Field  | Type / default                | Notes                                                              |
+| ------ | ----------------------------- | ------------------------------------------------------------------ |
+| `kind` | `Literal['cache-point']`      | Discriminator (all parts have one).                                |
+| `ttl`  | `Literal['5m', '1h']` (`'5m'`)| Anthropic / Bedrock honour per-marker TTL. OpenAI ignores it and uses `openai_prompt_cache_options['ttl']` instead. |
+
+Supported (2.33.0): Anthropic · Amazon Bedrock (Converse API) · OpenAI (GPT-5.6 models) · OpenRouter (Anthropic/Gemini models via `OpenRouterModel`, and OpenAI GPT-5.6 via `OpenAIChatModel`/`OpenAIResponsesModel` with `OpenRouterProvider`).
+
+```python
+from pathlib import Path
+from pydantic_ai import Agent, CachePoint
+from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+try:
+    HANDBOOK = Path('/tmp/handbook.txt').read_text()
+except FileNotFoundError:
+    HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
+
+agent = Agent('anthropic:claude-3-5-sonnet-latest')
+
+question1 = 'How many days of PTO does a new full-timer get?'
+question2 = 'And a part-timer?'
+
+for q in (question1, question2):
+    result = agent.run_sync(
+        message_history=[
+            ModelRequest(parts=[
+                UserPromptPart(content=[
+                    'Consult the handbook when answering:',
+                    HANDBOOK,
+                    CachePoint(ttl='1h'),   # everything above this line is cached
+                    q,
+                ])
+            ])
+        ]
+    )
+    print(result.output)
+```
+
+Tips:
+
+- Put the `CachePoint` **after** the stable prefix (system-of-record documents, retrieved chunks) and **before** the per-turn question. That is the boundary the provider hashes.
+- `ttl='1h'` is a paid tier on Anthropic — check the provider docs before flipping the default.
+- Mixing multi-provider `FallbackModel`? Keep `CachePoint`s in — providers that don't cache just discard them, they do not error.
+
 ## Reference
 
 - `ModelMessage`, `ModelRequest`, `ModelResponse` — `messages.py`
@@ -373,3 +421,4 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 - `HistoryProcessorFunc` — `_history_processor.py:17`
 - `ProcessHistory` — `pydantic_ai.capabilities`
 - `Agent(capabilities=[ProcessHistory(...)])` — `agent/__init__.py`
+- `CachePoint` — `messages.py` (2.33.0)
