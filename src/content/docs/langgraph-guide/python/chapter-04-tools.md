@@ -684,7 +684,7 @@ tool_node = ToolNode(
 
 ### Inspecting `ToolInvocationError` in an interceptor
 
-Combine `wrap_tool_call` with `ToolInvocationError` to audit argument errors before the fallback message is generated:
+Combine `wrap_tool_call` with `ToolInvocationError` to audit argument errors before the fallback message is generated. The snippet below continues from the `book_flight` tool defined earlier in this section:
 
 ```python
 from typing import Callable

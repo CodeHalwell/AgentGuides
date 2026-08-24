@@ -643,6 +643,8 @@ with outer_graph.stream_events(
 
 When `run.subgraphs` is consumed, each item is a `SubgraphRunStream` — a `GraphRunStream` subclass that also carries `.path` (the subgraph's namespace tuple), `.graph_name`, and `.status` / `.error`. This lets you consume a nested subgraph's own `values`, `messages`, and `lifecycle` projections independently.
 
+The snippet below reuses `outer_graph` and `cfg` from the `LifecyclePayload` example above:
+
 ```python
 with outer_graph.stream_events(
     {"messages": [HumanMessage(content="Go")]},
@@ -683,7 +685,8 @@ from langgraph.stream.stream_channel import StreamChannel
 # Non-native custom transformer channels (accessed via extensions dict):
 #   channel: StreamChannel[Any] = run.extensions["my_transformer_name"]
 
-# Iterating any channel drives the graph pump forward one event at a time:
+# Iterating any channel drives the graph pump forward one event at a time.
+# `graph` and `cfg` here are the ones set up in the earlier v3 examples:
 with graph.stream_events({"messages": [HumanMessage(content="Hi")]}, cfg, version="v3") as run:
     for snapshot in run.values:   # StreamChannel[dict] — one snapshot per step
         print(snapshot)
