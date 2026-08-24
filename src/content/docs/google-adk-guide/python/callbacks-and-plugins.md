@@ -365,9 +365,22 @@ class JsonLoggingPlugin(LoggingPlugin):
 
     # LoggingPlugin's _log is a plain method taking (self, msg: str). Override it.
     def _log(self, msg: str) -> None:  # noqa: D401
-        # Split the "🚀 USER MESSAGE RECEIVED" prefix from indented "Key: value" lines
-        # emitted by the parent class and shove them into structured logs.
-        self._log_impl.info(json.dumps({"plugin": self.name, "msg": msg}))
+        # Parent formats msg as a single string with an emoji-prefixed header
+        # line ("🚀 USER MESSAGE RECEIVED") followed by indented "Key: value"
+        # lines. Split that back into a header + fields dict so downstream
+        # log processors (Datadog, Loki) can query on individual fields.
+        header, *rest = msg.splitlines()
+        fields: dict[str, str] = {}
+        for line in rest:
+            stripped = line.strip()
+            if ":" in stripped:
+                k, _, v = stripped.partition(":")
+                fields[k.strip()] = v.strip()
+        self._log_impl.info(json.dumps({
+            "plugin": self.name,
+            "event": header,
+            "fields": fields,
+        }))
 ```
 
 **Pick one, not both.** `LoggingPlugin` and `DebugLoggingPlugin` overlap — `DebugLoggingPlugin` re-implements the same callbacks with fuller payload dumps (LLM prompt bodies, tool arg previews). Running both duplicates every line. In dev, prefer `DebugLoggingPlugin`; in prod, prefer `LoggingPlugin` (or your subclass) alone.
