@@ -41,7 +41,7 @@ WorkflowViz(workflow: Workflow)
 
 ```bash
 pip install agent-framework
-pip install graphviz>=0.20.0      # Python binding
+pip install 'graphviz>=0.20.0'    # Python binding
 apt-get install graphviz           # or: brew install graphviz
 ```
 
@@ -212,7 +212,7 @@ from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     # Persist to disk; all sessions for user "alice" share the same folder.
-    store = FileSystemAgentFileStore(root_path="/tmp/agent_memory")
+    store = FileSystemAgentFileStore(root_directory="/tmp/agent_memory")
     memory = FileMemoryProvider(store=store, scope="user-alice")
 
     agent = Agent(
@@ -791,11 +791,11 @@ async def main() -> None:
         source_id=classifier.id,
         cases=[
             SwitchCaseEdgeGroupCase(
-                condition=lambda data: "type: json" in (data.get("text") or "").lower(),
+                condition=lambda data: "type: json" in (data.text or "").lower(),
                 target_id=json_agent.id,
             ),
             SwitchCaseEdgeGroupCase(
-                condition=lambda data: "type: csv" in (data.get("text") or "").lower(),
+                condition=lambda data: "type: csv" in (data.text or "").lower(),
                 target_id=csv_agent.id,
             ),
             SwitchCaseEdgeGroupDefault(target_id=text_agent.id),
@@ -1364,16 +1364,18 @@ from agent_framework import (
     SlidingWindowStrategy, CharacterEstimatorTokenizer,
 )
 
-# Run ALL strategies regardless of whether budget is met earlier.
-# Useful when you want maximal compaction for analytics or storage cost reduction.
+# Run ALL strategies regardless of whether budget is met after an earlier stage.
+# NOTE: strategies only run at all when the current history EXCEEDS token_budget.
+# If the history is already under budget, the strategy returns immediately without
+# calling any sub-strategy. Use a tight budget (or a very large history) so stages run.
 full_compaction = TokenBudgetComposedStrategy(
-    token_budget=100_000,     # loose budget — just measuring what compaction does
+    token_budget=500,         # tight — any real multi-turn history exceeds this
     tokenizer=CharacterEstimatorTokenizer(),
     strategies=[
         ToolResultCompactionStrategy(keep_last_tool_call_groups=0),  # collapse ALL tool results
         SlidingWindowStrategy(keep_last_groups=10),
     ],
-    early_stop=False,         # run all strategies even after hitting budget
+    early_stop=False,         # keep running all stages even after budget is already met
 )
 ```
 

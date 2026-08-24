@@ -14,7 +14,7 @@ Latest verified release: 1.15.0 | Python 3.10+
 
 ---
 
-> **API reference (verified against `agent-framework==1.15.0`).**
+> **API reference (verified against `agent-framework==1.14.0`; 10 classes re-verified on 1.15.0 — see [10-Class Deep Dives](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/)).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
