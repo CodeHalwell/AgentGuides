@@ -500,7 +500,12 @@ LangGraph 1.2.11 introduces an experimental v3 streaming protocol built on typed
 
 ### `GraphRunStream` — the v3 run handle
 
-`stream_events(version="v3")` returns a `GraphRunStream` (sync) or `AsyncGraphRunStream` (async). The object has four native projections always present:
+The v3 protocol has separate sync and async entry points:
+
+- `graph.stream_events(..., version="v3")` returns a `GraphRunStream` you enter with `with ... as run:`.
+- `graph.astream_events(..., version="v3")` is a coroutine — `await` it, then enter with `async with ... as run:` to get an `AsyncGraphRunStream`.
+
+Both handles expose the same four native projections:
 
 | Attribute | Type | What it emits |
 |---|---|---|
@@ -568,6 +573,45 @@ with graph.stream_events(
     version="v3",
 ) as run3:
     final_state = run3.output   # drives graph to completion, returns final state
+```
+
+Async callers use `astream_events()` instead, awaiting it before entering:
+
+```python
+import asyncio
+
+async def main():
+    # astream_events() is a coroutine — await it to get the AsyncGraphRunStream
+    run = await graph.astream_events(
+        {"messages": [HumanMessage(content="Async hi")]},
+        cfg,
+        version="v3",
+    )
+    async with run:
+        async for msg_chunk in run.messages:
+            async for delta in msg_chunk.text:
+                print(delta, end="", flush=True)
+
+asyncio.run(main())
+```
+
+> **Multi-projection consumption.** `StreamChannel` uses **lazy-subscribe** — items are only buffered on a channel after something has subscribed to it. If you drain `run.values` fully before touching `run.messages`, the graph pumps to completion while `run.messages` has no subscriber, and every token pushed to it is silently discarded.
+>
+> Use `run.interleave("values", "messages", ...)` on `GraphRunStream` for the sync case; it yields `(name, item)` tuples in arrival order across the named projections and locks each channel for the duration. For async, subscribe every projection **before** starting the pump (e.g. `asyncio.gather` over per-projection consumer tasks) — `AsyncGraphRunStream` does not expose an `ainterleave` helper in 1.2.11.
+
+```python
+# Sync multi-projection consumption — arrival-ordered, no dropped events.
+with graph.stream_events(
+    {"messages": [HumanMessage(content="Interleave demo")]},
+    cfg,
+    version="v3",
+) as run:
+    for name, item in run.interleave("values", "messages"):
+        if name == "values":
+            print(f"[state] messages={len(item['messages'])}")
+        else:  # "messages"
+            for delta in item.text:
+                print(delta, end="", flush=True)
 ```
 
 ### `LifecyclePayload` — subgraph lifecycle events
@@ -706,7 +750,7 @@ For most use cases the built-in `stream_mode="custom"` (v1/v2 API) is simpler th
 | State snapshots | `stream_mode="values"` | `run.values` projection |
 | Subgraph visibility | `subgraphs=True` flag | `run.subgraphs` with typed handles |
 | Lifecycle events | `stream_mode="debug"` | `run.lifecycle` (typed `LifecyclePayload`) |
-| Multiple modes at once | `stream_mode=[...]` → `(mode, data)` tuples | Separate projection iterators |
+| Multiple modes at once | `stream_mode=[...]` → `(mode, data)` tuples | `run.interleave("a", "b", ...)` → arrival-ordered `(name, item)` tuples (sync); concurrent consumer tasks (async) |
 | Type safety | `version="v2"` `StreamPart` TypedDict | Generically typed `StreamChannel[T]` |
 
 Use **v1/v2** for production today. Experiment with **v3** when you need per-subgraph handles or typed lifecycle events, and be ready to adapt when the API stabilises.
@@ -726,7 +770,9 @@ Use **v1/v2** for production today. Experiment with **v3** when you need per-sub
 | Multiple at once | `stream_mode=["values", "messages"]` |
 | Typed stream parts | `astream(..., version="v2")` |
 | Typed final output | `ainvoke(..., version="v2")` → `GraphOutput` |
-| v3 run handle | `graph.stream_events(input, cfg, version="v3")` → `GraphRunStream` |
+| v3 run handle (sync) | `graph.stream_events(input, cfg, version="v3")` → `GraphRunStream` |
+| v3 run handle (async) | `await graph.astream_events(input, cfg, version="v3")` → `AsyncGraphRunStream` |
+| v3 multi-projection (sync) | `for name, item in run.interleave("values", "messages"): ...` |
 | v3 token stream | `for chunk in run.messages: ...` |
 | v3 state snapshots | `for snap in run.values: ...` |
 | v3 lifecycle events | `for ev in run.lifecycle: ...` → `LifecyclePayload` |
