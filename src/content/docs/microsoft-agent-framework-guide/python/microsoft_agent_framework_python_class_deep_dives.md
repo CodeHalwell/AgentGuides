@@ -398,11 +398,12 @@ async def main() -> None:
     r1 = await agent.run("Research recent developments in quantum computing.", session=session)
     print("RESEARCH:", r1.text[:200])
 
-    set_agent_mode(session, "write")
+    custom_modes = ["research", "write", "review"]
+    set_agent_mode(session, "write", available_modes=custom_modes)
     r2 = await agent.run("Write the article now.", session=session)
     print("WRITE:", r2.text[:200])
 
-    current = get_agent_mode(session)
+    current = get_agent_mode(session, available_modes=custom_modes)
     print(f"Current mode: {current}")  # → write
 
 
