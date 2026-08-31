@@ -56,19 +56,21 @@ from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
-web_researcher  = Agent(client=client, name="web_researcher",
-                        instructions="Search for recent news on the topic.")
-doc_researcher  = Agent(client=client, name="doc_researcher",
-                        instructions="Search internal documents on the topic.")
-synthesizer     = Agent(client=client, name="synthesizer",
-                        instructions="Combine the research findings into a single report.")
+dispatcher     = Agent(client=client, name="dispatcher",
+                       instructions="Echo the research query unchanged.")
+web_researcher = Agent(client=client, name="web_researcher",
+                       instructions="Search for recent news on the topic.")
+doc_researcher = Agent(client=client, name="doc_researcher",
+                       instructions="Search internal documents on the topic.")
+synthesizer    = Agent(client=client, name="synthesizer",
+                       instructions="Combine the research findings into a single report.")
 
-builder = WorkflowBuilder(start_executor=web_researcher)
+builder = WorkflowBuilder(start_executor=dispatcher)
 
-# Fan-out: start broadcasts to both researchers concurrently
-builder.add_fan_out_edges(web_researcher, [doc_researcher, web_researcher])
+# Fan-out: dispatcher broadcasts the query to both researchers concurrently
+builder.add_fan_out_edges(dispatcher, [web_researcher, doc_researcher])
 
-# Fan-in: synthesizer runs only after both researchers complete
+# Fan-in: synthesizer runs only after BOTH researchers complete
 # (add_fan_in_edges creates a FanInEdgeGroup internally)
 builder.add_fan_in_edges([web_researcher, doc_researcher], synthesizer)
 
