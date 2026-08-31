@@ -179,18 +179,24 @@ from google.adk.runners import InMemoryRunner
 from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
 from google.genai import types
 
-# Restricted policy: only allow git, ls, cat, echo; cap memory and timeout.
-# NOTE: allowed_command_prefixes is a startswith check — it is NOT a security
-# boundary on its own. A command like `echo $(rm -rf ...)` passes the prefix
-# check because the string starts with "echo". Block command-substitution and
-# other shell meta-characters via blocked_operators to close these bypasses.
+# Example policy — reduces accidental misuse, but is NOT a security sandbox.
+#
+# Limitations:
+#   - allowed_command_prefixes is a startswith check: `echo $(rm -rf ...)` passes
+#     because the string starts with "echo". Adding "$(" and "`" to
+#     blocked_operators closes the most obvious bypasses but cannot cover every
+#     vector — e.g. `git -c alias.x='!rm -rf /' x` starts with "git" and
+#     contains none of the blocked tokens, yet executes a shell command via
+#     git's alias feature.
+#   - For security-sensitive workloads, run the agent inside a real OS-level
+#     sandbox (Docker, gVisor, Firecracker, etc.) rather than relying on this
+#     filter as your primary containment boundary.
 policy = BashToolPolicy(
     allowed_command_prefixes=("git", "ls", "cat", "echo"),
     blocked_operators=(
         ";", "&&", "||", "|", ">", ">>",
         "$(", "`",          # command substitution
         "\n", "\r",         # newline injection
-        "$(",               # redundant but explicit
     ),
     timeout_seconds=10,
     max_memory_bytes=128 * 1024 * 1024,   # 128 MB
@@ -261,7 +267,7 @@ asyncio.run(main())
 
 - `ExecuteBashTool` is POSIX-only — it returns `{"error": "ExecuteBashTool is only supported on POSIX systems."}` on Windows.
 - The subprocess runs in a new session (`start_new_session=True`) and is SIGKILL'd on timeout via `os.killpg`. The `finally` block always kills the process group, even on success, to avoid zombie children.
-- `allowed_command_prefixes` is a `startswith` check on the raw command string — it is **not** a security boundary on its own. A command such as `echo $(rm -rf /workspace)` passes the prefix check because the string starts with `"echo"`, while the nested `$(...)` still executes in the shell. Always include command-substitution meta-characters (`"$("`, `` "`" ``) and newline sequences (`"\n"`, `"\r"`) in `blocked_operators` to close these bypasses.
+- `allowed_command_prefixes` is a `startswith` check on the raw command string — it is **not** a security boundary on its own. A command such as `echo $(rm -rf /workspace)` passes the prefix check because the string starts with `"echo"`, while the nested `$(...)` still executes in the shell. Adding `"$("` and backtick to `blocked_operators` closes that vector, but there are further bypasses for tools that interpret their own flags: for example, `git -c alias.x='!rm -rf /' x` starts with the allowed prefix `"git"` and contains no blocked token, yet git's alias feature executes the shell command. For security-sensitive workloads, run inside a real OS-level sandbox rather than relying on `BashToolPolicy` as your primary containment boundary.
 - `blocked_operators` performs a string-contains check on the raw command. Shell injection via encoded operators (e.g. `%26%26`) can bypass it — pair with a strict `allowed_command_prefixes` allowlist for security-sensitive environments.
 - `max_memory_bytes`, `max_file_size_bytes`, and `max_child_processes` are applied via `resource.setrlimit` in `preexec_fn` — they only take effect on Linux/macOS that support POSIX resource limits.
 
