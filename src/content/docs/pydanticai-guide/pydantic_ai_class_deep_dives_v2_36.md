@@ -382,6 +382,7 @@ Tool(
     args_validator=None,   # fn(ctx, args) -> args | raise
     docstring_format='auto',            # 'auto' | 'google' | 'numpy' | 'sphinx'
     require_parameter_descriptions=False,
+    schema_generator=GenerateToolJsonSchema,  # custom GenerateJsonSchema subclass
     strict=None,           # None = provider default; True = strict JSON schema
     sequential=False,      # if True, tool calls are serialised (not parallel)
     requires_approval=False, # if True, tool call is paused for HITL approval
@@ -389,6 +390,7 @@ Tool(
     timeout=None,          # seconds; overrides Agent's tool_timeout
     defer_loading=False,   # don't inspect function until first use
     include_return_schema=None,
+    function_schema=None,  # pre-built FunctionSchema; skips introspection entirely
 )
 ```
 
@@ -478,10 +480,24 @@ Models receive this; your code may inspect or modify it (e.g. inside a `prepare`
 | Field | Type | Default | Purpose |
 |---|---|---|---|
 | `name` | `str` | — | Tool name the model calls. |
-| `parameters_json_schema` | `ObjectJsonSchema` | `{'type': 'object', 'properties': {}}` | JSON schema for arguments. |
+| `parameters_json_schema` | `ObjectJsonSchema` | — | JSON schema for arguments. |
 | `description` | `str \| None` | `None` | Sent verbatim to the model. |
 | `outer_typed_dict_key` | `str \| None` | `None` | For output tools whose schema is not `object`. |
 | `strict` | `bool \| None` | `None` | `True` = strict schema enforcement; `False` = disable; `None` = provider default. |
+| `sequential` | `bool` | `False` | If `True`, tool calls are serialised rather than executed in parallel. |
+| `kind` | `ToolKind` | `'function'` | Kind of tool (`'function'` or `'output'`). |
+| `metadata` | `dict[str, Any] \| None` | `None` | Arbitrary metadata passed through from `Tool(metadata=…)`. |
+| `timeout` | `float \| None` | `None` | Per-call timeout in seconds; overrides `Agent`'s `tool_timeout`. |
+| `defer_loading` | `bool` | `False` | Whether function introspection is deferred until first use. |
+| `unless_native` | `str \| None` | `None` | Fallback tool name if the model does not support the native capability. |
+| `with_native` | `str \| None` | `None` | Maps tool to a model-native capability (e.g. `'web_search'`). |
+| `tool_kind` | `ToolPartKind \| None` | `None` | Distinguishes tool-call parts from output-tool parts in message history. |
+| `return_schema` | `ObjectJsonSchema \| None` | `None` | JSON schema for the tool's return value (when `include_return_schema=True`). |
+| `include_return_schema` | `bool \| None` | `None` | Override `Tool(include_return_schema=…)` for this specific definition. |
+| `toolset_id` | `str \| None` | `None` | Id of the toolset that registered this tool (set automatically). |
+| `capability_id` | `str \| None` | `None` | Id of the model capability this tool maps to (set automatically). |
+
+> **Tip — preserve the original in `prepare`:** When modifying a `ToolDefinition` inside a `prepare` callback, update only the fields you need and return the rest unchanged. Constructing a brand-new definition from scratch resets every field to its default, which silently drops `sequential`, `timeout`, `metadata`, and other configuration supplied when the `Tool` was created.
 
 ### Runnable example — inspecting the generated schema
 
