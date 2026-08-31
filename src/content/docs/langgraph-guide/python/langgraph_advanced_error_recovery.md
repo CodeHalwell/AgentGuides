@@ -27,7 +27,7 @@ LangGraph provides first-class primitives for every layer of error handling, wit
 `RetryPolicy` is a `NamedTuple` that wraps node execution in an automatic retry loop with configurable backoff and jitter. Verified source:
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.2)
+# langgraph.types (source-verified, langgraph 1.2.11)
 class RetryPolicy(NamedTuple):
     initial_interval: float = 0.5      # seconds before the first retry
     backoff_factor:   float = 2.0      # multiplier applied after each retry
@@ -182,7 +182,7 @@ builder.add_node(
 `TimeoutPolicy` cancels an async node attempt if it runs too long. Two cancellation modes:
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.2)
+# langgraph.types (source-verified, langgraph 1.2.11)
 @dataclass
 class TimeoutPolicy:
     run_timeout:  float | timedelta | None = None   # hard wall-clock cap
@@ -587,8 +587,16 @@ When `TimeoutPolicy` cancels a node, LangGraph raises `NodeTimeoutError` (not th
 
 ```python
 import asyncio
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
 from langgraph.errors import NodeTimeoutError
 from langgraph.types import RetryPolicy, TimeoutPolicy
+
+
+class State(TypedDict):
+    data: str
+    result: str
+
 
 RETRYABLE_KINDS = {"run"}   # retry on run_timeout but not idle_timeout
 
@@ -639,8 +647,15 @@ Catch it in a `retry_on` predicate to decide whether cancellation should trigger
 
 ```python
 import asyncio
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
 from langgraph.errors import NodeCancelledError
 from langgraph.types import RetryPolicy
+
+
+class State(TypedDict):
+    data: str
+    result: str
 
 
 def retry_policy_for_cancelled(exc: BaseException) -> bool:
