@@ -533,7 +533,7 @@ Identical interface to `FileCheckpointStorage`:
 | `await get_latest(*, workflow_name)` | `WorkflowCheckpoint \| None` |
 | `await delete(checkpoint_id)` | `bool` |
 
-### Example — Testing HITL resume with in-memory storage
+### Example — Checkpoint storage round-trip (save, list, load, delete)
 
 ```python
 import asyncio
@@ -657,7 +657,7 @@ async def main() -> None:
         args=["-m", "my_mcp_server.main"],
         env={"DATABASE_URL": "postgresql://localhost/mydb"},
         allowed_tools=["query_table", "list_tables"],
-        approval_mode="always_require",
+        approval_mode="never_require",
     )
 
     async with db_tool:
