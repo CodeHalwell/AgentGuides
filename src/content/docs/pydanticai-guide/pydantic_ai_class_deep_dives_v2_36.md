@@ -730,7 +730,7 @@ print(result.output)
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.concurrency import ConcurrencyLimiter
-from pydantic_ai.exceptions import UserError
+from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 agent = Agent('openai:gpt-4o-mini')
 # Very tight: only 1 running, only 1 queued
@@ -740,11 +740,9 @@ tight = ConcurrencyLimiter(max_running=1, max_queued=1, name='tight')
 async def safe_ask(q: str) -> str | None:
     try:
         await tight.acquire(source='agent:tight')
-    except Exception as exc:
-        if 'ConcurrencyLimitExceeded' in type(exc).__name__:
-            print(f'Dropped (queue full): {q}')
-            return None
-        raise
+    except ConcurrencyLimitExceeded:
+        print(f'Dropped (queue full): {q}')
+        return None
     try:
         result = await agent.run(q)
         return result.output
@@ -753,11 +751,10 @@ async def safe_ask(q: str) -> str | None:
 
 
 async def main() -> None:
-    tasks = [safe_ask(f'Question {i}') for i in range(5)]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    for r in results:
-        if r:
-            print(r[:60])
+    answers = await asyncio.gather(*(safe_ask(f'Question {i}') for i in range(5)))
+    for ans in answers:
+        if ans is not None:
+            print(ans[:60])
 
 
 asyncio.run(main())
@@ -943,8 +940,7 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 
 ```python
 import asyncio
-from pydantic_ai import Agent, RunContext
-from pydantic_ai._deferred import DeferredToolRequests
+from pydantic_ai import Agent, RunContext, DeferredToolRequests
 from pydantic_ai.toolsets import FunctionToolset, ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
 
