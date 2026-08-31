@@ -723,20 +723,22 @@ except GraphRecursionError:
 
 ### `ErrorCode` — structured error taxonomy (source-verified)
 
-`ErrorCode` is an `Enum` embedded in many LangGraph error messages. Match on it for programmatic error categorisation:
+`ErrorCode` is an `Enum` whose **string value is embedded in LangGraph exception messages and troubleshooting URLs**. It is NOT exposed as an attribute on exception instances — code like `exc.error_code == ErrorCode.GRAPH_RECURSION_LIMIT` will not work. Prefer catching concrete exception types (`NodeTimeoutError`, `GraphRecursionError`, etc.); use message-string inspection only as a fallback.
 
 ```python
 from langgraph.errors import ErrorCode
 
 # ErrorCode members (source-verified, 1.2.11):
 # ErrorCode.GRAPH_RECURSION_LIMIT          — recursion_limit exceeded
-# ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE — two threads wrote conflicting state
+# ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE — parallel nodes wrote to a channel accepting
+#                                             only one value per super-step (unannotated key
+#                                             or second Overwrite in the same super-step)
 # ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE — node returned a non-dict / bad type
 # ErrorCode.MULTIPLE_SUBGRAPHS             — ambiguous subgraph routing
 # ErrorCode.INVALID_CHAT_HISTORY          — malformed message sequence
 ```
 
-The code string is embedded in the exception message so you can detect it without importing `ErrorCode`:
+The code string is embedded in the exception message — inspect it via `str(exc)`, not via an attribute:
 
 ```python
 try:
