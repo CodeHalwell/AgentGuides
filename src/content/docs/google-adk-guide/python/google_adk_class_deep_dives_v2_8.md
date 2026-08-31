@@ -108,13 +108,11 @@ async def stream_audio(queue: LiveRequestQueue, wav_path: str) -> None:
     CHUNK_DURATION_MS = 20
     with wave.open(wav_path, "rb") as wf:
         sample_rate = wf.getframerate()
-        channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
-        bytes_per_chunk = int(sample_rate * CHUNK_DURATION_MS / 1000) * channels * sampwidth
+        frames_per_chunk = int(sample_rate * CHUNK_DURATION_MS / 1000)
 
         queue.send_activity_start()
         while True:
-            chunk = wf.readframes(int(sample_rate * CHUNK_DURATION_MS / 1000))
+            chunk = wf.readframes(frames_per_chunk)
             if not chunk:
                 break
             queue.send_realtime(
@@ -147,7 +145,7 @@ Source-verified from `google/adk/tools/bash_tool.py`:
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `allowed_command_prefixes` | `tuple[str, ...]` | `("*",)` | `"*"` allows everything; list explicit prefixes like `("git", "ls", "cat")` to allowlist |
-| `blocked_operators` | `tuple[str, ...]` | `()` | Shell operators to block in the command string, e.g. `(";", "&&", "\|\|")` |
+| `blocked_operators` | `tuple[str, ...]` | `()` | Shell operators to block in the command string, e.g. `(";", "&&", "&#124;&#124;")` |
 | `timeout_seconds` | `int \| None` | `30` | Seconds before the subprocess is SIGKILL'd; `None` = no limit |
 | `max_memory_bytes` | `int \| None` | `None` | `RLIMIT_AS` on the spawned process; `None` = unlimited |
 | `max_file_size_bytes` | `int \| None` | `None` | `RLIMIT_FSIZE` on the spawned process |
@@ -177,7 +175,7 @@ from google.adk.runners import InMemoryRunner
 from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
 from google.genai import types
 
-# Locked-down policy: only allow git and ls; cap memory and timeout
+# Locked-down policy: only allow git, ls, cat, echo; cap memory and timeout
 policy = BashToolPolicy(
     allowed_command_prefixes=("git", "ls", "cat", "echo"),
     blocked_operators=(";", "&&", "||", "|", ">", ">>"),
@@ -815,7 +813,6 @@ toolbox = ToolboxToolset(
 
 ```python
 from google.adk.tools.toolbox_toolset import ToolboxToolset
-from google.adk.tools.tool_context import ToolContext
 
 # Bind dynamic values that are resolved at call time
 toolbox = ToolboxToolset(
