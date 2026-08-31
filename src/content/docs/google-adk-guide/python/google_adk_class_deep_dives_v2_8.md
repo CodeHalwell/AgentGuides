@@ -224,6 +224,10 @@ async def main():
     session = await runner.session_service.create_session(
         app_name="bash_demo", user_id="u1"
     )
+
+    # Step 1 — initial invocation: model calls execute_bash, tool suspends
+    # and emits an adk_request_confirmation function call asking for approval.
+    confirmation_fc_id = None
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
@@ -236,6 +240,34 @@ async def main():
             for part in event.content.parts:
                 if part.text:
                     print(part.text)
+                # Capture the confirmation function-call ID so we can approve it.
+                if (part.function_call
+                        and part.function_call.name == "adk_request_confirmation"):
+                    confirmation_fc_id = part.function_call.id
+
+    # Step 2 — send approval: respond to the pending adk_request_confirmation
+    # with confirmed=True so the tool actually executes the bash command.
+    if confirmation_fc_id:
+        async for event in runner.run_async(
+            user_id="u1",
+            session_id=session.id,
+            new_message=types.Content(
+                role="user",
+                parts=[
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            id=confirmation_fc_id,
+                            name="adk_request_confirmation",
+                            response={"confirmed": True},
+                        )
+                    )
+                ],
+            ),
+        ):
+            if event.content:
+                for part in event.content.parts:
+                    if part.text:
+                        print(part.text)
 
 asyncio.run(main())
 ```
