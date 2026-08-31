@@ -742,8 +742,7 @@ BaseException
       ├── EmptyInputError        # graph.invoke() received an empty input
       ├── RecursionError
       │    └── GraphRecursionError   # recursion_limit steps exhausted
-      └── LookupError
-           └── TaskNotFound     # resume targeted a non-existent interrupt id
+      └── TaskNotFound         # executor cannot find a task (distributed mode)
 ```
 
 ---

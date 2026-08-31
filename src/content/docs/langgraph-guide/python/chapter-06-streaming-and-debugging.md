@@ -873,7 +873,7 @@ graph = (
 
 # Consumers receive UIMessage objects in the "custom" stream
 for mode, data in graph.stream(
-    {"query": "langgraph streaming", "ui": []},
+    {"query": "langgraph streaming", "result": "", "ui": []},
     stream_mode=["values", "custom"],
 ):
     if mode == "custom":
