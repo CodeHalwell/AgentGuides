@@ -194,11 +194,11 @@ ergonomic iteration methods.
 
 | Method | Signature | Notes |
 |---|---|---|
-| `stream_text()` | `AsyncIterator[str]` | Yields raw text chunks. Requires `output_type=str`. |
-| `stream_output()` | `AsyncIterator[OutputDataT]` | Partially-validated structured output on each chunk. |
+| `stream_text()` | `AsyncIterator[str]` | Yields raw text chunks regardless of `output_type`; pass `delta=True` for incremental chunks. |
+| `stream_output()` | `AsyncIterator[OutputDataT]` | Partially-validated structured output on each chunk; use this when `TextOutput` functions must apply. |
 | `stream_response()` | `AsyncIterator[ModelResponse]` | Cumulative `ModelResponse` snapshots; `response.state` is `'incomplete'` while streaming, `'complete'` on the final yield. |
-| `get_output()` | `-> OutputDataT` | Drain the stream and return the final validated value. |
-| `cancel()` | `-> None` | Abort the stream; partial history is preserved. |
+| `await get_output()` | `-> OutputDataT` | Drain the stream and return the final validated value. |
+| `await cancel()` | `-> None` | Abort the stream; interrupted response is recorded in message history. |
 | `all_messages()` | `-> list[ModelMessage]` | Full message history after stream completes. |
 | `new_messages()` | `-> list[ModelMessage]` | Only this run's messages. |
 | `is_complete` | `bool` | `True` once one of the stream/get methods fully completes. |
@@ -246,9 +246,9 @@ async def main() -> None:
         async for partial in streamed.stream_output(debounce_by=0.05):
             print(f'  steps so far: {len(partial.steps)}')
 
-        final = streamed._run_result
-        if final:
-            print('Final plan:', final.output)
+        # Use the public get_output() to retrieve the final validated value
+        final = await streamed.get_output()
+        print('Final plan:', final)
 
 
 asyncio.run(main())
@@ -688,9 +688,13 @@ limiter = ConcurrencyLimiter(max_running=3, max_queued=10, name='batch-agent')
 
 
 async def ask(question: str) -> str:
-    async with limiter:
+    # ConcurrencyLimiter uses acquire/release — it is NOT an async context manager
+    await limiter.acquire(source='agent:batch-agent')
+    try:
         result = await agent.run(question)
         return result.output
+    finally:
+        limiter.release()
 
 
 async def main() -> None:
@@ -735,14 +739,17 @@ tight = ConcurrencyLimiter(max_running=1, max_queued=1, name='tight')
 
 async def safe_ask(q: str) -> str | None:
     try:
-        async with tight:
-            result = await agent.run(q)
-            return result.output
+        await tight.acquire(source='agent:tight')
     except Exception as exc:
         if 'ConcurrencyLimitExceeded' in type(exc).__name__:
             print(f'Dropped (queue full): {q}')
             return None
         raise
+    try:
+        result = await agent.run(q)
+        return result.output
+    finally:
+        tight.release()
 
 
 async def main() -> None:
