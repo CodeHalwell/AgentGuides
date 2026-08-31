@@ -421,7 +421,7 @@ asyncio.run(main())
 
 **Module:** `agent_framework._workflows._checkpoint` (re-exported via `agent_framework`)
 
-`FileCheckpointStorage` persists workflow checkpoints to disk as JSON files with pickle-encoded state. It uses atomic writes (write-to-temp then `os.replace`) so a crash during a save never corrupts an existing checkpoint. Deserialization uses a safe allowlist of Python types to prevent arbitrary code execution.
+`FileCheckpointStorage` persists workflow checkpoints to disk as JSON files with pickle-encoded state. It uses atomic writes (write-to-temp then `os.replace`) so a crash during a save never corrupts an existing checkpoint. Deserialisation uses a safe allowlist of Python types to prevent arbitrary code execution.
 
 ### Constructor
 

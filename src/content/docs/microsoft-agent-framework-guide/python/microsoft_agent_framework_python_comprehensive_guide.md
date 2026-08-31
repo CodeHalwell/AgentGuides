@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.16.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For 1.15.0–1.16.0-verified class examples, see the Class Deep Dives Vol. 1 and Vol. 2 guides."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.16.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For class examples verified against 1.15.0–1.16.0, see the Class Deep Dives Vol. 1 and Vol. 2 guides."
 framework: microsoft-agent-framework
 language: python
 ---
