@@ -175,6 +175,7 @@ import pathlib
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
+from google.genai import types
 
 # Locked-down policy: only allow git and ls; cap memory and timeout
 policy = BashToolPolicy(
@@ -209,7 +210,10 @@ async def main():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="Show me the last 5 commits.",
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="Show me the last 5 commits.")],
+        ),
     ):
         if event.content:
             for part in event.content.parts:
@@ -1064,20 +1068,28 @@ In a `Workflow`, prefer the `end_condition` parameter on a loop node for pure Py
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.tools.exit_loop_tool import exit_loop
-from google.adk.workflow import Workflow
+from google.adk.workflow import Workflow, START
 
-@Workflow
-def review_loop(wf):
-    reviewer = wf.add_node(LlmAgent(
-        name="reviewer",
-        model="gemini-2.5-flash",
-        instruction=(
-            "Check if the task in state['task'] is complete. "
-            "Call exit_loop if done; otherwise update state['task'] with next step."
-        ),
-        tools=[exit_loop],
-    ))
-    wf.add_edge(reviewer, reviewer)   # loop back to self until exit_loop fires
+reviewer = LlmAgent(
+    name="reviewer",
+    model="gemini-2.5-flash",
+    instruction=(
+        "Check if the task in state['task'] is complete. "
+        "Call exit_loop if done; otherwise update state['task'] with next step."
+    ),
+    tools=[exit_loop],
+)
+
+# Workflow is a Pydantic model — construct it with edges=[], not a decorator.
+# (START, reviewer) seeds the entry point; (reviewer, reviewer) creates
+# the loop edge. exit_loop sets escalate=True which terminates the workflow.
+review_loop = Workflow(
+    name="review_loop",
+    edges=[
+        (START, reviewer),       # entry point
+        (reviewer, reviewer),    # loop back to self until exit_loop fires
+    ],
+)
 ```
 
 ### `get_user_choice_tool`
