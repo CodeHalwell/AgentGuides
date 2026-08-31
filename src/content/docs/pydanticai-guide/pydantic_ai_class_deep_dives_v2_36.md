@@ -80,8 +80,8 @@ agent = Agent('openai:gpt-4o-mini')
 
 async def main() -> None:
     async with agent.iter('What is the capital of France?') as run:
-        # Grab the first pending node
-        node = await run.__anext__()
+        # next_node is a property exposing the first pending node
+        node = run.next_node
 
         while not isinstance(node, End):
             print(f'  Running: {type(node).__name__}')
@@ -196,7 +196,7 @@ ergonomic iteration methods.
 |---|---|---|
 | `stream_text()` | `AsyncIterator[str]` | Yields raw text chunks. Requires `output_type=str`. |
 | `stream_output()` | `AsyncIterator[OutputDataT]` | Partially-validated structured output on each chunk. |
-| `stream_response()` | `AsyncIterator[ModelResponseStreamEvent]` | Raw model events. |
+| `stream_response()` | `AsyncIterator[ModelResponse]` | Cumulative `ModelResponse` snapshots; `response.state` is `'incomplete'` while streaming, `'complete'` on the final yield. |
 | `get_output()` | `-> OutputDataT` | Drain the stream and return the final validated value. |
 | `cancel()` | `-> None` | Abort the stream; partial history is preserved. |
 | `all_messages()` | `-> list[ModelMessage]` | Full message history after stream completes. |
@@ -937,9 +937,9 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 ```python
 import asyncio
 from pydantic_ai import Agent, RunContext
+from pydantic_ai._deferred import DeferredToolRequests
 from pydantic_ai.toolsets import FunctionToolset, ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai._deferred import ToolApproved, ToolDenied
 
 
 async def send_email(ctx: RunContext[None], to: str, body: str) -> str:
@@ -961,24 +961,29 @@ def needs_approval(ctx: RunContext[None], tool_def: ToolDefinition, args: dict) 
 base_toolset = FunctionToolset([send_email, check_balance])
 gated = ApprovalRequiredToolset(base_toolset, approval_required_func=needs_approval)
 
-agent = Agent('openai:gpt-4o-mini', toolsets=[gated])
+# output_type must include DeferredToolRequests so the agent can surface the pause
+agent = Agent(
+    'openai:gpt-4o-mini',
+    output_type=[str, DeferredToolRequests],
+    toolsets=[gated],
+)
 
 
 async def main() -> None:
-    # First pass — model decides to call send_email; run pauses
+    # First pass — model decides to call send_email; agent returns DeferredToolRequests
     result = await agent.run(
         'Check my balance and then email support@example.com saying I have sufficient funds.'
     )
 
-    # If the run was deferred (DeferredToolRequests raised), handle approval:
-    from pydantic_ai._deferred import DeferredToolRequests
-    if isinstance(result, DeferredToolRequests):
-        print('Approval needed for:', [r.tool_name for r in result.tool_requests])
+    if isinstance(result.output, DeferredToolRequests):
+        deferred = result.output
+        print('Approval needed for:',
+              [c.tool_name for c in deferred.approvals])
 
-        # Approve all pending calls
-        approved_results = result.build_results(ToolApproved())
+        # Approve all pending approval-requiring calls at once
+        approved_results = deferred.build_results(approve_all=True)
 
-        # Resume with approved results
+        # Resume: pass approved results + full message history so the model has context
         final = await agent.run(
             'Continue.',
             deferred_tool_results=approved_results,
@@ -986,6 +991,7 @@ async def main() -> None:
         )
         print(final.output)
     else:
+        # No approval needed — plain string output
         print(result.output)
 
 
