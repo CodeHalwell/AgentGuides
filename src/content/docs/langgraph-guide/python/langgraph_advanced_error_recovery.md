@@ -670,7 +670,7 @@ graph = (
 
 ### `GraphRecursionError` — handling the recursion limit (source-verified)
 
-`GraphRecursionError` is raised when the graph has exhausted the maximum number of steps (`recursion_limit`, default 25). It inherits from the built-in `RecursionError`:
+`GraphRecursionError` is raised when the graph has exhausted the maximum number of steps (`recursion_limit`). In LangGraph 1.2.11 the default is **10007** (set via `DEFAULT_RECURSION_LIMIT` in `langgraph._internal._config`; override the baseline with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable). It inherits from the built-in `RecursionError`:
 
 ```python
 class GraphRecursionError(RecursionError):
