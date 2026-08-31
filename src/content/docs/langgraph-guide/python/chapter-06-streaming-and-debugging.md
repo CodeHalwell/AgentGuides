@@ -1,6 +1,6 @@
 ---
 title: "Chapter 6 — Streaming & Debugging"
-description: "All 7 stream modes, typed StreamPart v2 API, GraphOutput, token-level message streaming, custom StreamWriter, multi-mode streaming, graph visualization, and checkpoint inspection."
+description: "All 7 stream modes, typed StreamPart v2 API, GraphOutput, token-level message streaming, custom StreamWriter, UI streaming with push_ui_message/UIMessage, experimental v3 stream_events API, graph visualization, and checkpoint inspection."
 framework: langgraph
 language: python
 sidebar:
@@ -10,9 +10,9 @@ sidebar:
 
 # Chapter 6 — Streaming & Debugging
 
-**What you'll learn:** every streaming mode in langgraph 1.2.x, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, the new experimental v3 `stream_events` API with `GraphRunStream` / `SubgraphRunStream` / `LifecyclePayload` / `StreamChannel`, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
+**What you'll learn:** every streaming mode in langgraph 1.2.x, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, the new experimental v3 `stream_events` API with `GraphRunStream` / `SubgraphRunStream` / `LifecyclePayload` / `StreamChannel`, **UI streaming** with `push_ui_message` / `UIMessage` / `delete_ui_message` for live front-end component updates, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.stream`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.stream`, `langgraph.graph.ui`).
 
 **Time:** ~30 minutes.
 
@@ -780,6 +780,187 @@ Use **v1/v2** for production today. Experiment with **v3** when you need per-sub
 
 ---
 
+## UI Streaming — `push_ui_message`, `UIMessage`, and `delete_ui_message`
+
+LangGraph 1.2.11 ships a first-class UI streaming layer under `langgraph.graph.ui`. Nodes call `push_ui_message()` from inside their body and the event is forwarded to every consumer watching `stream_mode="custom"`. This lets a React / Vue / Svelte front-end render named components from live graph state without polling.
+
+Verified against **`langgraph==1.2.11`** (module: `langgraph.graph.ui`).
+
+### Primitives at a glance
+
+| Symbol | Module | Purpose |
+|---|---|---|
+| `UIMessage` | `langgraph.graph.ui` | TypedDict describing a UI component to render |
+| `RemoveUIMessage` | `langgraph.graph.ui` | TypedDict describing a UI component to remove |
+| `push_ui_message(name, props)` | `langgraph.graph.ui` | Create and stream a `UIMessage` from inside a node |
+| `delete_ui_message(id)` | `langgraph.graph.ui` | Create and stream a `RemoveUIMessage` from inside a node |
+| `ui_message_reducer` | `langgraph.graph.ui` | Reducer for a `ui` state key — handles add/merge/remove |
+
+### `UIMessage` TypedDict (source-verified)
+
+```python
+# langgraph.graph.ui (source-verified, langgraph 1.2.11)
+class UIMessage(TypedDict):
+    type: Literal["ui"]         # always "ui"
+    id: str                     # unique identifier (UUID if not provided)
+    name: str                   # component name the client maps to a React element
+    props: dict[str, Any]       # arbitrary props passed to the component
+    metadata: dict[str, Any]    # run_id, tags, message_id, merge flag, …
+```
+
+`RemoveUIMessage` is simpler:
+
+```python
+class RemoveUIMessage(TypedDict):
+    type: Literal["remove-ui"]  # always "remove-ui"
+    id: str                     # id of the UIMessage to remove
+```
+
+### Minimal working example
+
+Wire a `ui` key into your state using `ui_message_reducer`, then call `push_ui_message()` from any node:
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.ui import (
+    UIMessage, RemoveUIMessage,
+    push_ui_message, delete_ui_message, ui_message_reducer,
+)
+
+# AnyUIMessage is the union type used by the reducer
+AnyUIMessage = UIMessage | RemoveUIMessage
+
+
+class State(TypedDict):
+    query: str
+    result: str
+    # Annotate with the reducer — it handles add / merge / remove semantics
+    ui: Annotated[list[AnyUIMessage], ui_message_reducer]
+
+
+def search_node(state: State) -> dict:
+    # Push a loading spinner to the UI before doing work
+    push_ui_message(
+        name="Spinner",
+        props={"label": "Searching…"},
+        id="spinner-1",      # stable id so we can remove it later
+    )
+
+    # … do the actual work …
+    result = f"results for: {state['query']}"
+
+    # Remove the spinner now that work is done
+    delete_ui_message("spinner-1")
+
+    # Show the result card
+    push_ui_message(
+        name="ResultCard",
+        props={"content": result, "query": state["query"]},
+    )
+
+    return {"result": result}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("search", search_node)
+    .add_edge(START, "search")
+    .add_edge("search", END)
+    .compile()
+)
+
+# Consumers receive UIMessage objects in the "custom" stream
+for mode, data in graph.stream(
+    {"query": "langgraph streaming", "result": "", "ui": []},
+    stream_mode=["values", "custom"],
+):
+    if mode == "custom":
+        print(f"UI event: {data}")      # {'type': 'ui', 'name': 'Spinner', ...}
+    elif mode == "values":
+        print(f"State ui list: {data.get('ui', [])}")
+```
+
+### Removing a UI component with `delete_ui_message`
+
+Call `delete_ui_message(id)` to emit a `RemoveUIMessage`. The `ui_message_reducer` splices it out of the `ui` list so the state stays consistent:
+
+```python
+from langgraph.graph.ui import push_ui_message, delete_ui_message
+
+
+def multi_step_node(state: State) -> dict:
+    # Show a progress bar
+    push_ui_message("ProgressBar", {"value": 0, "max": 3}, id="progress")
+
+    # … step 1 …
+    push_ui_message("ProgressBar", {"value": 1, "max": 3}, id="progress", merge=True)
+
+    # … step 2 …
+    push_ui_message("ProgressBar", {"value": 2, "max": 3}, id="progress", merge=True)
+
+    # Done — remove the progress bar entirely
+    delete_ui_message("progress")
+
+    return {}
+```
+
+> **`merge=True`** tells `ui_message_reducer` to *merge* the new `props` dict into the existing `UIMessage` with the same `id` rather than replacing the whole entry. Use it for incremental updates (e.g. progress values, streaming text chunks) and `merge=False` (the default) for full replacements.
+
+### Async node example
+
+`push_ui_message` and `delete_ui_message` are synchronous helpers that call the stream writer internally — they work inside both sync and async nodes without any change:
+
+```python
+import asyncio
+from langgraph.graph.ui import push_ui_message, delete_ui_message
+
+
+async def async_search_node(state: State) -> dict:
+    push_ui_message("Spinner", {"label": "Loading…"}, id="async-spinner")
+    await asyncio.sleep(0.1)   # simulate async I/O
+    result = f"async results for {state['query']}"
+    delete_ui_message("async-spinner")
+    push_ui_message("ResultCard", {"content": result})
+    return {"result": result}
+```
+
+### Connecting to a React front-end (sketch)
+
+`UIMessage.name` is the key the client uses to look up the component to render:
+
+```typescript
+// Pseudo-code: client receives UIMessage events from the stream
+const COMPONENTS = {
+  Spinner: SpinnerComponent,
+  ResultCard: ResultCardComponent,
+  ProgressBar: ProgressBarComponent,
+};
+
+for await (const event of graphStream) {
+  if (event.type === "ui") {
+    const Component = COMPONENTS[event.name];
+    if (Component) render(<Component key={event.id} {...event.props} />);
+  } else if (event.type === "remove-ui") {
+    removeRenderedComponent(event.id);
+  }
+}
+```
+
+### Quick Reference — UI streaming
+
+| Task | Code |
+|---|---|
+| Push a UI update | `push_ui_message("MyComponent", {"key": "val"})` |
+| Push with stable ID | `push_ui_message("MyComponent", {...}, id="my-id")` |
+| Merge props into existing | `push_ui_message("MyComponent", {...}, id="my-id", merge=True)` |
+| Remove a component | `delete_ui_message("my-id")` |
+| Declare the state key | `ui: Annotated[list[AnyUIMessage], ui_message_reducer]` |
+| Receive in stream | `stream_mode="custom"` (events appear alongside other modes) |
+
+---
+
 ## Quick Reference
 
 | Task | Code |
@@ -805,3 +986,7 @@ Use **v1/v2** for production today. Experiment with **v3** when you need per-sub
 | Inspect state | `graph.get_state(cfg)` |
 | History / time-travel | `graph.get_state_history(cfg)` |
 | Patch state | `graph.update_state(cfg, {...})` |
+| Push UI component | `push_ui_message("Name", props)` → `UIMessage` |
+| Remove UI component | `delete_ui_message(id)` → `RemoveUIMessage` |
+| Merge UI props | `push_ui_message("Name", delta, id=..., merge=True)` |
+| Declare UI state key | `ui: Annotated[list[AnyUIMessage], ui_message_reducer]` |
