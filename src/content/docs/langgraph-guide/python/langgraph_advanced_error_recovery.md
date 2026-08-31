@@ -1,13 +1,13 @@
 ---
 title: "LangGraph Advanced Error Handling and Recovery (Python)"
-description: "Native RetryPolicy, TimeoutPolicy, node-level error_handler, dead-letter patterns, and checkpoint-based resumption — source-verified for LangGraph 1.2.2."
+description: "Native RetryPolicy, TimeoutPolicy, node-level error_handler, dead-letter patterns, checkpoint-based resumption, and structured error types (NodeError, NodeTimeoutError, NodeCancelledError, GraphRecursionError, ErrorCode) — source-verified for LangGraph 1.2.11."
 framework: langgraph
 language: python
 ---
 
 # LangGraph Advanced Error Handling and Recovery (Python)
 
-Verified against **`langgraph==1.2.2`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`, `langgraph.errors`).
 
 LangGraph provides first-class primitives for every layer of error handling, with no external retry library needed:
 
@@ -511,6 +511,242 @@ builder.add_edge("dead_letter", END)
 
 checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
+```
+
+---
+
+## 6. Structured error types — catching and inspecting failures
+
+LangGraph 1.2.11 defines a hierarchy of typed exceptions in `langgraph.errors`. Knowing which type is raised lets you write targeted `except` blocks in error handlers, retry predicates, and observability callbacks.
+
+### `NodeError` — error handler context (source-verified)
+
+`NodeError` is a frozen dataclass injected into any function registered as an `error_handler=`. It gives the handler structured access to what failed and where:
+
+```python
+from dataclasses import dataclass
+from langgraph.errors import NodeError  # langgraph.errors, 1.2.11
+
+@dataclass(frozen=True, slots=True)
+class NodeError:
+    node: str            # name of the failing node
+    error: BaseException  # the raw exception
+```
+
+Use it to write generic handlers that log structured context:
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.errors import NodeError
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class State(TypedDict):
+    data: str
+    status: str
+
+
+def flaky_node(state: State) -> dict:
+    raise ValueError("upstream service unavailable")
+
+
+def structured_error_handler(state: State, error: NodeError) -> dict:
+    """NodeError.node and NodeError.error give full context without re-parsing."""
+    logger.error(
+        "node_failure",
+        extra={"node": error.node, "exc_type": type(error.error).__name__},
+    )
+    return {"status": f"error in '{error.node}': {error.error}"}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("flaky", flaky_node, error_handler=structured_error_handler)
+    .add_edge(START, "flaky")
+    .add_edge("flaky", END)
+    .compile()
+)
+
+result = graph.invoke({"data": "input", "status": ""})
+print(result["status"])  # error in 'flaky': upstream service unavailable
+```
+
+### `NodeTimeoutError` — which timeout fired and how long it ran (source-verified)
+
+When `TimeoutPolicy` cancels a node, LangGraph raises `NodeTimeoutError` (not the built-in `TimeoutError` — this is intentional so that `RetryPolicy`'s default `retry_on` treats it as retryable). Key attributes:
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `node` | `str` | Name of the timed-out node |
+| `kind` | `"idle" \| "run"` | Whether `idle_timeout` or `run_timeout` fired |
+| `timeout` | `float` | The threshold that was exceeded (seconds) |
+| `elapsed` | `float` | How long the node actually ran (seconds) |
+| `run_timeout` | `float \| None` | Configured `run_timeout` at the time of failure |
+| `idle_timeout` | `float \| None` | Configured `idle_timeout` at the time of failure |
+
+```python
+import asyncio
+from langgraph.errors import NodeTimeoutError
+from langgraph.types import RetryPolicy, TimeoutPolicy
+
+RETRYABLE_KINDS = {"run"}   # retry on run_timeout but not idle_timeout
+
+
+def retry_on_run_timeout(exc: BaseException) -> bool:
+    if isinstance(exc, NodeTimeoutError):
+        return exc.kind in RETRYABLE_KINDS
+    # fall back to the default behaviour for non-timeout errors
+    from langgraph.types import default_retry_on
+    return default_retry_on(exc)
+
+
+async def slow_search(state: State) -> dict:
+    await asyncio.sleep(60)   # simulate a slow operation
+    return {"result": "done"}
+
+
+graph = (
+    StateGraph(State)
+    .add_node(
+        "search",
+        slow_search,
+        timeout=TimeoutPolicy(run_timeout=5.0, idle_timeout=2.0),
+        retry_policy=RetryPolicy(
+            max_attempts=2,
+            retry_on=retry_on_run_timeout,  # only retry hard run_timeout, not idle
+        ),
+    )
+    .add_edge(START, "search")
+    .add_edge("search", END)
+    .compile()
+)
+```
+
+> `NodeTimeoutError` does **not** inherit from `asyncio.TimeoutError` or `TimeoutError`. If you have an `except TimeoutError` guard in your handler, it will not catch this exception — use `except NodeTimeoutError` explicitly.
+
+### `NodeCancelledError` — asyncio.CancelledError from user code (source-verified)
+
+`asyncio.CancelledError` is a `BaseException`, which the Pregel runner interprets as a framework-initiated cancellation signal (tearing down sibling tasks after a peer fails). When a node's own body raises it, LangGraph converts it into `NodeCancelledError` so it surfaces as a proper node failure rather than silently succeeding:
+
+```python
+# langgraph.errors — source-verified, 1.2.11
+class NodeCancelledError(Exception):
+    node: str   # the node whose body raised asyncio.CancelledError
+```
+
+Catch it in a `retry_on` predicate to decide whether cancellation should trigger a retry:
+
+```python
+import asyncio
+from langgraph.errors import NodeCancelledError
+from langgraph.types import RetryPolicy
+
+
+def retry_policy_for_cancelled(exc: BaseException) -> bool:
+    """Retry once if the node cancelled itself, but not on other errors."""
+    return isinstance(exc, NodeCancelledError)
+
+
+async def might_cancel(state: State) -> dict:
+    # Simulate a node that may cancel itself due to an external signal
+    if state.get("data") == "cancel":
+        raise asyncio.CancelledError("external interrupt")
+    return {"result": "ok"}
+
+
+graph = (
+    StateGraph(State)
+    .add_node(
+        "work",
+        might_cancel,
+        retry_policy=RetryPolicy(max_attempts=2, retry_on=retry_policy_for_cancelled),
+    )
+    .add_edge(START, "work")
+    .add_edge("work", END)
+    .compile()
+)
+```
+
+### `GraphRecursionError` — handling the recursion limit (source-verified)
+
+`GraphRecursionError` is raised when the graph has exhausted the maximum number of steps (`recursion_limit`, default 25). It inherits from the built-in `RecursionError`:
+
+```python
+class GraphRecursionError(RecursionError):
+    pass   # carries an ErrorCode.GRAPH_RECURSION_LIMIT message
+```
+
+Two ways to handle it:
+
+**Option 1 — raise the limit for long workflows:**
+
+```python
+result = graph.invoke(
+    {"data": "input", "status": ""},
+    {"recursion_limit": 100},   # second positional arg is the config
+)
+```
+
+**Option 2 — catch it at the call site and resume from checkpoint:**
+
+```python
+from langgraph.errors import GraphRecursionError
+from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+cfg = {"configurable": {"thread_id": "long-run-1"}, "recursion_limit": 25}
+
+try:
+    result = graph.invoke({"data": "start", "status": ""}, cfg)
+except GraphRecursionError:
+    # The checkpoint was saved up to the last successful step.
+    # Resume by passing None as input — LangGraph reloads from the checkpoint.
+    result = graph.invoke(None, {**cfg, "recursion_limit": 50})
+```
+
+### `ErrorCode` — structured error taxonomy (source-verified)
+
+`ErrorCode` is an `Enum` embedded in many LangGraph error messages. Match on it for programmatic error categorisation:
+
+```python
+from enum import Enum
+from langgraph.errors import ErrorCode
+
+# ErrorCode members (source-verified, 1.2.11):
+# ErrorCode.GRAPH_RECURSION_LIMIT          — recursion_limit exceeded
+# ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE — two threads wrote conflicting state
+# ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE — node returned a non-dict / bad type
+# ErrorCode.MULTIPLE_SUBGRAPHS             — ambiguous subgraph routing
+# ErrorCode.INVALID_CHAT_HISTORY          — malformed message sequence
+```
+
+The code string is embedded in the exception message so you can detect it without importing `ErrorCode`:
+
+```python
+try:
+    graph.invoke({"data": "x", "status": ""}, {"recursion_limit": 5})
+except RecursionError as exc:
+    if "GRAPH_RECURSION_LIMIT" in str(exc):
+        print("Graph hit recursion limit — increase recursion_limit in config")
+    raise
+```
+
+### Error type hierarchy summary
+
+```
+BaseException
+ └── Exception
+      ├── NodeTimeoutError       # run_timeout or idle_timeout exceeded
+      ├── NodeCancelledError     # node body raised asyncio.CancelledError
+      ├── EmptyInputError        # graph.invoke() received an empty input
+      ├── RecursionError
+      │    └── GraphRecursionError   # recursion_limit steps exhausted
+      └── LookupError
+           └── TaskNotFound     # resume targeted a non-existent interrupt id
 ```
 
 ---
