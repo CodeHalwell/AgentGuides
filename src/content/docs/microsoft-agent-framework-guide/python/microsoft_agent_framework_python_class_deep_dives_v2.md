@@ -47,9 +47,11 @@ Internally, `FanInEdgeGroup` builds one `Edge(source_id=source, target_id=target
 
 ### Example — Parallel research merge
 
+`FanInEdgeGroup` is constructed internally by `WorkflowBuilder.add_fan_in_edges()`, which both registers all executor objects and wires the fan-in group in a single call:
+
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder, FanInEdgeGroup
+from agent_framework import Agent, WorkflowBuilder
 from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
@@ -63,19 +65,18 @@ synthesizer     = Agent(client=client, name="synthesizer",
 
 builder = WorkflowBuilder(start_executor=web_researcher)
 
-# Both researchers run in parallel; synthesizer waits for both
-builder.add_edge(web_researcher, doc_researcher)  # fan-out start → both parallel
-fan_in = FanInEdgeGroup(
-    source_ids=["web_researcher", "doc_researcher"],
-    target_id="synthesizer",
-)
-builder.add_edge_group(fan_in)
+# Fan-out: start broadcasts to both researchers concurrently
+builder.add_fan_out_edges(web_researcher, [doc_researcher, web_researcher])
+
+# Fan-in: synthesizer runs only after both researchers complete
+# (add_fan_in_edges creates a FanInEdgeGroup internally)
+builder.add_fan_in_edges([web_researcher, doc_researcher], synthesizer)
 
 workflow = builder.build()
 
 async def main() -> None:
     result = await workflow.run("Quantum computing breakthroughs")
-    print(result.get_last_text_message_output())
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
@@ -137,9 +138,11 @@ Raises `ValueError` if fewer than two target IDs are provided.
 
 ### Example — Broadcast to all targets
 
+`FanOutEdgeGroup` is constructed internally by `WorkflowBuilder.add_fan_out_edges()`, which registers all executor objects and wires the broadcast group:
+
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowBuilder, FanOutEdgeGroup
+from agent_framework import Agent, WorkflowBuilder
 from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
@@ -153,41 +156,33 @@ leg_handler = Agent(client=client, name="legal_handler",
 gen_handler = Agent(client=client, name="general_handler",
                     instructions="Handle general content.")
 
+# add_fan_out_edges creates a FanOutEdgeGroup internally; broadcasts to all three handlers
 builder = WorkflowBuilder(start_executor=classifier)
-fan_out = FanOutEdgeGroup(
-    source_id="classifier",
-    target_ids=["financial_handler", "legal_handler", "general_handler"],
-)
-builder.add_edge_group(fan_out)
+builder.add_fan_out_edges(classifier, [fin_handler, leg_handler, gen_handler])
 workflow = builder.build()
 ```
 
-### Example — Dynamic selection based on classifier output
+### Example — Inspect the `FanOutEdgeGroup` serialisation directly
 
 ```python
-from agent_framework import Agent, WorkflowBuilder, FanOutEdgeGroup
-from agent_framework.openai import OpenAIChatClient
-
-client = OpenAIChatClient()
+from agent_framework import FanOutEdgeGroup
 
 def route(message: str, available: list[str]) -> list[str]:
-    """Send only to the handler whose name appears in the classification text."""
+    """Send only to handlers whose name prefix appears in the message."""
     return [t for t in available if t.split("_")[0] in message.lower()] or available
 
-classifier   = Agent(client=client, name="classifier",
-                     instructions="Output exactly one word: financial, legal, or general.")
-fin_handler  = Agent(client=client, name="financial_handler", instructions="...")
-leg_handler  = Agent(client=client, name="legal_handler",     instructions="...")
-gen_handler  = Agent(client=client, name="general_handler",   instructions="...")
-
-builder = WorkflowBuilder(start_executor=classifier)
-fan_out = FanOutEdgeGroup(
+group = FanOutEdgeGroup(
     source_id="classifier",
     target_ids=["financial_handler", "legal_handler", "general_handler"],
     selection_func=route,
 )
-builder.add_edge_group(fan_out)
-workflow = builder.build()
+
+assert group.target_ids == ["financial_handler", "legal_handler", "general_handler"]
+assert group.selection_func is route
+
+d = group.to_dict()
+assert d["type"] == "FanOutEdgeGroup"
+assert len(d["edges"]) == 3
 ```
 
 ---
@@ -198,7 +193,7 @@ workflow = builder.build()
 
 `FunctionalWorkflow` is the backing object produced by the `@workflow` decorator. Unlike graph-based `Workflow`, it runs a plain async Python function — no edge wiring, no `WorkflowBuilder`. Native `if`/`else`, `for`, and `asyncio.gather` drive branching and parallelism.
 
-> **Experimental:** Requires `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`. Enable via `agent_framework.enable_experimental`.
+> **Experimental:** The `@workflow` and `@step` decorators emit an `ExperimentalWarning` on first use. No explicit opt-in call is needed — simply import and use them.
 
 ### Constructor (internal — use `@workflow` decorator)
 
@@ -240,10 +235,8 @@ async def run(
 
 ```python
 import asyncio
-from agent_framework import enable_experimental, ExperimentalFeature, Agent, workflow, step
+from agent_framework import Agent, workflow, step
 from agent_framework.openai import OpenAIChatClient
-
-enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
 client = OpenAIChatClient()
 researcher = Agent(client=client, name="researcher",
@@ -254,12 +247,12 @@ writer     = Agent(client=client, name="writer",
 @step
 async def research(topic: str) -> str:
     result = await researcher.run(topic)
-    return result.get_last_text_message_output()
+    return result.text
 
 @step
 async def write(facts: str) -> str:
     result = await writer.run(facts)
-    return result.get_last_text_message_output()
+    return result.text
 
 @workflow
 async def pipeline(topic: str) -> str:
@@ -278,10 +271,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import enable_experimental, ExperimentalFeature, Agent, workflow, step
+from agent_framework import Agent, workflow, step
 from agent_framework.openai import OpenAIChatClient
-
-enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
 client = OpenAIChatClient()
 summarizer  = Agent(client=client, name="summarizer",  instructions="Summarize the text.")
@@ -290,15 +281,15 @@ fact_check  = Agent(client=client, name="fact_checker", instructions="List any f
 
 @step
 async def summarize(text: str) -> str:
-    return (await summarizer.run(text)).get_last_text_message_output()
+    return (await summarizer.run(text)).text
 
 @step
 async def translate(text: str) -> str:
-    return (await translator.run(text)).get_last_text_message_output()
+    return (await translator.run(text)).text
 
 @step
 async def check_facts(text: str) -> str:
-    return (await fact_check.run(text)).get_last_text_message_output()
+    return (await fact_check.run(text)).text
 
 @workflow
 async def multi_branch(text: str) -> dict[str, str]:
@@ -321,19 +312,15 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import (
-    enable_experimental, ExperimentalFeature, FileCheckpointStorage, Agent, workflow, step,
-)
+from agent_framework import FileCheckpointStorage, Agent, workflow, step
 from agent_framework.openai import OpenAIChatClient
-
-enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
 client   = OpenAIChatClient()
 analyzer = Agent(client=client, name="analyzer", instructions="Analyse each item.")
 
 @step
 async def analyze_item(item: str) -> str:
-    return (await analyzer.run(item)).get_last_text_message_output()
+    return (await analyzer.run(item)).text
 
 @workflow
 async def batch_workflow(items: list[str]) -> list[str]:
@@ -359,7 +346,7 @@ asyncio.run(main())
 
 `FunctionalWorkflowAgent` wraps a `FunctionalWorkflow` so it can be used anywhere an `Agent`-compatible object is expected — including as a `WorkflowExecutor` node inside a graph-based workflow. It translates `AgentResponse` / `ResponseStream` calls to the underlying functional workflow's `run()`.
 
-> **Experimental:** requires `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`.
+> **Experimental:** `@workflow`/`@step` emit `ExperimentalWarning` on first use — no explicit opt-in call is needed.
 
 ### Constructor
 
@@ -393,29 +380,26 @@ FunctionalWorkflowAgent(
 import asyncio
 from agent_framework import (
     Agent, WorkflowBuilder,
-    enable_experimental, ExperimentalFeature,
     workflow, step, FunctionalWorkflowAgent,
 )
 from agent_framework.openai import OpenAIChatClient
-
-enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
 client = OpenAIChatClient()
 inner_agent = Agent(client=client, name="inner", instructions="Process the data.")
 
 @step
 async def inner_step(data: str) -> str:
-    return (await inner_agent.run(data)).get_last_text_message_output()
+    return (await inner_agent.run(data)).text
 
 @workflow
 async def inner_pipeline(data: str) -> str:
     return await inner_step(data)
 
-# Wrap as an agent-compatible node
+# @workflow returns FunctionalWorkflowDefinition; .build() returns FunctionalWorkflow
 inner_wf      = inner_pipeline.build()
 inner_adapter = FunctionalWorkflowAgent(inner_wf, name="inner_pipeline")
 
-# Place into an outer graph workflow
+# Place the functional workflow adapter into an outer graph workflow
 outer_agent = Agent(client=client, name="outer",
                     instructions="Prepare the data for the inner pipeline.")
 builder = WorkflowBuilder(start_executor=outer_agent)
@@ -424,7 +408,7 @@ outer_workflow = builder.build()
 
 async def main() -> None:
     result = await outer_workflow.run("raw input data")
-    print(result.get_last_text_message_output())
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
@@ -482,7 +466,7 @@ workflow = builder.build()
 async def main() -> None:
     # Run and automatically checkpoint each superstep
     result = await workflow.run("start", checkpoint_storage=storage)
-    print("Finished:", result.get_last_text_message_output())
+    print("Finished:", result.get_outputs())
 
     # List all checkpoints for this workflow
     ids = await storage.list_checkpoint_ids(workflow_name="step_a")
@@ -493,7 +477,7 @@ async def main() -> None:
     if latest:
         resumed = await workflow.run(checkpoint_id=latest.checkpoint_id,
                                      checkpoint_storage=storage)
-        print("Resumed:", resumed.get_last_text_message_output())
+        print("Resumed:", resumed.get_outputs())
 
 asyncio.run(main())
 ```
@@ -648,7 +632,7 @@ async def main() -> None:
             tools=fs_tool,
         )
         response = await agent.run("List all .txt files in /tmp")
-        print(response.get_last_text_message_output())
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -680,7 +664,7 @@ async def main() -> None:
             tools=db_tool,
         )
         response = await agent.run("How many rows are in the orders table?")
-        print(response.get_last_text_message_output())
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -753,7 +737,7 @@ async def main() -> None:
             tools=web_tool,
         )
         response = await agent.run("What is the current weather in London?")
-        print(response.get_last_text_message_output())
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -788,7 +772,7 @@ async def main() -> None:
             tools=[local_fs, remote_api],
         )
         response = await agent.run("Read report.txt and enrich it with remote data")
-        print(response.get_last_text_message_output())
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -844,7 +828,7 @@ async def main() -> None:
     session = agent.create_session()
     for query in ["Step 1: fetch data", "Step 2: process", "Step 3: summarize"]:
         response = await agent.run(query, session=session)
-        print(response.get_last_text_message_output())
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -864,22 +848,20 @@ from agent_framework.openai import OpenAIChatClient
 client = OpenAIChatClient()
 tokenizer = CharacterEstimatorTokenizer()
 
-# Phase 1: evict old tool calls when over 40 % budget
+# Phase 1: evict old tool calls once the kept context exceeds 48 000 tokens
 tool_evict = SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=3)
 phase1 = TokenBudgetComposedStrategy(
-    strategy=tool_evict,
+    token_budget=48_000,
     tokenizer=tokenizer,
-    max_tokens=80_000,
-    threshold=0.4,
+    strategies=[tool_evict],
 )
 
-# Phase 2: summarise remaining history when over 70 % budget
+# Phase 2: summarise remaining history once context exceeds 72 000 tokens
 summarize = SummarizationStrategy(client=client)
 phase2 = TokenBudgetComposedStrategy(
-    strategy=summarize,
+    token_budget=72_000,
     tokenizer=tokenizer,
-    max_tokens=80_000,
-    threshold=0.7,
+    strategies=[summarize],
 )
 
 compaction = CompactionProvider(before_strategy=phase1, after_strategy=phase2)
@@ -968,14 +950,14 @@ async def main() -> None:
         "Plan a 3-step process to analyse customer feedback and summarise it.",
         session=session,
     )
-    print(response.get_last_text_message_output())
+    print(response.text)
 
     # Ask for remaining tasks
     response2 = await agent.run(
         "What tasks are still incomplete?",
         session=session,
     )
-    print(response2.get_last_text_message_output())
+    print(response2.text)
 
 asyncio.run(main())
 ```
@@ -1011,7 +993,7 @@ async def main() -> None:
     # Session 2: same user ID → same file → todos persist
     session2 = AgentSession(state={"user_id": "user-42"})
     response = await agent.run("What todos do I have?", session=session2)
-    print(response.get_last_text_message_output())
+    print(response.text)
 
 asyncio.run(main())
 ```
