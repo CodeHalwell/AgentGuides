@@ -823,9 +823,11 @@ Wire a `ui` key into your state using `ui_message_reducer`, then call `push_ui_m
 ```python
 from typing import Annotated
 from typing_extensions import TypedDict
-from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.ui import UIMessage, RemoveUIMessage, push_ui_message, ui_message_reducer
+from langgraph.graph.ui import (
+    UIMessage, RemoveUIMessage,
+    push_ui_message, delete_ui_message, ui_message_reducer,
+)
 
 # AnyUIMessage is the union type used by the reducer
 AnyUIMessage = UIMessage | RemoveUIMessage
@@ -840,7 +842,7 @@ class State(TypedDict):
 
 def search_node(state: State) -> dict:
     # Push a loading spinner to the UI before doing work
-    spinner = push_ui_message(
+    push_ui_message(
         name="Spinner",
         props={"label": "Searching…"},
         id="spinner-1",      # stable id so we can remove it later
@@ -849,7 +851,10 @@ def search_node(state: State) -> dict:
     # … do the actual work …
     result = f"results for: {state['query']}"
 
-    # Replace spinner with a result card (merge=False replaces props)
+    # Remove the spinner now that work is done
+    delete_ui_message("spinner-1")
+
+    # Show the result card
     push_ui_message(
         name="ResultCard",
         props={"content": result, "query": state["query"]},

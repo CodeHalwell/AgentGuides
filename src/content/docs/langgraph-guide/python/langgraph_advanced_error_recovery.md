@@ -524,13 +524,11 @@ LangGraph 1.2.11 defines a hierarchy of typed exceptions in `langgraph.errors`. 
 `NodeError` is a frozen dataclass injected into any function registered as an `error_handler=`. It gives the handler structured access to what failed and where:
 
 ```python
-from dataclasses import dataclass
 from langgraph.errors import NodeError  # langgraph.errors, 1.2.11
 
-@dataclass(frozen=True, slots=True)
-class NodeError:
-    node: str            # name of the failing node
-    error: BaseException  # the raw exception
+# NodeError is a frozen dataclass with two fields:
+#   node: str            — name of the failing node
+#   error: BaseException — the raw exception that was raised
 ```
 
 Use it to write generic handlers that log structured context:
@@ -713,7 +711,6 @@ except GraphRecursionError:
 `ErrorCode` is an `Enum` embedded in many LangGraph error messages. Match on it for programmatic error categorisation:
 
 ```python
-from enum import Enum
 from langgraph.errors import ErrorCode
 
 # ErrorCode members (source-verified, 1.2.11):
