@@ -19,7 +19,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.33.0** · August 2026 · Python 3.10+
+    **v2.36.0** · August 2026 · Python 3.10+
+    _New deep-dive page verified at 2.36.0; other reference pages verified at 2.33.0._
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -93,6 +94,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Built-in tools" href="./pydantic_ai_builtin_tools/" description="WebSearch, WebFetch, CodeExecution, ImageGeneration, FileSearch, MCPServer, XSearch." />
   <LinkCard title="Class & API reference" href="./pydantic_ai_comprehensive_guide/#class--api-reference" description="Consolidated, source-verified reference to every pydantic_ai/pydantic_graph/pydantic_evals class and function, in 16 topic sections. Verified against pydantic-ai 2.33.0." />
   <LinkCard title="10 class deep dives (Aug 2026)" href="./pydantic_ai_class_examples_2026_08/" description="Runnable, source-verified examples for Agent, RunContext, UsageLimits, ToolReturn, DeferredToolRequests/Results, CachePoint, PrefixedToolset/FilteredToolset/RenamedToolset, WebSearchTool, and the error taxonomy. Verified against pydantic-ai 2.33.0." />
+  <LinkCard title="10 more class deep dives (Aug 2026 · v2.36.0)" href="./pydantic_ai_class_deep_dives_v2_36/" description="AgentRun, AgentRunResult, StreamedRunResult, ModelSettings, Tool, ToolDefinition, RunUsage/RequestUsage, ConcurrencyLimiter, MCPToolset, ApprovalRequiredToolset/DynamicToolset — verified against pydantic-ai 2.36.0." />
   <LinkCard title="Advanced patterns" href="./pydantic_ai_advanced_patterns/" />
   <LinkCard title="Error handling & testing" href="./pydantic_ai_advanced_error_testing/" />
   <LinkCard title="Hooks" href="./pydantic_ai_hooks/" description="Lifecycle callbacks: Hooks capability." />
@@ -127,7 +129,8 @@ Condensed version history (superseded the previous per-volume changelog — full
 | 2.13.0–2.22.0 | Jul–Aug 2026 | Fine-grained `AgentRun` control, `SelectModel`/`ResolveModelId` routing, `RaiseContentFilterError`, MCP `prefer_tasks` durable calls, `RunContext.is_tool_available` |
 | 2.27.0 | Aug 2026 | `RunUsage.cost` + `CancellationToken`/`RunCancelled`; `ReinjectSystemPrompt`/`ProcessHistory` hardened for untrusted history |
 | 2.31.0 | Aug 2026 | `AgentSpec` YAML/JSON specs stabilised, `SelectModel`, native tool suite (Advisor/XSearch/ImageGeneration/WebFetch) complete |
-| **2.33.0** | Aug 2026 | **Current.** Consolidated [Class & API Reference](./pydantic_ai_comprehensive_guide/#class--api-reference) added to the comprehensive guide — 44 sprawling deep-dive volumes folded into 16 organised sections; guide version currency refreshed end-to-end |
+| 2.33.0 | Aug 2026 | Consolidated [Class & API Reference](./pydantic_ai_comprehensive_guide/#class--api-reference) added to the comprehensive guide — 44 sprawling deep-dive volumes folded into 16 organised sections; guide version currency refreshed end-to-end |
+| **2.36.0** | Aug 2026 | **Current.** New [10-class deep-dive page (v2.36.0)](./pydantic_ai_class_deep_dives_v2_36/) — `AgentRun`, `AgentRunResult`, `StreamedRunResult`, `ModelSettings`, `Tool`, `ToolDefinition`, `RunUsage`/`RequestUsage`, `ConcurrencyLimiter`/`ConcurrencyLimit`, `MCPToolset`, `ApprovalRequiredToolset`/`DynamicToolset` — all source-verified and with runnable examples. |
 
 ## Install, minimal example
 
@@ -155,6 +158,7 @@ Condensed — one row per meaningfully distinct change to this index/guide pairi
 
 | Date | Framework version | Summary |
 |------|-------------------|---------|
+| 2026-08-31 | pydantic-ai 2.36.0 | Added `pydantic_ai_class_deep_dives_v2_36.md` — 10 more source-verified deep dives with runnable code examples (`AgentRun`, `AgentRunResult`, `StreamedRunResult`, `ModelSettings`, `Tool`, `ToolDefinition`, `RunUsage`/`RequestUsage`, `ConcurrencyLimiter`/`ConcurrencyLimit`, `MCPToolset`, `ApprovalRequiredToolset`/`DynamicToolset`). Linked from the Reference grid. Sources read: `pydantic_ai/run.py`, `pydantic_ai/result.py`, `pydantic_ai/settings.py`, `pydantic_ai/tools.py`, `pydantic_ai/usage.py`, `pydantic_ai/concurrency.py`, `pydantic_ai/mcp.py`, `pydantic_ai/toolsets/{approval_required,_dynamic}.py`. Version bumped from 2.33.0 → 2.36.0. |
 | 2026-08-24 | pydantic-ai 2.33.0 | Added `pydantic_ai_class_examples_2026_08.md` — 10 source-verified deep dives with runnable code examples (`Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `DeferredToolRequests`/`Results`, `CachePoint`, `PrefixedToolset`/`FilteredToolset`/`RenamedToolset`, `WebSearchTool`, `FunctionToolset`, `ModelRetry`/`UnexpectedModelBehavior`/`ModelHTTPError`). Linked from the Reference grid. Sources read: `pydantic_ai/agent/__init__.py`, `_run_context.py`, `usage.py`, `messages.py`, `_deferred.py`, `toolsets/{function,filtered,renamed,prefixed}.py`, `native_tools/__init__.py`, `exceptions.py`. |
 | 2026-08-21 | pydantic-ai 2.33.0 | Consolidated the 44 `pydantic_ai_class_deep_dives*.md` / `pydantic_ai_advanced_classes_part2.md` / `pydantic_ai_source_code_deep_dive.md` volumes into one **Class & API Reference** section (16 subsections) inside the comprehensive guide; deleted the 44 source files; replaced the 44 individual `LinkCard`s and the per-volume "What's new" narrative with the single reference link and condensed changelog above; version badge and guide banners bumped to 2.33.0. |
 | 2026-07-20 | pydantic-ai 2.13.0 | `AgentRun`/`AgentRunResult`/`AgentRunResultEvent` fine-grained control; `FunctionModel`/`AgentInfo`; `FallbackModel`/`ResponseRejected`; tenacity HTTP retry; `FilteredToolset`/`DeferredLoadingToolset`/`ToolSearchToolset`; `WrapperModel`/`CompletedStreamedResponse`; `WrapperCapability`; `MessagesBuilder`/`BuilderCheckpoint`. |
