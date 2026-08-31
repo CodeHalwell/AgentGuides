@@ -107,6 +107,10 @@ async def stream_audio(queue: LiveRequestQueue, wav_path: str) -> None:
     """Stream a WAV file in 20 ms chunks — mirrors real-time microphone input."""
     CHUNK_DURATION_MS = 20
     with wave.open(wav_path, "rb") as wf:
+        # Live audio endpoint requires mono, 16-bit, linear PCM.
+        assert wf.getnchannels() == 1, "WAV must be mono"
+        assert wf.getsampwidth() == 2, "WAV must be 16-bit"
+        assert wf.getcomptype() == "NONE", "WAV must be uncompressed PCM"
         sample_rate = wf.getframerate()
         frames_per_chunk = int(sample_rate * CHUNK_DURATION_MS / 1000)
 
@@ -367,7 +371,7 @@ App(
 
 Validation rules (from `_validate`):
 - `root_agent` must be a `BaseAgent` or `BaseNode` instance; `None` raises `ValueError`.
-- `name` is passed through `validate_app_name` — alphanumeric + underscores only.
+- `name` is passed through `validate_app_name` — must match `^[a-zA-Z][a-zA-Z0-9_-]*$` (start with a letter; letters, digits, underscores, and hyphens only). The reserved name `"user"` is also rejected with `ValueError`.
 
 ### Minimal example
 
@@ -575,7 +579,7 @@ the interaction.
 {conversation_history}
 ```
 
-The `{conversation_history}` placeholder is required — the method raises `KeyError` if your template omits it.
+The `{conversation_history}` placeholder is required. If your template omits it, `str.format()` silently discards the conversation data (unused keyword arguments are not an error in Python), so the summarizer sends the model a prompt with no event history and may persist an ungrounded summary. Always include the placeholder.
 
 ### What gets included in the transcript
 
@@ -1062,36 +1066,9 @@ loop = LoopAgent(
 )
 ```
 
-**Usage — Workflow `end_condition` alternative:**
+**Workflow note:**
 
-In a `Workflow`, prefer the `end_condition` parameter on a loop node for pure Python termination checks. Use `exit_loop` when the termination decision should come from the model itself.
-
-```python
-from google.adk.agents import LlmAgent
-from google.adk.tools.exit_loop_tool import exit_loop
-from google.adk.workflow import Workflow, START
-
-reviewer = LlmAgent(
-    name="reviewer",
-    model="gemini-2.5-flash",
-    instruction=(
-        "Check if the task in state['task'] is complete. "
-        "Call exit_loop if done; otherwise update state['task'] with next step."
-    ),
-    tools=[exit_loop],
-)
-
-# Workflow is a Pydantic model — construct it with edges=[], not a decorator.
-# (START, reviewer) seeds the entry point; (reviewer, reviewer) creates
-# the loop edge. exit_loop sets escalate=True which terminates the workflow.
-review_loop = Workflow(
-    name="review_loop",
-    edges=[
-        (START, reviewer),       # entry point
-        (reviewer, reviewer),    # loop back to self until exit_loop fires
-    ],
-)
-```
+`exit_loop` is designed for `LoopAgent`. In a `Workflow`, every cycle must include at least one conditional (route-based) `Edge` — an unconditional self-loop raises `ValidationError: Unconditional cycle detected` at construction time, even if the agent would call `exit_loop` at runtime. For model-controlled loop termination inside a `Workflow`, wire the loop with a conditional edge (the agent sets `context.route` to a specific value) and route to a terminal node on the exit condition. For simple Python-predicate termination, use the `end_condition` parameter on the loop node instead.
 
 ### `get_user_choice_tool`
 
