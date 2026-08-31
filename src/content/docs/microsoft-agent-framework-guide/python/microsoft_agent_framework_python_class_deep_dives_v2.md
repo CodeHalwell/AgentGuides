@@ -12,7 +12,7 @@ language: python
 
 This volume covers 10 additional public classes from the `agent_framework` package that are not covered in Vol. 1. Each section includes the full `__init__` signature, every meaningful method, and self-contained runnable examples verified against the 1.16.0 source.
 
-See [Vol. 1](./microsoft_agent_framework_python_class_deep_dives.md) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
+See [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
 
 ---
 
@@ -240,9 +240,8 @@ async def run(
 
 ```python
 import asyncio
-from agent_framework import enable_experimental, ExperimentalFeature, Agent
+from agent_framework import enable_experimental, ExperimentalFeature, Agent, workflow, step
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._workflows._functional import workflow, step
 
 enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
@@ -279,9 +278,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import enable_experimental, ExperimentalFeature, Agent
+from agent_framework import enable_experimental, ExperimentalFeature, Agent, workflow, step
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._workflows._functional import workflow, step
 
 enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
@@ -323,9 +321,10 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import enable_experimental, ExperimentalFeature, FileCheckpointStorage, Agent
+from agent_framework import (
+    enable_experimental, ExperimentalFeature, FileCheckpointStorage, Agent, workflow, step,
+)
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._workflows._functional import workflow, step
 
 enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
@@ -393,11 +392,11 @@ FunctionalWorkflowAgent(
 ```python
 import asyncio
 from agent_framework import (
-    Agent, WorkflowBuilder, WorkflowExecutor,
+    Agent, WorkflowBuilder,
     enable_experimental, ExperimentalFeature,
+    workflow, step, FunctionalWorkflowAgent,
 )
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._workflows._functional import workflow, step, FunctionalWorkflowAgent
 
 enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
 
@@ -947,9 +946,8 @@ TodoProvider(
 
 ```python
 import asyncio
-from agent_framework import Agent
+from agent_framework import Agent, TodoProvider
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._harness._todo import TodoProvider
 
 client = OpenAIChatClient()
 
@@ -986,9 +984,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import Agent, AgentSession
+from agent_framework import Agent, AgentSession, TodoProvider, TodoFileStore
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._harness._todo import TodoProvider, TodoFileStore
 
 client = OpenAIChatClient()
 
@@ -1022,9 +1019,8 @@ asyncio.run(main())
 ### Example — Custom instructions and multiple source IDs
 
 ```python
-from agent_framework import Agent
+from agent_framework import Agent, TodoProvider
 from agent_framework.openai import OpenAIChatClient
-from agent_framework._harness._todo import TodoProvider
 
 client = OpenAIChatClient()
 
