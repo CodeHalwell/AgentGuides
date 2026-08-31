@@ -224,7 +224,7 @@ async def run(
 
 | Parameter | Notes |
 |---|---|
-| `message` | Input passed as the first argument to the workflow function. Mutually exclusive with `responses`/`checkpoint_id`. |
+| `message` | Input passed as the first argument to the workflow function. Mutually exclusive with `checkpoint_id`; can be combined with `responses` for HITL replays that also supply a new input. |
 | `stream` | If `True`, return a `ResponseStream` yielding events. |
 | `responses` | HITL responses keyed by `request_id` for resuming after a `ctx.request_info()` interruption. |
 | `checkpoint_id` | Resume from a saved checkpoint. |
@@ -493,10 +493,12 @@ class MyAppState:
     user_id: str
     session_count: int
 
-# Register MyAppState so it can round-trip through checkpoint serialisation
+# Register MyAppState so it can round-trip through checkpoint serialisation.
+# When the class is defined in the same script, pickle uses "__main__:MyAppState".
+# In a packaged project import the class from its real module and list that path.
 storage = FileCheckpointStorage(
     "/tmp/checkpoints",
-    allowed_checkpoint_types=["my_app.models:MyAppState"],
+    allowed_checkpoint_types=["__main__:MyAppState"],
 )
 ```
 
@@ -813,6 +815,10 @@ from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
+def fetch_data(key: str) -> str:
+    """Return a dummy data record."""
+    return f"data:{key}=42"
+
 # Keep only the 2 most recent tool-call rounds; older ones are excluded
 strategy = SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=2)
 compaction = CompactionProvider(before_strategy=strategy)
@@ -820,13 +826,18 @@ compaction = CompactionProvider(before_strategy=strategy)
 agent = Agent(
     client=client,
     name="tool_heavy_agent",
-    instructions="Use tools to gather data step by step.",
+    instructions="Use fetch_data to look up values, then summarise.",
+    tools=[fetch_data],
     context_providers=[compaction],
 )
 
 async def main() -> None:
     session = agent.create_session()
-    for query in ["Step 1: fetch data", "Step 2: process", "Step 3: summarize"]:
+    for query in [
+        "Fetch data for key 'alpha'",
+        "Now fetch 'beta' and compare with alpha",
+        "Summarise both results",
+    ]:
         response = await agent.run(query, session=session)
         print(response.text)
 
@@ -984,14 +995,24 @@ agent = Agent(
     context_providers=[provider],
 )
 
+# TodoFileStore partitions by BOTH owner_state_key value AND session_id.
+# Pass the same explicit session_id to both sessions so they share one file.
+SHARED_SESSION_ID = "user-42-main"
+
 async def main() -> None:
-    session = AgentSession(state={"user_id": "user-42"})
+    session = AgentSession(
+        session_id=SHARED_SESSION_ID,
+        state={"user_id": "user-42"},
+    )
 
     # Session 1: create todos
     await agent.run("Create todos for: research, draft, review.", session=session)
 
-    # Session 2: same user ID → same file → todos persist
-    session2 = AgentSession(state={"user_id": "user-42"})
+    # Session 2: same session_id + owner → same backing file → todos persist
+    session2 = AgentSession(
+        session_id=SHARED_SESSION_ID,
+        state={"user_id": "user-42"},
+    )
     response = await agent.run("What todos do I have?", session=session2)
     print(response.text)
 
