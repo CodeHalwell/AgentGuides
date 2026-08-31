@@ -93,7 +93,7 @@ Source-verified from `google/adk/agents/live_request_queue.py`:
 | `send_activity_end()` | `() -> None` | Mark end of a discrete user activity |
 | `send_audio_stream_end()` | `() -> None` | Force-flush audio — use when an audio chunk stream ends mid-utterance |
 | `send(req)` | `(LiveRequest) -> None` | Send an arbitrary pre-built `LiveRequest` |
-| `get()` | `async () -> LiveRequest` | Internal: drain one item (used by the runner — don't call directly) |
+| `get()` | `() -> LiveRequest` (async coroutine) | Internal: drain one item asynchronously (used by the runner — don't call directly) |
 
 ### Audio streaming pattern
 
@@ -339,7 +339,7 @@ async def send_email(to: str, subject: str, body: str, tool_context: ToolContext
 ### Gotchas
 
 - `ToolConfirmation` is `@experimental` — the `feature_name` is `FeatureName.TOOL_CONFIRMATION`. The API may change in future releases.
-- `tool_context.request_confirmation()` sets `skip_summarization=True` implicitly when called — so the tool's "awaiting_confirmation" response is not fed back to the model as a completion. Set `skip_summarization = False` explicitly if you want the model to see the pending state.
+- `tool_context.request_confirmation()` does **not** set `skip_summarization` automatically — set it explicitly in your tool body (as shown in the examples above) if you don't want the "awaiting_confirmation" response fed back to the model as a completion.
 - If a tool calls `request_confirmation` but the client never sends back a `ToolConfirmation`, the tool will keep returning "awaiting_confirmation" on every subsequent model call until the session ends. Guard with a max-retries counter in the tool body if needed.
 
 ---
