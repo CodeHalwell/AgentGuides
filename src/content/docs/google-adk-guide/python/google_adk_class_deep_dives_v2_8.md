@@ -179,10 +179,19 @@ from google.adk.runners import InMemoryRunner
 from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
 from google.genai import types
 
-# Locked-down policy: only allow git, ls, cat, echo; cap memory and timeout
+# Restricted policy: only allow git, ls, cat, echo; cap memory and timeout.
+# NOTE: allowed_command_prefixes is a startswith check — it is NOT a security
+# boundary on its own. A command like `echo $(rm -rf ...)` passes the prefix
+# check because the string starts with "echo". Block command-substitution and
+# other shell meta-characters via blocked_operators to close these bypasses.
 policy = BashToolPolicy(
     allowed_command_prefixes=("git", "ls", "cat", "echo"),
-    blocked_operators=(";", "&&", "||", "|", ">", ">>"),
+    blocked_operators=(
+        ";", "&&", "||", "|", ">", ">>",
+        "$(", "`",          # command substitution
+        "\n", "\r",         # newline injection
+        "$(",               # redundant but explicit
+    ),
     timeout_seconds=10,
     max_memory_bytes=128 * 1024 * 1024,   # 128 MB
     max_child_processes=10,
@@ -252,6 +261,7 @@ asyncio.run(main())
 
 - `ExecuteBashTool` is POSIX-only — it returns `{"error": "ExecuteBashTool is only supported on POSIX systems."}` on Windows.
 - The subprocess runs in a new session (`start_new_session=True`) and is SIGKILL'd on timeout via `os.killpg`. The `finally` block always kills the process group, even on success, to avoid zombie children.
+- `allowed_command_prefixes` is a `startswith` check on the raw command string — it is **not** a security boundary on its own. A command such as `echo $(rm -rf /workspace)` passes the prefix check because the string starts with `"echo"`, while the nested `$(...)` still executes in the shell. Always include command-substitution meta-characters (`"$("`, `` "`" ``) and newline sequences (`"\n"`, `"\r"`) in `blocked_operators` to close these bypasses.
 - `blocked_operators` performs a string-contains check on the raw command. Shell injection via encoded operators (e.g. `%26%26`) can bypass it — pair with a strict `allowed_command_prefixes` allowlist for security-sensitive environments.
 - `max_memory_bytes`, `max_file_size_bytes`, and `max_child_processes` are applied via `resource.setrlimit` in `preexec_fn` — they only take effect on Linux/macOS that support POSIX resource limits.
 
