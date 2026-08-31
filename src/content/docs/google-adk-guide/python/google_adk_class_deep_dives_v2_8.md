@@ -459,7 +459,11 @@ Two compaction modes are available and can be combined:
 | `compaction_interval` | `int \| None` | `> 0` | Number of new invocations between sliding-window compactions |
 | `overlap_size` | `int \| None` | `>= 0` | Invocations from the previous window included in each new summary |
 
-A `model_validator` enforces pairing: setting only one of `token_threshold`/`event_retention_size` raises `ValueError`.
+A `model_validator` enforces three rules:
+
+- **Token pair:** `token_threshold` and `event_retention_size` must be set together — setting only one raises `ValueError`.
+- **Sliding-window pair:** `compaction_interval` and `overlap_size` must be set together — setting only one raises `ValueError`.
+- **At least one mode:** at least one complete trigger pair must be configured — an instance with no fields set (other than `summarizer`) raises `ValueError`.
 
 ### Token-threshold compaction
 
@@ -1126,17 +1130,43 @@ agent = LlmAgent(
 
 **Usage — wiring the client-side response:**
 
-When `get_user_choice` is called the first time, it suspends and returns `None`. On the next user message, the client sends back the user's selection as the tool response. The model receives the choice and continues.
+When `get_user_choice` is called the first time, the tool returns `None` and the runner yields a pending function-call event. The client must capture the function-call ID from that event and resume by sending a `types.FunctionResponse` — not a plain user message — so the model receives the choice as the tool result.
 
 ```python
-# Client side (pseudo-code): after the agent suspends on get_user_choice,
-# present options to the user, collect the response, then resume:
+from google.genai import types
+
+# Step 1 — first run: capture the pending function-call ID
+pending_call_id = None
 async for event in runner.run_async(
     user_id="u1",
     session_id="s1",
     new_message=types.Content(
         role="user",
-        parts=[types.Part.from_text(text="Morning flight")]  # user's choice
+        parts=[types.Part.from_text(text="Book me a flight to London")],
+    ),
+):
+    if event.content and event.content.parts:
+        for part in event.content.parts:
+            if part.function_call and part.function_call.name == "get_user_choice":
+                pending_call_id = part.function_call.id
+
+# Step 2 — present options to the user, collect their answer, then resume
+# by sending a FunctionResponse that matches the pending call's ID:
+user_answer = "Morning flight"   # collected from UI / stdin
+async for event in runner.run_async(
+    user_id="u1",
+    session_id="s1",
+    new_message=types.Content(
+        role="user",
+        parts=[
+            types.Part(
+                function_response=types.FunctionResponse(
+                    id=pending_call_id,
+                    name="get_user_choice",
+                    response={"result": user_answer},
+                )
+            )
+        ],
     ),
 ):
     ...
