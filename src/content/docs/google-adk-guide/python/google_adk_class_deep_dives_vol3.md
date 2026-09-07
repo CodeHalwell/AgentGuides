@@ -38,7 +38,7 @@ Source-verified from `google/adk/agents/run_config.py`:
 |---|---|---|---|
 | `streaming_mode` | `StreamingMode` | `NONE` | `NONE` = batch; `SSE` = server-sent events; `BIDI` = bidirectional (live) |
 | `max_llm_calls` | `int` | env `ADK_MAX_LLM_CALLS` or internal default | Hard cap on LLM calls per invocation; ≤0 → no cap (dangerous) |
-| `response_modalities` | `list[types.Modality]` | `None` | `[types.Modality.TEXT]`, `[types.Modality.AUDIO]`, or both — overrides agent default |
+| `response_modalities` | `list[types.Modality]` | `None` | `[types.Modality.TEXT]` or `[types.Modality.AUDIO]` — overrides agent default; for `BIDI` live sessions Gemini accepts exactly one modality (both together is rejected) |
 | `http_options` | `types.HttpOptions \| None` | `None` | Per-invocation HTTP options (custom headers, timeouts, etc.) |
 | `labels` | `dict[str, str] \| None` | `None` | User-defined billing/attribution labels for this invocation |
 | `tool_thread_pool_config` | `ToolThreadPoolConfig \| None` | `None` | Run tools in a thread pool; see below |
@@ -101,11 +101,16 @@ asyncio.run(main())
 
 ### Thread-pool for blocking I/O tools
 
+`tool_thread_pool_config` only takes effect in live (BIDI) sessions where the
+event loop must stay free to process audio interrupts. Set
+`streaming_mode=StreamingMode.BIDI` alongside it; in regular `run_async` batch
+sessions the field is ignored.
+
 ```python
 import asyncio
 import time
 from google.adk.agents import LlmAgent
-from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig
+from google.adk.agents.run_config import RunConfig, ToolThreadPoolConfig, StreamingMode
 from google.adk.runners import InMemoryRunner
 from google.adk.tools import FunctionTool
 from google.genai import types
@@ -122,32 +127,12 @@ agent = LlmAgent(
     tools=[FunctionTool(func=slow_database_lookup)],
 )
 
-async def main():
-    runner = InMemoryRunner(agent=agent, app_name="db_demo")
-    session = await runner.session_service.create_session(
-        app_name="db_demo", user_id="u1"
-    )
-
-    run_config = RunConfig(
-        tool_thread_pool_config=ToolThreadPoolConfig(max_workers=8),
-        max_llm_calls=5,
-    )
-
-    user_msg = types.Content(
-        role="user",
-        parts=[types.Part.from_text(text="Look up users named Alice.")]
-    )
-
-    async for event in runner.run_async(
-        user_id="u1",
-        session_id=session.id,
-        new_message=user_msg,
-        run_config=run_config,
-    ):
-        if event.is_final_response() and event.content:
-            print(event.content.parts[0].text)
-
-asyncio.run(main())
+# tool_thread_pool_config is live-only: pair with StreamingMode.BIDI
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    tool_thread_pool_config=ToolThreadPoolConfig(max_workers=8),
+    max_llm_calls=5,
+)
 ```
 
 ### Loading only recent session events
@@ -413,10 +398,9 @@ class MetricsPlugin(BasePlugin):
         tool_args: dict[str, Any],
         tool_context: ToolContext,
     ) -> Optional[dict[str, Any]]:
-        # Key by invocation_id + tool.name so concurrent parallel calls
-        # don't overwrite each other's start times.
-        call_key = f"{tool_context.invocation_id}:{tool.name}"
-        self._tool_start[call_key] = time.monotonic()
+        # function_call_id is unique per tool call, so parallel calls to the
+        # same tool within one invocation don't overwrite each other's start time.
+        self._tool_start[tool_context.function_call_id] = time.monotonic()
         return None
 
     async def after_tool_callback(
@@ -427,9 +411,7 @@ class MetricsPlugin(BasePlugin):
         tool_context: ToolContext,
         result: dict[str, Any],
     ) -> Optional[dict[str, Any]]:
-        # Key by invocation_id + tool.name to handle concurrent parallel calls
-        call_key = f"{tool_context.invocation_id}:{tool.name}"
-        start = self._tool_start.pop(call_key, None)
+        start = self._tool_start.pop(tool_context.function_call_id, None)
         if start is not None:
             elapsed = time.monotonic() - start
             print(f"[metrics] tool={tool.name} latency={elapsed:.3f}s")
@@ -474,9 +456,15 @@ class SemanticCachePlugin(BasePlugin):
         super().__init__(name="semantic_cache")
         self._cache: dict[str, LlmResponse] = {}
 
-    def _cache_key(self, llm_request: LlmRequest) -> str:
+    def _cache_key(self, llm_request: LlmRequest, agent_name: str) -> str:
+        # Include model + agent identity so two agents with identical conversation
+        # content but different instructions/tools don't share cached responses.
         payload = json.dumps(
-            [c.model_dump() for c in llm_request.contents],
+            {
+                "model": llm_request.model,
+                "agent": agent_name,
+                "contents": [c.model_dump() for c in llm_request.contents],
+            },
             sort_keys=True, default=str
         )
         return hashlib.sha256(payload.encode()).hexdigest()
@@ -487,7 +475,7 @@ class SemanticCachePlugin(BasePlugin):
         callback_context: CallbackContext,
         llm_request: LlmRequest,
     ) -> Optional[LlmResponse]:
-        key = self._cache_key(llm_request)
+        key = self._cache_key(llm_request, callback_context.agent_name)
         if key in self._cache:
             print("[cache] HIT")
             return self._cache[key]  # short-circuits the actual LLM call
@@ -741,7 +729,7 @@ runner = Runner(
 
 **Module:** `google.adk.memory.vertex_ai_memory_bank_service`
 
-`VertexAiMemoryBankService` stores and retrieves cross-session memories using Vertex AI's managed Memory Bank. It is the production alternative to `InMemoryMemoryService` — memories persist across process restarts and can be shared across multiple users.
+`VertexAiMemoryBankService` stores and retrieves cross-session memories using Vertex AI's managed Memory Bank. It is the production alternative to `InMemoryMemoryService` — memories persist across process restarts. Operations are scoped by both `app_name` and `user_id`, so each user's memories are isolated from all other users.
 
 ### Constructor parameters
 
@@ -1078,18 +1066,15 @@ eval_set = EvalSet(
 )
 
 # --- Run evaluation ---
-async def main():
-    results = await AgentEvaluator.evaluate(
-        agent_module_file_path=None,  # pass module path or agent directly
-        eval_dataset=eval_set,
-        eval_metrics=[],
-        agent=travel_agent,
-        user_simulator_config=simulator_config,
-    )
-    for result in results:
-        print(f"Case {result.eval_case_id}: {result.final_eval_status}")
-
-asyncio.run(main())
+# evaluate_eval_set is synchronous; agent_module must be an importable
+# Python module path string that defines an `agent` variable at top level.
+eval_config = EvalConfig(user_simulator_config=simulator_config)
+AgentEvaluator.evaluate_eval_set(
+    agent_module="my_package.travel_agent",  # module where travel_agent is defined
+    eval_set=eval_set,
+    eval_config=eval_config,
+    print_detailed_results=True,
+)
 ```
 
 ### Custom `UserPersona`
