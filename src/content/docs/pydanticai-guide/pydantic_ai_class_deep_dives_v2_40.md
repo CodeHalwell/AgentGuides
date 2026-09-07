@@ -501,24 +501,28 @@ async def start_timer(ctx: RunContext[None]) -> None:
 
 
 @hooks.on.after_run
-async def log_duration(ctx: RunContext[None]) -> None:
+async def log_duration(ctx: RunContext[None], *, result):
     elapsed = time.monotonic() - ctx.metadata.get("_start", time.monotonic())
     print(f"Run finished in {elapsed:.2f}s")
+    return result
 
 
 @hooks.on.before_model_request
-async def log_request(ctx: RunContext[None], request_context) -> None:
+async def log_request(ctx: RunContext[None], request_context):
     print(f"  → Model request #{ctx.retry}")
+    return request_context
 
 
 @hooks.on.after_model_request
-async def log_response(ctx: RunContext[None], response, request_context) -> None:
+async def log_response(ctx: RunContext[None], *, response, request_context):
     print(f"  ← Model responded")
+    return response
 
 
 @hooks.on.before_tool_execute
-async def log_tool(ctx: RunContext[None], tool_name: str, args: dict) -> None:
-    print(f"  🔧 Calling tool '{tool_name}' with {args}")
+async def log_tool(ctx: RunContext[None], *, call, tool_def, args):
+    print(f"  🔧 Calling tool '{tool_def.name}' with {args}")
+    return args
 
 
 agent = Agent("openai:gpt-4o", capabilities=[hooks])
@@ -535,10 +539,11 @@ from pydantic_ai.capabilities import Hooks
 from pydantic_ai.tools import RunContext
 
 
-async def count_tokens(ctx: RunContext[None], response, request_context) -> None:
+async def count_tokens(ctx: RunContext[None], *, response, request_context):
     """Accumulate usage across requests."""
     usage = ctx.usage
     print(f"Usage so far: {usage.total_tokens} tokens")
+    return response
 
 
 hooks = Hooks(after_model_request=count_tokens)
@@ -1157,8 +1162,8 @@ agent = Agent(
         image_generation_tool(
             model="openai-responses:gpt-5.4",          # conversational model for the subagent
             native_tool=ImageGenerationTool(
-                image_model="gpt-image-2",             # actual image generation model
-                image_size="1024x1024",
+                model="gpt-image-2",             # actual image generation model
+                size="1024x1024",
             ),
         )
     ],
@@ -1213,7 +1218,7 @@ agent = Agent(
     tools=[
         image_generation_tool(
             model=choose_model,
-            native_tool=ImageGenerationTool(image_model="gpt-image-2"),
+            native_tool=ImageGenerationTool(model="gpt-image-2"),
         )
     ],
 )
@@ -1244,7 +1249,7 @@ agent = Agent(
         image_generation_tool(
             model="google:gemini-3-pro-image",          # conversational model for subagent
             native_tool=ImageGenerationTool(
-                image_model="imagen-3.0-generate-002",   # Imagen 3
+                model="imagen-3.0-generate-002",   # Imagen 3
             ),
             instructions=(
                 "Generate a high-quality image. Include artistic style details in the prompt."
