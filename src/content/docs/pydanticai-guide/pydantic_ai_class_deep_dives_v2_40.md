@@ -1352,6 +1352,6 @@ print(result.output)
 
 | Page | Classes | Version |
 |---|---|---|
-| `pydantic_ai_class_examples_2026_08` | `Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `DeferredToolRequests`/`Results`, `CachePoint`, `PrefixedToolset`/`FilteredToolset`/`RenamedToolset`, `WebSearchTool`, error taxonomy | 2.33.0 |
-| `pydantic_ai_class_deep_dives_v2_36` | `AgentRun`, `AgentRunResult`, `StreamedRunResult`, `ModelSettings`, `Tool`, `ToolDefinition`, `RunUsage`/`RequestUsage`, `ConcurrencyLimiter`/`ConcurrencyLimit`, `MCPToolset`, `ApprovalRequiredToolset`/`DynamicToolset` | 2.36.0 |
+| [pydantic\_ai\_class\_examples\_2026\_08](./pydantic_ai_class_examples_2026_08) | `Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `DeferredToolRequests`/`Results`, `CachePoint`, `PrefixedToolset`/`FilteredToolset`/`RenamedToolset`, `WebSearchTool`, error taxonomy | 2.33.0 |
+| [pydantic\_ai\_class\_deep\_dives\_v2\_36](./pydantic_ai_class_deep_dives_v2_36) | `AgentRun`, `AgentRunResult`, `StreamedRunResult`, `ModelSettings`, `Tool`, `ToolDefinition`, `RunUsage`/`RequestUsage`, `ConcurrencyLimiter`/`ConcurrencyLimit`, `MCPToolset`, `ApprovalRequiredToolset`/`DynamicToolset` | 2.36.0 |
 | **This page** | `RealtimeSession`, `RealtimeModelSettings`/`TurnDetection`, `AgentRealtime`, `Capability`, `Hooks`, `TemplateStr`, `ExternalToolset`, `RetryConfig`/`HTTPX2TenacityTransport`, `DuckDuckGoSearchTool`, `ImageGenerationSubagentTool` | **2.40.0** |
