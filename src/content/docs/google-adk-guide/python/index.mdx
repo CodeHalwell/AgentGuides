@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.7.1** · August 2026 · Python 3.10+
+    **v2.8.0** · August 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     GCP-native workloads, Gemini-first agents, Vertex AI Agent Engine.
@@ -47,7 +47,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="12 · Evaluation" href="./evaluation/" description="AgentEvaluator, EvalCase, EvalSet, metrics · 25 min" />
   <LinkCard title="13 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
   <LinkCard title="14 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
-  <LinkCard title="15 · Class & API reference" href="./google_adk_comprehensive_guide/#class--api-reference" description="Consolidated, source-verified reference for every ADK class across 12 subject areas — replaces the old 48-volume deep-dive series · verified against google-adk 2.7.1" />
+  <LinkCard title="15 · Class & API reference" href="./google_adk_comprehensive_guide/#class--api-reference" description="Consolidated, source-verified reference for every ADK class across 12 subject areas — replaces the old 48-volume deep-dive series · source-verified against google-adk 2.7.1 (2.8.0 additions in step 16)" />
+  <LinkCard title="16 · Class deep dives — v2.8.0" href="./google_adk_class_deep_dives_v2_8/" description="10 source-verified deep dives for 2.8.0: LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, exit_loop + get_user_choice_tool" />
 </CardGrid>
 
 ## Jump to a topic
@@ -82,6 +83,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Recipes" href="./google_adk_recipes/" />
   <LinkCard title="Diagrams" href="./google_adk_diagrams/" />
   <LinkCard title="Production guide" href="./google_adk_production_guide/" />
+  <LinkCard title="Class deep dives v2.8.0" href="./google_adk_class_deep_dives_v2_8/" description="LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, exit_loop + get_user_choice_tool" />
 </CardGrid>
 
 ## Install, minimal example
@@ -125,6 +127,7 @@ Compact, version-level history. Per-symbol details for the current release live 
 | 2.4.0 | Jul 2026 | `ManagedAgent` (Managed Agents API), `DaytonaEnvironment`, `ReplayManager`, injectable `platform.time`/`uuid`/`thread` for deterministic tests, `PubSubCredentialsConfig`/`PubSubToolConfig`. |
 | 2.5.0 | Jul 2026 | `SkillRegistry`/`SkillToolset`, `AgentOptimizer`/`Sampler` ABCs, `GEPARootAgentOptimizer`, `OpenAILlm` (labs), `LangGraphAgent`, `AutoFlow` vs `SingleFlow` pipeline split. |
 | 2.6.1 – 2.6.3 | Aug 2026 | `App`/`EventsCompactionConfig`/`ResumabilityConfig` refinements, `ToolConfirmation`, `McpInstructionProvider`, comprehensive `RunConfig`/`StreamingMode`/`ToolThreadPoolConfig`, `SpannerToolset`, `CachePerformanceAnalyzer`. |
-| **2.7.1** | Aug 21, 2026 | **Documentation consolidation.** The 48 sequential "class deep dive" volumes (covering versions 2.1.0 → 2.6.3) have been merged, deduplicated, and re-verified as one [Class & API Reference](./google_adk_comprehensive_guide/#class--api-reference) section on the comprehensive guide, organized into 12 subject areas. Notable import-path corrections confirmed against the installed `2.7.1` package: `EventsCompactionConfig` moved to the private `google.adk.apps._configs` (no longer re-exported from `google.adk.apps`); every `google.adk.a2a` class requires a private submodule import; GCS/Firestore session, memory, and artifact integrations relocated to `google.adk.integrations.*`; `LoopAgent`/`ParallelAgent`/`SequentialAgent` remain functional but are confirmed `@deprecated` in favor of `Workflow`. |
+| 2.7.1 | Aug 21, 2026 | **Documentation consolidation.** The 48 sequential "class deep dive" volumes (covering versions 2.1.0 → 2.6.3) have been merged, deduplicated, and re-verified as one [Class & API Reference](./google_adk_comprehensive_guide/#class--api-reference) section on the comprehensive guide, organized into 12 subject areas. Notable import-path corrections confirmed against the installed `2.7.1` package: `EventsCompactionConfig` moved to the private `google.adk.apps._configs` (no longer re-exported from `google.adk.apps`); every `google.adk.a2a` class requires a private submodule import; GCS/Firestore session, memory, and artifact integrations relocated to `google.adk.integrations.*`; `LoopAgent`/`ParallelAgent`/`SequentialAgent` remain functional but are confirmed `@deprecated` in favor of `Workflow`. |
+| **2.8.0** | Aug 31, 2026 | **New deep-dive page** covering 10 source-verified classes: `LiveRequestQueue` (bidirectional streaming), `ExecuteBashTool`/`BashToolPolicy` (secure bash with HITL gate), `ToolConfirmation` (human-in-the-loop protocol), `App` (top-level container), `EventsCompactionConfig` (token-threshold + sliding-window), `LlmEventSummarizer` (LLM-driven session summarizer), `PreloadMemoryTool` (proactive memory injection), `ToolboxToolset` (Cloud Toolbox / MCP Toolbox), `GcsArtifactService` (GCS artifact storage), and `exit_loop`/`get_user_choice_tool` (control-flow built-ins). |
 
 **Note:** Other languages: [Go](/google-adk-guide/go/) · [TypeScript](/google-adk-guide/typescript/).
