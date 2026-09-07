@@ -105,6 +105,9 @@ older blog post or docs page, the source wins.
   <LinkCard title="Managed values reference" href="/langgraph-guide/python/reference-managed-values/" description="IsLastStep and RemainingSteps — read-only state fields injected by the Pregel executor for recursion-limit detection and graceful truncation." />
   <LinkCard title="Runtime, ToolRuntime & Managed Values reference" href="/langgraph-guide/python/reference-runtime-and-managed-values/" description="Runtime context injection, ToolRuntime for tools, ExecutionInfo, IsLastStep, RemainingSteps — accessing execution metadata and injecting immutable context into nodes and tools." />
   <LinkCard title="RemoteGraph reference" href="/langgraph-guide/python/reference-remote-graph/" description="Call a LangGraph Platform deployment as a local graph — same invoke/stream/get_state surface, interrupt/resume, and subgraph node wiring." />
+  <LinkCard title="Graceful shutdown reference" href="/langgraph-guide/python/reference-graceful-shutdown/" description="RunControl, request_drain(), GraphDrained — cooperative superstep-boundary draining for SIGTERM, pre-stop hooks, and timeout-with-checkpoint patterns." />
+  <LinkCard title="TracePolicy reference" href="/langgraph-guide/python/reference-trace-policy/" description="Per-node LangSmith tracing control — process_inputs, process_outputs, omit_payload; selectively redact, truncate, or silence individual node spans." />
+  <LinkCard title="Cache backends reference" href="/langgraph-guide/python/reference-cache-backends/" description="BaseCache abstract interface and InMemoryCache thread-safe implementation — TTL eviction, custom Redis backends, CachePolicy wiring, and serializer protocol." />
 </CardGrid>
 
 <CardGrid>

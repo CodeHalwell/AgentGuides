@@ -536,7 +536,7 @@ async def interruptible_worker(state: State, runtime: Runtime) -> dict:
     return {"results": results, "partial": False}
 ```
 
-`RunControl` is populated automatically by the Pregel executor — you never create one yourself. Key properties:
+`RunControl` can be pre-created and passed to `graph.invoke(..., control=control)` so that external code (e.g. a signal handler) can call `control.request_drain()` before the graph starts. If you do not pass one, the Pregel executor creates it internally. Key properties:
 
 | Property / Method | Description |
 |---|---|
@@ -895,7 +895,7 @@ for mode, data in graph.stream(
 - **`TimeoutPolicy` only works on async nodes.** Setting `timeout=` on a synchronous node raises `ValueError` at node registration. Convert the node to `async` or wrap it with `asyncio.to_thread`.
 - **`runtime.heartbeat()` is a no-op without `refresh_on="heartbeat"`.** Under `refresh_on="auto"` (default), progress is detected automatically from callbacks and stream writes; calling `heartbeat()` is still valid but redundant.
 - **`runtime.execution_info` is `None` briefly during startup.** Don't access it in lifecycle hooks that run before task preparation.
-- **`RunControl` is populated automatically.** You cannot construct or inject your own `RunControl` — it is owned by the executor and forwarded through `Runtime.control`.
+- **`RunControl` can be pre-created and injected.** Pass `control=RunControl()` to `graph.invoke()` so external code (e.g. a SIGTERM handler) can call `control.request_drain()` before the run begins. If omitted, the executor creates one internally.
 
 ## Breaking changes
 

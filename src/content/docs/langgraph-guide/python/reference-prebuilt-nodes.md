@@ -736,6 +736,137 @@ tool_node = ToolNode(
 )
 ```
 
+### 10. `ToolCallRequest.override()` — immutable argument mutation
+
+`override()` returns a new `ToolCallRequest` with selected fields replaced. Use this to sanitize, normalise, or augment tool arguments without mutating the original:
+
+```python
+from langchain_core.tools import tool
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolNode, ToolCallRequest
+
+
+@tool
+def divide(numerator: float, denominator: float) -> float:
+    """Divide numerator by denominator."""
+    return numerator / denominator
+
+
+def safe_divide_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
+    """Clamp denominator to at least 1e-9 to avoid division-by-zero errors."""
+    args = request.tool_call.get("args", {})
+    denom = float(args.get("denominator", 1.0))
+    if abs(denom) < 1e-9:
+        clamped_args = {**args, "denominator": 1e-9}
+        request = request.override(
+            tool_call={**request.tool_call, "args": clamped_args}
+        )
+    return execute(request)
+
+
+tool_node = ToolNode([divide], wrap_tool_call=safe_divide_wrapper)
+```
+
+### 11. `ToolCallRequest` — reading tool metadata before execution
+
+The `request.tool` attribute gives you the fully resolved `BaseTool` instance — including its schema, description, and metadata — before the call is dispatched:
+
+```python
+import json
+from langchain_core.tools import tool
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolNode, ToolCallRequest
+
+
+@tool
+def search(query: str) -> str:
+    """Search the web for a query."""
+    return f"Results for: {query}"
+
+
+import threading
+
+# Keyed by (tool_name, thread_id) so each conversation gets its own quota.
+_RATE_LIMIT_LOCK = threading.Lock()
+RATE_LIMIT_PER_TOOL: dict[tuple[str, str], int] = {}
+MAX_CALLS = 3
+
+
+def rate_limited_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
+    """Block tools that have exceeded their call quota for this conversation thread."""
+    name = request.tool_call["name"]
+    thread_id = ((request.runtime.config or {}).get("configurable") or {}).get("thread_id")
+    if not thread_id:
+        # No thread identity — cannot apply a per-session rate limit safely; skip.
+        return execute(request)
+    key = (name, thread_id)
+
+    with _RATE_LIMIT_LOCK:
+        count = RATE_LIMIT_PER_TOOL.get(key, 0)
+        if count >= MAX_CALLS:
+            return ToolMessage(
+                content=f"Rate limit exceeded for tool '{name}' (max {MAX_CALLS} calls).",
+                tool_call_id=request.tool_call["id"],
+            )
+        RATE_LIMIT_PER_TOOL[key] = count + 1
+
+    result = execute(request)
+
+    # Log tool schema on first call for observability
+    if count == 0 and request.tool:
+        schema = request.tool.args_schema.model_json_schema() if request.tool.args_schema else {}
+        print(f"[first call] {name} schema: {json.dumps(schema, indent=2)}")
+
+    return result
+
+
+tool_node = ToolNode([search], wrap_tool_call=rate_limited_wrapper)
+```
+
+### 12. `ToolCallRequest` — returning a synthetic result without calling the tool
+
+The wrapper can skip `execute()` entirely and return a hard-coded or cached `ToolMessage`:
+
+```python
+import json
+from langchain_core.tools import tool
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolNode, ToolCallRequest
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city (live API call)."""
+    # In production this would call a real weather API
+    return f"Sunny, 22°C in {city}"
+
+
+# Simple in-memory cache for demonstration
+_cache: dict[str, str] = {}
+
+
+def cached_tool_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
+    """Return a cached result if available; otherwise execute and cache."""
+    args = request.tool_call.get("args", {})
+    cache_key = f"{request.tool_call['name']}:{json.dumps(args, sort_keys=True)}"
+
+    if cache_key in _cache:
+        return ToolMessage(
+            content=f"[cached] {_cache[cache_key]}",
+            tool_call_id=request.tool_call["id"],
+        )
+
+    result = execute(request)
+
+    if isinstance(result, ToolMessage) and result.status != "error":
+        _cache[cache_key] = result.content
+
+    return result
+
+
+tool_node = ToolNode([get_weather], wrap_tool_call=cached_tool_wrapper)
+```
+
 ## `ToolCallTransformer` + `ToolCallStream`
 
 `ToolCallTransformer` (module: `langgraph.prebuilt._tool_call_transformer`) is a built-in **`StreamTransformer`** that turns the raw `tools`-channel protocol events emitted during graph streaming into convenient **`ToolCallStream`** handles — one per tool invocation. It lets you consume per-tool incremental output (delta streaming), final output, and errors in a structured way without parsing raw event dicts.
@@ -804,11 +935,11 @@ graph = builder.compile(transformers=[ToolCallTransformer])
 
 config = {"configurable": {"thread_id": "t1"}}
 
-for run in graph.stream(
+with graph.stream(
     {"messages": [("user", "Search for LangGraph docs")]},
     config,
     stream_mode="tools",
-):
+) as run:
     for tc_stream in run.tool_calls:
         print(f"→ Tool started: {tc_stream.tool_name} (id={tc_stream.tool_call_id})")
         print(f"  Input: {tc_stream.input}")
@@ -864,11 +995,11 @@ config = {"configurable": {"thread_id": "async-1"}}
 
 
 async def main():
-    async for run in graph.astream(
+    async with graph.astream(
         {"messages": [("user", "Search for async patterns")]},
         config,
         stream_mode="tools",
-    ):
+    ) as run:
         async for tc_stream in run.tool_calls:
             print(f"→ {tc_stream.tool_name} started (id={tc_stream.tool_call_id})")
             async for delta in tc_stream:
