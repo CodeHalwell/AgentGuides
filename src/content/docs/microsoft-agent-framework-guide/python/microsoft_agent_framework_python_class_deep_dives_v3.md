@@ -198,14 +198,18 @@ asyncio.run(main())
 
 ### Output selection modes
 
+The snippets below are illustrative — `a`, `mid`, and `final` are placeholder names for `Executor` or `Agent` instances you have already constructed and registered with the builder.
+
 ```python
 # All executors emit output (default)
+# `a` is the start_executor Executor/Agent instance
 WorkflowBuilder(start_executor=a)
 
-# Only `final` emits output; `mid` events are hidden
+# Only `final` emits output; other executor yields are hidden
+# `final` is an Executor/Agent instance already added via add_edge / add_chain
 WorkflowBuilder(start_executor=a, output_from=[final])
 
-# `final` emits output; everything else emits intermediate events
+# `final` emits output; every other output-capable executor emits intermediate events
 WorkflowBuilder(start_executor=a, output_from=[final],
                 intermediate_output_from="all_other")
 ```
@@ -497,7 +501,7 @@ agent = Agent(client=client, name="assistant",
 
 `LocalEvaluator` runs agent evaluation checks locally — no cloud API calls or external services required. It implements the `Evaluator` protocol and accepts one or more `EvalCheck` functions. An `EvalItem` passes only when **all** checks pass; an item with no checks always fails.
 
-> **Experimental:** `LocalEvaluator` requires `ExperimentalFeature.EVALS` to be enabled or is accessed through the standard import.
+> **Experimental:** `LocalEvaluator` is marked experimental under `ExperimentalFeature.EVALS`. Importing it from `agent_framework` works without additional configuration, but it may emit staged-API warnings and its interface can change between minor releases.
 
 ### Constructor
 
@@ -577,7 +581,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import LocalEvaluator, EvalItem, CheckResult
+from agent_framework import LocalEvaluator, EvalItem, CheckResult, keyword_check
 
 def length_check(min_chars: int):
     def check(item: EvalItem) -> CheckResult:
