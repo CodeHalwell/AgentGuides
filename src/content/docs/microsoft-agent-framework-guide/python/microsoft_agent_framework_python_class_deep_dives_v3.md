@@ -604,17 +604,24 @@ evaluator = LocalEvaluator(
 ### Mixing with cloud evaluators
 
 ```python
-from agent_framework import LocalEvaluator, keyword_check, evaluate_agent
+import asyncio
+from agent_framework import Agent, LocalEvaluator, keyword_check, evaluate_agent
+from agent_framework.openai import OpenAIChatClient
 # from agent_framework.foundry import FoundryEvals  # cloud evaluator
 
+agent = Agent(client=OpenAIChatClient(), name="assistant", instructions="You are helpful.")
 local = LocalEvaluator(keyword_check("answer"))
 # foundry = FoundryEvals(project_client=..., model="gpt-4o")
 
-results = await evaluate_agent(
-    agent=agent,
-    queries=["What is 2+2?"],
-    evaluators=[local],   # add foundry here when available
-)
+async def main() -> None:
+    results = await evaluate_agent(
+        agent=agent,
+        queries=["What is 2+2?"],
+        evaluators=[local],   # add foundry here when available
+    )
+    print(results)
+
+asyncio.run(main())
 ```
 
 ---
@@ -1168,8 +1175,8 @@ MCPWebsocketTool(
 | `close()` | `Coroutine` | Close the connection. |
 | `load_tools()` | `Coroutine` | Reload tools from the server (e.g. after reconnect). |
 | `load_prompts()` | `Coroutine` | Reload prompts from the server. |
-| `call_tool(name, arguments)` | `Coroutine` | Invoke a tool directly. |
-| `get_prompt(name, arguments)` | `Coroutine` | Invoke a prompt directly. |
+| `call_tool(tool_name, **kwargs)` | `Coroutine` | Invoke a tool directly, passing arguments as keyword args. |
+| `get_prompt(prompt_name, **kwargs)` | `Coroutine` | Invoke a prompt directly, passing arguments as keyword args. |
 | `get_mcp_client()` | `ClientSession` | Access the raw MCP client session. |
 
 `MCPWebsocketTool` is an async context manager — use it in `async with` to manage the connection lifecycle.
@@ -1293,4 +1300,5 @@ Install the full package:
 
 ```bash
 pip install agent-framework==1.17.0
+pip install 'mcp[ws]'  # required for MCPWebsocketTool WebSocket transport
 ```
