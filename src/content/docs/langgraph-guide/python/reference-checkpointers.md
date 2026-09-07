@@ -364,7 +364,9 @@ print(result["approved"])  # True
 
 ```python
 # langgraph.types
-from typing import NamedTuple
+from typing import Any, NamedTuple
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import Interrupt, StateSnapshot
 
 class PregelTask(NamedTuple):
     id: str                               # unique task identifier

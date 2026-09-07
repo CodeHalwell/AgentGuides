@@ -272,7 +272,7 @@ result = graph.invoke(None, config)  # picks up from the last checkpoint
 |---|---|---|---|
 | `request_drain()` | Cooperative signal (e.g. SIGTERM) | Yes | Yes |
 | `interrupt()` | Node-level human-in-the-loop pause | Yes | Yes |
-| `GraphRecursionError` | `recursion_limit` exceeded | No | No |
+| `GraphRecursionError` | `recursion_limit` exceeded | Yes (last checkpoint) | Yes (with a checkpointer) |
 | Unhandled exception | Any node exception without handler | No | No |
 
 ---
