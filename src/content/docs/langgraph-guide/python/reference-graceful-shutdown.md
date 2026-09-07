@@ -86,8 +86,16 @@ class State(TypedDict):
     step: int
 
 
+_control: RunControl | None = None
+_control_lock = threading.Lock()
+
+
 def process(state: State, runtime: Runtime) -> dict:
     """Node that checks the drain signal before doing expensive work."""
+    global _control
+    with _control_lock:
+        _control = runtime.control
+
     if runtime.drain_requested:
         # Exit early — the framework will checkpoint and raise GraphDrained
         return {}
@@ -105,8 +113,6 @@ graph = (
 )
 
 config = {"configurable": {"thread_id": "demo"}}
-_control: RunControl | None = None
-_control_lock = threading.Lock()
 
 
 def _sigterm_handler(signum, frame):

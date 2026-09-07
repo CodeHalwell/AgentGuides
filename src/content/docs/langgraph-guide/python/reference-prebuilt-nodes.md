@@ -789,7 +789,7 @@ MAX_CALLS = 3
 
 
 def rate_limited_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
-    """Block tools that have exceeded their call quota for this session."""
+    """Block tools that have exceeded their call quota for this process run."""
     name = request.tool_call["name"]
 
     count = RATE_LIMIT_PER_TOOL.get(name, 0)

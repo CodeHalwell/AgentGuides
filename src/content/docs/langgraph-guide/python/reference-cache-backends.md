@@ -237,7 +237,9 @@ class RedisCache(BaseCache[Any]):
         result: dict[FullKey, Any] = {}
         for full_key, raw in zip(keys, values):
             if raw is not None:
-                result[full_key] = self.serde.loads_typed(("json", raw))
+                # Payload is stored as b"<enc>|<serialized-bytes>"
+                enc_b, data = raw.split(b"|", 1)
+                result[full_key] = self.serde.loads_typed((enc_b.decode(), data))
         return result
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
@@ -248,10 +250,12 @@ class RedisCache(BaseCache[Any]):
         for full_key, (value, ttl) in pairs.items():
             rk = self._make_redis_key(full_key)
             enc, data = self.serde.dumps_typed(value)
+            # Prefix encoding name so get() can reconstruct the typed pair
+            payload = enc.encode() + b"|" + data
             if ttl is not None:
-                pipe.setex(rk, ttl, data)
+                pipe.setex(rk, ttl, payload)
             else:
-                pipe.set(rk, data)
+                pipe.set(rk, payload)
         pipe.execute()
 
     async def aset(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
@@ -371,10 +375,12 @@ class AsyncRedisCache(BaseCache[Any]):
         client = await self._get_client()
         result = {}
         for k in keys:
-            rk = f"lg:{k[0]}:{k[1]}"
+            ns, key_hash = k
+            rk = f"lg:{':'.join(ns)}:{key_hash}"
             raw = await client.get(rk)
             if raw:
-                result[k] = self.serde.loads_typed(("json", raw))
+                enc_b, data = raw.split(b"|", 1)
+                result[k] = self.serde.loads_typed((enc_b.decode(), data))
         return result
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
@@ -384,12 +390,14 @@ class AsyncRedisCache(BaseCache[Any]):
     async def aset(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         client = await self._get_client()
         for full_key, (value, ttl) in pairs.items():
-            rk = f"lg:{full_key[0]}:{full_key[1]}"
-            _, data = self.serde.dumps_typed(value)
+            ns, key_hash = full_key
+            rk = f"lg:{':'.join(ns)}:{key_hash}"
+            enc, data = self.serde.dumps_typed(value)
+            payload = enc.encode() + b"|" + data
             if ttl:
-                await client.setex(rk, ttl, data)
+                await client.setex(rk, ttl, payload)
             else:
-                await client.set(rk, data)
+                await client.set(rk, payload)
 
     def set(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         import asyncio

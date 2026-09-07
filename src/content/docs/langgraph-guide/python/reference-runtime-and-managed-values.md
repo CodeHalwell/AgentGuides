@@ -300,6 +300,7 @@ tool_node = ToolNode([fetch_user_data])
 ```python
 # langgraph.runtime
 from dataclasses import dataclass
+from langgraph_sdk.auth.types import BaseUser
 
 @dataclass(frozen=True, slots=True)
 class ServerInfo:
