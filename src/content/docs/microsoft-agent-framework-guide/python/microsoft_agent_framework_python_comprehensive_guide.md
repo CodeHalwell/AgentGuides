@@ -1,20 +1,20 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Verified against agent-framework 1.14.0 — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.15.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For 1.15.0-verified class examples, see the Class Deep Dives guide."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest verified release: 1.14.0 | Python 3.10+
+Latest PyPI release: 1.15.0 | Guide verified against: 1.14.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version:** 1.14.0 (`agent-framework` and `agent-framework-core`)
+**Framework Version (guide content):** 1.14.0 (`agent-framework` and `agent-framework-core`) | **Latest PyPI release:** 1.15.0
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework==1.14.0`).**
+> **API reference (verified against `agent-framework==1.14.0`; 10 classes re-verified on 1.15.0 — see [10-Class Deep Dives](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/)).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).

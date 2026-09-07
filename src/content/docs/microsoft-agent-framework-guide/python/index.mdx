@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python)"
-description: "Unified Python agent SDK — core stable at agent-framework 1.14.0 (August 2026), with a consolidated Class & API Reference covering 200+ classes across workflows, agents, memory, tools, security, skills, and more."
+description: "Unified Python agent SDK — core stable at agent-framework 1.15.0, with a consolidated Class & API Reference covering 200+ classes across workflows, agents, memory, tools, security, skills, and more."
 framework: microsoft-agent-framework
 language: python
 sidebar:
@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    Core **1.14.0** stable · `agent-framework-foundry` and `agent-framework-openai` bundled via `agent-framework==1.14.0` · August 2026 · Python 3.10 – 3.13 · consolidated **Class & API Reference**
+    Core **1.15.0** stable · `agent-framework-foundry` and `agent-framework-openai` bundled via `agent-framework==1.15.0` · August 2026 · Python 3.10 – 3.13 · consolidated **Class & API Reference**
   </Card>
   <Card title="Best for" icon="puzzle">
     Azure-native agents, multi-agent orchestration via `WorkflowBuilder`, cross-framework A2A, declarative YAML agents.
@@ -114,11 +114,12 @@ A guided reading order across the comprehensive guide, 2025 features, advanced a
   <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_diagrams/" description="System architecture, lifecycle, orchestration." />
   <LinkCard title="Production guide" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/" description="Azure Container Apps, Kubernetes, CI/CD, compliance." />
   <LinkCard title="Class & API Reference" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#class--api-reference" description="Consolidated, source-verified class reference — Workflows, Agents/Modes/Orchestration, Memory/Sessions, Tools/MCP, Security/FIDES, Skills, Checkpointing/Compaction, Middleware, Evaluation, Settings, A2A/Declarative — plus the azure-ai-agents add-on appendix." />
+  <LinkCard title="10-Class Deep Dives (1.15.0)" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/" description="Source-verified, runnable examples for WorkflowViz, FileMemoryProvider, AgentModeProvider, BackgroundAgentsProvider, ToolApprovalMiddleware, SwitchCaseEdgeGroup, MessageInjectionMiddleware, ToolResultCompactionStrategy, SummarizationStrategy, and TokenBudgetComposedStrategy." />
 </CardGrid>
 
 ## What's shipped (August 2026 introspection)
 
-- **Stable core** — `agent-framework-core 1.14.0` (August 2026). The full class-by-class API surface — previously spread across 49 per-volume "class deep dive" pages — is now consolidated into one [Class & API Reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#class--api-reference) section of the comprehensive guide (plus an azure-ai-agents add-on appendix). See the [Revision history](#revision-history) below for the version-by-version summary.
+- **Stable core** — `agent-framework-core 1.15.0` (August 2026). The full class-by-class API surface — previously spread across 49 per-volume "class deep dive" pages — is now consolidated into one [Class & API Reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#class--api-reference) section of the comprehensive guide (plus an azure-ai-agents add-on appendix). See the [Revision history](#revision-history) below for the version-by-version summary.
 - **First-party chat clients** — `agent_framework.foundry.FoundryChatClient`, `agent_framework.openai.OpenAIChatClient`, `agent_framework.anthropic.AnthropicClient`, plus Bedrock / Ollama in the `1.0.0b` provider line.
 - **Skills (experimental)** — `MemoryStore`, `SkillResource`, `InlineSkillResource`, `ClassSkill`, `InlineSkill`, `FileSkill` now emit `ExperimentalWarning` on import — do not depend on these APIs in production yet.
 - **Middleware** — `@chat_middleware` / `@agent_middleware` / `@function_middleware` decorators and base classes; pass `middleware=[...]` (must be a list in 2026 releases).
@@ -165,6 +166,7 @@ Ready for the full walk-through? **[Start with Core Fundamentals →](/microsoft
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-08-24 | 1.15.0 | Upgraded to agent-framework 1.15.0 (latest). Added [10-Class Deep Dives](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) document covering WorkflowViz, FileMemoryProvider, AgentModeProvider, BackgroundAgentsProvider, ToolApprovalMiddleware, SwitchCaseEdgeGroup, MessageInjectionMiddleware, ToolResultCompactionStrategy, SummarizationStrategy, and TokenBudgetComposedStrategy — all source-verified with runnable examples. |
 | 2026-08-21 | 1.14.0 | Consolidated the 49 per-volume "class deep dive" pages (base + v2–v44 main series, plus the 5-volume azure-ai-agents add-on series) into one **Class & API Reference** section — 11 subsections (Workflows & Execution, Agents/Modes & Orchestration, Memory/Sessions & File Stores, Tools & MCP, Security & FIDES, Skills, Checkpointing & Compaction, Middleware & Function Invocation, Evaluation, Settings & Configuration, A2A Protocol & Declarative Graphs) plus an azure-ai-agents appendix — inside the [comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#class--api-reference). This index page was rewritten to match: old per-volume `LinkCard`s removed, changelog condensed to this table. |
 | 2026-07-10 – 2026-08-03 | 1.11.0 – 1.13.0 | `SecureMCPToolProxy` + `apply_mcp_security_labels` (FIDES MCP security proxy); `AgentMiddlewareLayer`/`ChatMiddlewareLayer` reworked as public MRO mixins; DevUI (`DiscoveryResponse`, `EntityInfo`); Gemini / Mistral / Anthropic-Vertex / Bedrock provider clients; `AGUIThreadSnapshot` + thread-state persistence; `FoundrySessionStore`; Foundry hosting (`ResponsesHostServer` / `InvocationsHostServer`); `FileMemoryProvider`. |
 | 2026-06-12 – 2026-07-09 | 1.8.1 – 1.10.0 | `ToolApprovalMiddleware` + `AgentLoopMiddleware` + `JudgeVerdict`; six `Supports*` capability Protocols; `WorkflowGraphValidator` + typed validation errors; A2A (`A2AAgent`); declarative graphs (`AgentFactory` / `WorkflowFactory` + control-flow/basic executors); `WorkflowBuilder` output routing (`output_from` / `intermediate_output_from`); durable execution (`agent-framework-durabletask`). |
