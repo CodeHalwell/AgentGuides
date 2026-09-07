@@ -12,6 +12,8 @@ language: python
 
 > **Vol. 2 available:** See [10-Class Deep Dives Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) for `FanInEdgeGroup`, `FanOutEdgeGroup`, `FunctionalWorkflow`, `FunctionalWorkflowAgent`, `FileCheckpointStorage`, `InMemoryCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `SelectiveToolCallCompactionStrategy`, and `TodoProvider` — verified against `agent-framework==1.16.0`.
 
+> **Vol. 3 available:** See [10-Class Deep Dives Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) for `WorkflowBuilder`, `SlidingWindowStrategy`, `TruncationStrategy`, `ContextWindowCompactionStrategy`, `LocalEvaluator`, `InlineSkill`, `FileAccessProvider`, `MemoryContextProvider`, `FileHistoryProvider`, and `MCPWebsocketTool` — verified against `agent-framework==1.17.0`.
+
 Each section below examines one public class from the `agent_framework` package in depth: what it does, its full `__init__` signature, every meaningful method, and one or more self-contained runnable examples verified against the 1.15.0 source.
 
 ---
