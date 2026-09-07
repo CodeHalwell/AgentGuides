@@ -125,7 +125,6 @@ import asyncio
 import wave
 import io
 from pydantic_ai import Agent
-from pydantic_ai.realtime import AudioRetention
 
 agent = Agent("openai:gpt-4o")
 
@@ -485,7 +484,6 @@ output lifecycle. Both sync and async callbacks are accepted.
 ### Example 1 — Observability hooks (decorator style)
 
 ```python {test="skip"}
-import asyncio
 import time
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
@@ -533,7 +531,6 @@ print(result.output)
 ### Example 2 — Constructor kwargs style (for one-liners)
 
 ```python {test="skip"}
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.tools import RunContext
@@ -555,11 +552,10 @@ print(result.output)
 ### Example 3 — Tool filtering via `prepare_tools`
 
 ```python {test="skip"}
-import asyncio
+from dataclasses import dataclass
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.tools import RunContext, ToolDefinition
-from dataclasses import dataclass
 
 
 @dataclass
@@ -817,7 +813,7 @@ async def main() -> None:
     # First run: agent produces tool calls but cannot execute them
     result = await agent.run("Please approve a $500 payment to Acme Corp for server hosting.")
 
-    deferred = result.output  # DeferredToolRequests containing .calls and .approvals
+    deferred = result.output  # str or DeferredToolRequests
     if isinstance(deferred, DeferredToolRequests) and deferred.calls:
         for call in deferred.calls:
             print(f"Pending external call: {call.tool_name}({call.args_as_dict()})")
@@ -835,6 +831,9 @@ async def main() -> None:
             deferred_tool_results=results,
         )
         print(final.output)
+    else:
+        # Agent responded with a plain text message (no external call needed)
+        print(deferred)
 
 
 asyncio.run(main())
