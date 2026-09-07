@@ -496,6 +496,10 @@ class SemanticCachePlugin(BasePlugin):
         callback_context: CallbackContext,
         llm_response: LlmResponse,
     ) -> Optional[LlmResponse]:
+        # In streaming mode after_model_callback fires for each partial chunk;
+        # only cache the complete response (partial is None or False when done).
+        if llm_response.partial:
+            return None
         key = callback_context.state.get(f"temp:cache_key:{callback_context.agent_name}")
         if key:
             self._cache[key] = llm_response
@@ -1077,7 +1081,12 @@ eval_set = EvalSet(
 # string. The module loader looks for root_agent on the module (or on an
 # "agent" attribute of the module); expose root_agent at the top level.
 async def main():
-    eval_config = EvalConfig(user_simulator_config=simulator_config)
+    eval_config = EvalConfig(
+        # multi_turn_task_success_v1 is reference-free: it judges whether the
+        # agent completed the scenario goal, suitable for simulation-based evals.
+        criteria={"multi_turn_task_success_v1": 0.7},
+        user_simulator_config=simulator_config,
+    )
     await AgentEvaluator.evaluate_eval_set(
         agent_module="my_package.travel_agent",  # module that exports root_agent
         eval_set=eval_set,
@@ -1128,7 +1137,7 @@ scenario_with_persona = ConversationScenario(
 
 **Module:** `google.adk.plugins.save_files_as_artifacts_plugin`
 
-`SaveFilesAsArtifactsPlugin` intercepts user messages that contain embedded binary blobs (images, PDFs, audio) and saves each blob as an artifact before the agent sees the message. Each blob is replaced in the message with a `[Uploaded Artifact: "name"]` placeholder so the model knows the file was uploaded. When `attach_file_reference=True` (the default), a `FileData` part with the artifact's GCS URI is also appended, allowing the model to read the file directly without needing `load_artifacts`.
+`SaveFilesAsArtifactsPlugin` intercepts user messages that contain embedded binary blobs (images, PDFs, audio) and saves each blob as an artifact before the agent sees the message. Each blob is replaced in the message with a `[Uploaded Artifact: "name"]` placeholder so the model knows the file was uploaded. When `attach_file_reference=True` (the default), a `FileData` part with the artifact's URI/reference is also appended, allowing the model to read the file directly without needing `load_artifacts`. The URI format depends on the backing `ArtifactService` — GCS for `GcsArtifactService`, an `artifact://` reference for `InMemoryArtifactService`.
 
 ### Constructor parameters
 
