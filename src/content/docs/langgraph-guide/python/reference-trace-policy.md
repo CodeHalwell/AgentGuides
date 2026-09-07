@@ -320,7 +320,11 @@ result = graph.invoke(
     }
 )
 print(result["embedding"])  # [0.1, 0.2, 0.3, 0.4]
-# In LangSmith: inputs show secret_key=***, outputs show embedding=<float[4]>
+# In LangSmith: the "sensitive" node span shows secret_key=*** and embedding=<float[4]>.
+# NOTE: TracePolicy only affects the node's own span. The root graph run still records
+# the full invocation input, including "secret_key". To hide credentials from ALL traces
+# (root run and children), use LangSmith-wide hide_inputs/anonymizer, or keep credentials
+# out of graph state entirely.
 ```
 
 ---

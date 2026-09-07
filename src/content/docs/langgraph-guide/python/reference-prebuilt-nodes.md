@@ -795,7 +795,10 @@ MAX_CALLS = 3
 def rate_limited_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
     """Block tools that have exceeded their call quota for this conversation thread."""
     name = request.tool_call["name"]
-    thread_id = ((request.runtime.config or {}).get("configurable") or {}).get("thread_id", "")
+    thread_id = ((request.runtime.config or {}).get("configurable") or {}).get("thread_id")
+    if not thread_id:
+        # No thread identity — cannot apply a per-session rate limit safely; skip.
+        return execute(request)
     key = (name, thread_id)
 
     with _RATE_LIMIT_LOCK:
@@ -932,11 +935,11 @@ graph = builder.compile(transformers=[ToolCallTransformer])
 
 config = {"configurable": {"thread_id": "t1"}}
 
-for run in graph.stream(
+with graph.stream(
     {"messages": [("user", "Search for LangGraph docs")]},
     config,
     stream_mode="tools",
-):
+) as run:
     for tc_stream in run.tool_calls:
         print(f"→ Tool started: {tc_stream.tool_name} (id={tc_stream.tool_call_id})")
         print(f"  Input: {tc_stream.input}")
@@ -992,11 +995,11 @@ config = {"configurable": {"thread_id": "async-1"}}
 
 
 async def main():
-    async for run in graph.astream(
+    async with graph.astream(
         {"messages": [("user", "Search for async patterns")]},
         config,
         stream_mode="tools",
-    ):
+    ) as run:
         async for tc_stream in run.tool_calls:
             print(f"→ {tc_stream.tool_name} started (id={tc_stream.tool_call_id})")
             async for delta in tc_stream:

@@ -270,10 +270,10 @@ result = graph.invoke(None, config)  # picks up from the last checkpoint
 
 | Mechanism | Trigger | Checkpoint saved? | Resumable? |
 |---|---|---|---|
-| `request_drain()` | Cooperative signal (e.g. SIGTERM) | Yes | Yes |
-| `interrupt()` | Node-level human-in-the-loop pause | Yes | Yes |
-| `GraphRecursionError` | `recursion_limit` exceeded | Yes (last checkpoint) | Yes (with a checkpointer) |
-| Unhandled exception | Any node exception without handler | No | No |
+| `request_drain()` | Cooperative signal (e.g. SIGTERM) | Yes (with a checkpointer) | Yes (with a checkpointer) |
+| `interrupt()` | Node-level human-in-the-loop pause | Yes (with a checkpointer) | Yes (with a checkpointer) |
+| `GraphRecursionError` | `recursion_limit` exceeded | Yes (last checkpoint, with a checkpointer) | Yes (with a checkpointer; raise `recursion_limit`) |
+| Unhandled exception | Any node exception without handler | Yes (last successful checkpoint, with a checkpointer) | Yes (with a checkpointer; fix the node first) |
 
 ---
 
@@ -306,30 +306,38 @@ from langgraph.runtime import RunControl
 from langgraph.errors import GraphDrained
 
 app = FastAPI()
-_run_control: RunControl | None = None
+
+# Thread-safe set of all in-flight RunControls.
+# A single global ref would be overwritten by concurrent requests,
+# leaving earlier runs undrainable on shutdown.
+_active_controls: set[RunControl] = set()
+_controls_lock = asyncio.Lock()
 
 
 @app.post("/lifecycle/pre-stop")
 async def pre_stop():
     """Kubernetes calls this before terminating the pod."""
-    if _run_control is not None:
-        _run_control.request_drain(reason="k8s-prestop")
-    return {"status": "draining"}
+    async with _controls_lock:
+        snapshot = list(_active_controls)
+    for ctrl in snapshot:
+        ctrl.request_drain(reason="k8s-prestop")
+    return {"status": "draining", "active_runs": len(snapshot)}
 
 
 @app.post("/run")
 async def run_graph(payload: dict):
-    """Endpoint that runs the graph; exposes its RunControl for pre-stop draining."""
-    global _run_control
+    """Endpoint that runs the graph; registers its RunControl for pre-stop draining."""
     control = RunControl()
-    _run_control = control
+    async with _controls_lock:
+        _active_controls.add(control)
     try:
         result = await graph.ainvoke(payload, control=control)
         return result
     except GraphDrained:
         return {"status": "drained"}
     finally:
-        _run_control = None
+        async with _controls_lock:
+            _active_controls.discard(control)
 ```
 
 ### Async drain with timeout
