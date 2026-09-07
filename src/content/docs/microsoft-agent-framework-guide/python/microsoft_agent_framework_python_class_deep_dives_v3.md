@@ -787,7 +787,7 @@ FileAccessProvider(
 import asyncio
 from agent_framework import (
     Agent, FileAccessProvider, InMemoryAgentFileStore,
-    ToolApprovalMiddleware, create_harness_agent
+    ToolApprovalMiddleware,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -952,13 +952,14 @@ asyncio.run(main())
 
 ```python
 from datetime import timedelta
-from agent_framework import Agent, MemoryContextProvider, MemoryStore
+from agent_framework import Agent, MemoryContextProvider, MemoryFileStore
 from agent_framework.openai import OpenAIChatClient
+from pathlib import Path
 
 main_client          = OpenAIChatClient(model="gpt-4o")
 consolidation_client = OpenAIChatClient(model="gpt-4o-mini")  # cheaper model
 
-store    = MemoryStore(path="./memory")
+store    = MemoryFileStore(base_path=Path("./memory"), owner_state_key="user_id")
 provider = MemoryContextProvider(
     store=store,
     consolidation_client=consolidation_client,  # use mini for cleanup
