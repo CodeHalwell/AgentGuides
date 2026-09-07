@@ -457,12 +457,17 @@ class SemanticCachePlugin(BasePlugin):
         self._cache: dict[str, LlmResponse] = {}
 
     def _cache_key(self, llm_request: LlmRequest, agent_name: str) -> str:
-        # Include model + agent identity so two agents with identical conversation
-        # content but different instructions/tools don't share cached responses.
+        # Include model, agent identity, generation config, and contents so
+        # agents with the same name but different instructions/tools/settings
+        # don't share cached responses.
+        config_dump = (
+            llm_request.config.model_dump() if llm_request.config else {}
+        )
         payload = json.dumps(
             {
                 "model": llm_request.model,
                 "agent": agent_name,
+                "config": config_dump,
                 "contents": [c.model_dump() for c in llm_request.contents],
             },
             sort_keys=True, default=str
@@ -479,10 +484,10 @@ class SemanticCachePlugin(BasePlugin):
         if key in self._cache:
             print("[cache] HIT")
             return self._cache[key]  # short-circuits the actual LLM call
-        # Stash the key in invocation-scoped temp state so after_model_callback
-        # can populate the cache without re-computing from an unavailable request.
+        # Key the state slot by agent_name so sibling agents under ParallelAgent
+        # don't overwrite each other's pending keys in shared invocation state.
         # The "temp:" prefix keeps this out of the persisted session state.
-        callback_context.state["temp:cache_key"] = key
+        callback_context.state[f"temp:cache_key:{callback_context.agent_name}"] = key
         return None
 
     async def after_model_callback(
@@ -491,7 +496,7 @@ class SemanticCachePlugin(BasePlugin):
         callback_context: CallbackContext,
         llm_response: LlmResponse,
     ) -> Optional[LlmResponse]:
-        key = callback_context.state.get("temp:cache_key")
+        key = callback_context.state.get(f"temp:cache_key:{callback_context.agent_name}")
         if key:
             self._cache[key] = llm_response
             print(f"[cache] STORED key={key[:8]}…")
@@ -1019,6 +1024,8 @@ travel_agent = LlmAgent(
     instruction="Help users book flights. Confirm details before booking.",
     tools=[FunctionTool(func=book_flight)],
 )
+# AgentEvaluator loads root_agent from the module; expose it at module level.
+root_agent = travel_agent
 
 # --- Test scenario ---
 scenarios = ConversationScenarios(
@@ -1066,15 +1073,19 @@ eval_set = EvalSet(
 )
 
 # --- Run evaluation ---
-# evaluate_eval_set is synchronous; agent_module must be an importable
-# Python module path string that defines an `agent` variable at top level.
-eval_config = EvalConfig(user_simulator_config=simulator_config)
-AgentEvaluator.evaluate_eval_set(
-    agent_module="my_package.travel_agent",  # module where travel_agent is defined
-    eval_set=eval_set,
-    eval_config=eval_config,
-    print_detailed_results=True,
-)
+# evaluate_eval_set is async; agent_module must be an importable module path
+# string. The module loader looks for root_agent on the module (or on an
+# "agent" attribute of the module); expose root_agent at the top level.
+async def main():
+    eval_config = EvalConfig(user_simulator_config=simulator_config)
+    await AgentEvaluator.evaluate_eval_set(
+        agent_module="my_package.travel_agent",  # module that exports root_agent
+        eval_set=eval_set,
+        eval_config=eval_config,
+        print_detailed_results=True,
+    )
+
+asyncio.run(main())
 ```
 
 ### Custom `UserPersona`
