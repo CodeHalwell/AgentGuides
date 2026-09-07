@@ -774,9 +774,9 @@ ExternalToolset(
 ```python {test="skip"}
 import asyncio
 from pydantic_ai import Agent
+from pydantic_ai.messages import DeferredToolRequests
 from pydantic_ai.toolsets import ExternalToolset
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.messages import ToolReturnPart
 
 
 # Declare the tool schema without any execution logic
@@ -799,8 +799,10 @@ external_toolset = ExternalToolset(
     id="payments",
 )
 
+# output_type=DeferredToolRequests ensures the run surfaces pending external calls
 agent = Agent(
     "openai:gpt-4o",
+    output_type=DeferredToolRequests,
     toolsets=[external_toolset],
     instructions="You can approve payments. Always justify each payment.",
 )
@@ -810,26 +812,22 @@ async def main() -> None:
     # First run: agent produces tool calls but cannot execute them
     result = await agent.run("Please approve a $500 payment to Acme Corp for server hosting.")
 
-    deferred = result.output  # DeferredToolRequests when the model calls external tools
-    if hasattr(deferred, "tool_calls"):
-        for call in deferred.tool_calls:
-            print(f"Pending approval: {call.tool_name}({call.args_as_dict()})")
+    deferred = result.output  # DeferredToolRequests containing .calls and .approvals
+    if isinstance(deferred, DeferredToolRequests) and deferred.calls:
+        for call in deferred.calls:
+            print(f"Pending external call: {call.tool_name}({call.args_as_dict()})")
 
-            # Simulate human review — build the result
-            tool_return = ToolReturnPart(
-                tool_name=call.tool_name,
-                content="Approved by finance team.",
-                tool_call_id=call.tool_call_id,
-            )
+        # Simulate the external system completing the call and returning a result
+        results = deferred.build_results(
+            calls={call.tool_call_id: "Approved by finance team." for call in deferred.calls},
+        )
 
-        # Second run: submit the human-provided result
-        from pydantic_ai.messages import DeferredToolResults
-
-        results = DeferredToolResults.build_results(deferred, approve_all=True)
+        # Second run: pass the external results back so the agent can continue
         final = await agent.run(
-            "Confirm the outcome.",
+            None,
             message_history=result.all_messages(),
-            toolsets=[ExternalToolset([], id="payments")],  # keep toolset registered
+            deferred_tool_results=results,
+            toolsets=[external_toolset],
         )
         print(final.output)
 
@@ -873,7 +871,7 @@ agent = Agent("openai:gpt-4o", toolsets=[external_toolset])
 
 **Module:** `pydantic_ai.retries`  
 **Source:** `pydantic_ai/retries.py`  
-**Extra:** `pip install "pydantic-ai-slim[retries]"` (or `pip install httpx tenacity`)
+**Extra:** `pip install "pydantic-ai-slim[retries]"` (or `pip install httpx2 tenacity`)
 
 The `retries` module integrates [tenacity](https://tenacity.readthedocs.io/) with `httpx2` HTTP
 transports so you can wrap any provider's HTTP client with automatic retry logic, including
@@ -1149,7 +1147,6 @@ image_generation_tool(
 ```python {test="skip"}
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import ImageGenerationTool
 from pydantic_ai.common_tools.image_generation import image_generation_tool
 
