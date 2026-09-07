@@ -795,7 +795,7 @@ MAX_CALLS = 3
 def rate_limited_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
     """Block tools that have exceeded their call quota for this conversation thread."""
     name = request.tool_call["name"]
-    thread_id = (request.runtime.configurable or {}).get("thread_id", "")
+    thread_id = ((request.runtime.config or {}).get("configurable") or {}).get("thread_id", "")
     key = (name, thread_id)
 
     with _RATE_LIMIT_LOCK:

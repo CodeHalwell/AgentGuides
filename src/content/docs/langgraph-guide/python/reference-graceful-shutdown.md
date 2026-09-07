@@ -300,7 +300,7 @@ result = graph.invoke(None, config)  # picks up from the last checkpoint
 ### Kubernetes pre-stop hook
 
 ```python
-import signal
+import asyncio
 from fastapi import FastAPI
 from langgraph.runtime import RunControl
 from langgraph.errors import GraphDrained
@@ -312,9 +312,24 @@ _run_control: RunControl | None = None
 @app.post("/lifecycle/pre-stop")
 async def pre_stop():
     """Kubernetes calls this before terminating the pod."""
-    if _run_control:
+    if _run_control is not None:
         _run_control.request_drain(reason="k8s-prestop")
     return {"status": "draining"}
+
+
+@app.post("/run")
+async def run_graph(payload: dict):
+    """Endpoint that runs the graph; exposes its RunControl for pre-stop draining."""
+    global _run_control
+    control = RunControl()
+    _run_control = control
+    try:
+        result = await graph.ainvoke(payload, control=control)
+        return result
+    except GraphDrained:
+        return {"status": "drained"}
+    finally:
+        _run_control = None
 ```
 
 ### Async drain with timeout
