@@ -1179,7 +1179,7 @@ image_generation_tool(
 ```python {test="skip"}
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.native_tools import ImageGenerationTool
+from pydantic_ai import ImageGenerationTool
 from pydantic_ai.common_tools.image_generation import image_generation_tool
 
 # The outer agent is a text model; image generation is handled by the subagent
@@ -1228,7 +1228,7 @@ asyncio.run(main())
 ```python {test="skip"}
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.native_tools import ImageGenerationTool
+from pydantic_ai import ImageGenerationTool
 from pydantic_ai.common_tools.image_generation import image_generation_tool
 from pydantic_ai.tools import RunContext
 from dataclasses import dataclass
@@ -1275,7 +1275,7 @@ asyncio.run(main())
 
 ```python {test="skip"}
 from pydantic_ai import Agent
-from pydantic_ai.native_tools import ImageGenerationTool
+from pydantic_ai import ImageGenerationTool
 from pydantic_ai.common_tools.image_generation import image_generation_tool
 
 agent = Agent(
