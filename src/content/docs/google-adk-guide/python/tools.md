@@ -1390,6 +1390,78 @@ toolset = SkillToolset(skills=[skill])
 
 `transfer_to_agent` and `TransferToAgentTool` are injected automatically by ADK when the LLM agent has `sub_agents`. You rarely construct them yourself, but you can inspect them for logging.
 
+### `TransferToAgentTool` — enum-constrained transfer
+
+Source-verified against `google.adk.tools.transfer_to_agent_tool` (google-adk==2.7.1). Unlike the module-level `transfer_to_agent` singleton, the **class** is used when ADK auto-injects transfer into an `LlmAgent` with sub-agents. Its one job over `FunctionTool(transfer_to_agent)` is adding a JSON Schema `enum` constraint to `agent_name`, so the model cannot hallucinate a sub-agent that doesn't exist.
+
+```python
+from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
+
+# Build one manually and inspect the resulting declaration — useful for
+# logging what the model actually sees when you tweak a hierarchy.
+transfer = TransferToAgentTool(agent_names=["billing", "shipping", "returns"])
+
+decl = transfer._get_declaration()
+
+# Prefer parameters_json_schema when JSON_SCHEMA_FOR_FUNC_DECL is enabled;
+# fall back to the classic types.Schema path otherwise.
+if decl.parameters_json_schema:
+    print(decl.parameters_json_schema["properties"]["agent_name"]["enum"])
+    # → ['billing', 'shipping', 'returns']
+else:
+    print(decl.parameters.properties["agent_name"].enum)
+    # → ['billing', 'shipping', 'returns']
+```
+
+**When you might construct it explicitly.** Rare, but useful if you need to expose transfer to a **subset** of the actual sub-agents (e.g. hide an internal debug agent from the model). Attach the manual instance and disable auto-injection with `LlmAgent(disallow_transfer_to_parent=True, disallow_transfer_to_peers=True, ...)` and add `TransferToAgentTool(agent_names=[...])` explicitly to `tools=`. The auto-inject path in the base flow only fires when transfer is not already present.
+
+## `LoadMemoryTool` — memory search with auto instruction
+
+Source-verified against `google.adk.tools.load_memory_tool` (google-adk==2.7.1). The exported symbol `load_memory` is a module-level `LoadMemoryTool()` instance — you pass either interchangeably to `tools=[]`.
+
+```python
+from google.adk.tools.load_memory_tool import LoadMemoryTool, load_memory
+from google.adk.agents import LlmAgent
+
+# These two are equivalent:
+agent_a = LlmAgent(name="a", model="gemini-2.5-flash", tools=[load_memory])
+agent_b = LlmAgent(name="b", model="gemini-2.5-flash", tools=[LoadMemoryTool()])
+```
+
+**Two things `LoadMemoryTool` does that a bare `FunctionTool(load_memory)` would not:**
+
+1. **JSON Schema-aware declaration.** `_get_declaration` branches on the `JSON_SCHEMA_FOR_FUNC_DECL` feature flag. When enabled, `parameters_json_schema` is `{"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}`. Otherwise, it emits a `types.Schema(type=OBJECT, properties={"query": types.Schema(type=STRING)}, required=["query"])`. Both shapes are wire-compatible with Gemini's function-calling API.
+2. **Prompt injection at request time.** `process_llm_request` appends the following instruction to every LLM request that reaches the tool:
+
+   > *You have memory. You can use it to answer questions. If any questions need you to look up the memory, you should call load_memory function with a query.*
+
+   You do **not** need to mention `load_memory` in your own `instruction=` — the tool tells the model about itself. This is why swapping `load_memory` in and out during A/B tests changes model behaviour immediately, with no prompt changes.
+
+```python
+from google.adk.tools import load_memory
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.runners import Runner
+from google.adk.memory import InMemoryMemoryService
+from google.adk.sessions import InMemorySessionService
+
+agent = LlmAgent(
+    name="recall",
+    model="gemini-2.5-flash",
+    instruction="Help the user. Personalise from anything you remember.",
+    tools=[load_memory],
+)
+
+app = App(name="recall_demo", root_agent=agent)
+runner = Runner(
+    app=app,
+    session_service=InMemorySessionService(),
+    memory_service=InMemoryMemoryService(),   # REQUIRED — load_memory raises otherwise
+)
+```
+
+**Gotcha.** `LoadMemoryTool.func` is the async `load_memory(query, tool_context)` — it calls `tool_context.search_memory(query)`, which itself raises `ValueError('Memory service is not available.')` when no `memory_service` is wired on the `Runner`. If you cannot guarantee a memory service is present (e.g. optional feature), guard with `preload_memory` instead — it silently no-ops when memory is absent.
+
 ## HITL tools
 
 - `get_user_choice` — a `LongRunningFunctionTool` that prompts the user with a list; the LLM picks from the returned choice.
