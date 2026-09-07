@@ -259,7 +259,7 @@ agent = Agent(
 )
 
 async def main() -> None:
-    session = {}
+    session = agent.create_session()
     for turn in ["Tell me about Paris.", "What about Rome?", "And Berlin?",
                  "Compare all three cities.", "Which has the best food?"]:
         response = await agent.run(turn, session=session)
@@ -343,7 +343,7 @@ agent = Agent(
 )
 
 async def main() -> None:
-    session = {}
+    session = agent.create_session()
     for i in range(30):
         await agent.run(f"Question number {i}", session=session)
     print("Completed 30 turns with bounded history.")
@@ -381,7 +381,7 @@ agent = Agent(
 )
 
 async def main() -> None:
-    session = {}
+    session = agent.create_session()
     response = await agent.run("Start a long research session.", session=session)
     print(response.text)
 
@@ -455,7 +455,7 @@ agent = Agent(
 )
 
 async def main() -> None:
-    session = {}
+    session = agent.create_session()
     response = await agent.run("Analyse the market trends.", session=session)
     print(response.text)
 
@@ -532,8 +532,7 @@ The framework ships several built-in check factories (importable from `agent_fra
 |---|---|
 | `keyword_check(keyword)` | Response text contains keyword (case-insensitive). |
 | `tool_called_check(tool_name)` | Agent called the specified tool at least once. |
-| `exact_match_check(expected)` | Response exactly matches the expected string. |
-| `contains_check(substring)` | Response contains the given substring. |
+| `tool_call_args_match(tool_name, args)` | Agent called the tool with arguments matching the given dict. |
 
 ### Example — Keyword and tool call checks
 
@@ -812,7 +811,7 @@ agent = Agent(
 
 async def main() -> None:
     # Pre-seed the store
-    await store.write("notes.txt", b"Important meeting notes.")
+    await store.write("notes.txt", "Important meeting notes.")
 
     response = await agent.run("Read my notes and summarise them.")
     print(response.text)
@@ -1156,7 +1155,7 @@ MCPWebsocketTool(
 | `load_tools` | `bool` | Fetch and expose MCP tools. |
 | `load_prompts` | `bool` | Fetch and expose MCP prompts. |
 | `allowed_tools` | `Collection[str] \| None` | Whitelist of MCP tool names to expose (others are hidden). |
-| `approval_mode` | `str \| MCPSpecificApproval \| None` | `"always_require"` (default), `"never_require"`, or per-tool rules. |
+| `approval_mode` | `str \| MCPSpecificApproval \| None` | Defaults to `None` (inherits server-side approval behavior). Set `"always_require"` to gate every tool call, or `"never_require"` to skip confirmation. |
 | `use_progressive_disclosure` | `bool` | Load full tool specs lazily when called, keeping initial context small. |
 | `request_timeout` | `int \| None` | Per-request timeout in seconds. |
 | `sampling_max_tokens` | `int \| None` | Max tokens for MCP server-side sampling requests. Default 4096. |
