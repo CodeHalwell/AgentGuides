@@ -506,7 +506,9 @@ async def start_timer(ctx: RunContext[None]) -> None:
     if ctx.metadata is None:
         ctx.metadata = {}
     ctx.metadata["_start"] = time.monotonic()
-    print(f"Run started for agent: {ctx.agent_name}")
+    ctx.metadata["_req"] = 0
+    agent_name = ctx.agent.name if ctx.agent else "unknown"
+    print(f"Run started for agent: {agent_name}")
 
 
 @hooks.on.after_run
@@ -518,7 +520,8 @@ async def log_duration(ctx: RunContext[None], *, result):
 
 @hooks.on.before_model_request
 async def log_request(ctx: RunContext[None], request_context):
-    print(f"  → Model request #{ctx.retry}")
+    ctx.metadata["_req"] = ctx.metadata.get("_req", 0) + 1
+    print(f"  → Model request #{ctx.metadata['_req']}")
     return request_context
 
 
