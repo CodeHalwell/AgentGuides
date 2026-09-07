@@ -200,20 +200,23 @@ A common pattern is to signal drain from a background thread (e.g. a SIGTERM han
 
 ```python
 import signal
-import threading
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import RunControl
 from langgraph.errors import GraphDrained
 
+# Simple module-level reference. Python signal handlers always run on the
+# main thread; acquiring a threading.Lock here can deadlock if SIGTERM
+# arrives while the main thread is already holding it. The GIL ensures
+# that a plain attribute read/write on a module global is atomic enough
+# for this single-pointer handoff — no lock needed.
 _active_control: RunControl | None = None
-_lock = threading.Lock()
 
 
 def handle_sigterm(signum, frame):
-    with _lock:
-        if _active_control:
-            _active_control.request_drain(reason="SIGTERM")
+    ctrl = _active_control  # single read, GIL-safe; no lock
+    if ctrl is not None:
+        ctrl.request_drain(reason="SIGTERM")
 
 
 signal.signal(signal.SIGTERM, handle_sigterm)
@@ -231,19 +234,17 @@ graph = (
     .compile(checkpointer=InMemorySaver())
 )
 
-# Pre-create the RunControl and register it BEFORE graph.invoke so that a
-# SIGTERM arriving during graph startup — before any node runs — is still caught.
+# Pre-create and publish the RunControl BEFORE graph.invoke so that a
+# SIGTERM arriving during graph startup — before any node runs — is caught.
 control = RunControl()
-with _lock:
-    _active_control = control
+_active_control = control  # plain assignment, GIL-safe
 
 try:
     graph.invoke({}, {"configurable": {"thread_id": "t1"}}, control=control)
 except GraphDrained as exc:
     print(f"Drained: {exc.reason} — resumable from checkpoint")
 finally:
-    with _lock:
-        _active_control = None
+    _active_control = None
 ```
 
 ---

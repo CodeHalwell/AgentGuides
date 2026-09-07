@@ -212,10 +212,16 @@ Subclass `BaseCache` to use Redis, Memcached, or any other store. Implement all 
 import json
 from collections.abc import Mapping, Sequence
 from typing import Any
+from urllib.parse import quote
 
 import redis
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace
+
+
+def _encode_seg(s: str) -> str:
+    """Percent-encode a namespace segment so ':' is not ambiguous as a separator."""
+    return quote(s, safe="")
 
 
 class RedisCache(BaseCache[Any]):
@@ -227,7 +233,9 @@ class RedisCache(BaseCache[Any]):
 
     def _make_redis_key(self, full_key: FullKey) -> str:
         ns, k = full_key
-        return f"langgraph:{':'.join(ns)}:{k}"
+        # Percent-encode each segment so 'a:b' in one segment never collides
+        # with a two-element namespace ['a', 'b'].
+        return f"langgraph:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(k)}"
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
         if not keys:
@@ -268,7 +276,7 @@ class RedisCache(BaseCache[Any]):
                 self._r.delete(key)
         else:
             for ns in namespaces:
-                prefix = f"langgraph:{':'.join(ns)}:*"
+                prefix = f"langgraph:{':'.join(_encode_seg(s) for s in ns)}:*"
                 for key in self._r.scan_iter(prefix):
                     self._r.delete(key)
 
@@ -358,6 +366,11 @@ import aioredis
 from langgraph.cache.base import BaseCache, FullKey, Namespace
 from typing import Any
 from collections.abc import Mapping, Sequence
+from urllib.parse import quote
+
+
+def _encode_seg(s: str) -> str:
+    return quote(s, safe="")
 
 
 class AsyncRedisCache(BaseCache[Any]):
@@ -368,7 +381,9 @@ class AsyncRedisCache(BaseCache[Any]):
 
     async def _get_client(self) -> aioredis.Redis:
         if self._client is None:
-            self._client = await aioredis.from_url(self._url)
+            # aioredis.from_url / redis.asyncio.from_url is a synchronous
+            # factory; it returns the client directly and must not be awaited.
+            self._client = aioredis.from_url(self._url)
         return self._client
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
@@ -376,7 +391,7 @@ class AsyncRedisCache(BaseCache[Any]):
         result = {}
         for k in keys:
             ns, key_hash = k
-            rk = f"lg:{':'.join(ns)}:{key_hash}"
+            rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(key_hash)}"
             raw = await client.get(rk)
             if raw:
                 enc_b, data = raw.split(b"|", 1)
@@ -392,7 +407,7 @@ class AsyncRedisCache(BaseCache[Any]):
         client = await self._get_client()
         for full_key, (value, ttl) in pairs.items():
             ns, key_hash = full_key
-            rk = f"lg:{':'.join(ns)}:{key_hash}"
+            rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(key_hash)}"
             enc, data = self.serde.dumps_typed(value)
             payload = enc.encode() + b"|" + data
             if ttl:
@@ -412,7 +427,7 @@ class AsyncRedisCache(BaseCache[Any]):
                 await client.delete(key)
         else:
             for ns in namespaces:
-                prefix = f"lg:{':'.join(ns)}:*"
+                prefix = f"lg:{':'.join(_encode_seg(s) for s in ns)}:*"
                 async for key in client.scan_iter(prefix):
                     await client.delete(key)
 
