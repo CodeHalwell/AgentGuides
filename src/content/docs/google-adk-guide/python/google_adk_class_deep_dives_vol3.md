@@ -343,9 +343,10 @@ before_run_callback
     before_tool_callback
     after_tool_callback | on_tool_error_callback
   after_agent_callback | on_agent_error_callback
-on_event_callback
 after_run_callback | on_run_error_callback
 ```
+
+> **`on_event_callback` fires per-event, not once per run.** It is called for every `Event` the runner produces — model responses, tool calls, agent transfers — *before* each event is persisted to the session service and yielded to the caller. It therefore interleaves throughout the invocation rather than firing once at the end. The diagram above shows only the major ordering; `on_event_callback` fires inside the loop each time an event is emitted.
 
 ### Implementing a metrics plugin
 
@@ -416,6 +417,21 @@ class MetricsPlugin(BasePlugin):
             elapsed = time.monotonic() - start
             print(f"[metrics] tool={tool.name} latency={elapsed:.3f}s")
         return None
+
+    async def on_tool_error_callback(
+        self,
+        *,
+        tool: BaseTool,
+        tool_args: dict[str, Any],
+        tool_context: ToolContext,
+        error: Exception,
+    ) -> Optional[dict[str, Any]]:
+        # Pop the start time to avoid unbounded growth when tools fail.
+        start = self._tool_start.pop(tool_context.function_call_id, None)
+        if start is not None:
+            elapsed = time.monotonic() - start
+            print(f"[metrics] tool={tool.name} FAILED after {elapsed:.3f}s: {error}")
+        return None  # let ADK propagate the error normally
 
     async def after_run_callback(
         self, *, invocation_context: InvocationContext
