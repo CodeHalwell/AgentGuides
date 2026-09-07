@@ -137,6 +137,7 @@ Large `messages` lists inflate trace storage. Record only the last two messages:
 
 ```python
 from typing import Any
+from langchain_core.runnables import RunnableLambda
 from langgraph.types import TracePolicy
 
 
@@ -147,9 +148,11 @@ def truncate_messages(value: Any) -> Any:
     return value
 
 
+# Wrap in RunnableLambda so LangSmith creates a traced span.
+call_model = RunnableLambda(call_model_fn)
 builder.add_node(
     "call_model",
-    call_model_fn,
+    call_model,
     trace_policy=TracePolicy(
         process_inputs=truncate_messages,
         process_outputs=truncate_messages,
@@ -163,6 +166,7 @@ Strip PII or credentials from a node's inputs before they hit LangSmith:
 
 ```python
 from typing import Any
+from langchain_core.runnables import RunnableLambda
 from langgraph.types import TracePolicy
 
 SENSITIVE_KEYS = {"api_key", "password", "token", "ssn", "credit_card"}
@@ -178,9 +182,11 @@ def redact_sensitive(value: Any) -> Any:
     return value
 
 
+# Wrap in RunnableLambda so LangSmith creates a traced span.
+auth_node = RunnableLambda(auth_fn)
 builder.add_node(
     "auth_node",
-    auth_fn,
+    auth_node,
     trace_policy=TracePolicy(process_inputs=redact_sensitive),
 )
 ```
@@ -191,6 +197,7 @@ Embedding nodes produce large float arrays. Record metadata only:
 
 ```python
 from typing import Any
+from langchain_core.runnables import RunnableLambda
 from langgraph.types import TracePolicy
 
 
@@ -202,9 +209,11 @@ def summarize_embedding_output(value: Any) -> Any:
     return value
 
 
+# Wrap in RunnableLambda so LangSmith creates a traced span.
+embed_node = RunnableLambda(embed_fn)
 builder.add_node(
     "embed",
-    embed_fn,
+    embed_node,
     trace_policy=TracePolicy(process_outputs=summarize_embedding_output),
 )
 ```
@@ -214,6 +223,7 @@ builder.add_node(
 Use `set_node_defaults` to apply a policy to all nodes at once, then override per-node:
 
 ```python
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import TracePolicy, omit_payload
 
@@ -231,9 +241,10 @@ def verbose_trace(v):
     return v  # pass through — records everything
 
 # Override for one critical node that you DO want traced
+decision_node = RunnableLambda(decision_fn)
 builder.add_node(
     "decision",
-    decision_fn,
+    decision_node,
     trace_policy=TracePolicy(
         process_inputs=verbose_trace,
         process_outputs=verbose_trace,
@@ -246,6 +257,7 @@ builder.add_node(
 Record what went in (for debugging) but not what came out (for compliance):
 
 ```python
+from langchain_core.runnables import RunnableLambda
 from langgraph.types import TracePolicy, omit_payload
 
 
@@ -255,9 +267,11 @@ def strip_pii(value):
     return value
 
 
+# Wrap in RunnableLambda so LangSmith creates a traced span.
+pii_processor = RunnableLambda(pii_fn)
 builder.add_node(
     "pii_processor",
-    pii_fn,
+    pii_processor,
     trace_policy=TracePolicy(
         process_inputs=strip_pii,    # record input minus PII
         process_outputs=omit_payload, # never record output

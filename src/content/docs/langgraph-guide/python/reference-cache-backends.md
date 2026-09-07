@@ -268,7 +268,8 @@ class RedisCache(BaseCache[Any]):
                 pipe.set(rk, payload)
             elif ttl > 0:
                 pipe.setex(rk, ttl, payload)
-            # ttl == 0: already expired — skip storing
+            else:
+                pipe.delete(rk)  # ttl == 0: evict any stale entry
         pipe.execute()
 
     async def aset(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
@@ -364,10 +365,10 @@ async def main():
 asyncio.run(main())
 ```
 
-For true async caches (e.g. aioredis), implement `aget` / `aset` / `aclear` with async I/O:
+For true async caches, implement `aget` / `aset` / `aclear` with async I/O using `redis.asyncio` (the maintained successor to the standalone `aioredis` package, which fails to import on Python 3.11+):
 
 ```python
-import aioredis
+import redis.asyncio as aioredis
 from langgraph.cache.base import BaseCache, FullKey, Namespace
 from typing import Any
 from collections.abc import Mapping, Sequence
@@ -419,7 +420,8 @@ class AsyncRedisCache(BaseCache[Any]):
                 await client.set(rk, payload)
             elif ttl > 0:
                 await client.setex(rk, ttl, payload)
-            # ttl == 0: already expired — skip storing
+            else:
+                await client.delete(rk)  # ttl == 0: evict any stale entry
 
     def set(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         raise NotImplementedError(
