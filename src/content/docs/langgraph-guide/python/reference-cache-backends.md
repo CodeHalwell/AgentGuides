@@ -384,8 +384,9 @@ class AsyncRedisCache(BaseCache[Any]):
         return result
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
-        import asyncio
-        return asyncio.get_event_loop().run_until_complete(self.aget(keys))
+        raise NotImplementedError(
+            "AsyncRedisCache is async-only. Call aget() from an async context."
+        )
 
     async def aset(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         client = await self._get_client()
@@ -400,8 +401,9 @@ class AsyncRedisCache(BaseCache[Any]):
                 await client.set(rk, payload)
 
     def set(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(self.aset(pairs))
+        raise NotImplementedError(
+            "AsyncRedisCache is async-only. Call aset() from an async context."
+        )
 
     async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         client = await self._get_client()
@@ -415,8 +417,9 @@ class AsyncRedisCache(BaseCache[Any]):
                     await client.delete(key)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(self.aclear(namespaces))
+        raise NotImplementedError(
+            "AsyncRedisCache is async-only. Call aclear() from an async context."
+        )
 ```
 
 ---

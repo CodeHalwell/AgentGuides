@@ -46,12 +46,19 @@ class RunControl:
 
 ```python
 # langgraph.errors
-class GraphDrained(Exception):
+from langgraph.errors import GraphBubbleUp
+
+class GraphDrained(GraphBubbleUp):
     """Raised when a graph run exits early due to a drain request.
 
-    The checkpoint is saved and the run can be resumed later.
+    This indicates the graph stopped cooperatively at a superstep boundary
+    because RunControl.request_drain() was called. The checkpoint is saved
+    and the run can be resumed later.
     """
-    reason: str
+
+    def __init__(self, reason: str = "shutdown") -> None:
+        self.reason = reason
+        super().__init__(f"Graph drained: {reason}")
 ```
 
 `GraphDrained` is raised at the end of the current superstep once `request_drain()` has been called. The checkpoint is always flushed before the exception propagates, so the run is safe to resume from the saved state.

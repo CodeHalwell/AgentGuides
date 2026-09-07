@@ -23,7 +23,7 @@ Verified against **`langgraph==1.2.11`** (module: `langgraph.types`).
 from dataclasses import dataclass
 from typing import Callable, Any
 
-@dataclass
+@dataclass(kw_only=True, slots=True, frozen=True)
 class TracePolicy:
     """Configuration for how a node's run is traced."""
 
@@ -38,6 +38,8 @@ class TracePolicy:
 
 ```python
 # langgraph.types
+from typing import Any
+
 def omit_payload(_value: Any) -> dict[str, Any]:
     """Record an empty payload, dropping the value entirely.
 

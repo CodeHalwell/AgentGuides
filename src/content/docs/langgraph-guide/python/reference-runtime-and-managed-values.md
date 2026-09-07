@@ -10,7 +10,7 @@ sidebar:
 
 # Runtime, ToolRuntime & Managed Values
 
-Verified against **`langgraph==1.2.1`** (modules: `langgraph.runtime`, `langgraph.prebuilt.tool_node`, `langgraph.managed.is_last_step`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.runtime`, `langgraph.prebuilt.tool_node`, `langgraph.managed.is_last_step`).
 
 This page covers the three mechanisms LangGraph provides for injecting execution context into node and tool functions without threading values through graph state:
 
