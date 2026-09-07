@@ -429,8 +429,10 @@ class MetricsPlugin(BasePlugin):
     ) -> Optional[dict[str, Any]]:
         # Key by invocation_id + tool.name to handle concurrent parallel calls
         call_key = f"{tool_context.invocation_id}:{tool.name}"
-        elapsed = time.monotonic() - self._tool_start.pop(call_key, 0)
-        print(f"[metrics] tool={tool.name} latency={elapsed:.3f}s")
+        start = self._tool_start.pop(call_key, None)
+        if start is not None:
+            elapsed = time.monotonic() - start
+            print(f"[metrics] tool={tool.name} latency={elapsed:.3f}s")
         return None
 
     async def after_run_callback(
@@ -885,12 +887,11 @@ await memory_service.add_events_to_memory(
 from google.adk.agents import LlmAgent
 from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
 from google.adk.sessions import InMemorySessionService
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import Runner
 from google.genai import types
 import asyncio
 
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-from google.adk.runners import Runner
 
 artifact_service = InMemoryArtifactService()
 
@@ -1062,7 +1063,7 @@ simulator_config = LlmBackedUserSimulatorConfig(
 )
 
 # --- Build EvalSet from scenarios ---
-import uuid
+from google.adk.evaluation.eval_case import EvalCase
 from google.adk.evaluation.eval_set import EvalSet
 
 eval_set = EvalSet(
