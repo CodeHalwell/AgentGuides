@@ -34,6 +34,8 @@ All examples and field tables on this page are source-verified against **google-
 
 Source-verified from `google/adk/agents/run_config.py`:
 
+Selected fields (source-verified from `google/adk/agents/run_config.py`; the full class has additional BIDI-specific fields not listed here):
+
 | Field | Type | Default | What it controls |
 |---|---|---|---|
 | `streaming_mode` | `StreamingMode` | `NONE` | `NONE` = batch; `SSE` = server-sent events; `BIDI` = bidirectional (live) |
@@ -46,10 +48,18 @@ Source-verified from `google/adk/agents/run_config.py`:
 | `get_session_config` | `GetSessionConfig \| None` | `None` | Limit how many events are loaded from the session store |
 | `model_input_context` | `list[types.Content] \| None` | `None` | Transient extra context for this turn; not persisted to session |
 | `telemetry` | `TelemetryConfig \| None` | `None` | Per-request OTel override (multi-tenant use) |
-| `custom_metadata` | `dict[str, Any] \| None` | `None` | Arbitrary key-value metadata for this invocation (forwarded to spans; distinct from `labels`) |
+| `custom_metadata` | `dict[str, Any] \| None` | `None` | Merged into each emitted `Event.custom_metadata` for the invocation (accessible in `on_event_callback` and session storage); distinct from `labels` and from OTel spans |
 | `include_thoughts_from_other_agents` | `bool` | `False` | Expose sub-agent reasoning to parent agent |
 | `support_cfc` | `bool` | `False` | Compositional Function Calling (experimental; forces LIVE API) |
 | `session_resumption` | `SessionResumptionConfig \| None` | `None` | Transparent session resumption for live sessions |
+| `speech_config` | `types.SpeechConfig \| None` | `None` | TTS voice/language for BIDI live sessions |
+| `realtime_input_config` | `types.RealtimeInputConfig \| None` | `None` | Realtime audio input config for BIDI live sessions |
+| `output_audio_transcription` | `types.AudioTranscriptionConfig \| None` | enabled | Transcript of agent audio output (BIDI) |
+| `input_audio_transcription` | `types.AudioTranscriptionConfig \| None` | enabled | Transcript of user audio input (BIDI) |
+| `save_live_blob` | `bool` | `False` | Persist live video/audio blobs to session and artifact service (BIDI) |
+| `enable_affective_dialog` | `bool \| None` | `None` | Emotion detection — model adapts responses when enabled (BIDI) |
+| `proactivity` | `types.ProactivityConfig \| None` | `None` | Allow model to respond proactively without a user turn (BIDI) |
+| `history_config` | `types.HistoryConfig \| None` | `None` | Controls history exchange between client and server (BIDI) |
 
 `ToolThreadPoolConfig` has one field: `max_workers: int = 4`. When set on `RunConfig.tool_thread_pool_config`, each tool call runs in a background thread, keeping the event loop free to process interrupts and audio.
 
@@ -1025,6 +1035,29 @@ Source-verified from `google/adk/evaluation/conversation_scenarios.py`:
 
 ### End-to-end simulation test
 
+`AgentEvaluator.evaluate_eval_set` imports the agent via `agent_module` (a dotted module path). The import runs the module at top level, so `asyncio.run(...)` must **not** appear in the agent module. Keep the agent definition and eval driver in separate files.
+
+**`my_package/travel_agent.py`** — agent module only:
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.tools import FunctionTool
+
+def book_flight(origin: str, destination: str, date: str) -> dict:
+    return {"confirmation": "ABC123", "price_usd": 199}
+
+travel_agent = LlmAgent(
+    name="travel_agent",
+    model="gemini-2.5-flash",
+    instruction="Help users book flights. Confirm details before booking.",
+    tools=[FunctionTool(func=book_flight)],
+)
+# AgentEvaluator looks for root_agent at the module level.
+root_agent = travel_agent
+```
+
+**`run_eval.py`** — eval driver (separate script, never imported by AgentEvaluator):
+
 ```python
 import asyncio
 from google.adk.evaluation.conversation_scenarios import (
@@ -1036,21 +1069,8 @@ from google.adk.evaluation.simulation.llm_backed_user_simulator import (
 )
 from google.adk.evaluation.agent_evaluator import AgentEvaluator
 from google.adk.evaluation.eval_config import EvalConfig
-from google.adk.agents import LlmAgent
-from google.adk.tools import FunctionTool
-
-# --- Agent under test ---
-def book_flight(origin: str, destination: str, date: str) -> dict:
-    return {"confirmation": "ABC123", "price_usd": 199}
-
-travel_agent = LlmAgent(
-    name="travel_agent",
-    model="gemini-2.5-flash",
-    instruction="Help users book flights. Confirm details before booking.",
-    tools=[FunctionTool(func=book_flight)],
-)
-# AgentEvaluator loads root_agent from the module; expose it at module level.
-root_agent = travel_agent
+from google.adk.evaluation.eval_case import EvalCase
+from google.adk.evaluation.eval_set import EvalSet
 
 # --- Test scenario ---
 scenarios = ConversationScenarios(
@@ -1083,9 +1103,6 @@ simulator_config = LlmBackedUserSimulatorConfig(
 )
 
 # --- Build EvalSet from scenarios ---
-from google.adk.evaluation.eval_case import EvalCase
-from google.adk.evaluation.eval_set import EvalSet
-
 eval_set = EvalSet(
     eval_set_id="flight_booking_eval",
     eval_cases=[
@@ -1098,9 +1115,6 @@ eval_set = EvalSet(
 )
 
 # --- Run evaluation ---
-# evaluate_eval_set is async; agent_module must be an importable module path
-# string. The module loader looks for root_agent on the module (or on an
-# "agent" attribute of the module); expose root_agent at the top level.
 async def main():
     eval_config = EvalConfig(
         # multi_turn_task_success_v1 is reference-free: it judges whether the
@@ -1109,7 +1123,7 @@ async def main():
         user_simulator_config=simulator_config,
     )
     await AgentEvaluator.evaluate_eval_set(
-        agent_module="my_package.travel_agent",  # module that exports root_agent
+        agent_module="my_package.travel_agent",  # imports travel_agent.py, reads root_agent
         eval_set=eval_set,
         eval_config=eval_config,
         print_detailed_results=True,
