@@ -108,6 +108,10 @@ graph = (
     .add_node("process", process)
     .add_edge(START, "process")
     .add_edge("process", END)
+    # NOTE: InMemorySaver is used here for brevity. It does not survive a process
+    # restart, so "resume with the same config later" only works within the same
+    # process. For true cross-process resumption use a durable checkpointer
+    # such as SqliteSaver or AsyncPostgresSaver.
     .compile(checkpointer=InMemorySaver())
 )
 
@@ -133,7 +137,7 @@ try:
     print("Graph finished normally:", result["step"])
 except GraphDrained as exc:
     print(f"Graph drained cooperatively — reason: {exc.reason}")
-    print("Checkpoint saved; resume with the same config later.")
+    print("Checkpoint saved in this process; resume with the same config.")
 ```
 
 ---
@@ -197,17 +201,13 @@ A common pattern is to signal drain from a background thread (e.g. a SIGTERM han
 ```python
 import signal
 import threading
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import RunControl
 from langgraph.errors import GraphDrained
 
 _active_control: RunControl | None = None
 _lock = threading.Lock()
-
-
-def register_control(control: RunControl) -> None:
-    global _active_control
-    with _lock:
-        _active_control = control
 
 
 def handle_sigterm(signum, frame):
@@ -218,15 +218,8 @@ def handle_sigterm(signum, frame):
 
 signal.signal(signal.SIGTERM, handle_sigterm)
 
-# Inject control via a wrapper middleware or startup hook
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.runtime import Runtime
 
-
-def node(state: dict, runtime: Runtime) -> dict:
-    if runtime.control:
-        register_control(runtime.control)
+def node(state: dict) -> dict:
     return {}
 
 
@@ -238,10 +231,19 @@ graph = (
     .compile(checkpointer=InMemorySaver())
 )
 
+# Pre-create the RunControl and register it BEFORE graph.invoke so that a
+# SIGTERM arriving during graph startup — before any node runs — is still caught.
+control = RunControl()
+with _lock:
+    _active_control = control
+
 try:
-    graph.invoke({}, {"configurable": {"thread_id": "t1"}})
+    graph.invoke({}, {"configurable": {"thread_id": "t1"}}, control=control)
 except GraphDrained as exc:
     print(f"Drained: {exc.reason} — resumable from checkpoint")
+finally:
+    with _lock:
+        _active_control = None
 ```
 
 ---
@@ -301,23 +303,25 @@ result = graph.invoke(None, config)  # picks up from the last checkpoint
 
 ```python
 import asyncio
-from fastapi import FastAPI
+import uuid
+from fastapi import FastAPI, HTTPException
 from langgraph.runtime import RunControl
 from langgraph.errors import GraphDrained
 
 app = FastAPI()
 
 # Thread-safe set of all in-flight RunControls.
-# A single global ref would be overwritten by concurrent requests,
-# leaving earlier runs undrainable on shutdown.
 _active_controls: set[RunControl] = set()
 _controls_lock = asyncio.Lock()
+_draining = False  # set to True once pre-stop begins; new runs are rejected
 
 
 @app.post("/lifecycle/pre-stop")
 async def pre_stop():
     """Kubernetes calls this before terminating the pod."""
+    global _draining
     async with _controls_lock:
+        _draining = True
         snapshot = list(_active_controls)
     for ctrl in snapshot:
         ctrl.request_drain(reason="k8s-prestop")
@@ -329,12 +333,17 @@ async def run_graph(payload: dict):
     """Endpoint that runs the graph; registers its RunControl for pre-stop draining."""
     control = RunControl()
     async with _controls_lock:
+        if _draining:
+            # Pre-stop already signalled; refuse new work so the pod can shut down.
+            raise HTTPException(status_code=503, detail="Service is draining")
         _active_controls.add(control)
+    thread_id = payload.get("thread_id") or str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
     try:
-        result = await graph.ainvoke(payload, control=control)
+        result = await graph.ainvoke(payload, config, control=control)
         return result
     except GraphDrained:
-        return {"status": "drained"}
+        return {"status": "drained", "thread_id": thread_id}
     finally:
         async with _controls_lock:
             _active_controls.discard(control)
