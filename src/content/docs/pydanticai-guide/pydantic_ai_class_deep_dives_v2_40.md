@@ -992,15 +992,24 @@ async def fetch_with_retry(url: str) -> dict:
 
 ```python {test="skip"}
 import httpx2
-from tenacity import retry_if_exception_type, stop_after_attempt
+from tenacity import retry_if_exception, stop_after_attempt
 
 from pydantic_ai import Agent
 from pydantic_ai.retries import AsyncHTTPX2TenacityTransport, RetryConfig, wait_retry_after
 
+
+def _is_transient(exc: BaseException) -> bool:
+    """Retry only on 429 (rate limit) and 5xx (server error) responses."""
+    return (
+        isinstance(exc, httpx2.HTTPStatusError)
+        and (exc.response.status_code == 429 or exc.response.status_code >= 500)
+    )
+
+
 # Build a resilient async HTTP client
 retry_transport = AsyncHTTPX2TenacityTransport(
     config=RetryConfig(
-        retry=retry_if_exception_type(httpx2.HTTPStatusError),
+        retry=retry_if_exception(_is_transient),
         wait=wait_retry_after(max_wait=60),
         stop=stop_after_attempt(3),
         reraise=True,
