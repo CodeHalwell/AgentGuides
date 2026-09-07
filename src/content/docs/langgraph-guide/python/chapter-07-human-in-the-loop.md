@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** how to pause your graph mid-execution to collect input, approval, or corrections from a human — the `interrupt()` and `Command(resume=...)` primitives, multi-stage approval workflows, multiple interrupts inside one node, and resume-by-id when a node raises several interrupts at once.
 
-Verified against **`langgraph==1.2.0`** (module: `langgraph.types`).
+Verified against **`langgraph==1.2.11`** (module: `langgraph.types`).
 
 **Time:** ~25 minutes.
 

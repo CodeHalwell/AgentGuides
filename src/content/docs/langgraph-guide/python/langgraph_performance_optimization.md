@@ -380,7 +380,8 @@ def handle_error_node(state: State, exception: Exception) -> dict:
 
 builder = StateGraph(State)
 
-# Set graph-wide defaults — applies to every add_node that follows
+# Set graph-wide defaults — applied at compile() time to every node,
+# regardless of whether add_node() runs before or after this call.
 builder.set_node_defaults(
     retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
     cache_policy=CachePolicy(ttl=600),         # 10-minute cache for all nodes
@@ -388,7 +389,7 @@ builder.set_node_defaults(
     timeout=30.0,                               # 30 s hard cap on all async nodes
 )
 
-# All nodes below inherit the defaults above
+# Every node in the graph inherits the defaults set above.
 builder.add_node("fetch", fetch_node)
 builder.add_node("process", process_node)
 
