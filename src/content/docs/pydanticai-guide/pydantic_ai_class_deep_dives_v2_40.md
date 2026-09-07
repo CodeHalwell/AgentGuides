@@ -804,10 +804,10 @@ external_toolset = ExternalToolset(
     id="payments",
 )
 
-# output_type=DeferredToolRequests ensures the run surfaces pending external calls
+# output_type includes str so the resumed run can return a normal text confirmation
 agent = Agent(
     "openai:gpt-4o",
-    output_type=DeferredToolRequests,
+    output_type=[str, DeferredToolRequests],
     toolsets=[external_toolset],
     instructions="You can approve payments. Always justify each payment.",
 )
@@ -828,11 +828,11 @@ async def main() -> None:
         )
 
         # Second run: pass the external results back so the agent can continue
+        # (external_toolset is already registered on the agent; don't pass it again)
         final = await agent.run(
             None,
             message_history=result.all_messages(),
             deferred_tool_results=results,
-            toolsets=[external_toolset],
         )
         print(final.output)
 
@@ -915,10 +915,14 @@ from pydantic_ai.retries import (
     wait_retry_after,
 )
 
+def _is_429(exc: BaseException) -> bool:
+    return isinstance(exc, httpx2.HTTPStatusError) and exc.response.status_code == 429
+
+
 transport = HTTPX2TenacityTransport(
     config=RetryConfig(
-        retry=retry_if_exception_type(httpx2.HTTPStatusError),
-        wait=wait_retry_after(max_wait=120),     # respects Retry-After header; caps at 2 min
+        retry=_is_429,                            # only retry 429 Too Many Requests
+        wait=wait_retry_after(max_wait=120),      # respects Retry-After header; caps at 2 min
         stop=stop_after_attempt(5),
         reraise=True,
     ),
