@@ -113,11 +113,17 @@ graph = builder.compile()
 Drop both inputs and outputs from the trace while keeping the span timing:
 
 ```python
+from langchain_core.runnables import RunnableLambda
 from langgraph.types import TracePolicy, omit_payload
+
+# Wrap in RunnableLambda so LangSmith creates a traced span.
+# Plain Python functions are not traced by default; without a span,
+# the TracePolicy processors have nothing to attach to.
+internal_router = RunnableLambda(router_fn)
 
 builder.add_node(
     "internal_router",
-    router_fn,
+    internal_router,
     trace_policy=TracePolicy(
         process_inputs=omit_payload,
         process_outputs=omit_payload,

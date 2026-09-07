@@ -310,7 +310,8 @@ from langgraph.errors import GraphDrained
 
 app = FastAPI()
 
-# Thread-safe set of all in-flight RunControls.
+# Coroutine-safe set of all in-flight RunControls (protected by asyncio.Lock,
+# which provides mutual exclusion within a single event loop — not across threads).
 _active_controls: set[RunControl] = set()
 _controls_lock = asyncio.Lock()
 _draining = False  # set to True once pre-stop begins; new runs are rejected

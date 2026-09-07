@@ -19,7 +19,7 @@ LangGraph node caching is a two-part system:
 | `CachePolicy` | Per-node config: TTL and optional key function. Attached via `add_node(..., cache_policy=...)`. |
 | `BaseCache` / `InMemoryCache` | Backend: stores and retrieves cached node outputs. Passed to `compile(cache=...)`. |
 
-This page covers the backend side. See [chapter 9 — Advanced Patterns](/langgraph-guide/python/chapter-09-advanced-patterns) for `CachePolicy` examples.
+This page covers the backend side. See [chapter 9 — Advanced Patterns](/langgraph-guide/python/chapter-09-advanced-patterns/) for `CachePolicy` examples.
 
 ---
 
@@ -412,7 +412,7 @@ class AsyncRedisCache(BaseCache[Any]):
             rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(key_hash)}"
             enc, data = self.serde.dumps_typed(value)
             payload = enc.encode() + b"|" + data
-            if ttl:
+            if ttl is not None:
                 await client.setex(rk, ttl, payload)
             else:
                 await client.set(rk, payload)
