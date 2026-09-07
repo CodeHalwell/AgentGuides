@@ -334,10 +334,11 @@ graph.invoke({"messages": [HumanMessage("Do the thing")], "approved": None}, cfg
 
 # --- Inspect the pending interrupt ---
 snapshot = graph.get_state(cfg)
-for intr in snapshot.interrupts:
-    print(f"Interrupt id: {intr.id}")
-    print(f"Interrupt value: {intr.value}")
-    # {'question': 'Should I proceed...', 'context': 'Do the thing'}
+assert snapshot.interrupts, "Expected at least one interrupt"
+intr = snapshot.interrupts[0]  # select the first (and only) interrupt explicitly
+print(f"Interrupt id: {intr.id}")
+print(f"Interrupt value: {intr.value}")
+# {'question': 'Should I proceed...', 'context': 'Do the thing'}
 
 # --- Resume by addressing the interrupt by ID ---
 result = graph.invoke(

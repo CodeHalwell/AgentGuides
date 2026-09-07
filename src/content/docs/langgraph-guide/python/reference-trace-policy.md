@@ -77,13 +77,19 @@ Plain function nodes are traced with `trace=False` by default (no trace run crea
 Pass `trace_policy=` when adding a node:
 
 ```python
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import TracePolicy, omit_payload
 
 builder = StateGraph(dict)
 
-def my_node(state: dict) -> dict:
+def _my_node(state: dict) -> dict:
     return state
+
+# Wrap in RunnableLambda so LangSmith creates a traced span for this node.
+# Plain Python functions are added with trace=False by default, which means
+# they have no span and TracePolicy processors have nothing to attach to.
+my_node = RunnableLambda(_my_node)
 
 builder.add_node(
     "my_node",

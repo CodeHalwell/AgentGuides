@@ -78,7 +78,6 @@ from langgraph.errors import GraphDrained
 
 ```python
 import signal
-import threading
 from typing import TypedDict, Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph import StateGraph, START, END

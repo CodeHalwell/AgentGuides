@@ -32,6 +32,7 @@ This page covers the backend side. See [chapter 9 — Advanced Patterns](/langgr
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Generic, TypeVar
+from langgraph.serde.base import SerializerProtocol
 
 ValueT = TypeVar("ValueT")
 Namespace = tuple[str, ...]      # e.g. ("my_graph", "embed_node")
@@ -70,6 +71,7 @@ class BaseCache(ABC, Generic[ValueT]):
 # langgraph.cache.memory
 import threading
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
+from langgraph.serde.base import SerializerProtocol
 
 
 class InMemoryCache(BaseCache[ValueT]):
