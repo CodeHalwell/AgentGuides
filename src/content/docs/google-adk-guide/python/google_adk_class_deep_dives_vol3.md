@@ -496,9 +496,10 @@ class SemanticCachePlugin(BasePlugin):
         callback_context: CallbackContext,
         llm_response: LlmResponse,
     ) -> Optional[LlmResponse]:
-        # In streaming mode after_model_callback fires for each partial chunk;
-        # only cache the complete response (partial is None or False when done).
-        if llm_response.partial:
+        # In streaming mode after_model_callback fires for each partial chunk
+        # and then a final turn_complete marker that may carry no content.
+        # Cache only when partial is not set AND there is actual content.
+        if llm_response.partial or not llm_response.content:
             return None
         key = callback_context.state.get(f"temp:cache_key:{callback_context.agent_name}")
         if key:
@@ -1146,13 +1147,13 @@ Source-verified from `google/adk/plugins/save_files_as_artifacts_plugin.py`:
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `name` | `str` | `"save_files_as_artifacts_plugin"` | Plugin identifier |
-| `attach_file_reference` | `bool` | `True` | `True` (default): saves the blob as an artifact, replaces it in the user message with a placeholder text part AND appends a `FileData` part containing the GCS URI so the model can read the file directly. `False`: saves the artifact and adds the placeholder text only — no `FileData` part is appended, so the model cannot read the file without the `load_artifacts` tool. |
+| `attach_file_reference` | `bool` | `True` | `True` (default): saves the blob as an artifact, replaces it in the user message with a placeholder text part AND appends a `FileData` part containing an artifact URI/reference so the model can read the file directly (URI format depends on the backing `ArtifactService`). `False`: saves the artifact and adds the placeholder text only — no `FileData` part is appended, so the model cannot read the file without the `load_artifacts` tool. |
 
 ### How naming and scope work
 
 - The artifact name comes from `blob.display_name`.
-- Names **without** the `user:` prefix are session-scoped (deleted when the session ends).
-- Names **with** the `user:` prefix are user-scoped and persist across sessions.
+- Names **without** the `user:` prefix are session-scoped (accessible by `session_id`; **not** automatically deleted when the session ends — explicit cleanup is required).
+- Names **with** the `user:` prefix are user-scoped and accessible across sessions for that user.
 - Each `save_artifact` call creates a **new version** of the artifact; prior versions remain retrievable by version index. The latest version is used by default when loading.
 
 ### Wiring the plugin
