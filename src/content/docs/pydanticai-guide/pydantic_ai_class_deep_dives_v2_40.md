@@ -538,7 +538,15 @@ async def log_tool(ctx: RunContext[None], *, call, tool_def, args):
 
 
 agent = Agent("openai:gpt-4o", capabilities=[hooks])
-result = agent.run_sync("What is 2 + 2? Use a tool to calculate.")
+
+
+@agent.tool_plain
+def calculate(expression: str) -> str:
+    """Evaluate a simple arithmetic expression and return the result."""
+    return str(eval(expression, {"__builtins__": {}}, {}))  # noqa: S307
+
+
+result = agent.run_sync("What is 2 + 2? Use the calculate tool.")
 print(result.output)
 ```
 
@@ -860,7 +868,7 @@ asyncio.run(main())
 
 ```python {test="skip"}
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.toolsets import ExternalToolset
 from pydantic_ai.tools import ToolDefinition
 
@@ -883,7 +891,12 @@ external_toolset = ExternalToolset(
     ]
 )
 
-agent = Agent("openai:gpt-4o", toolsets=[external_toolset])
+# DeferredToolRequests must be in output_type so the agent can surface the call
+agent = Agent(
+    "openai:gpt-4o",
+    output_type=[str, DeferredToolRequests],
+    toolsets=[external_toolset],
+)
 ```
 
 ---
