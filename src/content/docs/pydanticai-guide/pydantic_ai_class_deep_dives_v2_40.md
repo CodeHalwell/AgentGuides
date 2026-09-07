@@ -135,8 +135,10 @@ async def push_to_talk_demo(wav_bytes: bytes) -> None:
         "openai:gpt-4o-realtime-preview",
         model_settings={"turn_detection": False},  # push-to-talk: disable VAD
     ).session() as session:
-        # Decode WAV and send raw PCM16 chunks
+        # Decode WAV — must be mono PCM16 for the realtime API
         with wave.open(io.BytesIO(wav_bytes)) as wf:
+            assert wf.getnchannels() == 1, "Expected mono audio"
+            assert wf.getsampwidth() == 2, "Expected 16-bit (PCM16) audio"
             sample_rate = wf.getframerate()
             while chunk := wf.readframes(4096):
                 await session.send_audio(chunk, sample_rate=sample_rate)
@@ -494,6 +496,8 @@ hooks = Hooks()
 
 @hooks.on.before_run
 async def start_timer(ctx: RunContext[None]) -> None:
+    if ctx.metadata is None:
+        ctx.metadata = {}
     ctx.metadata["_start"] = time.monotonic()
     print(f"Run started for agent: {ctx.agent_name}")
 
