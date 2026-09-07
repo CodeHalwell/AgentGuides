@@ -274,18 +274,19 @@ asyncio.run(main())
 ```python
 from agent_framework import (
     SlidingWindowStrategy, SummarizationStrategy,
-    TokenBudgetComposedStrategy, CompactionProvider
+    TokenBudgetComposedStrategy, CharacterEstimatorTokenizer, CompactionProvider
 )
 from agent_framework.openai import OpenAIChatClient
 
-client   = OpenAIChatClient()
-window   = SlidingWindowStrategy(keep_last_groups=6)
+client    = OpenAIChatClient()
+window    = SlidingWindowStrategy(keep_last_groups=6)
 summarize = SummarizationStrategy(client=client)
 
 # Summarize old groups first, then slide the window
 composed  = TokenBudgetComposedStrategy(
-    compaction_strategies=[summarize, window],
+    strategies=[summarize, window],   # parameter is `strategies`, not `compaction_strategies`
     token_budget=8000,
+    tokenizer=CharacterEstimatorTokenizer(),  # required
 )
 compactor = CompactionProvider(before_strategy=composed)
 ```
@@ -540,17 +541,18 @@ The framework ships several built-in check factories (importable from `agent_fra
 import asyncio
 from agent_framework import (
     Agent, LocalEvaluator, EvalItem, evaluate_agent,
-    keyword_check, tool_called_check, FunctionTool
+    keyword_check, tool_called_check, tool
 )
 from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
+@tool
 def get_weather(location: str) -> str:
     """Get current weather for a location."""
     return f"Sunny, 22°C in {location}"
 
-weather_tool = FunctionTool(get_weather)
+weather_tool = get_weather  # @tool wraps the function into a FunctionTool
 
 agent = Agent(
     client=client,
@@ -693,7 +695,7 @@ def execute_query(query: str) -> str:
 
 # Register with a skills provider
 source   = InMemorySkillsSource(skills=[db_skill])
-provider = SkillsProvider(sources=[source])
+provider = SkillsProvider(source)  # `source` positional; accepts SkillsSource, Skill, or Sequence[Skill]
 
 agent = Agent(
     client=client,
@@ -831,7 +833,7 @@ from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
-store = FileSystemAgentFileStore(root=Path("./workspace"))
+store = FileSystemAgentFileStore(root_directory=Path("./workspace"))
 provider = FileAccessProvider(
     store=store,
     source_id="workspace_files",
@@ -903,13 +905,20 @@ MemoryContextProvider(
 ```python
 import asyncio
 from pathlib import Path
-from agent_framework import Agent, MemoryContextProvider, MemoryStore
+from agent_framework import (
+    Agent, AgentSession, MemoryContextProvider, MemoryFileStore
+)
 from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
-# MemoryStore backed by a directory on disk
-store    = MemoryStore(path=Path("./agent_memory"))
+# MemoryFileStore is the concrete file-backed implementation of MemoryStore.
+# owner_state_key="user_id" tells the store to look up session.state["user_id"]
+# at runtime to scope memory per user — both sessions must supply the same value.
+store = MemoryFileStore(
+    base_path=Path("./agent_memory"),
+    owner_state_key="user_id",
+)
 provider = MemoryContextProvider(
     store=store,
     recent_turns=3,          # inject last 3 turns alongside durable facts
@@ -925,11 +934,14 @@ agent = Agent(
 )
 
 async def main() -> None:
-    session_1 = {}
+    # session_1 and session_2 share owner "alice" via state["user_id"]
+    session_1 = AgentSession(session_id="session-1")
+    session_1.state["user_id"] = "alice"
     await agent.run("My name is Alice and I prefer Python.", session=session_1)
 
-    # New session — agent recalls Alice's preference from memory
-    session_2 = {}
+    # New session with the same owner ID — agent recalls Alice's preference
+    session_2 = AgentSession(session_id="session-2")
+    session_2.state["user_id"] = "alice"
     response = await agent.run("What do you know about me?", session=session_2)
     print(response.text)
 
