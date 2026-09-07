@@ -467,16 +467,26 @@ output lifecycle. Both sync and async callbacks are accepted.
 | `before_run` / `after_run` | Before/after the entire agent run |
 | `run` | Wrap the entire run (generator) |
 | `run_error` | Unhandled exception during the run |
+| `run_event_stream` | Wrap the event-stream iterator for the run |
 | `before_node_run` / `after_node_run` | Before/after each graph node |
 | `node_run` | Wrap a node execution |
+| `node_run_error` | Unhandled exception from a node |
 | `before_model_request` / `after_model_request` | Before/after each LLM call |
 | `model_request` | Wrap the model call |
 | `model_request_error` | Exception from the model |
 | `prepare_tools` / `prepare_output_tools` | Modify the tool list before each request |
 | `before_tool_validate` / `after_tool_validate` | Around tool argument validation |
+| `tool_validate` | Wrap tool argument validation |
+| `tool_validate_error` | Exception during tool argument validation |
 | `before_tool_execute` / `after_tool_execute` | Around tool execution |
 | `tool_execute` | Wrap a tool call |
+| `tool_execute_error` | Exception during tool execution |
 | `before_output_validate` / `after_output_validate` | Around output validation |
+| `output_validate` | Wrap output validation |
+| `output_validate_error` | Exception during output validation |
+| `before_output_process` / `after_output_process` | Around output post-processing |
+| `output_process` | Wrap output post-processing |
+| `output_process_error` | Exception during output post-processing |
 | `event` | Every `AgentStreamEvent` in the run's event stream |
 | `deferred_tool_calls` | Handle deferred (HITL / external) tool calls |
 
@@ -1180,8 +1190,17 @@ async def main() -> None:
     result = await agent.run(
         "Create an image of a futuristic city at sunset with flying cars."
     )
-    # result.output may be a BinaryImage or a message referencing the image
-    print(type(result.output))
+    print(result.output)  # str — the outer agent's text response describing the image
+
+    # The generated BinaryImage is stored in the tool-return part of the message history
+    from pydantic_ai.messages import ToolReturnPart, BinaryImage
+    for msg in result.all_messages():
+        for part in getattr(msg, "parts", []):
+            if isinstance(part, ToolReturnPart) and isinstance(part.content, BinaryImage):
+                img = part.content
+                with open("generated_city.png", "wb") as f:
+                    f.write(img.data)
+                print(f"Saved image: {len(img.data)} bytes ({img.media_type})")
 
 
 asyncio.run(main())
