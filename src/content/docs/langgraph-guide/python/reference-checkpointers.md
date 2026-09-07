@@ -272,6 +272,203 @@ for intr in snapshot.interrupts:
     print(intr.value)   # "Approve this action?"
 ```
 
+---
+
+## `Interrupt` — struct reference (source-verified, 1.2.11)
+
+`Interrupt` is a frozen dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
+
+```python
+# langgraph.types
+from dataclasses import dataclass
+
+@dataclass(frozen=True, slots=True)
+class Interrupt:
+    value: Any
+    """The value passed to interrupt() — the question or payload for the human reviewer."""
+
+    id: str
+    """Unique ID for this interrupt. Used to resume a specific interrupt:
+    Command(resume={intr.id: answer})"""
+```
+
+**Key usage patterns:**
+
+```python
+from typing import Annotated
+from langchain_core.messages import AnyMessage, HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt, Command
+from typing_extensions import TypedDict
+
+
+class State(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    approved: bool | None
+
+
+def approval_gate(state: State) -> dict:
+    """Pause until a human approves the action."""
+    answer = interrupt({
+        "question": "Should I proceed with this action?",
+        "context": state["messages"][-1].content,
+    })
+    return {"approved": answer}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("gate", approval_gate)
+    .add_edge(START, "gate")
+    .add_edge("gate", END)
+    .compile(checkpointer=InMemorySaver())
+)
+
+cfg = {"configurable": {"thread_id": "review-1"}}
+
+# --- First call: graph pauses at the interrupt ---
+graph.invoke({"messages": [HumanMessage("Do the thing")], "approved": None}, cfg)
+
+# --- Inspect the pending interrupt ---
+snapshot = graph.get_state(cfg)
+for intr in snapshot.interrupts:
+    print(f"Interrupt id: {intr.id}")
+    print(f"Interrupt value: {intr.value}")
+    # {'question': 'Should I proceed...', 'context': 'Do the thing'}
+
+# --- Resume by addressing the interrupt by ID ---
+result = graph.invoke(
+    Command(resume={intr.id: True}),  # True = approved
+    cfg,
+)
+print(result["approved"])  # True
+```
+
+**`Interrupt` field reference:**
+
+| Field | Type | Description |
+|---|---|---|
+| `value` | `Any` | The payload passed to `interrupt(value)` — question, instructions, or data for the human |
+| `id` | `str` | Unique identifier. Use in `Command(resume={id: answer})` to address this specific interrupt |
+
+> **Note on removed fields.** Before v0.6.0, `Interrupt` had `ns`, `when`, and `resumable` attributes. These were removed in v0.6.0. If you see code referencing them, it is targeting an older LangGraph version.
+
+---
+
+## `PregelTask` — task introspection (source-verified, 1.2.11)
+
+`PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
+
+```python
+# langgraph.types
+from typing import NamedTuple
+
+class PregelTask(NamedTuple):
+    id: str                               # unique task identifier
+    name: str                             # node name (e.g. "call_model", "tools")
+    path: tuple[str | int | tuple, ...]   # routing path within the graph
+    error: Exception | None               # if the task failed, the exception; else None
+    interrupts: tuple[Interrupt, ...]     # interrupts raised by this specific task
+    state: None | RunnableConfig | StateSnapshot  # subgraph state (if applicable)
+    result: Any | None                    # task result after completion
+```
+
+**Usage — inspecting pending tasks before resuming:**
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt
+from typing import TypedDict
+
+class State(TypedDict):
+    value: int
+
+
+def node_a(state: State) -> dict:
+    interrupt("step A paused")
+    return {"value": state["value"] + 1}
+
+
+def node_b(state: State) -> dict:
+    return {"value": state["value"] * 2}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("a", node_a)
+    .add_node("b", node_b)
+    .add_edge(START, "a")
+    .add_edge("a", "b")
+    .add_edge("b", END)
+    .compile(checkpointer=InMemorySaver())
+)
+
+cfg = {"configurable": {"thread_id": "task-demo"}}
+graph.invoke({"value": 1}, cfg)   # pauses at interrupt in node_a
+
+snapshot = graph.get_state(cfg)
+
+# snapshot.next tells you which nodes are queued
+print(snapshot.next)   # ('a',) — node_a is waiting to resume
+
+# snapshot.tasks gives richer task-level info
+for task in snapshot.tasks:
+    print(f"Task id:         {task.id}")
+    print(f"Node name:       {task.name}")
+    print(f"Path:            {task.path}")
+    print(f"Error:           {task.error}")       # None — paused, not failed
+    print(f"Interrupts:      {task.interrupts}")  # (Interrupt(value='step A paused', id=...),)
+    print(f"Result so far:   {task.result}")      # None — not yet complete
+```
+
+**Usage — inspecting failed tasks:**
+
+```python
+from langgraph.types import Command
+
+def flaky_node(state: State) -> dict:
+    if state["value"] < 0:
+        raise ValueError("negative value not allowed")
+    return {"value": state["value"]}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("flaky", flaky_node)
+    .add_edge(START, "flaky")
+    .add_edge("flaky", END)
+    .compile(checkpointer=InMemorySaver())
+)
+
+cfg = {"configurable": {"thread_id": "error-demo"}}
+try:
+    graph.invoke({"value": -1}, cfg)
+except Exception:
+    pass
+
+snapshot = graph.get_state(cfg)
+for task in snapshot.tasks:
+    if task.error:
+        print(f"Task '{task.name}' failed: {type(task.error).__name__}: {task.error}")
+        # Task 'flaky' failed: ValueError: negative value not allowed
+```
+
+**`PregelTask` field reference:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `str` | Unique task ID within the current superstep |
+| `name` | `str` | Name of the node this task belongs to |
+| `path` | `tuple` | Internal routing path — useful for subgraph introspection |
+| `error` | `Exception \| None` | Exception from the task if it failed; `None` if pending or succeeded |
+| `interrupts` | `tuple[Interrupt, ...]` | Interrupts raised by this task specifically |
+| `state` | `None \| RunnableConfig \| StateSnapshot` | Subgraph checkpoint state when `subgraphs=True` |
+| `result` | `Any \| None` | The task's output once it completes |
+
+---
+
 ### Iterating state history
 
 `get_state_history()` returns an iterator of `StateSnapshot` objects, newest first:

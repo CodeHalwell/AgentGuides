@@ -293,6 +293,99 @@ tool_node = ToolNode([fetch_user_data])
 
 ---
 
+## `ServerInfo` — LangGraph Cloud metadata (source-verified, 1.2.11)
+
+`ServerInfo` is a frozen dataclass injected into `Runtime.server_info` and `ToolRuntime.server_info` when the graph runs inside a **LangGraph Cloud** (LangSmith Platform) deployment. It is always `None` when running open-source LangGraph locally.
+
+```python
+# langgraph.runtime
+from dataclasses import dataclass
+
+@dataclass(frozen=True, slots=True)
+class ServerInfo:
+    assistant_id: str
+    """The assistant ID for the current execution."""
+
+    graph_id: str
+    """The graph ID for the current execution."""
+
+    user: BaseUser | None = None
+    """The authenticated user, if any.
+    Implements BaseUser from langgraph_sdk.auth.types:
+    supports both attribute access (user.identity) and dict access (user["identity"]).
+    """
+```
+
+### Field reference
+
+| Field | Type | Available | Description |
+|---|---|---|---|
+| `assistant_id` | `str` | Cloud only | LangGraph Cloud assistant identifier |
+| `graph_id` | `str` | Cloud only | LangGraph Cloud graph identifier |
+| `user` | `BaseUser \| None` | Cloud + auth | Authenticated user from LangGraph Cloud auth middleware; `None` if no auth is configured |
+
+### Guard pattern — OSS vs Cloud
+
+`server_info` is `None` in OSS deployments. Always guard:
+
+```python
+from langgraph.runtime import Runtime
+
+
+def my_node(state: dict, runtime: Runtime) -> dict:
+    if runtime.server_info is not None:
+        assistant_id = runtime.server_info.assistant_id
+        graph_id = runtime.server_info.graph_id
+        print(f"Running on Cloud: assistant={assistant_id}, graph={graph_id}")
+    else:
+        print("Running in OSS LangGraph")
+    return state
+```
+
+### Accessing the authenticated user
+
+When LangGraph Cloud is configured with an auth handler, `server_info.user` is populated:
+
+```python
+from langgraph.runtime import Runtime
+
+
+def personalized_node(state: dict, runtime: Runtime) -> dict:
+    user = runtime.server_info.user if runtime.server_info else None
+
+    if user is None:
+        user_id = "anonymous"
+        user_email = None
+    else:
+        # BaseUser supports both attribute and dict access
+        user_id = user.identity           # or user["identity"]
+        user_email = getattr(user, "email", None)
+
+    return {"user_id": user_id, "user_email": user_email}
+```
+
+### Routing by graph identity (multi-graph deployments)
+
+In a Cloud deployment that hosts multiple graphs, `graph_id` lets a shared node adjust behaviour per-graph:
+
+```python
+GRAPH_CONFIGS = {
+    "customer-support": {"max_steps": 10, "model": "gpt-4o"},
+    "internal-tools":   {"max_steps": 50, "model": "gpt-4o-mini"},
+}
+
+from langgraph.runtime import Runtime
+
+
+def adaptive_node(state: dict, runtime: Runtime) -> dict:
+    graph_id = runtime.server_info.graph_id if runtime.server_info else "default"
+    config = GRAPH_CONFIGS.get(graph_id, {"max_steps": 25, "model": "gpt-4o-mini"})
+    # use config["model"] and config["max_steps"] ...
+    return state
+```
+
+---
+
 ## `Runtime` vs `ToolRuntime` comparison
 
 | Attribute | `Runtime[ContextT]` | `ToolRuntime[ContextT, StateT]` |
