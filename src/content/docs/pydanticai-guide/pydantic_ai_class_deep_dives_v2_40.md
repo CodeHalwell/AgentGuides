@@ -278,10 +278,10 @@ import asyncio
 from pydantic_ai import Agent
 
 agent = Agent("openai:gpt-4o")
+realtime = agent.realtime("openai:gpt-4o-realtime-preview")
 
 async def handle_caller(caller_id: str, first_message: str) -> list:
     """Open a session per caller, all sharing the same realtime binding."""
-    realtime = agent.realtime("openai:gpt-4o-realtime-preview")
     async with realtime.session() as session:
         await session.send(first_message)
         async for update in session.stream_transcripts(assistant=True):
