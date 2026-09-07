@@ -411,7 +411,10 @@ class MetricsPlugin(BasePlugin):
         tool_args: dict[str, Any],
         tool_context: ToolContext,
     ) -> Optional[dict[str, Any]]:
-        self._tool_start[tool.name] = time.monotonic()
+        # Key by invocation_id + tool.name so concurrent parallel calls
+        # don't overwrite each other's start times.
+        call_key = f"{tool_context.invocation_id}:{tool.name}"
+        self._tool_start[call_key] = time.monotonic()
         return None
 
     async def after_tool_callback(
@@ -422,7 +425,9 @@ class MetricsPlugin(BasePlugin):
         tool_context: ToolContext,
         result: dict[str, Any],
     ) -> Optional[dict[str, Any]]:
-        elapsed = time.monotonic() - self._tool_start.pop(tool.name, 0)
+        # Key by invocation_id + tool.name to handle concurrent parallel calls
+        call_key = f"{tool_context.invocation_id}:{tool.name}"
+        elapsed = time.monotonic() - self._tool_start.pop(call_key, 0)
         print(f"[metrics] tool={tool.name} latency={elapsed:.3f}s")
         return None
 
@@ -697,20 +702,32 @@ plugin = ContextFilterPlugin(
 from google.adk.apps.app import App
 from google.adk.apps._configs import EventsCompactionConfig
 from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 
+# App holds the agent, compaction config, and app-wide plugins.
+# Session and artifact services belong on the Runner, not the App.
 app = App(
     name="cost_controlled",
-    agent=agent,
-    session_service=session_service,
-    artifact_service=artifact_service,
-    # Compact stored events when session exceeds 4000 tokens
+    root_agent=agent,  # required field; use root_agent, not agent
+    # Compact stored events when prompt tokens hit 4000; keep the last 0
+    # raw events un-compacted after each compaction cycle.
     events_compaction_config=EventsCompactionConfig(
-        max_token_limit_per_session=4000,
+        token_threshold=4000,
+        event_retention_size=0,
     ),
     plugins=[
-        # Also trim the live request to the last 15 turns
+        # Also trim the live LLM request to the last 15 invocations
         ContextFilterPlugin(num_invocations_to_keep=15),
     ],
+)
+
+# Services go on the Runner
+runner = Runner(
+    app=app,
+    session_service=InMemorySessionService(),
+    artifact_service=InMemoryArtifactService(),
 )
 ```
 
@@ -865,9 +882,15 @@ await memory_service.add_events_to_memory(
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
+from google.adk.sessions import InMemorySessionService
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 import asyncio
+
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.runners import Runner
+
+artifact_service = InMemoryArtifactService()
 
 code_executor = VertexAiCodeExecutor(
     stateful=True,        # interpreter state shared across turns in the session
@@ -886,7 +909,16 @@ agent = LlmAgent(
 )
 
 async def main():
-    runner = InMemoryRunner(agent=agent, app_name="code_demo")
+    # VertexAiCodeExecutor saves generated files (images, CSVs) via the
+    # runner's artifact service — they do NOT appear as inline_data parts
+    # on the final response.  Wire an artifact service so the runner can
+    # persist them.
+    runner = Runner(
+        agent=agent,
+        app_name="code_demo",
+        session_service=InMemorySessionService(),
+        artifact_service=artifact_service,
+    )
     session = await runner.session_service.create_session(
         app_name="code_demo", user_id="u1"
     )
@@ -903,11 +935,20 @@ async def main():
             for part in event.content.parts:
                 if part.text:
                     print(part.text)
-                elif part.inline_data:
-                    # Inline image (PNG histogram from matplotlib)
-                    with open("histogram.png", "wb") as f:
-                        f.write(part.inline_data.data)
-                    print("Saved histogram.png")
+
+    # Retrieve generated files from the artifact service after the run
+    artifacts = await artifact_service.list_artifact_keys(
+        app_name="code_demo", user_id="u1", session_id=session.id
+    )
+    for name in artifacts:
+        artifact = await artifact_service.load_artifact(
+            app_name="code_demo", user_id="u1",
+            session_id=session.id, filename=name,
+        )
+        if artifact and artifact.inline_data:
+            with open(name, "wb") as f:
+                f.write(artifact.inline_data.data)
+            print(f"Saved {name}")
 
 asyncio.run(main())
 ```
@@ -1018,17 +1059,32 @@ simulator_config = LlmBackedUserSimulatorConfig(
     include_function_calls=False,
 )
 
+# --- Build EvalSet from scenarios ---
+import uuid
+from google.adk.evaluation.eval_set import EvalSet
+
+eval_set = EvalSet(
+    eval_set_id="flight_booking_eval",
+    eval_cases=[
+        EvalCase(
+            eval_id=f"case_{i}",
+            conversation_scenario=scenario,
+        )
+        for i, scenario in enumerate(scenarios.scenarios)
+    ],
+)
+
 # --- Run evaluation ---
 async def main():
-    evaluator = AgentEvaluator(
+    results = await AgentEvaluator.evaluate(
+        agent_module_file_path=None,  # pass module path or agent directly
+        eval_dataset=eval_set,
+        eval_metrics=[],
         agent=travel_agent,
-        eval_config=EvalConfig(),
+        user_simulator_config=simulator_config,
     )
-    # Convert scenarios to EvalCases and run
-    # (Full wiring depends on your eval harness setup)
-    print(f"Loaded {len(scenarios.scenarios)} scenarios")
-    for i, scenario in enumerate(scenarios.scenarios):
-        print(f"Scenario {i+1}: {scenario.starting_prompt[:60]}...")
+    for result in results:
+        print(f"Case {result.eval_case_id}: {result.final_eval_status}")
 
 asyncio.run(main())
 ```
@@ -1073,7 +1129,7 @@ scenario_with_persona = ConversationScenario(
 
 **Module:** `google.adk.plugins.save_files_as_artifacts_plugin`
 
-`SaveFilesAsArtifactsPlugin` intercepts user messages that contain embedded binary blobs (images, PDFs, audio) and saves each blob as an artifact before the agent sees the message. A placeholder text reference replaces each blob so the model knows the file exists but doesn't receive raw bytes in the prompt.
+`SaveFilesAsArtifactsPlugin` intercepts user messages that contain embedded binary blobs (images, PDFs, audio) and saves each blob as an artifact before the agent sees the message. Each blob is replaced in the message with a `[Uploaded Artifact: "name"]` placeholder so the model knows the file was uploaded. When `attach_file_reference=True` (the default), a `FileData` part with the artifact's GCS URI is also appended, allowing the model to read the file directly without needing `load_artifacts`.
 
 ### Constructor parameters
 
@@ -1082,14 +1138,14 @@ Source-verified from `google/adk/plugins/save_files_as_artifacts_plugin.py`:
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `name` | `str` | `"save_files_as_artifacts_plugin"` | Plugin identifier |
-| `attach_file_reference` | `bool` | `True` | Replace blob with a text reference; `False` = save silently |
+| `attach_file_reference` | `bool` | `True` | `True` (default): saves the blob as an artifact, replaces it in the user message with a placeholder text part AND appends a `FileData` part containing the GCS URI so the model can read the file directly. `False`: saves the artifact and adds the placeholder text only — no `FileData` part is appended, so the model cannot read the file without the `load_artifacts` tool. |
 
 ### How naming and scope work
 
 - The artifact name comes from `blob.display_name`.
 - Names **without** the `user:` prefix are session-scoped (deleted when the session ends).
 - Names **with** the `user:` prefix are user-scoped and persist across sessions.
-- Uploading a file with the same name overwrites the previous version.
+- Each `save_artifact` call creates a **new version** of the artifact; prior versions remain retrievable by version index. The latest version is used by default when loading.
 
 ### Wiring the plugin
 
