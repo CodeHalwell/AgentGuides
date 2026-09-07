@@ -347,7 +347,7 @@ Capability(
 ### Example 1 — Audit trail capability
 
 ```python {test="skip"}
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Capability
 from pydantic_ai.tools import RunContext
@@ -355,7 +355,7 @@ from pydantic_ai.tools import RunContext
 
 def get_current_time(ctx: RunContext[None]) -> str:
     """Return the current UTC timestamp."""
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat()
 
 
 def log_action(ctx: RunContext[None], action: str) -> str:
@@ -845,8 +845,11 @@ async def main() -> None:
             deferred_tool_results=results,
         )
         print(final.output)
+    elif isinstance(deferred, DeferredToolRequests):
+        # DeferredToolRequests with no calls — agent decided no external tool was needed
+        print("No external calls were requested.")
     else:
-        # Agent responded with a plain text message (no external call needed)
+        # Agent responded with a plain text message
         print(deferred)
 
 
