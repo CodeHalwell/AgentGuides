@@ -330,7 +330,7 @@ asyncio.run(main())
 
 **Module:** `google.adk.plugins.base_plugin`
 
-`BasePlugin` is the abstract base for all ADK plugins. Plugins differ from per-agent callbacks: they are registered once on the `Runner` and apply to every agent in the hierarchy, executing *before* per-agent callbacks. A non-`None` return from any plugin callback short-circuits all remaining plugins and the agent's own callbacks.
+`BasePlugin` is the abstract base for all ADK plugins. Plugins differ from per-agent callbacks: they are registered on `App(plugins=[...])` and apply to every agent in the hierarchy, executing *before* per-agent callbacks. A non-`None` return from any plugin callback short-circuits all remaining plugins and the agent's own callbacks.
 
 ### Callback lifecycle order (source-verified)
 
@@ -429,13 +429,11 @@ class MetricsPlugin(BasePlugin):
 # Register with the runner
 from google.adk.runners import InMemoryRunner
 from google.adk.agents import LlmAgent
+from google.adk.apps import App
 
 agent = LlmAgent(name="agent", model="gemini-2.5-flash", instruction="Help.")
-runner = InMemoryRunner(
-    agent=agent,
-    app_name="metrics_demo",
-    plugins=[MetricsPlugin()],
-)
+app = App(name="metrics_demo", root_agent=agent, plugins=[MetricsPlugin()])
+runner = InMemoryRunner(app=app)
 ```
 
 ### Caching plugin (short-circuit pattern)
@@ -555,9 +553,11 @@ agent = LlmAgent(
     tools=[FunctionTool(func=flaky_api)],
 )
 
-runner = InMemoryRunner(
-    agent=agent,
-    app_name="retry_demo",
+from google.adk.apps import App
+
+app = App(
+    name="retry_demo",
+    root_agent=agent,
     plugins=[
         ReflectAndRetryToolPlugin(
             max_retries=3,
@@ -565,6 +565,7 @@ runner = InMemoryRunner(
         )
     ],
 )
+runner = InMemoryRunner(app=app)
 ```
 
 ### Custom error detection in successful responses
@@ -640,9 +641,11 @@ agent = LlmAgent(
     instruction="You are a helpful assistant.",
 )
 
-runner = InMemoryRunner(
-    agent=agent,
-    app_name="chat",
+from google.adk.apps import App
+
+app = App(
+    name="chat",
+    root_agent=agent,
     plugins=[
         ContextFilterPlugin(
             num_invocations_to_keep=10,
@@ -650,6 +653,7 @@ runner = InMemoryRunner(
         )
     ],
 )
+runner = InMemoryRunner(app=app)
 ```
 
 ### Custom filter — strip large tool outputs
@@ -1138,7 +1142,7 @@ scenario_with_persona = ConversationScenario(
 
 **Module:** `google.adk.plugins.save_files_as_artifacts_plugin`
 
-`SaveFilesAsArtifactsPlugin` intercepts user messages that contain embedded binary blobs (images, PDFs, audio) and saves each blob as an artifact before the agent sees the message. Each blob is replaced in the message with a `[Uploaded Artifact: "name"]` placeholder so the model knows the file was uploaded. When `attach_file_reference=True` (the default), a `FileData` part with the artifact's URI/reference is also appended, allowing the model to read the file directly without needing `load_artifacts`. The URI format depends on the backing `ArtifactService` — GCS for `GcsArtifactService`, an `artifact://` reference for `InMemoryArtifactService`.
+`SaveFilesAsArtifactsPlugin` intercepts user messages that contain embedded binary blobs (images, PDFs, audio) and saves each blob as an artifact before the agent sees the message. Each blob is replaced in the message with a `[Uploaded Artifact: "name"]` placeholder so the model knows the file was uploaded. When `attach_file_reference=True` (the default), a `FileData` part with the artifact's URI/reference is also appended to the message. The URI format depends on the backing `ArtifactService` — GCS for `GcsArtifactService`, an `artifact://` reference for `InMemoryArtifactService`.
 
 ### Constructor parameters
 
@@ -1147,22 +1151,24 @@ Source-verified from `google/adk/plugins/save_files_as_artifacts_plugin.py`:
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `name` | `str` | `"save_files_as_artifacts_plugin"` | Plugin identifier |
-| `attach_file_reference` | `bool` | `True` | `True` (default): saves the blob as an artifact, replaces it in the user message with a placeholder text part AND appends a `FileData` part containing an artifact URI/reference so the model can read the file directly (URI format depends on the backing `ArtifactService`). `False`: saves the artifact and adds the placeholder text only — no `FileData` part is appended, so the model cannot read the file without the `load_artifacts` tool. |
+| `attach_file_reference` | `bool` | `True` | `True` (default): saves the blob as an artifact, replaces it in the user message with a placeholder text part AND appends a `FileData` part containing the artifact URI/reference (URI format depends on the backing `ArtifactService`). `False`: saves the artifact and adds the placeholder text only — no `FileData` part is appended. |
 
 ### How naming and scope work
 
 - The artifact name comes from `blob.display_name`.
-- Names **without** the `user:` prefix are session-scoped (accessible by `session_id`; **not** automatically deleted when the session ends — explicit cleanup is required).
-- Names **with** the `user:` prefix are user-scoped and accessible across sessions for that user.
+- Names **without** the `user:` prefix are session-scoped — addressed by `session_id`.
+- Names **with** the `user:` prefix are user-scoped — addressable across sessions for that user.
 - Each `save_artifact` call creates a **new version** of the artifact; prior versions remain retrievable by version index. The latest version is used by default when loading.
 
 ### Wiring the plugin
 
 ```python
 from google.adk.agents import LlmAgent
+from google.adk.apps import App
 from google.adk.plugins.save_files_as_artifacts_plugin import SaveFilesAsArtifactsPlugin
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 
 artifact_service = InMemoryArtifactService()
 
@@ -1175,13 +1181,15 @@ agent = LlmAgent(
     ),
 )
 
-runner = InMemoryRunner(
-    agent=agent,
-    app_name="file_demo",
+app = App(
+    name="file_demo",
+    root_agent=agent,
+    plugins=[SaveFilesAsArtifactsPlugin(attach_file_reference=True)],
+)
+runner = Runner(
+    app=app,
+    session_service=InMemorySessionService(),
     artifact_service=artifact_service,
-    plugins=[
-        SaveFilesAsArtifactsPlugin(attach_file_reference=True)
-    ],
 )
 ```
 
@@ -1189,15 +1197,24 @@ runner = InMemoryRunner(
 
 ```python
 import asyncio
-from google.adk.runners import InMemoryRunner
+from google.adk.apps import App
+from google.adk.plugins.save_files_as_artifacts_plugin import SaveFilesAsArtifactsPlugin
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 async def main():
-    runner = InMemoryRunner(
-        agent=agent,
-        app_name="file_demo",
-        artifact_service=artifact_service,
+    artifact_service = InMemoryArtifactService()
+    app = App(
+        name="file_demo",
+        root_agent=agent,
         plugins=[SaveFilesAsArtifactsPlugin()],
+    )
+    runner = Runner(
+        app=app,
+        session_service=InMemorySessionService(),
+        artifact_service=artifact_service,
     )
     session = await runner.session_service.create_session(
         app_name="file_demo", user_id="u1"
