@@ -38,13 +38,15 @@ Source-verified from `google/adk/agents/run_config.py`:
 |---|---|---|---|
 | `streaming_mode` | `StreamingMode` | `NONE` | `NONE` = batch; `SSE` = server-sent events; `BIDI` = bidirectional (live) |
 | `max_llm_calls` | `int` | env `ADK_MAX_LLM_CALLS` or internal default | Hard cap on LLM calls per invocation; ≤0 → no cap (dangerous) |
-| `response_modalities` | `list[types.Modality]` | `None` | `["TEXT"]`, `["AUDIO"]`, or both — overrides agent default |
+| `response_modalities` | `list[types.Modality]` | `None` | `[types.Modality.TEXT]`, `[types.Modality.AUDIO]`, or both — overrides agent default |
+| `http_options` | `types.HttpOptions \| None` | `None` | Per-invocation HTTP options (custom headers, timeouts, etc.) |
+| `labels` | `dict[str, str] \| None` | `None` | User-defined billing/attribution labels for this invocation |
 | `tool_thread_pool_config` | `ToolThreadPoolConfig \| None` | `None` | Run tools in a thread pool; see below |
 | `context_window_compression` | `ContextWindowCompressionConfig \| None` | `None` | Gemini-side sliding-window compression |
 | `get_session_config` | `GetSessionConfig \| None` | `None` | Limit how many events are loaded from the session store |
 | `model_input_context` | `list[types.Content] \| None` | `None` | Transient extra context for this turn; not persisted to session |
 | `telemetry` | `TelemetryConfig \| None` | `None` | Per-request OTel override (multi-tenant use) |
-| `custom_metadata` | `dict[str, Any] \| None` | `None` | Billing / attribution labels forwarded to spans |
+| `custom_metadata` | `dict[str, Any] \| None` | `None` | Arbitrary key-value metadata for this invocation (forwarded to spans; distinct from `labels`) |
 | `include_thoughts_from_other_agents` | `bool` | `False` | Expose sub-agent reasoning to parent agent |
 | `support_cfc` | `bool` | `False` | Compositional Function Calling (experimental; forces LIVE API) |
 | `session_resumption` | `SessionResumptionConfig \| None` | `None` | Transparent session resumption for live sessions |
@@ -73,7 +75,7 @@ async def main():
     )
 
     run_config = RunConfig(
-        response_modalities=["TEXT"],
+        response_modalities=[types.Modality.TEXT],
         max_llm_calls=10,
         custom_metadata={"team": "backend", "environment": "staging"},
     )
