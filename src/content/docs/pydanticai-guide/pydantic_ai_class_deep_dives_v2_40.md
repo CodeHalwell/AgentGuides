@@ -618,8 +618,9 @@ hooks = Hooks()
 
 
 @hooks.on.before_model_request(timeout=2.0)   # fail if hook takes > 2 s
-async def slow_hook(ctx: RunContext[None], request_context) -> None:
-    await asyncio.sleep(10)  # would cause HookTimeoutError
+async def slow_hook(ctx: RunContext[None], request_context):
+    await asyncio.sleep(10)  # would cause HookTimeoutError before this returns
+    return request_context   # never reached; shown here for correct hook contract
 ```
 
 ---
@@ -825,7 +826,7 @@ async def main() -> None:
         # Second run: pass the external results back so the agent can continue
         # (external_toolset is already registered on the agent; don't pass it again)
         final = await agent.run(
-            None,
+            "",
             message_history=result.all_messages(),
             deferred_tool_results=results,
         )
