@@ -300,7 +300,7 @@ class State(TypedDict):
 
 
 def _sensitive_fn(state: State) -> dict:
-    """Has access to the secret key — must not leak it to LangSmith."""
+    """Returns embeddings; secret_key is redacted in this node's span via TracePolicy."""
     return {"embedding": [0.1, 0.2, 0.3, 0.4]}
 
 
