@@ -347,7 +347,6 @@ Capability(
 ### Example 1 — Audit trail capability
 
 ```python {test="skip"}
-import asyncio
 from datetime import datetime
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Capability
@@ -383,7 +382,6 @@ When `defer_loading=True`, the model sees only the capability's `description` an
 loads the capability.
 
 ```python {test="skip"}
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Capability
 
@@ -418,7 +416,6 @@ print(result.output)
 ### Example 3 — Capability with an instruction function
 
 ```python {test="skip"}
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Capability
 from pydantic_ai.tools import RunContext
@@ -439,7 +436,7 @@ def get_user_context(ctx: RunContext[UserDeps]) -> str:
     )
 
 
-user_capability = Capability[UserDeps](
+user_capability: Capability[UserDeps] = Capability(
     instructions=get_user_context,
     id="user-context",
 )
@@ -1038,7 +1035,6 @@ duckduckgo_search_tool(
 ### Example 1 — Minimal setup
 
 ```python {test="skip"}
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 
@@ -1055,7 +1051,6 @@ print(result.output)
 ### Example 2 — Custom DDGS client with proxy
 
 ```python {test="skip"}
-import asyncio
 from ddgs import DDGS
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
@@ -1245,7 +1240,6 @@ asyncio.run(main())
 ### Example 3 — Google Imagen via subagent
 
 ```python {test="skip"}
-import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.native_tools import ImageGenerationTool
 from pydantic_ai.common_tools.image_generation import image_generation_tool
