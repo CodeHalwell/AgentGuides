@@ -253,25 +253,57 @@ finally:
 Because the checkpoint is flushed before `GraphDrained` is raised, resuming is identical to resuming after any other interruption:
 
 ```python
+import time
 import threading
-from langgraph.errors import GraphDrained
+from typing import TypedDict, Annotated
+from langchain_core.messages import AnyMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import RunControl
+from langgraph.errors import GraphDrained
+
+
+class ResumeState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    step: int
+
+
+def slow_step(state: ResumeState) -> dict:
+    """Each superstep takes 20 ms, giving the drain timer time to fire between steps."""
+    time.sleep(0.02)
+    return {"step": state["step"] + 1}
+
+
+def should_continue(state: ResumeState) -> str:
+    return "slow_step" if state["step"] < 10 else END
+
+
+# A multi-step graph: drain fires between supersteps, leaving a resumable checkpoint.
+resume_graph = (
+    StateGraph(ResumeState)
+    .add_node("slow_step", slow_step)
+    .add_edge(START, "slow_step")
+    .add_conditional_edges("slow_step", should_continue)
+    .compile(checkpointer=InMemorySaver())
+)
 
 config = {"configurable": {"thread_id": "resumable-thread"}}
 control = RunControl()
 
-# Request drain shortly after the graph starts (simulating a SIGTERM mid-run)
-# so at least one superstep completes and a checkpoint is saved before draining.
-threading.Timer(0.05, lambda: control.request_drain(reason="demo")).start()
+# Request drain after 30 ms — fires during step 2, between superstep boundaries.
+threading.Timer(0.03, lambda: control.request_drain(reason="demo")).start()
 
 try:
-    graph.invoke({"messages": [("user", "hello")]}, config, control=control)
+    resume_graph.invoke(
+        {"messages": [("user", "hello")], "step": 0}, config, control=control
+    )
 except GraphDrained:
-    pass  # at least one checkpoint was saved before the cooperative drain
+    pass  # checkpoint saved; state["step"] is 1 or 2
 
-# Resume: pass the same config with no input to continue from the checkpoint
-result = graph.invoke(None, config)
-print("Resumed:", result)
+# Resume: pass None to continue from the saved checkpoint
+result = resume_graph.invoke(None, config)
+print("Resumed at step:", result["step"])
 ```
 
 ---

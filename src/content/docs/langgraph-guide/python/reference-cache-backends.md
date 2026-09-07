@@ -264,10 +264,11 @@ class RedisCache(BaseCache[Any]):
             enc, data = self.serde.dumps_typed(value)
             # Prefix encoding name so get() can reconstruct the typed pair
             payload = enc.encode() + b"|" + data
-            if ttl is not None:
-                pipe.setex(rk, ttl, payload)
-            else:
+            if ttl is None:
                 pipe.set(rk, payload)
+            elif ttl > 0:
+                pipe.setex(rk, ttl, payload)
+            # ttl == 0: already expired — skip storing
         pipe.execute()
 
     async def aset(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
@@ -414,10 +415,11 @@ class AsyncRedisCache(BaseCache[Any]):
             rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}/{_encode_seg(key_hash)}"
             enc, data = self.serde.dumps_typed(value)
             payload = enc.encode() + b"|" + data
-            if ttl is not None:
-                await client.setex(rk, ttl, payload)
-            else:
+            if ttl is None:
                 await client.set(rk, payload)
+            elif ttl > 0:
+                await client.setex(rk, ttl, payload)
+            # ttl == 0: already expired — skip storing
 
     def set(self, pairs: Mapping[FullKey, tuple[Any, int | None]]) -> None:
         raise NotImplementedError(
