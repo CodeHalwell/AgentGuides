@@ -524,15 +524,15 @@ async def evaluate(
 
 Returns `EvalResults` with `.passed`, `.failed`, `.total`, `.per_evaluator`, and `.items` fields.
 
-### Built-in check factory functions
+### Built-in check helpers
 
-The framework ships several built-in check factories (importable from `agent_framework`):
+The framework ships built-in check helpers (importable from `agent_framework`). Factory functions return an `EvalCheck` callable; `tool_call_args_match` is an `EvalCheck` itself (used directly, not called as a factory):
 
-| Factory | Description |
-|---|---|
-| `keyword_check(*keywords)` | Response text contains all keywords (case-insensitive by default). |
-| `tool_called_check(*tool_names)` | Agent called all named tools (use `mode="any"` to match any). |
-| `tool_call_args_match(item)` | `EvalItem`-level check: verifies tool calls match `item.expected_tool_calls`. |
+| Function | Signature | Description |
+|---|---|---|
+| `keyword_check` | `(*keywords, case_sensitive=False)` | Returns a check that passes when the response contains all keywords. |
+| `tool_called_check` | `(*tool_names, mode="all")` | Returns a check that passes when the agent called the named tools (`mode="any"` relaxes to at least one). |
+| `tool_call_args_match` | `(item: EvalItem) → CheckResult` | Direct check: verifies the agent's tool calls match `item.expected_tool_calls`. |
 
 ### Example — Keyword and tool call checks
 
