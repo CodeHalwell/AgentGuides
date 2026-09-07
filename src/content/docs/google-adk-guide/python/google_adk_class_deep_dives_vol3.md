@@ -482,6 +482,10 @@ class SemanticCachePlugin(BasePlugin):
         if key in self._cache:
             print("[cache] HIT")
             return self._cache[key]  # short-circuits the actual LLM call
+        # Stash the key in invocation-scoped temp state so after_model_callback
+        # can populate the cache without re-computing from an unavailable request.
+        # The "temp:" prefix keeps this out of the persisted session state.
+        callback_context.state["temp:cache_key"] = key
         return None
 
     async def after_model_callback(
@@ -490,8 +494,10 @@ class SemanticCachePlugin(BasePlugin):
         callback_context: CallbackContext,
         llm_response: LlmResponse,
     ) -> Optional[LlmResponse]:
-        # Store the fresh response; next identical prompt hits the cache
-        # We need the request — store via invocation_context if needed
+        key = callback_context.state.get("temp:cache_key")
+        if key:
+            self._cache[key] = llm_response
+            print(f"[cache] STORED key={key[:8]}…")
         return None
 ```
 
