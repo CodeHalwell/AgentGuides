@@ -165,7 +165,7 @@ run_config = RunConfig(
 
 **Module:** `google.adk.planners.built_in_planner`
 
-`BuiltInPlanner` wraps Gemini's native thinking feature. You pass a `ThinkingConfig` and the planner injects it into every `LlmRequest` before the model call. The model emits `thought=True` parts that ADK strips from the user-visible response.
+`BuiltInPlanner` wraps Gemini's native thinking feature. You pass a `ThinkingConfig` and the planner injects it into every `LlmRequest` before the model call. When `include_thoughts=True`, the model returns `thought=True` parts that appear in the yielded `Event.content.parts` — ADK does **not** strip them (`process_planning_response` is a no-op). Callers must filter `part.thought` themselves if they do not want to expose reasoning in UIs or logs.
 
 ### Constructor
 
