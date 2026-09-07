@@ -86,16 +86,8 @@ class State(TypedDict):
     step: int
 
 
-_control: RunControl | None = None
-_control_lock = threading.Lock()
-
-
 def process(state: State, runtime: Runtime) -> dict:
     """Node that checks the drain signal before doing expensive work."""
-    global _control
-    with _control_lock:
-        _control = runtime.control
-
     if runtime.drain_requested:
         # Exit early — the framework will checkpoint and raise GraphDrained
         return {}
@@ -114,11 +106,13 @@ graph = (
 
 config = {"configurable": {"thread_id": "demo"}}
 
+# Create the control handle upfront so the handler can use it immediately,
+# even before the first node runs.
+control = RunControl()
+
 
 def _sigterm_handler(signum, frame):
-    with _control_lock:
-        if _control is not None:
-            _control.request_drain(reason="SIGTERM")
+    control.request_drain(reason="SIGTERM")
 
 
 signal.signal(signal.SIGTERM, _sigterm_handler)
@@ -127,6 +121,7 @@ try:
     result = graph.invoke(
         {"messages": [("user", "start")]},
         config,
+        control=control,
     )
     print("Graph finished normally:", result["step"])
 except GraphDrained as exc:
@@ -319,28 +314,25 @@ async def pre_stop():
 
 ```python
 import asyncio
+from langgraph.runtime import RunControl
 from langgraph.errors import GraphDrained
 
 
 async def run_with_drain_timeout(graph, input, config, timeout_seconds: float):
-    """Run a graph; drain it if it exceeds the timeout."""
-    run_control_ref: list[RunControl] = []
-
-    async def wrapped_invoke():
-        try:
-            return await graph.ainvoke(input, config)
-        except GraphDrained:
-            return None
-
-    task = asyncio.create_task(wrapped_invoke())
+    """Run a graph; drain cooperatively if it exceeds the timeout."""
+    control = RunControl()
+    # Shield the task so asyncio.wait_for's cancellation doesn't kill the graph;
+    # instead we signal drain and let it finish at the next superstep boundary.
+    task = asyncio.create_task(graph.ainvoke(input, config, control=control))
 
     try:
-        return await asyncio.wait_for(task, timeout=timeout_seconds)
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout_seconds)
     except asyncio.TimeoutError:
-        # Signal the graph to drain cooperatively on next superstep
-        # (This requires access to the RunControl — inject via node middleware)
-        task.cancel()
-        return None
+        control.request_drain(reason="timeout")
+        try:
+            return await task  # wait for the cooperative checkpoint-safe exit
+        except GraphDrained:
+            return None
 ```
 
 ### Drain reason taxonomy

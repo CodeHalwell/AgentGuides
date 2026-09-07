@@ -258,6 +258,7 @@ builder.add_node(
 ```python
 from typing import Annotated, Any
 from langchain_core.messages import AnyMessage, HumanMessage
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.types import TracePolicy, omit_payload
@@ -270,9 +271,15 @@ class State(TypedDict):
     embedding: list[float]
 
 
-def sensitive_node(state: State) -> dict:
+def _sensitive_fn(state: State) -> dict:
     """Has access to the secret key — must not leak it to LangSmith."""
     return {"embedding": [0.1, 0.2, 0.3, 0.4]}
+
+
+# Wrap in RunnableLambda so LangSmith creates a traced span for this node.
+# Plain Python functions are wrapped with trace=False by default, which means
+# TracePolicy processors would have no span to attach to.
+sensitive_runnable = RunnableLambda(_sensitive_fn)
 
 
 def summarize_secret(value: Any) -> Any:
@@ -293,7 +300,7 @@ def summarize_embedding(value: Any) -> Any:
 builder = StateGraph(State)
 builder.add_node(
     "sensitive",
-    sensitive_node,
+    sensitive_runnable,
     trace_policy=TracePolicy(
         process_inputs=summarize_secret,
         process_outputs=summarize_embedding,

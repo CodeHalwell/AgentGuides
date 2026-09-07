@@ -784,22 +784,25 @@ def search(query: str) -> str:
     return f"Results for: {query}"
 
 
-RATE_LIMIT_PER_TOOL: dict[str, int] = {}
+# Keyed by (tool_name, thread_id) so each conversation gets its own quota.
+RATE_LIMIT_PER_TOOL: dict[tuple[str, str], int] = {}
 MAX_CALLS = 3
 
 
 def rate_limited_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
-    """Block tools that have exceeded their call quota for this process run."""
+    """Block tools that have exceeded their call quota for this conversation thread."""
     name = request.tool_call["name"]
+    thread_id = (request.runtime.configurable or {}).get("thread_id", "")
+    key = (name, thread_id)
 
-    count = RATE_LIMIT_PER_TOOL.get(name, 0)
+    count = RATE_LIMIT_PER_TOOL.get(key, 0)
     if count >= MAX_CALLS:
         return ToolMessage(
             content=f"Rate limit exceeded for tool '{name}' (max {MAX_CALLS} calls).",
             tool_call_id=request.tool_call["id"],
         )
 
-    RATE_LIMIT_PER_TOOL[name] = count + 1
+    RATE_LIMIT_PER_TOOL[key] = count + 1
     result = execute(request)
 
     # Log tool schema on first call for observability
@@ -848,7 +851,7 @@ def cached_tool_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
 
     result = execute(request)
 
-    if isinstance(result, ToolMessage) and not result.additional_kwargs.get("error"):
+    if isinstance(result, ToolMessage) and result.status != "error":
         _cache[cache_key] = result.content
 
     return result

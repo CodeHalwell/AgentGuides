@@ -405,8 +405,14 @@ class AsyncRedisCache(BaseCache[Any]):
 
     async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         client = await self._get_client()
-        async for key in client.scan_iter("lg:*"):
-            await client.delete(key)
+        if namespaces is None:
+            async for key in client.scan_iter("lg:*"):
+                await client.delete(key)
+        else:
+            for ns in namespaces:
+                prefix = f"lg:{':'.join(ns)}:*"
+                async for key in client.scan_iter(prefix):
+                    await client.delete(key)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         import asyncio
