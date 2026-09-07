@@ -66,7 +66,7 @@ WorkflowBuilder(
 
 ```python
 import asyncio
-from typing_extensions import Never
+from typing import NoReturn
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 
 class Cleaner(Executor):
@@ -81,7 +81,7 @@ class Reverser(Executor):
 
 class Publisher(Executor):
     @handler
-    async def run(self, text: str, ctx: WorkflowContext[Never, str]) -> None:
+    async def run(self, text: str, ctx: WorkflowContext[NoReturn, str]) -> None:
         await ctx.yield_output(f"result: {text}")
 
 cleaner   = Cleaner(id="cleaner")
@@ -530,9 +530,9 @@ The framework ships several built-in check factories (importable from `agent_fra
 
 | Factory | Description |
 |---|---|
-| `keyword_check(keyword)` | Response text contains keyword (case-insensitive). |
-| `tool_called_check(tool_name)` | Agent called the specified tool at least once. |
-| `tool_call_args_match(tool_name, args)` | Agent called the tool with arguments matching the given dict. |
+| `keyword_check(*keywords)` | Response text contains all keywords (case-insensitive by default). |
+| `tool_called_check(*tool_names)` | Agent called all named tools (use `mode="any"` to match any). |
+| `tool_call_args_match(item)` | `EvalItem`-level check: verifies tool calls match `item.expected_tool_calls`. |
 
 ### Example — Keyword and tool call checks
 
