@@ -543,12 +543,15 @@ agent = Agent("openai:gpt-4o", capabilities=[hooks])
 import ast
 import operator as _op
 
+_MAX_NUM = 1e15  # reject constants and results outside this range
+
+# ast.Pow is intentionally excluded to prevent resource exhaustion
+# (e.g. 10**1000000000 would exhaust CPU/memory before raising).
 _SAFE_OPS = {
     ast.Add: _op.add,
     ast.Sub: _op.sub,
     ast.Mult: _op.mul,
     ast.Div: _op.truediv,
-    ast.Pow: _op.pow,
     ast.USub: _op.neg,
     ast.UAdd: _op.pos,
 }
@@ -556,9 +559,14 @@ _SAFE_OPS = {
 
 def _eval_node(node):
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-        return node.value
+        if abs(node.value) > _MAX_NUM:
+            raise ValueError(f"Number out of range: {node.value}")
+        return float(node.value)
     if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
-        return _SAFE_OPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+        result = _SAFE_OPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+        if abs(result) > _MAX_NUM:
+            raise ValueError(f"Result out of range: {result}")
+        return result
     if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
         return _SAFE_OPS[type(node.op)](_eval_node(node.operand))
     raise ValueError(f"Unsupported expression: {ast.dump(node)}")
@@ -566,7 +574,7 @@ def _eval_node(node):
 
 @agent.tool_plain
 def calculate(expression: str) -> str:
-    """Evaluate a simple arithmetic expression and return the result."""
+    """Evaluate a simple arithmetic expression (+, -, *, /) and return the result."""
     try:
         return str(_eval_node(ast.parse(expression, mode="eval").body))
     except Exception as exc:
