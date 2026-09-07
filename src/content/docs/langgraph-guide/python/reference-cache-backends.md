@@ -235,9 +235,11 @@ class RedisCache(BaseCache[Any]):
 
     def _make_redis_key(self, full_key: FullKey) -> str:
         ns, k = full_key
-        # Percent-encode each segment so 'a:b' in one segment never collides
-        # with a two-element namespace ['a', 'b'].
-        return f"langgraph:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(k)}"
+        # Use '/' to separate the namespace from the hash so that scanning
+        # "langgraph:ns1/*" does not match "langgraph:ns1:ns2/hash".
+        # Namespace segments are joined by ':'; segments are percent-encoded
+        # so a literal ':' inside a segment never looks like a separator.
+        return f"langgraph:{':'.join(_encode_seg(s) for s in ns)}/{_encode_seg(k)}"
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, Any]:
         if not keys:
@@ -278,7 +280,7 @@ class RedisCache(BaseCache[Any]):
                 self._r.delete(key)
         else:
             for ns in namespaces:
-                prefix = f"langgraph:{':'.join(_encode_seg(s) for s in ns)}:*"
+                prefix = f"langgraph:{':'.join(_encode_seg(s) for s in ns)}/*"
                 for key in self._r.scan_iter(prefix):
                     self._r.delete(key)
 
@@ -393,7 +395,7 @@ class AsyncRedisCache(BaseCache[Any]):
         result = {}
         for k in keys:
             ns, key_hash = k
-            rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(key_hash)}"
+            rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}/{_encode_seg(key_hash)}"
             raw = await client.get(rk)
             if raw:
                 enc_b, data = raw.split(b"|", 1)
@@ -409,7 +411,7 @@ class AsyncRedisCache(BaseCache[Any]):
         client = await self._get_client()
         for full_key, (value, ttl) in pairs.items():
             ns, key_hash = full_key
-            rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}:{_encode_seg(key_hash)}"
+            rk = f"lg:{':'.join(_encode_seg(s) for s in ns)}/{_encode_seg(key_hash)}"
             enc, data = self.serde.dumps_typed(value)
             payload = enc.encode() + b"|" + data
             if ttl is not None:
@@ -429,7 +431,7 @@ class AsyncRedisCache(BaseCache[Any]):
                 await client.delete(key)
         else:
             for ns in namespaces:
-                prefix = f"lg:{':'.join(_encode_seg(s) for s in ns)}:*"
+                prefix = f"lg:{':'.join(_encode_seg(s) for s in ns)}/*"
                 async for key in client.scan_iter(prefix):
                     await client.delete(key)
 

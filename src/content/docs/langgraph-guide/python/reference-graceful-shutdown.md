@@ -253,17 +253,25 @@ finally:
 Because the checkpoint is flushed before `GraphDrained` is raised, resuming is identical to resuming after any other interruption:
 
 ```python
+import threading
 from langgraph.errors import GraphDrained
+from langgraph.runtime import RunControl
 
 config = {"configurable": {"thread_id": "resumable-thread"}}
+control = RunControl()
+
+# Request drain shortly after the graph starts (simulating a SIGTERM mid-run)
+# so at least one superstep completes and a checkpoint is saved before draining.
+threading.Timer(0.05, lambda: control.request_drain(reason="demo")).start()
 
 try:
-    graph.invoke({"messages": [("user", "hello")]}, config)
+    graph.invoke({"messages": [("user", "hello")]}, config, control=control)
 except GraphDrained:
-    pass  # checkpoint saved
+    pass  # at least one checkpoint was saved before the cooperative drain
 
-# Resume: pass the same config with no input (or a new message)
-result = graph.invoke(None, config)  # picks up from the last checkpoint
+# Resume: pass the same config with no input to continue from the checkpoint
+result = graph.invoke(None, config)
+print("Resumed:", result)
 ```
 
 ---
