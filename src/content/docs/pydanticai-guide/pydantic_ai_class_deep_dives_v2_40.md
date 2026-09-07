@@ -774,8 +774,7 @@ ExternalToolset(
 
 ```python {test="skip"}
 import asyncio
-from pydantic_ai import Agent
-from pydantic_ai.messages import DeferredToolRequests
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.toolsets import ExternalToolset
 from pydantic_ai.tools import ToolDefinition
 
@@ -906,7 +905,7 @@ transports so you can wrap any provider's HTTP client with automatic retry logic
 
 ```python {test="skip"}
 import httpx2
-from tenacity import retry_if_exception_type, stop_after_attempt
+from tenacity import retry_if_exception, stop_after_attempt
 
 from pydantic_ai.retries import (
     HTTPX2TenacityTransport,
@@ -920,7 +919,7 @@ def _is_429(exc: BaseException) -> bool:
 
 transport = HTTPX2TenacityTransport(
     config=RetryConfig(
-        retry=_is_429,                            # only retry 429 Too Many Requests
+        retry=retry_if_exception(_is_429),        # only retry 429 Too Many Requests
         wait=wait_retry_after(max_wait=120),      # respects Retry-After header; caps at 2 min
         stop=stop_after_attempt(5),
         reraise=True,
