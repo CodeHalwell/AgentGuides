@@ -137,8 +137,10 @@ async def push_to_talk_demo(wav_bytes: bytes) -> None:
     ).session() as session:
         # Decode WAV — must be mono PCM16 for the realtime API
         with wave.open(io.BytesIO(wav_bytes)) as wf:
-            assert wf.getnchannels() == 1, "Expected mono audio"
-            assert wf.getsampwidth() == 2, "Expected 16-bit (PCM16) audio"
+            if wf.getnchannels() != 1:
+                raise ValueError(f"Expected mono audio, got {wf.getnchannels()} channels")
+            if wf.getsampwidth() != 2:
+                raise ValueError(f"Expected 16-bit (PCM16) audio, got {wf.getsampwidth() * 8}-bit")
             sample_rate = wf.getframerate()
             while chunk := wf.readframes(4096):
                 await session.send_audio(chunk, sample_rate=sample_rate)
