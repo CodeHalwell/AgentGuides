@@ -6,7 +6,7 @@ framework: mistral-agents-api
 
 # Mistral Streaming Server (FastAPI)
 
-Latest: 2.0.1 | Updated: April 2026
+Latest: mistralai 2.4.9 | Updated: June 4, 2026
 Last verified: 2026-04
 
 ```python

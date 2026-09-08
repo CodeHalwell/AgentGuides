@@ -4,7 +4,7 @@ description: "The Claude Agent SDK is the official TypeScript library for buildi
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-Latest: 0.3.165 | Updated: June 5, 2026
+Latest: @anthropic-ai/claude-agent-sdk 0.3.165 | Updated: June 5, 2026
 # Claude Agent SDK (TypeScript) - Comprehensive Technical Guide
 
 **Table of Contents**
@@ -13,20 +13,8 @@ Latest: 0.3.165 | Updated: June 5, 2026
 - [Multi-Agent Systems](#multi-agent-systems)
 - [Tools Integration](#tools-integration)
 - [Computer Use API](#computer-use-api)
-- [Structured Output](#structured-output)
-- [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-- [Agentic Patterns](#agentic-patterns)
-- [Automatic Context Compaction](#automatic-context-compaction)
-- [Permissions System](#permissions-system)
-- [Session Management](#session-management)
-- [Context Engineering](#context-engineering)
-- [Production Essentials](#production-essentials)
-- [Tool Development](#tool-development)
-- [Streaming and Real-Time](#streaming-and-real-time)
-- [TypeScript Patterns](#typescript-patterns)
-- [Project Setup](#project-setup)
-- [Integration Patterns](#integration-patterns)
-- [Advanced Topics](#advanced-topics)
+
+**Continue elsewhere in this guide:** [Advanced multi-agent](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_advanced_multi_agent/) for guardrails and human-in-the-loop · [Middleware](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/) · [Streaming server (Express)](/anthropic-claude-agent-sdk-typescript-guide/claude_streaming_server_express/) · [Production guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/) for sessions, permissions and deployment · [Recipes](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_recipes/) · [Migration guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_migration_guide/).
 
 ---
 

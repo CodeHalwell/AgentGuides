@@ -21,8 +21,7 @@ The May 27, 2025 Agents API launch includes **Model Context Protocol (MCP)** sup
 4. [Tool Exposure Patterns](#tool-exposure-patterns)
 5. [Integration Best Practices](#integration-best-practices)
 6. [Security and Authentication](#security-and-authentication)
-7. [Debugging MCP Connections](#debugging-mcp-connections)
-8. [Production Deployment](#production-deployment)
+7. [Production Deployment](#production-deployment)
 
 ---
 

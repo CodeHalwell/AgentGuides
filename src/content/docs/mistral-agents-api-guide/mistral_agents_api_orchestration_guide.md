@@ -22,8 +22,7 @@ The May 27, 2025 Agents API launch introduced **built-in multi-agent orchestrati
 5. [Agent Handoff Mechanisms](#agent-handoff-mechanisms)
 6. [State Management Across Agents](#state-management-across-agents)
 7. [Complex Workflow Patterns](#complex-workflow-patterns)
-8. [Error Handling in Orchestration](#error-handling-in-orchestration)
-9. [Production Patterns](#production-patterns)
+8. [Production Patterns](#production-patterns)
 
 ---
 

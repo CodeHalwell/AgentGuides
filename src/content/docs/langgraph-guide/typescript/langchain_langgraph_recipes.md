@@ -18,11 +18,14 @@ language: typescript
 3. [Document Analysis Agent](#document-analysis-agent)
 4. [Multi-Agent Supervisor](#multi-agent-supervisor)
 5. [RAG Chatbot](#rag-chatbot)
-6. [Code Review Agent](#code-review-agent)
-7. [Data Analysis Pipeline](#data-analysis-pipeline)
-8. [Human-in-the-Loop Approval](#human-in-the-loop-approval)
-9. [Streaming Chat API](#streaming-chat-api)
-10. [Error Recovery Agent](#error-recovery-agent)
+6. [Streaming Chat API](#streaming-chat-api)
+7. [Error Recovery Agent](#error-recovery-agent)
+8. [Advanced Streaming Agent (v0.3+)](#advanced-streaming-agent-v03)
+9. [Cached RAG Pipeline](#cached-rag-pipeline)
+10. [Parallel Data Processing with Deferred Aggregation](#parallel-data-processing-with-deferred-aggregation)
+11. [Content Moderation Pipeline with Pre/Post Hooks](#content-moderation-pipeline-with-prepost-hooks)
+12. [Cross-Thread Memory Multi-User Support](#cross-thread-memory-multi-user-support)
+13. [Production Monitoring Dashboard](#production-monitoring-dashboard)
 
 ---
 

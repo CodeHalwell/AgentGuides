@@ -1,6 +1,6 @@
 ---
 title: "Haystack Architecture and Pattern Diagrams"
-description: "1. Haystack 2.x Core Architecture 2. Component Types and Interactions 3. Pipeline Execution Flow 4. Agent Loop Architecture 5. Multi-Agent Coordination Patterns 6. Memory and Retri"
+description: "Architecture diagrams for Haystack 2.x — components, pipeline execution, the agent loop, multi-agent coordination and memory/retrieval."
 framework: haystack
 ---
 

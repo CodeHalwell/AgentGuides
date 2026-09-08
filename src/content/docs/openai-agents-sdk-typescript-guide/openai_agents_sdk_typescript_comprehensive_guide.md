@@ -4,7 +4,7 @@ description: "Version: 1.0 Last Updated: May 2026 Language: TypeScript Framework
 framework: openai-agents-sdk-typescript
 ---
 
-Latest: 0.11.6 | Updated: May 29, 2026
+Latest: @openai/agents 0.11.6 | Updated: May 29, 2026
 # OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
 
 **Version:** 1.0  
@@ -21,19 +21,9 @@ Latest: 0.11.6 | Updated: May 29, 2026
 3. [Multi-Agent Systems](#multi-agent-systems)
 4. [Tools Integration](#tools-integration)
 5. [Structured Output](#structured-output)
-6. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-7. [Agentic Patterns](#agentic-patterns)
-8. [Guardrails](#guardrails)
-9. [Memory Systems](#memory-systems)
-10. [Context Engineering](#context-engineering)
-11. [Responses API Integration](#responses-api-integration)
-12. [Tracing & Observability](#tracing--observability)
-13. [Real-Time Experiences](#real-time-experiences)
-14. [Model Providers](#model-providers)
-15. [Testing](#testing)
-16. [Deployment Patterns](#deployment-patterns)
-17. [TypeScript Patterns](#typescript-patterns)
-18. [Advanced Topics](#advanced-topics)
+6. [Summary](#summary)
+
+**Continue elsewhere in this guide:** [2025 features](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_2025_features/) for MCP, realtime and the Responses API · [Middleware & guardrails](/openai-agents-sdk-typescript-guide/openai_agents_sdk_middleware_typescript/) · [Streaming server (Express)](/openai-agents-sdk-typescript-guide/openai_agents_streaming_server_express/) · [Production guide](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_production_guide/) for deployment, tracing and testing · [Recipes](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_recipes/).
 
 ---
 
@@ -2461,14 +2451,6 @@ if (response.success && response.data) {
   console.log('Analysis:', response.data.summary);
 }
 ```
-
----
-
-## Continued in next section...
-
-This is approximately 35% of the comprehensive guide. The document continues with the remaining sections covering Model Context Protocol, Agentic Patterns, Guardrails, Memory Systems, Context Engineering, Responses API, Tracing & Observability, Real-Time Experiences, Model Providers, Testing, Deployment, TypeScript Patterns, and Advanced Topics.
-
-Would you like me to continue with the remaining sections?
 
 ---
 

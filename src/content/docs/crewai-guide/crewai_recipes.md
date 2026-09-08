@@ -1,6 +1,6 @@
 ---
 title: "CrewAI Recipes"
-description: "1. Research and Content Creation 2. Data Analysis and Reporting 3. Customer Service and Support 4. Software Development Assistance 5. Business Intelligence 6. Marketing Campaign Pl"
+description: "Ten end-to-end CrewAI crews — research, data analysis, customer service, BI, marketing, finance, legal, science and project management."
 framework: crewai
 ---
 
@@ -11,16 +11,16 @@ framework: crewai
 
 ## Table of Contents
 
-1. [Research and Content Creation](#research-and-content-creation)
-2. [Data Analysis and Reporting](#data-analysis-and-reporting)
-3. [Customer Service and Support](#customer-service-and-support)
-4. [Software Development Assistance](#software-development-assistance)
-5. [Business Intelligence](#business-intelligence)
-6. [Marketing Campaign Planning](#marketing-campaign-planning)
-7. [Financial Analysis](#financial-analysis)
-8. [Legal Document Review](#legal-document-review)
-9. [Scientific Research](#scientific-research)
-10. [Project Management](#project-management)
+1. [Research and Content Creation](#recipe-1-research-and-content-creation)
+2. [Data Analysis and Reporting](#recipe-2-data-analysis-and-reporting)
+3. [Customer Service and Support](#recipe-3-customer-service-and-support)
+4. [Software Development Assistance](#recipe-4-software-development-assistance)
+5. [Business Intelligence](#recipe-5-business-intelligence)
+6. [Marketing Campaign Planning](#recipe-6-marketing-campaign-planning)
+7. [Financial Analysis](#recipe-7-financial-analysis)
+8. [Legal Document Review](#recipe-8-legal-document-review)
+9. [Scientific Research](#recipe-9-scientific-research)
+10. [Project Management](#recipe-10-project-management)
 
 ---
 

@@ -143,7 +143,7 @@ A multi-agent system that collaboratively reviews code through multiple lenses.
 
 **File: `code_review_team.py`**
 
-```python
+````python
 """
 Code Review Team: Multi-agent code review system
 - Performance Reviewer
@@ -277,7 +277,7 @@ def process_user_data(user_id):
     print("Starting code review...")
     result = review_code(sample_code)
     print(f"\nCode review completed. {len(result['chat_history'])} messages exchanged.")
-```
+````
 
 ---
 

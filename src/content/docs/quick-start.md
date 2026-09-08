@@ -214,7 +214,7 @@ def search_web(query: str) -> str:
 agent = CodeAgent(tools=[search_web])
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tools)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tools-integration)
 
 ---
 
@@ -229,7 +229,7 @@ graph = builder.compile(checkpointer=memory)
 # Now the graph remembers between runs
 ```
 
-[Learn More →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory)
+[Learn More →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory--persistence)
 
 ---
 
@@ -249,7 +249,7 @@ def risky_operation() -> str:
         return "Operation failed, trying alternative approach"
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#error-handling)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#error-handling-and-resilience)
 
 ---
 
@@ -264,7 +264,7 @@ docker run -p 8000:8000 my-agent
 aws ecs run-task --cluster my-cluster --task-definition my-agent
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#deployment)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#deployment-architectures)
 
 ---
 
@@ -360,7 +360,7 @@ agent = Agent(tools=[my_tool])
 agent = Agent()
 ```
 
-[See Tool Guide →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tools)
+[See Tool Guide →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tools-integration)
 
 ---
 
@@ -374,7 +374,7 @@ graph = builder.compile(checkpointer=MemorySaver())
 graph = builder.compile()
 ```
 
-[See Memory Guide →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory)
+[See Memory Guide →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory--persistence)
 
 ---
 
@@ -389,7 +389,7 @@ for event in agent.stream(input):
 output = agent.run(input)
 ```
 
-[See Streaming Guide →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#streaming)
+[See Streaming Guide →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#streaming-outputs)
 
 ---
 

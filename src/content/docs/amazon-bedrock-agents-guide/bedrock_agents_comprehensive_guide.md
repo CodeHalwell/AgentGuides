@@ -17,23 +17,19 @@ A definitive, end-to-end technical reference covering Amazon Bedrock Agents from
 ## Table of Contents
 
 1. [Core Fundamentals](#core-fundamentals)
-2. [Simple Agents](#simple-agents)
-3. [Multi-Agent Systems (MAS)](#multi-agent-systems)
-4. [AgentCore Services](#agentcore-services)
-5. [Action Groups](#action-groups)
-6. [Knowledge Bases](#knowledge-bases)
-7. [Tools Integration](#tools-integration)
-8. [Structured Output](#structured-output)
-9. [Model Context Protocol (MCP)](#model-context-protocol)
-10. [Agentic Patterns](#agentic-patterns)
-11. [Guardrails](#guardrails)
-12. [Prompt Flows](#prompt-flows)
-13. [Memory Systems](#memory-systems)
-14. [Context Engineering](#context-engineering)
-15. [Multi-Model Support](#multi-model-support)
-16. [AWS Integrations](#aws-integrations)
-17. [Supervisor Architecture](#supervisor-architecture)
-18. [Advanced Topics](#advanced-topics)
+   - [Amazon Bedrock AgentCore](#amazon-bedrock-agentcore)
+   - [Best Practices for Building Bedrock Agents](#best-practices-for-building-bedrock-agents)
+   - [AWS Bedrock Setup and IAM Permissions](#aws-bedrock-setup-and-iam-permissions)
+   - [Bedrock Agents Architecture Overview](#bedrock-agents-architecture-overview)
+   - [Core Components: Action Groups, Knowledge Bases, Guardrails, Prompt Flows](#core-components-action-groups-knowledge-bases-guardrails-prompt-flows)
+   - [Supported Foundation Models](#supported-foundation-models)
+   - [Region Availability and Configuration](#region-availability-and-configuration)
+
+2. [Multi-Agent Systems (MAS)](#multi-agent-systems-mas)
+   - [Creating Basic Bedrock Agents via Console](#creating-basic-bedrock-agents-via-console)
+   - [Creating Basic Bedrock Agents via CloudFormation and Terraform](#creating-basic-bedrock-agents-via-cloudformation-and-terraform)
+
+**Continue elsewhere in this guide:** [AgentCore services](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/) · [Advanced multi-agent & supervisor patterns](/amazon-bedrock-agents-guide/bedrock_agents_advanced_multi_agent_python/) · [A2A protocol](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/) · [Strands SDK](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) · [Security & IAM](/amazon-bedrock-agents-guide/bedrock_security_iam_examples/) · [Error handling](/amazon-bedrock-agents-guide/bedrock_agents_error_handling_python/) · [Observability](/amazon-bedrock-agents-guide/bedrock_agents_observability_python/) · [Production guide](/amazon-bedrock-agents-guide/bedrock_agents_production_guide/) · [Recipes](/amazon-bedrock-agents-guide/bedrock_agents_recipes/).
 
 ---
 
@@ -1370,6 +1366,7 @@ class ModelSelectionFramework:
         }
         
         return fallback_chains.get(primary_model, [])
+```
 
 ### Code Interpretation
 
@@ -1412,7 +1409,6 @@ response = bedrock_runtime.invoke_agent(
 # The agent will generate and execute Python code to read the CSV file,
 # perform the analysis, and generate a summary.
 print(response['outputText'])
-```
 ```
 
 ### AWS CLI and SDK Setup

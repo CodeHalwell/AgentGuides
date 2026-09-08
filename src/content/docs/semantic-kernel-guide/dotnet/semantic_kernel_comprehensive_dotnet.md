@@ -5,7 +5,7 @@ framework: semantic-kernel
 language: dotnet
 ---
 
-Latest: 1.74.0 | Updated: April 2026
+Latest: Microsoft.SemanticKernel 1.74.0 | Updated: April 2026
 # Semantic Kernel Comprehensive Guide (.NET)
 
 **Complete C#/.NET Reference for Building AI Agents and Agentic Systems**

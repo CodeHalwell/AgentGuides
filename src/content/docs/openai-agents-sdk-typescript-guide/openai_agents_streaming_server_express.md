@@ -6,8 +6,9 @@ framework: openai-agents-sdk-typescript
 
 # OpenAI Agents Streaming Server (Express)
 
-Latest: 6.8.1
-Last verified: 2025-11
+Latest: @openai/agents 0.11.6 | Updated: May 29, 2026
+
+> The snippets on this page stream through the base `openai` SDK (6.8.1) rather than the Agents SDK runner — use them when you want raw token streaming over SSE without an agent loop.
 
 ```ts
 import express from "express";

@@ -32,8 +32,8 @@ Deploying LlamaIndex Applications to Production: Best Practices, Deployment Stra
 
 ```python
 # requirements-prod.txt
-llama-index==0.14.6
-llama-index-core==0.2.1
+llama-index==0.14.22
+llama-index-core==0.14.22
 llama-index-llms-openai==0.3.1
 llama-index-embeddings-openai==0.2.1
 llama-index-vector-stores-chroma==0.4.1

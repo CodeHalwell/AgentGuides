@@ -5,7 +5,7 @@ framework: langgraph
 language: python
 ---
 
-Latest: 1.2.11 | Updated: August 17, 2026
+Latest: langgraph 1.2.11 | Updated: August 17, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
 **Latest Version**: LangGraph 1.2.11 (August 2026)
@@ -2251,7 +2251,7 @@ The following subsections appeared in earlier drafts of this guide under a "v1.0
 
 What's real and remains documented:
 
-- **Cross-thread memory** — use `langgraph.store.postgres.AsyncPostgresStore` with hierarchical namespaces, and the `InjectedStore` annotation to inject the store into node signatures. Covered in [Chapter 5 — Memory & Persistence](/langgraph-guide/python/chapter-05-memory/#cross-thread-memory-v103).
+- **Cross-thread memory** — use `langgraph.store.postgres.AsyncPostgresStore` with hierarchical namespaces, and the `InjectedStore` annotation to inject the store into node signatures. Covered in [Chapter 5 — Memory & Persistence](/langgraph-guide/python/chapter-05-memory/#cross-thread-memory-pattern).
 - **Python 3.10 – 3.14** — LangGraph 1.1.x supports Python 3.10 through 3.14 (Python 3.9 was dropped in 1.1). Type-parameter syntax (PEP 695) works as-is; there's no LangGraph-specific coupling.
 - **Type-safe v2 API** — opt in with `version="v2"` on `.invoke` / `.stream` / `.ainvoke` / `.astream`. Covered in [Type-Safe v2 API](#type-safe-v2-api-v11x) above.
 

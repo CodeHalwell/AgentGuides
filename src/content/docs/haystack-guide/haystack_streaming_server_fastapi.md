@@ -6,7 +6,7 @@ framework: haystack
 
 # Haystack Streaming Server (FastAPI)
 
-Latest: 2.27.0 | Updated: April 2026
+Latest: haystack-ai 2.30.0 | Updated: June 4, 2026
 Last verified: 2025-11
 
 This example streams simple progress events and a final answer. Token-level streaming depends on the underlying generator.

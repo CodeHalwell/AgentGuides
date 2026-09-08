@@ -1,6 +1,6 @@
 ---
 title: "Haystack Production Deployment and Operations Guide"
-description: "1. Production Readiness Checklist 2. Deployment Strategies 3. Containerisation and Docker 4. Kubernetes Deployment 5. API Service Development 6. Scaling Strategies 7. Caching and P"
+description: "Deploying Haystack in production — readiness checklist, Docker, Kubernetes, FastAPI services, scaling and caching."
 framework: haystack
 ---
 
@@ -15,14 +15,8 @@ framework: haystack
 5. [API Service Development](#api-service-development)
 6. [Scaling Strategies](#scaling-strategies)
 7. [Caching and Performance](#caching-and-performance)
-8. [Rate Limiting and Throttling](#rate-limiting-and-throttling)
-9. [Security Best Practices](#security-best-practices)
-10. [Observability and Monitoring](#observability-and-monitoring)
-11. [Error Handling and Recovery](#error-handling-and-recovery)
-12. [Database and Storage](#database-and-storage)
-13. [Multi-Tenancy](#multi-tenancy)
-14. [Governance and Compliance](#governance-and-compliance)
-15. [Disaster Recovery](#disaster-recovery)
+
+For tracing, metrics and error-recovery patterns, continue in [Observability](/haystack-guide/haystack_observability_python/); for resilience inside the agent loop, see [Error Handling and Resilience](/haystack-guide/haystack_comprehensive_guide/#error-handling-and-resilience) in the comprehensive guide.
 
 ---
 
@@ -1283,10 +1277,8 @@ async def process_query_with_cache(
 
 ---
 
-This comprehensive production guide covers all aspects of deploying, managing, and scaling Haystack applications in production environments. The documentation includes complete code examples for Docker, Kubernetes, FastAPI integration, and production best practices.
+This guide covers deployment, containerisation, Kubernetes, API service design, scaling and caching for Haystack applications, with complete code examples for Docker, Kubernetes and FastAPI integration.
 
-Due to space constraints, I've covered the essential production topics. The remaining sections (Rate Limiting, Security, Observability, Error Recovery, Database Management, Multi-Tenancy, Governance, and Disaster Recovery) would follow similar patterns with detailed implementations.
-
-Each section provides production-ready code that can be adapted to specific deployment scenarios. The combination of best practices, design patterns, and working examples ensures applications can be deployed and operated reliably at scale.
+**Not covered here.** Rate limiting, security hardening, error recovery, database management, multi-tenancy, governance and disaster recovery are outside this page's scope. For tracing and metrics see [Observability](/haystack-guide/haystack_observability_python/); for resilience inside the agent loop see [Error Handling and Resilience](/haystack-guide/haystack_comprehensive_guide/#error-handling-and-resilience).
 
 

@@ -23,9 +23,8 @@ language: python
 7. [Testing Strategies](#testing-strategies)
 8. [CI/CD Pipeline with Cloud Build](#cicd-pipeline-with-cloud-build)
 9. [Enterprise Patterns](#enterprise-patterns)
-10. [Disaster Recovery](#disaster-recovery)
-11. [Performance Tuning](#performance-tuning)
-12. [SLA Management](#sla-management)
+
+Performance tuning is covered under [Scalability and Performance](#scalability-and-performance); failover and retry behaviour under [Reliability and Fault Tolerance](#reliability-and-fault-tolerance).
 
 ---
 

@@ -144,7 +144,7 @@ pip install claude-agent-sdk[full]
 claude-code-sdk>=0.9.0
 
 # NEW
-claude-agent-sdk>=1.0.0
+claude-agent-sdk>=0.2.93
 python-dotenv>=1.0.0
 pydantic>=2.0.0
 aiohttp>=3.9.0

@@ -7,7 +7,7 @@ language: dotnet
 
 # Microsoft Agent Streaming Server (.NET)
 
-Latest: 1.1.0
+Latest: Microsoft.Agents.AI 1.1.0 | Updated: April 2026
 Last verified: 2025-11
 
 

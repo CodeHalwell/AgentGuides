@@ -1092,8 +1092,7 @@ class LoadBalancer {
 
 ### Common Issues & Solutions
 
-```markdown
-## Issue: Rate Limiting (429 errors)
+#### Issue: Rate Limiting (429 errors)
 
 **Symptoms:**
 - Frequent "RATE_LIMIT_EXCEEDED" errors
@@ -1119,7 +1118,7 @@ class LoadBalancer {
 
 ---
 
-## Issue: Context Length Exceeded
+#### Issue: Context Length Exceeded
 
 **Symptoms:**
 - Error: "CONTEXT_LENGTH_EXCEEDED"
@@ -1150,7 +1149,7 @@ class LoadBalancer {
 
 ---
 
-## Issue: Timeouts
+#### Issue: Timeouts
 
 **Symptoms:**
 - Requests hang indefinitely
@@ -1179,7 +1178,7 @@ class LoadBalancer {
 
 ---
 
-## Issue: Inconsistent Results
+#### Issue: Inconsistent Results
 
 **Symptoms:**
 - Same prompt gives different outputs
@@ -1205,7 +1204,6 @@ class LoadBalancer {
 4. **Post-process outputs:**
    - Validate structure
    - Retry if invalid
-```
 
 ---
 

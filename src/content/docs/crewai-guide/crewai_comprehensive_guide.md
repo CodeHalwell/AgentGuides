@@ -1,10 +1,10 @@
 ---
 title: "CrewAI Comprehensive Technical Guide"
-description: "1. Introduction 2. Core Fundamentals 3. Simple Agents 4. Multi-Agent Systems 5. Tools Integration 6. Structured Output 7. Memory Systems 8. Context Engineering 9. Task Management 1"
+description: "Complete CrewAI reference — agents, tasks, crews, processes, tools, memory, knowledge, structured output and task management."
 framework: crewai
 ---
 
-Latest: 1.14.6 | Updated: May 29, 2026
+Latest: crewai 1.14.6 | Updated: May 29, 2026
 # CrewAI Comprehensive Technical Guide
 ## From Beginner to Expert - Role-Based Agent Collaboration
 
@@ -2375,7 +2375,7 @@ source .venv/bin/activate  # macOS/Linux
 uv pip install crewai 'crewai[tools]'
 
 # Install specific versions
-uv pip install crewai==1.14.0
+uv pip install crewai==1.14.6
 
 # Install from requirements file
 uv pip install -r requirements.txt

@@ -84,4 +84,3 @@ def lambda_handler(event, context):
 ### c. Distributed Tracing with OpenTelemetry
 
 Instrument your application with the OpenTelemetry SDK to create custom spans and traces for a more detailed view of your agent's performance.
-```

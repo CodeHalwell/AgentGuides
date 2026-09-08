@@ -7,8 +7,10 @@ framework: anthropic-claude-agent-sdk-typescript
 # Claude Agent SDK Advanced Multi‑Agent (TypeScript)
 
 
-Latest: 0.68.0
-Upstream: https://github.com/anthropics/anthropic-sdk-typescript | https://anthropic.mintlify.app/en/api
+Latest: @anthropic-ai/claude-agent-sdk 0.3.165 | Updated: June 5, 2026
+Upstream: https://github.com/anthropics/claude-agent-sdk-typescript | https://docs.anthropic.com
+
+> The snippets on this page call the base `@anthropic-ai/sdk` (0.68.0) directly, so the routing and guardrail patterns apply whether or not you run them inside the Agent SDK loop.
 
 ## Patterns
 - Specialize agents and route by capability; guardrails at boundaries

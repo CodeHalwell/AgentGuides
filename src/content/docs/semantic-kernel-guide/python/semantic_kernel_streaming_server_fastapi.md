@@ -7,7 +7,7 @@ language: python
 
 # Semantic Kernel Streaming Server (FastAPI, Python)
 
-Latest: 1.41.2 | Updated: April 2026
+Latest: semantic-kernel 1.43.0 | Updated: June 4, 2026
 Last verified: 2025-11
 
 This example streams staged events from a Semantic Kernel workflow; token-level streaming may depend on your SK function/service.

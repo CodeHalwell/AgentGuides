@@ -7,7 +7,7 @@ language: python
 
 # LlamaIndex Streaming Server (FastAPI)
 
-Latest: 0.14.20 | Updated: April 2026
+Latest: llama-index-core 0.14.22 | Updated: May 2026
 Last verified: 2025-11
 
 ```python

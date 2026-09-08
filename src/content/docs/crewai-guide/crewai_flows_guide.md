@@ -1,10 +1,10 @@
 ---
 title: "CrewAI Flows - Comprehensive Guide (2025)"
-description: "1. Introduction to Flows 2. Core Concepts 3. Getting Started 4. Flow Decorators 5. Integrating Crews with Flows 6. Conditional Logic and Routing 7. Loops and Iterations 8. State Ma"
+description: "Event-driven CrewAI Flows — decorators, state management, conditional routing, loops, and combining flows with crews."
 framework: crewai
 ---
 
-Latest: 1.14.0 | Updated: April 2026
+Latest: crewai 1.14.6 | Updated: May 29, 2026
 # CrewAI Flows - Comprehensive Guide (2025)
 ## Event-Driven Workflows for Agentic AI Automation
 
@@ -105,12 +105,12 @@ Each method can trigger one or more listeners, creating a directed acyclic graph
 
 ### Installation
 
-Flows are included in CrewAI 1.6.0+:
+Flows have shipped in CrewAI since 1.6.0; the examples on this page are verified against 1.14.6:
 
 ```bash
-pip install crewai>=1.14.0
+pip install crewai>=1.14.6
 # Or with UV:
-uv pip install crewai>=1.14.0
+uv pip install crewai>=1.14.6
 ```
 
 ### Your First Flow
