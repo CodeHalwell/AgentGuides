@@ -1,6 +1,6 @@
 ---
 title: "AutoGen to AG2 Migration Guide"
-description: "1. Introduction 2. Understanding AG2 3. Why Migrate? 4. Compatibility and Backward Compatibility 5. Migration Steps 6. Code Examples 7. New AG2 Features 8. Troubleshooting 9. FAQ 1"
+description: "Moving from Microsoft AutoGen to AG2 — compatibility, step-by-step migration, code examples, new AG2 features and troubleshooting."
 framework: autogen
 language: python
 ---

@@ -6,8 +6,9 @@ framework: openai-agents-sdk
 
 # OpenAI Agents Streaming Server (FastAPI)
 
-Latest: 2.7.2
-Last verified: 2025-11
+Latest: openai-agents 0.17.4 | Updated: May 27, 2026
+
+> The snippets on this page stream through the base `openai` SDK (6.8.1) rather than the Agents SDK runner — use them when you want raw token streaming over SSE without an agent loop.
 
 ```python
 from fastapi import FastAPI

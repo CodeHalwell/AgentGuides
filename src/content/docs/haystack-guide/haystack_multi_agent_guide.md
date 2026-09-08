@@ -17,11 +17,10 @@ framework: haystack
 3. [Agent Specialization & Roles](#agent-specialization--roles)
 4. [Agent Communication Protocols](#agent-communication-protocols)
 5. [Coordination & Orchestration](#coordination--orchestration)
-6. [Multi-Agent Pipelines](#multi-agent-pipelines)
-7. [State Sharing & Memory](#state-sharing--memory)
-8. [Error Handling & Resilience](#error-handling--resilience)
-9. [Performance Optimization](#performance-optimization)
-10. [Production Deployment](#production-deployment)
+6. [Complete Production Multi-Agent Example](#complete-production-multi-agent-example)
+7. [Summary](#summary)
+
+For pipeline-level patterns see [Multi-Agent Pipeline Design Patterns](/haystack-guide/haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns); for deployment, scaling and caching see the [production guide](/haystack-guide/haystack_production_guide/).
 
 ---
 

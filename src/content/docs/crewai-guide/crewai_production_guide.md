@@ -1,6 +1,6 @@
 ---
 title: "CrewAI Production Guide"
-description: "1. Production Fundamentals 2. Testing Strategies 3. Deployment Patterns 4. Monitoring and Logging 5. Performance Optimisation 6. Cost Optimisation 7. Error Handling and Recovery 8."
+description: "Running CrewAI in production — testing, deployment, monitoring, performance and cost optimisation, and error recovery."
 framework: crewai
 ---
 

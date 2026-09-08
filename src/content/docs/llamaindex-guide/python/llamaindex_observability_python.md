@@ -8,7 +8,7 @@ language: python
 # LlamaIndex Observability & Monitoring (Python)
 
 
-Latest: 0.14.20 | Updated: April 2026
+Latest: llama-index-core 0.14.22 | Updated: May 2026
 Upstream: https://github.com/run-llama/llama_index/releases | https://pypi.org/project/llama-index/
 
 ## Tracing

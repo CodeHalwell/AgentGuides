@@ -6,8 +6,9 @@ framework: anthropic-claude-agent-sdk-typescript
 
 # Claude Streaming Server (Express)
 
-Latest: 0.68.0
-Last verified: 2025-11
+Latest: @anthropic-ai/claude-agent-sdk 0.3.165 | Updated: June 5, 2026
+
+> The snippets on this page stream through the base `@anthropic-ai/sdk` (0.68.0) rather than the Agent SDK loop — use them when you want raw SSE token streaming.
 
 ```ts
 import express from "express";

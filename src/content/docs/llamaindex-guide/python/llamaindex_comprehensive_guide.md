@@ -1,11 +1,11 @@
 ---
 title: "LlamaIndex Comprehensive Technical Guide"
-description: "1. Core Fundamentals 2. Simple Agents 3. Multi-Agent Systems (llama-agents) 4. Tools Integration 5. Structured Output 6. Model Context Protocol (MCP) 7. Agentic Patterns 8. Memory"
+description: "Complete LlamaIndex reference — agents, tools, structured output, RAG patterns, data connectors, indexing, retrieval and query engines."
 framework: llamaindex
 language: python
 ---
 
-Latest: 0.14.22 | Updated: May 2026
+Latest: llama-index-core 0.14.22 | Updated: May 2026
 # LlamaIndex Comprehensive Technical Guide
 
 ## Complete Framework for Building LLM-Powered Agents with RAG, Data Connectors, and Agentic Reasoning
@@ -19,15 +19,14 @@ Latest: 0.14.22 | Updated: May 2026
 3. [Multi-Agent Systems (llama-agents)](#multi-agent-systems-llama-agents)
 4. [Tools Integration](#tools-integration)
 5. [Structured Output](#structured-output)
-6. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-7. [Agentic Patterns](#agentic-patterns)
-8. [Memory Systems](#memory-systems)
-9. [Data Connectors & Loaders](#data-connectors--loaders)
-10. [Indexing & Retrieval](#indexing--retrieval)
-11. [Query Engines](#query-engines)
-12. [Context Engineering](#context-engineering)
-13. [RAG Patterns](#rag-patterns)
-14. [Advanced Topics](#advanced-topics)
+6. [Agentic Patterns](#agentic-patterns)
+7. [Memory Systems](#memory-systems)
+8. [Data Connectors & Loaders](#data-connectors--loaders)
+9. [Indexing & Retrieval](#indexing--retrieval)
+10. [Query Engines](#query-engines)
+11. [Context Engineering](#context-engineering)
+12. [RAG Patterns](#rag-patterns)
+13. [Advanced Topics](#advanced-topics)
 
 ---
 

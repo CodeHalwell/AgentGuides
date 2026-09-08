@@ -576,6 +576,7 @@ app = App(
         LoggingPlugin(),                                                 # 5: observability (last)
     ],
 )
+```
 
 ## Terminating an invocation from a callback
 

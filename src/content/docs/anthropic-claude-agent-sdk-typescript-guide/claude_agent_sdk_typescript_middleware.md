@@ -7,8 +7,10 @@ framework: anthropic-claude-agent-sdk-typescript
 # Claude Agent SDK Middleware (TypeScript)
 
 
-Latest: 0.68.0
-Upstream: https://github.com/anthropics/anthropic-sdk-typescript | https://www.npmjs.com/package/@anthropic-ai/sdk
+Latest: @anthropic-ai/claude-agent-sdk 0.3.165 | Updated: June 5, 2026
+Upstream: https://github.com/anthropics/claude-agent-sdk-typescript | https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk
+
+> The snippets on this page call the base `@anthropic-ai/sdk` (0.68.0) directly, so the middleware shapes apply whether or not you run them inside the Agent SDK loop.
 
 ## Middleware Wrapper
 
@@ -48,6 +50,7 @@ async function messagesHandler(input: string) {
 }
 
 export const run = chain([policyMw, redactMw], messagesHandler);
+```
 
 ## Streaming
 

@@ -4,7 +4,7 @@ description: "From Beginner to Expert – The Complete Reference for Building AI
 framework: smolagents
 ---
 
-Latest: 1.26.0 | Updated: May 29, 2026
+Latest: smolagents 1.26.0 | Updated: May 29, 2026
 # 🤗 SmolAgents: Comprehensive Technical Guide
 
 **From Beginner to Expert – The Complete Reference for Building AI Agents That Think in Code**
@@ -27,6 +27,8 @@ SmolAgents (2025) represents the **ultimate minimalist approach** to building pr
 
 ## Table of Contents
 
+Steps 1–10 are the Zero → Hero path from the [guide overview](/smolagents-guide/), in the order they appear below.
+
 1. [Introduction & Philosophy](#introduction--philosophy)
 2. [Installation & Setup](#installation--setup)
 3. [Core Concepts & Architecture](#core-concepts--architecture)
@@ -37,16 +39,11 @@ SmolAgents (2025) represents the **ultimate minimalist approach** to building pr
 8. [ToolCallingAgent: Traditional JSON-Based Workflows](#toolcallingagent-traditional-json-based-workflows)
 9. [Multi-Agent Systems & Orchestration](#multi-agent-systems--orchestration)
 10. [Structured Outputs & Schema](#structured-outputs--schema)
-11. [Code Execution & Sandboxing](#code-execution--sandboxing)
-12. [Memory & State Management](#memory--state-management)
-13. [Context Engineering & Prompting](#context-engineering--prompting)
-14. [Hub Integration & Sharing](#hub-integration--sharing)
-15. [Multi-Modal Capabilities](#multi-modal-capabilities)
-16. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-17. [Debugging & Troubleshooting](#debugging--troubleshooting)
-18. [Advanced Patterns & Optimization](#advanced-patterns--optimization)
-19. [Comparison with Other Frameworks](#comparison-with-other-frameworks)
-20. [Production Deployment Strategy](#production-deployment-strategy)
+11. Production — continue in the [production guide](/smolagents-guide/smolagents_production_guide/)
+
+**Also on this page:** [2025 Features Deep Dive](#2025-features-deep-dive) — sandboxing options, multi-modal input, Hub integration and the measured efficiency gain, with runnable examples.
+
+**Elsewhere in this guide:** [Recipes](/smolagents-guide/smolagents_recipes/) for task-shaped patterns and error recovery · [Diagrams](/smolagents-guide/smolagents_diagrams/) for architecture visualisations.
 
 ---
 

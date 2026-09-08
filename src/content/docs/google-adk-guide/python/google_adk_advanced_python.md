@@ -843,6 +843,7 @@ root = LlmAgent(
     instruction="Route requests to the right specialist.",
     sub_agents=[technical, billing],
 )
+```
 
 ## Security best practices
 

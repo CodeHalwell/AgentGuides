@@ -26,6 +26,15 @@ language: python
 10. [System Health Monitor](#system-health-monitor)
 11. [SSE Streaming Chat](#sse-streaming-chat)
 12. [Resilient Tool Pipeline](#resilient-tool-pipeline)
+13. [OpenAPI Agent](#openapi-agent)
+14. [Observability with Cloud Trace](#observability-with-cloud-trace)
+15. [Multi-Model Agent System](#multi-model-agent-system)
+16. [Self-Healing API Agent with `ReflectAndRetryToolPlugin`](#recipe-13--self-healing-api-agent-with-reflectandretrytoolplugin)
+17. [Few-Shot Agent with Dynamic Example Provider](#recipe-14--few-shot-agent-with-dynamic-example-provider)
+18. [Tool Environment Simulation for CI Testing](#recipe-15--tool-environment-simulation-for-ci-testing)
+19. [Code Analysis Agent with `VertexAiCodeExecutor`](#recipe-16--code-analysis-agent-with-vertexaicodeexecutor)
+
+See also [Best Practices for Recipes](#best-practices-for-recipes).
 
 ---
 
@@ -588,7 +597,7 @@ An intelligent code review system.
 > **Note:** `ParallelAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
 > valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
 
-```python
+````python
 from google.adk.agents import ParallelAgent, LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -693,7 +702,7 @@ Provide detailed, constructive feedback."""
         "language": request.language,
         "review": response,
     }
-```
+````
 
 ---
 

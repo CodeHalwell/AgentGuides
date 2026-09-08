@@ -4,7 +4,7 @@ description: "Version: 2.33.0 (August 2026) Framework: Pydantic AI - GenAI Agent
 framework: pydanticai
 ---
 
-Latest: 2.33.0 | Updated: August 21, 2026
+Latest: pydantic-ai 2.40.0 | Guide verified against: 2.33.0 | Updated: September 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
@@ -24,8 +24,10 @@ Latest: 2.33.0 | Updated: August 21, 2026
 6. [Structured Output](#structured-output)
 7. [Tools & Function Calling](#tools--function-calling)
 8. [Dependency Injection](#dependency-injection)
-9. [Advanced Patterns](#advanced-patterns)
-10. [Production Deployment](#production-deployment)
+9. [Advanced Features (April 2026)](#advanced-features-april-2026)
+10. [Class & API Reference](#class--api-reference)
+
+For deployment and scaling see the [production guide](/pydanticai-guide/pydantic_ai_production_guide/); for topic pages (streaming, toolsets, testing, model providers, evals) see the [guide overview](/pydanticai-guide/).
 
 ---
 
@@ -1690,26 +1692,23 @@ asyncio.run(main())
 
 ---
 
-## Next Sections Overview
+## Where the rest of this guide lives
 
-This comprehensive guide continues with:
+The topics below are covered on their own pages rather than in this one:
 
-1. **Multi-Agent Systems** - Agent coordination, A2A protocol, hierarchical structures
-2. **Model Context Protocol (MCP)** - MCP server creation, type-safe integration
-3. **Agentic Patterns** - ReAct loops, self-correction, planning
-4. **Memory Systems** - Conversation history, custom backends, serialization
-5. **Context Engineering** - Dynamic prompts, few-shot examples, templates
-6. **Logfire Integration** - Observability, tracing, monitoring
-7. **Durable Execution** - Checkpoint/resume, state persistence, fault tolerance
-8. **FastAPI Integration** - API endpoints, streaming, WebSockets
-9. **Testing** - Unit testing, mocking, fixtures, property-based testing
-10. **Advanced Topics** - Custom adapters, middleware, performance optimization
+| Topic | Page |
+|---|---|
+| Multi-agent systems, A2A, hierarchical structures | [Advanced patterns](/pydanticai-guide/pydantic_ai_advanced_patterns/) |
+| Model Context Protocol (MCP) | [Toolsets](/pydanticai-guide/pydantic_ai_toolsets/) · [Built-in tools](/pydanticai-guide/pydantic_ai_builtin_tools/) |
+| Memory & conversation history | [Message history](/pydanticai-guide/pydantic_ai_message_history/) |
+| Streaming & real-time | [Streaming](/pydanticai-guide/pydantic_ai_streaming/) · [Streaming server (FastAPI)](/pydanticai-guide/pydantic_ai_streaming_server_fastapi/) |
+| Observability & Logfire | [Integrations](/pydanticai-guide/pydantic_ai_integrations_2025/) |
+| Durable execution | [Durable execution](/pydanticai-guide/pydantic_ai_durable_execution/) |
+| Testing & error handling | [Testing](/pydanticai-guide/pydantic_ai_testing/) · [Error handling & testing](/pydanticai-guide/pydantic_ai_advanced_error_testing/) |
+| Deployment, scaling, architecture | [Production guide](/pydanticai-guide/pydantic_ai_production_guide/) |
+| Worked examples | [Recipes](/pydanticai-guide/pydantic_ai_recipes/) · [Diagrams](/pydanticai-guide/pydantic_ai_diagrams/) |
 
-**See separate files for:**
-- `pydantic_ai_production_guide.md` - Deployment, scaling, architecture patterns
-- `pydantic_ai_recipes.md` - Real-world code examples and patterns
-- `pydantic_ai_diagrams.md` - Architecture and flow diagrams
-- The [Class & API Reference](#class--api-reference) section below - the consolidated, source-verified class/API reference for this guide (folds in what used to be 44 separate "class deep dive" volumes)
+The [Class & API Reference](#class--api-reference) section below is the consolidated, source-verified class/API reference for this guide (it folds in what used to be 44 separate "class deep dive" volumes).
 
 ---
 

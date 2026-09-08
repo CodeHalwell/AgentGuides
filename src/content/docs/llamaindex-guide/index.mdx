@@ -17,7 +17,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   <LinkCard
     title="🐍 Python"
     href="/llamaindex-guide/python/"
-    description="v0.14.21 · 100+ data connectors, ReAct agents, llama-agents package."
+    description="llama-index-core v0.14.22 · 100+ data connectors, ReAct agents, llama-agents package."
   />
   <LinkCard
     title="📘 TypeScript"
@@ -55,6 +55,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-09-08 | llama-index-core 0.14.22 | Consistency sweep. Python card corrected 0.14.21 → 0.14.22; observability and streaming pages moved off a stale 0.14.20; the production requirements block no longer pins an impossible `llama-index-core==0.2.1`. No package installation or symbol verification performed. |
 | 2026-05-04 | Py 0.14.21 / TS 1.1.25 | TS bumped 1.1.24 → 1.1.25; Python card corrected from 0.14.20 to 0.14.21 (stale reference). | Claude routine |
 | 2026-04-21 | Py 0.14.21 / TS 1.1.24 | Versions corrected against installed packages; TS minimal example rewritten to real functional API (`createWorkflow`/`workflowEvent`). |
 | 2026-04-21 | Py 0.14.20 / TS 1.1.4 | Parent index redesigned as language selector. |

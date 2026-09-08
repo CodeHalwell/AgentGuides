@@ -4,7 +4,7 @@ description: "> BREAKING: Mistral SDK v2.0.1 (March 12, 2026) is NOT backwards-c
 framework: mistral-agents-api
 ---
 
-Latest: 2.4.9 | Updated: June 4, 2026
+Latest: mistralai 2.4.9 | Updated: June 4, 2026
 # Mistral Agents API: Comprehensive Technical Guide
 
 > **BREAKING (v2.0.1, March 2026)**: The v2 SDK is NOT backwards-compatible with v1.x. See the migration guide for full details. Current stable: **v2.4.9**.

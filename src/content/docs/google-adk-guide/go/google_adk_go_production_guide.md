@@ -20,14 +20,12 @@ Last Updated: April 2026
 2. [Containerization](#containerization)
 3. [Google Cloud Run](#google-cloud-run)
 4. [Kubernetes Deployment](#kubernetes-deployment)
-5. [Vertex AI Agent Engine](#vertex-ai-agent-engine)
-6. [Security](#security)
-7. [Monitoring and Observability](#monitoring-and-observability)
-8. [Performance Optimization](#performance-optimization)
-9. [CI/CD Pipeline](#cicd-pipeline)
-10. [Scaling](#scaling)
-11. [Cost Optimization](#cost-optimization)
-12. [Troubleshooting](#troubleshooting)
+5. [Security](#security)
+6. [Monitoring and Observability](#monitoring-and-observability)
+7. [Performance Optimization](#performance-optimization)
+8. [CI/CD Pipeline](#cicd-pipeline)
+
+Horizontal scaling is covered under [Kubernetes Deployment](#kubernetes-deployment); for Vertex AI Agent Engine deployment see the [Python production guide](/google-adk-guide/python/google_adk_production_guide/#production-deployment-patterns).
 
 ---
 

@@ -8,7 +8,7 @@ language: dotnet
 # Microsoft Agent Framework Advanced (.NET)
 
 
-Latest: 1.1.0
+Latest: Microsoft.Agents.AI 1.1.0 | Updated: April 2026
 Upstream: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.Agents.Persistent | https://learn.microsoft.com/dotnet/api/overview/azure/ai.agents.persistent-readme
 
 ## Topics

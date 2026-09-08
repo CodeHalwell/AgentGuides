@@ -18,13 +18,9 @@ language: typescript
 3. [Security Best Practices](#security-best-practices)
 4. [Database and Persistence](#database-and-persistence)
 5. [Monitoring and Observability](#monitoring-and-observability)
-6. [Error Handling and Recovery](#error-handling-and-recovery)
-7. [Deployment Patterns](#deployment-patterns)
-8. [Scaling Considerations](#scaling-considerations)
-9. [Cost Optimisation](#cost-optimisation)
-10. [Testing Strategies](#testing-strategies)
-11. [CI/CD Integration](#cicd-integration)
-12. [LangGraph Studio Setup](#langgraph-studio-setup)
+6. [Deployment Patterns](#deployment-patterns)
+
+For token and latency budgets see [Performance Optimisation](#performance-optimisation) above; for tracing detail see [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/).
 
 ---
 

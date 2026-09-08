@@ -10,7 +10,7 @@ language: dotnet
 This document provides a collection of practical, copy-paste-ready C# recipes for building common agentic patterns with the Microsoft Agent Framework for .NET.
 
 **Target Platform:** .NET 8.0+  
-**Framework Version:** 1.0+
+**Framework Version:** Microsoft.Agents.AI 1.1.0
 
 ---
 

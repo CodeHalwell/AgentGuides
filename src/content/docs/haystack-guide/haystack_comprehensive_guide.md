@@ -4,7 +4,7 @@ description: "2026 Update: Production-Ready Agentic Workflows"
 framework: haystack
 ---
 
-Latest: 2.30.0 | Updated: June 4, 2026
+Latest: haystack-ai 2.30.0 | Updated: June 4, 2026
 # Haystack Comprehensive Technical Guide: From Fundamentals to Expert-Level Agentic AI
 
 **2026 Update: Production-Ready Agentic Workflows**
@@ -21,116 +21,32 @@ Haystack 2.x has evolved into the premier framework for building **production-gr
 
 ## Table of Contents
 
-1. [Part I: Core Fundamentals](#part-i-core-fundamentals)
-   - Installation and Setup
-   - Haystack 2.x Architecture Overview
-   - Components and Pipelines
-   - Agent Concepts and Paradigms
-   - Provider-Agnostic Design Philosophy
-   - Configuration Patterns and Best Practices
+1. [2026 Features Overview](#2026-features-overview)
+   - [Agentic AI Workflows: Production-First Design](#agentic-ai-workflows-production-first-design)
 
-2. [Part II: Simple Agents](#part-ii-simple-agents)
-   - Creating Agents with the Agent Class
-   - Tool Integration and Function Calling
-   - Single-Purpose Agents
-   - Conversational Agents with Memory
-   - Agent Configuration and Customisation
-   - Error Handling and Resilience
+2. [Part I: Core Fundamentals](#part-i-core-fundamentals)
+   - [Installation and Setup](#installation-and-setup)
+   - [Haystack 2.x Architecture Overview](#haystack-2x-architecture-overview)
+   - [Components and Pipelines](#components-and-pipelines)
+   - [Agent Concepts in Haystack](#agent-concepts-in-haystack)
+   - [Provider-Agnostic Design Philosophy](#provider-agnostic-design-philosophy)
+   - [Configuration Patterns and Best Practices](#configuration-patterns-and-best-practices)
 
-3. [Part III: Multi-Agent Systems](#part-iii-multi-agent-systems)
-   - Multi-Agent Pipeline Design Patterns
-   - Agent Coordination and Communication
-   - Router and Dispatcher Components
-   - Conditional Routing and Flow Control
-   - Parallel Execution and Concurrency
-   - Agent Collaboration Patterns
+3. [Part II: Simple Agents](#part-ii-simple-agents)
+   - [Creating Agents with the Agent Class](#creating-agents-with-the-agent-class)
+   - [Tool Integration and Function Calling](#tool-integration-and-function-calling)
+   - [Single-Purpose Agents](#single-purpose-agents)
+   - [Conversational Agents with Memory](#conversational-agents-with-memory)
+   - [Agent Configuration and Customisation](#agent-configuration-and-customisation)
+   - [Error Handling and Resilience](#error-handling-and-resilience)
 
-4. [Part IV: Tools Integration](#part-iv-tools-integration)
-   - Tool Components Architecture
-   - Custom Tool Creation
-   - OpenAPI Tool Integration
-   - Function Calling Mechanisms
-   - Tool Validation and Verification
-   - Error Recovery Strategies
+4. [Part III: Multi-Agent Systems](#part-iii-multi-agent-systems)
+   - [Multi-Agent Pipeline Design Patterns](#multi-agent-pipeline-design-patterns)
+   - [SearchableToolset (v2.21.0+)](#searchabletoolset-v2210)
+   - [LLMRanker (v2.22.0+)](#llmranker-v2220)
+   - [ToolInvoker](#toolinvoker)
 
-5. [Part V: Structured Output and Validation](#part-v-structured-output-and-validation)
-   - Output Adapters and Transformation
-   - Schema Validation Framework
-   - JSON Output Generation
-   - Pydantic Integration
-   - Custom Output Formats
-   - Parsing Strategies and Error Handling
-
-6. [Part VI: Model Context Protocol (MCP)](#part-vi-model-context-protocol-mcp)
-   - MCP in Haystack Ecosystem
-   - Custom MCP Component Development
-   - Tool Exposure Through MCP
-   - Context Management
-   - Integration Patterns
-
-7. [Part VII: Agentic Patterns](#part-vii-agentic-patterns)
-   - ReAct Agent Loops and Reasoning Chains
-   - Planning Components and Goal Decomposition
-   - Self-Correction Mechanisms
-   - Multi-Step Reasoning Frameworks
-   - Reflection Patterns
-   - Autonomous Workflows
-
-8. [Part VIII: Memory Systems](#part-viii-memory-systems)
-   - Conversation Memory Components
-   - Document Stores for Memory Management
-   - Memory Retrievers
-   - Session Management
-   - Persistent Memory Infrastructure
-   - Custom Memory Store Implementation
-
-9. [Part IX: Document Stores](#part-ix-document-stores)
-   - Supported Store Types
-   - Configuration and Initialisation
-   - Indexing Strategies
-   - Retrieval Methods and Query Execution
-   - Hybrid Search Techniques
-   - Filters, Metadata, and Advanced Queries
-
-10. [Part X: Pipelines](#part-x-pipelines)
-    - Pipeline Creation and Composition
-    - Component Connections
-    - Conditional Branching
-    - Loops in Pipelines
-    - Error Handling in Pipeline Execution
-    - Pipeline Visualisation and Debugging
-
-11. [Part XI: Retrievers and Generators](#part-xi-retrievers-and-generators)
-    - Retriever Components and Types
-    - Generator Components
-    - RAG Pipeline Construction
-    - Prompt Builders and Templates
-    - Output Validation
-    - Streaming Responses
-
-12. [Part XII: Context Engineering](#part-xii-context-engineering)
-    - PromptBuilder Component Deep Dive
-    - Dynamic Prompt Construction
-    - Template Management
-    - Context Optimisation
-    - Few-Shot Learning Examples
-    - Prompt Versioning and Rollbacks
-
-13. [Part XIII: Observability and Monitoring](#part-xiii-observability-and-monitoring)
-    - Tracing and Logging Infrastructure
-    - Component Instrumentation
-    - Pipeline Monitoring
-    - Performance Metrics Collection
-    - Custom Tracers
-    - Integration with Observability Platforms
-
-14. [Part XIV: Advanced Topics](#part-xiv-advanced-topics)
-    - Custom Components Development
-    - Component Testing and Validation
-    - Pipeline Optimisation Techniques
-    - Provider Switching
-    - Evaluation Pipelines
-    - CI/CD Integration
+**Continue elsewhere in this guide:** [Multi-agent systems](/haystack-guide/haystack_multi_agent_guide/) for coordination and communication patterns · [Advanced agents](/haystack-guide/haystack_advanced_agents_python/) for custom components · [Observability](/haystack-guide/haystack_observability_python/) for tracing and metrics · [Production guide](/haystack-guide/haystack_production_guide/) for deployment, scaling and caching · [Recipes](/haystack-guide/haystack_recipes/) for end-to-end examples.
 
 ---
 
@@ -550,7 +466,7 @@ Haystack is available on PyPI and can be installed using pip. The main package `
 pip install haystack-ai
 
 # Installation with specific version
-pip install haystack-ai==2.16.0
+pip install haystack-ai==2.30.0
 
 # Installation with extras (includes common integrations)
 pip install haystack-ai[all]

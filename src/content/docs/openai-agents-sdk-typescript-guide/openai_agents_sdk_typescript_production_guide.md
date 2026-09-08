@@ -21,8 +21,6 @@ framework: openai-agents-sdk-typescript
 6. [Scaling Strategies](#scaling-strategies)
 7. [Multi-Tenancy](#multi-tenancy)
 8. [Testing Strategies](#testing-strategies)
-9. [CI/CD Integration](#cicd-integration)
-10. [Database Integration](#database-integration)
 
 ---
 

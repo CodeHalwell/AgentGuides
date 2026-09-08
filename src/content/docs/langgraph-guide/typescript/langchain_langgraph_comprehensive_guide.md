@@ -5,7 +5,7 @@ framework: langgraph
 language: typescript
 ---
 
-Latest: 1.3.5 | Updated: June 5, 2026
+Latest: @langchain/langgraph 1.3.5 | Updated: June 5, 2026
 # LangChain.js and LangGraph.js Comprehensive Technical Guide
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
@@ -20,22 +20,16 @@ Latest: 1.3.5 | Updated: June 5, 2026
 4. [Multi-Agent Systems](#multi-agent-systems)
 5. [Tools Integration](#tools-integration)
 6. [Structured Output](#structured-output)
-7. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-8. [Agentic Patterns](#agentic-patterns)
-9. [Memory Systems (LangChain.js)](#memory-systems-langchainjs)
-10. [State Management (LangGraph.js)](#state-management-langgraphjs)
-11. [LangGraph Checkpointing](#langgraph-checkpointing)
-12. [Conditional Logic (LangGraph.js)](#conditional-logic-langgraphjs)
-13. [Context Engineering](#context-engineering)
-14. [Retrieval-Augmented Generation (RAG)](#retrieval-augmented-generation-rag)
-15. [Human-in-the-Loop (LangGraph.js)](#human-in-the-loop-langgraphjs)
-16. [LangGraph Studio](#langgraph-studio)
-17. [Streaming](#streaming)
-18. [Chains and Sequences](#chains-and-sequences)
-19. [Callbacks and Tracing](#callbacks-and-tracing)
-20. [TypeScript Patterns](#typescript-patterns)
-21. [Deployment Patterns](#deployment-patterns)
-22. [Advanced Topics](#advanced-topics)
+7. [Type-Safe `.stream()` Method (v0.3+)](#type-safe-stream-method-v03)
+8. [`.addNode()` and `.addSequence()` Methods](#addnode-and-addsequence-methods)
+9. [Node Caching](#node-caching)
+10. [Deferred Nodes](#deferred-nodes)
+11. [Pre/Post Model Hooks](#prepost-model-hooks)
+12. [Cross-Thread Memory Support](#cross-thread-memory-support)
+13. [New Type Utilities (v1.2.x)](#new-type-utilities-v12x)
+14. [New APIs in v1.3.0](#new-apis-in-v130)
+
+**Continue elsewhere in this guide:** [Middleware](/langgraph-guide/typescript/langgraph_middleware_typescript/) · [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/) for tracing and metrics · [Streaming server (Express)](/langgraph-guide/typescript/langgraph_streaming_server_express/) · [Production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/) for deployment, security and persistence · [Recipes](/langgraph-guide/typescript/langchain_langgraph_recipes/) for RAG, supervisors and human-in-the-loop.
 
 ---
 
@@ -1448,8 +1442,6 @@ const createAgentAtLevel = (
 ```
 
 ---
-
-[Continuing with remaining sections...]
 
 ## Tools Integration
 
@@ -5057,18 +5049,3 @@ async function myNode(state: { messages: BaseMessage[] }) {
 | 1.2.9 | April 19, 2026 | Stability improvements and bug fixes following 1.2.8 |
 | 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type; `createReactAgent` moved to `@langgraphjs/toolkit` |
 | 1.0.2 | November 2025 | Previous documented version |
-
----
-
-## Continuation
-
-Document continues with remaining v1.0+ features:
-
-- **Tools State Updates** - Tools can directly update graph state
-- **Command Tool** - Dynamic agent flows
-- **LangGraph Templates** - Common agentic use cases
-
----
-
-**End of Core v1.0+ Features** - Additional documentation in subsequent files.
-

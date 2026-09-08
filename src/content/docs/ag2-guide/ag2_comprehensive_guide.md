@@ -4,7 +4,7 @@ description: "Version: 0.13.3 Last Updated: June 2026 Focus: Modern AutoGen (AG2
 framework: ag2
 ---
 
-Latest: 0.13.3 | Updated: June 7, 2026
+Latest: ag2 0.13.3 | Updated: June 7, 2026
 # AG2 (AutoGen) Comprehensive Guide
 
 **Version:** 0.13.3

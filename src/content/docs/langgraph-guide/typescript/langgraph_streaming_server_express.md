@@ -7,7 +7,7 @@ language: typescript
 
 # LangGraph Streaming Server (Express)
 
-Latest: 1.0.2
+Latest: @langchain/langgraph 1.3.5 | Updated: June 5, 2026
 Last verified: 2025-11
 
 ```ts

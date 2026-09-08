@@ -1,14 +1,13 @@
 ---
 title: "Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide"
-description: "Latest: SK Python 1.41.3 / .NET 1.74.0 | Updated: April 2026"
+description: "Language-neutral Semantic Kernel reference — core concepts, agents, plugins, planners, memory and Azure integration across Python and .NET."
 framework: semantic-kernel
 ---
 
-Latest: SK Python 1.41.3 / .NET 1.74.0 | Updated: April 2026
+Latest: semantic-kernel 1.43.0 (Python) / Microsoft.SemanticKernel 1.74.0 (.NET) | Updated: June 4, 2026
 # Semantic Kernel: From Fundamentals to Expert Level - Comprehensive Technical Guide
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
+**Last updated:** June 2026  
 **Scope:** Installation, Core Concepts, Agents, Plugins, Planners, Memory, Azure Integration, Cross-Platform Implementation
 
 ---

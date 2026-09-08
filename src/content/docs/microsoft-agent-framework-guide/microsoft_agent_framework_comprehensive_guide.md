@@ -20,15 +20,8 @@ framework: microsoft-agent-framework
 2. [Core Fundamentals](#core-fundamentals)
 3. [Simple Agents](#simple-agents)
 4. [Multi-Agent Systems](#multi-agent-systems)
-5. [Tools Integration](#tools-integration)
-6. [Structured Output](#structured-output)
-7. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-8. [Agentic Patterns](#agentic-patterns)
-9. [Memory Systems](#memory-systems)
-10. [Context Engineering](#context-engineering)
-11. [Copilot Studio Integration](#copilot-studio-integration)
-12. [Azure AI Integration](#azure-ai-integration)
-13. [Semantic Kernel Integration](#semantic-kernel-integration)
+
+This page is the language-neutral overview. Tools, structured output, MCP, memory, context engineering and the Azure/Copilot Studio integrations are covered per language in the [Python guide](/microsoft-agent-framework-guide/python/) and the [.NET guide](/microsoft-agent-framework-guide/dotnet/), and across both in the [A2A protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/), [graph workflows & declarative agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) and [enterprise](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/) pages.
 
 ---
 
@@ -1318,23 +1311,19 @@ deployment_config = {
 
 ---
 
-## Document Structure Continuation
+## Where to go next
 
-This comprehensive guide continues with detailed sections on:
+Tools, structured output, MCP, agentic patterns, memory and context engineering are documented per language:
 
-- **Tools Integration:** Complete tool definition, built-in Azure tools, custom tool creation
-- **Structured Output:** Schema definition, type-safe responses, error handling
-- **Model Context Protocol:** MCP servers, tool standards, resource management
-- **Agentic Patterns:** Planning, reasoning, autonomous decision-making
-- **Memory Systems:** Unified API, persistent and vector memory
-- **Context Engineering:** Propagation, optimization, multi-tenant isolation
-- **Copilot Studio Integration:** Creation, publishing, analytics
-- **Azure AI Integration:** Service configuration, cost optimisation
+- **Python** — [guide overview](/microsoft-agent-framework-guide/python/), [tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/), [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/), [orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/), [sessions](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/)
+- **.NET** — [guide overview](/microsoft-agent-framework-guide/dotnet/), [comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/)
 
-See the companion documents for:
-- **microsoft_agent_framework_diagrams.md** - Architecture visualisations
-- **microsoft_agent_framework_production_guide.md** - Deployment and scaling
-- **microsoft_agent_framework_recipes.md** - Production code patterns
+Cross-cutting, language-neutral material lives in:
+
+- [Architecture diagrams](/microsoft-agent-framework-guide/microsoft_agent_framework_diagrams/)
+- [Production guide](/microsoft-agent-framework-guide/microsoft_agent_framework_production_guide/) — deployment and scaling
+- [Recipes](/microsoft-agent-framework-guide/microsoft_agent_framework_recipes/) — production code patterns
+- [A2A protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/) · [Graph workflows & declarative agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) · [Enterprise](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/)
 
 ---
 

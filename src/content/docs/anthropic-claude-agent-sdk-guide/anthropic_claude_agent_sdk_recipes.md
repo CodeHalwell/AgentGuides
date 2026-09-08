@@ -431,7 +431,7 @@ reviewCode({
 
 ### Recipe 9: Test Case Generator Agent
 
-```python
+````python
 # Python - Generate test cases for code
 import asyncio
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -489,7 +489,7 @@ def calculate_discount(price, quantity):
     print("Test Cases:\n", test_cases)
 
 asyncio.run(main())
-```
+````
 
 ---
 

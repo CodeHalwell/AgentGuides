@@ -4,7 +4,7 @@ description: "> Exhaustive Reference for Building, Deploying, and Scaling Produc
 framework: anthropic-claude-agent-sdk
 ---
 
-Latest: 0.2.91 | Updated: June 5, 2026
+Latest: claude-agent-sdk 0.2.93 | Updated: June 7, 2026
 # Anthropic Claude Agent SDK - Comprehensive Technical Guide
 
 > **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
@@ -141,7 +141,7 @@ source venv/bin/activate
 pip install --upgrade pip
 
 # Install Claude Agent SDK
-pip install claude-agent-sdk  # Latest stable release (0.2.91)
+pip install claude-agent-sdk  # Latest stable release (0.2.93)
 
 # Install recommended dependencies
 pip install python-dotenv pydantic aiohttp

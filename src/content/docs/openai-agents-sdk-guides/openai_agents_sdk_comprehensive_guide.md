@@ -4,7 +4,7 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: 0.17.4 | Updated: May 27, 2026
+Latest: openai-agents 0.17.4 | Updated: May 27, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
@@ -38,7 +38,7 @@ A complete reference for building production-ready multi-agent AI applications w
 The OpenAI Agents SDK requires Python 3.10 or newer and can be installed via pip:
 
 ```bash
-pip install openai-agents>=0.14.1
+pip install openai-agents>=0.17.4
 ```
 
 > **Requirements:** `openai>=2.0.0` is required (breaking change from v1.x — see [Breaking Changes](#breaking-changes-in-v014x) below). Python 3.9 has been dropped; minimum supported version is Python 3.10.

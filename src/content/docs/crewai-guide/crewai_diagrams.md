@@ -1,6 +1,6 @@
 ---
 title: "CrewAI Architecture and Workflow Diagrams"
-description: "1. Architecture Overview 2. Agent Lifecycle 3. Process Flows 4. Task Execution Patterns 5. Collaboration Patterns 6. Memory Systems 7. Tool Integration"
+description: "Architecture and flow diagrams for CrewAI — agent lifecycle, process flows, task execution, collaboration, memory and tools."
 framework: crewai
 ---
 

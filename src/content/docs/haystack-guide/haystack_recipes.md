@@ -1,6 +1,6 @@
 ---
 title: "Haystack Recipes: Production-Ready Use Cases and Examples"
-description: "1. Knowledge Base Question Answering System 2. Multi-Tenant Customer Support Agent 3. Document Analysis and Summarisation Pipeline 4. Real-Time Data Retrieval Agent 5. Multi-Agent"
+description: "Production-ready Haystack pipelines — knowledge-base Q&A, multi-tenant support, document analysis, real-time retrieval and multi-agent collaboration."
 framework: haystack
 ---
 
@@ -14,10 +14,7 @@ framework: haystack
 4. [Real-Time Data Retrieval Agent](#real-time-data-retrieval-agent)
 5. [Multi-Agent Collaboration System](#multi-agent-collaboration-system)
 6. [Autonomous Research Agent](#autonomous-research-agent)
-7. [Content Generation Pipeline](#content-generation-pipeline)
-8. [Anomaly Detection and Reporting](#anomaly-detection-and-reporting)
-9. [Conversational Code Assistant](#conversational-code-assistant)
-10. [Enterprise Knowledge Management](#enterprise-knowledge-management)
+7. [Conversational Code Assistant](#conversational-code-assistant)
 
 ---
 

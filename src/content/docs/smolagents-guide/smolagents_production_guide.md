@@ -22,8 +22,6 @@ framework: smolagents
 8. [Scaling Strategies](#scaling-strategies)
 9. [Testing & Quality Assurance](#testing--quality-assurance)
 10. [Observability Integration (Weights & Biases Weave)](#observability-integration-weights--biases-weave)
-11. [Incident Response](#incident-response)
-12. [Migration Strategies](#migration-strategies)
 
 ---
 

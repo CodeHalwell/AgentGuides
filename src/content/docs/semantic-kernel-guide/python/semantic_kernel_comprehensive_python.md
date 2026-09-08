@@ -5,7 +5,7 @@ framework: semantic-kernel
 language: python
 ---
 
-Latest: 1.43.0 | Updated: June 4, 2026
+Latest: semantic-kernel 1.43.0 | Updated: June 4, 2026
 # Semantic Kernel Comprehensive Guide (Python)
 
 **Complete Python Reference for Building AI Agents and Agentic Systems**
@@ -37,7 +37,7 @@ Install note: v1.43.0 requires pre-release resolution (`pip install --pre semant
 16. [MCP Client Implementation](#16-mcp-client-implementation)
 17. [MCP Server Creation](#17-mcp-server-creation)
 18. [Google A2A Protocol Integration - 2025](#18-google-a2a-protocol-integration---2025)
-19. [Microsoft Agent Framework Integration - 2025](#19-microsoft-agent-framework-integration---2025)
+19. [Microsoft Agent Framework Integration - 2026](#19-microsoft-agent-framework-integration---2026)
 20. [Structured Output & Validation](#20-structured-output--validation)
 21. [Error Handling & Resilience](#21-error-handling--resilience)
 22. [Observability & Telemetry](#22-observability--telemetry)

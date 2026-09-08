@@ -7,7 +7,7 @@ framework: haystack
 # Haystack Observability & Error Recovery (Python)
 
 
-Latest: 2.27.0 | Updated: April 2026
+Latest: haystack-ai 2.30.0 | Updated: June 4, 2026
 Upstream: https://github.com/deepset-ai/haystack/releases | https://haystack.deepset.ai/release-notes
 
 ## Pipelines

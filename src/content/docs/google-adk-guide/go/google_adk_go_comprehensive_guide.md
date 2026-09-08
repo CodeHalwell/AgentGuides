@@ -26,21 +26,15 @@ License: Apache 2.0
 5. [LLMAgent](#llmagent)
 6. [Agent Orchestration](#agent-orchestration)
 7. [Tools System](#tools-system)
-8. [Model Integration](#model-integration)
-9. [Runner and Execution](#runner-and-execution)
-10. [Session Management](#session-management)
-11. [Memory System](#memory-system)
-12. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-13. [Agent2Agent (A2A) Protocol](#agent2agent-a2a-protocol)
-14. [Server and API](#server-and-api)
-15. [Artifacts](#artifacts)
-16. [Telemetry](#telemetry)
-17. [Go Idioms and Patterns](#go-idioms-and-patterns)
-18. [Context Handling](#context-handling)
-19. [Error Handling](#error-handling)
-20. [Goroutine Patterns](#goroutine-patterns)
-21. [Testing](#testing)
-22. [Best Practices](#best-practices)
+8. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+9. [Agent2Agent (A2A) Protocol](#agent2agent-a2a-protocol)
+10. [Go Idioms and Patterns](#go-idioms-and-patterns) — context handling, error handling, goroutine patterns
+11. [Session Management](#session-management)
+12. [Testing](#testing)
+13. [Best Practices](#best-practices)
+14. [What's New in v1.0.0 GA](#whats-new-in-v100-ga)
+
+For deployment, telemetry and Vertex AI Agent Engine, continue in the [production guide](/google-adk-guide/go/google_adk_go_production_guide/); for task-shaped examples see the [recipes](/google-adk-guide/go/google_adk_go_recipes/).
 
 ---
 

@@ -5,7 +5,7 @@ framework: autogen
 language: python
 ---
 
-Latest: 0.11.5 | Updated: April 2026
+Latest: ag2 0.13.3 (autogen-agentchat 0.11.5) | Updated: June 7, 2026
 # AG2 (AutoGen 2.0) - Comprehensive Technical Guide
 
 **A Beginner-to-Expert Tutorial for Building Autonomous Multi-Agent AI Systems with AG2, The Next Generation of AutoGen**

@@ -8,7 +8,7 @@ language: typescript
 # LangGraph Observability and Monitoring (TypeScript)
 
 
-Latest: 1.0.2
+Latest: @langchain/langgraph 1.3.5 | Updated: June 5, 2026
 Upstream: https://github.com/langchain-ai/langgraph
 
 ## Tracing

@@ -14,14 +14,10 @@ A collection of practical, production-ready recipes and patterns for implementin
 
 1. [Customer Support Agent](#customer-support-agent)
 2. [Multi-Agent Customer Service System](#multi-agent-customer-service-system)
-3. [Financial Analytics Agent](#financial-analytics-agent)
-4. [Document Processing Pipeline](#document-processing-pipeline)
-5. [Real-Time Inventory Management](#real-time-inventory-management)
-6. [Claims Processing Agent](#claims-processing-agent)
-7. [Research and Analysis Agent](#research-and-analysis-agent)
-8. [HR and Employee Assistance](#hr-and-employee-assistance)
-9. [Code Generation and Debugging](#code-generation-and-debugging)
-10. [IoT Data Analysis](#iot-data-analysis)
+3. [Multi-Agent System with A2A Protocol](#multi-agent-system-with-a2a-protocol)
+4. [Financial Analytics Agent](#financial-analytics-agent)
+5. [Data Analysis Agent with Code Interpretation](#data-analysis-agent-with-code-interpretation)
+6. [Document Processing Pipeline](#document-processing-pipeline)
 
 ---
 

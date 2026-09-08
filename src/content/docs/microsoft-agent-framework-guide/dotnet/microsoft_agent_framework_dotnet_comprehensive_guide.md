@@ -1,15 +1,15 @@
 ---
 title: "Microsoft Agent Framework .NET - Comprehensive Technical Guide"
-description: "Release: October 2025 Framework Version: 1.0+ Target Platform: .NET 8.0+"
+description: "Comprehensive .NET reference for Microsoft.Agents.AI 1.1.0 — ChatClientAgent, multi-agent orchestration, tools, MCP and Azure integration."
 framework: microsoft-agent-framework
 language: dotnet
 ---
 
-Latest: 1.1.0
+Latest: Microsoft.Agents.AI 1.1.0 | Updated: April 2026
 # Microsoft Agent Framework .NET - Comprehensive Technical Guide
 
 **Release:** October 2025  
-**Framework Version:** 1.0+  
+**Framework Version:** Microsoft.Agents.AI 1.1.0  
 **Target Platform:** .NET 8.0+
 
 ---
