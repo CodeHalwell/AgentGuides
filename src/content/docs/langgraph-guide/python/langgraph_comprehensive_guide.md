@@ -336,7 +336,7 @@ def fetch_user_context(state: State):
 
 def call_model(state: State):
     """Call LLM with messages."""
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-5")
     
     system_prompt = f"You're helping {state['user_name']}. Be concise."
     
@@ -415,7 +415,7 @@ def solve_math(state: State) -> dict:
 
 def general_response(state: State) -> dict:
     """Handle general queries."""
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-5")
     response = model.invoke(state["query"])
     return {"result": response.content}
 
@@ -852,7 +852,7 @@ def send_email(to: str, subject: str, body: str) -> str:
 tools = [get_weather, get_stock_price, send_email]
 
 # Create model with tools
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5")
 model_with_tools = model.bind_tools(tools)
 
 class ToolState(TypedDict):

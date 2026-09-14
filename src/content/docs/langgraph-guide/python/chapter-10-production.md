@@ -481,7 +481,7 @@ def my_tool(x: str) -> str:
     return x
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[my_tool],
 )
 ```

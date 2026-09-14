@@ -32,7 +32,7 @@ from langchain_core.messages import SystemMessage
 
 # Construct the model ONCE at module scope — reusing across node calls avoids
 # unnecessary client-creation overhead in production.
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5")
 
 def call_model(state: MessagesState) -> dict:
     """Call the LLM with the full message history."""
@@ -94,7 +94,7 @@ class State(TypedDict):
     query_type: str
     result: str
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5")
 
 
 def classify_query(state: State) -> dict:
@@ -219,7 +219,7 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[get_weather, convert_currency],
     checkpointer=InMemorySaver(),
     prompt="You are a helpful travel assistant. Answer concisely.",
@@ -294,7 +294,7 @@ def calculator(expression: str) -> str:
         return f"Error: {e}"
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([search, calculator])
+model = ChatAnthropic(model="claude-sonnet-5").bind_tools([search, calculator])
 
 
 def agent_node(state: MessagesState) -> dict:
@@ -351,7 +351,7 @@ def multiply(a: float, b: float) -> float:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[multiply],
 )
 

@@ -106,7 +106,7 @@ def trim_to_last_n(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[],
     pre_model_hook=trim_to_last_n,
 )
@@ -125,7 +125,7 @@ def inject_system_prompt(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[],
     pre_model_hook=inject_system_prompt,
 )
@@ -205,7 +205,7 @@ def truncate_long_messages(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[],
     pre_model_hook=truncate_long_messages,
 )
@@ -244,7 +244,7 @@ def log_token_usage(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[],
     post_model_hook=log_token_usage,
 )
@@ -283,7 +283,7 @@ class CostTracker:
 tracker = CostTracker()
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[],
     post_model_hook=tracker,
 )
@@ -310,7 +310,7 @@ def guard_empty_response(state: dict) -> dict | Command:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[],
     post_model_hook=guard_empty_response,
 )
@@ -352,7 +352,7 @@ def post_hook(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    model=ChatAnthropic(model="claude-sonnet-5"),
     tools=[get_weather],
     pre_model_hook=pre_hook,
     post_model_hook=post_hook,
@@ -673,7 +673,7 @@ def get_stock_price(ticker: str) -> str:
     return f"{ticker}: ${prices[ticker]}"
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([get_stock_price])
+model = ChatAnthropic(model="claude-sonnet-5").bind_tools([get_stock_price])
 
 tool_node = ToolNode(
     tools=[get_stock_price],
@@ -841,7 +841,7 @@ def invoke_once(user_message: str) -> str:
     """Build a fresh agent (and fresh budget) for each independent request."""
     budget = TokenBudget()   # brand-new counter for this request only
     agent = create_react_agent(
-        model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+        model=ChatAnthropic(model="claude-sonnet-5"),
         tools=[search_docs, send_alert],
         pre_model_hook=enforce_system_prompt,
         post_model_hook=budget,
@@ -878,7 +878,7 @@ def send_alert(message: str) -> str:
     return "Alert sent."
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([search_docs, send_alert])
+model = ChatAnthropic(model="claude-sonnet-5").bind_tools([search_docs, send_alert])
 
 
 def call_model(state: MessagesState) -> dict:
