@@ -886,10 +886,11 @@ def fallback_handler(state: MessagesState, error: NodeError) -> dict:
 
 tool_node = ToolNode(
     tools=[search_docs, send_alert],
-    # handle_tool_errors=True catches tool exceptions inside ToolNode and converts them
-    # to ToolMessages before returning. This means tool errors are NEVER seen by the
-    # graph's RetryPolicy — only errors from call_model can trigger graph-level retries.
-    handle_tool_errors=True,
+    # format_error (defined above) returns only the exception type name, avoiding leakage
+    # of internal URLs or stack traces into ToolMessage content visible to the model.
+    # Tool errors handled here are NEVER seen by the graph's RetryPolicy — only errors
+    # from call_model can trigger graph-level retries.
+    handle_tool_errors=format_error,
 )
 
 builder = StateGraph(MessagesState)

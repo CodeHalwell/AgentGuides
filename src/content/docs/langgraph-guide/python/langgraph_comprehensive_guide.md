@@ -4782,12 +4782,15 @@ def create_react_agent(
   add_messages], "remaining_steps": NotRequired[RemainingSteps]}`; a custom
   `state_schema` must include a `remaining_steps` field or `create_react_agent`
   raises `ValueError`.
-- `AgentState`, `AgentStatePydantic`, `AgentStateWithStructuredResponse` were
-  removed — they are **not** in `langchain.agents`. Migrate to `response_format=`
-  instead of a custom structured-response state class, or a hand-written
-  `TypedDict`/Pydantic model with the same two fields for a custom `state_schema`.
+- `AgentState`, `AgentStatePydantic`, `AgentStateWithStructuredResponse` are
+  **deprecated** and no longer re-exported from `langgraph.prebuilt.__init__`, but
+  remain importable from `langgraph.prebuilt.chat_agent_executor`. Migrate to
+  `response_format=` instead of a custom structured-response state class, or a
+  hand-written `TypedDict`/Pydantic model with the same two fields for a custom
+  `state_schema`.
 - `ValidationNode` (schema-only tool-argument validator, no execution) is also
-  removed. **There is no drop-in schema-only replacement.** `ToolNode`
+  **deprecated** (since v1.0, planned removal in v2.0.0) but still importable from
+  `langgraph.prebuilt.tool_validator`. **There is no drop-in schema-only replacement.** `ToolNode`
   **executes** valid tool calls after schema validation — callers that relied on
   `ValidationNode` to validate without side effects cannot use `ToolNode` as a
   direct substitute. Two migration paths:
