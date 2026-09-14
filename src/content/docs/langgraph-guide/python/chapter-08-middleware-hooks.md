@@ -104,13 +104,32 @@ from langchain_core.messages import SystemMessage, HumanMessage
 MAX_INPUT_CHARS = 12_000
 
 def truncate_long_messages(state: dict) -> dict:
-    """Hard truncate message content that exceeds a per-message character cap."""
+    """Hard truncate message content that exceeds a per-message character cap.
+
+    Handles both string content and block-based (multimodal) content so the cap
+    applies regardless of how a message was constructed.
+    """
     updated = []
     for msg in state.get("messages", []):
-        if hasattr(msg, "content") and isinstance(msg.content, str):
-            if len(msg.content) > MAX_INPUT_CHARS:
-                truncated = msg.content[:MAX_INPUT_CHARS] + " [truncated]"
-                msg = msg.model_copy(update={"content": truncated})
+        if not hasattr(msg, "content"):
+            updated.append(msg)
+            continue
+        content = msg.content
+        if isinstance(content, str):
+            if len(content) > MAX_INPUT_CHARS:
+                msg = msg.model_copy(update={"content": content[:MAX_INPUT_CHARS] + " [truncated]"})
+        elif isinstance(content, list):
+            # Block-based content (e.g. Anthropic multimodal messages).
+            # Each block is either a plain string or a dict with a "text" key.
+            new_blocks = []
+            for block in content:
+                if isinstance(block, str) and len(block) > MAX_INPUT_CHARS:
+                    block = block[:MAX_INPUT_CHARS] + " [truncated]"
+                elif isinstance(block, dict) and isinstance(block.get("text"), str):
+                    if len(block["text"]) > MAX_INPUT_CHARS:
+                        block = {**block, "text": block["text"][:MAX_INPUT_CHARS] + " [truncated]"}
+                new_blocks.append(block)
+            msg = msg.model_copy(update={"content": new_blocks})
         updated.append(msg)
     return {"llm_input_messages": updated}
 
