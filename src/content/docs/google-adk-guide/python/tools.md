@@ -1284,42 +1284,33 @@ analyst = LlmAgent(
 )
 ```
 
-**Filter operations** with `tool_filter` (controls which BQ tools are exposed) or **restrict datasets** with `dataset_filter`:
+**Filter operations** with `tool_filter` (controls which BQ tool functions are exposed to the agent):
 
 ```python
 from google.adk.tools.bigquery import BigQueryToolset
 from google.adk.agents import LlmAgent
 
-# Expose only SQL execution and dataset listing — agent can still access any dataset
+# Expose only SQL execution and dataset listing tools
 bq_tools = BigQueryToolset(
     tool_filter=["bigquery_execute_sql", "bigquery_list_dataset_ids"],
-)
-
-# Restrict to specific datasets — agent cannot query outside these
-bq_tools_scoped = BigQueryToolset(
-    dataset_filter=["my_project.sales", "my_project.inventory"],
 )
 
 agent = LlmAgent(
     name="sales_analyst",
     model="gemini-2.5-pro",
     instruction="Run SQL against the sales dataset only.",
-    tools=[bq_tools_scoped],
+    tools=[bq_tools],
 )
 ```
 
-`BigQueryToolset` follows the same `credentials_config` pattern as other GCP toolsets — pass a `BigQueryCredentialsConfig` to use a service account or external credentials:
+> **Dataset access control** — `tool_filter` limits which operations the agent can call, but does not restrict which datasets those operations may reach. To enforce dataset-level boundaries, use BigQuery IAM roles (e.g. grant the service account `roles/bigquery.dataViewer` on specific datasets only) or authorized views. Pass the ADK agent a `BigQueryToolset` configured with service account credentials that have only the required dataset permissions.
+
+`BigQueryToolset` accepts a `credentials_config` argument for passing explicit service account credentials or an external token rather than relying on ADC. The exact import path for `BigQueryCredentialsConfig` varies between minor releases — use:
 
 ```python
 from google.adk.tools.bigquery import BigQueryToolset
-from google.adk.tools.bigquery.config import BigQueryCredentialsConfig
-
-bq_tools = BigQueryToolset(
-    credentials_config=BigQueryCredentialsConfig(
-        project_id="my-gcp-project",
-        # credentials=... or external_access_token_key="..." for non-ADC auth
-    )
-)
+# Import BigQueryCredentialsConfig from whichever submodule your installed version exposes;
+# check `python -c "import google.adk.tools.bigquery; help(BigQueryToolset)"` for the constructor.
 ```
 
 > Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.

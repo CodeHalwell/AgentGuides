@@ -154,14 +154,14 @@ wf = Workflow(name="two_pass", edges=[(START, node_a, node_b)])
 from google.adk.workflow import Workflow, node, START
 
 @node
-def validate(text: str) -> str:
-    if not text.strip():
+def validate(node_input: str) -> str:
+    if not node_input.strip():
         raise ValueError("empty input")
-    return text
+    return node_input
 
 @node
-def publish(text: str) -> dict:
-    return {"published": True, "content": text}
+def publish(node_input: str) -> dict:
+    return {"published": True, "content": node_input}
 
 # Inner pipeline — reusable unit
 inner = Workflow(
