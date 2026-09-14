@@ -466,21 +466,29 @@ Send("slow_node", {"data": payload}, timeout=30.0)
 
 ---
 
-## `create_react_agent` Migration Notice
+## `create_react_agent` — current recommended factory
 
-`create_react_agent` from `langgraph.prebuilt` is **deprecated** since langgraph 1.2.x. The replacement is `create_agent` from the `langchain` package:
+`create_react_agent` from `langgraph.prebuilt` is **not deprecated** in langgraph 1.2.x. It is the primary recommended way to build a tool-calling agent:
 
 ```python
-# Deprecated — still works but emits a DeprecationWarning
 from langgraph.prebuilt import create_react_agent
-agent = create_react_agent(model, tools)
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
 
-# Preferred — use langchain.agents (requires langchain >= 0.3)
-from langchain.agents import create_agent
-agent = create_agent(model, tools)
+@tool
+def my_tool(x: str) -> str:
+    """A stub tool."""
+    return x
+
+agent = create_react_agent(
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+    tools=[my_tool],
+)
 ```
 
-`create_agent` adds a flexible middleware system (`AgentMiddleware`) with `wrap_tool_call` support at the agent level rather than the node level.
+For intercepting model calls, use `pre_model_hook` / `post_model_hook` — not a middleware layer. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for the full API.
+
+> **Note:** `langchain.agents.create_agent` and `langchain.agents.middleware` do not exist. `langchain` is a separate package not installed with `langgraph`; even if installed, these APIs are not part of it.
 
 ---
 

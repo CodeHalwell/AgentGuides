@@ -53,12 +53,15 @@ def trim_to_last_n(state: dict) -> dict:
     """Keep only the last 20 messages to avoid blowing the context window."""
     msgs = state.get("messages", [])
     if len(msgs) > 20:
-        # Preserve the system message if present, then take the tail
-        system = [m for m in msgs if isinstance(m, SystemMessage)]
-        rest = [m for m in msgs if not isinstance(m, SystemMessage)][-19:]
+        # Preserve at most ONE system message (the first), then take the tail.
+        # Keeping all system messages would allow multiple to accumulate and
+        # push the total over the 20-message cap.
+        system_msgs = [m for m in msgs if isinstance(m, SystemMessage)][:1]
+        non_system = [m for m in msgs if not isinstance(m, SystemMessage)]
+        tail = non_system[-(20 - len(system_msgs)):]
         # Use "llm_input_messages" — this is passed to the model WITHOUT
         # updating the persistent "messages" state through the add_messages reducer.
-        return {"llm_input_messages": system + rest}
+        return {"llm_input_messages": system_msgs + tail}
     return {}   # Return empty dict = no change
 
 
@@ -263,7 +266,7 @@ result = agent.invoke({"messages": [{"role": "user", "content": "Weather in Pari
 
 ## 4. Per-node `error_handler` on `add_node`
 
-Every `add_node` call accepts an `error_handler` — a node function called when the primary node raises. It receives the same state the node received and can return a partial state update (to write an error message, skip, or set a fallback value).
+Every `add_node` call accepts an `error_handler` — a node function called when the primary node raises **after all configured retries are exhausted**. It receives the state the node last received and a `NodeError` context object, and can return a partial state update (to write an error message, skip, or set a fallback value).
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -450,6 +453,7 @@ You can override defaults on specific nodes by passing the policy directly to `a
 
 ```python
 from langgraph.graph import StateGraph, START, END
+from langgraph.errors import NodeError
 from langgraph.types import RetryPolicy
 from typing_extensions import TypedDict
 
@@ -463,8 +467,8 @@ def node_a(state: State) -> dict:
 def node_b(state: State) -> dict:
     return {"answer": f"B({state['answer']})"}
 
-def global_error_handler(state: State, error: Exception) -> dict:
-    return {"answer": f"[error] — {error}"}
+def global_error_handler(state: State, error: NodeError) -> dict:
+    return {"answer": f"[error] {error.node} failed: {error.error}"}
 
 builder2 = StateGraph(State)
 builder2.set_node_defaults(
@@ -508,10 +512,11 @@ def fetch_data(key: str) -> str:
     raise TimeoutError("Store unavailable")
 
 
-# Strategy 1: Return the default exception message as a ToolMessage
+# Strategy 1: Use LangGraph's default formatted error template as a ToolMessage.
+# The template reads: "Error: <exception>\nPlease fix your mistakes." — not raw str(exc).
 tool_node_default = ToolNode(
     tools=[divide, fetch_data],
-    handle_tool_errors=True,   # catches all exceptions, returns default message
+    handle_tool_errors=True,
 )
 
 # Strategy 2: Return a fixed string for all errors
