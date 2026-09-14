@@ -1266,7 +1266,7 @@ Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `
 `BigQueryToolset` lets an agent query BigQuery datasets, list tables, inspect schemas, and run SQL. Requires `pip install google-cloud-bigquery`.
 
 ```python
-from google.adk.tools.bigquery import BigQueryToolset
+from google.adk.integrations.bigquery import BigQueryToolset
 from google.adk.agents import LlmAgent
 
 # Uses Application Default Credentials (ADC); set GOOGLE_CLOUD_PROJECT env var for the project
@@ -1287,7 +1287,7 @@ analyst = LlmAgent(
 **Filter operations** with `tool_filter` (controls which BQ tool functions are exposed to the agent):
 
 ```python
-from google.adk.tools.bigquery import BigQueryToolset
+from google.adk.integrations.bigquery import BigQueryToolset
 from google.adk.agents import LlmAgent
 
 # Expose only SQL execution and dataset listing tools
@@ -1305,13 +1305,23 @@ agent = LlmAgent(
 
 > **Dataset access control** — `tool_filter` limits which operations the agent can call, but does not restrict which datasets those operations may reach. To enforce dataset-level boundaries, use BigQuery IAM roles (e.g. grant the service account `roles/bigquery.dataViewer` on specific datasets only) or authorized views. Pass the ADK agent a `BigQueryToolset` configured with service account credentials that have only the required dataset permissions.
 
-`BigQueryToolset` accepts a `credentials_config` argument for passing explicit service account credentials or an external token rather than relying on ADC. The exact import path for `BigQueryCredentialsConfig` varies between minor releases — use:
+`BigQueryToolset` accepts a `credentials_config` argument for passing explicit credentials or an external token rather than relying on ADC:
 
 ```python
-from google.adk.tools.bigquery import BigQueryToolset
-# Import BigQueryCredentialsConfig from whichever submodule your installed version exposes;
-# check `python -c "import google.adk.tools.bigquery; help(BigQueryToolset)"` for the constructor.
+import google.oauth2.service_account as sa_lib
+from google.adk.integrations.bigquery import BigQueryToolset, BigQueryCredentialsConfig
+
+credentials = sa_lib.Credentials.from_service_account_file(
+    "service_account.json",
+    scopes=["https://www.googleapis.com/auth/bigquery.readonly"],
+)
+
+bq_tools = BigQueryToolset(
+    credentials_config=BigQueryCredentialsConfig(credentials=credentials),
+)
 ```
+
+Pass `external_access_token_key="my_token"` to `BigQueryCredentialsConfig` instead of `credentials` if you want the agent to inject a short-lived token from session state at query time.
 
 > Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
 
