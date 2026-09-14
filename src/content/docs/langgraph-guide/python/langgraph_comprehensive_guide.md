@@ -42,8 +42,8 @@ Latest: langgraph 1.2.11 | Updated: August 17, 2026
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
 
-**Removed (since v1.0):**
-- `langgraph.prebuilt.ValidationNode` — removed entirely; there is no drop-in schema-only replacement. Migrate to `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool (the node will execute calls and catch validation errors), or add a `error_handler=` callback on `StateGraph.add_node` for node-level error handling.
+**Deprecated (since v1.0, removal planned in v2.0.0):**
+- `langgraph.prebuilt.ValidationNode` — still importable from `langgraph.prebuilt.tool_validator`; there is no drop-in schema-only replacement. Migrate to `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool (note: the node executes valid calls — unsuitable for validate-only workflows), or add an `error_handler=` callback on `StateGraph.add_node` for node-level error handling.
 
 ---
 
@@ -2777,10 +2777,15 @@ of a full write-up.
 
 Several symbols changed in 1.0–1.2: `MessageGraph` was removed (use `StateGraph`);
 `AgentState`/`AgentStatePydantic`/`AgentStateWithStructuredResponse` and
-`ValidationNode` were removed from `langgraph.prebuilt` (they are **not** in
-`langchain.agents`); `create_react_agent` is **not deprecated** — it carries no
-`@deprecated` decorator in 1.2.11 and remains the primary recommended factory;
-the `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
+`ValidationNode` are **deprecated** in `langgraph.prebuilt` (scheduled for
+removal in v2.0.0). The `AgentState*` family is no longer re-exported from the
+top-level `langgraph.prebuilt.__init__` but remains importable from
+`langgraph.prebuilt.chat_agent_executor`; `ValidationNode` is still importable
+from `langgraph.prebuilt.tool_validator`. The deprecation notices in the source
+target `langchain.agents` as migration destination (requires the separate
+`langchain` package). `create_react_agent` is **not deprecated** — it carries no
+`@deprecated` decorator in 1.2.11 and remains the primary recommended factory.
+The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
 `langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` does not exist in any released
 version of `langchain`.
 

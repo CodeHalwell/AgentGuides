@@ -343,7 +343,12 @@ from langgraph.prebuilt.tool_validator import ValidationNode
 
 Deprecated since **v1.0**. Validates tool call schemas without executing the tools. It was designed for structured output and extraction workflows where the LLM needs to be re-prompted when its tool arguments fail schema validation.
 
-Migrate to `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool to catch argument-validation errors inside the tool node, or use the `error_handler=` parameter on `StateGraph.add_node` for node-level fallback handling. (`handle_tool_errors` is a `ToolNode` constructor argument, not an `add_node` keyword; `langchain.agents.create_agent` does not exist.)
+Two migration paths:
+
+1. **`ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool** — the node catches argument-validation failures and converts them to `ToolMessage` error replies. **Important:** unlike `ValidationNode`, `ToolNode` **executes** every call whose arguments are valid. This is unsafe in validate-only workflows (e.g. before a human-approval step) where side effects such as sending email or charging a payment must not occur during validation.
+2. **Custom validation node** — for schema-only validation without execution, call `tool.args_schema.model_validate(tc["args"])` for each tool call and return a `ToolMessage` error on failure without invoking the tool. This is the only safe drop-in path when execution must not happen during validation.
+
+The `error_handler=` parameter on `StateGraph.add_node` provides node-level fallback handling after all retries are exhausted — it is separate from per-call validation. (`handle_tool_errors` is a `ToolNode` constructor argument, not an `add_node` keyword; `langchain.agents.create_agent` does not exist.)
 
 ## Patterns
 
