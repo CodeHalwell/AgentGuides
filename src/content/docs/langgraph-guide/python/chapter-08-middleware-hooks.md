@@ -150,8 +150,10 @@ def truncate_long_messages(state: dict) -> dict:
                 elif isinstance(block, dict) and isinstance(block.get("text"), str):
                     text = block["text"]
                     if remaining <= 0:
-                        # Preserve block structure but clear its text.
-                        block = {**block, "text": ""}
+                        # Skip exhausted text-dict blocks entirely — providers
+                        # such as Anthropic reject empty {"text": ""} blocks.
+                        # Non-text blocks fall through to new_blocks.append below.
+                        continue
                     elif len(text) > remaining:
                         if remaining >= _MARKER_LEN:
                             block = {**block, "text": text[:remaining - _MARKER_LEN] + _TRUNC_MARKER}
