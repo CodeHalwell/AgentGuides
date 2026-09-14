@@ -359,7 +359,7 @@ from google.adk.workflow import node, Workflow, START
 @node(rerun_on_resume=True)
 async def orchestrate(node_input: str, ctx) -> str:
     # Dispatch the task agent dynamically — ctx.run_node supports task-mode agents
-    result = await ctx.run_node(researcher, ResearchInput(topic=node_input))
+    result = await ctx.run_node(researcher, ResearchInput(topic=node_input), run_id="research")
     # result is a ResearchOutput instance (Pydantic model)
     summary = result.summary if hasattr(result, "summary") else str(result)
     return summary
