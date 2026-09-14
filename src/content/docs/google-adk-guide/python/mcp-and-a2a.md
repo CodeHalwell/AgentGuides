@@ -486,14 +486,14 @@ from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
 from google.adk.auth import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
-from google.adk.auth.auth_schemes import CustomAuthScheme
+from fastapi.security import HTTPBearer
 
 # Scopes the service account token should carry (used by the SA exchanger)
 SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 # ADK's service-account exchanger pairs with HTTPBearer: the exchanged token
 # is serialized as an Authorization: Bearer header on each MCP request.
-auth_scheme = CustomAuthScheme(type="http", scheme="bearer")
+auth_scheme = HTTPBearer()
 
 auth_credential = AuthCredential(
     auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
@@ -564,7 +564,7 @@ from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.auth import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
-from google.adk.auth.auth_schemes import CustomAuthScheme
+from fastapi.security import HTTPBearer
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import McpToolset
@@ -573,7 +573,7 @@ from google.genai import types
 
 SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
-auth_scheme = CustomAuthScheme(type="http", scheme="bearer")
+auth_scheme = HTTPBearer()
 
 with open("service_account.json") as f:
     sa = json.load(f)
