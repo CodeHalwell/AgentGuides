@@ -71,7 +71,7 @@ def before(ctx: RunContext) -> None:
 
 @hooks.on.after_run
 async def after(ctx: RunContext, *, result: AgentRunResult) -> AgentRunResult:
-    print(f'[after_run] tokens used: {result.usage.total_tokens}')  # .usage is a property in 1.102.0
+    print(f'[after_run] tokens used: {result.usage.total_tokens}')  # .usage is a @property
     return result  # must return the result
 
 @hooks.on.run_error

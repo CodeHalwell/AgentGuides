@@ -402,7 +402,7 @@ async def main() -> None:
         },
     )
     print(result.output)
-    print(f'Tokens: {result.usage().total_tokens}')
+    print(f'Tokens: {result.usage.total_tokens}')
 
 
 asyncio.run(main())
@@ -414,7 +414,10 @@ asyncio.run(main())
 import asyncio
 from pydantic_ai import Agent
 
-# On a reasoning model, disable thinking for simple classification tasks.
+# On providers that support disabling thinking (e.g. Anthropic extended thinking
+# models), thinking=False reduces cost. On always-on reasoning models like o4-mini
+# it is silently ignored — the model still reasons. Use a non-reasoning model for
+# tasks where reasoning overhead is undesirable.
 agent = Agent('openai:o4-mini', model_settings={'thinking': False})
 
 
