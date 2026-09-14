@@ -50,19 +50,25 @@ from langchain_core.messages import SystemMessage
 # --- Example 1: Trim messages to avoid context overflow ---
 
 def trim_to_last_n(state: dict) -> dict:
-    """Keep only the last 20 messages to avoid blowing the context window."""
+    """Keep only the last 20 messages, preserving complete tool-call/result pairs."""
+    from langchain_core.messages import ToolMessage, AIMessage as AI
     msgs = state.get("messages", [])
-    if len(msgs) > 20:
-        # Preserve at most ONE system message (the first), then take the tail.
-        # Keeping all system messages would allow multiple to accumulate and
-        # push the total over the 20-message cap.
-        system_msgs = [m for m in msgs if isinstance(m, SystemMessage)][:1]
-        non_system = [m for m in msgs if not isinstance(m, SystemMessage)]
-        tail = non_system[-(20 - len(system_msgs)):]
-        # Use "llm_input_messages" — this is passed to the model WITHOUT
-        # updating the persistent "messages" state through the add_messages reducer.
-        return {"llm_input_messages": system_msgs + tail}
-    return {}   # Return empty dict = no change
+    if len(msgs) <= 20:
+        return {}   # Nothing to trim
+    # Preserve at most ONE system message (the first), then take the tail.
+    system_msgs = [m for m in msgs if isinstance(m, SystemMessage)][:1]
+    non_system = [m for m in msgs if not isinstance(m, SystemMessage)]
+    tail = non_system[-(20 - len(system_msgs)):]
+    # Drop leading ToolMessages whose AIMessage pair was trimmed away — providers
+    # reject a history that starts with a tool result without the preceding tool call.
+    while tail and isinstance(tail[0], ToolMessage):
+        tail = tail[1:]
+    # Drop a trailing AIMessage that has tool_calls but whose ToolMessage results
+    # were trimmed away — this would also produce a malformed exchange.
+    while tail and isinstance(tail[-1], AI) and getattr(tail[-1], "tool_calls", []):
+        tail = tail[:-1]
+    # "llm_input_messages" is passed to the model WITHOUT updating persistent state.
+    return {"llm_input_messages": system_msgs + tail}
 
 
 agent = create_react_agent(
@@ -693,11 +699,13 @@ SYSTEM_PROMPT = SystemMessage(content=(
 ))
 
 def enforce_system_prompt(state: dict) -> dict:
-    """Ensure the system prompt is always the first message (model-only, not persisted)."""
-    msgs = state.get("messages", [])
-    if not msgs or not isinstance(msgs[0], SystemMessage):
-        return {"llm_input_messages": [SYSTEM_PROMPT] + list(msgs)}
-    return {}
+    """Always prepend the canonical system prompt, stripping any pre-existing SystemMessages.
+
+    Stripping first ensures a caller cannot bypass the canonical instructions by
+    supplying a different leading SystemMessage in the invocation input.
+    """
+    non_system = [m for m in state.get("messages", []) if not isinstance(m, SystemMessage)]
+    return {"llm_input_messages": [SYSTEM_PROMPT] + non_system}
 
 
 class TokenBudget:
