@@ -120,14 +120,28 @@ def truncate_long_messages(state: dict) -> dict:
                 msg = msg.model_copy(update={"content": content[:MAX_INPUT_CHARS] + " [truncated]"})
         elif isinstance(content, list):
             # Block-based content (e.g. Anthropic multimodal messages).
-            # Each block is either a plain string or a dict with a "text" key.
+            # Track a shared per-message budget so the aggregate text across ALL
+            # blocks cannot exceed MAX_INPUT_CHARS, not just each block individually.
             new_blocks = []
+            remaining = MAX_INPUT_CHARS
             for block in content:
-                if isinstance(block, str) and len(block) > MAX_INPUT_CHARS:
-                    block = block[:MAX_INPUT_CHARS] + " [truncated]"
+                if remaining <= 0:
+                    break  # budget exhausted — drop remaining blocks
+                if isinstance(block, str):
+                    if len(block) > remaining:
+                        block = block[:remaining] + " [truncated]"
+                        remaining = 0
+                    else:
+                        remaining -= len(block)
                 elif isinstance(block, dict) and isinstance(block.get("text"), str):
-                    if len(block["text"]) > MAX_INPUT_CHARS:
-                        block = {**block, "text": block["text"][:MAX_INPUT_CHARS] + " [truncated]"}
+                    text = block["text"]
+                    if len(text) > remaining:
+                        block = {**block, "text": text[:remaining] + " [truncated]"}
+                        remaining = 0
+                    else:
+                        remaining -= len(text)
+                # Non-text blocks (images, audio) are passed through unchanged;
+                # binary content has no meaningful character count to truncate.
                 new_blocks.append(block)
             msg = msg.model_copy(update={"content": new_blocks})
         updated.append(msg)

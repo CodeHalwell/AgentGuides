@@ -4735,15 +4735,15 @@ async with graph.astream({"messages": []}, stream_mode="tools", version="v2") as
         print("final:", tc.output)
 ```
 
-#### `create_react_agent` (deprecated) — and the `AgentState` / `ValidationNode` migration
+#### `create_react_agent` — and the `AgentState` / `ValidationNode` migration
 
 **Module:** `langgraph.prebuilt.chat_agent_executor` / `.tool_validator`
 
-`create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. **Verified
-deprecated** in the installed venv — the function carries
-`@deprecated(category=LangGraphDeprecatedSinceV10)` — in favor of `create_agent`
-from `langchain.agents`; it remains fully functional in 1.2.11 and existing code
-keeps working (with a warning).
+`create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. It is **not
+deprecated** in langgraph 1.2.11 — the installed source carries no
+`@deprecated` decorator or runtime warning. It remains the primary recommended
+factory. (`langchain.agents.create_agent` does not exist in any released version
+of `langchain`; references to it in earlier drafts of this guide were erroneous.)
 
 ```python
 def create_react_agent(
