@@ -483,7 +483,7 @@ asyncio.run(main())
 ### Example — parametric filter for a search tool
 
 ```python
-from agent_framework import Filter, Param, VectorStoreField, vectorstoremodel, InMemoryCollection
+from agent_framework import Filter, Param, VectorStoreField, vectorstoremodel, InMemoryCollection, create_vector_search_tool
 
 # Param("min_price", float | None, default=None, omit_if_none=True) means:
 # the tool schema exposes "min_price" as an optional float parameter.
@@ -491,7 +491,8 @@ from agent_framework import Filter, Param, VectorStoreField, vectorstoremodel, I
 price_filter = Filter("price", "gte", Param("min_price", float | None, default=None, omit_if_none=True))
 
 col = ...  # InMemoryCollection already set up
-tool = col.create_vector_search_tool(
+tool = create_vector_search_tool(  # top-level function; col is the first positional arg
+    col,
     description="Search items; optionally filter by minimum price.",
     filter=price_filter,
     top=5,
