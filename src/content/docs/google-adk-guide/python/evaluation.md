@@ -7,7 +7,7 @@ sidebar:
   order: 75
 ---
 
-Verified against google-adk==2.4.0 (`google/adk/evaluation/`).
+Verified against google-adk==2.4.0 (`google/adk/evaluation/`). The latest release is **2.9.0** — all examples are compatible with 2.4.0 and later unless noted.
 
 ADK ships a first-class evaluation framework built around three concepts: **`EvalCase`** (a single conversation to run), **`EvalSet`** (a collection of cases), and **`AgentEvaluator`** (the engine that runs cases against a live agent and scores the results). The framework integrates with `pytest` and supports custom metrics.
 

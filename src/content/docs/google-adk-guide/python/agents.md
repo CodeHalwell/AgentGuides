@@ -7,7 +7,7 @@ sidebar:
   order: 20
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/agents/`).
+Verified against google-adk==2.3.0 (`google/adk/agents/`). The latest release is **2.9.0** — all examples in this guide are compatible with 2.3.0 and later unless noted.
 
 ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](./workflows/).
 
@@ -169,6 +169,203 @@ agent = LlmAgent(name="greeter", instruction=instruction_provider)
 ```
 
 When you set `static_instruction`, the runtime places it as `system_instruction` (ideal for cache keys) and routes `instruction` into the user content instead (`agents/llm_agent.py:248-297`).
+
+## LlmAgent modes
+
+The `mode` field controls dispatch behaviour, agent-transfer eligibility, and how content history is handled. It matters most when placing agents inside a `Workflow`.
+
+| Mode | Dispatch style | Transfer tools | `include_contents` default | Valid placement |
+|---|---|---|---|---|
+| `None` / `'chat'` | Continuous conversation loop | Injected (if `sub_agents` set) | `'default'` (full history) | Root `LlmAgent`; first node after `START` in a `Workflow` |
+| `'single_turn'` | One LLM call, then exit | **Not** injected | `'none'` (stateless) | Any `Workflow` node; `build_node()` default |
+| `'task'` | Structured I/O with `FinishTaskTool` handshake | **Not** injected | `'default'` | Sub-agent of a `mode='chat'` coordinator; or `ctx.run_node()` |
+
+> The runner auto-sets `mode='chat'` on a root `LlmAgent` that has `mode=None`.
+> `mode='task'` agents **cannot** be placed as static graph nodes in a `Workflow` — `Workflow.__init__` raises `ValueError`. Use them as `sub_agents` of a chat coordinator or dispatch them via `ctx.run_node()`.
+
+### `mode='chat'` — conversational root agent
+
+This is the default for a root agent. It drives a multi-turn conversation and, when given `sub_agents`, gains `transfer_to_agent` routing.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.apps import App
+from google.genai import types
+
+billing = LlmAgent(
+    name="billing",
+    model="gemini-2.5-flash",
+    description="Handles invoice and refund questions.",
+    instruction="Answer billing questions concisely.",
+)
+support = LlmAgent(
+    name="support",
+    model="gemini-2.5-flash",
+    description="Handles technical support questions.",
+    instruction="Help users fix technical problems.",
+)
+
+coordinator = LlmAgent(
+    name="triage",
+    model="gemini-2.5-flash",
+    # mode='chat' is set automatically by the runner for root agents
+    instruction="Route each question to the right specialist.",
+    sub_agents=[billing, support],
+)
+
+async def main():
+    app = App(name="demo", root_agent=coordinator)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="demo", user_id="u1"
+    )
+    async for event in runner.run_async(
+        user_id="u1",
+        session_id=session.id,
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part(text="I have a question about my last invoice.")]
+        ),
+    ):
+        if event.is_final_response() and event.content:
+            print(event.content.parts[0].text)
+
+asyncio.run(main())
+```
+
+### `mode='single_turn'` — stateless workflow node
+
+`single_turn` agents run one LLM call and exit. They receive their input via `node_input` (set to the preceding node's output), not from session history (`include_contents` is forced to `'none'`). This makes them ideal as `Workflow` stages.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.workflow import Workflow, START
+from google.adk.runners import InMemoryRunner
+from google.adk.apps import App
+
+drafter = LlmAgent(
+    name="drafter",
+    model="gemini-2.5-flash",
+    mode="single_turn",                         # processes one turn, no history
+    instruction="Write a punchy 2-sentence summary of the input topic.",
+)
+editor = LlmAgent(
+    name="editor",
+    model="gemini-2.5-flash",
+    mode="single_turn",
+    instruction="Polish the summary. Fix grammar, tighten sentences. Return only the final text.",
+)
+
+pipeline = Workflow(
+    name="summarize",
+    edges=[(START, drafter, editor)],           # drafter output → editor input
+)
+
+async def main():
+    app = App(name="demo", root_agent=pipeline)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="demo", user_id="u1"
+    )
+    events = await runner.run_debug(
+        "Electric vehicles are outselling petrol cars in Norway.",
+        user_id="u1", session_id=session.id,
+    )
+    print(events[-1].content.parts[0].text)
+
+asyncio.run(main())
+```
+
+`build_node(agent)` produces the same result — it sets `mode='single_turn'` automatically when no parent agent is provided.
+
+### `mode='task'` — structured I/O with input/output schemas
+
+`task` mode agents accept a structured `input_schema` and return a validated `output_schema`. The ADK uses a `FinishTaskTool` handshake internally: the LLM calls `finish_task(result=...)` when ready, ADK validates the Pydantic model, and the result surfaces as `event.output` on the parent. If validation fails, the model is prompted to retry.
+
+> **Important:** `mode='task'` agents must be in a chat coordinator's `sub_agents` or dispatched via `ctx.run_node()`. They **cannot** be static `Workflow` graph nodes.
+
+```python
+import asyncio
+from pydantic import BaseModel, Field
+from google.adk.agents import LlmAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.apps import App
+from google.genai import types
+
+# ── Pydantic schemas for structured I/O ──────────────────────────────────────
+class ResearchInput(BaseModel):
+    topic: str = Field(description="The subject to research.")
+    depth: str = Field(default="brief", description="'brief' or 'detailed'.")
+
+class ResearchOutput(BaseModel):
+    summary: str = Field(description="A concise summary of findings.")
+    key_points: list[str] = Field(description="3-5 bullet points.")
+    sources: list[str] = Field(description="Cited URLs or references.")
+
+# ── Task sub-agent — structured I/O, no transfer tools ──────────────────────
+researcher = LlmAgent(
+    name="researcher",
+    model="gemini-2.5-flash",
+    mode="task",
+    instruction=(
+        "Research the given topic. Return a structured summary with "
+        "key points and cited sources."
+    ),
+    input_schema=ResearchInput,
+    output_schema=ResearchOutput,
+)
+
+# ── Chat coordinator — delegates structured work to researcher ────────────────
+writer = LlmAgent(
+    name="writer",
+    model="gemini-2.5-flash",
+    instruction=(
+        "You write blog posts. For every topic, first ask the 'researcher' "
+        "sub-agent for a structured brief, then write a 3-paragraph post."
+    ),
+    sub_agents=[researcher],     # researcher is auto-wrapped as _TaskAgentTool
+)
+
+async def main():
+    app = App(name="blog_app", root_agent=writer)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="blog_app", user_id="u1"
+    )
+    async for event in runner.run_async(
+        user_id="u1",
+        session_id=session.id,
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part(text="Write a post about quantum computing.")]
+        ),
+    ):
+        if event.is_final_response() and event.content:
+            print(event.content.parts[0].text)
+
+asyncio.run(main())
+```
+
+**Task mode dispatch via `ctx.run_node()`** (from inside a `Workflow` `@node`):
+
+```python
+from google.adk.workflow import node, Workflow, START
+
+@node(rerun_on_resume=True)
+async def orchestrate(topic: str, ctx) -> str:
+    # Dispatch the task agent dynamically — ctx.run_node supports task-mode agents
+    result = await ctx.run_node(researcher, ResearchInput(topic=topic))
+    # result is a ResearchOutput instance (Pydantic model)
+    summary = result.summary if hasattr(result, "summary") else str(result)
+    return summary
+
+wf = Workflow(name="research_pipeline", edges=[(START, orchestrate)])
+```
+
+**When `output_key` does not apply.** In `task` mode, `output_key` has no effect — the result surfaces only via `event.output`, not via `session.state`. Use `ctx.state["key"] = result` in the calling `@node` if you need to thread the output through session state.
 
 ## Transfer and routing
 
@@ -684,13 +881,93 @@ root = LlmAgent(
 
 > For full constructor reference and examples (signed requests, file-based cards, interceptors) — see the [Class & API Reference — A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) section.
 
+## ManagedAgent
+
+`ManagedAgent` wraps Google's **Managed Agents API** so a _server-hosted_ agent (identified by `agent_id`) runs without local inference. Available from `google.adk.agents` (verified in `agents/_managed_agent.py`, google-adk==2.7.1).
+
+Key constraints:
+- `tools` must be `list[types.Tool | BaseTool | RemoteMcpServer]` — passing a plain callable or `FunctionTool` raises at runtime.
+- Interactions always stream (`background=True`); polling is not implemented.
+- The API is served only from the `global` location — enterprise clients pinned to a specific region are rejected at construction.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent, ManagedAgent
+from google.adk.runners import InMemoryRunner
+from google.adk.apps import App
+from google.genai import types
+
+# Server-side search agent — no local model inference
+managed_search = ManagedAgent(
+    name="web_researcher",
+    description="Answers questions that need live web search.",
+    agent_id="antigravity-preview-05-2026",   # your Managed Agent ID
+    tools=[types.Tool(google_search=types.GoogleSearch())],
+)
+
+# Chat coordinator — delegates to the managed agent
+root = LlmAgent(
+    name="coordinator",
+    model="gemini-2.5-flash",
+    instruction=(
+        "For questions that need up-to-date information, "
+        "ask 'web_researcher'. Handle everything else yourself."
+    ),
+    sub_agents=[managed_search],
+)
+
+async def main():
+    app = App(name="demo", root_agent=root)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="demo", user_id="u1"
+    )
+    async for event in runner.run_async(
+        user_id="u1",
+        session_id=session.id,
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part(text="What are the latest AI announcements this week?")]
+        ),
+    ):
+        if event.is_final_response() and event.content:
+            print(event.content.parts[0].text)
+
+asyncio.run(main())
+```
+
+**`mode='single_turn'`** — set this when placing a `ManagedAgent` inside a `LlmAgent.sub_agents` list. ADK wraps it as a `_SingleTurnAgentTool` automatically.
+
+**`RemoteMcpServer`** — pass a `RemoteMcpServer` instance in `tools=` to connect the managed agent to an HTTP-streamable MCP server server-side. Unlike client-side `McpToolset`, ADK forwards the server URL and auth headers to the Managed Agents API; the API connects and executes the MCP tools without local transport overhead.
+
+```python
+from google.adk.agents import ManagedAgent
+from google.adk.tools.mcp_tool.remote_mcp_server import RemoteMcpServer
+
+maps_mcp = RemoteMcpServer(
+    server_url="https://maps.googleapis.com/mcp/v1",
+    http_headers={"X-Goog-Api-Key": "YOUR_MAPS_API_KEY"},
+)
+
+managed_maps = ManagedAgent(
+    name="maps_agent",
+    description="Geocodes addresses and fetches directions.",
+    agent_id="antigravity-preview-05-2026",
+    tools=[maps_mcp],
+)
+```
+
+> `ManagedAgent` requires a Managed Agents API project allowlist. See the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) section for the full constructor signature.
+
 ## Gotchas
 
 - `output_schema` and `tools` can be used together in 2.3.0 — tools run during the thought loop and the schema is enforced on the final reply only (`llm_agent.py:368-372`).
 - `global_instruction` is deprecated at the agent level; use `GlobalInstructionPlugin` at the `App` level.
-- A root `LlmAgent` must have `mode='chat'` or the runner auto-sets it; other modes are only valid inside a `Workflow`.
+- A root `LlmAgent` must have `mode='chat'` or the runner auto-sets it. `mode='single_turn'` agents belong as `Workflow` nodes. `mode='task'` agents **cannot** be static `Workflow` graph nodes (`Workflow.__init__` raises `ValueError`) — place them in a chat coordinator's `sub_agents` or dispatch via `ctx.run_node()`. See [LlmAgent modes](#llmagent-modes).
 - `LoopAgent.run_live` is **not implemented** — `ParallelAgent.run_live` also raises `NotImplementedError`.
 - When a sub-agent has no `model`, it inherits from the nearest ancestor `LlmAgent`. If the root also omits `model`, the default is resolved via `LlmAgent._default_model` (`gemini-3.5-flash` in 2.3.0).
 - Callables passed to `tools=` are wrapped as `FunctionTool(func=callable)` automatically. Pass an explicit `FunctionTool` only when you need `require_confirmation=`.
 - `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
 - `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
+- `ManagedAgent.tools` only accepts `types.Tool`, `BaseTool`, or `RemoteMcpServer` — a plain callable or `FunctionTool` raises a `ValueError` at runtime because client-side tools are not supported in server-hosted execution.
+- `ManagedAgent` is available from `google.adk.agents` starting in google-adk==2.7.0.

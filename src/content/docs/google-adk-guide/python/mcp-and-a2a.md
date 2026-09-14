@@ -7,7 +7,7 @@ sidebar:
   order: 70
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`).
+Verified against google-adk==2.3.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`). The latest release is **2.9.0** — all examples are compatible with 2.3.0 and later unless noted.
 
 ADK supports both **Model Context Protocol** (Anthropic's tool-server protocol) and **Agent-to-Agent** (Google's cross-framework agent-handoff protocol). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
 
@@ -469,6 +469,110 @@ async def main():
     await runner.close()
 
 asyncio.run(main())
+```
+
+### Example F — MCP toolset with service account credentials
+
+When the MCP server requires OAuth 2.0 with a Google service account (e.g. a private GCP-hosted MCP server), pass an `AuthCredential` with `auth_type=AuthCredentialTypes.SERVICE_ACCOUNT`:
+
+```python
+import asyncio
+from google.genai import types
+from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.apps import App
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
+from google.adk.auth import AuthCredential, AuthCredentialTypes
+from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
+
+# Scopes required by your MCP server
+SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
+auth_credential = AuthCredential(
+    auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
+    service_account=ServiceAccount(
+        service_account_credential=ServiceAccountCredential(
+            type_="service_account",
+            project_id="my-gcp-project",
+            private_key_id="key-id-from-json",
+            private_key="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n",
+            client_email="my-sa@my-gcp-project.iam.gserviceaccount.com",
+            client_id="123456789",
+            auth_uri="https://accounts.google.com/o/oauth2/auth",
+            token_uri="https://oauth2.googleapis.com/token",
+            auth_provider_x509_cert_url="https://www.googleapis.com/oauth2/v1/certs",
+            client_x509_cert_url=(
+                "https://www.googleapis.com/robot/v1/metadata/x509/"
+                "my-sa%40my-gcp-project.iam.gserviceaccount.com"
+            ),
+            universe_domain="googleapis.com",
+        ),
+        scopes=SCOPES,
+    ),
+)
+
+async def main():
+    toolset = McpToolset(
+        connection_params=StreamableHTTPConnectionParams(
+            url="https://my-private-mcp-server.example.com/mcp",
+            timeout=30.0,
+        ),
+        # auth_scheme describes the expected auth type; auth_credential supplies the key material.
+        # ADK exchanges the service account for a short-lived access token and injects
+        # it as an Authorization header on each MCP request.
+        auth_credential=auth_credential,
+        tool_name_prefix="private",
+    )
+
+    agent = LlmAgent(
+        name="secure_agent",
+        model="gemini-2.5-flash",
+        instruction="Use the private tools to retrieve company data.",
+        tools=[toolset],
+    )
+
+    session_service = InMemorySessionService()
+    app = App(name="secure_app", root_agent=agent)
+    runner = Runner(app=app, session_service=session_service)
+    session = await session_service.create_session(
+        app_name="secure_app", user_id="user1"
+    )
+
+    async for event in runner.run_async(
+        user_id="user1", session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="List available reports.")]),
+    ):
+        if event.is_final_response():
+            print(event.content.parts[0].text)
+
+    await runner.close()
+
+asyncio.run(main())
+```
+
+In production, load the service account JSON from a file rather than hard-coding the key:
+
+```python
+import json
+
+with open("service_account.json") as f:
+    sa = json.load(f)
+
+cred = ServiceAccountCredential(
+    type_=sa["type"],
+    project_id=sa["project_id"],
+    private_key_id=sa["private_key_id"],
+    private_key=sa["private_key"],
+    client_email=sa["client_email"],
+    client_id=sa["client_id"],
+    auth_uri=sa["auth_uri"],
+    token_uri=sa["token_uri"],
+    auth_provider_x509_cert_url=sa["auth_provider_x509_cert_url"],
+    client_x509_cert_url=sa["client_x509_cert_url"],
+    universe_domain=sa.get("universe_domain", "googleapis.com"),
+)
 ```
 
 ## Gotchas

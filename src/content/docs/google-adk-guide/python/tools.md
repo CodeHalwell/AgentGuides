@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`).
+Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). The latest release is **2.9.0** — all examples are compatible with 2.3.0 and later unless noted.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -1260,6 +1260,64 @@ agent = LlmAgent(
 ```
 
 Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `state` (read-only `MappingProxyType`), `session`, `user_id`, `run_config`, `get_credential(key)`.
+
+## BigQueryToolset (experimental)
+
+`BigQueryToolset` lets an agent query BigQuery datasets, list tables, inspect schemas, and run SQL. Requires `pip install google-cloud-bigquery`.
+
+```python
+from google.adk.tools.bigquery import BigQueryToolset
+from google.adk.agents import LlmAgent
+
+# Uses Application Default Credentials; optionally pass project_id
+bq_tools = BigQueryToolset()
+
+analyst = LlmAgent(
+    name="data_analyst",
+    model="gemini-2.5-pro",
+    instruction=(
+        "You are a data analyst with access to BigQuery. "
+        "List tables first, inspect schemas before writing queries, "
+        "and cap results at 100 rows."
+    ),
+    tools=[bq_tools],
+)
+```
+
+**Filter to specific tables** using `tool_filter` or `BigQueryToolset`'s `dataset_filter`:
+
+```python
+from google.adk.tools.bigquery import BigQueryToolset
+from google.adk.agents import LlmAgent
+
+# Expose only the 'sales' and 'inventory' datasets
+bq_tools = BigQueryToolset(
+    tool_filter=["bigquery_execute_sql", "bigquery_list_dataset_ids"],
+)
+
+agent = LlmAgent(
+    name="sales_analyst",
+    model="gemini-2.5-pro",
+    instruction="Run SQL against the sales dataset only.",
+    tools=[bq_tools],
+)
+```
+
+`BigQueryToolset` follows the same `credentials_config` pattern as other GCP toolsets — pass a `BigQueryCredentialsConfig` to use a service account or external credentials:
+
+```python
+from google.adk.tools.bigquery import BigQueryToolset
+from google.adk.tools.bigquery.config import BigQueryCredentialsConfig
+
+bq_tools = BigQueryToolset(
+    credentials_config=BigQueryCredentialsConfig(
+        project_id="my-gcp-project",
+        # credentials=... or external_access_token_key="..." for non-ADC auth
+    )
+)
+```
+
+> Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## PubSubToolset (experimental)
 
