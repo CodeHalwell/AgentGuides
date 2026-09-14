@@ -64,6 +64,15 @@ def trim_to_last_n(state: dict) -> dict:
     # reject a history that starts with a tool result without the preceding tool call.
     while tail and isinstance(tail[0], ToolMessage):
         tail = tail[1:]
+    # Edge case: if the most recent exchange alone exceeds N (e.g. an agent made
+    # 20+ parallel tool calls in one turn), the tail above is all ToolMessages and
+    # stripping orphaned leading ones empties it. Fall back to the entire most recent
+    # complete exchange so the model always receives at least one meaningful turn.
+    if not tail and non_system:
+        for i in range(len(non_system) - 1, -1, -1):
+            if isinstance(non_system[i], AI):
+                tail = non_system[i:]
+                break
     # Drop a trailing AIMessage that has tool_calls but whose ToolMessage results
     # were trimmed away — this would also produce a malformed exchange.
     while tail and isinstance(tail[-1], AI) and getattr(tail[-1], "tool_calls", []):
