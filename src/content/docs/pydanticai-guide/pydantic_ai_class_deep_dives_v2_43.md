@@ -161,15 +161,12 @@ async def main() -> None:
         if run_cancelled:
             partial_history = run_cancelled.all_messages()
             print(f'Cancelled after {run_cancelled.usage.requests} request(s)')
-        raise   # must re-raise so the timeout tears down correctly
-
-    if partial_history:
-        # Resume from where we left off.
-        result = await agent.run(
-            'Continue from where you left off.',
-            message_history=partial_history,
-        )
-        print(result.output)
+            # Resume from where we left off.
+            result = await agent.run(
+                'Continue from where you left off.',
+                message_history=partial_history,
+            )
+            print(result.output)
 
 
 asyncio.run(main())
@@ -193,7 +190,7 @@ async def main() -> None:
                 print(f'Node: {node_name}')
                 if node_name == 'CallToolsNode':
                     # Cancel after the first model response.
-                    await run.cancel()
+                    run.cancel()
     except RunCancelled as exc:
         msgs = exc.all_messages()
         print(f'Stopped early, captured {len(msgs)} message(s).')
@@ -225,14 +222,26 @@ ToolSelector = Literal['all'] | Sequence[str] | dict[str, Any] | ToolSelectorFun
 
 The first three forms are serializable for use in agent specs (YAML/JSON).
 
-### Example — metadata-based selection
+### Example — metadata-based selection applied via a hook
+
+The dict form of `ToolSelector` is accepted by hook decorators' `tools=` argument,
+so the hook fires only for tools whose metadata matches:
 
 ```python
 import asyncio
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.tools import Tool, ToolDefinition
+from pydantic_ai.capabilities import Hooks
 
-agent = Agent('openai:gpt-4o-mini')
+hooks = Hooks()
+
+# This hook fires only for tools whose metadata contains category='read_only'.
+@hooks.on.before_tool_execute(tools={'category': 'read_only'})
+async def log_read_tool(ctx, *, call, tool_def, args):
+    print(f'Read-only tool called: {tool_def.name}')
+    return args  # must return args unchanged (or modified)
+
+
+agent = Agent('openai:gpt-4o-mini', capabilities=[hooks])
 
 
 @agent.tool(metadata={'category': 'read_only'})
@@ -247,12 +256,7 @@ def create_file(ctx: RunContext[None], name: str) -> str:
     return f'Created {name}'
 
 
-# Using ToolSelector as a dict — matches tools whose metadata includes the key-value pair.
-read_only_selector: dict = {'category': 'read_only'}
-
-
 async def main() -> None:
-    # Only tools matching the selector will be available via a custom capability.
     result = await agent.run('What files are in the project?')
     print(result.output)
 
@@ -303,7 +307,7 @@ from pydantic_ai.settings import ToolOrOutput
 settings = {'tool_choice': ToolOrOutput(function_tools=['search', 'calculator'])}
 ```
 
-### Example — first step forced, remaining steps free
+### Example — restricting function tools while keeping output available
 
 ```python
 import asyncio
@@ -326,8 +330,10 @@ def calculate(expression: str) -> float:
 
 
 async def main() -> None:
-    # Force the model to call `search_web` on the first step only.
-    # The output tool (for structured output / text) stays available throughout.
+    # Allow only search_web as a function tool; the output tool (text / structured
+    # output) remains available so the model can still finish the run.
+    # `calculate` is excluded from the function tools but the model can still
+    # complete — ToolOrOutput does not force a specific tool call.
     result = await agent.run(
         'What is the population of France? Search then summarise.',
         model_settings={'tool_choice': ToolOrOutput(function_tools=['search_web'])},
@@ -420,12 +426,15 @@ asyncio.run(main())
 
 ---
 
-## 6. `AgentStream` — the streaming result object
+## 6. `AgentStream` and `StreamedRunResult` — the streaming result objects
 
 **Module:** `pydantic_ai.result`
 
-`AgentStream` is the object you work with inside `async with agent.run_stream(...) as stream:`.
-It provides three independent axes for consuming a streamed model response:
+`agent.run_stream()` returns a `StreamedRunResult` context manager. Inside the `async with`
+block the `stream` variable is a `StreamedRunResult`, which wraps an `AgentStream` and
+delegates its streaming methods to it.
+
+`StreamedRunResult` provides three independent axes for consuming a streamed model response:
 
 | Method | What you get |
 |---|---|
@@ -594,10 +603,12 @@ async def maybe_skip_model(ctx):
 
 
 @hooks.on.before_tool_execute
-async def maybe_skip_tool(ctx, *, tool_name, args, **_):
-    key = f'{tool_name}:{args}'
+async def maybe_skip_tool(ctx, *, call, tool_def, args):
+    import json
+    key = f'{tool_def.name}:{json.dumps(args, sort_keys=True)}'
     if key in _tool_cache:
         raise SkipToolExecution(result=_tool_cache[key])
+    return args  # must return args (unchanged or modified)
 
 
 agent = Agent('openai:gpt-4o-mini', capabilities=[hooks])
@@ -609,7 +620,8 @@ def weather(city: str) -> str:
 
 
 async def main() -> None:
-    _tool_cache['weather:{"city": "Paris"}'] = 'Cloudy in Paris (cached)'
+    import json
+    _tool_cache[f'weather:{json.dumps({"city": "Paris"}, sort_keys=True)}'] = 'Cloudy in Paris (cached)'
     result = await agent.run("What's the weather in Paris?")
     print(result.output)
 
@@ -648,7 +660,10 @@ async def write_to_db(table: str, data: dict) -> str:
     return f'Written {data} to {table}'
 
 
-# Register with sequential=True so concurrent runs can't overlap.
+# sequential=True makes this tool a per-turn barrier: other tools in the same
+# turn complete first, then this one runs alone, then any remaining tools start.
+# This prevents overlapping DB writes within a single model turn.
+# For cross-run exclusion, use an application-level lock or transaction.
 agent.add_tool(Tool(write_to_db, sequential=True))
 
 
@@ -726,13 +741,18 @@ and whether text or structured data was expected.
 | `allows_text` | `bool` | Whether the schema accepts plain text |
 | `allows_image` | `bool` | Whether the schema accepts image output |
 
-### Example — logging output mode in a validator
+### Example — inspecting output mode via an output lifecycle hook
+
+`@agent.output_validator` accepts only `(output)` or `(RunContext, output)` — it does not
+receive an `OutputContext`. To inspect the output mechanism, use the `after_output_validate`
+capability hook, which is passed `output_context` as a keyword argument:
 
 ```python
 import asyncio
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.output import OutputContext
+from pydantic_ai.capabilities import Hooks
+from pydantic_ai.exceptions import ModelRetry
 
 
 class Summary(BaseModel):
@@ -740,19 +760,22 @@ class Summary(BaseModel):
     detail: str
 
 
-agent = Agent('openai:gpt-4o-mini', output_type=Summary)
+hooks = Hooks()
+
+
+@hooks.on.after_output_validate
+async def inspect_output(ctx, *, output_context, output):
+    print(f'Output mode: {output_context.mode}')
+    print(f'Has function: {output_context.has_function}')
+    return output
+
+
+agent = Agent('openai:gpt-4o-mini', output_type=Summary, capabilities=[hooks])
 
 
 @agent.output_validator
-async def validate_summary(
-    ctx: RunContext[None],
-    output: Summary,
-    output_context: OutputContext,
-) -> Summary:
-    print(f'Output mode: {output_context.mode}')
-    print(f'Has function: {output_context.has_function}')
+async def validate_summary(ctx: RunContext[None], output: Summary) -> Summary:
     if not output.headline:
-        from pydantic_ai.exceptions import ModelRetry
         raise ModelRetry('Headline cannot be empty.')
     return output
 
@@ -790,17 +813,21 @@ The tool call is paused; resume it by passing `DeferredToolResults` (with `ToolA
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ApprovalRequired
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 
-agent = Agent('openai:gpt-4o-mini')
+# DeferredToolRequests must be included in output_type so the agent can surface
+# the approval pause as structured output rather than raising at run time.
+agent = Agent('openai:gpt-4o-mini', output_type=[str, DeferredToolRequests])
 
 
-@agent.tool_plain
-def delete_record(record_id: int) -> str:
+@agent.tool
+def delete_record(ctx: RunContext[None], record_id: int) -> str:
     """Delete a database record. Requires human approval for IDs > 1000."""
-    if record_id > 1000:
+    if record_id > 1000 and not ctx.tool_call_approved:
+        # Raise only when the call has NOT yet been approved.
+        # On the resume pass ctx.tool_call_approved is True, so we proceed.
         raise ApprovalRequired(
             metadata={
                 'action': 'delete',
