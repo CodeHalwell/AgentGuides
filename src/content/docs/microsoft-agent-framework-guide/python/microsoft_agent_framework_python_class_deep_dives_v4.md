@@ -597,7 +597,7 @@ compound = FilterGroup("or", [
 
 **Module:** `agent_framework._settings` (re-exported via `agent_framework`)
 
-`SecretString` wraps a credential so that `str()`, `repr()`, f-string formatting, and string concatenation all emit `'**********'` instead of the real value. Use `get_secret_value()` to extract it for SDK calls.
+`SecretString` wraps a credential so that `str()`, `repr()`, and f-string formatting emit `'**********'`, and string concatenation masks the secret portion while preserving any non-secret prefix (e.g. `"Bearer " + s` → `"Bearer **********"`). Use `get_secret_value()` to extract the real value for SDK calls.
 
 ### Constructor
 
@@ -766,7 +766,7 @@ settings = load_settings(
 
 > **Trust-model caveat:** AGENT-HOOKS-0.1 is a cooperative in-process control contract, not a security boundary. The eight interception points provide best-effort mediation; complete mediation is not guaranteed by the spec. Do not rely solely on this middleware to enforce hard security invariants across trust boundaries.
 
-Requires the optional `agent-hooks-sdk` package: `pip install agent-hooks-sdk`.
+Requires the optional `agent-hooks-sdk` package: `pip install --pre agent-hooks-sdk` (the SDK is in pre-release as of 1.18.0).
 
 ### Signature
 
@@ -880,10 +880,11 @@ agent = Agent(client=..., middleware=[bundle])
 
 ```python
 from agent_framework import create_agent_hooks_middleware_from_emitter
-from agent_hooks import InterceptionEmitter, AgentContextBuilder
+from agent_hooks import InterceptionEmitter, AgentContextBuilder  # pip install --pre agent-hooks-sdk
 
 emitter = InterceptionEmitter(interceptors=[my_interceptor])
-builder = AgentContextBuilder(emitter=emitter)
+# AgentContextBuilder constructor args vary by agent-hooks-sdk version — check its docs
+builder = AgentContextBuilder(agent_id="my-agent", framework="agent-framework", session_id="sess-1")
 
 bundle = create_agent_hooks_middleware_from_emitter(emitter, builder)
 # Same bundle used for every run — one shared session
@@ -961,7 +962,6 @@ class GroupChatState:
 
 ```python
 import asyncio
-from itertools import cycle
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 from agent_framework_orchestrations import GroupChatBuilder, GroupChatState
@@ -976,10 +976,12 @@ def make_agent(name: str, persona: str) -> Agent:
 alice = make_agent("Alice", "A skeptical scientist.")
 bob   = make_agent("Bob",   "An optimistic entrepreneur.")
 
-# Alternate between Alice and Bob for up to 4 rounds
-_participants = cycle(["Alice", "Bob"])
+_names = ["Alice", "Bob"]
+
 def round_robin(state: GroupChatState) -> str:
-    return next(_participants)
+    # Derive speaker from current_round so the function is stateless and safe across
+    # concurrent runs (a module-level cycle would share state between workflow instances)
+    return _names[state.current_round % len(_names)]
 
 workflow = GroupChatBuilder(
     participants=[alice, bob],
@@ -1076,8 +1078,8 @@ async def main():
             print(f"[{msg.author_name}] {msg.text[:80]}")
 
     # To resume: retrieve the latest saved checkpoint ID from storage, then run again.
-    # workflow_name must match the workflow's configured name (defaults to class/builder name).
-    latest = await storage.get_latest(workflow_name="GroupChatWorkflow")
+    # workflow.name is the authoritative name (a UUID-based string set at build() time).
+    latest = await storage.get_latest(workflow_name=workflow.name)
     if latest:
         resumed = await workflow.run(checkpoint_id=latest.checkpoint_id)
         for response in resumed.get_outputs():
