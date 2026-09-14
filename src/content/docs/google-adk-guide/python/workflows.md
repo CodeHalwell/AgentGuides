@@ -172,7 +172,7 @@ inner = Workflow(
 # Outer pipeline — nests inner as a node
 outer = Workflow(
     name="outer_pipeline",
-    edges=[(START, inner, publish)],   # inner is auto-wrapped via build_node()
+    edges=[(START, inner, publish)],   # Workflow is already BaseNode; edge parser accepts it directly
 )
 ```
 

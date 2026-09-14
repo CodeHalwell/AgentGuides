@@ -274,7 +274,12 @@ async def main():
         "Electric vehicles are outselling petrol cars in Norway.",
         user_id="u1", session_id=session.id,
     )
-    print(events[-1].content.parts[0].text)
+    # single_turn node completions arrive as event.output, not event.content
+    output = next(
+        (e.content.parts[0].text for e in reversed(events) if e.content and e.content.parts),
+        None,
+    )
+    print(output)
 
 asyncio.run(main())
 ```
@@ -355,9 +360,9 @@ asyncio.run(main())
 from google.adk.workflow import node, Workflow, START
 
 @node(rerun_on_resume=True)
-async def orchestrate(topic: str, ctx) -> str:
+async def orchestrate(node_input: str, ctx) -> str:
     # Dispatch the task agent dynamically — ctx.run_node supports task-mode agents
-    result = await ctx.run_node(researcher, ResearchInput(topic=topic))
+    result = await ctx.run_node(researcher, ResearchInput(topic=node_input))
     # result is a ResearchOutput instance (Pydantic model)
     summary = result.summary if hasattr(result, "summary") else str(result)
     return summary
@@ -902,6 +907,7 @@ managed_search = ManagedAgent(
     name="web_researcher",
     description="Answers questions that need live web search.",
     agent_id="antigravity-preview-05-2026",   # your Managed Agent ID
+    mode="single_turn",                        # required when used as a sub_agents member
     tools=[types.Tool(google_search=types.GoogleSearch())],
 )
 
@@ -938,7 +944,7 @@ asyncio.run(main())
 
 **`mode='single_turn'`** — set this when placing a `ManagedAgent` inside a `LlmAgent.sub_agents` list. ADK wraps it as a `_SingleTurnAgentTool` automatically.
 
-**`RemoteMcpServer`** — pass a `RemoteMcpServer` instance in `tools=` to connect the managed agent to an HTTP-streamable MCP server server-side. Unlike client-side `McpToolset`, ADK forwards the server URL and auth headers to the Managed Agents API; the API connects and executes the MCP tools without local transport overhead.
+**`RemoteMcpServer`** — pass a `RemoteMcpServer` instance in `tools=` to connect the managed agent to an HTTP-streamable MCP server running server-side. Unlike client-side `McpToolset`, ADK forwards the server URL and auth headers to the Managed Agents API; the API connects and executes the MCP tools without local transport overhead.
 
 ```python
 from google.adk.agents import ManagedAgent
@@ -970,4 +976,4 @@ managed_maps = ManagedAgent(
 - `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
 - `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
 - `ManagedAgent.tools` only accepts `types.Tool`, `BaseTool`, or `RemoteMcpServer` — a plain callable or `FunctionTool` raises a `ValueError` at runtime because client-side tools are not supported in server-hosted execution.
-- `ManagedAgent` is available from `google.adk.agents` starting in google-adk==2.7.0.
+- `ManagedAgent` is available from `google.adk.agents` starting in google-adk==2.4.0.

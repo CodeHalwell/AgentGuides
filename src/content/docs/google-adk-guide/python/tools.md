@@ -1269,7 +1269,7 @@ Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `
 from google.adk.tools.bigquery import BigQueryToolset
 from google.adk.agents import LlmAgent
 
-# Uses Application Default Credentials; optionally pass project_id
+# Uses Application Default Credentials (ADC); set GOOGLE_CLOUD_PROJECT env var for the project
 bq_tools = BigQueryToolset()
 
 analyst = LlmAgent(
@@ -1284,22 +1284,27 @@ analyst = LlmAgent(
 )
 ```
 
-**Filter to specific tables** using `tool_filter` or `BigQueryToolset`'s `dataset_filter`:
+**Filter operations** with `tool_filter` (controls which BQ tools are exposed) or **restrict datasets** with `dataset_filter`:
 
 ```python
 from google.adk.tools.bigquery import BigQueryToolset
 from google.adk.agents import LlmAgent
 
-# Expose only the 'sales' and 'inventory' datasets
+# Expose only SQL execution and dataset listing — agent can still access any dataset
 bq_tools = BigQueryToolset(
     tool_filter=["bigquery_execute_sql", "bigquery_list_dataset_ids"],
+)
+
+# Restrict to specific datasets — agent cannot query outside these
+bq_tools_scoped = BigQueryToolset(
+    dataset_filter=["my_project.sales", "my_project.inventory"],
 )
 
 agent = LlmAgent(
     name="sales_analyst",
     model="gemini-2.5-pro",
     instruction="Run SQL against the sales dataset only.",
-    tools=[bq_tools],
+    tools=[bq_tools_scoped],
 )
 ```
 

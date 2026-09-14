@@ -486,9 +486,18 @@ from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
 from google.adk.auth import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
+from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 
 # Scopes required by your MCP server
 SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
+# auth_scheme describes the token exchange protocol; ADK uses it alongside
+# auth_credential to obtain and inject a short-lived access token.
+auth_scheme = OpenIdConnectWithConfig(
+    authorization_endpoint="https://accounts.google.com/o/oauth2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    scopes=SCOPES,
+)
 
 auth_credential = AuthCredential(
     auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
@@ -519,9 +528,7 @@ async def main():
             url="https://my-private-mcp-server.example.com/mcp",
             timeout=30.0,
         ),
-        # auth_scheme describes the expected auth type; auth_credential supplies the key material.
-        # ADK exchanges the service account for a short-lived access token and injects
-        # it as an Authorization header on each MCP request.
+        auth_scheme=auth_scheme,
         auth_credential=auth_credential,
         tool_name_prefix="private",
     )
@@ -560,18 +567,25 @@ import json
 with open("service_account.json") as f:
     sa = json.load(f)
 
-cred = ServiceAccountCredential(
-    type_=sa["type"],
-    project_id=sa["project_id"],
-    private_key_id=sa["private_key_id"],
-    private_key=sa["private_key"],
-    client_email=sa["client_email"],
-    client_id=sa["client_id"],
-    auth_uri=sa["auth_uri"],
-    token_uri=sa["token_uri"],
-    auth_provider_x509_cert_url=sa["auth_provider_x509_cert_url"],
-    client_x509_cert_url=sa["client_x509_cert_url"],
-    universe_domain=sa.get("universe_domain", "googleapis.com"),
+# Reassign auth_credential so McpToolset picks up the file-loaded key
+auth_credential = AuthCredential(
+    auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
+    service_account=ServiceAccount(
+        service_account_credential=ServiceAccountCredential(
+            type_=sa["type"],
+            project_id=sa["project_id"],
+            private_key_id=sa["private_key_id"],
+            private_key=sa["private_key"],
+            client_email=sa["client_email"],
+            client_id=sa["client_id"],
+            auth_uri=sa["auth_uri"],
+            token_uri=sa["token_uri"],
+            auth_provider_x509_cert_url=sa["auth_provider_x509_cert_url"],
+            client_x509_cert_url=sa["client_x509_cert_url"],
+            universe_domain=sa.get("universe_domain", "googleapis.com"),
+        ),
+        scopes=SCOPES,
+    ),
 )
 ```
 
