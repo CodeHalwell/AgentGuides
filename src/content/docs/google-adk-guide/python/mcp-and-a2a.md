@@ -486,7 +486,7 @@ from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
 from google.adk.auth import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
-from fastapi.security import HTTPBearer
+from fastapi.openapi.models import HTTPBearer
 
 # Scopes the service account token should carry (used by the SA exchanger)
 SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -564,7 +564,7 @@ from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.auth import AuthCredential, AuthCredentialTypes
 from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
-from fastapi.security import HTTPBearer
+from fastapi.openapi.models import HTTPBearer
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import McpToolset

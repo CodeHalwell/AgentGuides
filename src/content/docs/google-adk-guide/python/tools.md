@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). The latest release is **2.9.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). The latest release is **2.9.0** — most examples are compatible with 2.3.0 and later; the `BigQueryToolset` section requires 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -1262,6 +1262,8 @@ agent = LlmAgent(
 Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `state` (read-only `MappingProxyType`), `session`, `user_id`, `run_config`, `get_credential(key)`.
 
 ## BigQueryToolset (experimental)
+
+> **Minimum version:** `google.adk.integrations.bigquery` was introduced after 2.7.1 — use **google-adk ≥ 2.9.0** for the imports shown below. On 2.7.x and earlier, the module path is `google.adk.tools.bigquery` (deprecated compatibility shim).
 
 `BigQueryToolset` lets an agent query BigQuery datasets, list tables, inspect schemas, and run SQL. Requires `pip install google-cloud-bigquery`.
 
