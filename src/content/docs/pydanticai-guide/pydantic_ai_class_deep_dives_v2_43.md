@@ -15,7 +15,9 @@ Modules consulted: `pydantic_ai/exceptions.py`, `pydantic_ai/tools.py`,
 `pydantic_ai/tool_manager.py`.
 
 This page covers classes that were **absent or thin** in the three earlier deep-dive pages
-(v2.33.0, v2.36.0, v2.40.0). All 10 items here are distinct from those sets.
+(v2.33.0, v2.36.0, v2.40.0). Most items are new to the series; two (`StreamedRunResult` and
+`ToolDefinition.sequential`) also appear in the v2.36.0 page but are covered here with
+deeper 2.43.0-specific patterns and corrections.
 
 ```bash
 pip install "pydantic-ai==2.43.0"
@@ -613,6 +615,16 @@ async def maybe_skip_model(ctx, request_context):
     return request_context  # must return request_context on cache miss
 
 
+@hooks.on.after_model_request
+async def populate_model_cache(ctx, *, request_context, response):
+    key = str(ctx.messages)
+    for part in response.parts:
+        if isinstance(part, TextPart):
+            _model_cache[key] = part.content  # cache the first text part
+            break
+    return response
+
+
 @hooks.on.before_tool_execute
 async def maybe_skip_tool(ctx, *, call, tool_def, args):
     import json
@@ -633,8 +645,16 @@ def weather(city: str) -> str:
 async def main() -> None:
     import json
     _tool_cache[f'weather:{json.dumps({"city": "Paris"}, sort_keys=True)}'] = 'Cloudy in Paris (cached)'
-    result = await agent.run("What's the weather in Paris?")
-    print(result.output)
+
+    # First run: tool-cache hit (SkipToolExecution), model-cache miss →
+    # after_model_request populates _model_cache for the same message key.
+    result1 = await agent.run("What's the weather in Paris?")
+    print(result1.output)
+
+    # Second run: same user prompt → before_model_request fires SkipModelRequest
+    # because _model_cache now has an entry for this message key.
+    result2 = await agent.run("What's the weather in Paris?")
+    print(result2.output)  # served from model cache
 
 
 asyncio.run(main())
@@ -872,9 +892,9 @@ async def main() -> None:
             }
         )
 
-        # Step 3: resume the run.
+        # Step 3: resume the run (no new user prompt — this is a tool resumption).
         final = await agent.run(
-            '',
+            None,
             message_history=result.all_messages(),
             deferred_tool_results=tool_results,
         )

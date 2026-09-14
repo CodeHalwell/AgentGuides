@@ -134,7 +134,7 @@ print(repr(result2.output))  # DetailedReport(title=..., sections=[...], citatio
 When `end_strategy='exhaustive'` the agent runs **all** tool calls the model emitted in a turn before stopping,
 including multiple output tools. Setting `sequential=True` on a `ToolOutput` makes it act as a
 barrier: function tools emitted before it finish first, then this output tool runs alone, then
-tools emitted after it start. Under `'early'`/`'graceful'` (the default) output tools already run
+tools emitted after it start. Under `'early'` (the default) or `'graceful'`, output tools already run
 sequentially, so `sequential=True` has no effect there.
 
 ```python
