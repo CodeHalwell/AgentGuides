@@ -466,9 +466,9 @@ Send("slow_node", {"data": payload}, timeout=30.0)
 
 ---
 
-## `create_react_agent` — current recommended factory
+## `create_react_agent` — legacy factory (deprecated in LangGraph v1)
 
-`create_react_agent` from `langgraph.prebuilt` is **not deprecated** in langgraph 1.2.x. It is the primary recommended way to build a tool-calling agent:
+`create_react_agent` from `langgraph.prebuilt` is **deprecated** per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent` (requires `pip install langchain`). The installed source does not carry a runtime decorator but migration guidance is clear. For new production code, prefer `langchain.agents.create_agent`. This section documents `create_react_agent` for users maintaining existing code or using `langgraph` without the separate `langchain` package:
 
 ```python
 from langgraph.prebuilt import create_react_agent

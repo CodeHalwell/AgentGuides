@@ -18,7 +18,7 @@ Verified against **`langgraph==1.2.11`** (modules: `langgraph.prebuilt`, `langgr
 
 > Prereqs: [Chapter 4 — Tools](/langgraph-guide/python/chapter-04-tools/).
 
-> **Important note on `langchain.agents.middleware`.** This module does not exist in the current release. If you encountered references to `create_agent(middleware=[...])` or `AgentMiddleware` from `langchain.agents`, those APIs are not available in the installed packages. The real primitives are documented here.
+> **Note on `langchain.agents.middleware` and `create_agent`.** These APIs exist in the separate **`langchain`** package (install with `pip install langchain`), which is not bundled with `langgraph`. Official LangGraph v1 migration docs deprecate `create_react_agent` in favour of `langchain.agents.create_agent` with middleware. This chapter documents the `pre_model_hook`/`post_model_hook` hooks available in `langgraph` standalone — they work without installing `langchain` and remain supported on `create_react_agent` while it exists.
 
 ## Where hooks and policies live
 

@@ -137,7 +137,7 @@ Complete rewrite updating all framework version records:
 
 **Breaking changes**:
 - Python 3.9 dropped (minimum 3.10)
-- `langgraph.prebuilt.create_react_agent` is **not deprecated** in 1.2.11 — source inspection confirms no `@deprecated` decorator (the claim that it was deprecated and should migrate to `langchain.agents.create_agent` was erroneous; `langchain.agents.create_agent` does not exist in any released `langchain` version)
+- `langgraph.prebuilt.create_react_agent` is **deprecated** per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent`. The installed `langgraph==1.2.11` source does not carry a runtime `@deprecated` decorator, but official migration guidance is clear. `langchain.agents.create_agent` and `langchain.agents.middleware` exist in the separate **`langchain`** package and require `pip install langchain` (not bundled with `langgraph`).
 - `langgraph-prebuilt==1.0.9` introduces `ImportError` for `ServerInfo` when paired with older versions
 
 **New features (v1.1.x)**:

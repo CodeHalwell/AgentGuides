@@ -2246,7 +2246,7 @@ The following subsections appeared in earlier drafts of this guide under a "v1.0
 
 - **Node Caching** — `from langgraph.cache import cache_node, SemanticCache, CachePolicy` does not exist. For caching, use LangGraph's long-term `Store` (see [Memory & Persistence](#memory--persistence)) or plain `functools.lru_cache`.
 - **Deferred Nodes** — `from langgraph.graph import deferred` and `@deferred(wait_for=[...])` are not real. Fan-in is native: edges from multiple sources into the same target wait for all upstream completions.
-- **Pre/Post Model Hooks decorators** — `from langgraph.llm_hooks import pre_model_hook, post_model_hook` does not exist. The real middleware API is the `pre_model_hook=` / `post_model_hook=` keyword arguments on `langgraph.prebuilt.create_react_agent` (not decorators). `langchain.agents.middleware` is also not a real module — `langchain` is a separate package not installed with `langgraph`, and `AgentMiddleware`/`create_agent(middleware=[...])` do not exist in it. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for verified examples.
+- **Pre/Post Model Hooks decorators** — `from langgraph.llm_hooks import pre_model_hook, post_model_hook` does not exist. The real hooks are the `pre_model_hook=` / `post_model_hook=` kwargs on `langgraph.prebuilt.create_react_agent` (not decorators). `langchain.agents.middleware` and `langchain.agents.create_agent` **do** exist but require the separate **`langchain`** package (`pip install langchain`), which is not bundled with `langgraph`. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for verified examples.
 - **Tools State Updates** — `@tool(updates_state=True)` returning `StateUpdate` is not a real decorator option. Have your node read the tool result and return the state update as a normal dict.
 - **Command Tool for edgeless flows** — `command_tool`, `CommandRouter` are not real. Real equivalent: return a `langgraph.types.Command(goto="next_node", update={...})` from a node or a tool to drive routing.
 - **LangGraph Templates CLI** — `langgraph template list|create|init|publish` is not a real subcommand. Use `langgraph new --template NAME` to scaffold from a template.
@@ -2781,13 +2781,14 @@ Several symbols changed in 1.0–1.2: `MessageGraph` is **deprecated** (still im
 removal in v2.0.0). The `AgentState*` family is no longer re-exported from the
 top-level `langgraph.prebuilt.__init__` but remains importable from
 `langgraph.prebuilt.chat_agent_executor`; `ValidationNode` is still importable
-from `langgraph.prebuilt.tool_validator`. The deprecation notices in the source
-target `langchain.agents` as migration destination (requires the separate
-`langchain` package). `create_react_agent` is **not deprecated** — it carries no
-`@deprecated` decorator in 1.2.11 and remains the primary recommended factory.
-The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
-`langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` does not exist in any released
-version of `langchain`.
+from `langgraph.prebuilt.tool_validator`. The deprecation notices target
+`langchain.agents` as migration destination (requires the separate `langchain`
+package). `create_react_agent` is **deprecated** per official LangGraph v1
+migration docs in favour of `langchain.agents.create_agent`; the installed
+`langgraph==1.2.11` source does not carry a runtime `@deprecated` decorator but
+migration guidance is clear. The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
+`langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` and
+`langchain.agents.middleware` exist in the separate `langchain` package.
 
 ### Graph Construction & State
 
@@ -4747,11 +4748,13 @@ async with graph.astream({"messages": []}, stream_mode="tools", version="v2") as
 
 **Module:** `langgraph.prebuilt.chat_agent_executor` / `.tool_validator`
 
-`create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. It is **not
-deprecated** in langgraph 1.2.11 — the installed source carries no
-`@deprecated` decorator or runtime warning. It remains the primary recommended
-factory. (`langchain.agents.create_agent` does not exist in any released version
-of `langchain`; references to it in earlier drafts of this guide were erroneous.)
+`create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. It is
+**deprecated** per official LangGraph v1 migration docs in favour of
+`langchain.agents.create_agent` (from the separate `langchain` package; install
+with `pip install langchain`). The installed `langgraph==1.2.11` source does not
+carry a runtime `@deprecated` decorator, but official migration guidance is clear.
+`pre_model_hook`/`post_model_hook` hooks remain available on `create_react_agent`
+for users working with `langgraph` standalone.
 
 ```python
 def create_react_agent(
