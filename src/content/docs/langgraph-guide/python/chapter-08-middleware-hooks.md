@@ -622,6 +622,7 @@ builder2.add_edge("b", END)
 
 ```python
 from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolInvocationError
 from langchain_core.tools import tool
 
 
@@ -666,7 +667,9 @@ def format_error(exc: Exception) -> str:
     # request data that the model (and user) should not see.
     # Distinguish argument errors (fixable by the model) from service failures
     # (where retrying with different arguments won't help).
-    if isinstance(exc, (TypeError, ValueError, KeyError)):
+    # ToolInvocationError wraps Pydantic ValidationErrors raised during tool
+    # argument validation inside ToolNode; include it with the argument-error branch.
+    if isinstance(exc, (TypeError, ValueError, KeyError, ToolInvocationError)):
         return f"Tool call failed ({type(exc).__name__}): bad arguments. Retry with corrected arguments."
     return f"Tool call failed ({type(exc).__name__}): service error. Try a different approach."
 
