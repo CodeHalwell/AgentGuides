@@ -1,6 +1,6 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.33.0 (August 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.43.0 (September 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
@@ -2312,6 +2312,8 @@ Three new exceptions enable short-circuiting the normal execution pipeline from 
 ## Class & API Reference
 
 Verified against **pydantic-ai 2.33.0** (installed and cross-checked via `inspect.signature`, `dataclasses.fields`, and direct source reads). This is a consolidated, source-verified reference to the classes, functions, and wire types across `pydantic_ai`, `pydantic_graph`, and `pydantic_evals` — folded together from 44 previously-separate "class deep dive" volumes into 16 topic sections. Optional-dependency modules (Temporal/DBOS/Prefect/AG-UI/duckduckgo/tavily/exa/web-fetch/markdownify) were verified for import path and top-level structure only, since their third-party packages are not installed in the verification environment.
+
+> **2.43.0 addendum:** Ten additional classes verified against pydantic-ai 2.43.0 are documented in the companion deep-dive page — [10 Source-Verified Class Deep Dives (v2.43.0)](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_43/) — covering `ToolFailed`, `RunCancelled`, `ToolSelector`, `ToolOrOutput`, `ServiceTier`/`ThinkingLevel`, `AgentStream`/`StreamedRunResult`, `SkipModelRequest`/`SkipToolValidation`/`SkipToolExecution`, `ToolDefinition.sequential`, `OutputContext`, and `ApprovalRequired`.
 
 ### Agents & Execution Core
 

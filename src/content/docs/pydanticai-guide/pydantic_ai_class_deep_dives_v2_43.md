@@ -325,8 +325,10 @@ def search_web(query: str) -> str:
 
 @agent.tool_plain
 def calculate(expression: str) -> float:
-    """Evaluate a mathematical expression."""
-    return eval(expression)  # noqa: S307 (demo only)
+    """Evaluate a simple arithmetic expression (addition only)."""
+    # Restricted to addition to avoid arbitrary code execution.
+    parts = expression.split('+')
+    return sum(float(p.strip()) for p in parts)
 
 
 async def main() -> None:
@@ -573,7 +575,11 @@ from pydantic_ai.exceptions import SkipToolExecution
 raise SkipToolExecution(result='Cached: 42.0 USD')
 ```
 
-### Full example — a caching capability using all three
+### Full example — a caching capability using SkipModelRequest and SkipToolExecution
+
+Note: `SkipToolValidation` (for `before_tool_validate`) is a third escape hatch in the same
+family. It is shown individually above; the caching pattern below combines only model-level
+and tool-level caching to keep the example focused.
 
 ```python
 import asyncio
@@ -590,7 +596,7 @@ hooks = Hooks()
 
 
 @hooks.on.before_model_request
-async def maybe_skip_model(ctx):
+async def maybe_skip_model(ctx, request_context):
     key = str(ctx.messages)
     if key in _model_cache:
         raise SkipModelRequest(
@@ -600,6 +606,7 @@ async def maybe_skip_model(ctx):
                 timestamp=datetime.utcnow(),
             )
         )
+    return request_context  # must return request_context on cache miss
 
 
 @hooks.on.before_tool_execute
@@ -844,18 +851,20 @@ async def main() -> None:
     result = await agent.run('Delete record 1500.')
 
     if isinstance(result.output, DeferredToolRequests):
-        requests = result.output
+        deferred = result.output
         print('Approval required:')
-        for call_id, meta in requests.metadata.items():
-            print(f'  {call_id}: {meta}')
+        for call in deferred.approvals:
+            meta = deferred.metadata.get(call.tool_call_id, {})
+            print(f'  {call.tool_call_id}: {meta}')
 
         # Step 2 (in a real app, show the metadata to a human):
         approved = True  # human says yes
 
+        # Build results using approvals= kwarg keyed by tool_call_id.
         tool_results = DeferredToolResults(
-            {
-                call_id: ToolApproved() if approved else ToolDenied('User declined.')
-                for call_id in requests.metadata
+            approvals={
+                call.tool_call_id: ToolApproved() if approved else ToolDenied('User declined.')
+                for call in deferred.approvals
             }
         )
 

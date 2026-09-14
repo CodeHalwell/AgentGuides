@@ -19,6 +19,8 @@ Modules consulted: `pydantic_ai/realtime/_session.py`, `pydantic_ai/realtime/set
 This page covers classes that were **absent or thin** in the two earlier deep-dive pages
 (v2.33.0 and v2.36.0). All 10 items here are distinct from those sets.
 
+> **v2.43.0 available:** See [10-Class Deep Dives v2.43.0](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_43/) for `ToolFailed`, `RunCancelled`, `ToolSelector`, `ToolOrOutput`, `ServiceTier`/`ThinkingLevel`, `AgentStream`/`StreamedRunResult`, `SkipModelRequest`/`SkipToolValidation`/`SkipToolExecution`, `ToolDefinition.sequential`, `OutputContext`, and `ApprovalRequired` — verified against pydantic-ai 2.43.0.
+
 ```bash
 pip install "pydantic-ai==2.40.0"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
