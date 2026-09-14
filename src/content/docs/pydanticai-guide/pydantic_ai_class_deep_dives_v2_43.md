@@ -593,7 +593,7 @@ from datetime import datetime
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import SkipModelRequest, SkipToolExecution
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
 
 _model_cache: dict[str, str] = {}
 _tool_cache: dict[str, str] = {}
@@ -601,9 +601,19 @@ _tool_cache: dict[str, str] = {}
 hooks = Hooks()
 
 
+def _prompt_key(ctx) -> str:
+    """Stable cache key: text of the first UserPromptPart in the conversation."""
+    for msg in ctx.messages:
+        if hasattr(msg, 'parts'):
+            for part in msg.parts:
+                if isinstance(part, UserPromptPart):
+                    return str(part.content)
+    return str(ctx.messages)
+
+
 @hooks.on.before_model_request
 async def maybe_skip_model(ctx, request_context):
-    key = str(ctx.messages)
+    key = _prompt_key(ctx)
     if key in _model_cache:
         raise SkipModelRequest(
             ModelResponse(
@@ -617,10 +627,10 @@ async def maybe_skip_model(ctx, request_context):
 
 @hooks.on.after_model_request
 async def populate_model_cache(ctx, *, request_context, response):
-    key = str(ctx.messages)
+    key = _prompt_key(ctx)
     for part in response.parts:
         if isinstance(part, TextPart):
-            _model_cache[key] = part.content  # cache the first text part
+            _model_cache[key] = part.content  # cache the final text response
             break
     return response
 
@@ -646,13 +656,14 @@ async def main() -> None:
     import json
     _tool_cache[f'weather:{json.dumps({"city": "Paris"}, sort_keys=True)}'] = 'Cloudy in Paris (cached)'
 
-    # First run: tool-cache hit (SkipToolExecution), model-cache miss →
-    # after_model_request populates _model_cache for the same message key.
+    # First run: SkipToolExecution serves the tool result from cache.
+    # after_model_request caches the final text response under the stable
+    # prompt key ("What's the weather in Paris?").
     result1 = await agent.run("What's the weather in Paris?")
     print(result1.output)
 
-    # Second run: same user prompt → before_model_request fires SkipModelRequest
-    # because _model_cache now has an entry for this message key.
+    # Second run: before_model_request fires, _prompt_key extracts the same
+    # prompt text, finds the cached response, raises SkipModelRequest.
     result2 = await agent.run("What's the weather in Paris?")
     print(result2.output)  # served from model cache
 
