@@ -882,7 +882,8 @@ agent = Agent(client=..., middleware=[bundle])
 from agent_framework import create_agent_hooks_middleware_from_emitter
 from agent_hooks import InterceptionEmitter, AgentContextBuilder  # pip install --pre agent-hooks-sdk
 
-emitter = InterceptionEmitter(interceptors=[my_interceptor])
+emitter = InterceptionEmitter()
+emitter.register(my_interceptor)  # interceptors are added via .register(), not the constructor
 # AgentContextBuilder constructor args vary by agent-hooks-sdk version — check its docs
 builder = AgentContextBuilder(agent_id="my-agent", framework="agent-framework", session_id="sess-1")
 
@@ -1115,10 +1116,11 @@ async def main():
     # HITL pattern: run → collect request_info events → re-run with responses= dict.
     result = await workflow.run("Summarise recent advances in quantum computing.")
     while result.get_request_info_events():
-        responses = {
-            event.request_id: input(f"[HITL] Guide (round {i}): ")
-            for i, event in enumerate(result.get_request_info_events())
-        }
+        responses = {}
+        for i, event in enumerate(result.get_request_info_events()):
+            # asyncio.to_thread offloads blocking input() to a thread so the event loop is not stalled
+            answer = await asyncio.to_thread(input, f"[HITL] Guide (round {i}): ")
+            responses[event.request_id] = answer
         result = await workflow.run(responses=responses)
     for response in result.get_outputs():
         for msg in response.messages:
