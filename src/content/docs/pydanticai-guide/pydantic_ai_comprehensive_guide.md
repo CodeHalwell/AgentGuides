@@ -4,7 +4,7 @@ description: "Version: 2.43.0 (September 2026) Framework: Pydantic AI - GenAI Ag
 framework: pydanticai
 ---
 
-Latest: pydantic-ai 2.43.0 | Guide verified against: 2.43.0 | Updated: September 2026
+Latest: pydantic-ai 2.43.0 | Class & API Reference verified against: 2.33.0 · new classes in 2.43.0 addendum | Updated: September 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
@@ -4716,7 +4716,7 @@ parts = split_content_into_text_and_thinking(
 Explicit, per-type control over how structured output is delivered. `ToolOutput` — model emits a structured "output tool" call (best for unions/non-native models). `NativeOutput` — provider's native JSON-schema/response-format mode; `template=False` suppresses schema-prompt injection when the provider already handles it natively. `PromptedOutput` — injects the schema as prompt text and parses the reply; `template` accepts a custom `'{schema}'`-style string. `TextOutput(fn)` — plain text passed to a Python parser function, which may optionally take `RunContext` as its first argument and may be async. `StructuredDict` is a factory (not a class) returning a `dict[str, Any]` subclass with a JSON Schema attached — validated structured output without defining a Pydantic `BaseModel`; `name`/`description` fall back to the schema's `title`/`description`.
 
 ```python
-ToolOutput(type_, *, name=None, description=None, max_retries=None, strict=None)
+ToolOutput(type_, *, name=None, description=None, max_retries=None, strict=None, sequential=False)
 NativeOutput(outputs, *, name=None, description=None, strict=None, template=None)
 PromptedOutput(outputs, *, name=None, description=None, template=None)
 TextOutput(output: TextOutputFunc)
