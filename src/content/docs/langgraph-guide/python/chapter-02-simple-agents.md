@@ -82,7 +82,7 @@ Use your own TypedDict when you need extra fields alongside `messages`.
 
 ## Example 2: Conditional Routing
 
-Route based on message type. A classifier node sets `query_type`, and `add_conditional_edges` dispatches to the right handler.
+Route based on message content. A classifier node inspects keyword patterns and sets `query_type`, then `add_conditional_edges` dispatches to the right handler.
 
 ```python
 from typing_extensions import TypedDict
@@ -193,7 +193,7 @@ print(result)
 
 ## Example 4: ReAct Agent with `create_react_agent`
 
-`create_react_agent` from `langgraph.prebuilt` builds a full tool-calling loop for you — no boilerplate. It uses `MessagesState` internally and adds a `tools` node wired with `tools_condition`.
+`create_react_agent` from `langgraph.prebuilt` builds a full tool-calling loop for you — no boilerplate. It uses an agent state that extends `MessagesState` with an internal `remaining_steps` counter, and adds a `tools` node wired with `tools_condition`.
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -313,7 +313,7 @@ builder.add_edge("tools", "agent")   # loop back after tool execution
 
 graph = builder.compile()
 
-result = graph.invoke({"messages": [{"role": "user", "content": "What is sqrt(144) + 5?"}]})
+result = graph.invoke({"messages": [{"role": "user", "content": "What is 12 * 12 + 5?"}]})
 print(result["messages"][-1].content)
 ```
 
@@ -404,6 +404,8 @@ print()
 | `"debug"` | Detailed execution trace with timing | Debugging and profiling |
 | `"tasks"` | `(TasksStreamPart, ...)` — task-level events | Monitoring subgraph tasks |
 | `"custom"` | Values written via `runtime.stream_writer(...)` | Custom progress signals from nodes |
+| `"checkpoints"` | Checkpoint metadata after each step | Inspecting saved state for time-travel |
+| `"tools"` | Tool-call start and result events | Monitoring individual tool executions |
 
 Pass a list to receive multiple modes simultaneously; the first element of each yielded tuple identifies the mode.
 

@@ -117,7 +117,7 @@ agent = create_react_agent(
 - Return `{"llm_input_messages": [...]}` to pass a **different** message list to the model without touching persistent state. This is the right key for trimming, truncating, or injecting a fresh system prompt.
 - Return `{"messages": [...]}` only when you want changes to be **persisted** back into the graph's message history (goes through the `add_messages` reducer).
 - Return an empty dict `{}` or `None` to pass the state through unchanged.
-- The hook **must not** raise; uncaught exceptions propagate to the caller.
+- Hooks **may** raise; the exception propagates out of the agent invocation. This is intentional for guards like the budget example in section 10.
 
 ---
 
@@ -197,10 +197,12 @@ from langchain_core.messages import AIMessage
 from langgraph.types import Command
 
 def guard_empty_response(state: dict) -> dict | Command:
-    """If the model returned an empty response, end the run immediately."""
+    """If the model returned an empty final response (no tool calls), end the run."""
     last_msg = state["messages"][-1]
-    if isinstance(last_msg, AIMessage) and not last_msg.content:
-        # Returning Command(goto=END) exits the agent loop immediately.
+    # Only exit early when content is empty AND there are no pending tool calls —
+    # tool-calling AIMessages legitimately have empty text content.
+    has_tool_calls = bool(getattr(last_msg, "tool_calls", None))
+    if isinstance(last_msg, AIMessage) and not last_msg.content and not has_tool_calls:
         from langgraph.graph import END
         return Command(goto=END)
     return {}
@@ -388,7 +390,7 @@ Instead of passing `retry_policy`, `cache_policy`, `error_handler`, or `timeout`
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+from langgraph.types import RetryPolicy
 from typing_extensions import TypedDict
 
 
@@ -412,10 +414,10 @@ def global_error_handler(state: State, error: Exception) -> dict:
 builder = StateGraph(State)
 
 # Apply defaults before adding nodes — they are inherited by every add_node call.
+# Note: TimeoutPolicy only applies to async nodes; omit it for sync nodes.
 builder.set_node_defaults(
     retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
     error_handler=global_error_handler,
-    timeout=TimeoutPolicy(run_timeout=30.0),
 )
 
 builder.add_node("a", node_a)                # inherits defaults
@@ -430,17 +432,41 @@ result = graph.invoke({"query": "hello", "answer": ""})
 print(result)   # {'query': 'hello', 'answer': 'B(A(hello))'}
 ```
 
-You can override defaults on specific nodes:
+You can override defaults on specific nodes by passing the policy directly to `add_node`. In a fresh builder this replaces the default for that node only — don't call `add_node` for the same name twice in the same builder:
 
 ```python
+from langgraph.graph import StateGraph, START, END
 from langgraph.types import RetryPolicy
+from typing_extensions import TypedDict
 
-# node_b gets a different retry policy; node_a keeps the graph default
-builder.add_node(
+class State(TypedDict):
+    query: str
+    answer: str
+
+def node_a(state: State) -> dict:
+    return {"answer": f"A({state['query']})"}
+
+def node_b(state: State) -> dict:
+    return {"answer": f"B({state['answer']})"}
+
+def global_error_handler(state: State, error: Exception) -> dict:
+    return {"answer": f"[error] — {error}"}
+
+builder2 = StateGraph(State)
+builder2.set_node_defaults(
+    retry_policy=RetryPolicy(max_attempts=3),
+    error_handler=global_error_handler,
+)
+
+builder2.add_node("a", node_a)   # inherits: max_attempts=3
+builder2.add_node(               # overrides: no retries for this node
     "b",
     node_b,
-    retry_policy=RetryPolicy(max_attempts=1),  # no retries for this node
+    retry_policy=RetryPolicy(max_attempts=1),
 )
+builder2.add_edge(START, "a")
+builder2.add_edge("a", "b")
+builder2.add_edge("b", END)
 ```
 
 ---
@@ -557,7 +583,7 @@ builder = StateGraph(MessagesState)
 # ... add nodes and edges
 ```
 
-This is the same state type used by `create_react_agent` internally.
+Note: `create_react_agent` uses an extended version of this state that also includes `remaining_steps` (an internal step counter). Hook callables passed to `create_react_agent` receive this extended state.
 
 ---
 
@@ -596,7 +622,8 @@ builder.add_edge(START, "slow")
 builder.add_edge("slow", END)
 
 graph = builder.compile()
-# graph.ainvoke({"result": ""}) will raise asyncio.TimeoutError after ~5-10 s
+# graph.ainvoke({"result": ""}) will raise langgraph.errors.NodeTimeoutError after ~5-10 s
+# Note: this is NOT asyncio.TimeoutError — catch NodeTimeoutError specifically.
 ```
 
 **`TimeoutPolicy` fields:**
@@ -611,7 +638,7 @@ graph = builder.compile()
 
 ## 10. Realistic production stack
 
-Putting it all together: hooks for context management + graph-wide retry + per-node error recovery + tool error handling.
+Putting it all together. Two complementary patterns: (A) `create_react_agent` with pre/post hooks for model-call interceptors, and (B) a manual `StateGraph` with `set_node_defaults` for graph-wide retry + per-node error recovery + `ToolNode` error handling.
 
 ```python
 from langgraph.graph import StateGraph, MessagesState, START, END
@@ -702,6 +729,70 @@ result = agent_with_memory.invoke(
     {"messages": [{"role": "user", "content": "What does LangGraph do?"}]},
     config=cfg,
 )
+print(result["messages"][-1].content)
+```
+
+### Pattern B — Custom `StateGraph` with retry, error recovery, and `ToolNode`
+
+When you build your own graph (instead of using `create_react_agent`), combine `set_node_defaults`, per-node `error_handler`, and `ToolNode(handle_tool_errors=...)`:
+
+```python
+from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.types import RetryPolicy
+from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
+
+
+@tool
+def search_docs(query: str) -> str:
+    """Search the internal knowledge base."""
+    return f"Results for '{query}': ..."
+
+
+@tool
+def send_alert(message: str) -> str:
+    """Send a Slack alert."""
+    print(f"[ALERT] {message}")
+    return "Alert sent."
+
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([search_docs, send_alert])
+
+
+def call_model(state: MessagesState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+
+def fallback_handler(state: MessagesState, error: Exception) -> dict:
+    """Return a safe fallback message if call_model fails."""
+    from langchain_core.messages import AIMessage
+    return {"messages": [AIMessage(content=f"[error] Model call failed: {error}")]}
+
+
+tool_node = ToolNode(
+    tools=[search_docs, send_alert],
+    handle_tool_errors=True,   # tool errors become ToolMessages, not exceptions
+)
+
+builder = StateGraph(MessagesState)
+
+# Graph-wide defaults — applied to every node that doesn't override them.
+# TimeoutPolicy only applies to async nodes; omit it for sync nodes like call_model.
+builder.set_node_defaults(
+    retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5, retry_on=ConnectionError),
+    error_handler=fallback_handler,
+)
+
+builder.add_node("agent", call_model)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile()
+
+result = graph.invoke({"messages": [{"role": "user", "content": "Search for LangGraph docs."}]})
 print(result["messages"][-1].content)
 ```
 
