@@ -272,10 +272,12 @@ def search(query: str) -> str:
 def calculator(expression: str) -> str:
     """Evaluate a simple arithmetic expression (stub — replace with a real math library in production)."""
     import ast, operator as op
+    # Exponentiation (**) is intentionally excluded — unbounded exponents like
+    # 2**1000000000 can exhaust memory before the exception handler fires.
     _ops = {
         ast.Add: op.add, ast.Sub: op.sub,
         ast.Mult: op.mul, ast.Div: op.truediv,
-        ast.Pow: op.pow, ast.USub: op.neg,
+        ast.USub: op.neg,
     }
     def _eval(node):
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
