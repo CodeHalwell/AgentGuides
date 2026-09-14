@@ -270,10 +270,24 @@ def search(query: str) -> str:
 
 @tool
 def calculator(expression: str) -> str:
-    """Evaluate a mathematical expression safely."""
+    """Evaluate a simple arithmetic expression (stub — replace with a real math library in production)."""
+    import ast, operator as op
+    _ops = {
+        ast.Add: op.add, ast.Sub: op.sub,
+        ast.Mult: op.mul, ast.Div: op.truediv,
+        ast.Pow: op.pow, ast.USub: op.neg,
+    }
+    def _eval(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in _ops:
+            return _ops[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _ops:
+            return _ops[type(node.op)](_eval(node.operand))
+        raise ValueError(f"Unsupported expression: {ast.dump(node)}")
     try:
-        result = eval(expression, {"__builtins__": {}})   # noqa: S307
-        return str(result)
+        tree = ast.parse(expression, mode="eval")
+        return str(_eval(tree.body))
     except Exception as e:
         return f"Error: {e}"
 

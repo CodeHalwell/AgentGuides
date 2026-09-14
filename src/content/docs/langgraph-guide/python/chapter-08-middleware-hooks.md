@@ -56,7 +56,9 @@ def trim_to_last_n(state: dict) -> dict:
         # Preserve the system message if present, then take the tail
         system = [m for m in msgs if isinstance(m, SystemMessage)]
         rest = [m for m in msgs if not isinstance(m, SystemMessage)][-19:]
-        return {"messages": system + rest}
+        # Use "llm_input_messages" — this is passed to the model WITHOUT
+        # updating the persistent "messages" state through the add_messages reducer.
+        return {"llm_input_messages": system + rest}
     return {}   # Return empty dict = no change
 
 
@@ -75,7 +77,8 @@ def inject_system_prompt(state: dict) -> dict:
     """Prepend a fresh system prompt at the start of each model call."""
     system = SystemMessage(content="You are a concise assistant. Respond in ≤3 sentences.")
     msgs = [m for m in state.get("messages", []) if not isinstance(m, SystemMessage)]
-    return {"messages": [system] + msgs}
+    # "llm_input_messages" is model-only; it does NOT write back to persistent state.
+    return {"llm_input_messages": [system] + msgs}
 
 
 agent = create_react_agent(
@@ -100,7 +103,7 @@ def truncate_long_messages(state: dict) -> dict:
                 truncated = msg.content[:MAX_INPUT_CHARS] + " [truncated]"
                 msg = msg.model_copy(update={"content": truncated})
         updated.append(msg)
-    return {"messages": updated}
+    return {"llm_input_messages": updated}
 
 
 agent = create_react_agent(
@@ -111,7 +114,8 @@ agent = create_react_agent(
 ```
 
 **Return value rules:**
-- Return a `dict` with the keys you want to update — unchanged keys are left as-is.
+- Return `{"llm_input_messages": [...]}` to pass a **different** message list to the model without touching persistent state. This is the right key for trimming, truncating, or injecting a fresh system prompt.
+- Return `{"messages": [...]}` only when you want changes to be **persisted** back into the graph's message history (goes through the `add_messages` reducer).
 - Return an empty dict `{}` or `None` to pass the state through unchanged.
 - The hook **must not** raise; uncaught exceptions propagate to the caller.
 
@@ -226,11 +230,11 @@ def get_weather(city: str) -> str:
 
 
 def pre_hook(state: dict) -> dict:
-    """Ensure a system message is always present."""
+    """Ensure a system message is always present (model-only, not persisted)."""
     has_system = any(isinstance(m, SystemMessage) for m in state.get("messages", []))
     if not has_system:
         system = SystemMessage(content="Be brief. Use metric units.")
-        return {"messages": [system] + state["messages"]}
+        return {"llm_input_messages": [system] + state["messages"]}
     return {}
 
 
@@ -277,11 +281,11 @@ def risky_transform(state: PipelineState) -> dict:
     return {"result": state["input"].upper()}
 
 
-def handle_transform_error(state: PipelineState) -> dict:
+def handle_transform_error(state: PipelineState, error: Exception) -> dict:
     """Recover from risky_transform failure gracefully."""
     return {
         "result": "",
-        "error": f"Transform failed for input: {state['input']!r}",
+        "error": f"Transform failed for input: {state['input']!r} — {error}",
     }
 
 
@@ -372,7 +376,9 @@ print(result["content"])
 | `max_interval` | `128.0` | Upper bound on the interval (seconds) |
 | `max_attempts` | `3` | Total attempts including the first |
 | `jitter` | `True` | Add random jitter to each interval |
-| `retry_on` | all exceptions | Exception type(s) or `Callable[[Exception], bool]` |
+| `retry_on` | `default_retry_on` (transient errors only — see below) | Exception type(s) or `Callable[[Exception], bool]` |
+
+> **`default_retry_on`** retries transient transport and server errors (e.g. `ConnectionError`, `httpx`/`requests` 5xx responses). It explicitly **does not** retry `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, or `OSError`. Pass a custom predicate — `retry_on=lambda exc: isinstance(exc, (ConnectionError, TimeoutError))` — to control exactly what triggers a retry.
 
 ---
 
@@ -399,8 +405,8 @@ def node_b(state: State) -> dict:
     return {"answer": f"B({state['answer']})"}
 
 
-def global_error_handler(state: State) -> dict:
-    return {"answer": f"[error] could not process: {state['query']}"}
+def global_error_handler(state: State, error: Exception) -> dict:
+    return {"answer": f"[error] could not process: {state['query']} — {error}"}
 
 
 builder = StateGraph(State)
@@ -638,15 +644,19 @@ SYSTEM_PROMPT = SystemMessage(content=(
 ))
 
 def enforce_system_prompt(state: dict) -> dict:
-    """Ensure the system prompt is always the first message."""
+    """Ensure the system prompt is always the first message (model-only, not persisted)."""
     msgs = state.get("messages", [])
     if not msgs or not isinstance(msgs[0], SystemMessage):
-        return {"messages": [SYSTEM_PROMPT] + list(msgs)}
+        return {"llm_input_messages": [SYSTEM_PROMPT] + list(msgs)}
     return {}
 
 
 class TokenBudget:
-    """Abort the run if cumulative token usage exceeds a budget."""
+    """Abort the run if cumulative token usage exceeds a budget.
+
+    Instantiate once PER INVOCATION (not at module scope) so each run
+    starts with a fresh counter and concurrent calls don't race.
+    """
     BUDGET = 50_000
 
     def __init__(self) -> None:
@@ -661,31 +671,32 @@ class TokenBudget:
         return {}
 
 
-budget = TokenBudget()
+def make_agent() -> object:
+    """Factory — creates a fresh TokenBudget per agent invocation."""
+    budget = TokenBudget()   # fresh counter, not a shared singleton
+    return create_react_agent(
+        model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+        tools=[search_docs, send_alert],
+        pre_model_hook=enforce_system_prompt,
+        post_model_hook=budget,
+    )
 
-# ── Graph ──────────────────────────────────────────────────────────────────
 
-# create_react_agent with hooks handles the agent loop.
-agent = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
-    tools=[search_docs, send_alert],
-    pre_model_hook=enforce_system_prompt,
-    post_model_hook=budget,
-)
+# ── Invoke ─────────────────────────────────────────────────────────────────
 
-# For a custom graph: use set_node_defaults for graph-wide resilience.
-# (Shown separately — create_react_agent builds its own StateGraph internally.)
-
-# Invoke
 from langgraph.checkpoint.memory import InMemorySaver
-agent_with_memory = create_react_agent(
-    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
-    tools=[search_docs, send_alert],
-    pre_model_hook=enforce_system_prompt,
-    post_model_hook=budget,
-    checkpointer=InMemorySaver(),
-)
 
+def make_persistent_agent() -> object:
+    budget = TokenBudget()
+    return create_react_agent(
+        model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
+        tools=[search_docs, send_alert],
+        pre_model_hook=enforce_system_prompt,
+        post_model_hook=budget,
+        checkpointer=InMemorySaver(),
+    )
+
+agent_with_memory = make_persistent_agent()
 cfg = {"configurable": {"thread_id": "session-1"}}
 result = agent_with_memory.invoke(
     {"messages": [{"role": "user", "content": "What does LangGraph do?"}]},
