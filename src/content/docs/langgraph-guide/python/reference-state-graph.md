@@ -888,7 +888,7 @@ for mode, data in graph.stream(
 - **Two writes, no reducer, one super-step → `InvalidUpdateError`.** Either add a reducer or stagger the writes with edges.
 - **`checkpointer=None`** disables every feature that depends on persistence: `interrupt()`, `get_state`, `update_state`, `get_state_history`, time travel, thread-scoped memory. Use `InMemorySaver()` while developing.
 - **`config_schema=` is deprecated**, but still accepted. Rename to `context_schema=` before v2.0.
-- **`AgentState` / `AgentStatePydantic`** in `langgraph.prebuilt` were removed in v1.0 — use `MessagesState` (built-in) or a custom `TypedDict` with an `add_messages`-annotated field instead.
+- **`AgentState` / `AgentStatePydantic`** in `langgraph.prebuilt` are **deprecated** as of v1.0 — their top-level re-export was removed from `langgraph.prebuilt.__init__`, but both are still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled for removal in v2.0.0. Use `MessagesState` (built-in) or a custom `TypedDict` with an `add_messages`-annotated field for new code.
 - **Root graphs cannot have `checkpointer=True`.** That value is only for subgraphs inheriting from the parent.
 - **`destinations=` does not route** — it only labels edges in the rendered diagram for nodes that return `Command(goto=...)`.
 - **`TimeoutPolicy` only works on async nodes.** Setting `timeout=` on a synchronous node raises `ValueError` at node registration. Convert the node to `async` or wrap it with `asyncio.to_thread`.
@@ -902,6 +902,6 @@ for mode, data in graph.stream(
 |---|---|
 | 1.2 | `TimeoutPolicy` dataclass introduced with `run_timeout`, `idle_timeout`, `refresh_on`. `Runtime.heartbeat()` added. `RunControl` and cooperative draining added (`runtime.control`, `runtime.drain_requested`, `runtime.drain_reason`). `ExecutionInfo` extended with `checkpoint_ns` and `task_id` fields. |
 | 1.1 | `invoke()`/`stream()` coerce input dicts into the declared state schema for Pydantic/dataclass. V2 stream mode emits typed `StreamPart` dicts. Python 3.9 dropped. |
-| 1.0 | `AgentState`, `AgentStatePydantic` removed from `langgraph.prebuilt`; use `MessagesState` or a custom TypedDict. `create_react_agent` remains the primary recommended factory in `langgraph.prebuilt`. `ns`, `when`, `resumable`, `interrupt_id` removed from `Interrupt` (in v0.6). |
+| 1.0 | `AgentState`, `AgentStatePydantic` **deprecated** in `langgraph.prebuilt` (top-level re-export removed from `__init__`; still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled removal in v2.0.0) — use `MessagesState` or a custom TypedDict for new code. `create_react_agent` remains the primary recommended factory in `langgraph.prebuilt`. `ns`, `when`, `resumable`, `interrupt_id` removed from `Interrupt` (in v0.6). |
 | 0.6 | `config_schema` on `StateGraph` deprecated; use `context_schema`. `Runtime[Ctx]` replaces ad-hoc `config["configurable"]` usage for run context. |
 | 0.5 | `input` / `output` kwargs on `StateGraph.__init__` deprecated; use `input_schema` / `output_schema`. |

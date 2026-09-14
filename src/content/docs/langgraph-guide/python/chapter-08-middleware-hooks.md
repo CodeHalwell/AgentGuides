@@ -392,9 +392,14 @@ def handle_transform_error(state: PipelineState, error: NodeError) -> dict:
     LangGraph passes a NodeError context object, not the raw exception.
     Access the underlying exception via error.error; the failed node name via error.node.
     """
+    # Log the full exception server-side; expose only safe metadata to state.
+    import logging
+    logging.getLogger(__name__).error(
+        "risky_transform failed on node %s: %s", error.node, error.error
+    )
     return {
         "result": "",
-        "error": f"Transform failed for input: {state['input']!r} — {error.error}",
+        "error": f"Transform failed (node: {error.node}, type: {type(error.error).__name__})",
     }
 
 
@@ -523,8 +528,12 @@ def node_b(state: State) -> dict:
 
 
 def global_error_handler(state: State, error: NodeError) -> dict:
-    # error.error is the underlying exception; error.node is the failing node name.
-    return {"answer": f"[error] {error.node} failed: {error.error}"}
+    # Log the full exception server-side; return a sanitized fixed message so raw
+    # exception text (which can include internal URLs or request details) is never
+    # written into user-visible state.
+    import logging
+    logging.getLogger(__name__).error("Node %s failed: %s", error.node, error.error)
+    return {"answer": f"[error] Node {error.node} could not complete — please retry."}
 
 
 builder = StateGraph(State)
@@ -568,7 +577,9 @@ def node_b(state: State) -> dict:
     return {"answer": f"B({state['answer']})"}
 
 def global_error_handler(state: State, error: NodeError) -> dict:
-    return {"answer": f"[error] {error.node} failed: {error.error}"}
+    import logging
+    logging.getLogger(__name__).error("Node %s failed: %s", error.node, error.error)
+    return {"answer": f"[error] Node {error.node} could not complete — please retry."}
 
 builder2 = StateGraph(State)
 builder2.set_node_defaults(
@@ -898,7 +909,9 @@ builder = StateGraph(MessagesState)
 # Graph-wide defaults — applied to every node that doesn't override them.
 # TimeoutPolicy only applies to async nodes; omit it for sync nodes like call_model.
 builder.set_node_defaults(
-    retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5, retry_on=ConnectionError),
+    # Omit retry_on so it uses default_retry_on, which covers ConnectionError,
+    # httpx/requests 5xx, and transport timeouts — not just ConnectionError alone.
+    retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
     error_handler=fallback_handler,
 )
 
