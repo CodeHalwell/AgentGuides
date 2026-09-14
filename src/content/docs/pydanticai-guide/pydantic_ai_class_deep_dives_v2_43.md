@@ -39,10 +39,11 @@ consume the tool's retry budget. Use `UsageLimits` at the run level to bound rep
 ### Constructor
 
 ```python
-raise ToolFailed(message: str)
+raise ToolFailed('The requested resource was not found.')
 ```
 
 `message` is returned to the model as a failed tool result, verbatim.
+Constructor signature: `ToolFailed(message: str)`.
 
 ### `ToolFailed` vs `ModelRetry` comparison
 
