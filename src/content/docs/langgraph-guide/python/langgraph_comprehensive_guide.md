@@ -43,7 +43,7 @@ Latest: langgraph 1.2.11 | Updated: August 17, 2026
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
 
 **Deprecated (since v1.0, removal planned in v2.0.0):**
-- `langgraph.prebuilt.ValidationNode` — still importable from `langgraph.prebuilt.tool_validator`; there is no drop-in schema-only replacement. Migrate to `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool (note: the node executes valid calls — unsuitable for validate-only workflows), or add an `error_handler=` callback on `StateGraph.add_node` for node-level error handling.
+- `langgraph.prebuilt.ValidationNode` — still importable from `langgraph.prebuilt.tool_validator`; there is no drop-in schema-only replacement. Two migration paths: (1) `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on each tool when tool execution is acceptable (note: the node executes valid calls — unsuitable for validate-only workflows with side-effecting tools); (2) a custom node calling `tool.args_schema.model_validate(tc["args"])` per tool call and returning a `ToolMessage` on failure, without invoking the tool, for validate-only workflows.
 
 ---
 
