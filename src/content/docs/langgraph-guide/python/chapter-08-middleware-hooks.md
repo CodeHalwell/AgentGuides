@@ -103,11 +103,17 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 MAX_INPUT_CHARS = 12_000
 
+_TRUNC_MARKER = " [truncated]"
+_MARKER_LEN = len(_TRUNC_MARKER)
+
+
 def truncate_long_messages(state: dict) -> dict:
     """Hard truncate message content that exceeds a per-message character cap.
 
     Handles both string content and block-based (multimodal) content so the cap
-    applies regardless of how a message was constructed.
+    applies regardless of how a message was constructed. The marker itself is
+    counted inside the cap, so the final string never exceeds MAX_INPUT_CHARS.
+    Non-text blocks (images, audio) are always passed through unchanged.
     """
     updated = []
     for msg in state.get("messages", []):
@@ -117,7 +123,10 @@ def truncate_long_messages(state: dict) -> dict:
         content = msg.content
         if isinstance(content, str):
             if len(content) > MAX_INPUT_CHARS:
-                msg = msg.model_copy(update={"content": content[:MAX_INPUT_CHARS] + " [truncated]"})
+                # Slice so that slice + marker together stay within the cap.
+                msg = msg.model_copy(update={
+                    "content": content[:MAX_INPUT_CHARS - _MARKER_LEN] + _TRUNC_MARKER
+                })
         elif isinstance(content, list):
             # Block-based content (e.g. Anthropic multimodal messages).
             # Track a shared per-message budget so the aggregate text across ALL
@@ -125,22 +134,25 @@ def truncate_long_messages(state: dict) -> dict:
             new_blocks = []
             remaining = MAX_INPUT_CHARS
             for block in content:
-                if remaining <= 0:
-                    break  # budget exhausted — drop remaining blocks
                 if isinstance(block, str):
+                    if remaining <= 0:
+                        continue  # budget exhausted — skip remaining text blocks
                     if len(block) > remaining:
-                        block = block[:remaining] + " [truncated]"
+                        block = block[:max(0, remaining - _MARKER_LEN)] + _TRUNC_MARKER
                         remaining = 0
                     else:
                         remaining -= len(block)
                 elif isinstance(block, dict) and isinstance(block.get("text"), str):
                     text = block["text"]
-                    if len(text) > remaining:
-                        block = {**block, "text": text[:remaining] + " [truncated]"}
+                    if remaining <= 0:
+                        # Preserve block structure but clear its text.
+                        block = {**block, "text": ""}
+                    elif len(text) > remaining:
+                        block = {**block, "text": text[:max(0, remaining - _MARKER_LEN)] + _TRUNC_MARKER}
                         remaining = 0
                     else:
                         remaining -= len(text)
-                # Non-text blocks (images, audio) are passed through unchanged;
+                # Non-text blocks (images, audio) are always appended unchanged;
                 # binary content has no meaningful character count to truncate.
                 new_blocks.append(block)
             msg = msg.model_copy(update={"content": new_blocks})

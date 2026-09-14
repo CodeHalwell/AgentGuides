@@ -2773,13 +2773,14 @@ entries — they carry no compatibility guarantee and change between patch relea
 each section that has notable internals closes with a short, named pointer instead
 of a full write-up.
 
-Several symbols below are deprecated but still importable and functional in
-1.2.11 — each carries an explicit **migrate to** note rather than being silently
-dropped: `create_react_agent`, `AgentState`/`AgentStatePydantic`/
-`AgentStateWithStructuredResponse`, `ValidationNode`, `MessageGraph`, and the
-`HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family all moved to
-`langchain.agents` (or `langchain.agents.interrupt`) as of LangGraph 1.0, and each
-still works with a `LangGraphDeprecatedSinceV10` warning.
+Several symbols changed in 1.0–1.2: `MessageGraph` was removed (use `StateGraph`);
+`AgentState`/`AgentStatePydantic`/`AgentStateWithStructuredResponse` and
+`ValidationNode` were removed from `langgraph.prebuilt` (they are **not** in
+`langchain.agents`); `create_react_agent` is **not deprecated** — it carries no
+`@deprecated` decorator in 1.2.11 and remains the primary recommended factory;
+the `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
+`langgraph.types`. `langchain.agents.create_agent` does not exist in any released
+version of `langchain`.
 
 ### Graph Construction & State
 
