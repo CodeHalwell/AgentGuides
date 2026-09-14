@@ -4,11 +4,11 @@ description: "Version: 2.33.0 (August 2026) Framework: Pydantic AI - GenAI Agent
 framework: pydanticai
 ---
 
-Latest: pydantic-ai 2.40.0 | Guide verified against: 2.33.0 | Updated: September 2026
+Latest: pydantic-ai 2.43.0 | Guide verified against: 2.43.0 | Updated: September 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.33.0 (August 2026)  
+**Version:** 2.43.0 (September 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -2819,6 +2819,36 @@ def step_one() -> str: return 'done'
 with ToolManager.parallel_execution_mode('sequential'):
     result = agent.run_sync('Run step_one twice.')
 ```
+
+#### `ToolFailed` — terminal tool failure
+
+`ToolFailed` is the counterpart to `ModelRetry`. Raise it when a tool call has *definitively*
+failed — missing resource, unsupported operation, confirmed upstream error — and you want the
+model to adapt instead of retrying the same call. Unlike `ModelRetry`, it does **not** prepend
+"please retry" instructions and does **not** consume the tool's retry budget.
+
+```python
+class ToolFailed(Exception):
+    def __init__(self, message: str): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelRetry, ToolFailed
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+def fetch_record(record_id: int) -> dict:
+    if record_id < 0:
+        raise ToolFailed(f'Record {record_id} does not exist (not retryable).')
+    if record_id > 9999:
+        raise ModelRetry('Record ID seems too large — did you mean a smaller number?')
+    return {'id': record_id, 'value': 'ok'}
+```
+
+Use `ToolFailed` for definitive errors the model should adapt to; use `ModelRetry` for
+transient errors where a prompt correction might help.
 
 #### `SkipModelRequest` + `SkipToolExecution` + `SkipToolValidation`
 

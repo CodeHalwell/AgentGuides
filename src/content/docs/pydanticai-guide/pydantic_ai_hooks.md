@@ -7,7 +7,7 @@ language: python
 
 # Hooks — Lifecycle Callbacks
 
-Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.capabilities.hooks`.
+Verified against **pydantic-ai==2.43.0** — source module: `pydantic_ai.capabilities.hooks`.
 
 The `Hooks` class gives you a decorator-first API for intercepting every phase of an agent run without subclassing `AbstractCapability`. Register a function once with `@hooks.on.<event>` and it fires automatically during runs that include this capability.
 
