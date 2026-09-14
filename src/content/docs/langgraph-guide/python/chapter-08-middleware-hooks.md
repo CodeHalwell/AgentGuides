@@ -256,7 +256,7 @@ agent = create_react_agent(
 class CostTracker:
     """Accumulate token costs across the full agent run."""
 
-    INPUT_PRICE_PER_1M = 3.00   # USD per 1M input tokens (Sonnet 3.5)
+    INPUT_PRICE_PER_1M = 3.00   # USD per 1M input tokens (illustrative — update for your model)
     OUTPUT_PRICE_PER_1M = 15.00
 
     def __init__(self) -> None:
@@ -623,8 +623,10 @@ def fetch_data(key: str) -> str:
     raise TimeoutError("Store unavailable")
 
 
-# Strategy 1: Use LangGraph's default formatted error template as a ToolMessage.
-# The template reads: "Error: <exception>\nPlease fix your mistakes." — not raw str(exc).
+# Strategy 1: LangGraph's default error template — includes the exception string, which can
+# expose internal URLs or request data to the model. Use a custom callable (Strategy 3)
+# in production to avoid leaking sensitive details.
+# The template reads: "Error: <exception>\nPlease fix your mistakes."
 tool_node_default = ToolNode(
     tools=[divide, fetch_data],
     handle_tool_errors=True,
