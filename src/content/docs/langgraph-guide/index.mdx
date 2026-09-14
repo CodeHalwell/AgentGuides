@@ -17,7 +17,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   <LinkCard
     title="🐍 Python"
     href="/langgraph-guide/python/"
-    description="v1.2.11 · chaptered Zero → Hero tutorial with 10 paginated chapters plus v3 streaming, set_node_defaults, ToolInvocationError."
+    description="v1.2.11 · chaptered Zero → Hero tutorial with 10 paginated chapters plus v3 streaming, set_node_defaults, pre/post model hooks, tools_condition, MessagesState, RetryPolicy, TimeoutPolicy, CachePolicy."
   />
   <LinkCard
     title="📘 TypeScript"
@@ -60,6 +60,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 | Date | Version | Changes |
 |------|---------|--------|
+| 2026-09-14 | Py 1.2.11 / TS 1.3.5 | Source-verified rewrite: ch2 expanded to 6 patterns (MessagesState, create_react_agent, tools_condition, multi-mode streaming); ch8 completely rewritten — removed fabricated `langchain.agents.middleware` API, replaced with real `pre_model_hook`/`post_model_hook` on `create_react_agent`, per-node `error_handler`/`retry_policy`/`timeout`/`cache_policy`, `set_node_defaults`, and `ToolNode(handle_tool_errors=...)` — all verified against installed langgraph==1.2.11 source. |
 | 2026-09-08 | Py 1.2.11 / TS 1.3.5 | Consistency sweep. TypeScript card corrected 1.3.0 → 1.3.5; the TypeScript observability and streaming pages moved off a stale `Latest: 1.0.2`; every `Latest:` stamp now names its package. Tables of contents on the TypeScript pages trimmed to sections that exist. No package installation or symbol verification performed. |
 | 2026-08-24 | Python 1.2.11 / TS 1.3.0 | Python updated to 1.2.11; ch1 version bump; ch4 added ToolInvocationError with interceptor example; ch6 added experimental v3 stream_events API (GraphRunStream, SubgraphRunStream, LifecyclePayload, StreamChannel); ch10 added set_node_defaults() with graph-wide policy defaults. |
 | 2026-06-22 | Python 1.2.6 / TS 1.3.0 | Python updated to 1.2.6; ch6 expanded with all 7 stream modes, typed StreamPart, GraphOutput; ch10 expanded with RetryPolicy, TimeoutPolicy, CachePolicy, Durability, IsLastStep, Topic channels, Send timeout. |
