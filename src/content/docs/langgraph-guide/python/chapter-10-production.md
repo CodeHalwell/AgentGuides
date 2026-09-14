@@ -488,7 +488,7 @@ agent = create_react_agent(
 
 For intercepting model calls, use `pre_model_hook` / `post_model_hook` — not a middleware layer. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for the full API.
 
-> **Note:** `langchain.agents.create_agent` and `langchain.agents.middleware` do not exist. `langchain` is a separate package not installed with `langgraph`; even if installed, these APIs are not part of it.
+> **Note:** `langchain.agents.create_agent` and `langchain.agents.middleware` exist in the separate `langchain` package (install with `pip install langchain`), which is not bundled with `langgraph`. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for verified `pre_model_hook`/`post_model_hook` examples that work without installing `langchain`.
 
 ---
 

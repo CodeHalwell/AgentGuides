@@ -916,14 +916,19 @@ builder = StateGraph(MessagesState)
 
 # Graph-wide defaults — applied to every node that doesn't override them.
 # TimeoutPolicy only applies to async nodes; omit it for sync nodes like call_model.
+# error_handler is NOT set here: a global fallback returning a plain AIMessage would
+# leave orphaned tool calls without matching ToolMessage results if it ran on the tools
+# node. Set error_handler per-node instead.
 builder.set_node_defaults(
     # Omit retry_on so it uses default_retry_on, which covers ConnectionError,
     # httpx/requests 5xx, and transport timeouts — not just ConnectionError alone.
     retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
-    error_handler=fallback_handler,
 )
 
-builder.add_node("agent", call_model)
+# Scope fallback_handler to agent only — the tools node already handles errors via
+# handle_tool_errors above; a generic AIMessage fallback on tools would send a history
+# with orphaned tool_calls (no matching ToolMessage) back to the provider.
+builder.add_node("agent", call_model, error_handler=fallback_handler)
 builder.add_node("tools", tool_node)
 builder.add_edge(START, "agent")
 builder.add_conditional_edges("agent", tools_condition)
