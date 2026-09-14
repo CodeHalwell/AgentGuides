@@ -4780,8 +4780,12 @@ def create_react_agent(
   instead of a custom structured-response state class, or a hand-written
   `TypedDict`/Pydantic model with the same two fields for a custom `state_schema`.
 - `ValidationNode` (schema-only tool-argument validator, no execution) is also
-  `@deprecated` — migrate to `ToolNode(handle_tool_errors=True)` with a pydantic
-  `args_schema` on the tool, or a node-level `handle_tool_errors=` parameter.
+  removed — note that `ToolNode` **executes** valid tool calls (unlike
+  `ValidationNode` which only validated schemas). For schema-only validation
+  with re-prompting, use `ToolNode(handle_tool_errors=True)` with a pydantic
+  `args_schema` on each tool (validation errors surface as `ToolMessage` errors
+  that prompt the LLM to retry), or `error_handler=` on `StateGraph.add_node`
+  for node-level fallback handling.
 
 **Correction vs. some older write-ups:** `from langgraph.prebuilt import
 AgentState` does **not** merely warn — it raises `ImportError` in the installed
