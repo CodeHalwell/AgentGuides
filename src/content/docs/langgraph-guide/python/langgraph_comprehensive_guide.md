@@ -39,7 +39,7 @@ Latest: langgraph 1.2.11 | Updated: August 17, 2026
 - `langgraph.prebuilt.HumanInterrupt` → `langchain.agents.interrupt.HumanInterrupt`
 - `langgraph.prebuilt.HumanInterruptConfig` → `langchain.agents.interrupt.HumanInterruptConfig`
 - `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
-- `langgraph.prebuilt.ValidationNode` → use `create_agent` from `langchain.agents` with custom error handling
+- `langgraph.prebuilt.ValidationNode` → use `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool, or a node-level `error_handler`
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
 
@@ -4774,14 +4774,13 @@ def create_react_agent(
   add_messages], "remaining_steps": NotRequired[RemainingSteps]}`; a custom
   `state_schema` must include a `remaining_steps` field or `create_react_agent`
   raises `ValueError`.
-- `AgentState`, `AgentStatePydantic`, `AgentStateWithStructuredResponse` are each
-  separately `@deprecated`, moved to `langchain.agents`; migrate to
-  `response_format=` instead of a custom structured-response state class, or a
-  hand-written `TypedDict`/Pydantic model with the same two fields for a custom
-  `state_schema`.
+- `AgentState`, `AgentStatePydantic`, `AgentStateWithStructuredResponse` were
+  removed — they are **not** in `langchain.agents`. Migrate to `response_format=`
+  instead of a custom structured-response state class, or a hand-written
+  `TypedDict`/Pydantic model with the same two fields for a custom `state_schema`.
 - `ValidationNode` (schema-only tool-argument validator, no execution) is also
-  `@deprecated` — migrate to `create_agent(response_format=...)` or tool-level
-  `handle_tool_errors=` with a pydantic `args_schema` on the tool itself.
+  `@deprecated` — migrate to `ToolNode(handle_tool_errors=True)` with a pydantic
+  `args_schema` on the tool, or a node-level `handle_tool_errors=` parameter.
 
 **Correction vs. some older write-ups:** `from langgraph.prebuilt import
 AgentState` does **not** merely warn — it raises `ImportError` in the installed
