@@ -1068,6 +1068,6 @@ for mode, data in graph.stream(
 | Version | Change |
 |---|---|
 | 1.1.0 (prebuilt) | `ToolCallRequest.override()` introduced; direct attribute assignment deprecated. `awrap_tool_call` added. |
-| 1.0.0 (prebuilt) | `ValidationNode` deprecated — use `create_agent` from `langchain.agents`. `AgentState` / `AgentStatePydantic` moved to `langchain.agents`. |
+| 1.0.0 (prebuilt) | `ValidationNode` deprecated — migrate to `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema`. `AgentState` / `AgentStatePydantic` removed (not moved to `langchain.agents`; that module has no such exports) — use `MessagesState` or a custom `TypedDict`. |
 | 1.2.0 / prebuilt 1.1.0 | `ToolRuntime` dataclass introduced in `langgraph-prebuilt`; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, `execution_info`, `server_info`. `emit_output_delta` added. `ToolCallTransformer` stream transformer and `ToolCallStream` handle added; enable per-tool-call structured streaming via `compile(transformers=[ToolCallTransformer])` + `stream_mode="tools"`. |
 | 0.3.8 (langchain-core) | `InjectedStore` requires `langchain-core >= 0.3.8`. |

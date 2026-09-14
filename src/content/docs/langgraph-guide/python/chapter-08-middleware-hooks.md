@@ -138,7 +138,12 @@ def truncate_long_messages(state: dict) -> dict:
                     if remaining <= 0:
                         continue  # budget exhausted — skip remaining text blocks
                     if len(block) > remaining:
-                        block = block[:max(0, remaining - _MARKER_LEN)] + _TRUNC_MARKER
+                        # Guard: if the budget is too small to fit the marker,
+                        # just hard-truncate to remaining chars with no marker.
+                        if remaining >= _MARKER_LEN:
+                            block = block[:remaining - _MARKER_LEN] + _TRUNC_MARKER
+                        else:
+                            block = block[:remaining]
                         remaining = 0
                     else:
                         remaining -= len(block)
@@ -148,7 +153,10 @@ def truncate_long_messages(state: dict) -> dict:
                         # Preserve block structure but clear its text.
                         block = {**block, "text": ""}
                     elif len(text) > remaining:
-                        block = {**block, "text": text[:max(0, remaining - _MARKER_LEN)] + _TRUNC_MARKER}
+                        if remaining >= _MARKER_LEN:
+                            block = {**block, "text": text[:remaining - _MARKER_LEN] + _TRUNC_MARKER}
+                        else:
+                            block = {**block, "text": text[:remaining]}
                         remaining = 0
                     else:
                         remaining -= len(text)
