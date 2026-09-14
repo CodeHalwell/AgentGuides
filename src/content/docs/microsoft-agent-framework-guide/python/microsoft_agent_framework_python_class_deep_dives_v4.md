@@ -730,7 +730,9 @@ settings = load_settings(
 print(settings["model"])          # "gpt-4o-mini"
 print(settings["max_tokens"])     # 1024  (override wins)
 print(settings["openai_api_key"]) # **********  (SecretString masked)
-print(settings["openai_api_key"].get_secret_value())  # "sk-abc123"
+# Call get_secret_value() only when passing the credential to an SDK — never print it
+from openai import AsyncOpenAI
+client = AsyncOpenAI(api_key=settings["openai_api_key"].get_secret_value())
 ```
 
 ### Example — mutual-exclusion requirement
@@ -771,8 +773,7 @@ Requires the optional `agent-hooks-sdk` package: `pip install --pre agent-hooks-
 ### Signature
 
 ```python
-from agent_framework import create_agent_hooks_middleware
-from agent_framework._types import MiddlewareBundle   # return type
+from agent_framework import create_agent_hooks_middleware, MiddlewareBundle  # MiddlewareBundle is a public root export
 
 create_agent_hooks_middleware(
     interceptors: Sequence[Interceptor] | Mapping[str, Interceptor],
@@ -818,7 +819,7 @@ import asyncio
 from agent_framework import Agent, create_agent_hooks_middleware
 from agent_framework.openai import OpenAIChatClient
 
-# agent-hooks-sdk must be installed: pip install agent-hooks-sdk
+# agent-hooks-sdk must be installed: pip install --pre agent-hooks-sdk
 try:
     from agent_hooks import ALLOW, Verdict
 except ImportError:

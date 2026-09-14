@@ -1646,7 +1646,10 @@ If you skip `add_handoff`, every agent can hand off to every other (mesh topolog
 ```python
 from agent_framework_orchestrations import GroupChatBuilder
 
-workflow = GroupChatBuilder(participants=[engineer, pm, security]).build()
+workflow = GroupChatBuilder(
+    participants=[engineer, pm, security],
+    selection_func=lambda state, participants: participants[state.current_round % len(participants)],
+).build()
 ```
 
 ### Magentic — manager + workers + replanning
