@@ -92,7 +92,7 @@ agent = create_react_agent(
 ```
 
 ```python
-# --- Example 3: Token-budget guardrail via pre_model_hook ---
+# --- Example 3: Per-message size guardrail via pre_model_hook ---
 from langchain_core.messages import SystemMessage, HumanMessage
 
 MAX_INPUT_CHARS = 12_000
@@ -182,6 +182,8 @@ class CostTracker:
         )
 
 
+# tracker and agent are module-scoped — token counts accumulate across ALL invocations.
+# For per-run cost, create a fresh CostTracker and agent inside a helper function.
 tracker = CostTracker()
 
 agent = create_react_agent(
@@ -191,7 +193,7 @@ agent = create_react_agent(
 )
 
 result = agent.invoke({"messages": [{"role": "user", "content": "Explain LangGraph in one sentence."}]})
-print(f"Run cost: ${tracker.total_cost_usd:.6f}")
+print(f"Cumulative cost so far: ${tracker.total_cost_usd:.6f}")
 ```
 
 ```python
@@ -430,7 +432,8 @@ def global_error_handler(state: State, error: NodeError) -> dict:
 
 builder = StateGraph(State)
 
-# Apply defaults before adding nodes — they are inherited by every add_node call.
+# set_node_defaults resolves at compile time (builder.compile()), not at add_node time,
+# so call order relative to add_node does not matter.
 # Note: TimeoutPolicy only applies to async nodes; omit it for sync nodes.
 builder.set_node_defaults(
     retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
@@ -778,7 +781,10 @@ def fallback_handler(state: MessagesState, error: NodeError) -> dict:
 
 tool_node = ToolNode(
     tools=[search_docs, send_alert],
-    handle_tool_errors=True,   # tool errors become ToolMessages, not exceptions
+    # handle_tool_errors=True catches tool exceptions inside ToolNode and converts them
+    # to ToolMessages before returning. This means tool errors are NEVER seen by the
+    # graph's RetryPolicy — only errors from call_model can trigger graph-level retries.
+    handle_tool_errors=True,
 )
 
 builder = StateGraph(MessagesState)
