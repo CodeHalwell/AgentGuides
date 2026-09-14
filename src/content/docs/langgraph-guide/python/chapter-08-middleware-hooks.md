@@ -895,10 +895,16 @@ def fallback_handler(state: MessagesState, error: NodeError) -> dict:
     return {"messages": [AIMessage(content="I encountered an error and couldn't complete your request. Please try again.")]}
 
 
+def format_error(exc: Exception) -> str:
+    # Only include the exception type — raw str(exc) can leak internal URLs or
+    # request data that the model (and user) should not see.
+    return f"Tool call failed ({type(exc).__name__}). Retry with different arguments."
+
+
 tool_node = ToolNode(
     tools=[search_docs, send_alert],
-    # format_error (defined above) returns only the exception type name, avoiding leakage
-    # of internal URLs or stack traces into ToolMessage content visible to the model.
+    # format_error returns only the exception type name, avoiding leakage of
+    # internal URLs or stack traces into ToolMessage content visible to the model.
     # Tool errors handled here are NEVER seen by the graph's RetryPolicy — only errors
     # from call_model can trigger graph-level retries.
     handle_tool_errors=format_error,

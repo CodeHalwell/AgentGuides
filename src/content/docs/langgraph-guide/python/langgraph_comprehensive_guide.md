@@ -2775,7 +2775,7 @@ entries — they carry no compatibility guarantee and change between patch relea
 each section that has notable internals closes with a short, named pointer instead
 of a full write-up.
 
-Several symbols changed in 1.0–1.2: `MessageGraph` was removed (use `StateGraph`);
+Several symbols changed in 1.0–1.2: `MessageGraph` is **deprecated** (still importable from `langgraph.graph.message`, emits a deprecation warning; use `StateGraph` for new code);
 `AgentState`/`AgentStatePydantic`/`AgentStateWithStructuredResponse` and
 `ValidationNode` are **deprecated** in `langgraph.prebuilt` (scheduled for
 removal in v2.0.0). The `AgentState*` family is no longer re-exported from the
