@@ -176,11 +176,12 @@ The `mode` field controls dispatch behaviour, agent-transfer eligibility, and ho
 
 | Mode | Dispatch style | Transfer tools | `include_contents` default | Valid placement |
 |---|---|---|---|---|
-| `None` / `'chat'` | Continuous conversation loop | Injected (if `sub_agents` set) | `'default'` (full history) | Root `LlmAgent`; first node after `START` in a `Workflow` |
+| `'chat'` | Continuous conversation loop | Injected (if `sub_agents` set) | `'default'` (full history) | Root `LlmAgent`; first node after `START` in a `Workflow` |
+| `None` | Resolved by context | — | — | Root `LlmAgent` (runner → `'chat'`); `Workflow` node (`build_node()` → `'single_turn'`) |
 | `'single_turn'` | One LLM call, then exit | **Not** injected | `'none'` (stateless) | Any `Workflow` node; `build_node()` default |
 | `'task'` | Structured I/O with `FinishTaskTool` handshake | **Not** injected | `'default'` | Sub-agent of a `mode='chat'` coordinator; or `ctx.run_node()` |
 
-> The runner auto-sets `mode='chat'` on a root `LlmAgent` that has `mode=None`.
+> When `mode=None`, the runner auto-sets `'chat'` for a root `LlmAgent`, but `build_node()` resolves it to `'single_turn'` when the agent is placed inside a `Workflow`.
 > `mode='task'` agents **cannot** be placed as static graph nodes in a `Workflow` — `Workflow.__init__` raises `ValueError`. Use them as `sub_agents` of a chat coordinator or dispatch them via `ctx.run_node()`.
 
 ### `mode='chat'` — conversational root agent
