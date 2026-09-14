@@ -947,4 +947,4 @@ print(result["messages"][-1].content)
 | `set_node_defaults(...)` | Graph-wide safety net — retry, timeout, error fallback applied to every node by default. |
 | `ToolNode(handle_tool_errors=...)` | Control what the model sees when a tool raises — prevent stack traces from leaking into the conversation. |
 
-The rule of thumb: if a reader tracing your graph would be surprised the behaviour exists, it probably belongs in a `pre_model_hook` or `post_model_hook`, not a node. If it's part of the business flow, it belongs in the graph as a node.
+The rule of thumb: if a reader tracing your graph would be surprised the behaviour exists, it probably belongs in the graph as an **explicit node**, not hidden in a hook. Cross-cutting concerns that apply uniformly to every model call — token logging, message trimming, cost tracking — are the right candidates for `pre_model_hook`/`post_model_hook`.
