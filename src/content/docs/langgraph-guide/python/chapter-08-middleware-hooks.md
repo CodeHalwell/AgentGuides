@@ -841,8 +841,12 @@ def call_model(state: MessagesState) -> dict:
 
 def fallback_handler(state: MessagesState, error: NodeError) -> dict:
     """Return a safe fallback message if call_model fails."""
+    import logging
     from langchain_core.messages import AIMessage
-    return {"messages": [AIMessage(content=f"[error] {error.node} failed: {error.error}")]}
+    logging.getLogger(__name__).error(
+        "call_model failed on node %s: %s", error.node, error.error
+    )
+    return {"messages": [AIMessage(content="I encountered an error and couldn't complete your request. Please try again.")]}
 
 
 tool_node = ToolNode(

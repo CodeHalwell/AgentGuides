@@ -39,9 +39,11 @@ Latest: langgraph 1.2.11 | Updated: August 17, 2026
 - `langgraph.prebuilt.HumanInterrupt` → `langchain.agents.interrupt.HumanInterrupt`
 - `langgraph.prebuilt.HumanInterruptConfig` → `langchain.agents.interrupt.HumanInterruptConfig`
 - `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
-- `langgraph.prebuilt.ValidationNode` → use `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool, or a node-level `error_handler`
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
+
+**Removed (since v1.0):**
+- `langgraph.prebuilt.ValidationNode` — removed entirely; there is no drop-in schema-only replacement. Migrate to `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool (the node will execute calls and catch validation errors), or add a `error_handler=` callback on `StateGraph.add_node` for node-level error handling.
 
 ---
 
