@@ -325,12 +325,12 @@ asyncio.run(main())
 ### Example 3 — Expose as an agent tool
 
 ```python
-from agent_framework import Agent, create_vector_search_tool, InMemoryCollection
+from agent_framework import Agent, InMemoryCollection
 from agent_framework.openai import OpenAIChatClient
 
 col: InMemoryCollection = ...  # already populated
 
-search_tool = col.create_vector_search_tool(
+search_tool = col.create_vector_search_tool(  # instance method, no top-level import needed
     description="Search product catalogue by semantic similarity",
     top=5,
 )
@@ -677,7 +677,8 @@ load_settings(
     settings_type: type[SettingsT],
     *,
     env_prefix: str = "",
-    dotenv_file: str | None = ".env",
+    env_file_path: str | None = None,
+    env_file_encoding: str | None = None,
     required_fields: Sequence[str | tuple[str, ...]] | None = None,
     **overrides: Any,
 ) -> SettingsT
@@ -687,11 +688,12 @@ load_settings(
 |---|---|
 | `settings_type` | A `TypedDict` class whose keys map to setting names. |
 | `env_prefix` | Prefix prepended to every key when looking up env vars (e.g. `"MY_APP_"` → `MY_APP_API_KEY`). |
-| `dotenv_file` | Path to a `.env` file. `None` disables dotenv loading. Defaults to `".env"`. |
+| `env_file_path` | Path to a `.env` file. `None` (default) disables dotenv loading. |
+| `env_file_encoding` | Encoding for the `.env` file. `None` uses the system default. |
 | `required_fields` | List of required field names (strings) or mutual-exclusion groups (`tuples`). A tuple means "exactly one of these must be set". Raises `SettingNotFoundError` on failure. |
 | `**overrides` | Explicit values that override env vars and dotenv. Validated against the TypedDict type. |
 
-**Resolution order (highest wins):** overrides → environment variables → dotenv file → `None` for optional fields.
+**Resolution order (highest wins):** overrides → environment variables → `env_file_path` dotenv file (when specified) → `None` for optional fields.
 
 Fields typed `SecretString` are automatically wrapped. Fields typed `int`, `float`, or `bool` are coerced from their string env-var form.
 
@@ -730,9 +732,17 @@ print(settings["openai_api_key"].get_secret_value())  # "sk-abc123"
 ### Example — mutual-exclusion requirement
 
 ```python
+from typing import TypedDict
+from agent_framework import SecretString, load_settings
+
+class SourceSettings(TypedDict, total=False):
+    source_a: str | None
+    source_b: str | None
+    model: str | None
+
 # Exactly one of "source_a" or "source_b" must be set:
 settings = load_settings(
-    MySettings,
+    SourceSettings,
     env_prefix="MY_",
     required_fields=[("source_a", "source_b")],
 )
@@ -872,7 +882,7 @@ bundle = create_agent_hooks_middleware_from_emitter(emitter, builder)
 
 **Module:** `agent_framework_orchestrations` (install: `pip install agent-framework-orchestrations`)
 
-**Import:** `from agent_framework.orchestrations import GroupChatBuilder`
+**Import:** `from agent_framework_orchestrations import GroupChatBuilder`
 
 `GroupChatBuilder` wires multiple agents (and custom `Executor` nodes) into a star-topology group chat where an orchestrator dynamically selects the next speaker each round. It mirrors the ergonomics of `SequentialBuilder` and `ConcurrentBuilder` from the same package.
 
