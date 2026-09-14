@@ -109,12 +109,12 @@ edges = [Edge(from_node=a, to_node=b, route="yes")]
 
 Mix them freely. `BaseAgent`, `BaseTool`, and plain callables are auto-wrapped via `build_node()` when they appear in an edge.
 
-## `build_node()` — explicit node conversion
+## `build_node()` — automatic node conversion
 
-`build_node` converts any `NodeLike` value (callable, `LlmAgent`, `BaseTool`, or `Workflow`) into a concrete `BaseNode`. The edge parser calls it automatically, but calling it explicitly lets you override defaults before adding the node to an edge.
+`build_node` is an internal helper that converts any `NodeLike` value (callable, `LlmAgent`, `BaseTool`, or `Workflow`) into a concrete `BaseNode`. The edge parser calls it automatically whenever you place an agent, callable, or tool directly in an edge — you do not import or call it yourself. Understanding its mode-defaulting rules helps you predict how the edge parser will configure each node.
 
 ```python
-from google.adk.workflow import build_node, Workflow, START
+from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
 
 writer = LlmAgent(
@@ -123,14 +123,12 @@ writer = LlmAgent(
     instruction="Summarise the input in one sentence.",
 )
 
-# Explicit conversion — sets mode='single_turn' if no parent_agent is provided
-writer_node = build_node(writer)
-# writer_node.mode == 'single_turn'
-
-wf = Workflow(name="demo", edges=[(START, writer_node)])
+# Place the agent directly in an edge — the edge parser calls build_node()
+# internally, defaulting mode to 'single_turn' (no parent_agent provided).
+wf = Workflow(name="demo", edges=[(START, writer)])
 ```
 
-**Mode defaulting rules applied by `build_node`:**
+**Mode defaulting rules applied by `build_node` (for reference):**
 
 | Input | `mode` result |
 |---|---|
@@ -139,13 +137,17 @@ wf = Workflow(name="demo", edges=[(START, writer_node)])
 | `LlmAgent` with `mode='task'` or `mode='chat'` | forces `wait_for_output=True` |
 | Any `LlmAgent` | forces `rerun_on_resume=True` |
 
-```python
-# Build with an explicit name override (useful when re-using the same agent
-# class under two different node names in the same graph)
-node_a = build_node(writer, name="first_pass")
-node_b = build_node(writer, name="second_pass")
+To control the mode explicitly, set it on the `LlmAgent` before placing it in the edge:
 
-wf = Workflow(name="two_pass", edges=[(START, node_a, node_b)])
+```python
+from google.adk.workflow import Workflow, START
+from google.adk.agents import LlmAgent
+
+# Explicitly set mode so build_node() preserves it rather than defaulting
+writer = LlmAgent(name="writer", model="gemini-2.5-flash",
+                  instruction="Summarise the input.", mode="single_turn")
+
+wf = Workflow(name="demo", edges=[(START, writer)])
 ```
 
 **Nested workflows.** A `Workflow` is itself a `BaseNode` and can appear inside another `Workflow`'s edge list. This lets you compose large pipelines from reusable sub-pipelines:
