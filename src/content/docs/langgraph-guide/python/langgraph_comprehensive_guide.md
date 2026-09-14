@@ -5811,7 +5811,7 @@ class AuditHandler(GraphCallbackHandler):
 **Module:** `langgraph.warnings`
 
 The deprecation-warning hierarchy every deprecated LangGraph API (`MessageGraph`,
-`ValidationNode`, `create_react_agent`, `AgentState`, the `langgraph.prebuilt.interrupt`
+`ValidationNode`, `AgentState`, the `langgraph.prebuilt.interrupt`
 re-exports, `GraphOutput` dict-access, …) emits — each subclass records `since` and
 `expected_removal` as `(major, minor)` tuples, letting you filter by version range in
 tests (`pytest.warns(LangGraphDeprecatedSinceV10)`) or promote them to errors

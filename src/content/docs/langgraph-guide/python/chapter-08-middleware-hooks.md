@@ -77,6 +77,30 @@ def trim_to_last_n(state: dict) -> dict:
     # were trimmed away — this would also produce a malformed exchange.
     while tail and isinstance(tail[-1], AI) and getattr(tail[-1], "tool_calls", []):
         tail = tail[:-1]
+    # Verify the first AIMessage with tool_calls has ALL its results present.
+    # If an AIMessage made 2 tool calls but only 1 ToolMessage follows in the tail,
+    # the exchange is still malformed; drop it (and its partial results) and retry.
+    changed = True
+    while changed and tail:
+        changed = False
+        for idx, msg in enumerate(tail):
+            if not (isinstance(msg, AI) and getattr(msg, "tool_calls", [])):
+                continue
+            needed = {tc["id"] for tc in msg.tool_calls}
+            found: set = set()
+            for m in tail[idx + 1:]:
+                if isinstance(m, ToolMessage) and hasattr(m, "tool_call_id"):
+                    found.add(m.tool_call_id)
+                elif not isinstance(m, ToolMessage):
+                    break
+            if not needed.issubset(found):
+                # Drop this AI message and its (partial) results then re-scan.
+                j = idx + 1
+                while j < len(tail) and isinstance(tail[j], ToolMessage):
+                    j += 1
+                tail = tail[:idx] + tail[j:]
+                changed = True
+                break
     # "llm_input_messages" is passed to the model WITHOUT updating persistent state.
     return {"llm_input_messages": system_msgs + tail}
 
@@ -609,7 +633,9 @@ tool_node_selective = ToolNode(
 
 # Strategy 4: Custom callable — full control over the error message
 def format_error(exc: Exception) -> str:
-    return f"[ERROR {type(exc).__name__}] {exc}. Retry with different arguments."
+    # Only include the exception type — raw str(exc) can leak internal URLs or
+    # request data that the model (and user) should not see.
+    return f"Tool call failed ({type(exc).__name__}). Retry with different arguments."
 
 tool_node_custom = ToolNode(
     tools=[divide, fetch_data],
