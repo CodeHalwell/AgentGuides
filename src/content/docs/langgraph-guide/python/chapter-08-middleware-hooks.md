@@ -52,7 +52,7 @@ from langchain_anthropic import ChatAnthropic
 
 def trim_to_last_n(state: dict) -> dict:
     """Keep only the last 20 messages, preserving complete tool-call/result pairs."""
-    from langchain_core.messages import ToolMessage, AIMessage as AI
+    from langchain_core.messages import ToolMessage, AIMessage as AI, HumanMessage
     msgs = state.get("messages", [])
     if len(msgs) <= 20:
         return {}   # Nothing to trim
@@ -76,7 +76,10 @@ def trim_to_last_n(state: dict) -> dict:
     if not tail and non_system:
         for i in range(len(non_system) - 1, -1, -1):
             if isinstance(non_system[i], AI):
-                tail = non_system[i:]
+                # Include the HumanMessage that opened this exchange — providers require
+                # the first non-system turn to be a human turn, not an assistant turn.
+                start = i - 1 if i > 0 and isinstance(non_system[i - 1], HumanMessage) else i
+                tail = non_system[start:]
                 break
     # Drop a trailing AIMessage that has tool_calls but whose ToolMessage results
     # were trimmed away — this would also produce a malformed exchange.
@@ -505,7 +508,7 @@ print(result["content"])
 > 3. `httpx.TransportError` (includes request timeouts) → **retry**
 > 4. `requests.HTTPError` with 5xx status → **retry**
 > 5. `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, `StopAsyncIteration`, `OSError` (generic) → **do not retry**
-> 6. Any other exception → **retry** (including `KeyError`, `AttributeError`, etc. — use a custom predicate to limit this)
+> 6. Any other exception → **retry** (including `AttributeError`, `AssertionError`, etc. — note: `KeyError` is a `LookupError` subclass and is blocked above; use a custom predicate to narrow this catch-all)
 >
 > Pass a custom predicate — `retry_on=lambda exc: isinstance(exc, (ConnectionError, TimeoutError))` — to control exactly what triggers a retry.
 

@@ -214,8 +214,9 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
     """Convert an amount between currencies (stub)."""
     rates = {"USD_EUR": 0.92, "EUR_USD": 1.09, "GBP_USD": 1.27}
     key = f"{from_currency}_{to_currency}"
-    rate = rates.get(key, 1.0)
-    return f"{amount} {from_currency} = {amount * rate:.2f} {to_currency}"
+    if key not in rates:
+        return f"Unsupported currency pair: {from_currency} → {to_currency}. Supported: USD↔EUR, GBP→USD."
+    return f"{amount} {from_currency} = {amount * rates[key]:.2f} {to_currency}"
 
 
 agent = create_react_agent(
