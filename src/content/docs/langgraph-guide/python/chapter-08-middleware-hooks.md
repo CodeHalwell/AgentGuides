@@ -266,6 +266,8 @@ class CostTracker:
     def __call__(self, state: dict) -> dict:
         last_msg = state["messages"][-1]
         usage = getattr(last_msg, "usage_metadata", None) or {}
+        # += is not thread-safe under multi-threaded concurrency; for concurrent
+        # invocations use a threading.Lock or keep counts in per-run graph state.
         self.input_tokens += usage.get("input_tokens", 0)
         self.output_tokens += usage.get("output_tokens", 0)
         return {}
@@ -648,7 +650,11 @@ tool_node_selective = ToolNode(
 def format_error(exc: Exception) -> str:
     # Only include the exception type — raw str(exc) can leak internal URLs or
     # request data that the model (and user) should not see.
-    return f"Tool call failed ({type(exc).__name__}). Retry with different arguments."
+    # Distinguish argument errors (fixable by the model) from service failures
+    # (where retrying with different arguments won't help).
+    if isinstance(exc, (TypeError, ValueError, KeyError)):
+        return f"Tool call failed ({type(exc).__name__}): bad arguments. Retry with corrected arguments."
+    return f"Tool call failed ({type(exc).__name__}): service error. Try a different approach."
 
 tool_node_custom = ToolNode(
     tools=[divide, fetch_data],
@@ -756,7 +762,7 @@ builder.add_edge(START, "slow")
 builder.add_edge("slow", END)
 
 graph = builder.compile()
-# graph.ainvoke({"result": ""}) will raise langgraph.errors.NodeTimeoutError after ~5-10 s
+# await graph.ainvoke({"result": ""})  → raises NodeTimeoutError after ~5-10 s
 # Note: this is NOT asyncio.TimeoutError — catch NodeTimeoutError specifically.
 ```
 
@@ -907,8 +913,9 @@ tool_node = ToolNode(
     tools=[search_docs, send_alert],
     # format_error returns only the exception type name, avoiding leakage of
     # internal URLs or stack traces into ToolMessage content visible to the model.
-    # Tool errors handled here are NEVER seen by the graph's RetryPolicy — only errors
-    # from call_model can trigger graph-level retries.
+    # Errors converted to ToolMessages here are not seen by the graph's RetryPolicy.
+    # Unhandled ToolNode exceptions (e.g., a protocol/state error) can still trigger
+    # the graph-level retry policy if one is set.
     handle_tool_errors=format_error,
 )
 
