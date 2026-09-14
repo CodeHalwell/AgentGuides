@@ -237,7 +237,7 @@ asyncio.run(main())
 
 ### `mode='single_turn'` — stateless workflow node
 
-`single_turn` agents run one LLM call and exit. They receive their input via `node_input` (set to the preceding node's output), not from session history (`include_contents` is forced to `'none'`). This makes them ideal as `Workflow` stages.
+`single_turn` agents run one LLM call and exit. They receive their input via `node_input` (set to the preceding node's output), not from session history (`include_contents` defaults to `'none'` unless you explicitly set it). This makes them ideal as `Workflow` stages.
 
 ```python
 import asyncio
