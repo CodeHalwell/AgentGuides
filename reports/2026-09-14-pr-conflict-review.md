@@ -21,9 +21,9 @@ The GitHub API returned **4 open PRs**, numbered **#339–#342**, all authored b
 
 ## 2. Git Conflict Status
 
-GitHub reports `mergeable_state: clean` (`mergeable: true`) for **all 4 PRs** — no hard git text conflicts against `main` right now, and none of the four PRs targets another open PR's branch (unlike some past review cycles with stacked chains).
+GitHub reports `mergeable_state: clean` (`mergeable: true`) for **all 4 PRs** as of this snapshot (queried 2026-09-14 ~16:00 UTC, and re-verified ~16:13 UTC after this report's own PR was opened) — no hard git text conflicts against `main`, and none of the four PRs targets another open PR's branch (unlike some past review cycles with stacked chains). `mergeable_state` is a live, GitHub-computed value that can shift between queries (e.g. to `blocked` while a required check or review is pending) without implying an actual text conflict — treat the "clean" reads above as a point-in-time result, not a standing guarantee.
 
-**No PRs require conflict resolution.**
+**No PRs show a hard text conflict.**
 
 ---
 
@@ -38,7 +38,7 @@ Each PR is confined to a single framework's guide directory, and none share a fi
 | #341 (Pydantic AI) | `src/content/docs/pydanticai-guide/index.mdx`, `pydantic_ai_class_deep_dives_v2_40.md`, `pydantic_ai_class_deep_dives_v2_43.md` (new), `pydantic_ai_comprehensive_guide.md`, `pydantic_ai_hooks.md`, `pydantic_ai_output_types.md`, `pydantic_ai_toolsets.md` |
 | #342 (Microsoft Agent Framework) | `src/content/docs/microsoft-agent-framework-guide/python/index.mdx`, `microsoft_agent_framework_python_class_deep_dives_v4.md` (new), `microsoft_agent_framework_python_comprehensive_guide.md` |
 
-Every PR lives in its own `<framework>-guide/` directory tree (plus, for #340, one line in the shared `src/data/frameworks.ts`, which no other open PR touches). There is **zero filename overlap** between any pair of PRs, so merge order between them does not matter — all four can be merged in any sequence, including in parallel, without creating a conflict.
+Every PR lives in its own `<framework>-guide/` directory tree, plus one file each outside that tree: #339 also touches `src/content/docs/updates/april-2026-summary.md`, and #340 also touches one line in `src/data/frameworks.ts` — neither of those two files is touched by any other open PR. Three of the four PRs (#339, #340, #342) happen to each modify a file named `index.mdx`, but each is a distinct path in a different directory, not the same file — basename reuse, not overlap. There is **zero changed-file-path overlap** between any pair of PRs, so merge order between them does not matter — all four can be merged in any sequence, including in parallel, without creating a conflict.
 
 ---
 
@@ -47,7 +47,7 @@ Every PR lives in its own `<framework>-guide/` directory tree (plus, for #340, o
 | Change | Detail |
 |---|---|
 | PRs added | `#339`–`#342`, four new independent PRs, one per framework, each a source-verified content refresh rather than a stacked follow-up |
-| PRs merged/closed | The entire `#311`–`#320` chain set from the 2026-08-10 review is gone from the open list — merged or closed since then |
+| PRs merged/closed | The entire `#311`–`#319` chain set from the 2026-08-10 review is gone from the open list — merged or closed since then (the 2026-08-10 review's own report PR, `#320`, is separate from that chain and is also gone) |
 | New conflicts | None |
 | Stacked chains | None found this cycle — unlike 2026-08-03/08-10, all four current PRs branch directly from `main` and none targets another PR's branch |
 
@@ -66,8 +66,8 @@ No urgent action required — nothing is broken and no PR shows a real text conf
 
 | Finding | Detail |
 |---|---|
-| Hard git conflicts | **None** — all 4 PRs are `mergeable_state: clean` |
-| Cross-PR file overlap | **None** — each PR is scoped to its own framework's guide directory |
+| Hard git conflicts | **None** — all 4 PRs are `mergeable_state: clean` as of this snapshot |
+| Cross-PR file overlap | **None** — each PR is scoped to its own framework's guide directory (plus one PR-specific file each for #339 and #340) |
 | Stacked chains | None this cycle — all four PRs branch directly from `main` |
 | Standalone PRs | All four (`#339`, `#340`, `#341`, `#342`) are independent of one another |
 | Recommended action | Merge any or all of `#339`–`#342` in any order; no coordination required |
