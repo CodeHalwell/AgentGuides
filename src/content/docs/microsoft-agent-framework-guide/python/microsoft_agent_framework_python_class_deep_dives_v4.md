@@ -941,7 +941,7 @@ import asyncio
 from itertools import cycle
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework.orchestrations import GroupChatBuilder, GroupChatState
+from agent_framework_orchestrations import GroupChatBuilder, GroupChatState
 
 def make_agent(name: str, persona: str) -> Agent:
     return Agent(
@@ -966,8 +966,9 @@ workflow = GroupChatBuilder(
 
 async def main():
     result = await workflow.run("Should AI replace human creativity?")
-    for message in result.output:
-        print(f"[{message.author_name}] {message.text}")
+    for response in result.get_outputs():
+        for message in response.messages:
+            print(f"[{message.author_name}] {message.text}")
 
 asyncio.run(main())
 ```
@@ -978,7 +979,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework.orchestrations import GroupChatBuilder
+from agent_framework_orchestrations import GroupChatBuilder
 
 writer    = Agent(name="Writer",   client=OpenAIChatClient(), instructions="You write first drafts.")
 editor    = Agent(name="Editor",   client=OpenAIChatClient(), instructions="You refine and critique drafts.")
@@ -1002,8 +1003,9 @@ workflow = GroupChatBuilder(
 
 async def main():
     result = await workflow.run("Write a haiku about sunrise.")
-    for msg in result.output:
-        print(f"[{msg.author_name}] {msg.text}")
+    for response in result.get_outputs():
+        for msg in response.messages:
+            print(f"[{msg.author_name}] {msg.text}")
 
 asyncio.run(main())
 ```
@@ -1015,7 +1017,7 @@ import asyncio
 from agent_framework import Agent, Message
 from agent_framework import InMemoryCheckpointStorage
 from agent_framework.openai import OpenAIChatClient
-from agent_framework.orchestrations import GroupChatBuilder
+from agent_framework_orchestrations import GroupChatBuilder
 
 analyst = Agent(name="Analyst", client=OpenAIChatClient(), instructions="Analyse the data.")
 critic  = Agent(name="Critic",  client=OpenAIChatClient(), instructions="Challenge the analysis.")
@@ -1044,9 +1046,12 @@ workflow = (
 )
 
 async def main():
-    result = await workflow.run("Evaluate Q3 sales performance.", checkpoint_id="q3-review")
-    for msg in result.output:
-        print(f"[{msg.author_name}] {msg.text[:80]}")
+    # Initial run — checkpoint_id is for resuming a stored checkpoint, not for naming one.
+    # The workflow auto-saves checkpoints; retrieve checkpoint IDs from status events.
+    result = await workflow.run("Evaluate Q3 sales performance.")
+    for response in result.get_outputs():
+        for msg in response.messages:
+            print(f"[{msg.author_name}] {msg.text[:80]}")
 
 asyncio.run(main())
 ```
@@ -1057,7 +1062,7 @@ asyncio.run(main())
 import asyncio
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework.orchestrations import GroupChatBuilder
+from agent_framework_orchestrations import GroupChatBuilder
 
 researcher = Agent(name="Researcher", client=OpenAIChatClient(), instructions="Research the topic.")
 writer     = Agent(name="Writer",     client=OpenAIChatClient(), instructions="Write the summary.")
@@ -1073,12 +1078,18 @@ workflow = (
 )
 
 async def main():
-    result = await workflow.run(
-        "Summarise recent advances in quantum computing.",
-        response_handler=lambda req: input(f"[HITL] Guide for {req.source}: "),
-    )
-    for msg in result.output:
-        print(f"[{msg.author_name}] {msg.text[:80]}")
+    # Workflow.run() does not accept a response_handler callback.
+    # HITL pattern: run → collect request_info events → re-run with responses= dict.
+    result = await workflow.run("Summarise recent advances in quantum computing.")
+    while result.get_request_info_events():
+        responses = {
+            event.request_id: input(f"[HITL] Guide (round {i}): ")
+            for i, event in enumerate(result.get_request_info_events())
+        }
+        result = await workflow.run(responses=responses)
+    for response in result.get_outputs():
+        for msg in response.messages:
+            print(f"[{msg.author_name}] {msg.text[:80]}")
 
 asyncio.run(main())
 ```
