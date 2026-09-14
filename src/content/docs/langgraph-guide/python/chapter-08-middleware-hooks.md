@@ -267,6 +267,7 @@ Every `add_node` call accepts an `error_handler` — a node function called when
 
 ```python
 from langgraph.graph import StateGraph, START, END
+from langgraph.errors import NodeError
 from typing_extensions import TypedDict
 
 
@@ -283,11 +284,15 @@ def risky_transform(state: PipelineState) -> dict:
     return {"result": state["input"].upper()}
 
 
-def handle_transform_error(state: PipelineState, error: Exception) -> dict:
-    """Recover from risky_transform failure gracefully."""
+def handle_transform_error(state: PipelineState, error: NodeError) -> dict:
+    """Recover from risky_transform failure gracefully.
+
+    LangGraph passes a NodeError context object, not the raw exception.
+    Access the underlying exception via error.error; the failed node name via error.node.
+    """
     return {
         "result": "",
-        "error": f"Transform failed for input: {state['input']!r} — {error}",
+        "error": f"Transform failed for input: {state['input']!r} — {error.error}",
     }
 
 
@@ -380,7 +385,14 @@ print(result["content"])
 | `jitter` | `True` | Add random jitter to each interval |
 | `retry_on` | `default_retry_on` (transient errors only — see below) | Exception type(s) or `Callable[[Exception], bool]` |
 
-> **`default_retry_on`** retries transient transport and server errors (e.g. `ConnectionError`, `httpx`/`requests` 5xx responses). It explicitly **does not** retry `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, or `OSError`. Pass a custom predicate — `retry_on=lambda exc: isinstance(exc, (ConnectionError, TimeoutError))` — to control exactly what triggers a retry.
+> **`default_retry_on`** checks exceptions in this order:
+> 1. `ConnectionError` → **retry** (even though `ConnectionError` is an `OSError` subclass, it is checked first and retried)
+> 2. `httpx.HTTPStatusError` with 5xx status → **retry**
+> 3. `requests.HTTPError` with 5xx status → **retry**
+> 4. `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, `StopAsyncIteration`, `OSError` (generic) → **do not retry**
+> 5. Any other exception → **retry**
+>
+> Pass a custom predicate — `retry_on=lambda exc: isinstance(exc, (ConnectionError, TimeoutError))` — to control exactly what triggers a retry.
 
 ---
 
@@ -390,6 +402,7 @@ Instead of passing `retry_policy`, `cache_policy`, `error_handler`, or `timeout`
 
 ```python
 from langgraph.graph import StateGraph, START, END
+from langgraph.errors import NodeError
 from langgraph.types import RetryPolicy
 from typing_extensions import TypedDict
 
@@ -407,8 +420,9 @@ def node_b(state: State) -> dict:
     return {"answer": f"B({state['answer']})"}
 
 
-def global_error_handler(state: State, error: Exception) -> dict:
-    return {"answer": f"[error] could not process: {state['query']} — {error}"}
+def global_error_handler(state: State, error: NodeError) -> dict:
+    # error.error is the underlying exception; error.node is the failing node name.
+    return {"answer": f"[error] {error.node} failed: {error.error}"}
 
 
 builder = StateGraph(State)
@@ -589,7 +603,7 @@ Note: `create_react_agent` uses an extended version of this state that also incl
 
 ## 9. `timeout` per node — `TimeoutPolicy`
 
-Prevent runaway nodes with per-node timeouts. Async-only — sync nodes raise `ValueError` at decoration time if `timeout` is set.
+Prevent runaway nodes with per-node timeouts. Async-only — sync nodes raise `ValueError` at node registration time (i.e. when `add_node` is called) if `timeout` is set.
 
 ```python
 from datetime import timedelta
@@ -698,38 +712,24 @@ class TokenBudget:
         return {}
 
 
-def make_agent() -> object:
-    """Factory — creates a fresh TokenBudget per agent invocation."""
-    budget = TokenBudget()   # fresh counter, not a shared singleton
-    return create_react_agent(
-        model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
-        tools=[search_docs, send_alert],
-        pre_model_hook=enforce_system_prompt,
-        post_model_hook=budget,
-    )
-
-
 # ── Invoke ─────────────────────────────────────────────────────────────────
+# IMPORTANT: the budget is bound at agent-construction time, not at invoke time.
+# Each call to invoke() on the SAME agent instance accumulates tokens in the SAME
+# budget object. To get a truly per-invocation budget, build a fresh agent per call:
 
-from langgraph.checkpoint.memory import InMemorySaver
-
-def make_persistent_agent() -> object:
-    budget = TokenBudget()
-    return create_react_agent(
+def invoke_once(user_message: str) -> str:
+    """Build a fresh agent (and fresh budget) for each independent request."""
+    budget = TokenBudget()   # brand-new counter for this request only
+    agent = create_react_agent(
         model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
         tools=[search_docs, send_alert],
         pre_model_hook=enforce_system_prompt,
         post_model_hook=budget,
-        checkpointer=InMemorySaver(),
     )
+    result = agent.invoke({"messages": [{"role": "user", "content": user_message}]})
+    return result["messages"][-1].content
 
-agent_with_memory = make_persistent_agent()
-cfg = {"configurable": {"thread_id": "session-1"}}
-result = agent_with_memory.invoke(
-    {"messages": [{"role": "user", "content": "What does LangGraph do?"}]},
-    config=cfg,
-)
-print(result["messages"][-1].content)
+print(invoke_once("What does LangGraph do?"))
 ```
 
 ### Pattern B — Custom `StateGraph` with retry, error recovery, and `ToolNode`
@@ -738,6 +738,7 @@ When you build your own graph (instead of using `create_react_agent`), combine `
 
 ```python
 from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.errors import NodeError
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import RetryPolicy
 from langchain_core.tools import tool
@@ -764,10 +765,10 @@ def call_model(state: MessagesState) -> dict:
     return {"messages": [model.invoke(state["messages"])]}
 
 
-def fallback_handler(state: MessagesState, error: Exception) -> dict:
+def fallback_handler(state: MessagesState, error: NodeError) -> dict:
     """Return a safe fallback message if call_model fails."""
     from langchain_core.messages import AIMessage
-    return {"messages": [AIMessage(content=f"[error] Model call failed: {error}")]}
+    return {"messages": [AIMessage(content=f"[error] {error.node} failed: {error.error}")]}
 
 
 tool_node = ToolNode(
