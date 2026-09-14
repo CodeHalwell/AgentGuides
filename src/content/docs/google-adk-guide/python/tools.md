@@ -1292,7 +1292,7 @@ from google.adk.agents import LlmAgent
 
 # Expose only SQL execution and dataset listing tools
 bq_tools = BigQueryToolset(
-    tool_filter=["bigquery_execute_sql", "bigquery_list_dataset_ids"],
+    tool_filter=["execute_sql", "list_dataset_ids"],
 )
 
 agent = LlmAgent(

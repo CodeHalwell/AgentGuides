@@ -559,15 +559,33 @@ async def main():
 asyncio.run(main())
 ```
 
-In production, load the service account JSON from a file rather than hard-coding the key:
+In production, load the service account JSON from a file. Build the `auth_credential` **before** constructing `McpToolset`; `McpToolset` captures the credential object at construction time, so a post-hoc rebinding has no effect.
 
 ```python
+import asyncio
 import json
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.auth import AuthCredential, AuthCredentialTypes
+from google.adk.auth.auth_credential import ServiceAccount, ServiceAccountCredential
+from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
+from google.genai import types
+
+SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
+auth_scheme = OpenIdConnectWithConfig(
+    authorization_endpoint="https://accounts.google.com/o/oauth2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    scopes=SCOPES,
+)
 
 with open("service_account.json") as f:
     sa = json.load(f)
 
-# Reassign auth_credential so McpToolset picks up the file-loaded key
 auth_credential = AuthCredential(
     auth_type=AuthCredentialTypes.SERVICE_ACCOUNT,
     service_account=ServiceAccount(
@@ -587,6 +605,20 @@ auth_credential = AuthCredential(
         scopes=SCOPES,
     ),
 )
+
+async def main():
+    toolset = McpToolset(
+        connection_params=StreamableHTTPConnectionParams(
+            url="https://my-private-mcp-server.example.com/mcp",
+            timeout=30.0,
+        ),
+        auth_scheme=auth_scheme,
+        auth_credential=auth_credential,
+        tool_name_prefix="private",
+    )
+    # ... build agent, runner, session and run as before
+
+asyncio.run(main())
 ```
 
 ## Gotchas

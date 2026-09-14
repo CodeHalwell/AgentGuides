@@ -274,11 +274,8 @@ async def main():
         "Electric vehicles are outselling petrol cars in Norway.",
         user_id="u1", session_id=session.id,
     )
-    # single_turn node completions arrive as event.output, not event.content
-    output = next(
-        (e.content.parts[0].text for e in reversed(events) if e.content and e.content.parts),
-        None,
-    )
+    # Workflow node completions are Event(output=...) — read event.output directly
+    output = next((e.output for e in reversed(events) if e.output is not None), None)
     print(output)
 
 asyncio.run(main())
@@ -948,11 +945,11 @@ asyncio.run(main())
 
 ```python
 from google.adk.agents import ManagedAgent
-from google.adk.tools.mcp_tool.remote_mcp_server import RemoteMcpServer
+from google.adk.tools import RemoteMcpServer
 
 maps_mcp = RemoteMcpServer(
-    server_url="https://maps.googleapis.com/mcp/v1",
-    http_headers={"X-Goog-Api-Key": "YOUR_MAPS_API_KEY"},
+    url="https://maps.googleapis.com/mcp/v1",
+    headers={"X-Goog-Api-Key": "YOUR_MAPS_API_KEY"},
 )
 
 managed_maps = ManagedAgent(
@@ -975,5 +972,5 @@ managed_maps = ManagedAgent(
 - Callables passed to `tools=` are wrapped as `FunctionTool(func=callable)` automatically. Pass an explicit `FunctionTool` only when you need `require_confirmation=`.
 - `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
 - `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
-- `ManagedAgent.tools` only accepts `types.Tool`, `BaseTool`, or `RemoteMcpServer` — a plain callable or `FunctionTool` raises a `ValueError` at runtime because client-side tools are not supported in server-hosted execution.
+- `ManagedAgent.tools` only accepts `types.Tool`, `BaseTool`, or `RemoteMcpServer` — a plain callable or `FunctionTool` raises a `NotImplementedError` at runtime because client-side tools are not supported in server-hosted execution.
 - `ManagedAgent` is available from `google.adk.agents` starting in google-adk==2.4.0.
