@@ -139,8 +139,8 @@ older blog post or docs page, the source wins.
     installed, neither module nor these classes are part of it.
   - `create_react_agent` from `langgraph.prebuilt` is **not deprecated** in 1.2.11.
     It is the primary recommended factory for tool-calling agents.
-  - `AgentState` / `AgentStatePydantic` moved from `langgraph.prebuilt` to
-    `langchain.agents`.
+  - `AgentState` / `AgentStatePydantic` were **removed** from `langgraph.prebuilt` — they
+    are not in `langchain.agents`; use `MessagesState` or a custom `TypedDict` instead.
   - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)`
     are **context managers** (`with ... as saver:`), not factories that return
     a saver directly. Some earlier examples omitted the `with`; see the

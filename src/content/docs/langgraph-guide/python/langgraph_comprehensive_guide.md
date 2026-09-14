@@ -2781,7 +2781,7 @@ Several symbols changed in 1.0–1.2: `MessageGraph` was removed (use `StateGrap
 `langchain.agents`); `create_react_agent` is **not deprecated** — it carries no
 `@deprecated` decorator in 1.2.11 and remains the primary recommended factory;
 the `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
-`langgraph.types`. `langchain.agents.create_agent` does not exist in any released
+`langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` does not exist in any released
 version of `langchain`.
 
 ### Graph Construction & State
