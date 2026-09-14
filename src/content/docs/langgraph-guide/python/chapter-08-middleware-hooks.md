@@ -46,6 +46,7 @@ from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import SystemMessage
+from langchain_anthropic import ChatAnthropic
 
 # --- Example 1: Trim messages to avoid context overflow ---
 
@@ -72,7 +73,7 @@ def trim_to_last_n(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[],
     pre_model_hook=trim_to_last_n,
 )
@@ -91,7 +92,7 @@ def inject_system_prompt(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[],
     pre_model_hook=inject_system_prompt,
 )
@@ -171,7 +172,7 @@ def truncate_long_messages(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[],
     pre_model_hook=truncate_long_messages,
 )
@@ -193,6 +194,7 @@ Common uses: logging token usage, enforcing response policies, adding metadata, 
 
 ```python
 from langgraph.prebuilt import create_react_agent
+from langchain_anthropic import ChatAnthropic
 
 # --- Example 1: Log token usage on every model call ---
 
@@ -209,7 +211,7 @@ def log_token_usage(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[],
     post_model_hook=log_token_usage,
 )
@@ -248,7 +250,7 @@ class CostTracker:
 tracker = CostTracker()
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[],
     post_model_hook=tracker,
 )
@@ -275,7 +277,7 @@ def guard_empty_response(state: dict) -> dict | Command:
 
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[],
     post_model_hook=guard_empty_response,
 )
@@ -289,6 +291,7 @@ agent = create_react_agent(
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
 
 
 @tool
@@ -316,7 +319,7 @@ def post_hook(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-20241022",
+    model=ChatAnthropic(model="claude-3-5-sonnet-20241022"),
     tools=[get_weather],
     pre_model_hook=pre_hook,
     post_model_hook=post_hook,
