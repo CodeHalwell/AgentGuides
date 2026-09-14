@@ -64,6 +64,11 @@ def trim_to_last_n(state: dict) -> dict:
     # reject a history that starts with a tool result without the preceding tool call.
     while tail and isinstance(tail[0], ToolMessage):
         tail = tail[1:]
+    # Also drop any leading AIMessage — providers (e.g. Anthropic) require the first
+    # non-system turn to be a HumanMessage. An AI turn at the start means the preceding
+    # human turn was sliced out.
+    while tail and isinstance(tail[0], AI):
+        tail = tail[1:]
     # Edge case: if the most recent exchange alone exceeds N (e.g. an agent made
     # 20+ parallel tool calls in one turn), the tail above is all ToolMessages and
     # stripping orphaned leading ones empties it. Fall back to the entire most recent
@@ -492,14 +497,15 @@ print(result["content"])
 | `max_interval` | `128.0` | Upper bound on the interval (seconds) |
 | `max_attempts` | `3` | Total attempts including the first |
 | `jitter` | `True` | Add random jitter to each interval |
-| `retry_on` | `default_retry_on` (transient errors only — see below) | Exception type(s) or `Callable[[Exception], bool]` |
+| `retry_on` | `default_retry_on` (blocklist predicate — see below) | Exception type(s) or `Callable[[Exception], bool]` |
 
-> **`default_retry_on`** checks exceptions in this order:
+> **`default_retry_on`** uses a blocklist: explicit programmer/logic errors do not retry; everything else (including unknown exceptions) does. Checks in order:
 > 1. `ConnectionError` → **retry** (even though `ConnectionError` is an `OSError` subclass, it is checked first and retried)
 > 2. `httpx.HTTPStatusError` with 5xx status → **retry**
-> 3. `requests.HTTPError` with 5xx status → **retry**
-> 4. `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, `StopAsyncIteration`, `OSError` (generic) → **do not retry**
-> 5. Any other exception → **retry**
+> 3. `httpx.TransportError` (includes request timeouts) → **retry**
+> 4. `requests.HTTPError` with 5xx status → **retry**
+> 5. `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`, `StopAsyncIteration`, `OSError` (generic) → **do not retry**
+> 6. Any other exception → **retry** (including `KeyError`, `AttributeError`, etc. — use a custom predicate to limit this)
 >
 > Pass a custom predicate — `retry_on=lambda exc: isinstance(exc, (ConnectionError, TimeoutError))` — to control exactly what triggers a retry.
 
@@ -526,6 +532,11 @@ def node_a(state: State) -> dict:
 
 
 def node_b(state: State) -> dict:
+    # NOTE: node_b runs unconditionally after node_a — even when node_a's error_handler
+    # ran. node_b will overwrite state["answer"] with its own result, so the fallback
+    # value set by global_error_handler may not appear in the final output.
+    # To preserve the fallback, add an error flag to State and make node_b a no-op
+    # when the flag is set, or add a conditional edge that routes around node_b.
     return {"answer": f"B({state['answer']})"}
 
 
@@ -626,7 +637,7 @@ def fetch_data(key: str) -> str:
 
 
 # Strategy 1: LangGraph's default error template — includes the exception string, which can
-# expose internal URLs or request data to the model. Use a custom callable (Strategy 3)
+# expose internal URLs or request data to the model. Use a custom callable (Strategy 4)
 # in production to avoid leaking sensitive details.
 # The template reads: "Error: <exception>\nPlease fix your mistakes."
 tool_node_default = ToolNode(

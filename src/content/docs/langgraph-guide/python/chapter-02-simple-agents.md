@@ -325,8 +325,11 @@ print(result["messages"][-1].content)
 from langgraph.graph import END
 
 def tools_condition(state):
+    from langchain_core.messages import AIMessage
     last = state["messages"][-1]
-    if hasattr(last, "tool_calls") and last.tool_calls:
+    # Match LangGraph's real tools_condition: only an AIMessage with non-empty
+    # tool_calls routes to tools; arbitrary objects with a tool_calls attribute do not.
+    if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
     return END
 ```
