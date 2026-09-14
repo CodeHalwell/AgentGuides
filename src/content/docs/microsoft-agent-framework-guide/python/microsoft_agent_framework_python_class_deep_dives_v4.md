@@ -1057,11 +1057,19 @@ workflow = (
 
 async def main():
     # Initial run — checkpoint_id is for resuming a stored checkpoint, not for naming one.
-    # The workflow auto-saves checkpoints; retrieve checkpoint IDs from status events.
     result = await workflow.run("Evaluate Q3 sales performance.")
     for response in result.get_outputs():
         for msg in response.messages:
             print(f"[{msg.author_name}] {msg.text[:80]}")
+
+    # To resume: retrieve the latest saved checkpoint ID from storage, then run again.
+    # workflow_name must match the workflow's configured name (defaults to class/builder name).
+    latest = await storage.get_latest(workflow_name="GroupChatWorkflow")
+    if latest:
+        resumed = await workflow.run(checkpoint_id=latest.checkpoint_id)
+        for response in resumed.get_outputs():
+            for msg in response.messages:
+                print(f"[resumed][{msg.author_name}] {msg.text[:80]}")
 
 asyncio.run(main())
 ```
