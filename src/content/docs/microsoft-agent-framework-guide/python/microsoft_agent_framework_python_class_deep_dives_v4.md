@@ -1,16 +1,16 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-Class Deep Dives Vol. 4 (1.18.0)"
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 4 (1.18.0)"
 description: "Source-verified deep dives for VectorStoreField, VectorStoreCollectionDefinition, InMemoryCollection, InMemoryStore, Filter, FilterGroup, SecretString, load_settings, create_agent_hooks_middleware, and GroupChatBuilder — all verified against agent-framework 1.18.0 source."
 framework: microsoft-agent-framework
 language: python
 ---
 
-# agent-framework (Python) — 10-Class Deep Dives Vol. 4
+# agent-framework (Python) — 10-API Deep Dives Vol. 4
 
 **Verified against:** `agent-framework==1.18.0`
 **Python requirement:** 3.10+
 
-This volume covers 10 additional public classes spanning vector store modelling, portable filter expressions, settings management, AGENT-HOOKS-0.1 enforcement, and multi-agent group chat orchestration. Each section includes the full constructor signature, every meaningful method, and self-contained runnable examples verified against the 1.18.0 source.
+This volume covers 10 additional public APIs (eight classes and two functions) spanning vector store modelling, portable filter expressions, settings management, AGENT-HOOKS-0.1 enforcement, and multi-agent group chat orchestration. Each section includes the full constructor or signature, every meaningful method, and self-contained runnable examples verified against the 1.18.0 source.
 
 See [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
 
@@ -105,9 +105,8 @@ class Article:
         index_kind="hnsw",
     )]
 
-# Inspect the derived definition
-from agent_framework import register_vectorstoremodel
-defn = register_vectorstoremodel(Article).definition
+# @vectorstoremodel attaches the derived definition as a class attribute
+defn = Article.__vectorstoremodel_definition__
 print(defn.key_name)             # "id"
 print(defn.vector_field_names)   # ["embedding"]
 print(defn.data_field_names)     # ["title", "body"]
@@ -202,7 +201,7 @@ async def main():
     await collection.ensure_collection_exists()
     keys = await collection.upsert([
         {"id": "a", "text": "hello world", "embedding": [0.1, 0.2, 0.3, 0.4]},
-    ])
+    ], generate_vectors=False)  # embedding already supplied; no generator attached
     print(keys)  # ["a"]
     records = await collection.get(["a"])
     print(records[0]["text"])  # "hello world"
@@ -248,7 +247,8 @@ InMemoryCollection(
 | `await get(keys=None, *, filter=None, top=10, skip=0, order_by=None, include_vectors=False)` | Retrieve by keys or list a filtered/sorted page. |
 | `await delete(keys)` | Delete records by key. |
 | `await search(values=None, *, vector=None, top=3, filter=None, score_threshold=None, ...)` | Vector search. Pass pre-computed `vector` or let the `embedding_generator` build it from `values`. Returns `SearchResults`. |
-| `create_vector_search_tool(...)` | Returns a `FunctionTool` that agents can call to search this collection. |
+
+> **`create_vector_search_tool`** is a module-level function (imported from `agent_framework`), not a method of `InMemoryCollection`. Pass the collection as its first positional argument: `create_vector_search_tool(col, description="...", top=5)`. See Example 3 below.
 
 Supported distance functions: `cosine_similarity`, `cosine_distance` (default), `dot_prod`, `negative_dot_prod`, `euclidean_distance`, `euclidean_squared_distance`, `manhattan`, `hamming`.
 
@@ -292,7 +292,7 @@ asyncio.run(main())
 import asyncio
 from dataclasses import dataclass
 from typing import Annotated
-from agent_framework import VectorStoreField, vectorstoremodel, InMemoryCollection, SearchResults
+from agent_framework import VectorStoreField, vectorstoremodel, InMemoryCollection, SearchResults, SearchResponse
 
 @vectorstoremodel
 @dataclass
@@ -310,11 +310,11 @@ async def main():
         Doc(id="d3", text="birds", embedding=[0.0, 0.0, 1.0, 0.0]),
     ], generate_vectors=False)
 
-    results: SearchResults[Doc] = await col.search(
+    results: SearchResults[SearchResponse[Doc]] = await col.search(
         vector=[1.0, 0.0, 0.0, 0.0],   # nearest to "cats"
         top=2,
     )
-    for result in results.results:
+    async for result in results.results:  # results.results is AsyncIterable
         print(result.record.text, result.score)
     # cats  1.0  (exact match)
     # dogs  0.0  (orthogonal)
@@ -325,12 +325,13 @@ asyncio.run(main())
 ### Example 3 — Expose as an agent tool
 
 ```python
-from agent_framework import Agent, InMemoryCollection
+from agent_framework import Agent, InMemoryCollection, create_vector_search_tool
 from agent_framework.openai import OpenAIChatClient
 
 col: InMemoryCollection = ...  # already populated
 
-search_tool = col.create_vector_search_tool(  # instance method, no top-level import needed
+search_tool = create_vector_search_tool(  # top-level function; col is the first positional arg
+    col,
     description="Search product catalogue by semantic similarity",
     top=5,
 )
@@ -503,7 +504,7 @@ tool = col.create_vector_search_tool(
 
 **Module:** `agent_framework._vector_filters` (re-exported via `agent_framework`)
 
-`FilterGroup` composes two or more `Filter` / `FilterGroup` nodes with an explicit boolean operator: `"and"` (all must match), `"or"` (any must match), or `"not"` (negation of exactly one child).
+`FilterGroup` composes one or more `Filter` / `FilterGroup` nodes with an explicit boolean operator: `"and"` (all must match), `"or"` (any must match), or `"not"` (negation of **exactly one** child — the `"not"` form intentionally accepts only a single child).
 
 ### Constructor
 
@@ -658,8 +659,10 @@ settings = load_settings(
     env_prefix="MY_APP_",
     required_fields=["model"],
     model="gpt-4o",
+    api_key="sk-test-key",   # explicit override — wrapped as SecretString automatically
 )
 # settings["api_key"] is a SecretString — safe to log, safe to store in memory
+# Without the override, api_key would be None (no MY_APP_API_KEY env var set)
 ```
 
 ---
@@ -693,7 +696,7 @@ load_settings(
 | `required_fields` | List of required field names (strings) or mutual-exclusion groups (`tuples`). A tuple means "exactly one of these must be set". Raises `SettingNotFoundError` on failure. |
 | `**overrides` | Explicit values that override env vars and dotenv. Validated against the TypedDict type. |
 
-**Resolution order (highest wins):** overrides → environment variables → `env_file_path` dotenv file (when specified) → `None` for optional fields.
+**Resolution order (highest wins):** overrides → `env_file_path` dotenv file (when specified) → environment variables → `None` for optional fields. The dotenv file takes precedence over process environment variables — use explicit overrides to win over both.
 
 Fields typed `SecretString` are automatically wrapped. Fields typed `int`, `float`, or `bool` are coerced from their string env-var form.
 
@@ -740,12 +743,16 @@ class SourceSettings(TypedDict, total=False):
     source_b: str | None
     model: str | None
 
-# Exactly one of "source_a" or "source_b" must be set:
+# Exactly one of "source_a" or "source_b" must be set — supply one via override:
 settings = load_settings(
     SourceSettings,
     env_prefix="MY_",
     required_fields=[("source_a", "source_b")],
+    source_a="db://localhost/main",   # satisfies the mutual-exclusion constraint
 )
+# Providing both raises SettingNotFoundError("mutually exclusive"):
+# load_settings(SourceSettings, required_fields=[("source_a", "source_b")],
+#               source_a="x", source_b="y")  # → SettingNotFoundError
 ```
 
 ---
@@ -755,6 +762,8 @@ settings = load_settings(
 **Module:** `agent_framework._agent_hooks` (re-exported via `agent_framework`)
 
 `create_agent_hooks_middleware` wires the [AGENT-HOOKS-0.1 protocol](https://github.com/responsibleai/agent-hooks) into an agent as a `MiddlewareBundle`. The bundle spans **three** middleware layers (agent, chat, function) and keeps them indivisible — installing part of the bundle would enforce only part of the control contract.
+
+> **Trust-model caveat:** AGENT-HOOKS-0.1 is a cooperative in-process control contract, not a security boundary. The eight interception points provide best-effort mediation; complete mediation is not guaranteed by the spec. Do not rely solely on this middleware to enforce hard security invariants across trust boundaries.
 
 Requires the optional `agent-hooks-sdk` package: `pip install agent-hooks-sdk`.
 
@@ -816,8 +825,11 @@ except ImportError:
     raise
 
 class EgressGuard:
-    """Block any output that contains the word 'secret'."""
+    """Block output (only) that contains the word 'secret'."""
     def intercept(self, context):
+        # Guard only the output point — other points see instructions/tool data, not final response
+        if context.get("interception_point") != "output":
+            return ALLOW
         target = str(context.get("target", ""))
         if "secret" in target.lower():
             return Verdict.deny(reason="egress_blocked: sensitive content detected")
@@ -916,10 +928,10 @@ GroupChatBuilder(
 |---|---|
 | `participants` | Agent instances or custom `Executor` nodes. Each must have a unique `name` / `id`. |
 | `participant_factories` | Callables returning instances — evaluated at `build()` time. Mutually exclusive with `participants`. |
-| `selection_func` | `(GroupChatState) -> str` or async. Returns the name of the next participant. |
+| `selection_func` | `(GroupChatState) -> str \| None` or async. Returns the name of the next participant, or `None` to terminate the chat early. |
 | `orchestrator_agent` | An `Agent` that produces an `AgentOrchestrationOutput` (JSON structured output). |
 | `orchestrator` | A fully constructed `BaseGroupChatOrchestrator` instance. |
-| `termination_condition` | `(list[Message]) -> bool`. Return `True` to halt the conversation. |
+| `termination_condition` | `(list[Message]) -> bool` or `async (list[Message]) -> bool`. Return `True` to halt. |
 | `max_rounds` | Hard cap on selection rounds. |
 | `checkpoint_storage` | `FileCheckpointStorage` or `InMemoryCheckpointStorage` for pause/resume. |
 | `output_from` | Which participant(s) emit workflow `output` events. Default: orchestrator only. |
@@ -931,7 +943,7 @@ GroupChatBuilder(
 | `.with_termination_condition(cond)` | `Self` | Override `termination_condition`. |
 | `.with_max_rounds(n)` | `Self` | Override `max_rounds`. |
 | `.with_checkpointing(storage)` | `Self` | Attach checkpoint storage. |
-| `.with_request_info(*, agents=None)` | `Self` | Enable human-in-the-loop after each participant turn. `agents=None` means all participants. |
+| `.with_request_info(*, agents=None)` | `Self` | Enable human-in-the-loop after each *agent* participant turn. `agents=None` targets all `Agent` participants; custom `Executor` participants are not covered and must handle request info themselves. |
 | `.build()` | `Workflow` | Validate and freeze the workflow graph. |
 
 ### `GroupChatState` (passed to `selection_func`)
