@@ -168,7 +168,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['gcp', 'gemini', 'multi-agent'],
-    version: 'v2.1.0',
+    version: 'v2.9.0',
   },
   {
     id: 'claude-sdk',

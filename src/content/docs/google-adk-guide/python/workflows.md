@@ -7,7 +7,7 @@ sidebar:
   order: 25
 ---
 
-Verified against google-adk==2.4.0 (`google/adk/workflow/`).
+Verified against google-adk==2.4.0 (`google/adk/workflow/`). The latest release is **2.9.0** — all examples are compatible with 2.4.0 and later unless noted.
 
 `Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
 
@@ -108,6 +108,75 @@ edges = [Edge(from_node=a, to_node=b, route="yes")]
 ```
 
 Mix them freely. `BaseAgent`, `BaseTool`, and plain callables are auto-wrapped via `build_node()` when they appear in an edge.
+
+## `build_node()` — automatic node conversion
+
+`build_node` is an internal helper that converts any `NodeLike` value (callable, `LlmAgent`, `BaseTool`, or `Workflow`) into a concrete `BaseNode`. The edge parser calls it automatically whenever you place an agent, callable, or tool directly in an edge — you do not import or call it yourself. Understanding its mode-defaulting rules helps you predict how the edge parser will configure each node.
+
+```python
+from google.adk.workflow import Workflow, START
+from google.adk.agents import LlmAgent
+
+writer = LlmAgent(
+    name="writer",
+    model="gemini-2.5-flash",
+    instruction="Summarise the input in one sentence.",
+)
+
+# Place the agent directly in an edge — the edge parser calls build_node()
+# internally, defaulting mode to 'single_turn' (no parent_agent provided).
+wf = Workflow(name="demo", edges=[(START, writer)])
+```
+
+**Mode defaulting rules applied by `build_node` (for reference):**
+
+| Input | `mode` result |
+|---|---|
+| `LlmAgent` with `mode=None`, no `parent_agent` | `'single_turn'` |
+| `LlmAgent` with `mode=None`, `parent_agent` provided | `'chat'` |
+| `LlmAgent` with `mode='task'` or `mode='chat'` | forces `wait_for_output=True` |
+| Any `LlmAgent` | forces `rerun_on_resume=True` |
+
+To control the mode explicitly, set it on the `LlmAgent` before placing it in the edge:
+
+```python
+from google.adk.workflow import Workflow, START
+from google.adk.agents import LlmAgent
+
+# Explicitly set mode so build_node() preserves it rather than defaulting
+writer = LlmAgent(name="writer", model="gemini-2.5-flash",
+                  instruction="Summarise the input.", mode="single_turn")
+
+wf = Workflow(name="demo", edges=[(START, writer)])
+```
+
+**Nested workflows.** A `Workflow` is itself a `BaseNode` and can appear inside another `Workflow`'s edge list. This lets you compose large pipelines from reusable sub-pipelines:
+
+```python
+from google.adk.workflow import Workflow, node, START
+
+@node
+def validate(node_input: str) -> str:
+    if not node_input.strip():
+        raise ValueError("empty input")
+    return node_input
+
+@node
+def publish(node_input: str) -> dict:
+    return {"published": True, "content": node_input}
+
+# Inner pipeline — reusable unit
+inner = Workflow(
+    name="inner_pipeline",
+    edges=[(START, validate)],
+)
+
+# Outer pipeline — nests inner as a node
+outer = Workflow(
+    name="outer_pipeline",
+    edges=[(START, inner, publish)],   # Workflow is already BaseNode; edge parser accepts it directly
+)
+```
 
 ## `@node` decorator
 

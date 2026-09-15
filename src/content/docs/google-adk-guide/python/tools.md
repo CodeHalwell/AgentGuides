@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`).
+Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). The latest release is **2.9.0** — most examples are compatible with 2.3.0 and later; the `BigQueryToolset` section requires 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -1260,6 +1260,72 @@ agent = LlmAgent(
 ```
 
 Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `state` (read-only `MappingProxyType`), `session`, `user_id`, `run_config`, `get_credential(key)`.
+
+## BigQueryToolset (experimental)
+
+> **Minimum version:** `google.adk.integrations.bigquery` was introduced after 2.7.1 — use **google-adk ≥ 2.9.0** for the imports shown below. On 2.7.x and earlier, the module path is `google.adk.tools.bigquery` (deprecated compatibility shim).
+
+`BigQueryToolset` lets an agent query BigQuery datasets, list tables, inspect schemas, and run SQL. Requires `pip install google-cloud-bigquery`.
+
+```python
+from google.adk.integrations.bigquery import BigQueryToolset
+from google.adk.agents import LlmAgent
+
+# Uses Application Default Credentials (ADC); set GOOGLE_CLOUD_PROJECT env var for the project
+bq_tools = BigQueryToolset()
+
+analyst = LlmAgent(
+    name="data_analyst",
+    model="gemini-2.5-pro",
+    instruction=(
+        "You are a data analyst with access to BigQuery. "
+        "List tables first, inspect schemas before writing queries, "
+        "and cap results at 100 rows."
+    ),
+    tools=[bq_tools],
+)
+```
+
+**Filter operations** with `tool_filter` (controls which BQ tool functions are exposed to the agent):
+
+```python
+from google.adk.integrations.bigquery import BigQueryToolset
+from google.adk.agents import LlmAgent
+
+# Expose only SQL execution and dataset listing tools
+bq_tools = BigQueryToolset(
+    tool_filter=["execute_sql", "list_dataset_ids"],
+)
+
+agent = LlmAgent(
+    name="sales_analyst",
+    model="gemini-2.5-pro",
+    instruction="Run SQL against the sales dataset only.",
+    tools=[bq_tools],
+)
+```
+
+> **Dataset access control** — `tool_filter` limits which operations the agent can call, but does not restrict which datasets those operations may reach. To enforce dataset-level boundaries, use BigQuery IAM roles (e.g. grant the service account `roles/bigquery.dataViewer` on specific datasets only) or authorized views. Pass the ADK agent a `BigQueryToolset` configured with service account credentials that have only the required dataset permissions.
+
+`BigQueryToolset` accepts a `credentials_config` argument for passing explicit credentials or an external token rather than relying on ADC:
+
+```python
+import google.oauth2.service_account as sa_lib
+from google.adk.integrations.bigquery import BigQueryToolset, BigQueryCredentialsConfig
+
+credentials = sa_lib.Credentials.from_service_account_file(
+    "service_account.json",
+    scopes=["https://www.googleapis.com/auth/bigquery.readonly"],
+)
+
+bq_tools = BigQueryToolset(
+    credentials_config=BigQueryCredentialsConfig(credentials=credentials),
+)
+```
+
+Pass `external_access_token_key="my_token"` to `BigQueryCredentialsConfig` instead of `credentials` if you want the agent to inject a short-lived token from session state at query time.
+
+> Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## PubSubToolset (experimental)
 
