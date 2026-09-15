@@ -42,7 +42,7 @@ A chaptered tutorial that takes you from a first graph to a production-ready age
   <LinkCard title="5 · Memory & persistence" href="/langgraph-guide/python/chapter-05-memory/" description="Checkpointers, Store, cross-thread memory · 25 min" />
   <LinkCard title="6 · Streaming & debugging" href="/langgraph-guide/python/chapter-06-streaming-and-debugging/" description="All 7 stream modes, typed StreamPart v2, GraphOutput, token streaming, custom events · 30 min" />
   <LinkCard title="7 · Human-in-the-loop" href="/langgraph-guide/python/chapter-07-human-in-the-loop/" description="Interrupts, multi-stage approval, interactive debug · 25 min" />
-  <LinkCard title="8 · Middleware" href="/langgraph-guide/python/chapter-08-middleware-hooks/" description="langchain.agents.middleware — PII, summarization, retries, HITL, cost limits · 20 min" />
+  <LinkCard title="8 · Middleware" href="/langgraph-guide/python/chapter-08-middleware-hooks/" description="pre_model_hook, post_model_hook, RetryPolicy, TimeoutPolicy, error_handler, ToolNode(handle_tool_errors) · 25 min" />
   <LinkCard title="9 · Advanced patterns" href="/langgraph-guide/python/chapter-09-advanced-patterns/" description="ReAct, Tree-of-Thoughts, reflection, structured output, caching, Functional API · 25 min" />
   <LinkCard title="10 · Production & troubleshooting" href="/langgraph-guide/python/chapter-10-production/" description="RetryPolicy, TimeoutPolicy, CachePolicy, Durability, IsLastStep, Topic channels, Docker, CLI · 30 min" />
 </CardGrid>
@@ -70,7 +70,7 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Store (long-term memory)" href="/langgraph-guide/python/chapter-05-memory/#long-term-memory-store" />
   <LinkCard title="Type-safe v2 API" href="/langgraph-guide/python/chapter-06-streaming-and-debugging/#type-safe-v2-streaming-api" />
   <LinkCard title="Interrupts (HITL)" href="/langgraph-guide/python/chapter-07-human-in-the-loop/#how-interrupt-works" />
-  <LinkCard title="Middleware (create_agent)" href="/langgraph-guide/python/chapter-08-middleware-hooks/" />
+  <LinkCard title="Middleware &amp; hooks" href="/langgraph-guide/python/chapter-08-middleware-hooks/" />
   <LinkCard title="ReAct pattern" href="/langgraph-guide/python/chapter-09-advanced-patterns/#pattern-1-react-reasoning--acting-with-native-langgraph" />
   <LinkCard title="Functional API" href="/langgraph-guide/python/reference-functional-api/" />
   <LinkCard title="Command / Send" href="/langgraph-guide/python/reference-command-and-send/" />
@@ -131,13 +131,17 @@ older blog post or docs page, the source wins.
 
   Known corrections vs older drafts / third-party guides:
 
-  - `langgraph.llm_hooks` and `langgraph.cache.cache_node` **do not exist**. The
-    middleware system is `langchain.agents.create_agent(middleware=[...])`; see
-    [Chapter 8](./chapter-08-middleware-hooks/).
-  - `create_react_agent` in `langgraph.prebuilt` is **deprecated in v1.0** in
-    favor of `langchain.agents.create_agent`. It still runs, with a warning.
-  - `AgentState` / `AgentStatePydantic` moved from `langgraph.prebuilt` to
-    `langchain.agents`.
+  - `langgraph.llm_hooks` and `langgraph.cache.cache_node` **do not exist**.
+    The real middleware API is `pre_model_hook`/`post_model_hook` kwargs on
+    `langgraph.prebuilt.create_react_agent`; see [Chapter 8](./chapter-08-middleware-hooks/).
+  - `langchain.agents.create_agent(middleware=[...])` and `AgentMiddleware` exist in
+    the separate **`langchain`** package (install with `pip install langchain`), which
+    is not bundled with `langgraph`. `create_react_agent` is **deprecated** per
+    official LangGraph v1 migration docs in favour of `langchain.agents.create_agent`.
+  - `AgentState` / `AgentStatePydantic` are **deprecated** in `langgraph.prebuilt` (no
+    longer re-exported from the top-level `__init__`; still importable from
+    `langgraph.prebuilt.chat_agent_executor`). Deprecation notice targets `langchain.agents`
+    as migration (requires the `langchain` package).
   - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)`
     are **context managers** (`with ... as saver:`), not factories that return
     a saver directly. Some earlier examples omitted the `with`; see the

@@ -343,7 +343,12 @@ from langgraph.prebuilt.tool_validator import ValidationNode
 
 Deprecated since **v1.0**. Validates tool call schemas without executing the tools. It was designed for structured output and extraction workflows where the LLM needs to be re-prompted when its tool arguments fail schema validation.
 
-Migrate to `create_agent` from `langchain.agents`, which handles schema validation internally.
+Two migration paths:
+
+1. **`ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on the tool** — the node catches argument-validation failures and converts them to `ToolMessage` error replies. **Important:** unlike `ValidationNode`, `ToolNode` **executes** every call whose arguments are valid. This is unsafe in validate-only workflows (e.g. before a human-approval step) where side effects such as sending email or charging a payment must not occur during validation.
+2. **Custom validation node** — for schema-only validation without execution, call `tool.args_schema.model_validate(tc["args"])` for each tool call and return a `ToolMessage` for **every** call — a success message when arguments are valid, an error message when they are not — without invoking the tool. Every `tool_call` in the preceding `AIMessage` must have a matching `ToolMessage`; omitting results for successful calls leaves the history malformed and the provider will reject the next model call. This is the only safe migration path when execution must not happen during validation.
+
+The `error_handler=` parameter on `StateGraph.add_node` provides node-level fallback handling after all retries are exhausted — it is separate from per-call validation. (`handle_tool_errors` is a `ToolNode` constructor argument, not an `add_node` keyword; `langchain.agents.create_agent` exists in the separate `langchain` package, not in `langgraph`.)
 
 ## Patterns
 
@@ -1068,6 +1073,6 @@ for mode, data in graph.stream(
 | Version | Change |
 |---|---|
 | 1.1.0 (prebuilt) | `ToolCallRequest.override()` introduced; direct attribute assignment deprecated. `awrap_tool_call` added. |
-| 1.0.0 (prebuilt) | `ValidationNode` deprecated — use `create_agent` from `langchain.agents`. `AgentState` / `AgentStatePydantic` moved to `langchain.agents`. |
+| 1.0.0 (prebuilt) | `ValidationNode` deprecated (planned removal v2.0.0) — **no drop-in replacement**: `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` when tool execution is acceptable; use a custom validation node (`tool.args_schema.model_validate(tc["args"])`) for validate-only workflows where tools must not execute. `AgentState` / `AgentStatePydantic` **deprecated** — top-level re-export removed from `langgraph.prebuilt.__init__`, but still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled for removal in v2.0.0. Use `MessagesState` or a custom `TypedDict` for new code. |
 | 1.2.0 / prebuilt 1.1.0 | `ToolRuntime` dataclass introduced in `langgraph-prebuilt`; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, `execution_info`, `server_info`. `emit_output_delta` added. `ToolCallTransformer` stream transformer and `ToolCallStream` handle added; enable per-tool-call structured streaming via `compile(transformers=[ToolCallTransformer])` + `stream_mode="tools"`. |
 | 0.3.8 (langchain-core) | `InjectedStore` requires `langchain-core >= 0.3.8`. |

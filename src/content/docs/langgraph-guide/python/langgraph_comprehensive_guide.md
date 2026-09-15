@@ -39,9 +39,11 @@ Latest: langgraph 1.2.11 | Updated: August 17, 2026
 - `langgraph.prebuilt.HumanInterrupt` → `langchain.agents.interrupt.HumanInterrupt`
 - `langgraph.prebuilt.HumanInterruptConfig` → `langchain.agents.interrupt.HumanInterruptConfig`
 - `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
-- `langgraph.prebuilt.ValidationNode` → use `create_agent` from `langchain.agents` with custom error handling
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
+
+**Deprecated (since v1.0, removal planned in v2.0.0):**
+- `langgraph.prebuilt.ValidationNode` — still importable from `langgraph.prebuilt.tool_validator`; there is no drop-in schema-only replacement. Two migration paths: (1) `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` on each tool when tool execution is acceptable (note: the node executes valid calls — unsuitable for validate-only workflows with side-effecting tools); (2) a custom node calling `tool.args_schema.model_validate(tc["args"])` per tool call and returning a `ToolMessage` on failure, without invoking the tool, for validate-only workflows.
 
 ---
 
@@ -334,7 +336,7 @@ def fetch_user_context(state: State):
 
 def call_model(state: State):
     """Call LLM with messages."""
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-5")
     
     system_prompt = f"You're helping {state['user_name']}. Be concise."
     
@@ -413,7 +415,7 @@ def solve_math(state: State) -> dict:
 
 def general_response(state: State) -> dict:
     """Handle general queries."""
-    model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    model = ChatAnthropic(model="claude-sonnet-5")
     response = model.invoke(state["query"])
     return {"result": response.content}
 
@@ -850,7 +852,7 @@ def send_email(to: str, subject: str, body: str) -> str:
 tools = [get_weather, get_stock_price, send_email]
 
 # Create model with tools
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5")
 model_with_tools = model.bind_tools(tools)
 
 class ToolState(TypedDict):
@@ -2244,7 +2246,7 @@ The following subsections appeared in earlier drafts of this guide under a "v1.0
 
 - **Node Caching** — `from langgraph.cache import cache_node, SemanticCache, CachePolicy` does not exist. For caching, use LangGraph's long-term `Store` (see [Memory & Persistence](#memory--persistence)) or plain `functools.lru_cache`.
 - **Deferred Nodes** — `from langgraph.graph import deferred` and `@deferred(wait_for=[...])` are not real. Fan-in is native: edges from multiple sources into the same target wait for all upstream completions.
-- **Pre/Post Model Hooks decorators** — `from langgraph.llm_hooks import pre_model_hook, post_model_hook` does not exist. The real middleware API lives in `langchain.agents.middleware` and is used via `langchain.agents.create_agent(middleware=[...])`. The older `langgraph.prebuilt.create_react_agent` function also accepts `pre_model_hook=` / `post_model_hook=` keyword arguments (not decorators). See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for details.
+- **Pre/Post Model Hooks decorators** — `from langgraph.llm_hooks import pre_model_hook, post_model_hook` does not exist. The real hooks are the `pre_model_hook=` / `post_model_hook=` kwargs on `langgraph.prebuilt.create_react_agent` (not decorators). `langchain.agents.middleware` and `langchain.agents.create_agent` **do** exist but require the separate **`langchain`** package (`pip install langchain`), which is not bundled with `langgraph`. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for verified examples.
 - **Tools State Updates** — `@tool(updates_state=True)` returning `StateUpdate` is not a real decorator option. Have your node read the tool result and return the state update as a normal dict.
 - **Command Tool for edgeless flows** — `command_tool`, `CommandRouter` are not real. Real equivalent: return a `langgraph.types.Command(goto="next_node", update={...})` from a node or a tool to drive routing.
 - **LangGraph Templates CLI** — `langgraph template list|create|init|publish` is not a real subcommand. Use `langgraph new --template NAME` to scaffold from a template.
@@ -2773,13 +2775,20 @@ entries — they carry no compatibility guarantee and change between patch relea
 each section that has notable internals closes with a short, named pointer instead
 of a full write-up.
 
-Several symbols below are deprecated but still importable and functional in
-1.2.11 — each carries an explicit **migrate to** note rather than being silently
-dropped: `create_react_agent`, `AgentState`/`AgentStatePydantic`/
-`AgentStateWithStructuredResponse`, `ValidationNode`, `MessageGraph`, and the
-`HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family all moved to
-`langchain.agents` (or `langchain.agents.interrupt`) as of LangGraph 1.0, and each
-still works with a `LangGraphDeprecatedSinceV10` warning.
+Several symbols changed in 1.0–1.2: `MessageGraph` is **deprecated** (still importable from `langgraph.graph.message`, emits a deprecation warning; use `StateGraph` for new code);
+`AgentState`/`AgentStatePydantic`/`AgentStateWithStructuredResponse` and
+`ValidationNode` are **deprecated** in `langgraph.prebuilt` (scheduled for
+removal in v2.0.0). The `AgentState*` family is no longer re-exported from the
+top-level `langgraph.prebuilt.__init__` but remains importable from
+`langgraph.prebuilt.chat_agent_executor`; `ValidationNode` is still importable
+from `langgraph.prebuilt.tool_validator`. The deprecation notices target
+`langchain.agents` as migration destination (requires the separate `langchain`
+package). `create_react_agent` is **deprecated** per official LangGraph v1
+migration docs in favour of `langchain.agents.create_agent`; the installed
+`langgraph==1.2.11` source does not carry a runtime `@deprecated` decorator but
+migration guidance is clear. The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
+`langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` and
+`langchain.agents.middleware` exist in the separate `langchain` package.
 
 ### Graph Construction & State
 
@@ -4735,15 +4744,17 @@ async with graph.astream({"messages": []}, stream_mode="tools", version="v2") as
         print("final:", tc.output)
 ```
 
-#### `create_react_agent` (deprecated) — and the `AgentState` / `ValidationNode` migration
+#### `create_react_agent` — and the `AgentState` / `ValidationNode` migration
 
 **Module:** `langgraph.prebuilt.chat_agent_executor` / `.tool_validator`
 
-`create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. **Verified
-deprecated** in the installed venv — the function carries
-`@deprecated(category=LangGraphDeprecatedSinceV10)` — in favor of `create_agent`
-from `langchain.agents`; it remains fully functional in 1.2.11 and existing code
-keeps working (with a warning).
+`create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. It is
+**deprecated** per official LangGraph v1 migration docs in favour of
+`langchain.agents.create_agent` (from the separate `langchain` package; install
+with `pip install langchain`). The installed `langgraph==1.2.11` source does not
+carry a runtime `@deprecated` decorator, but official migration guidance is clear.
+`pre_model_hook`/`post_model_hook` hooks remain available on `create_react_agent`
+for users working with `langgraph` standalone.
 
 ```python
 def create_react_agent(
@@ -4774,14 +4785,25 @@ def create_react_agent(
   add_messages], "remaining_steps": NotRequired[RemainingSteps]}`; a custom
   `state_schema` must include a `remaining_steps` field or `create_react_agent`
   raises `ValueError`.
-- `AgentState`, `AgentStatePydantic`, `AgentStateWithStructuredResponse` are each
-  separately `@deprecated`, moved to `langchain.agents`; migrate to
+- `AgentState`, `AgentStatePydantic`, `AgentStateWithStructuredResponse` are
+  **deprecated** and no longer re-exported from `langgraph.prebuilt.__init__`, but
+  remain importable from `langgraph.prebuilt.chat_agent_executor`. Migrate to
   `response_format=` instead of a custom structured-response state class, or a
   hand-written `TypedDict`/Pydantic model with the same two fields for a custom
   `state_schema`.
 - `ValidationNode` (schema-only tool-argument validator, no execution) is also
-  `@deprecated` — migrate to `create_agent(response_format=...)` or tool-level
-  `handle_tool_errors=` with a pydantic `args_schema` on the tool itself.
+  **deprecated** (since v1.0, planned removal in v2.0.0) but still importable from
+  `langgraph.prebuilt.tool_validator`. **There is no drop-in schema-only replacement.** `ToolNode`
+  **executes** valid tool calls after schema validation — callers that relied on
+  `ValidationNode` to validate without side effects cannot use `ToolNode` as a
+  direct substitute. Two migration paths:
+  - **Tool execution is acceptable:** use `ToolNode(handle_tool_errors=True)`
+    with a pydantic `args_schema` on each tool; argument-validation failures
+    surface as `ToolMessage` errors that prompt the LLM to retry.
+  - **Schema-only, no execution:** write a custom node that calls
+    `tool.args_schema.model_validate(tc["args"])` for each tool call and returns
+    a `ToolMessage` with the validation error on failure, without invoking the
+    tool.
 
 **Correction vs. some older write-ups:** `from langgraph.prebuilt import
 AgentState` does **not** merely warn — it raises `ImportError` in the installed
@@ -5795,7 +5817,7 @@ class AuditHandler(GraphCallbackHandler):
 **Module:** `langgraph.warnings`
 
 The deprecation-warning hierarchy every deprecated LangGraph API (`MessageGraph`,
-`ValidationNode`, `create_react_agent`, `AgentState`, the `langgraph.prebuilt.interrupt`
+`ValidationNode`, `AgentState`, the `langgraph.prebuilt.interrupt`
 re-exports, `GraphOutput` dict-access, …) emits — each subclass records `since` and
 `expected_removal` as `(major, minor)` tuples, letting you filter by version range in
 tests (`pytest.warns(LangGraphDeprecatedSinceV10)`) or promote them to errors

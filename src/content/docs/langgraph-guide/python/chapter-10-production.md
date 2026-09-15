@@ -466,21 +466,29 @@ Send("slow_node", {"data": payload}, timeout=30.0)
 
 ---
 
-## `create_react_agent` Migration Notice
+## `create_react_agent` — legacy factory (deprecated in LangGraph v1)
 
-`create_react_agent` from `langgraph.prebuilt` is **deprecated** since langgraph 1.2.x. The replacement is `create_agent` from the `langchain` package:
+`create_react_agent` from `langgraph.prebuilt` is **deprecated** per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent` (requires `pip install langchain`). The installed source does not carry a runtime decorator but migration guidance is clear. For new production code, prefer `langchain.agents.create_agent`. This section documents `create_react_agent` for users maintaining existing code or using `langgraph` without the separate `langchain` package:
 
 ```python
-# Deprecated — still works but emits a DeprecationWarning
 from langgraph.prebuilt import create_react_agent
-agent = create_react_agent(model, tools)
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
 
-# Preferred — use langchain.agents (requires langchain >= 0.3)
-from langchain.agents import create_agent
-agent = create_agent(model, tools)
+@tool
+def my_tool(x: str) -> str:
+    """A stub tool."""
+    return x
+
+agent = create_react_agent(
+    model=ChatAnthropic(model="claude-sonnet-5"),
+    tools=[my_tool],
+)
 ```
 
-`create_agent` adds a flexible middleware system (`AgentMiddleware`) with `wrap_tool_call` support at the agent level rather than the node level.
+For intercepting model calls, use `pre_model_hook` / `post_model_hook` — not a middleware layer. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for the full API.
+
+> **Note:** `langchain.agents.create_agent` and `langchain.agents.middleware` exist in the separate `langchain` package (install with `pip install langchain`), which is not bundled with `langgraph`. See [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) for verified `pre_model_hook`/`post_model_hook` examples that work without installing `langchain`.
 
 ---
 
