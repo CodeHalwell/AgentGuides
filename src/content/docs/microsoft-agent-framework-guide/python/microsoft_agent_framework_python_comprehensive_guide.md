@@ -1,20 +1,20 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.17.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For class examples verified against 1.15.0–1.17.0, see the Class Deep Dives Vol. 1–3 guides."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.18.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For class examples verified against 1.15.0–1.18.0, see the Class Deep Dives Vol. 1–4 guides."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest: agent-framework 1.17.0 | Guide verified against: 1.14.0 | Python 3.10+
+Latest: agent-framework 1.18.0 | Guide verified against: 1.14.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version (guide content):** 1.14.0 (`agent-framework` and `agent-framework-core`) | **Latest PyPI release:** 1.17.0
+**Framework Version (guide content):** 1.14.0 (`agent-framework` and `agent-framework-core`) | **Latest PyPI release:** 1.18.0
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework==1.14.0`; 30 classes verified on 1.15.0–1.17.0 — see [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) and [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/)).**
+> **API reference (verified against `agent-framework==1.14.0`; 40 APIs (38 classes and 2 functions) verified on 1.15.0–1.18.0 — see [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/), [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) and [Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/)).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
@@ -41,7 +41,7 @@ Latest: agent-framework 1.17.0 | Guide verified against: 1.14.0 | Python 3.10+
 | **File access provider** | `FileAccessProvider` + `AgentFileStore` hierarchy (`InMemoryAgentFileStore`, `FileSystemAgentFileStore`). 7 agent-facing tools (write, read, delete, ls, grep, replace, replace_lines). Configurable approval modes. |
 | **File memory provider** | `FileMemoryProvider` — session-scoped file-based memory with descriptions index (`memories.md`), `scope` override for cross-session sharing. |
 | **Agent mode** | `AgentModeProvider` — plan/execute modes (fully customisable), `get_agent_mode` / `set_agent_mode` helpers for external orchestrators. |
-| **Settings** | `SecretString` replaces `pydantic.SecretStr` — masked repr, `get_secret_value()` shim. `load_settings` — TypedDict-based config from env/dotenv with `required_fields` validation. |
+| **Settings** | `SecretString` — masks `str()`, `repr()`, f-strings, and `+` concatenation (not a `str` subclass); call `get_secret_value()` to extract for SDK use. `load_settings` — TypedDict-based config from env/dotenv with `required_fields` validation. |
 | **Compaction** | `ToolResultCompactionStrategy` (replace old tool-call groups with summary messages) and `TokenBudgetComposedStrategy` (pipeline multiple strategies under a token budget cap). |
 | **FIDES security** | `agent_framework.security` promoted to public experimental: `LabelTrackingFunctionMiddleware` (3-tier label propagation), `PolicyEnforcementFunctionMiddleware` (block/approve on violation), `SecureMCPToolProxy` (local MCP enforcement), `SecureAgentConfig` (all-in-one context provider). |
 | **Workflow evaluation** | `evaluate_workflow` — post-hoc or run+evaluate, per-agent `sub_results` breakdown. `AgentEvalConverter` — message/tool conversion to Foundry evaluator format. |
@@ -1646,7 +1646,11 @@ If you skip `add_handoff`, every agent can hand off to every other (mesh topolog
 ```python
 from agent_framework_orchestrations import GroupChatBuilder
 
-workflow = GroupChatBuilder(participants=[engineer, pm, security]).build()
+_names = [engineer.name, pm.name, security.name]
+workflow = GroupChatBuilder(
+    participants=[engineer, pm, security],
+    selection_func=lambda state: _names[state.current_round % len(_names)],
+).build()
 ```
 
 ### Magentic — manager + workers + replanning
@@ -3344,15 +3348,20 @@ GAIATelemetryConfig(enable_tracing=False, otlp_endpoint=None, trace_to_file=Fals
 **Module:** `agent_framework._settings` (top-level `agent_framework`)
 
 ```python
-class SecretString(str):
+# SecretString is NOT a str subclass — it is a standalone class with __slots__.
+class SecretString:
+    def __init__(self, value: str | SecretString) -> None: ...
+    def __str__(self) -> str: return "**********"
     def __repr__(self) -> str: return "SecretString('**********')"
-    def get_secret_value(self) -> str: return str(self)   # back-compat shim
+    def __format__(self, spec: str) -> str: ...  # also masked in f-strings
+    def __add__(self, other: str | SecretString) -> str: ...  # masked in concatenation
+    def get_secret_value(self) -> str: ...  # reveals raw value — use only for SDK calls
 
 load_settings(settings_type: type[SettingsT], *, env_prefix: str = "", env_file_path: str | None = None,
               env_file_encoding: str | None = None,
               required_fields: Sequence[str | tuple[str, ...]] | None = None, **overrides: Any) -> SettingsT
 ```
-`SecretString` behaves as a normal `str` everywhere except `repr()` (masked) — safe to `logging.info("%r", key)`. `load_settings` resolution order, highest to lowest: explicit `**overrides` (ignoring `None`) → `.env` file (only if `env_file_path` given) → environment variables (`<env_prefix><FIELD_NAME>`) → TypedDict class defaults. `required_fields` entries: a bare string must resolve non-`None`; a `tuple[str, ...]` means exactly one member of the group must resolve non-`None` (mutually-exclusive constraint, e.g. `("api_key", "azure_api_key")`).
+`SecretString` masks `str()`, `repr()`, and f-string formatting (all emit `"**********"`). String concatenation masks the secret portion while preserving any non-secret prefix — `"Bearer " + s` produces `"Bearer **********"`, not just the bare mask. It is **not** a `str` subclass, so string-only operations like `str.join()` and JSON encoding raise `TypeError` rather than silently leaking the value. Call `.get_secret_value()` only when passing a credential to an SDK. `load_settings` resolution order, highest to lowest: explicit `**overrides` (ignoring `None`) → `.env` file (only if `env_file_path` given) → environment variables (`<env_prefix><FIELD_NAME>`) → TypedDict class defaults. `required_fields` entries: a bare string must resolve non-`None`; a `tuple[str, ...]` means exactly one member of the group must resolve non-`None` (mutually-exclusive constraint, e.g. `("api_key", "azure_api_key")`).
 
 By contrast, individual provider-specific chat clients (OpenAI, Anthropic, Bedrock, Foundry, Ollama, GitHub Copilot, etc.) resolve their own credentials/config with a similar but distinct precedence: explicit constructor kwargs override process environment variables, which override values loaded from a `.env` file if `python-dotenv` support is enabled — that's the client-constructor-level resolution order, separate from the general-purpose `load_settings()` helper above.
 
