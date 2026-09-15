@@ -7,7 +7,7 @@ language: python
 
 # Output Types & Validators
 
-Verified against **pydantic-ai==2.10.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
+Verified against **pydantic-ai==2.43.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
 
 The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. PydanticAI ships five "marker" wrappers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — plus a plain type / union shortcut. The right one depends on what the model natively supports.
 
@@ -70,7 +70,7 @@ print(repr(result.output))
 #> Fruit(name='banana', color='yellow')
 ```
 
-Arguments (`output.py` — verified against pydantic-ai 2.10.0):
+Arguments (`output.py` — verified against pydantic-ai 2.43.0):
 
 | Arg | Type | Default | Notes |
 |-----|------|---------|-------|
@@ -78,7 +78,8 @@ Arguments (`output.py` — verified against pydantic-ai 2.10.0):
 | `name` | `str \| None` | `None` | Tool name sent to the model; auto-derived if unset |
 | `description` | `str \| None` | `None` | Overrides the type's docstring as the tool description |
 | `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level `retries` / `output_retries` |
-| `strict` | `bool \| None` | `None` | Forwarded to providers that support strict JSON schema (OpenAI) |
+| `strict` | `bool \| None` | `None` | Forwarded to providers that support strict JSON schema (OpenAI, Anthropic, Google) |
+| `sequential` | `bool` | `False` | Act as a barrier — run alone, not overlapping with other tool calls (only meaningful under `end_strategy='exhaustive'`) |
 
 ### `ToolOutput.max_retries` — per-output retry budgets
 
@@ -126,6 +127,52 @@ print(repr(result.output))  # QuickAnswer(text='1991')
 
 result2 = agent.run_sync('Give me a detailed report on Python history with sources.')
 print(repr(result2.output))  # DetailedReport(title=..., sections=[...], citations=[...])
+```
+
+### `ToolOutput.sequential` — barrier output under `exhaustive` end strategy
+
+When `end_strategy='exhaustive'` the agent runs **all** tool calls the model emitted in a turn before stopping,
+including multiple output tools. Setting `sequential=True` on a `ToolOutput` makes it act as a
+barrier: function tools emitted before it finish first, then this output tool runs alone, then
+tools emitted after it start. Under `'early'` (the default) or `'graceful'`, output tools already run
+sequentially, so `sequential=True` has no effect there.
+
+```python
+import asyncio
+from pydantic import BaseModel
+from pydantic_ai import Agent, ToolOutput
+
+
+class AuditRecord(BaseModel):
+    """Audit record — must not overlap with live DB writes."""
+    action: str
+    timestamp: str
+    user_id: int
+
+
+class AnalysisResult(BaseModel):
+    """Analysis result — safe to emit in parallel."""
+    summary: str
+    score: float
+
+
+# AuditRecord must run alone (barrier); AnalysisResult can overlap with others.
+agent = Agent(
+    'openai:gpt-4o',
+    output_type=[
+        ToolOutput(AuditRecord, name='audit',    sequential=True),   # barrier
+        ToolOutput(AnalysisResult, name='analysis', sequential=False),
+    ],
+    end_strategy='exhaustive',
+)
+
+
+async def main() -> None:
+    result = await agent.run('Analyse the last login and log an audit record.')
+    print(repr(result.output))
+
+
+asyncio.run(main())
 ```
 
 ## `NativeOutput` — provider-native JSON schema

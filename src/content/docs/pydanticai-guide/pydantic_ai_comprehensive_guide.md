@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.33.0 (August 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.43.0 (September 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: pydantic-ai 2.40.0 | Guide verified against: 2.33.0 | Updated: September 2026
+Latest: pydantic-ai 2.43.0 | Class & API Reference verified against: 2.33.0 · new classes in 2.43.0 addendum | Updated: September 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.33.0 (August 2026)  
+**Version:** 2.43.0 (September 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
@@ -2313,6 +2313,8 @@ Three new exceptions enable short-circuiting the normal execution pipeline from 
 
 Verified against **pydantic-ai 2.33.0** (installed and cross-checked via `inspect.signature`, `dataclasses.fields`, and direct source reads). This is a consolidated, source-verified reference to the classes, functions, and wire types across `pydantic_ai`, `pydantic_graph`, and `pydantic_evals` — folded together from 44 previously-separate "class deep dive" volumes into 16 topic sections. Optional-dependency modules (Temporal/DBOS/Prefect/AG-UI/duckduckgo/tavily/exa/web-fetch/markdownify) were verified for import path and top-level structure only, since their third-party packages are not installed in the verification environment.
 
+> **2.43.0 addendum:** Ten additional classes verified against pydantic-ai 2.43.0 are documented in the companion deep-dive page — [10 Source-Verified Class Deep Dives (v2.43.0)](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_43/) — covering `ToolFailed`, `RunCancelled`, `ToolSelector`, `ToolOrOutput`, `ServiceTier`/`ThinkingLevel`, `AgentStream`/`StreamedRunResult`, `SkipModelRequest`/`SkipToolValidation`/`SkipToolExecution`, `ToolDefinition.sequential`, `OutputContext`, and `ApprovalRequired`.
+
 ### Agents & Execution Core
 
 #### `Agent` — constructor reference
@@ -2819,6 +2821,36 @@ def step_one() -> str: return 'done'
 with ToolManager.parallel_execution_mode('sequential'):
     result = agent.run_sync('Run step_one twice.')
 ```
+
+#### `ToolFailed` — terminal tool failure
+
+`ToolFailed` is the counterpart to `ModelRetry`. Raise it when a tool call has *definitively*
+failed — missing resource, unsupported operation, confirmed upstream error — and you want the
+model to adapt instead of retrying the same call. Unlike `ModelRetry`, it does **not** prepend
+"please retry" instructions and does **not** consume the tool's retry budget.
+
+```python
+class ToolFailed(Exception):
+    def __init__(self, message: str): ...
+```
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelRetry, ToolFailed
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+def fetch_record(record_id: int) -> dict:
+    if record_id < 0:
+        raise ToolFailed(f'Record {record_id} does not exist (not retryable).')
+    if record_id > 9999:
+        raise ModelRetry('Record ID seems too large — did you mean a smaller number?')
+    return {'id': record_id, 'value': 'ok'}
+```
+
+Use `ToolFailed` for definitive errors the model should adapt to; use `ModelRetry` for
+transient errors where a prompt correction might help.
 
 #### `SkipModelRequest` + `SkipToolExecution` + `SkipToolValidation`
 
@@ -4684,7 +4716,7 @@ parts = split_content_into_text_and_thinking(
 Explicit, per-type control over how structured output is delivered. `ToolOutput` — model emits a structured "output tool" call (best for unions/non-native models). `NativeOutput` — provider's native JSON-schema/response-format mode; `template=False` suppresses schema-prompt injection when the provider already handles it natively. `PromptedOutput` — injects the schema as prompt text and parses the reply; `template` accepts a custom `'{schema}'`-style string. `TextOutput(fn)` — plain text passed to a Python parser function, which may optionally take `RunContext` as its first argument and may be async. `StructuredDict` is a factory (not a class) returning a `dict[str, Any]` subclass with a JSON Schema attached — validated structured output without defining a Pydantic `BaseModel`; `name`/`description` fall back to the schema's `title`/`description`.
 
 ```python
-ToolOutput(type_, *, name=None, description=None, max_retries=None, strict=None)
+ToolOutput(type_, *, name=None, description=None, max_retries=None, strict=None, sequential=False)
 NativeOutput(outputs, *, name=None, description=None, strict=None, template=None)
 PromptedOutput(outputs, *, name=None, description=None, template=None)
 TextOutput(output: TextOutputFunc)
