@@ -25,6 +25,10 @@ This guide includes recipes demonstrating the latest v1.2.11 features:
 - `BinaryOperatorAggregate` custom reducer patterns (Recipe 15)
 - `Send` with per-instance timeout for safe parallel map-reduce (Recipe 16)
 - `Command` with `Command.PARENT` for subgraph-to-parent signalling (Recipe 17)
+- `TracePolicy` + `omit_payload` for hiding sensitive node payloads in LangSmith (Recipe 18)
+- `ToolNode` with `ToolRuntime.emit_output_delta` for incremental tool streaming (Recipe 19)
+- `entrypoint.final` for separating return value from checkpoint state (Recipe 20)
+- `GraphOutput` + `Durability` for the v2 invoke API (Recipe 21)
 
 ---
 
@@ -3108,7 +3112,7 @@ print(result)
 
 ## Recipe 18: `TracePolicy` — Hiding Sensitive Payloads in LangSmith (v1.2.11)
 
-**Goal:** Run an agent that handles PII (personal-identifiable information). The node's inputs and outputs must never appear in LangSmith traces, but everything else in the graph is traced normally.
+**Goal:** Run an agent that handles PII (personally identifiable information). The node's inputs and outputs must never appear in LangSmith traces, but everything else in the graph is traced normally.
 
 **Uses:** `TracePolicy`, `omit_payload` helper, `add_node(trace_policy=...)`
 
