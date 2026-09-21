@@ -471,7 +471,7 @@ agent = LlmAgent(
     instruction="Answer geography questions accurately.",
 )
 
-# Point to the agents/ directory; eval sets live under agents/geography_qa/eval/
+# Point to the agents/ directory; eval sets live directly under agents/geography_qa/
 eval_sets_manager = LocalEvalSetsManager(agents_dir="./agents")
 
 sampler = LocalEvalSampler(
