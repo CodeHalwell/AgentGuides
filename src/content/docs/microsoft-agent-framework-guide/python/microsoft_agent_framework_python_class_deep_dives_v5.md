@@ -1017,7 +1017,7 @@ def find_topics_matching(store: MemoryFileStore, session: AgentSession, keyword:
 
 **Module:** `agent_framework._workflows._workflow` (re-exported via `agent_framework`)
 
-`WorkflowRunResult` is a `list[WorkflowEvent]` subclass returned by `await workflow.run(...)`. It holds the **data-plane** events (executor invocations, completions, outputs, and `request_info` pauses) in the list itself, and the **control-plane** status events in a separate private list accessible via `status_timeline()`.
+`WorkflowRunResult` is a `list[WorkflowEvent]` subclass returned by `await workflow.run(...)`. By default the list holds only **data-plane** events (executor invocations, completions, outputs, and `request_info` pauses); control-plane status events are kept in a separate private list accessible via `status_timeline()`. When `workflow.run(..., include_status_events=True)` is passed, status and failed events are also included in the list itself alongside data-plane events.
 
 ### Constructor
 
