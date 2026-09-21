@@ -1074,7 +1074,7 @@ graph = create_react_agent(
     response_format=None,           # type | (str, type) | None — structured output schema
     pre_model_hook=None,            # Callable[[state], dict] | None
     post_model_hook=None,           # Callable[[state], dict] | None
-    state_schema=MessagesState,     # TypedDict | BaseModel
+    state_schema=None,              # None uses built-in AgentState (messages + remaining_steps)
     context_schema=None,            # type | None — for Runtime[Ctx] injection
     checkpointer=None,              # BaseCheckpointSaver | None
     store=None,                     # BaseStore | None
@@ -1094,7 +1094,7 @@ Key parameters:
 | `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
 | `pre_model_hook` | Called before every LLM call. Return a dict to merge into state (e.g., inject a formatted system message). |
 | `post_model_hook` | Called after every LLM call. Return a dict to merge into state (e.g., trim history, record tokens). |
-| `state_schema` | Custom state schema; must include a `messages` field annotated with `add_messages` **and** a `remaining_steps: int` field (used internally to cap the agent loop). `MessagesState` satisfies both — use it as the base or include both fields explicitly. |
+| `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` which has both `messages` (annotated with `add_messages`) and `remaining_steps: int`. Custom schemas must include both fields — `MessagesState` alone is rejected because it lacks `remaining_steps`. |
 | `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
 
 ### Pre/post model hooks

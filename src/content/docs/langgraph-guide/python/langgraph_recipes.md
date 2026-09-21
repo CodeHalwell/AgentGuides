@@ -9,7 +9,7 @@ language: python
 
 **Updated for LangGraph 1.2.11 (September 2026)**
 
-This guide includes recipes demonstrating the latest v1.2.10 features:
+This guide includes recipes demonstrating the latest v1.2.11 features:
 - Node Caching for performance
 - Deferred Nodes for fan-in patterns
 - Pre/Post Model Hooks for LLM customization
