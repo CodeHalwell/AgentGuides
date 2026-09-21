@@ -112,7 +112,7 @@ async def main():
     agent = Agent(client=client, name="summarizer",
                   instructions="Summarize the user's text in one sentence.")
 
-    workflow = WorkflowBuilder().add_agent(agent).build()
+    workflow = WorkflowBuilder(start_executor=agent).build()
     result = await workflow.run("The quick brown fox jumps over the lazy dog.")
 
     for event in result:
@@ -139,9 +139,9 @@ from agent_framework.openai import OpenAIChatClient
 async def stream():
     agent = Agent(client=OpenAIChatClient(), name="poet",
                   instructions="Write a haiku.")
-    workflow = WorkflowBuilder().add_agent(agent).build()
+    workflow = WorkflowBuilder(start_executor=agent).build()
 
-    async for event in workflow.stream("Cherry blossoms fall"):
+    async for event in workflow.run("Cherry blossoms fall", stream=True):
         match event.type:
             case "started":
                 print("Workflow started")
@@ -166,8 +166,8 @@ import asyncio
 from agent_framework import WorkflowEvent
 
 # Pause-and-resume pattern: the executor emits a request_info event,
-# the host reads it, supplies the answer, then resumes the workflow.
-async def handle_pending_request(run_result, workflow):
+# the host reads it, supplies the answer, then resumes the workflow via run().
+async def handle_pending_request(run_result, workflow, checkpoint_id: str):
     pending = run_result.get_request_info_events()
     if not pending:
         return
@@ -177,9 +177,9 @@ async def handle_pending_request(run_result, workflow):
     print(f"Workflow is asking: {req.data}")
     user_answer = input("Your answer: ")
 
-    resumed = await workflow.respond(
-        request_id=req.request_id,
-        response=user_answer,
+    resumed = await workflow.run(
+        responses={req.request_id: user_answer},
+        checkpoint_id=checkpoint_id,
     )
     outputs = resumed.get_outputs()
     print(f"Final output: {outputs}")
@@ -388,15 +388,21 @@ agent = Agent(
 ### Example — bundle returned by a factory (agent-hooks pattern)
 
 ```python
-import os
 from agent_framework import Agent, acknowledge_experimental_feature, ExperimentalFeature
-from agent_framework._harness._hooks import create_agent_hooks_middleware
+from agent_framework import create_agent_hooks_middleware
 from agent_framework.openai import OpenAIChatClient
 
 acknowledge_experimental_feature(ExperimentalFeature.AGENT_HOOKS)
 
+
+# An interceptor is any callable matching the Interceptor protocol.
+def my_interceptor(event_type: str, payload: dict) -> dict:
+    print(f"[Hook] event={event_type!r}")
+    return payload
+
+
 bundle = create_agent_hooks_middleware(
-    hooks_endpoint=os.environ["AGENT_HOOKS_ENDPOINT"],
+    interceptors=[my_interceptor],
 )
 
 agent = Agent(
@@ -440,7 +446,7 @@ def my_splitter(
 ```python
 import asyncio
 from agent_framework import (
-    Agent, EvalItem, LocalEvaluator, ConversationSplit,
+    Agent, EvalItem, EvalCheck, CheckResult, LocalEvaluator, ConversationSplit,
     acknowledge_experimental_feature, ExperimentalFeature,
 )
 from agent_framework.openai import OpenAIChatClient
@@ -448,17 +454,18 @@ from agent_framework.openai import OpenAIChatClient
 acknowledge_experimental_feature(ExperimentalFeature.EVALS)
 
 
-async def main():
-    judge = Agent(
-        client=OpenAIChatClient(),
-        name="judge",
-        instructions=(
-            "You are an impartial judge. Given a query and an agent response, "
-            "reply with PASS or FAIL followed by a one-sentence reason."
-        ),
+# An EvalCheck is a callable: (EvalItem) -> CheckResult
+async def factual_check(item: EvalItem) -> CheckResult:
+    """Pass if the response contains 'Paris'."""
+    response_text = " ".join(
+        m.get("content", "") if isinstance(m, dict) else (m.text or "")
+        for m in item.response
     )
-    evaluator = LocalEvaluator(judge_agent=judge)
+    passed = "paris" in response_text.lower()
+    return CheckResult(passed=passed, reason="Response mentions Paris" if passed else "Missing 'Paris'")
 
+
+async def main():
     item = EvalItem(
         conversation=[
             {"role": "user", "content": "What is the capital of France?"},
@@ -466,11 +473,13 @@ async def main():
         ]
     )
 
-    result = await evaluator.evaluate(
+    evaluator = LocalEvaluator(factual_check)
+
+    results = await evaluator.evaluate(
         items=[item],
         split=ConversationSplit.LAST_TURN,
     )
-    for r in result.results:
+    for r in results.items:
         print(r.passed, r.reason)
 
 asyncio.run(main())
@@ -679,7 +688,7 @@ async def reset_user_history(history_provider, session_id: str):
 
 > **Experimental:** requires `ExperimentalFeature.HARNESS` to be acknowledged.
 
-`MemoryStore` is the **abstract base class** for all memory backing stores used by `FileMemoryProvider`. It manages topic-based long-term memory organised as a set of per-topic markdown files plus a `MEMORY.md` index and a transcript archive.
+`MemoryStore` is the **abstract base class** for all memory backing stores used by `MemoryContextProvider`. It manages topic-based long-term memory organised as a set of per-topic markdown files plus a `MEMORY.md` index and a transcript archive.
 
 `MemoryFileStore` is the concrete filesystem implementation provided by the framework.
 
@@ -729,12 +738,12 @@ MemoryFileStore(
 
 **Path resolution** follows `base_path / source_component / owner_component / kind`. Path traversal in owner IDs (`..", absolute paths) raises `ValueError`.
 
-### Example — file-backed memory with `FileMemoryProvider`
+### Example — file-backed memory with `MemoryContextProvider`
 
 ```python
 import asyncio
 from agent_framework import (
-    Agent, FileMemoryProvider, acknowledge_experimental_feature, ExperimentalFeature,
+    Agent, MemoryContextProvider, acknowledge_experimental_feature, ExperimentalFeature,
 )
 from agent_framework._harness._memory import MemoryFileStore
 from agent_framework.openai import OpenAIChatClient
@@ -748,8 +757,8 @@ async def main():
         owner_state_key="user_id",
     )
 
-    provider = FileMemoryProvider(
-        memory_store=store,
+    provider = MemoryContextProvider(
+        store=store,
         memory_agent=Agent(
             client=OpenAIChatClient(),
             name="memory-agent",
@@ -1009,7 +1018,7 @@ async def main():
         name="haiku-writer",
         instructions="Write a haiku about the given subject.",
     )
-    workflow = WorkflowBuilder().add_agent(agent).build()
+    workflow = WorkflowBuilder(start_executor=agent).build()
     result = await workflow.run("spring rain")
 
     # Primary output
@@ -1044,9 +1053,8 @@ async def main():
                    instructions="Turn the researcher's facts into a polished paragraph.")
 
     workflow = (
-        WorkflowBuilder()
-        .add_agent(researcher)
-        .add_agent(writer, input_from=["researcher"])
+        WorkflowBuilder(start_executor=researcher)
+        .add_edge(researcher, writer)
         .build()
     )
     result = await workflow.run("quantum computing")
@@ -1072,16 +1080,16 @@ import asyncio
 from agent_framework import WorkflowRunState
 
 
-async def run_and_handle(workflow, initial_prompt: str):
+async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
     result = await workflow.run(initial_prompt)
 
     if result.get_final_state() == WorkflowRunState.IDLE_WITH_PENDING_REQUESTS:
         for req_event in result.get_request_info_events():
             print(f"Workflow is asking ({req_event.source_executor_id}): {req_event.data}")
             answer = input("Your answer: ")
-            result = await workflow.respond(
-                request_id=req_event.request_id,
-                response=answer,
+            result = await workflow.run(
+                responses={req_event.request_id: answer},
+                checkpoint_id=checkpoint_id,
             )
 
     return result.get_outputs()
@@ -1167,7 +1175,11 @@ class SqlInjectionGuard(FunctionMiddleware):
     BLOCKED = {"'; drop table", "union select", "--"}
 
     async def process(self, context: FunctionInvocationContext, call_next):
-        for value in (context.arguments or {}).values():
+        args = context.arguments
+        args_dict = (
+            args.model_dump() if hasattr(args, "model_dump") else dict(args or {})
+        )
+        for value in args_dict.values():
             if isinstance(value, str):
                 lower = value.lower()
                 if any(bad in lower for bad in self.BLOCKED):
@@ -1279,7 +1291,7 @@ class TraceIdMiddleware(AgentMiddleware):
 `ChatOptions` is used as:
 
 1. **`Agent` constructor `default_options`** — applied on every run unless overridden.
-2. **Per-run override** via `agent.run(..., **options)`.
+2. **Per-run override** via `agent.run(..., options={...})`.
 3. **`Unpack[ChatOptions]` function signatures** for type-safe option forwarding.
 
 ### Example — setting default options on an agent
@@ -1325,12 +1337,12 @@ async def main():
         default_options={"temperature": 0.7},
     )
 
-    # Override temperature for this specific call
-    creative_result = await agent.run("Write a haiku.", temperature=1.2)
+    # Override temperature for this specific call via options=
+    creative_result = await agent.run("Write a haiku.", options={"temperature": 1.2})
     print(creative_result.text)
 
     # Use a different model for a specific call
-    fast_result = await agent.run("Summarize AI.", model="gpt-4o-mini", max_tokens=50)
+    fast_result = await agent.run("Summarize AI.", options={"model": "gpt-4o-mini", "max_tokens": 50})
     print(fast_result.text)
 
 asyncio.run(main())
@@ -1387,7 +1399,7 @@ class ConfigurableAgent:
         )
 
     async def ask(self, prompt: str, **override: Unpack[ChatOptions]) -> str:
-        result = await self._agent.run(prompt, **override)
+        result = await self._agent.run(prompt, options=dict(override))
         return result.text
 
 
