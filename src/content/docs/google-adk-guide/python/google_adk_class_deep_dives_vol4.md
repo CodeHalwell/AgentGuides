@@ -7,7 +7,7 @@ sidebar:
   order: 130
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.9.2** (installed in a venv, introspected with `inspect.getsource`). The ten classes cover the brand-new **optimization module** (prompt engineering automation), per-request telemetry control, the Gemini URL-context tool, the skills subsystem, and RAG-backed memory — areas either absent from earlier guides or covered only superficially.
+All examples and field tables on this page are source-verified against **google-adk==2.9.2** (installed in a venv, introspected with `inspect.getsource`). The ten classes cover the **optimization module** (prompt engineering automation, deepened here beyond the overview in the Class & API reference), per-request telemetry control, the Gemini URL-context tool, the skills subsystem, and RAG-backed memory — areas either absent from earlier guides or covered only superficially.
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|
