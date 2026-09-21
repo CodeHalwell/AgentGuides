@@ -1130,7 +1130,7 @@ graph = create_react_agent(llm, tools, state_schema=MyAgentState)
 **`post_model_hook`** receives the current state dict and must return `Command | dict | None`:
 - Return `None` for a no-op.
 - Return a dict to merge into state (e.g., record token usage).
-- Return a `Command` to override the default conditional routing (e.g., short-circuit to `END` without calling tools).
+- To prevent tool execution, replace the last `AIMessage` with one that has `tool_calls=[]` — the `post_model_hook_router` checks pending tool calls in the **updated state**, so clearing them reroutes to `END`. `Command(goto=END)` alone is not enough: the router is a separate conditional edge that runs regardless of any `Command.goto`.
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -1160,15 +1160,37 @@ def inject_system_prompt(state: MessagesState) -> dict:
 
 
 def trim_history(state: MessagesState) -> dict:
-    """Keep only the last 10 messages to avoid token bloat."""
-    if len(state["messages"]) > 10:
-        # Returning a slice does NOT remove older messages — add_messages merges by ID.
-        # Use REMOVE_ALL_MESSAGES first, then re-add the messages to keep.
-        from langchain_core.messages import RemoveMessage
-        from langgraph.graph.message import REMOVE_ALL_MESSAGES
-        to_keep = state["messages"][-10:]
-        return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)] + to_keep}
-    return {}
+    """Keep only the last 10 messages to avoid token bloat.
+
+    Trims at a clean boundary: if the naive last-10 slice starts with a
+    ToolMessage whose parent AIMessage was cut off, those orphaned tool
+    messages are discarded. OpenAI-compatible backends reject ToolMessages
+    that have no corresponding AIMessage with matching tool_calls.
+    """
+    from langchain_core.messages import AIMessage, RemoveMessage, ToolMessage
+    from langgraph.graph.message import REMOVE_ALL_MESSAGES
+
+    msgs = state["messages"]
+    if len(msgs) <= 10:
+        return {}
+
+    to_keep = list(msgs[-10:])
+
+    # IDs of tool calls whose parent AIMessage is already in the slice
+    covered_ids = {
+        c["id"]
+        for m in to_keep
+        if isinstance(m, AIMessage)
+        for c in (m.tool_calls or [])
+    }
+    # Drop any leading ToolMessages whose parent was cut off
+    while to_keep and isinstance(to_keep[0], ToolMessage) and to_keep[0].tool_call_id not in covered_ids:
+        to_keep.pop(0)
+
+    if not to_keep:
+        return {}
+
+    return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)] + to_keep}
 
 
 graph = create_react_agent(
