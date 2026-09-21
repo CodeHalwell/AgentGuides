@@ -393,7 +393,7 @@ the same `output_type` value but tell the runtime which extraction strategy to u
 
 | Class | Mechanism | When to use |
 |---|---|---|
-| `ToolOutput` | Tool call | Default for Pydantic models. Best compatibility. |
+| `ToolOutput` | Tool call | Explicit tool-call strategy. Best compatibility across providers. |
 | `NativeOutput` | Provider JSON mode | JSON schema enforced by provider. Faster, fewer tokens. |
 | `PromptedOutput` | Prompt injection | Works on any model, even those without native JSON mode. |
 | `TextOutput` | Plain text + function | Transform free text into a Python value. |
@@ -1022,9 +1022,11 @@ def create_document(ctx: RunContext[None], title: str, body: str) -> str:
 
 combined = CombinedToolset([read_tools, write_tools])
 
-# Allow only read_tools for untrusted users
+# Explicit allowlist — safer than a deny-list: only listed tools are exposed
+TRUSTED_TOOLS = {'read_document'}
+
 def is_read_tool(_ctx: RunContext[str], tool_def: ToolDefinition) -> bool:
-    return not tool_def.name.startswith('create')
+    return tool_def.name in TRUSTED_TOOLS
 
 
 safe_toolset = FilteredToolset(combined, filter_func=is_read_tool)
