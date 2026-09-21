@@ -527,16 +527,17 @@ class TelemetryConfig(BaseModel):
 
     genai_semconv_stability_opt_in: str | None = None
     """Stability opt-in for GenAI semantic conventions.
-    Options: 'database', 'http'. Maps to OTEL_SEMCONV_STABILITY_OPT_IN.
+    Options: 'experimental' (GenAI semconv), 'stable' (legacy path).
+    Maps to OTEL_SEMCONV_STABILITY_OPT_IN.
     Falls back to the env var value when None."""
 
-    capture_message_content: bool | None = None
-    """Whether to capture message content in telemetry spans.
-    Falls back to GOOGLE_ADK_CAPTURE_MESSAGE_CONTENT env var when None."""
+    capture_message_content: ContentCapturingMode | None = None
+    """Controls which telemetry destinations receive message content.
+    Falls back to OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT env var when None."""
 
     adk_experimental_telemetry_opt_in: str | None = None
     """Opt-in to experimental ADK-specific semantic conventions.
-    Falls back to ADK_EXPERIMENTAL_TELEMETRY_OPT_IN env var when None."""
+    Falls back to ADK_EXPERIMENTAL_TELEMETRY env var when None."""
 ```
 
 ### Precedence rules (source-verified)
@@ -550,9 +551,9 @@ ADK_TELEMETRY_IGNORE_RUN_CONFIG=1 (admin lock)
 per-request TelemetryConfig field (not None)
   → overrides the env-var value for this invocation only
   ↓
-env-var value (OTEL_SEMCONV_STABILITY_OPT_IN, GOOGLE_ADK_CAPTURE_MESSAGE_CONTENT, …)
+env-var value (OTEL_SEMCONV_STABILITY_OPT_IN, OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT, …)
   ↓
-built-in default (None / False)
+built-in default (None)
 ```
 
 Setting `ADK_TELEMETRY_IGNORE_RUN_CONFIG=1` is the operator's way to prevent tenants from changing telemetry behaviour.
@@ -561,9 +562,9 @@ Setting `ADK_TELEMETRY_IGNORE_RUN_CONFIG=1` is the operator's way to prevent ten
 
 | Field | Env-var fallback | Purpose |
 |---|---|---|
-| `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | GenAI semantic conventions stability level (`"database"` or `"http"`) |
-| `capture_message_content` | `GOOGLE_ADK_CAPTURE_MESSAGE_CONTENT` | Include full message text in OTel spans (PII risk) |
-| `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY_OPT_IN` | ADK-specific experimental semantic conventions |
+| `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | GenAI semantic conventions stability level (`"experimental"` or `"stable"`) |
+| `capture_message_content` | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | Which telemetry destinations receive message content (`ContentCapturingMode`) |
+| `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY` | ADK-specific experimental semantic conventions |
 
 ### Attaching `TelemetryConfig` to a run
 
@@ -572,7 +573,7 @@ import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.agents.run_config import RunConfig
 from google.adk.runners import InMemoryRunner
-from google.adk.telemetry.context import TelemetryConfig
+from google.adk.telemetry.context import ContentCapturingMode, TelemetryConfig
 from google.genai import types
 
 agent = LlmAgent(
@@ -590,8 +591,8 @@ async def main():
     # Per-request: capture message content for this tenant.
     run_config = RunConfig(
         telemetry=TelemetryConfig(
-            capture_message_content=True,
-            genai_semconv_stability_opt_in="database",
+            capture_message_content=ContentCapturingMode.EVENT_ONLY,
+            genai_semconv_stability_opt_in="experimental",
         )
     )
 
@@ -1061,8 +1062,9 @@ agent = LlmAgent(
 
 `tool_filter` operates on the **skill management tool names** (`list_skills`, `load_skill`,
 `load_skill_resource`, `run_skill_script`, `search_skills`) — not on individual skill names.
-Use it to restrict which operations the agent can perform. To control which skills appear
-in the discovery list, use a predicate that inspects `tool.name`.
+Use it to restrict which operations the agent can perform. To control which individual
+skills are available, pass only those `Skill` objects in the `skills=` argument —
+`tool_filter` cannot select individual skills.
 
 ```python
 # Allowlist: disable script execution for this agent (read-only operations only)
@@ -1071,15 +1073,16 @@ toolset = SkillToolset(
     tool_filter=["list_skills", "load_skill", "load_skill_resource"],
 )
 
-# Predicate: dynamic filtering
-# Predicate receives (tool: BaseTool, context: ReadonlyContext | None)
+# Predicate: dynamic filtering based on management operation name
+# tool.name is always one of: list_skills, load_skill, load_skill_resource,
+# run_skill_script, search_skills — never an individual skill name.
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.base_toolset import ReadonlyContext
 
-def only_stable(tool: BaseTool, context: ReadonlyContext | None) -> bool:
-    return not tool.name.startswith("experimental-")
+def no_script_execution(tool: BaseTool, context: ReadonlyContext | None) -> bool:
+    return tool.name != "run_skill_script"
 
-toolset = SkillToolset(skills=all_skills, tool_filter=only_stable)
+toolset = SkillToolset(skills=all_skills, tool_filter=no_script_execution)
 ```
 
 ### Namespacing skill management tool names
