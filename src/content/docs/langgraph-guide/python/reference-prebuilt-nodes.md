@@ -1,6 +1,6 @@
 ---
 title: "ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference"
-description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.2."
+description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.11."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference
 
-Verified against **`langgraph==1.2.2`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
+Verified against **`langgraph==1.2.11`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
 
 `ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` — let tools read graph state, access the long-term store, stream partial output, intercept calls before execution, and consume per-tool-call streaming results in a structured way.
 
@@ -1054,6 +1054,168 @@ for mode, data in graph.stream(
 | `tool-error` | Calls `tc_stream._fail(message)` — sets `error`, marks `completed=True`, closes `output_deltas`. |
 
 `ToolCallStream` is not meant to be constructed directly — it is always produced by `ToolCallTransformer` as events flow through the stream mux.
+
+## `create_react_agent`
+
+> **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. For new code, build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
+
+`create_react_agent` builds a ReAct-style agent graph in one call. It returns a compiled `StateGraph` with two nodes: `agent` (the LLM) and `tools` (a `ToolNode`), wired with `tools_condition`.
+
+### Signature
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+graph = create_react_agent(
+    model,                          # BaseChatModel or callable(state, runtime) -> BaseChatModel
+    tools,                          # list[BaseTool | Callable]
+    *,
+    prompt=None,                    # SystemMessage | str | Callable | None
+    response_format=None,           # type | (str, type) | None — structured output schema
+    pre_model_hook=None,            # Callable[[state], dict] | None
+    post_model_hook=None,           # Callable[[state], dict] | None
+    state_schema=MessagesState,     # TypedDict | BaseModel
+    context_schema=None,            # type | None — for Runtime[Ctx] injection
+    checkpointer=None,              # BaseCheckpointSaver | None
+    store=None,                     # BaseStore | None
+    interrupt_before=None,
+    interrupt_after=None,
+    name="LangGraph",
+)
+```
+
+Key parameters:
+
+| Parameter | Description |
+|---|---|
+| `model` | A `BaseChatModel` with `.bind_tools()` support, **or** a callable `(state, runtime) -> BaseChatModel` for dynamic model selection. |
+| `tools` | List of tools the agent can call. Passed to both `model.bind_tools()` and `ToolNode`. |
+| `prompt` | Optional system-level instructions. Pass a `str` or `SystemMessage` for static prompts; a callable for dynamic prompts that read from state. |
+| `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
+| `pre_model_hook` | Called before every LLM call. Return a dict to merge into state (e.g., inject a formatted system message). |
+| `post_model_hook` | Called after every LLM call. Return a dict to merge into state (e.g., trim history, record tokens). |
+| `state_schema` | Custom state schema; must include a `messages` field annotated with `add_messages`. Defaults to `MessagesState`. |
+| `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
+
+### Pre/post model hooks
+
+`pre_model_hook` and `post_model_hook` run inside the `agent` node, before and after the LLM call respectively. Both receive the current state and must return a dict that is merged back into state.
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langchain_core.messages import SystemMessage
+from langgraph.prebuilt import create_react_agent
+from langgraph.graph.message import MessagesState
+
+llm = ChatOpenAI(model="gpt-4o-mini")
+
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two integers."""
+    return a * b
+
+
+def inject_system_prompt(state: MessagesState) -> dict:
+    """Prepend a system message if not already present."""
+    if not state["messages"] or state["messages"][0].type != "system":
+        return {"messages": [SystemMessage(content="You are a helpful math assistant.")] + state["messages"]}
+    return {}
+
+
+def trim_history(state: MessagesState) -> dict:
+    """Keep only the last 10 messages to avoid token bloat."""
+    if len(state["messages"]) > 10:
+        return {"messages": state["messages"][-10:]}
+    return {}
+
+
+graph = create_react_agent(
+    llm,
+    [multiply],
+    pre_model_hook=inject_system_prompt,
+    post_model_hook=trim_history,
+)
+
+result = graph.invoke({"messages": [("user", "What is 6 times 7?")]})
+print(result["messages"][-1].content)  # 42
+```
+
+### Dynamic model selection
+
+Pass a callable instead of a model to pick a model at runtime based on state:
+
+```python
+from dataclasses import dataclass
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from langgraph.runtime import Runtime
+from langgraph.graph.message import MessagesState
+
+
+@dataclass
+class UserCtx:
+    is_premium: bool
+
+
+def pick_model(state: MessagesState, runtime: Runtime[UserCtx]):
+    model_id = "gpt-4o" if runtime.context.is_premium else "gpt-4o-mini"
+    return ChatOpenAI(model=model_id).bind_tools([search])
+
+
+@tool
+def search(query: str) -> str:
+    """Search the web."""
+    return f"Results for: {query}"
+
+
+graph = create_react_agent(
+    pick_model,
+    [search],
+    context_schema=UserCtx,
+)
+
+result = graph.invoke(
+    {"messages": [("user", "Search for LangGraph")]},
+    context=UserCtx(is_premium=True),
+)
+```
+
+### Structured output with `response_format`
+
+Force the final response into a typed Pydantic schema:
+
+```python
+from pydantic import BaseModel
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+
+
+class Answer(BaseModel):
+    value: float
+    explanation: str
+
+
+@tool
+def add(a: float, b: float) -> float:
+    """Add two numbers."""
+    return a + b
+
+
+graph = create_react_agent(
+    ChatOpenAI(model="gpt-4o-mini"),
+    [add],
+    response_format=Answer,
+)
+
+result = graph.invoke({"messages": [("user", "What is 3.5 plus 2.1?")]})
+# result["structured_response"] is an Answer instance
+print(result["structured_response"].value)        # 5.6
+print(result["structured_response"].explanation)  # "3.5 + 2.1 = 5.6"
+```
 
 ## Gotchas
 

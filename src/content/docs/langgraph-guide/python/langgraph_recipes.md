@@ -1,13 +1,13 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.10 (August 2026)"
+description: "Updated for LangGraph 1.2.11 (September 2026)"
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.2.10 (August 2026)**
+**Updated for LangGraph 1.2.11 (September 2026)**
 
 This guide includes recipes demonstrating the latest v1.2.10 features:
 - Node Caching for performance
@@ -3105,3 +3105,401 @@ print(result)
 - You want to decouple the subgraph's internal state from what it exposes upward.
 - Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
 - Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.
+
+## Recipe 18: `TracePolicy` — Hiding Sensitive Payloads in LangSmith (v1.2.11)
+
+**Goal:** Run an agent that handles PII (personal-identifiable information). The node's inputs and outputs must never appear in LangSmith traces, but everything else in the graph is traced normally.
+
+**Uses:** `TracePolicy`, `omit_payload` helper, `add_node(trace_policy=...)`
+
+```python
+from dataclasses import dataclass
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import TracePolicy
+from langgraph.tracing import omit_payload   # helper that returns TracePolicy(process_inputs=..., process_outputs=...)
+
+
+# --- State ---
+
+class State(TypedDict):
+    raw_pii: str        # e.g., full name + SSN
+    anonymized: str
+    result: str
+
+
+# --- Nodes ---
+
+def anonymize(state: State) -> dict:
+    """Replace PII with a placeholder — must NOT appear in traces."""
+    text = state["raw_pii"]
+    # Real implementation would use a NER model or regex; toy version here:
+    return {"anonymized": "[REDACTED]"}
+
+
+def process(state: State) -> dict:
+    """Safe to trace — works on anonymized data only."""
+    return {"result": f"Processed: {state['anonymized']}"}
+
+
+# --- Graph ---
+
+builder = StateGraph(State)
+
+# anonymize node: strip both inputs and outputs from LangSmith traces
+builder.add_node(
+    "anonymize",
+    anonymize,
+    trace_policy=omit_payload(),   # hides raw_pii from the trace payload
+)
+builder.add_node("process", process)   # traced normally
+builder.add_edge(START, "anonymize")
+builder.add_edge("anonymize", "process")
+builder.add_edge("process", END)
+
+graph = builder.compile()
+
+result = graph.invoke({"raw_pii": "Alice Smith, SSN 123-45-6789", "anonymized": "", "result": ""})
+print(result["result"])   # Processed: [REDACTED]
+```
+
+**What `omit_payload()` does:** Returns a `TracePolicy` that replaces the node's `inputs` and `outputs` in the LangSmith run with `{"__omitted__": True}`. The run ID, timing, and parent/child relationships are still recorded — only the data payload is hidden.
+
+You can also supply custom processors:
+
+```python
+from langgraph.types import TracePolicy
+
+def scrub_ssn(payload: dict) -> dict:
+    """Return a safe version of the payload — called by LangSmith before the run is stored."""
+    return {k: "[REDACTED]" if "ssn" in k.lower() else v for k, v in payload.items()}
+
+builder.add_node(
+    "anonymize",
+    anonymize,
+    trace_policy=TracePolicy(process_inputs=scrub_ssn, process_outputs=scrub_ssn),
+)
+```
+
+**When to use `TracePolicy`:**
+- Nodes that receive raw PII (names, addresses, financial data).
+- Nodes that embed secrets or credentials in their input/output.
+- High-volume nodes where storing full payloads in LangSmith is expensive.
+
+---
+
+## Recipe 19: `ToolCallTransformer` — Structured Per-Tool Streaming (v1.2.11)
+
+**Goal:** Stream a tool-calling agent and consume each tool's output incrementally as it arrives, using the structured `ToolCallStream` API rather than parsing raw event dicts.
+
+**Uses:** `ToolCallTransformer`, `ToolCallStream`, `compile(transformers=[...])`, `stream_mode="tools"`
+
+```python
+import asyncio
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- Tools ---
+
+@tool
+def fetch_price(ticker: str) -> str:
+    """Get the current price for a stock ticker."""
+    prices = {"AAPL": "182.50", "GOOG": "141.20", "MSFT": "378.90"}
+    return prices.get(ticker.upper(), "Unknown ticker")
+
+
+@tool
+def summarize_news(ticker: str) -> str:
+    """Get a one-line news summary for a ticker."""
+    return f"No major news for {ticker} today."
+
+
+# --- Graph ---
+
+tools = [fetch_price, summarize_news]
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+
+
+def call_model(state: MessagesState) -> dict:
+    return {"messages": [llm.invoke(state["messages"])]}
+
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", ToolNode(tools))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+# Register ToolCallTransformer — projects raw protocol events into ToolCallStream handles
+graph = builder.compile(
+    checkpointer=InMemorySaver(),
+    transformers=[ToolCallTransformer],
+)
+
+cfg = {"configurable": {"thread_id": "stocks-1"}}
+
+# --- Sync streaming ---
+
+print("=== Sync stream ===")
+for mode, data in graph.stream(
+    {"messages": [("user", "What is the price and latest news for AAPL?")]},
+    cfg,
+    stream_mode=["updates", "tools"],
+):
+    if mode == "tools":
+        # data is a run-level container; iterate its tool_calls
+        for tc in data.tool_calls:
+            print(f"[tool] {tc.tool_name}({tc.input}) => {tc.output}")
+    elif mode == "updates":
+        node = list(data.keys())[0]
+        print(f"[update] node={node}")
+
+
+# --- Async streaming ---
+
+async def main():
+    print("\n=== Async stream ===")
+    async with graph.astream(
+        {"messages": [("user", "Check MSFT price")]},
+        {"configurable": {"thread_id": "stocks-2"}},
+        stream_mode="tools",
+    ) as run:
+        async for tc_stream in run.tool_calls:
+            print(f"→ {tc_stream.tool_name} started (input={tc_stream.input})")
+            async for delta in tc_stream:
+                # delta chunks arrive as the tool streams partial output
+                print(f"  chunk: {delta!r}")
+            if tc_stream.error:
+                print(f"  ERROR: {tc_stream.error}")
+            else:
+                print(f"  Final output: {tc_stream.output}")
+
+
+asyncio.run(main())
+```
+
+**Key points:**
+- `compile(transformers=[ToolCallTransformer])` must be set — without it `stream_mode="tools"` yields raw event dicts.
+- `ToolCallStream.output_deltas` / async `__aiter__` iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
+- `ToolCallStream.completed` becomes `True` once `tool-finished` or `tool-error` fires.
+- You can mix `"tools"` with other stream modes: `stream_mode=["updates", "tools"]`.
+
+---
+
+## Recipe 20: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
+
+**Goal:** Build a conversation workflow where the agent returns a user-friendly summary to the caller but persists only the raw internal state to the checkpoint — so the heavy intermediate data doesn't bloat the stored thread.
+
+**Uses:** `entrypoint.final`, `@entrypoint(checkpointer=...)`, `previous`
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Any
+from langgraph.func import entrypoint, task
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- What we persist (compact) ---
+
+@dataclass
+class ThreadState:
+    turn_count: int
+    last_query: str
+    last_answer: str
+
+
+# --- What we return to the caller (richer) ---
+
+@dataclass
+class TurnResult:
+    answer: str
+    turn_count: int
+    context_used: list[str]
+
+
+# --- Tasks ---
+
+@task
+def retrieve(query: str) -> list[str]:
+    """Toy retrieval — returns relevant context snippets."""
+    corpus = {
+        "langgraph": ["LangGraph builds stateful graphs.", "It supports checkpointing."],
+        "python": ["Python is a high-level language.", "pip installs packages."],
+    }
+    for k, docs in corpus.items():
+        if k in query.lower():
+            return docs
+    return ["No specific context found."]
+
+
+@task
+def answer(query: str, context: list[str]) -> str:
+    """Generate an answer using retrieved context (toy version)."""
+    ctx_str = " | ".join(context)
+    return f"Based on [{ctx_str}]: answer to '{query}'"
+
+
+# --- Entrypoint ---
+
+@entrypoint(checkpointer=InMemorySaver())
+def qa_agent(
+    query: str,
+    *,
+    previous: ThreadState | None = None,
+) -> entrypoint.final[TurnResult, ThreadState]:
+    prev = previous or ThreadState(turn_count=0, last_query="", last_answer="")
+
+    context = retrieve(query).result()
+    ans = answer(query, context).result()
+
+    turn_count = prev.turn_count + 1
+
+    # What the caller receives — rich object with context included
+    caller_result = TurnResult(
+        answer=ans,
+        turn_count=turn_count,
+        context_used=context,
+    )
+
+    # What is saved to the checkpoint — compact, no context snippets
+    saved_state = ThreadState(
+        turn_count=turn_count,
+        last_query=query,
+        last_answer=ans,
+    )
+
+    return entrypoint.final(value=caller_result, save=saved_state)
+
+
+# --- Usage ---
+
+cfg = {"configurable": {"thread_id": "qa-session-1"}}
+
+r1: TurnResult = qa_agent.invoke("Tell me about LangGraph", cfg)
+print(f"Turn {r1.turn_count}: {r1.answer}")
+print(f"Context used: {r1.context_used}")
+
+r2: TurnResult = qa_agent.invoke("What about Python?", cfg)
+print(f"Turn {r2.turn_count}: {r2.answer}")   # turn_count is 2 — loaded from checkpoint
+
+# The checkpoint stores ThreadState (no context_used field):
+snap = qa_agent.get_state(cfg)
+print(type(snap.values))   # ThreadState — compact form
+```
+
+**Why `entrypoint.final`?**
+- `value=` controls what `invoke`/`stream` returns to the caller.
+- `save=` controls what is written to the checkpoint and surfaced as `previous` on the next call.
+- The two can be completely different types — useful when you want rich, ephemeral return values but cheap, serializable checkpoint state.
+
+---
+
+## Recipe 21: `GraphOutput` and `Durability` — v2 Invoke API (v1.2.11)
+
+**Goal:** Use the v2 invoke API to get a typed `GraphOutput` wrapper that includes both the final state and any interrupts that occurred, while controlling when checkpoints are persisted with `Durability` modes.
+
+**Uses:** `GraphOutput`, `Durability`, `version="v2"`, `interrupt()`
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import interrupt, GraphOutput
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- State ---
+
+class ApprovalState(TypedDict):
+    document: str
+    approved: bool
+    approver: str
+
+
+# --- Nodes ---
+
+def draft(state: ApprovalState) -> dict:
+    return {"document": f"Draft: {state['document']}"}
+
+
+def review(state: ApprovalState) -> dict:
+    approval = interrupt({
+        "message": "Please approve or reject this document.",
+        "document": state["document"],
+    })
+    return {"approved": approval["decision"] == "approve", "approver": approval.get("by", "unknown")}
+
+
+def publish(state: ApprovalState) -> dict:
+    if state["approved"]:
+        print(f"Published by {state['approver']}: {state['document']}")
+    return {}
+
+
+# --- Graph ---
+
+builder = StateGraph(ApprovalState)
+builder.add_node("draft", draft)
+builder.add_node("review", review)
+builder.add_node("publish", publish)
+builder.add_edge(START, "draft")
+builder.add_edge("draft", "review")
+builder.add_edge("review", "publish")
+builder.add_edge("publish", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "approval-1"}}
+
+# --- v2 invoke: returns GraphOutput ---
+
+# durability="exit": only checkpoint once the graph exits (cheapest — no mid-run persistence)
+output: GraphOutput = graph.invoke(
+    {"document": "Quarterly report", "approved": False, "approver": ""},
+    cfg,
+    version="v2",
+    durability="exit",
+)
+
+print(type(output))           # <class 'langgraph.types.GraphOutput'>
+print(output.value)           # ApprovalState dict (final state up to the interrupt)
+print(len(output.interrupts)) # 1 — contains the Interrupt raised by review()
+print(output.interrupts[0].value)  # {'message': '...', 'document': '...'}
+
+# --- Resume with a Command ---
+
+from langgraph.types import Command
+
+resumed: GraphOutput = graph.invoke(
+    Command(resume={"decision": "approve", "by": "alice"}),
+    cfg,
+    version="v2",
+    durability="sync",   # strongest guarantee: checkpoint before every step
+)
+print(resumed.value["approved"])   # True
+print(resumed.value["approver"])   # alice
+print(len(resumed.interrupts))     # 0 — no pending interrupts
+```
+
+**`Durability` modes:**
+
+| Mode | When checkpointed | Cost | Use case |
+|---|---|---|---|
+| `"sync"` | Before each step begins | Highest | Critical workflows where every step must survive a crash |
+| `"async"` | Concurrently as the next step runs | Medium | **Default** — good balance of speed and safety |
+| `"exit"` | Only when the graph exits | Lowest | Short-lived, low-stakes runs; CI test graphs |
+
+**`GraphOutput` fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `value` | `OutputT` | The final state (or output schema value) after the run. |
+| `interrupts` | `tuple[Interrupt, ...]` | All `interrupt()` calls that fired during the run. Empty when no interrupts occurred. |
+
+Use `version="v2"` to opt into the typed `GraphOutput` wrapper. The v1 API (default) returns the raw state dict.
