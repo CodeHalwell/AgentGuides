@@ -90,8 +90,11 @@ optimizer = SimplePromptOptimizer(config=config)
 async def main():
     result = await optimizer.optimize(initial_agent=agent, sampler=sampler)
 
-    print("Best prompt:\n", result.best_agent.instruction)
-    print("Validation scores:", result.best_agent_with_scores.scores)
+    # OptimizerResult.optimized_agents is a list (Pareto front); for
+    # SimplePromptOptimizer it always contains exactly one entry.
+    best = result.optimized_agents[0]
+    print("Best prompt:\n", best.optimized_agent.instruction)
+    print("Validation score:", best.overall_score)
 
 asyncio.run(main())
 ```
@@ -209,7 +212,9 @@ optimizer = GEPARootAgentOptimizer(config=config)
 
 async def main():
     result = await optimizer.optimize(initial_agent=agent, sampler=sampler)
-    print("Optimised prompt:\n", result.best_agent.instruction)
+    # GEPARootAgentOptimizerResult.optimized_agents is a Pareto front list.
+    best = max(result.optimized_agents, key=lambda a: a.overall_score or 0.0)
+    print("Optimised prompt:\n", best.optimized_agent.instruction)
 
 asyncio.run(main())
 ```
@@ -259,10 +264,10 @@ class Sampler(ABC, Generic[SamplingResultT]):
     VALIDATION_SET = "validation"
 
     @abstractmethod
-    async def get_train_example_ids(self) -> list[str]: ...
+    def get_train_example_ids(self) -> list[str]: ...      # sync
 
     @abstractmethod
-    async def get_validation_example_ids(self) -> list[str]: ...
+    def get_validation_example_ids(self) -> list[str]: ... # sync
 
     @abstractmethod
     async def sample_and_score(
@@ -301,10 +306,10 @@ class InMemorySampler(Sampler[SimpleResult]):
         self._train_ids = ids[: n * 8 // 10]
         self._val_ids   = ids[n * 8 // 10 :]
 
-    async def get_train_example_ids(self) -> list[str]:
+    def get_train_example_ids(self) -> list[str]:
         return self._train_ids
 
-    async def get_validation_example_ids(self) -> list[str]:
+    def get_validation_example_ids(self) -> list[str]:
         return self._val_ids
 
     async def sample_and_score(
@@ -435,7 +440,8 @@ optimizer = SimplePromptOptimizer(
 
 async def main():
     result = await optimizer.optimize(initial_agent=agent, sampler=sampler)
-    optimised = result.best_agent
+    # optimized_agents is a list; SimplePromptOptimizer always returns one entry.
+    optimised = result.optimized_agents[0].optimized_agent
     print("Final prompt:", optimised.instruction)
 
     # Persist the improved agent for later use:
