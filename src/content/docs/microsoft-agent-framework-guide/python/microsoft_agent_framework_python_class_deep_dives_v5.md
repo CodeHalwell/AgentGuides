@@ -397,8 +397,8 @@ from agent_framework import Agent, acknowledge_experimental_feature, Experimenta
 from agent_framework import create_agent_hooks_middleware
 from agent_framework.openai import OpenAIChatClient
 
-# agent_hooks Interceptor objects come from the agent-hooks package.
-# Install it: pip install agent-hooks
+# agent_hooks Interceptor objects come from the agent-hooks-sdk package.
+# Install it: pip install --pre agent-hooks-sdk
 from agent_hooks import Interceptor, InterceptionContext, Verdict
 
 acknowledge_experimental_feature(ExperimentalFeature.AGENT_HOOKS)
@@ -458,7 +458,7 @@ def my_splitter(
 import asyncio
 from agent_framework import (
     Agent, EvalItem, EvalCheck, CheckResult, LocalEvaluator, ConversationSplit,
-    acknowledge_experimental_feature, ExperimentalFeature,
+    Message, acknowledge_experimental_feature, ExperimentalFeature,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -478,11 +478,12 @@ async def factual_check(item: EvalItem) -> CheckResult:
 
 
 async def main():
+    # EvalItem.conversation expects list[Message], not raw dicts
     # split_strategy belongs on EvalItem, not on evaluate()
     item = EvalItem(
         conversation=[
-            {"role": "user", "content": "What is the capital of France?"},
-            {"role": "assistant", "content": "The capital of France is Paris."},
+            Message("user", ["What is the capital of France?"]),
+            Message("assistant", ["The capital of France is Paris."]),
         ],
         split_strategy=ConversationSplit.LAST_TURN,
     )
@@ -1096,14 +1097,18 @@ from agent_framework import WorkflowRunState
 async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
     result = await workflow.run(initial_prompt)
 
-    if result.get_final_state() == WorkflowRunState.IDLE_WITH_PENDING_REQUESTS:
-        for req_event in result.get_request_info_events():
+    # Collect ALL pending answers before resuming; each workflow.run(responses=...)
+    # call restarts from the stored checkpoint, so all answers must go in one map.
+    while result.get_final_state() == WorkflowRunState.IDLE_WITH_PENDING_REQUESTS:
+        pending = result.get_request_info_events()
+        responses = {}
+        for req_event in pending:
             print(f"Workflow is asking ({req_event.source_executor_id}): {req_event.data}")
-            answer = input("Your answer: ")
-            result = await workflow.run(
-                responses={req_event.request_id: answer},
-                checkpoint_id=checkpoint_id,
-            )
+            responses[req_event.request_id] = input("Your answer: ")
+        result = await workflow.run(
+            responses=responses,
+            checkpoint_id=checkpoint_id,
+        )
 
     return result.get_outputs()
 ```
