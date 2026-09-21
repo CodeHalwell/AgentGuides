@@ -1170,7 +1170,7 @@ def multiply(a: int, b: int) -> int:
     return a * b
 
 
-def inject_system_prompt(state: MessagesState) -> dict:
+def inject_system_prompt(state: MessagesState) -> dict | None:
     """Prepend a system message for each model call without modifying persistent state."""
     msgs = state["messages"]
     if not msgs or msgs[0].type != "system":
@@ -1178,7 +1178,7 @@ def inject_system_prompt(state: MessagesState) -> dict:
         # Use llm_input_messages to control what the model sees without going
         # through add_messages, which cannot reorder existing messages by ID.
         return {"llm_input_messages": [system] + list(msgs)}
-    return {}
+    return None
 
 
 def trim_history(state: MessagesState) -> dict:
