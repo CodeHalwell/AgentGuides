@@ -107,7 +107,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 3 — response handler: skip empty or refused answers
+### Example 3 — response handler: skip empty answers
 
 A **response handler** receives a `ModelResponse` (not an exception) and returns `True` to
 trigger fallback. The handler is identified automatically: if its first parameter is typed as
@@ -120,8 +120,8 @@ from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.fallback import FallbackModel
 
 
-def response_is_empty(response: ModelResponse) -> bool:
-    """Fall through if the model returned no useful text."""
+def response_too_short(response: ModelResponse) -> bool:
+    """Fall through if the model returned fewer than 10 meaningful characters."""
     from pydantic_ai.messages import TextPart
     text = ''.join(
         p.content for p in response.parts if isinstance(p, TextPart)
@@ -132,7 +132,7 @@ def response_is_empty(response: ModelResponse) -> bool:
 model = FallbackModel(
     'openai:gpt-5',
     'anthropic:claude-sonnet-5',
-    fallback_on=(response_is_empty,),
+    fallback_on=(response_too_short,),
 )
 
 agent = Agent(model, output_type=str)
@@ -468,7 +468,7 @@ class Summary(BaseModel):
 
 
 agent = Agent(
-    'ollama:llama3.2',  # no JSON mode support
+    'ollama:llama3.2',  # PromptedOutput works on any model, including self-hosted Ollama
     output_type=PromptedOutput(
         Summary,
         template='Return valid JSON matching this schema:\n{schema}\n\nNow respond:',
