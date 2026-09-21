@@ -363,9 +363,11 @@ class InMemorySampler(Sampler[UnstructuredSamplingResult]):
             if capture_full_eval_data:
                 outputs[ex_id] = answer
 
-        # When capture_full_eval_data=True (required by GEPARootAgentOptimizer
-        # for its reflection step), data must be keyed by example ID so GEPA
-        # can look up each example's raw output via data[ex_id].
+        # data must be keyed by example ID: {ex_id: {...}}.
+        # This minimal payload suffices for SimplePromptOptimizer.
+        # GEPARootAgentOptimizer's reflection step requires richer traces
+        # (full trajectories, tool calls, intermediate steps); for GEPA
+        # use LocalEvalSampler, which captures complete ADK run traces.
         data = {ex_id: {"output": ans} for ex_id, ans in outputs.items()} if capture_full_eval_data else None
         return UnstructuredSamplingResult(scores=scores, data=data)
 
@@ -1058,13 +1060,18 @@ agent = LlmAgent(
 )
 ```
 
-### Filtering which skills are exposed
+### Filtering which skill management operations are exposed
+
+`tool_filter` operates on the **skill management tool names** (`list_skills`, `load_skill`,
+`load_skill_resource`, `run_skill_script`, `search_skills`) — not on individual skill names.
+Use it to restrict which operations the agent can perform. To control which skills appear
+in the discovery list, use a predicate that inspects `tool.name`.
 
 ```python
-# Allowlist: only expose specific skills by name
+# Allowlist: disable script execution for this agent (read-only operations only)
 toolset = SkillToolset(
     skills=[write_test_skill, review_pr_skill],
-    tool_filter=["write-unit-test"],   # hide review-pr from this agent
+    tool_filter=["list_skills", "load_skill", "load_skill_resource"],
 )
 
 # Predicate: dynamic filtering
