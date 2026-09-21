@@ -60,6 +60,7 @@ WorkflowEvent(
 | `"failed"` | `WorkflowEvent.failed(details)` | `None` / DataT | `details` |
 | `"warning"` | `WorkflowEvent.warning(msg)` | `str` | — |
 | `"error"` | `WorkflowEvent.error(exc)` | `Exception` | — |
+| `"data"` | `WorkflowEvent.emit(data)` *(deprecated)* | DataT | — |
 | `"output"` | emitted by `ctx.yield_output()` | DataT | `executor_id` |
 | `"intermediate"` | emitted by `ctx.yield_output()` (intermediate) | DataT | `executor_id` |
 | `"request_info"` | `WorkflowEvent.request_info(...)` | DataT | `request_id`, `source_executor_id` |
@@ -79,6 +80,7 @@ WorkflowEvent(
 | `failed` | `(details: WorkflowErrorDetails, data=None) → WorkflowEvent[DataT]` | Run termination |
 | `warning` | `(message: str) → WorkflowEvent[str]` | User-emitted diagnostic |
 | `error` | `(exception: Exception) → WorkflowEvent[Exception]` | User-emitted diagnostic |
+| `emit` | `(data: DataT) → WorkflowEvent[DataT]` *(deprecated)* | Produces `"data"` events; prefer `ctx.yield_output()` |
 | `request_info` | `(request_id, source_executor_id, request_data, response_type) → WorkflowEvent[DataT]` | Human-in-the-loop pause |
 | `superstep_started` | `(iteration: int, data=None) → WorkflowEvent[DataT]` | Pregel superstep begin |
 | `superstep_completed` | `(iteration: int, data=None) → WorkflowEvent[DataT]` | Pregel superstep end |
@@ -810,19 +812,25 @@ asyncio.run(main())
 
 ```python
 import base64
+import hashlib
 from pathlib import Path
 from agent_framework import AgentSession
 from agent_framework._harness._memory import MemoryStore, MemoryTopicRecord, MemoryIndexEntry
 
+_MAX_COMPONENT = 200  # comfortably below the 255-byte filesystem name limit
+
 
 def _safe(s: str) -> str:
-    """URL-safe base64 encode a string for use as a path component (injective, no collisions).
+    """Encode a string as a safe filesystem path component (injective, length-bounded).
 
-    A constant 's' prefix ensures empty strings produce a non-empty component
-    ("s"), preventing (source_id="", owner="x") from colliding with
-    (source_id="x", owner="") under filesystem path joining.
+    Short values: 's' + url-safe-base64 (injective, no collisions including "").
+    Long values: 'd' + SHA-256 hex (64 chars, collision-resistant for any practical ID).
+    The distinct prefixes ensure the two schemes never collide with each other.
     """
-    return "s" + base64.urlsafe_b64encode(s.encode()).decode().rstrip('=')
+    encoded = "s" + base64.urlsafe_b64encode(s.encode()).decode().rstrip('=')
+    if len(encoded.encode()) > _MAX_COMPONENT:
+        return "d" + hashlib.sha256(s.encode()).hexdigest()
+    return encoded
 
 
 class InMemoryMemoryStore(MemoryStore):
@@ -1508,7 +1516,7 @@ The 1.19.0 release refines several of the APIs deep-dived in this and prior volu
 
 ## See also
 
-- [Python Comprehensive Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — framework overview, verified against 1.19.0
+- [Python Comprehensive Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — framework overview, content verified against 1.14.0 (latest release badge: 1.19.0)
 - [Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) — workflow visualization, file memory, background agents, tool approval
 - [Class Deep Dives Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — fan-in/out edges, functional workflows, checkpointing, MCP tools
 - [Class Deep Dives Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) — workflow builder, compaction strategies, evaluation, inline skills, file access
