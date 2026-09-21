@@ -3116,8 +3116,7 @@ print(result)
 from dataclasses import dataclass
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import TracePolicy
-from langgraph.tracing import omit_payload   # helper that returns TracePolicy(process_inputs=..., process_outputs=...)
+from langgraph.types import TracePolicy, omit_payload  # omit_payload is in langgraph.types
 
 
 # --- State ---
@@ -3146,11 +3145,12 @@ def process(state: State) -> dict:
 
 builder = StateGraph(State)
 
-# anonymize node: strip both inputs and outputs from LangSmith traces
+# anonymize node: strip both inputs and outputs from LangSmith traces.
+# omit_payload is a processor fn that returns {}; pass it for both sides.
 builder.add_node(
     "anonymize",
     anonymize,
-    trace_policy=omit_payload(),   # hides raw_pii from the trace payload
+    trace_policy=TracePolicy(process_inputs=omit_payload, process_outputs=omit_payload),
 )
 builder.add_node("process", process)   # traced normally
 builder.add_edge(START, "anonymize")
@@ -3163,7 +3163,9 @@ result = graph.invoke({"raw_pii": "Alice Smith, SSN 123-45-6789", "anonymized": 
 print(result["result"])   # Processed: [REDACTED]
 ```
 
-**What `omit_payload()` does:** Returns a `TracePolicy` that replaces the node's `inputs` and `outputs` in the LangSmith run with `{"__omitted__": True}`. The run ID, timing, and parent/child relationships are still recorded — only the data payload is hidden.
+**What `omit_payload` does:** A processor function (from `langgraph.types`) that returns an empty dict `{}`, dropping the entire payload. Pass it as `process_inputs` and/or `process_outputs` on a `TracePolicy` to keep the node's span (run ID, timing, parent/child links) while omitting its data from the trace.
+
+> **Scope limitation:** `TracePolicy` only hides the annotated node's own LangSmith span. The root graph run still records the full invocation input and final state (both of which contain `raw_pii` in this example). For complete PII removal from traces, strip or anonymize the sensitive data before it enters the graph, and use graph-level LangSmith project settings for broader suppression.
 
 You can also supply custom processors:
 
@@ -3245,21 +3247,33 @@ graph = builder.compile(
 
 cfg = {"configurable": {"thread_id": "stocks-1"}}
 
-# --- Sync streaming ---
+# --- Sync streaming (context manager required for run.tool_calls) ---
 
 print("=== Sync stream ===")
-for mode, data in graph.stream(
+# The structured ToolCallStream API requires opening stream() as a context manager.
+# Using an ordinary for-loop over (mode, data) pairs does NOT give you run.tool_calls.
+with graph.stream(
     {"messages": [("user", "What is the price and latest news for AAPL?")]},
     cfg,
-    stream_mode=["updates", "tools"],
+    stream_mode="tools",
+) as run:
+    for tc_stream in run.tool_calls:
+        print(f"→ Tool started: {tc_stream.tool_name} (input={tc_stream.input})")
+        for delta in tc_stream:
+            print(f"  delta: {delta!r}")
+        if tc_stream.error:
+            print(f"  ERROR: {tc_stream.error}")
+        else:
+            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output}")
+
+# To also see state-update events, stream separately with "updates" mode:
+for update in graph.stream(
+    {"messages": [("user", "What is the price and latest news for AAPL?")]},
+    {"configurable": {"thread_id": "stocks-1b"}},
+    stream_mode="updates",
 ):
-    if mode == "tools":
-        # data is a run-level container; iterate its tool_calls
-        for tc in data.tool_calls:
-            print(f"[tool] {tc.tool_name}({tc.input}) => {tc.output}")
-    elif mode == "updates":
-        node = list(data.keys())[0]
-        print(f"[update] node={node}")
+    node = list(update.keys())[0]
+    print(f"[update] node={node}")
 
 
 # --- Async streaming ---

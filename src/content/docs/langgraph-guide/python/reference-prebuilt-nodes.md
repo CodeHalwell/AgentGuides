@@ -1094,7 +1094,7 @@ Key parameters:
 | `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
 | `pre_model_hook` | Called before every LLM call. Return a dict to merge into state (e.g., inject a formatted system message). |
 | `post_model_hook` | Called after every LLM call. Return a dict to merge into state (e.g., trim history, record tokens). |
-| `state_schema` | Custom state schema; must include a `messages` field annotated with `add_messages`. Defaults to `MessagesState`. |
+| `state_schema` | Custom state schema; must include a `messages` field annotated with `add_messages` **and** a `remaining_steps: int` field (used internally to cap the agent loop). `MessagesState` satisfies both — use it as the base or include both fields explicitly. |
 | `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
 
 ### Pre/post model hooks
@@ -1127,7 +1127,12 @@ def inject_system_prompt(state: MessagesState) -> dict:
 def trim_history(state: MessagesState) -> dict:
     """Keep only the last 10 messages to avoid token bloat."""
     if len(state["messages"]) > 10:
-        return {"messages": state["messages"][-10:]}
+        # Returning a slice does NOT remove older messages — add_messages merges by ID.
+        # Use REMOVE_ALL_MESSAGES first, then re-add the messages to keep.
+        from langchain_core.messages import RemoveMessage
+        from langgraph.graph.message import REMOVE_ALL_MESSAGES
+        to_keep = state["messages"][-10:]
+        return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)] + to_keep}
     return {}
 
 
