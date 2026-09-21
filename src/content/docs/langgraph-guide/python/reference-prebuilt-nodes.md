@@ -1081,7 +1081,7 @@ graph = create_react_agent(
     interrupt_before=None,
     interrupt_after=None,
     debug=False,
-    version="v2",                   # "v1" runs tools sequentially; "v2" (default) runs in parallel via Send
+    version="v2",                   # "v1" batches all tool calls into one ToolNode invocation (concurrent within the node); "v2" (default) fans each call out as an independent Send task
     name=None,                      # graph name; defaults to None
 )
 ```
@@ -1104,7 +1104,8 @@ Key parameters:
 When you need extra state fields, extend `MessagesState` and add `remaining_steps`:
 
 ```python
-from typing import NotRequired, Annotated
+from typing_extensions import NotRequired  # typing.NotRequired requires Python 3.11+; use typing_extensions for 3.10
+from typing import Annotated
 from langgraph.managed import RemainingSteps
 from langgraph.graph.message import MessagesState, add_messages
 
