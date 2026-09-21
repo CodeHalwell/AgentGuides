@@ -836,10 +836,10 @@ class InMemoryMemoryStore(MemoryStore):
     def get_owner_id(self, session: AgentSession) -> str:
         return str(session.state.get("user_id", "default"))
 
-    def export_provider_state(self, session: AgentSession, *, source_id: str) -> dict:
+    def export_provider_state(self, session: AgentSession) -> dict:
         return {"user_id": str(session.state.get("user_id", "default"))}
 
-    def import_provider_state(self, session: AgentSession, state: dict, *, source_id: str) -> None:
+    def import_provider_state(self, session: AgentSession, *, state: dict) -> None:
         session.state["user_id"] = state.get("user_id", "default")
 
     def list_topics(self, session, *, source_id):
