@@ -1120,7 +1120,17 @@ graph = create_react_agent(llm, tools, state_schema=MyAgentState)
 
 ### Pre/post model hooks
 
-`pre_model_hook` and `post_model_hook` are **separate graph nodes** inserted immediately before and after the `agent` (LLM-call) node respectively. They are not callbacks inside the `agent` node. Each hook receives the current state dict and must return a dict; the graph merges the returned dict back into state before passing control to the next node.
+`pre_model_hook` and `post_model_hook` are **separate graph nodes** inserted immediately before and after the `agent` (LLM-call) node respectively. They are not callbacks inside the `agent` node.
+
+**`pre_model_hook`** receives the current state dict and must return `dict | None`:
+- Return `None` for a no-op.
+- Return a dict with `messages` to overwrite the persistent message history (use `RemoveMessage` to trim).
+- Return a dict with `llm_input_messages` to supply a different message list **only to the LLM for this call** — this is ephemeral and is not merged into checkpointed state. Use it to prepend a system prompt without polluting the conversation history.
+
+**`post_model_hook`** receives the current state dict and must return `Command | dict | None`:
+- Return `None` for a no-op.
+- Return a dict to merge into state (e.g., record token usage).
+- Return a `Command` to override the default conditional routing (e.g., short-circuit to `END` without calling tools).
 
 ```python
 from langchain_openai import ChatOpenAI
