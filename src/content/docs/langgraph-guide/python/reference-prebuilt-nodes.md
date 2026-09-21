@@ -1080,7 +1080,7 @@ graph = create_react_agent(
     prompt=None,                    # SystemMessage | str | Callable | None
     response_format=None,           # type | (str, type) | None — structured output schema
     pre_model_hook=None,            # Callable[[state], dict | None] — must include 'messages' or 'llm_input_messages'
-    post_model_hook=None,           # Callable[[state], Command | dict | None] — Command overrides default routing
+    post_model_hook=None,           # Callable[[state], Command | dict | None] — to suppress tools, clear tool_calls on the AIMessage in state
     state_schema=None,              # None uses built-in AgentState (messages + remaining_steps)
     context_schema=None,            # type | None — for Runtime[Ctx] injection
     checkpointer=None,              # BaseCheckpointSaver | None
@@ -1102,7 +1102,7 @@ Key parameters:
 | `prompt` | Optional system-level instructions. Pass a `str` or `SystemMessage` for static prompts; a callable for dynamic prompts that read from state. |
 | `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
 | `pre_model_hook` | Separate node inserted **before** `agent`. Returns `dict \| None`; must include at least `messages` or `llm_input_messages`. Returning `None` is a no-op. Use for message trimming, injecting system prompts, etc. |
-| `post_model_hook` | Separate node inserted **after** `agent` (v2 only). Returns `Command \| dict \| None`. Returning a `Command` overrides the default conditional routing (tools → end). Returning `None` is a no-op. Use for guardrails, human-in-the-loop, token tracking, etc. |
+| `post_model_hook` | Separate node inserted **after** `agent` (v2 only). Returns `Command \| dict \| None`. Returning `None` is a no-op. To prevent tool execution, the hook must clear `tool_calls` on the last `AIMessage` — `post_model_hook_router` is a separate conditional edge that still fires regardless of any `Command.goto`. Use for guardrails, human-in-the-loop, token tracking, etc. |
 | `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` (`messages` + `remaining_steps`). Custom schemas must include `messages` and `remaining_steps`; when `response_format` is also set, `structured_response` is required too — missing any of these raises `ValueError`. |
 | `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
 
