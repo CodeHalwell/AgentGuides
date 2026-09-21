@@ -7,7 +7,7 @@ sidebar:
   order: 25
 ---
 
-Verified against google-adk==2.4.0 (`google/adk/workflow/`). The latest release is **2.9.0** — all examples are compatible with 2.4.0 and later unless noted.
+Verified against google-adk==2.4.0 (`google/adk/workflow/`). The latest release is **2.9.2** — all examples are compatible with 2.4.0 and later unless noted.
 
 `Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
 
