@@ -291,28 +291,38 @@ result = agent.run_sync('Find users named Alice')
 print(result.output)
 ```
 
-### Example 3 — `sequential=True` for ordered execution
+### Example 3 — `sequential=True` for serialized execution
+
+`sequential=True` makes every tool in the toolset a **barrier**: if the model requests multiple
+tools in the same response, each tool in this toolset runs alone — it won't overlap with other
+tool calls in that step. This prevents race conditions when tools share mutable state such as a
+database transaction or file handle.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
 
-pipeline_tools = FunctionToolset(sequential=True)  # model must call tools one at a time
+# Each tool runs alone (no overlap) if the model calls multiple tools in one step.
+counter_state = {'value': 0}
+
+serial_tools = FunctionToolset(sequential=True)
 
 
-@pipeline_tools.tool
-def step_one(ctx: RunContext[None], value: int) -> int:
-    """First pipeline step: double the value."""
-    return value * 2
+@serial_tools.tool
+def increment(ctx: RunContext[None], amount: int) -> int:
+    """Add amount to the shared counter and return the new value."""
+    counter_state['value'] += amount
+    return counter_state['value']
 
 
-@pipeline_tools.tool
-def step_two(ctx: RunContext[None], value: int) -> int:
-    """Second pipeline step: add 10."""
-    return value + 10
+@serial_tools.tool
+def reset(ctx: RunContext[None]) -> int:
+    """Reset the shared counter to zero."""
+    counter_state['value'] = 0
+    return counter_state['value']
 
 
-agent = Agent('openai:gpt-5', toolsets=[pipeline_tools])
-result = agent.run_sync('Run the pipeline with value 5 (step_one first, then step_two)')
+agent = Agent('openai:gpt-5', toolsets=[serial_tools])
+result = agent.run_sync('Increment the counter by 3, then by 7')
 print(result.output)
 ```
 
@@ -342,22 +352,28 @@ if isinstance(result.output, DeferredToolRequests):
     # build DeferredToolResults and pass to next run to approve
 ```
 
-### Example 5 — `defer_loading=True` for lazy schema generation
+### Example 5 — `defer_loading=True` to hide tools until discovered
+
+`defer_loading=True` **hides** the toolset's tools from the model entirely. The tools only become
+visible once the model discovers them via a tool-search call, via `load_capability`, or when
+another tool returns a `ToolReturn` that includes them. This is useful for large tool libraries
+where you only want to expose a subset based on user intent.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
 
-# Schema is computed only at first use, not at import time.
-large_toolset = FunctionToolset(defer_loading=True)
+# Tools are HIDDEN from the model until it searches for or loads them.
+hidden_tools = FunctionToolset(defer_loading=True, id='hidden-ops')
 
 
-@large_toolset.tool
-def expensive_lookup(ctx: RunContext[None], query: str) -> str:
-    """Expensive schema — defer until actually needed."""
-    return f'Result for {query}'
+@hidden_tools.tool
+def secret_lookup(ctx: RunContext[None], query: str) -> str:
+    """Look up internal records (only available after tool discovery)."""
+    return f'Internal result for {query}'
 
 
-agent = Agent('openai:gpt-5', toolsets=[large_toolset])
+# The agent starts without these tools visible; load_capability or tool search reveals them.
+agent = Agent('openai:gpt-5', toolsets=[hidden_tools])
 ```
 
 ---
@@ -1428,14 +1444,13 @@ from pydantic_ai import Agent, AdvisorTool
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 advisor = AdvisorTool(
-    model='anthropic/claude-opus-4.8',  # OpenRouter slug
+    model='openrouter:anthropic/claude-opus-4.8',  # OpenRouter-prefixed model string
     max_tokens=512,
 )
 
 agent = Agent(
-    'anthropic/claude-haiku-4-5',
+    'openrouter:anthropic/claude-haiku-4-5',  # executor also via OpenRouter
     native_tools=[advisor],
-    model=OpenRouterProvider(),
 )
 
 result = agent.run_sync('What is the Riemann hypothesis and why does it matter?')
