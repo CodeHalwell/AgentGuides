@@ -809,15 +809,15 @@ asyncio.run(main())
 ### Example — custom `MemoryStore` implementation
 
 ```python
-import re
+import base64
 from pathlib import Path
 from agent_framework import AgentSession
 from agent_framework._harness._memory import MemoryStore, MemoryTopicRecord, MemoryIndexEntry
 
 
 def _safe(s: str) -> str:
-    """Sanitize a string for use as a path component."""
-    return re.sub(r'[^a-zA-Z0-9._-]', '_', s)[:64] or 'default'
+    """URL-safe base64 encode a string for use as a path component (injective, no collisions)."""
+    return base64.urlsafe_b64encode(s.encode()).decode().rstrip('=')
 
 
 class InMemoryMemoryStore(MemoryStore):
@@ -835,6 +835,12 @@ class InMemoryMemoryStore(MemoryStore):
 
     def get_owner_id(self, session: AgentSession) -> str:
         return str(session.state.get("user_id", "default"))
+
+    def export_provider_state(self, session: AgentSession, *, source_id: str) -> dict:
+        return {"user_id": str(session.state.get("user_id", "default"))}
+
+    def import_provider_state(self, session: AgentSession, state: dict, *, source_id: str) -> None:
+        session.state["user_id"] = state.get("user_id", "default")
 
     def list_topics(self, session, *, source_id):
         return sorted(self._topics.get(self._key(session, source_id), {}).values(),
@@ -1139,8 +1145,8 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
             responses=responses,
             checkpoint_id=checkpoint_id,
         )
-        # Advance to the new checkpoint written by this round
-        checkpoint_id = result.checkpoint_id
+        # The checkpoint storage updates in-place; the same checkpoint_id
+        # is valid for every subsequent round.
 
     return result.get_outputs()
 ```
