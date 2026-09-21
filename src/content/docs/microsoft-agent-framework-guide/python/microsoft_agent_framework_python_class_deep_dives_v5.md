@@ -316,7 +316,7 @@ class MockMiddleware(AgentMiddleware):
     async def process(self, context: AgentContext, call_next):
         # Skip call_next entirely — return canned response
         context.result = AgentResponse(
-            messages=Message.from_assistant(self._text),
+            messages=[Message.from_assistant(self._text)],
         )
 ```
 
@@ -397,17 +397,23 @@ from agent_framework import Agent, acknowledge_experimental_feature, Experimenta
 from agent_framework import create_agent_hooks_middleware
 from agent_framework.openai import OpenAIChatClient
 
+# agent_hooks Interceptor objects come from the agent-hooks package.
+# Install it: pip install agent-hooks
+from agent_hooks import Interceptor, InterceptionContext, Verdict
+
 acknowledge_experimental_feature(ExperimentalFeature.AGENT_HOOKS)
 
 
-# An interceptor is any callable matching the Interceptor protocol.
-def my_interceptor(event_type: str, payload: dict) -> dict:
-    print(f"[Hook] event={event_type!r}")
-    return payload
+class LoggingInterceptor(Interceptor):
+    """Log each interception point and allow all through."""
+
+    def intercept(self, context: InterceptionContext) -> Verdict:
+        print(f"[Hook] point={context.point!r} agent={context.agent_id!r}")
+        return Verdict.allow()
 
 
 bundle = create_agent_hooks_middleware(
-    interceptors=[my_interceptor],
+    interceptors=[LoggingInterceptor()],
 )
 
 agent = Agent(
@@ -460,14 +466,15 @@ acknowledge_experimental_feature(ExperimentalFeature.EVALS)
 
 
 # An EvalCheck is a callable: (EvalItem) -> CheckResult
+# item.response is already a str (the joined assistant text from the response split).
 async def factual_check(item: EvalItem) -> CheckResult:
     """Pass if the response contains 'Paris'."""
-    response_text = " ".join(
-        m.get("content", "") if isinstance(m, dict) else (m.text or "")
-        for m in item.response
+    passed = "paris" in item.response.lower()
+    return CheckResult(
+        check_name="factual_check",
+        passed=passed,
+        reason="Response mentions Paris" if passed else "Missing 'Paris'",
     )
-    passed = "paris" in response_text.lower()
-    return CheckResult(passed=passed, reason="Response mentions Paris" if passed else "Missing 'Paris'")
 
 
 async def main():
@@ -484,7 +491,10 @@ async def main():
 
     results = await evaluator.evaluate(items=[item])
     for r in results.items:
-        print(r.passed, r.reason)
+        # r.is_passed: bool; r.scores: list[EvalScoreResult] with per-check detail
+        print(r.status, r.is_passed)
+        for score in r.scores:
+            print(f"  check={score.name!r} passed={score.passed}")
 
 asyncio.run(main())
 ```
@@ -508,8 +518,9 @@ def split_before_tool_call(
     return ConversationSplit.LAST_TURN(conversation)
 
 
-# Use exactly like a built-in split:
-# evaluator.evaluate(items=items, split=split_before_tool_call)
+# Pass as split_strategy= on EvalItem, not as an argument to evaluate():
+# item = EvalItem(conversation=..., split_strategy=split_before_tool_call)
+# results = await evaluator.evaluate(items=[item])
 ```
 
 ### Example — `FULL` split for trajectory evaluation
@@ -761,13 +772,11 @@ async def main():
         owner_state_key="user_id",
     )
 
+    # MemoryContextProvider uses consolidation_client for the model that writes memories;
+    # it does not accept a separate memory_agent argument.
     provider = MemoryContextProvider(
         store=store,
-        memory_agent=Agent(
-            client=OpenAIChatClient(),
-            name="memory-agent",
-            instructions="Consolidate and maintain the user's long-term memories.",
-        ),
+        consolidation_client=OpenAIChatClient(),
     )
 
     agent = Agent(
