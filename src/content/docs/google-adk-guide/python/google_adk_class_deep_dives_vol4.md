@@ -1002,7 +1002,7 @@ class SkillToolset(BaseToolset):
 | `script_timeout` | `int` | `300` | Max seconds for a skill's code block to run |
 | `additional_tools` | `list[BaseTool] \| None` | `None` | Extra tools available to the skill's sub-agent |
 | `tool_name_prefix` | `str \| None` | `None` | String prepended to every skill tool's name |
-| `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of skill names or a predicate |
+| `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of **management tool names** (`list_skills`, `load_skill`, `load_skill_resource`, `run_skill_script`) or a `ToolPredicate`; does **not** filter by skill name |
 
 ### How the agent uses skills
 
