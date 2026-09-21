@@ -1000,7 +1000,7 @@ class SkillToolset(BaseToolset):
 | `environment` | `BaseEnvironment \| None` | `None` | Execution environment for code skills |
 | `skills_folder` | `str \| None` | `None` | **Requires `environment` to be set**; must be an absolute path |
 | `script_timeout` | `int` | `300` | Max seconds for a skill's code block to run |
-| `additional_tools` | `list[BaseTool] \| None` | `None` | Extra tools available to the skill's sub-agent |
+| `additional_tools` | `list[BaseTool] \| None` | `None` | Pool of tools the agent unlocks when an activated skill's frontmatter lists them in `metadata.adk_additional_tools`; not exposed automatically |
 | `tool_name_prefix` | `str \| None` | `None` | String prepended to every skill tool's name |
 | `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of **management tool names** (`list_skills`, `load_skill`, `load_skill_resource`, `run_skill_script`) or a `ToolPredicate`; does **not** filter by skill name |
 
@@ -1116,6 +1116,7 @@ agent = LlmAgent(
 # SKILL.md frontmatter for a skill that needs my_api_tool
 ---
 name: my-api-skill
+description: "Calls the internal API to fetch data. Use when the user asks for live data."
 metadata:
   adk_additional_tools:
     - my_api_tool
