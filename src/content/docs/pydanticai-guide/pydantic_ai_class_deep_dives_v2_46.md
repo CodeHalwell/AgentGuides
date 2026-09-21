@@ -677,9 +677,9 @@ embedder = Embedder('openai:text-embedding-3-small')
 **Module:** `pydantic_ai.mcp`
 
 `MCPToolset` was rewritten around the **FastMCP Client** in 2.5.x and stabilised through 2.46.0.
-The previous stdio/SSE constructor (`MCPServerStdio`, `MCPServerHTTP`) is gone — pass anything
-FastMCP can build a transport from: a URL, a script path, a `FastMCP` server instance, or a
-pre-built `fastmcp.Client`.
+The previous per-transport classes (`MCPServerStdio`, `MCPServerSSE`, `MCPServerStreamableHTTP`)
+are gone — pass anything FastMCP can build a transport from: a URL, a script path, a `FastMCP`
+server instance, or a pre-built `fastmcp.Client`.
 
 ### Constructor signature (condensed from source)
 
