@@ -306,17 +306,13 @@ Use a custom `Sampler` when your evaluation data lives somewhere other than a lo
 
 ```python
 import asyncio
-from dataclasses import dataclass, field
 from google.adk.agents import LlmAgent
 from google.adk.optimization.sampler import Sampler
+from google.adk.optimization.data_types import UnstructuredSamplingResult
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-@dataclass
-class SimpleResult:
-    scores: dict[str, float] = field(default_factory=dict)
-
-class InMemorySampler(Sampler[SimpleResult]):
+class InMemorySampler(Sampler[UnstructuredSamplingResult]):
     """Scores a candidate agent on in-memory question/answer pairs."""
 
     def __init__(self, examples: dict[str, tuple[str, str]]):
@@ -339,8 +335,9 @@ class InMemorySampler(Sampler[SimpleResult]):
         example_set: str,
         batch: list[str],
         capture_full_eval_data: bool,
-    ) -> SimpleResult:
+    ) -> UnstructuredSamplingResult:
         scores: dict[str, float] = {}
+        outputs: dict[str, str] = {}
         runner = InMemoryRunner(agent=candidate, app_name="opt_eval")
 
         for ex_id in batch:
@@ -363,8 +360,13 @@ class InMemorySampler(Sampler[SimpleResult]):
 
             # Simple exact-match metric; replace with ROUGE, LLM-as-judge, etc.
             scores[ex_id] = 1.0 if expected.lower() in answer.lower() else 0.0
+            if capture_full_eval_data:
+                outputs[ex_id] = answer
 
-        return SimpleResult(scores=scores)
+        # When capture_full_eval_data=True (required by GEPARootAgentOptimizer
+        # for its reflection step), populate data with the raw model outputs.
+        data = {"outputs": outputs} if capture_full_eval_data else {}
+        return UnstructuredSamplingResult(scores=scores, data=data)
 
 # Wire it up:
 examples = {
@@ -867,8 +869,8 @@ class SkillRegistry(ABC):
         ...
 
     @abstractmethod
-    async def search_skills(self, query: str) -> list[Skill]:
-        """Returns skills whose name/description match the query."""
+    async def search_skills(self, query: str) -> list[Frontmatter]:
+        """Returns Frontmatter discovery metadata for skills matching the query."""
         ...
 
     def search_tool_description(self) -> str:
@@ -884,7 +886,7 @@ import json
 import asyncio
 from google.cloud import storage
 from google.adk.skills.skill_registry import SkillRegistry
-from google.adk.skills.models import Skill
+from google.adk.skills.models import Skill, Frontmatter
 
 class GcsSkillRegistry(SkillRegistry):
     """Reads skills from JSON objects in a GCS bucket."""
@@ -917,11 +919,11 @@ class GcsSkillRegistry(SkillRegistry):
         all_skills = await self._load_all()
         return all_skills.get(name)
 
-    async def search_skills(self, query: str) -> list[Skill]:
+    async def search_skills(self, query: str) -> list[Frontmatter]:
         all_skills = await self._load_all()
         q = query.lower()
         return [
-            s for s in all_skills.values()
+            s.frontmatter for s in all_skills.values()
             if q in s.name.lower() or q in s.description.lower()
         ]
 
@@ -948,9 +950,9 @@ class InMemorySkillRegistry(SkillRegistry):
     async def get_skill(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
-    async def search_skills(self, query: str) -> list[Skill]:
+    async def search_skills(self, query: str) -> list[Frontmatter]:
         q = query.lower()
-        return [s for s in self._skills.values()
+        return [s.frontmatter for s in self._skills.values()
                 if q in s.name.lower() or q in s.description.lower()]
 
 test_skill = Skill(
@@ -1212,6 +1214,7 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.memory.vertex_ai_rag_memory_service import VertexAiRagMemoryService
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai import types
 
 RAG_CORPUS = "projects/my-project/locations/us-central1/ragCorpora/1234567890"
@@ -1223,6 +1226,9 @@ agent = LlmAgent(
         "You are a persistent assistant. Use your memory to recall "
         "context from previous conversations."
     ),
+    # PreloadMemoryTool is invisible to the model; it auto-injects relevant
+    # memories from the RAG corpus before each LLM call.
+    tools=[PreloadMemoryTool()],
 )
 
 memory_service = VertexAiRagMemoryService(
