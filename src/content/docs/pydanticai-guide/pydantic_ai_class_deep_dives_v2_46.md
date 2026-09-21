@@ -211,7 +211,7 @@ model = FallbackModel(
 - share a toolset across multiple agents,
 - set defaults for `max_retries`, `timeout`, `sequential`, and `requires_approval` per group,
 - attach `instructions` — extra system-prompt text injected whenever the toolset is active,
-- defer schema loading until first use with `defer_loading=True`.
+- hide tools from the model until discovered via tool search or `load_capability` with `defer_loading=True`.
 
 ### Constructor (from source, condensed)
 
@@ -442,7 +442,7 @@ agent = Agent(
         [Fruit, Vehicle],
         name='Fruit or vehicle',
         description='Classify the item as a fruit or vehicle.',
-        strict=True,   # enforce strict JSON schema adherence
+        strict=False,  # strict=True rejects undiscriminated root unions on OpenAI
     ),
 )
 
@@ -513,7 +513,7 @@ class Answer(BaseModel):
     confidence: float
 
 
-# Default (implicit ToolOutput) — works everywhere
+# Default — agent selects output mode based on model profile (may be tool, native, or prompted)
 agent_default = Agent('openai:gpt-5', output_type=Answer)
 
 # Explicit NativeOutput — faster on OpenAI/Google, requires provider support
@@ -1072,7 +1072,7 @@ def StructuredDict(
     json_schema: JsonSchemaValue,
     name: str | None = None,
     description: str | None = None,
-) -> type[JsonSchemaValue]:
+) -> type[dict[str, Any]]:
     ...
 ```
 
@@ -1368,10 +1368,10 @@ call the advisor without your code being involved — the round-trip happens at 
 @dataclass(kw_only=True)
 class AdvisorTool(AbstractNativeTool):
     model: AdvisorModelName
-    max_uses: int | None = None       # Anthropic only
-    max_tokens: int | None = None
-    system_prompt: str | None = None  # Anthropic only
-    on_advisor_turn: ... = None       # async callback
+    max_uses: int | None = None              # Anthropic only; OpenRouter ignores
+    max_tokens: int | None = None            # min 1024; maps to max_completion_tokens on OpenRouter
+    caching: Literal['5m', '1h'] | None = None  # Anthropic only; ephemeral context cache TTL
+    kind: str = 'advisor'                    # fixed sentinel
 ```
 
 ### Example 1 — fast executor with powerful advisor
@@ -1386,15 +1386,11 @@ advisor = AdvisorTool(
     model='claude-opus-5',   # Advisor: powerful, slow
     max_uses=3,              # consult at most 3 times per request
     max_tokens=1024,
-    system_prompt=(
-        'You are an expert advisor. Provide concise, high-quality guidance '
-        'when the executor encounters a difficult reasoning step.'
-    ),
 )
 
 agent = Agent(
     'claude-haiku-4-5-20251001',   # Executor: fast, cheap
-    native_tools=[advisor],
+    capabilities=[advisor],         # pass via capabilities=, not native_tools=
 )
 
 
@@ -1409,29 +1405,31 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 2 — `on_advisor_turn` callback for logging
+### Example 2 — ephemeral `caching` to reduce repeated advisor context cost
+
+The `caching` field tells Anthropic to cache the advisor's context for `'5m'` or `'1h'`.
+Warm requests skip re-tokenising the advisor's system context, cutting latency and cost on
+repeated queries. OpenRouter ignores this field.
 
 ```python
 import asyncio
 from pydantic_ai import Agent, AdvisorTool
 
 
-async def log_advisor_call(event) -> None:
-    print(f'[Advisor turn] tokens used: {getattr(event, "usage", "?")}')
-
-
 advisor = AdvisorTool(
     model='claude-opus-5',
-    max_tokens=512,
-    on_advisor_turn=log_advisor_call,
+    max_tokens=1024,
+    caching='5m',  # cache advisor context for 5 minutes (Anthropic only)
 )
 
-agent = Agent('claude-haiku-4-5-20251001', native_tools=[advisor])
+agent = Agent('claude-haiku-4-5-20251001', capabilities=[advisor])
 
 
 async def main():
-    result = await agent.run('Derive the quadratic formula step by step.')
-    print(result.output)
+    # First call cold; subsequent calls within 5 min benefit from cached advisor context.
+    for question in ['Derive the quadratic formula.', 'What is the binomial theorem?']:
+        result = await agent.run(question)
+        print(result.output)
 
 
 asyncio.run(main())
@@ -1441,16 +1439,15 @@ asyncio.run(main())
 
 ```python
 from pydantic_ai import Agent, AdvisorTool
-from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 advisor = AdvisorTool(
-    model='openrouter:anthropic/claude-opus-4.8',  # OpenRouter-prefixed model string
-    max_tokens=512,
+    model='anthropic/claude-opus-4.8',  # OpenRouter catalog slug (no prefix for advisor model)
+    max_tokens=1024,
 )
 
 agent = Agent(
-    'openrouter:anthropic/claude-haiku-4-5',  # executor also via OpenRouter
-    native_tools=[advisor],
+    'openrouter:anthropic/claude-haiku-4-5',  # executor via OpenRouter prefix
+    capabilities=[advisor],
 )
 
 result = agent.run_sync('What is the Riemann hypothesis and why does it matter?')
