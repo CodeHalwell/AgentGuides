@@ -1002,7 +1002,7 @@ class SkillToolset(BaseToolset):
 | `script_timeout` | `int` | `300` | Max seconds for a skill's code block to run |
 | `additional_tools` | `list[BaseTool] \| None` | `None` | Pool of tools the agent unlocks when an activated skill's frontmatter lists them in `metadata.adk_additional_tools`; not exposed automatically |
 | `tool_name_prefix` | `str \| None` | `None` | String prepended to every skill tool's name |
-| `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of **management tool names** (`list_skills`, `load_skill`, `load_skill_resource`, `run_skill_script`) or a `ToolPredicate`; does **not** filter by skill name |
+| `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of **management tool names** (`list_skills`, `load_skill`, `load_skill_resource`, `run_skill_script`; plus `search_skills` when `registry` is set) or a `ToolPredicate`; does **not** filter by skill name |
 
 ### How the agent uses skills
 
