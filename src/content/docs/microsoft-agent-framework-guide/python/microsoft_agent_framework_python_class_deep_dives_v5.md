@@ -816,8 +816,13 @@ from agent_framework._harness._memory import MemoryStore, MemoryTopicRecord, Mem
 
 
 def _safe(s: str) -> str:
-    """URL-safe base64 encode a string for use as a path component (injective, no collisions)."""
-    return base64.urlsafe_b64encode(s.encode()).decode().rstrip('=')
+    """URL-safe base64 encode a string for use as a path component (injective, no collisions).
+
+    A constant 's' prefix ensures empty strings produce a non-empty component
+    ("s"), preventing (source_id="", owner="x") from colliding with
+    (source_id="x", owner="") under filesystem path joining.
+    """
+    return "s" + base64.urlsafe_b64encode(s.encode()).decode().rstrip('=')
 
 
 class InMemoryMemoryStore(MemoryStore):
@@ -868,12 +873,14 @@ class InMemoryMemoryStore(MemoryStore):
             self._slug_idx.get(key, {}).pop(rec.slug, None)
 
     def rebuild_index(self, session, *, source_id, line_limit, line_length):
-        return [MemoryIndexEntry.from_topic_record(t) for t in self.list_topics(session, source_id=source_id)]
+        topics = self.list_topics(session, source_id=source_id)
+        return [MemoryIndexEntry.from_topic_record(t) for t in topics[:line_limit]]
 
     def get_index_text(self, session, *, source_id, line_limit, line_length, index_entries=None):
         entries = index_entries or self.rebuild_index(session, source_id=source_id,
                                                      line_limit=line_limit, line_length=line_length)
-        return "\n".join(e.to_pointer_line(max_length=line_length) for e in entries)
+        # Truncate to line_limit so tests match the production provider's index bound.
+        return "\n".join(e.to_pointer_line(max_length=line_length) for e in entries[:line_limit])
 
     def read_state(self, session, *, source_id):
         return dict(self._states.get(self._key(session, source_id), {}))
