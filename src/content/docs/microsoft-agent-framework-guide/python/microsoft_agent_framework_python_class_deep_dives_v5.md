@@ -1127,10 +1127,17 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import uuid
 from agent_framework import WorkflowRunState
+from agent_framework.checkpointing import MemoryFileStore
 
 
 async def run_and_handle(workflow, initial_prompt: str, checkpoint_storage):
+    # IMPORTANT: checkpoint_storage must be scoped to a single run.
+    # get_latest(workflow_name=...) selects the newest checkpoint for that
+    # name in the given store — if two concurrent runs share the same store
+    # they can cross-contaminate.  Callers should create a fresh, run-scoped
+    # storage instance for every invocation (see usage example below).
     result = await workflow.run(initial_prompt, checkpoint_storage=checkpoint_storage)
 
     # Each resumed run saves a FRESH checkpoint forming a previous_checkpoint_id
@@ -1149,6 +1156,14 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_storage):
         )
 
     return result.get_outputs()
+
+
+# Usage: create a run-scoped storage so get_latest() only ever sees
+# checkpoints from this specific invocation, even in multi-user deployments.
+async def handle_request(workflow, prompt: str):
+    run_id = uuid.uuid4().hex
+    storage = MemoryFileStore(path=f"./checkpoints/{run_id}")
+    return await run_and_handle(workflow, prompt, storage)
 ```
 
 ---
