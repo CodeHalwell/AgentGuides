@@ -681,7 +681,7 @@ async def main():
 
     session = agent.create_session()
     await agent.run("My favourite colour is blue.", session=session)
-    # In a later session the agent can search for "favourite colour"
+    # Later in the same session the agent can search for "favourite colour"
     result = await agent.run("What did I say about colours?", session=session)
     print(result.text)
 
@@ -829,7 +829,7 @@ class InMemoryMemoryStore(MemoryStore):
         return record
 
     def write_topic(self, session, record, *, source_id):
-        self._topics.setdefault(self._owner(session), {})[record.slug] = record
+        self._topics.setdefault(self._owner(session), {})[record.topic] = record
 
     def delete_topic(self, session, *, source_id, topic):
         self._topics.get(self._owner(session), {}).pop(topic, None)
@@ -1063,7 +1063,7 @@ async def main():
     client = OpenAIChatClient()
     researcher = Agent(client=client, name="researcher",
                        instructions="Research the given topic and write 3 key facts.")
-    writer = Agent(client=client, name="writer",
+    writer = Agent(client=client, id="writer", name="writer",
                    instructions="Turn the researcher's facts into a polished paragraph.")
 
     workflow = (
@@ -1303,7 +1303,7 @@ class TraceIdMiddleware(AgentMiddleware):
 | `response_format` | `type[BaseModel] \| Mapping[str, Any] \| None` | Structured output schema. |
 | `metadata` | `dict[str, Any]` | Provider-specific metadata. |
 | `user` | `str` | End-user identifier (e.g. for OpenAI abuse monitoring). |
-| `store` | `bool` | Whether to persist the request for fine-tuning (OpenAI). |
+| `store` | `bool` | Whether to persist the conversation server-side (provider-specific; e.g. OpenAI Responses API, Foundry). |
 | `conversation_id` | `str` | Conversation identifier (provider-specific). |
 | `instructions` | `str` | System-level instructions override. |
 
