@@ -640,8 +640,12 @@ async def main() -> None:
     print(result.model_name)       # 'text-embedding-3-small'
     print(result.usage.total_tokens)
 
-    # Convenience helper: normalised vectors for cosine similarity
-    norms = result.normalised_embeddings()
+    # Normalise vectors manually for cosine similarity (no built-in helper)
+    def normalise(v: list[float]) -> list[float]:
+        mag = sum(x**2 for x in v) ** 0.5
+        return [x / mag for x in v]
+
+    norms = [normalise(list(e)) for e in result.embeddings]
     print(f'Norm of first vector: {sum(x**2 for x in norms[0])**0.5:.4f}')  # ~1.0
 
 
@@ -681,8 +685,7 @@ MCPToolset(
     tool_error_behavior: Literal['retry', 'error', 'failed'] = 'retry',
     max_retries: int | None = None,
     prefer_tasks: bool = True,
-    cache_tools: bool = False,
-    allowed_tools: list[str] | None = None,
+    cache_tools: bool = True,    # default True — fetched once, reused
     ...
 )
 ```
@@ -693,8 +696,7 @@ MCPToolset(
 |---|---|---|
 | `tool_error_behavior` | `'retry'` | `'retry'` → `ModelRetry`; `'error'` → propagate `ToolError`; `'failed'` → `ToolFailed` |
 | `prefer_tasks` | `True` | Prefer task-augmented (SEP-1686) execution when supported |
-| `cache_tools` | `False` | Cache tool list across `get_tools()` calls |
-| `allowed_tools` | `None` | Allowlist of tool names to expose |
+| `cache_tools` | `True` | Cache tool list across `get_tools()` calls; set `False` if server changes tools mid-session |
 
 ### Example 1 — HTTP (Streamable HTTP / SSE) server
 
@@ -767,21 +769,25 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 4 — `tool_error_behavior` and `allowed_tools`
+### Example 4 — `tool_error_behavior` and allowlisting via `FilteredToolset`
+
+`MCPToolset` itself has no `allowed_tools` parameter. To restrict which tools the model can call,
+wrap the toolset with `FilteredToolset`:
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, FilteredToolset
 from pydantic_ai.mcp import MCPToolset
 
 
 async def main():
-    toolset = MCPToolset(
+    raw = MCPToolset(
         'http://localhost:8000/mcp',
         tool_error_behavior='failed',   # model sees the error, no retry
-        allowed_tools=['read_file', 'list_dir'],  # deny write/delete tools
-        cache_tools=True,               # list tools once, reuse across steps
+        cache_tools=False,              # fetch fresh list each get_tools() call
     )
+    # Allow only safe read-only tools; deny write/delete tools
+    toolset = FilteredToolset(raw, lambda tool: tool.name in {'read_file', 'list_dir'})
     agent = Agent('openai:gpt-5', toolsets=[toolset])
 
     async with agent:
