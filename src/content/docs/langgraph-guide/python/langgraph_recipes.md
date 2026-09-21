@@ -3134,14 +3134,18 @@ class State(TypedDict):
 # --- Nodes ---
 
 def anonymize(state: State) -> dict:
-    """Replace PII with a placeholder — must NOT appear in traces."""
+    """Replace PII with a placeholder and clear the raw field.
+
+    Clearing raw_pii ensures downstream nodes never receive it in state,
+    so their LangSmith spans won't record the sensitive value either.
+    """
     text = state["raw_pii"]
     # Real implementation would use a NER model or regex; toy version here:
-    return {"anonymized": "[REDACTED]"}
+    return {"anonymized": "[REDACTED]", "raw_pii": ""}   # wipe raw field
 
 
 def process(state: State) -> dict:
-    """Safe to trace — works on anonymized data only."""
+    """Safe to trace — state['raw_pii'] is empty by the time this runs."""
     return {"result": f"Processed: {state['anonymized']}"}
 
 
@@ -3169,7 +3173,9 @@ print(result["result"])   # Processed: [REDACTED]
 
 **What `omit_payload` does:** A processor function (from `langgraph.types`) that returns an empty dict `{}`, dropping the entire payload. Pass it as `process_inputs` and/or `process_outputs` on a `TracePolicy` to keep the node's span (run ID, timing, parent/child links) while omitting its data from the trace.
 
-> **Scope limitation:** `TracePolicy` only hides the annotated node's own LangSmith span. The root graph run still records the full invocation input and final state (both of which contain `raw_pii` in this example). For complete PII removal from traces, strip or anonymize the sensitive data before it enters the graph, and use graph-level LangSmith project settings for broader suppression.
+> **Scope limitations to keep in mind:**
+> - `TracePolicy` only hides the annotated node's own LangSmith span. Without also clearing `raw_pii` from state (as `anonymize` does above), every downstream node's span would still record the raw value in its input state.
+> - The **root graph run** still records the full invocation input (which contains `raw_pii`) in its LangSmith entry. For complete removal, strip sensitive data before it enters the graph, or use graph-level LangSmith project settings.
 
 You can also supply custom processors:
 
