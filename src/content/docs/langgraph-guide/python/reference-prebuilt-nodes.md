@@ -1059,7 +1059,14 @@ for mode, data in graph.stream(
 
 > **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. For new code, build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
 
-`create_react_agent` builds a ReAct-style agent graph in one call. It returns a compiled `StateGraph` with at minimum two nodes — `agent` (the LLM) and `tools` (a `ToolNode`) — wired with `tools_condition`. When `response_format` is set, a third `generate_structured_response` node is appended after `agent`/`tools`; it makes a **separate** structured-output LLM call and adds latency and cost. When hooks are provided, `pre_model_hook` and/or `post_model_hook` nodes are also inserted around `agent`.
+`create_react_agent` builds a ReAct-style agent graph in one call. The exact nodes depend on the arguments:
+
+- **`agent`** — always present (the LLM call).
+- **`tools`** (`ToolNode`) — added only when `tools` is non-empty; omitted entirely for tool-free agents (`tools=[]`).
+- **`generate_structured_response`** — added when `response_format` is set; makes a **separate** structured-output LLM call and adds latency and cost.
+- **`pre_model_hook`** / **`post_model_hook`** — added when the corresponding hook argument is provided.
+
+A tool-free agent compiles a graph with just `agent` (plus any optional hook/response nodes), so `interrupt_before`/`interrupt_after` lists and streamed-update keys reflect only the nodes that actually exist.
 
 ### Signature
 
@@ -1096,24 +1103,39 @@ Key parameters:
 | `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
 | `pre_model_hook` | Separate node inserted **before** `agent`. Returns `dict \| None`; must include at least `messages` or `llm_input_messages`. Returning `None` is a no-op. Use for message trimming, injecting system prompts, etc. |
 | `post_model_hook` | Separate node inserted **after** `agent` (v2 only). Returns `Command \| dict \| None`. Returning a `Command` overrides the default conditional routing (tools → end). Returning `None` is a no-op. Use for guardrails, human-in-the-loop, token tracking, etc. |
-| `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` which has both `messages` (annotated with `add_messages`) and `remaining_steps: int`. Custom schemas must include both fields — `MessagesState` alone is rejected because it lacks `remaining_steps`. |
+| `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` (`messages` + `remaining_steps`). Custom schemas must include `messages` and `remaining_steps`; when `response_format` is also set, `structured_response` is required too — missing any of these raises `ValueError`. |
 | `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
 
 #### Custom state schema example
 
-When you need extra state fields, extend `MessagesState` and add `remaining_steps`:
+When you need extra state fields, extend `MessagesState` and add `remaining_steps`. If you also pass `response_format`, add `structured_response` — the factory raises `ValueError` if it is missing:
 
 ```python
+from typing import Any
 from typing_extensions import NotRequired  # typing.NotRequired requires Python 3.11+; use typing_extensions for 3.10
-from typing import Annotated
 from langgraph.managed import RemainingSteps
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessagesState
 
 class MyAgentState(MessagesState):
     remaining_steps: NotRequired[RemainingSteps]   # managed — auto-injected and decremented by the graph
     user_name: str                                  # any extra fields you need
 
 graph = create_react_agent(llm, tools, state_schema=MyAgentState)
+
+# When response_format is set, structured_response is also required:
+class MyAgentStateWithOutput(MessagesState):
+    remaining_steps: NotRequired[RemainingSteps]
+    structured_response: Any                        # populated by generate_structured_response node
+    user_name: str
+
+from pydantic import BaseModel
+
+class Answer(BaseModel):
+    value: int
+
+graph_with_output = create_react_agent(
+    llm, tools, state_schema=MyAgentStateWithOutput, response_format=Answer
+)
 ```
 
 `RemainingSteps` is a **managed value**: the graph injects and decrements it automatically each step. Annotating it as `NotRequired` means you never need to provide it when invoking the graph.
