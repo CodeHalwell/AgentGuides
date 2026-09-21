@@ -793,7 +793,7 @@ async def main():
         cache_tools=False,              # fetch fresh list each get_tools() call
     )
     # Allow only safe read-only tools; deny write/delete tools
-    toolset = FilteredToolset(raw, lambda tool: tool.name in {'read_file', 'list_dir'})
+    toolset = FilteredToolset(raw, lambda _ctx, tool: tool.name in {'read_file', 'list_dir'})
     agent = Agent('openai:gpt-5', toolsets=[toolset])
 
     async with agent:
@@ -1325,8 +1325,8 @@ from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 
 
-def token_ids(words: list[str]) -> dict[str, int]:
-    enc = tiktoken.get_encoding('cl100k_base')
+def token_ids(model: str, words: list[str]) -> dict[str, int]:
+    enc = tiktoken.encoding_for_model(model)  # use the exact model's tokenizer
     bias: dict[str, int] = {}
     for word in words:
         for tok in enc.encode(word):
@@ -1338,7 +1338,7 @@ def token_ids(words: list[str]) -> dict[str, int]:
 agent = Agent(
     'openai:gpt-5',
     model_settings=ModelSettings(
-        logit_bias=token_ids(['Python', 'pydantic', 'type']),
+        logit_bias=token_ids('gpt-5', ['Python', 'pydantic', 'type']),
     ),
 )
 
