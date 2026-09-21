@@ -1097,6 +1097,21 @@ Key parameters:
 | `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` which has both `messages` (annotated with `add_messages`) and `remaining_steps: int`. Custom schemas must include both fields — `MessagesState` alone is rejected because it lacks `remaining_steps`. |
 | `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
 
+#### Custom state schema example
+
+When you need extra state fields, extend `MessagesState` and add `remaining_steps`:
+
+```python
+from typing import Annotated
+from langgraph.graph.message import MessagesState, add_messages
+
+class MyAgentState(MessagesState):
+    remaining_steps: int   # required — omitting this raises ValueError
+    user_name: str         # any extra fields you need
+
+graph = create_react_agent(llm, tools, state_schema=MyAgentState)
+```
+
 ### Pre/post model hooks
 
 `pre_model_hook` and `post_model_hook` run inside the `agent` node, before and after the LLM call respectively. Both receive the current state and must return a dict that is merged back into state.

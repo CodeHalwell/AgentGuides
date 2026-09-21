@@ -3172,14 +3172,17 @@ You can also supply custom processors:
 ```python
 from langgraph.types import TracePolicy
 
-def scrub_ssn(payload: dict) -> dict:
+# Match known PII field names (including raw_pii as used in this example).
+_PII_KEYS = {"raw_pii", "ssn", "email", "phone", "credit_card"}
+
+def scrub_pii(payload: dict) -> dict:
     """Return a safe version of the payload — called by LangSmith before the run is stored."""
-    return {k: "[REDACTED]" if "ssn" in k.lower() else v for k, v in payload.items()}
+    return {k: "[REDACTED]" if k.lower() in _PII_KEYS else v for k, v in payload.items()}
 
 builder.add_node(
     "anonymize",
     anonymize,
-    trace_policy=TracePolicy(process_inputs=scrub_ssn, process_outputs=scrub_ssn),
+    trace_policy=TracePolicy(process_inputs=scrub_pii, process_outputs=scrub_pii),
 )
 ```
 
@@ -3202,7 +3205,7 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import MessagesState
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
 from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -3210,15 +3213,21 @@ from langgraph.checkpoint.memory import InMemorySaver
 # --- Tools ---
 
 @tool
-def fetch_price(ticker: str) -> str:
+def fetch_price(ticker: str, runtime: ToolRuntime) -> str:
     """Get the current price for a stock ticker."""
+    # emit_output_delta pushes incremental chunks onto the "tools" stream channel.
+    # Each call produces a "tool-output-delta" event that ToolCallStream exposes
+    # via its __iter__ / __aiter__ so callers can consume partial results in order.
+    runtime.emit_output_delta(f"Looking up ticker {ticker.upper()}…")
     prices = {"AAPL": "182.50", "GOOG": "141.20", "MSFT": "378.90"}
-    return prices.get(ticker.upper(), "Unknown ticker")
+    price = prices.get(ticker.upper(), "Unknown ticker")
+    runtime.emit_output_delta(f"Found: ${price}")
+    return price
 
 
 @tool
 def summarize_news(ticker: str) -> str:
-    """Get a one-line news summary for a ticker."""
+    """Get a one-line news summary for a ticker (no streaming deltas)."""
     return f"No major news for {ticker} today."
 
 
