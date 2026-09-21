@@ -3413,9 +3413,10 @@ print(f"Context used: {r1.context_used}")
 r2: TurnResult = qa_agent.invoke("What about Python?", cfg)
 print(f"Turn {r2.turn_count}: {r2.answer}")   # turn_count is 2 — loaded from checkpoint
 
-# The checkpoint stores ThreadState (no context_used field):
+# get_state().values returns the value= output (TurnResult), NOT the save= state (ThreadState).
+# ThreadState is only accessible as the `previous` argument on the *next* call.
 snap = qa_agent.get_state(cfg)
-print(type(snap.values))   # ThreadState — compact form
+print(type(snap.values))   # TurnResult — the value= output from the last entrypoint.final
 ```
 
 **Why `entrypoint.final`?**

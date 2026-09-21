@@ -1080,7 +1080,9 @@ graph = create_react_agent(
     store=None,                     # BaseStore | None
     interrupt_before=None,
     interrupt_after=None,
-    name="LangGraph",
+    debug=False,
+    version="v2",                   # "v1" runs tools sequentially; "v2" (default) runs in parallel via Send
+    name=None,                      # graph name; defaults to None
 )
 ```
 
@@ -1102,19 +1104,22 @@ Key parameters:
 When you need extra state fields, extend `MessagesState` and add `remaining_steps`:
 
 ```python
-from typing import Annotated
+from typing import NotRequired, Annotated
+from langgraph.managed import RemainingSteps
 from langgraph.graph.message import MessagesState, add_messages
 
 class MyAgentState(MessagesState):
-    remaining_steps: int   # required — omitting this raises ValueError
-    user_name: str         # any extra fields you need
+    remaining_steps: NotRequired[RemainingSteps]   # managed — auto-injected and decremented by the graph
+    user_name: str                                  # any extra fields you need
 
 graph = create_react_agent(llm, tools, state_schema=MyAgentState)
 ```
 
+`RemainingSteps` is a **managed value**: the graph injects and decrements it automatically each step. Annotating it as `NotRequired` means you never need to provide it when invoking the graph.
+
 ### Pre/post model hooks
 
-`pre_model_hook` and `post_model_hook` run inside the `agent` node, before and after the LLM call respectively. Both receive the current state and must return a dict that is merged back into state.
+`pre_model_hook` and `post_model_hook` are **separate graph nodes** inserted immediately before and after the `agent` (LLM-call) node respectively. They are not callbacks inside the `agent` node. Each hook receives the current state dict and must return a dict; the graph merges the returned dict back into state before passing control to the next node.
 
 ```python
 from langchain_openai import ChatOpenAI
