@@ -135,24 +135,21 @@ config = SimplePromptOptimizerConfig(
 Only the **root agent's** instruction is rewritten on each iteration. Sub-agents keep their original instructions throughout:
 
 ```python
-from google.adk.agents import LlmAgent, SequentialAgent
+from google.adk.agents import LlmAgent
 from google.adk.optimization.simple_prompt_optimizer import (
     SimplePromptOptimizer,
     SimplePromptOptimizerConfig,
 )
 
+# Sub-agents keep their original instructions throughout.
 planner = LlmAgent(name="planner", model="gemini-2.5-flash",
                    instruction="Break the task into steps.")
 executor = LlmAgent(name="executor", model="gemini-2.5-flash",
                     instruction="Execute each step in turn.")
 
-root = SequentialAgent(
-    name="pipeline",
-    sub_agents=[planner, executor],
-    # SequentialAgent has no `instruction` — wrap in an LlmAgent if needed:
-)
-
-# Or use an LlmAgent root:
+# IMPORTANT: each sub-agent can only have one parent_agent — do NOT also add
+# these same instances to a SequentialAgent or another LlmAgent simultaneously
+# (raises ValueError: "Agent already has a parent agent").
 root_llm = LlmAgent(
     name="orchestrator",
     model="gemini-2.5-flash",
@@ -1109,13 +1106,15 @@ agent = LlmAgent(
 ### Registry + code executor combo
 
 ```python
-from google.adk.code_executors import BuiltInCodeExecutor
+from google.adk.code_executors import UnsafeLocalCodeExecutor
 from google.adk.tools.skill_toolset import SkillToolset
 
-# For skills that contain runnable code blocks
+# NOTE: BuiltInCodeExecutor is a stub — it delegates to the model and cannot
+# directly run skill scripts. Use UnsafeLocalCodeExecutor for local dev/testing
+# or VertexAiCodeExecutor for sandboxed production execution.
 toolset = SkillToolset(
     registry=registry,             # custom SkillRegistry from §8
-    code_executor=BuiltInCodeExecutor(),
+    code_executor=UnsafeLocalCodeExecutor(),
     script_timeout=120,
     additional_tools=[my_api_tool],  # available inside the skill's sub-agent
 )
