@@ -643,7 +643,7 @@ Once set, `RunConfig.telemetry` is silently ignored; the operator's env vars are
 
 **Module:** `google.adk.tools.url_context_tool`
 
-`UrlContextTool` injects Gemini's **built-in URL-context** grounding capability into an agent. When the agent invokes this tool, it passes one or more URLs to the Gemini model, which fetches and grounds its response in the live content of those pages.
+`UrlContextTool` enables Gemini's **built-in URL-context** grounding capability in an agent. It injects a `types.Tool(url_context=types.UrlContext())` into every model request — there is no Python-side function declaration or explicit invocation. When the model encounters URLs in the conversation, Gemini fetches their live content and grounds its response on it automatically.
 
 ### How it works (source-verified)
 
