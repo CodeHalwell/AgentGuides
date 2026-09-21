@@ -354,15 +354,17 @@ if isinstance(result.output, DeferredToolRequests):
 
 ### Example 5 — `defer_loading=True` to hide tools until discovered
 
-`defer_loading=True` **hides** the toolset's tools from the model entirely. The tools only become
-visible once the model discovers them via a tool-search call, via `load_capability`, or when
-another tool returns a `ToolReturn` that includes them. This is useful for large tool libraries
-where you only want to expose a subset based on user intent.
+`defer_loading=True` **hides** the toolset's tools from the model entirely. Discovery is handled
+by the `ToolSearch` capability, which is **auto-injected** into every agent (zero overhead when
+no deferred tools exist). On providers that support native search (Anthropic BM25/regex, OpenAI
+Responses), the provider exposes hidden tools once discovered; elsewhere a local `search_tools`
+function is injected instead.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
+from pydantic_ai.capabilities import ToolSearch
 
-# Tools are HIDDEN from the model until it searches for or loads them.
+# Tools are HIDDEN from the model until the auto-injected ToolSearch reveals them.
 hidden_tools = FunctionToolset(defer_loading=True, id='hidden-ops')
 
 
@@ -372,8 +374,12 @@ def secret_lookup(ctx: RunContext[None], query: str) -> str:
     return f'Internal result for {query}'
 
 
-# The agent starts without these tools visible; load_capability or tool search reveals them.
-agent = Agent('openai:gpt-5', toolsets=[hidden_tools])
+# ToolSearch() is auto-injected; passing it explicitly lets you configure the strategy.
+agent = Agent(
+    'openai:gpt-5',
+    toolsets=[hidden_tools],
+    capabilities=[ToolSearch()],  # default: native search where supported, else local keywords
+)
 ```
 
 ---
