@@ -62,11 +62,16 @@ The optimizer calls `sampler.sample_and_score()` — so you only need to provide
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
 from google.adk.optimization.simple_prompt_optimizer import (
     SimplePromptOptimizer,
     SimplePromptOptimizerConfig,
 )
-from google.adk.optimization.local_eval_sampler import LocalEvalSampler
+from google.adk.optimization.local_eval_sampler import (
+    LocalEvalSampler,
+    LocalEvalSamplerConfig,
+)
 
 # 1. Define the agent whose prompt you want to improve.
 agent = LlmAgent(
@@ -75,8 +80,15 @@ agent = LlmAgent(
     instruction="Summarise the following text.",  # starting prompt — will be improved
 )
 
-# 2. Point to an ADK eval dataset on disk (see §4 for LocalEvalSampler details).
-sampler = LocalEvalSampler(eval_set_file="evals/summarise_eval.json")
+# 2. Wire up the sampler (see §4 for LocalEvalSampler details).
+sampler = LocalEvalSampler(
+    config=LocalEvalSamplerConfig(
+        eval_config=EvalConfig(criteria={"response_match_score": 0.5}),
+        app_name="summariser",
+        train_eval_set="summarise_train",
+    ),
+    eval_sets_manager=LocalEvalSetsManager(agents_dir="./agents"),
+)
 
 # 3. Configure the optimizer.
 config = SimplePromptOptimizerConfig(
@@ -192,7 +204,9 @@ from google.adk.optimization.gepa_root_agent_optimizer import (
     GEPARootAgentOptimizer,
     GEPARootAgentOptimizerConfig,
 )
-from google.adk.optimization.local_eval_sampler import LocalEvalSampler
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
+from google.adk.optimization.local_eval_sampler import LocalEvalSampler, LocalEvalSamplerConfig
 
 agent = LlmAgent(
     name="classifier",
@@ -200,7 +214,14 @@ agent = LlmAgent(
     instruction="Classify the sentiment of the text.",
 )
 
-sampler = LocalEvalSampler(eval_set_file="evals/sentiment_eval.json")
+sampler = LocalEvalSampler(
+    config=LocalEvalSamplerConfig(
+        eval_config=EvalConfig(criteria={"response_match_score": 0.5}),
+        app_name="classifier",
+        train_eval_set="sentiment_train",
+    ),
+    eval_sets_manager=LocalEvalSetsManager(agents_dir="./agents"),
+)
 
 config = GEPARootAgentOptimizerConfig(
     optimizer_model="gemini-3.5-flash",
@@ -365,7 +386,7 @@ agent = LlmAgent(name="qa", model="gemini-2.5-flash",
 
 **Module:** `google.adk.optimization.local_eval_sampler`
 
-`LocalEvalSampler` is the **built-in** `Sampler` that reads an ADK evaluation JSON file from disk and delegates scoring to ADK's own `LocalEvalService`. It is the quickest way to connect the optimization loop to an existing evaluation dataset.
+`LocalEvalSampler` is the **built-in** `Sampler` that delegates scoring to ADK's `LocalEvalService`. It reads eval cases from an `EvalSetsManager` (typically `LocalEvalSetsManager`, which reads the eval sets stored in your agent's directory), applies the configured metrics, and returns per-example scores.
 
 ### Dependencies
 
@@ -377,39 +398,54 @@ pip install google-adk[eval]   # includes pandas, rouge-score, etc.
 pip install pandas rouge-score google-cloud-aiplatform
 ```
 
-### Constructor
+### Constructor (source-verified)
 
 ```python
-class LocalEvalSampler:
-    def __init__(
-        self,
-        eval_set_file: str,          # path to an ADK eval JSON (see format below)
-        # Internal fields are set automatically
-    ): ...
+LocalEvalSampler(
+    config: LocalEvalSamplerConfig,
+    eval_sets_manager: EvalSetsManager,
+)
 ```
 
-### Eval file format
+`LocalEvalSamplerConfig` fields (source-verified from `google/adk/optimization/local_eval_sampler.py`):
 
-The eval JSON is the same format used by ADK's `adk eval` CLI command and `LocalEvalService`:
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `eval_config` | `EvalConfig` | required | Metrics and thresholds for scoring (e.g. `response_match_score`) |
+| `app_name` | `str` | required | Must match the app name used by the eval sets manager |
+| `train_eval_set` | `str` | required | ID of the eval set used for optimization iterations |
+| `train_eval_case_ids` | `list[str] \| None` | `None` | Specific case IDs; `None` → use all cases in the set |
+| `validation_eval_set` | `str \| None` | `None` | Eval set for final scoring; `None` → reuse `train_eval_set` |
+| `validation_eval_case_ids` | `list[str] \| None` | `None` | Specific validation case IDs |
+
+### Eval sets directory layout
+
+`LocalEvalSetsManager` reads eval sets from the ADK agent directory structure:
+
+```
+my_agent/
+  agent.py
+  eval/
+    geography_train/          ← train_eval_set = "geography_train"
+      case_001.json
+      case_002.json
+    geography_val/            ← validation_eval_set = "geography_val"
+      val_001.json
+```
+
+Each case JSON uses the same format as the `adk eval` CLI:
 
 ```json
-[
-  {
-    "name": "example_001",
-    "initial_session_state": {},
-    "conversation": [
-      {
-        "user_content": {
-          "parts": [{"text": "What is the capital of France?"}],
-          "role": "user"
-        },
-        "expected_tool_use": [],
-        "expected_intermediate_agent_responses": [],
-        "reference": "Paris"
-      }
-    ]
-  }
-]
+{
+  "eval_id": "case_001",
+  "conversation": [
+    {
+      "user_content": {"parts": [{"text": "Capital of France?"}], "role": "user"},
+      "expected_tool_use": [],
+      "reference": "Paris"
+    }
+  ]
+}
 ```
 
 ### End-to-end optimisation with `LocalEvalSampler`
@@ -417,11 +453,16 @@ The eval JSON is the same format used by ADK's `adk eval` CLI command and `Local
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
 from google.adk.optimization.simple_prompt_optimizer import (
     SimplePromptOptimizer,
     SimplePromptOptimizerConfig,
 )
-from google.adk.optimization.local_eval_sampler import LocalEvalSampler
+from google.adk.optimization.local_eval_sampler import (
+    LocalEvalSampler,
+    LocalEvalSamplerConfig,
+)
 
 agent = LlmAgent(
     name="geography_qa",
@@ -429,7 +470,20 @@ agent = LlmAgent(
     instruction="Answer geography questions accurately.",
 )
 
-sampler = LocalEvalSampler(eval_set_file="evals/geography.json")
+# Point to the agents/ directory; eval sets live under agents/geography_qa/eval/
+eval_sets_manager = LocalEvalSetsManager(agents_dir="./agents")
+
+sampler = LocalEvalSampler(
+    config=LocalEvalSamplerConfig(
+        eval_config=EvalConfig(
+            criteria={"response_match_score": 0.5},
+        ),
+        app_name="geography_qa",
+        train_eval_set="geography_train",       # eval/geography_train/ sub-dir
+        validation_eval_set="geography_val",    # eval/geography_val/ sub-dir
+    ),
+    eval_sets_manager=eval_sets_manager,
+)
 
 optimizer = SimplePromptOptimizer(
     config=SimplePromptOptimizerConfig(
@@ -444,16 +498,15 @@ async def main():
     optimised = result.optimized_agents[0].optimized_agent
     print("Final prompt:", optimised.instruction)
 
-    # Persist the improved agent for later use:
     with open("optimised_instruction.txt", "w") as f:
         f.write(optimised.instruction)
 
 asyncio.run(main())
 ```
 
-### Split sizes
+### Train / validation split
 
-`LocalEvalSampler` automatically divides the eval file examples into a training split (used during iterations) and a validation split (used for the final evaluation). The split is determined internally by `LocalEvalService`; for explicit control, implement `Sampler` directly (§3).
+The training and validation splits are explicitly named eval sets (not auto-derived from a single file). Set `validation_eval_set` to a different set for held-out evaluation, or leave it `None` to reuse the training set for both.
 
 ---
 
@@ -695,34 +748,47 @@ export ADK_DISABLE_GEMINI_MODEL_ID_CHECK=1
 
 **Module:** `google.adk.skills.models`
 
-`Skill` is a **Pydantic model** that represents a single self-contained capability defined in a Markdown file. It stores the raw frontmatter, the instructions body, and any linked resources. `SkillToolset` instantiates a `Skill` for each `.md` file in its skills folder.
+`Skill` is a **Pydantic model** that bundles three layers of a skill: frontmatter metadata (`Frontmatter`), instruction text (from `SKILL.md`), and optional resources (`Resources`). Skills are loaded from a directory that contains a `SKILL.md` file and optional subdirectories for references, assets, and scripts.
 
 ### Class structure (source-verified)
 
 ```python
 class Skill(BaseModel):
-    frontmatter: dict[str, Any]   # parsed YAML front matter
-    instructions: str             # Markdown body (the actual skill instructions)
-    resources: list[Resource]     # linked files / tools / sub-skills
+    frontmatter: Frontmatter   # typed model — name, description, license, etc.
+    instructions: str          # SKILL.md body (the skill's instruction text)
+    resources: Resources = Resources()  # references, assets, scripts (defaults empty)
 
     @property
     def name(self) -> str:
-        return self.frontmatter.get("name", "")
+        return self.frontmatter.name
 
     @property
     def description(self) -> str:
-        return self.frontmatter.get("description", "")
+        return self.frontmatter.description
 ```
 
-### Skill Markdown format
+`Frontmatter` required fields: `name` (kebab-case or snake_case, ≤ 64 chars) and `description`.
+`Resources` fields: `references: dict[str, str | bytes]`, `assets: dict[str, str | bytes]`, `scripts: dict[str, Script]`.
 
-A valid skill file looks like this:
+### Skill directory layout
+
+A skill lives in its own directory named after the skill, with a `SKILL.md` file:
+
+```
+skills/
+  write-unit-test/
+    SKILL.md          ← L1 frontmatter + L2 instructions
+    references/       ← optional: extra markdown guidance
+    assets/           ← optional: schemas, templates, examples
+    scripts/          ← optional: executable scripts
+```
+
+`SKILL.md` format:
 
 ```markdown
 ---
-name: write_unit_test
+name: write-unit-test
 description: Generate a pytest unit test for a given Python function.
-version: "1.0"
 ---
 
 You are a Python testing expert.
@@ -735,44 +801,50 @@ Given a Python function, write a complete pytest unit test that:
 Return only the test code, no explanation.
 ```
 
-### Reading a skill programmatically
+### Creating a `Skill` programmatically
+
+```python
+from google.adk.skills.models import Skill, Frontmatter, Resources
+
+skill = Skill(
+    frontmatter=Frontmatter(
+        name="write-unit-test",
+        description="Generate a pytest unit test for a given Python function.",
+    ),
+    instructions=(
+        "You are a Python testing expert.\n\n"
+        "Write a complete pytest unit test for the given function."
+    ),
+    resources=Resources(),   # empty — no references/assets/scripts
+)
+
+print(skill.name)         # "write-unit-test"
+print(skill.description)  # "Generate a pytest unit test ..."
+```
+
+### Parsing a `SKILL.md` file manually
 
 ```python
 from pathlib import Path
-from google.adk.skills.models import Skill
+from google.adk.skills.models import Skill, Frontmatter, Resources
 import yaml
 
-def load_skill(path: str) -> Skill:
-    text = Path(path).read_text()
+def load_skill_from_file(skill_md_path: str) -> Skill:
+    text = Path(skill_md_path).read_text()
     if text.startswith("---"):
         _, fm_block, body = text.split("---", 2)
-        frontmatter = yaml.safe_load(fm_block)
+        fm_data = yaml.safe_load(fm_block)
         instructions = body.strip()
     else:
-        frontmatter = {}
-        instructions = text.strip()
+        raise ValueError("SKILL.md must begin with YAML front matter.")
 
-    return Skill(frontmatter=frontmatter, instructions=instructions, resources=[])
+    return Skill(
+        frontmatter=Frontmatter(**fm_data),
+        instructions=instructions,
+        resources=Resources(),
+    )
 
-skill = load_skill("skills/write_unit_test.md")
-print(skill.name)         # "write_unit_test"
-print(skill.description)  # "Generate a pytest unit test ..."
-print(skill.instructions[:80])
-```
-
-### Inspecting skills loaded by `SkillToolset`
-
-```python
-from google.adk.tools.skill_toolset import SkillToolset
-
-toolset = SkillToolset(skills_folder="/abs/path/to/skills")
-tools = await toolset.get_tools()   # each tool wraps one Skill
-
-for tool in tools:
-    print(f"{tool.name}: {tool.description}")
-    # tool._skill is the underlying Skill instance
-    if hasattr(tool, "_skill"):
-        print("  instructions:", tool._skill.instructions[:60])
+skill = load_skill_from_file("skills/write-unit-test/SKILL.md")
 ```
 
 ---
@@ -861,7 +933,7 @@ toolset = SkillToolset(registry=registry)
 
 ```python
 from google.adk.skills.skill_registry import SkillRegistry
-from google.adk.skills.models import Skill
+from google.adk.skills.models import Skill, Frontmatter, Resources
 
 class InMemorySkillRegistry(SkillRegistry):
     def __init__(self, skills: list[Skill]):
@@ -876,9 +948,9 @@ class InMemorySkillRegistry(SkillRegistry):
                 if q in s.name.lower() or q in s.description.lower()]
 
 test_skill = Skill(
-    frontmatter={"name": "greet", "description": "Greet the user warmly."},
+    frontmatter=Frontmatter(name="greet", description="Greet the user warmly."),
     instructions="Always start with 'Hello!' and use the user's name.",
-    resources=[],
+    resources=Resources(),
 )
 registry = InMemorySkillRegistry([test_skill])
 ```
@@ -889,7 +961,7 @@ registry = InMemorySkillRegistry([test_skill])
 
 **Module:** `google.adk.tools.skill_toolset`
 
-`SkillToolset` is the **official way to attach skill files to an agent**. Each `.md` file in the skills folder becomes an independent tool whose description is the skill's frontmatter `description` and whose implementation runs the `instructions` as a sub-prompt. Source-verified constructor signature:
+`SkillToolset` exposes skills to an agent as a set of built-in **skill management tools**. It does not make each skill a direct callable tool; instead the agent uses `list_skills` (to discover available skills), `load_skill` (to activate a skill and receive its instructions), `load_skill_resource` (to fetch a skill's asset or reference), and `run_skill_script` (to execute a skill's script — requires a `code_executor`). When a `registry` is provided, `search_skills` is added as well. Source-verified constructor signature:
 
 ```python
 class SkillToolset(BaseToolset):
@@ -915,28 +987,64 @@ class SkillToolset(BaseToolset):
 | `registry` | `SkillRegistry \| None` | `None` | Remote/custom skill discovery backend |
 | `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for code blocks inside skills |
 | `environment` | `BaseEnvironment \| None` | `None` | Execution environment for code skills |
-| `skills_folder` | `str \| None` | `None` | **Must be an absolute path when `environment` is set** |
+| `skills_folder` | `str \| None` | `None` | **Requires `environment` to be set**; must be an absolute path |
 | `script_timeout` | `int` | `300` | Max seconds for a skill's code block to run |
 | `additional_tools` | `list[BaseTool] \| None` | `None` | Extra tools available to the skill's sub-agent |
 | `tool_name_prefix` | `str \| None` | `None` | String prepended to every skill tool's name |
 | `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of skill names or a predicate |
 
-### Loading from a skills folder
+### How the agent uses skills
+
+When an agent has a `SkillToolset`, it gets these skill-management tools:
+
+| Tool | Purpose |
+|---|---|
+| `list_skills` | Returns names and descriptions of all available skills |
+| `load_skill` | Activates a skill — returns its full instruction text |
+| `load_skill_resource` | Fetches a reference, asset, or script file from a loaded skill |
+| `run_skill_script` | Executes a script from a skill (requires `code_executor`) |
+| `search_skills` | Fuzzy-searches the registry (only when `registry` is set) |
+
+### Loading from a `skills` list
+
+The common case — pass pre-constructed `Skill` objects:
 
 ```python
 from google.adk.agents import LlmAgent
+from google.adk.skills.models import Skill, Frontmatter, Resources
 from google.adk.tools.skill_toolset import SkillToolset
-from google.adk.runners import InMemoryRunner
-from google.genai import types
-import asyncio
 
-# skills/ must contain one .md file per skill
-toolset = SkillToolset(skills_folder="/abs/path/to/skills")
+write_test_skill = Skill(
+    frontmatter=Frontmatter(
+        name="write-unit-test",
+        description="Generate a pytest unit test for a Python function.",
+    ),
+    instructions=(
+        "You are a testing expert. Write a complete pytest test that covers "
+        "the happy path, edge cases, and uses descriptive test names."
+    ),
+)
+
+review_pr_skill = Skill(
+    frontmatter=Frontmatter(
+        name="review-pr",
+        description="Review a pull request diff for bugs and style issues.",
+    ),
+    instructions=(
+        "Carefully read the diff. List any bugs, missing tests, or style "
+        "violations. Format as a numbered list, most severe first."
+    ),
+)
+
+toolset = SkillToolset(skills=[write_test_skill, review_pr_skill])
 
 agent = LlmAgent(
-    name="multi_skill_agent",
+    name="dev_assistant",
     model="gemini-2.5-flash",
-    instruction="Use the available skills to help the user.",
+    instruction=(
+        "You are a development assistant. Use list_skills to see what you can do, "
+        "then load_skill to activate the relevant skill before responding."
+    ),
     tools=[toolset],
 )
 ```
@@ -944,42 +1052,38 @@ agent = LlmAgent(
 ### Filtering which skills are exposed
 
 ```python
-# Allowlist: only expose specific skills
+# Allowlist: only expose specific skills by name
 toolset = SkillToolset(
-    skills_folder="/abs/path/to/skills",
-    tool_filter=["write_unit_test", "review_pr"],
+    skills=[write_test_skill, review_pr_skill],
+    tool_filter=["write-unit-test"],   # hide review-pr from this agent
 )
 
-# Predicate: expose skills based on a dynamic condition
-def only_prod_skills(skill_name: str) -> bool:
-    return not skill_name.startswith("experimental_")
+# Predicate: dynamic filtering
+def only_stable(skill_name: str) -> bool:
+    return not skill_name.startswith("experimental-")
 
-toolset = SkillToolset(
-    skills_folder="/abs/path/to/skills",
-    tool_filter=only_prod_skills,
-)
+toolset = SkillToolset(skills=all_skills, tool_filter=only_stable)
 ```
 
-### Namespacing skill tool names
+### Namespacing skill management tool names
 
 ```python
-# Avoids name collisions when merging skill toolsets from different domains
+# Prevents collisions when merging two toolsets in one agent
 coding_toolset = SkillToolset(
-    skills_folder="/skills/coding",
-    tool_name_prefix="coding__",
+    skills=coding_skills,
+    tool_name_prefix="coding__",  # tools become coding__list_skills, etc.
 )
 writing_toolset = SkillToolset(
-    skills_folder="/skills/writing",
+    skills=writing_skills,
     tool_name_prefix="writing__",
 )
 
 agent = LlmAgent(
     name="super_agent",
     model="gemini-2.5-flash",
-    instruction="Help the user with coding and writing tasks.",
+    instruction="Help with coding and writing. Use coding__list_skills or writing__list_skills to start.",
     tools=[coding_toolset, writing_toolset],
 )
-# Agent now has tools: coding__write_unit_test, writing__draft_email, etc.
 ```
 
 ### Registry + code executor combo
@@ -999,22 +1103,24 @@ toolset = SkillToolset(
 
 ### Skills folder with a sandboxed environment
 
-When `environment` is set, `skills_folder` **must be an absolute path** — relative paths silently resolve against the wrong working directory inside the environment:
+`skills_folder` is **only valid when `environment` is also set** — it tells the toolset where skills are located inside the environment's filesystem. Passing `skills_folder` without `environment` raises `ValueError`.
 
 ```python
 import os
 from google.adk.tools.skill_toolset import SkillToolset
 
-# BAD — relative path will break when environment is set:
-# toolset = SkillToolset(skills_folder="skills", environment=my_env)
+# WRONG — raises ValueError: Cannot specify skills_folder without an environment:
+# toolset = SkillToolset(skills_folder="/abs/path/to/skills")
 
-# GOOD — use an absolute path:
+# CORRECT — skills_folder requires environment:
 toolset = SkillToolset(
-    skills_folder=os.path.abspath("skills"),
+    skills_folder=os.path.abspath("skills"),  # must also be absolute
     environment=my_env,
     code_executor=my_executor,
 )
 ```
+
+Without an environment, load skills as `Skill` objects and pass them via `skills=[...]` (see "Loading from a `skills` list" above).
 
 ---
 
@@ -1145,12 +1251,23 @@ async def chat(user_id: str, message: str, session_id: str | None = None):
             response = "".join(
                 p.text for p in event.content.parts if p.text
             )
+
+    # Runner does NOT automatically ingest the session.
+    # Reload the updated session and persist it to the RAG corpus explicitly.
+    updated_session = await runner.session_service.get_session(
+        app_name="persistent_assistant",
+        user_id=user_id,
+        session_id=session.id,
+    )
+    if updated_session:
+        await runner.memory_service.add_session_to_memory(updated_session)
+
     return response, session.id
 ```
 
-### Enabling the `load_memory` tool
+### Automatic memory preloading with `PreloadMemoryTool`
 
-For the agent to proactively query memory, add `PreloadMemoryTool` (covered in the Vol. 2 deep-dives) or let the runner automatically inject memory at session start:
+`PreloadMemoryTool` is **invisible to the model** — it is not a callable tool the agent invokes. Instead it overrides `process_llm_request` and automatically queries the memory service before each LLM call, injecting relevant past exchanges as context. Add it to the agent to get automatic retrieval every turn:
 
 ```python
 from google.adk.tools.preload_memory_tool import PreloadMemoryTool
@@ -1159,7 +1276,27 @@ agent = LlmAgent(
     name="assistant",
     model="gemini-2.5-flash",
     instruction="You are a persistent assistant.",
-    tools=[PreloadMemoryTool()],  # agent can call load_memory() explicitly
+    tools=[PreloadMemoryTool()],  # auto-injects memory before each LLM call
+)
+# The model never sees or calls "preload_memory" — it just receives the context.
+```
+
+### Triggering memory ingestion via a callback
+
+If you prefer to ingest at the end of each turn rather than calling `add_session_to_memory` after every `runner.run()` call, use an `after_agent_callback`:
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.agents.callback_context import CallbackContext
+
+async def save_to_memory(ctx: CallbackContext) -> None:
+    await ctx.add_session_to_memory()
+
+agent = LlmAgent(
+    name="assistant",
+    model="gemini-2.5-flash",
+    instruction="You are a persistent assistant.",
+    after_agent_callback=save_to_memory,
 )
 ```
 
@@ -1171,7 +1308,7 @@ agent = LlmAgent(
 | `ValueError: rag_corpus must be set` | Pass the full corpus resource name or set corpus on every `rag_resource` |
 | `DeprecationWarning: vertexai.preview.rag` | Already on the new `agentplatform` path; warning means mixed install — upgrade `google-cloud-aiplatform` |
 | High latency on `search_memory` | Reduce `similarity_top_k` or increase `vector_distance_threshold` to fetch fewer chunks |
-| Stale data returned | `add_session_to_memory()` is called after the session ends; in-flight sessions are not yet indexed |
+| Stale data returned | `add_session_to_memory()` must be called explicitly; `Runner` does not auto-ingest. Use a callback or call it after `runner.run()` completes |
 
 ---
 
