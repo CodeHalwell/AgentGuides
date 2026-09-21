@@ -354,17 +354,16 @@ if isinstance(result.output, DeferredToolRequests):
 
 ### Example 5 — `defer_loading=True` to hide tools until discovered
 
-`defer_loading=True` **hides** the toolset's tools from the model entirely. Discovery is handled
-by the `ToolSearch` capability, which is **auto-injected** into every agent (zero overhead when
-no deferred tools exist). On providers that support native search (Anthropic BM25/regex, OpenAI
-Responses), the provider exposes hidden tools once discovered; elsewhere a local `search_tools`
-function is injected instead.
+`defer_loading=True` **hides** the toolset's tools from the model entirely. To enable discovery,
+add the `ToolSearch` capability explicitly. On providers that support native search (Anthropic
+BM25/regex, OpenAI Responses), the provider exposes hidden tools once discovered; elsewhere a
+local `search_tools` function is added to the model's tool list.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
 from pydantic_ai.capabilities import ToolSearch
 
-# Tools are HIDDEN from the model until the auto-injected ToolSearch reveals them.
+# Tools are HIDDEN from the model until ToolSearch reveals them.
 hidden_tools = FunctionToolset(defer_loading=True, id='hidden-ops')
 
 
@@ -1214,8 +1213,9 @@ are less commonly used but highly useful in production.
 
 ### `parallel_tool_calls` — control multi-tool fan-out
 
-When `False`, the model must call one tool at a time instead of issuing several in parallel.
-Useful when tools have side-effects and ordering matters.
+When `False`, the model issues at most one tool call per response instead of fanning out in
+parallel. This limits concurrent side-effects — it does **not** enforce call ordering between
+different tools; the model still chooses which tool to call first.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
@@ -1234,7 +1234,7 @@ def step_a(ctx: RunContext[None]) -> str:
 
 @tools.tool
 def step_b(ctx: RunContext[None]) -> str:
-    """Second step, depends on A."""
+    """Second step (model decides call order; one-at-a-time fan-out)."""
     return 'B done'
 
 
