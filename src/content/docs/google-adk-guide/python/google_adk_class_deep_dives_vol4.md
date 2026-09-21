@@ -420,29 +420,30 @@ LocalEvalSampler(
 
 ### Eval sets directory layout
 
-`LocalEvalSetsManager` reads eval sets from the ADK agent directory structure:
+`LocalEvalSetsManager` reads eval sets from flat `.evalset.json` files stored directly inside each app's directory under `agents_dir`:
 
 ```
-my_agent/
-  agent.py
-  eval/
-    geography_train/          ← train_eval_set = "geography_train"
-      case_001.json
-      case_002.json
-    geography_val/            ← validation_eval_set = "geography_val"
-      val_001.json
+agents/
+  geography_qa/
+    geography_train.evalset.json    ← train_eval_set = "geography_train"
+    geography_val.evalset.json      ← validation_eval_set = "geography_val"
 ```
 
-Each case JSON uses the same format as the `adk eval` CLI:
+Each `.evalset.json` file is a single JSON object with `eval_set_id` and an `eval_cases` array:
 
 ```json
 {
-  "eval_id": "case_001",
-  "conversation": [
+  "eval_set_id": "geography_train",
+  "name": "geography_train",
+  "eval_cases": [
     {
-      "user_content": {"parts": [{"text": "Capital of France?"}], "role": "user"},
-      "expected_tool_use": [],
-      "reference": "Paris"
+      "eval_id": "case_001",
+      "conversation": [
+        {
+          "user_content": {"parts": [{"text": "Capital of France?"}], "role": "user"},
+          "final_response": {"parts": [{"text": "Paris"}], "role": "model"}
+        }
+      ]
     }
   ]
 }
@@ -479,8 +480,8 @@ sampler = LocalEvalSampler(
             criteria={"response_match_score": 0.5},
         ),
         app_name="geography_qa",
-        train_eval_set="geography_train",       # eval/geography_train/ sub-dir
-        validation_eval_set="geography_val",    # eval/geography_val/ sub-dir
+        train_eval_set="geography_train",       # agents/geography_qa/geography_train.evalset.json
+        validation_eval_set="geography_val",    # agents/geography_qa/geography_val.evalset.json
     ),
     eval_sets_manager=eval_sets_manager,
 )
@@ -897,15 +898,20 @@ class GcsSkillRegistry(SkillRegistry):
     async def _load_all(self) -> dict[str, Skill]:
         if self._cache is not None:
             return self._cache
-        skills: dict[str, Skill] = {}
-        for blob in self._bucket.list_blobs(prefix=self._prefix):
-            if not blob.name.endswith(".json"):
-                continue
-            data = json.loads(blob.download_as_text())
-            skill = Skill(**data)
-            skills[skill.name] = skill
-        self._cache = skills
-        return skills
+
+        def _fetch() -> dict[str, Skill]:
+            result: dict[str, Skill] = {}
+            for blob in self._bucket.list_blobs(prefix=self._prefix):
+                if not blob.name.endswith(".json"):
+                    continue
+                data = json.loads(blob.download_as_text())
+                skill = Skill(**data)
+                result[skill.name] = skill
+            return result
+
+        # Run blocking GCS I/O off the event loop to avoid stalling other tasks.
+        self._cache = await asyncio.to_thread(_fetch)
+        return self._cache
 
     async def get_skill(self, name: str) -> Skill | None:
         all_skills = await self._load_all()
@@ -1228,7 +1234,7 @@ memory_service = VertexAiRagMemoryService(
 runner = Runner(
     agent=agent,
     app_name="persistent_assistant",
-    session_service=DatabaseSessionService(db_url="sqlite:///sessions.db"),
+    session_service=DatabaseSessionService(db_url="sqlite+aiosqlite:///sessions.db"),
     memory_service=memory_service,
 )
 
