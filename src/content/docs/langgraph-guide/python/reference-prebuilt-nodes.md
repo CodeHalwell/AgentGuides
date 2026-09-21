@@ -1133,9 +1133,13 @@ def multiply(a: int, b: int) -> int:
 
 
 def inject_system_prompt(state: MessagesState) -> dict:
-    """Prepend a system message if not already present."""
-    if not state["messages"] or state["messages"][0].type != "system":
-        return {"messages": [SystemMessage(content="You are a helpful math assistant.")] + state["messages"]}
+    """Prepend a system message for each model call without modifying persistent state."""
+    msgs = state["messages"]
+    if not msgs or msgs[0].type != "system":
+        system = SystemMessage(content="You are a helpful math assistant.")
+        # Use llm_input_messages to control what the model sees without going
+        # through add_messages, which cannot reorder existing messages by ID.
+        return {"llm_input_messages": [system] + list(msgs)}
     return {}
 
 
