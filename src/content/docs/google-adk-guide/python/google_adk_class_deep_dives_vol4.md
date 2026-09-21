@@ -615,11 +615,13 @@ asyncio.run(main())
 
 ```python
 from google.adk.agents.run_config import RunConfig
-from google.adk.telemetry.context import TelemetryConfig
+from google.adk.telemetry.context import ContentCapturingMode, TelemetryConfig
 
 TENANT_CONFIGS = {
-    "tenant_a": TelemetryConfig(capture_message_content=True),
-    "tenant_b": TelemetryConfig(capture_message_content=False),
+    # tenant_a: full capture — spans and events include message text
+    "tenant_a": TelemetryConfig(capture_message_content=ContentCapturingMode.SPAN_AND_EVENT),
+    # tenant_b: no content — PII-sensitive tenant, never capture message text
+    "tenant_b": TelemetryConfig(capture_message_content=ContentCapturingMode.NO_CONTENT),
 }
 
 def get_run_config(tenant_id: str) -> RunConfig:
