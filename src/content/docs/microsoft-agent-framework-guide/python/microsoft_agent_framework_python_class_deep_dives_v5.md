@@ -813,6 +813,8 @@ asyncio.run(main())
 ```python
 import base64
 import hashlib
+import shutil
+import tempfile
 from pathlib import Path
 from agent_framework import AgentSession
 from agent_framework._harness._memory import MemoryStore, MemoryTopicRecord, MemoryIndexEntry
@@ -841,7 +843,12 @@ class InMemoryMemoryStore(MemoryStore):
         self._topics: dict[tuple[str, str], dict[str, MemoryTopicRecord]] = {}  # topic → record
         self._slug_idx: dict[tuple[str, str], dict[str, str]] = {}              # slug → topic
         self._states: dict[tuple[str, str], dict] = {}
-        self._tmp = Path("/tmp/in-memory-store-transcripts")
+        # Unique per-instance root so parallel test instances never share transcript dirs.
+        self._tmp = Path(tempfile.mkdtemp(prefix="in-memory-store-"))
+
+    def cleanup(self) -> None:
+        """Remove the instance's temporary transcript directory."""
+        shutil.rmtree(self._tmp, ignore_errors=True)
 
     def _key(self, session: AgentSession, source_id: str) -> tuple[str, str]:
         return (source_id, str(session.state.get("user_id", "default")))
