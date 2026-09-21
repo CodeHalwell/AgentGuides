@@ -408,7 +408,8 @@ class LoggingInterceptor(Interceptor):
     """Log each interception point and allow all through."""
 
     def intercept(self, context: InterceptionContext) -> Verdict:
-        print(f"[Hook] point={context.point!r} agent={context.agent_id!r}")
+        # InterceptionContext is a mapping; access data via .get()
+        print(f"[Hook] point={context.get('interception_point')!r} agent={context.get('agent_id')!r}")
         return Verdict.allow()
 
 
@@ -811,28 +812,39 @@ class InMemoryMemoryStore(MemoryStore):
     """In-memory MemoryStore for unit testing."""
 
     def __init__(self):
-        self._topics: dict[str, dict[str, MemoryTopicRecord]] = {}  # owner → slug → record
-        self._states: dict[str, dict] = {}
+        # Outer key: (source_id, owner) — isolates each provider instance per user
+        self._topics: dict[tuple[str, str], dict[str, MemoryTopicRecord]] = {}  # topic → record
+        self._slug_idx: dict[tuple[str, str], dict[str, str]] = {}              # slug → topic
+        self._states: dict[tuple[str, str], dict] = {}
         self._tmp = Path("/tmp/in-memory-store-transcripts")
 
-    def _owner(self, session: AgentSession) -> str:
-        return str(session.state.get("user_id", "default"))
+    def _key(self, session: AgentSession, source_id: str) -> tuple[str, str]:
+        return (source_id, str(session.state.get("user_id", "default")))
 
     def list_topics(self, session, *, source_id):
-        return sorted(self._topics.get(self._owner(session), {}).values(),
+        return sorted(self._topics.get(self._key(session, source_id), {}).values(),
                       key=lambda r: r.topic)
 
     def get_topic(self, session, *, source_id, topic):
-        record = self._topics.get(self._owner(session), {}).get(topic)
+        key = self._key(session, source_id)
+        # resolve slug to canonical topic name if needed
+        resolved = self._slug_idx.get(key, {}).get(topic, topic)
+        record = self._topics.get(key, {}).get(resolved)
         if record is None:
             raise FileNotFoundError(topic)
         return record
 
     def write_topic(self, session, record, *, source_id):
-        self._topics.setdefault(self._owner(session), {})[record.topic] = record
+        key = self._key(session, source_id)
+        self._topics.setdefault(key, {})[record.topic] = record
+        self._slug_idx.setdefault(key, {})[record.slug] = record.topic
 
     def delete_topic(self, session, *, source_id, topic):
-        self._topics.get(self._owner(session), {}).pop(topic, None)
+        key = self._key(session, source_id)
+        resolved = self._slug_idx.get(key, {}).get(topic, topic)
+        rec = self._topics.get(key, {}).pop(resolved, None)
+        if rec is not None:
+            self._slug_idx.get(key, {}).pop(rec.slug, None)
 
     def rebuild_index(self, session, *, source_id, line_limit, line_length):
         return [MemoryIndexEntry.from_topic_record(t) for t in self.list_topics(session, source_id=source_id)]
@@ -843,10 +855,10 @@ class InMemoryMemoryStore(MemoryStore):
         return "\n".join(e.to_pointer_line(max_length=line_length) for e in entries)
 
     def read_state(self, session, *, source_id):
-        return dict(self._states.get(self._owner(session), {}))
+        return dict(self._states.get(self._key(session, source_id), {}))
 
     def write_state(self, session, state, *, source_id):
-        self._states[self._owner(session)] = dict(state)
+        self._states[self._key(session, source_id)] = dict(state)
 
     def get_transcripts_directory(self, session, *, source_id):
         self._tmp.mkdir(parents=True, exist_ok=True)
