@@ -1130,12 +1130,13 @@ import asyncio
 from agent_framework import WorkflowRunState
 
 
-async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
-    result = await workflow.run(initial_prompt)
+async def run_and_handle(workflow, initial_prompt: str, checkpoint_storage):
+    result = await workflow.run(initial_prompt, checkpoint_storage=checkpoint_storage)
 
-    # Collect ALL pending answers before resuming; each workflow.run(responses=...)
-    # call restarts from the stored checkpoint, so all answers must go in one map.
+    # Each resumed run saves a FRESH checkpoint forming a previous_checkpoint_id
+    # chain, so refresh the checkpoint_id via get_latest() before every iteration.
     while result.get_final_state() == WorkflowRunState.IDLE_WITH_PENDING_REQUESTS:
+        latest = await checkpoint_storage.get_latest(workflow_name=workflow.name)
         pending = result.get_request_info_events()
         responses = {}
         for req_event in pending:
@@ -1143,10 +1144,9 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
             responses[req_event.request_id] = await asyncio.to_thread(input, "Your answer: ")
         result = await workflow.run(
             responses=responses,
-            checkpoint_id=checkpoint_id,
+            checkpoint_id=latest.checkpoint_id,
+            checkpoint_storage=checkpoint_storage,
         )
-        # The checkpoint storage updates in-place; the same checkpoint_id
-        # is valid for every subsequent round.
 
     return result.get_outputs()
 ```
