@@ -182,7 +182,7 @@ Source-verified from `google/adk/optimization/gepa_root_agent_optimizer.py`:
 |---|---|---|---|
 | `optimizer_model` | `str` | `"gemini-3.5-flash"` | LLM that generates reflections and new prompt variants |
 | `model_configuration` | `GenerateContentConfig` | `ThinkingConfig(include_thoughts=True, thinking_level=ThinkingLevel.HIGH)` | Generation config for optimizer calls |
-| `max_metric_calls` | `int` | `100` | Hard budget on total `sample_and_score` invocations |
+| `max_metric_calls` | `int` | `100` | Hard budget on the total number of **example-level** metric evaluations; a batched call scoring N examples consumes N units, not 1 |
 | `reflection_minibatch_size` | `int` | `3` | Examples shown to the LLM when writing a reflection |
 | `run_dir` | `str \| None` | `None` | Checkpoint directory. Set this to resume an interrupted run |
 
