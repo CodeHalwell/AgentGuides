@@ -446,7 +446,7 @@ agent = Agent(
     'openai:gpt-5',
     output_type=NativeOutput(
         [Fruit, Vehicle],
-        name='Fruit or vehicle',
+        name='fruit_or_vehicle',       # machine-safe name (letters/digits/underscores only)
         description='Classify the item as a fruit or vehicle.',
         strict=False,  # strict=True rejects undiscriminated root unions on OpenAI
     ),
