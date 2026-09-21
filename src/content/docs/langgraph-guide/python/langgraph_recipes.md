@@ -3177,10 +3177,13 @@ print(result["result"])   # Processed: [REDACTED]
 > - `TracePolicy` only hides the annotated node's own LangSmith span. Without also clearing `raw_pii` from state (as `anonymize` does above), every downstream node's span would still record the raw value in its input state.
 > - The **root graph run** still records the full invocation input (which contains `raw_pii`) in its LangSmith entry. For complete removal, strip sensitive data before it enters the graph, or use graph-level LangSmith project settings.
 
-You can also supply custom processors:
+You can also supply custom processors instead of `omit_payload`. Build a
+fresh graph using the same node functions defined above, replacing
+`omit_payload` with your own callable:
 
 ```python
 from langgraph.types import TracePolicy
+from langgraph.graph import StateGraph, START, END
 
 # Match known PII field names (including raw_pii as used in this example).
 _PII_KEYS = {"raw_pii", "ssn", "email", "phone", "credit_card"}
@@ -3189,11 +3192,20 @@ def scrub_pii(payload: dict) -> dict:
     """Return a safe version of the payload — called by LangSmith before the run is stored."""
     return {k: "[REDACTED]" if k.lower() in _PII_KEYS else v for k, v in payload.items()}
 
-builder.add_node(
+builder2 = StateGraph(State)
+builder2.add_node(
     "anonymize",
     anonymize,
     trace_policy=TracePolicy(process_inputs=scrub_pii, process_outputs=scrub_pii),
 )
+builder2.add_node("process", process)
+builder2.add_edge(START, "anonymize")
+builder2.add_edge("anonymize", "process")
+builder2.add_edge("process", END)
+
+graph2 = builder2.compile()
+result2 = graph2.invoke({"raw_pii": "Bob Jones, SSN 987-65-4321", "anonymized": "", "result": ""})
+print(result2["result"])   # Processed: [REDACTED]
 ```
 
 **When to use `TracePolicy`:**
