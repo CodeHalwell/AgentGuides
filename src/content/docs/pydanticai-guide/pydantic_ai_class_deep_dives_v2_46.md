@@ -1390,8 +1390,8 @@ class AdvisorTool(AbstractNativeTool):
 
 ```python
 import asyncio
-from pydantic_ai import Agent
-from pydantic_ai import AdvisorTool
+from pydantic_ai import Agent, AdvisorTool
+from pydantic_ai.capabilities import NativeTool
 
 
 advisor = AdvisorTool(
@@ -1401,8 +1401,8 @@ advisor = AdvisorTool(
 )
 
 agent = Agent(
-    'claude-haiku-4-5-20251001',   # Executor: fast, cheap
-    capabilities=[advisor],         # pass via capabilities=, not native_tools=
+    'claude-haiku-4-5-20251001',        # Executor: fast, cheap
+    capabilities=[NativeTool(advisor)],  # wrap in NativeTool to register as a capability
 )
 
 
@@ -1426,6 +1426,7 @@ repeated queries. OpenRouter ignores this field.
 ```python
 import asyncio
 from pydantic_ai import Agent, AdvisorTool
+from pydantic_ai.capabilities import NativeTool
 
 
 advisor = AdvisorTool(
@@ -1434,7 +1435,7 @@ advisor = AdvisorTool(
     caching='5m',  # cache advisor context for 5 minutes (Anthropic only)
 )
 
-agent = Agent('claude-haiku-4-5-20251001', capabilities=[advisor])
+agent = Agent('claude-haiku-4-5-20251001', capabilities=[NativeTool(advisor)])
 
 
 async def main():
@@ -1451,6 +1452,7 @@ asyncio.run(main())
 
 ```python
 from pydantic_ai import Agent, AdvisorTool
+from pydantic_ai.capabilities import NativeTool
 
 advisor = AdvisorTool(
     model='anthropic/claude-opus-4.8',  # OpenRouter catalog slug (no prefix for advisor model)
@@ -1459,7 +1461,7 @@ advisor = AdvisorTool(
 
 agent = Agent(
     'openrouter:anthropic/claude-haiku-4-5',  # executor via OpenRouter prefix
-    capabilities=[advisor],
+    capabilities=[NativeTool(advisor)],
 )
 
 result = agent.run_sync('What is the Riemann hypothesis and why does it matter?')
