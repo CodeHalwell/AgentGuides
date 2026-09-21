@@ -295,8 +295,9 @@ print(result.output)
 
 `sequential=True` makes every tool in the toolset a **barrier**: if the model requests multiple
 tools in the same response, each tool in this toolset runs alone — it won't overlap with other
-tool calls in that step. This prevents race conditions when tools share mutable state such as a
-database transaction or file handle.
+tool calls in that step. This prevents intra-step races when tools share mutable state such as a
+database transaction or file handle. It does **not** protect against races from concurrent
+`agent.run()` calls; use an external lock for that.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
@@ -1103,7 +1104,7 @@ person_schema = {
     'required': ['name', 'age'],
 }
 
-PersonDict = StructuredDict(person_schema)
+PersonDict = StructuredDict(person_schema, name='PersonDict')  # explicit name; falls back to schema title otherwise
 agent = Agent('openai:gpt-5', output_type=PersonDict)
 
 result = agent.run_sync('Create a person called John who is 30 years old')
@@ -1401,8 +1402,8 @@ advisor = AdvisorTool(
 )
 
 agent = Agent(
-    'claude-haiku-4-5-20251001',        # Executor: fast, cheap
-    capabilities=[NativeTool(advisor)],  # wrap in NativeTool to register as a capability
+    'anthropic:claude-haiku-4-5-20251001',  # Executor: fast, cheap
+    capabilities=[NativeTool(advisor)],     # wrap in NativeTool to register as a capability
 )
 
 
@@ -1435,7 +1436,7 @@ advisor = AdvisorTool(
     caching='5m',  # cache advisor context for 5 minutes (Anthropic only)
 )
 
-agent = Agent('claude-haiku-4-5-20251001', capabilities=[NativeTool(advisor)])
+agent = Agent('anthropic:claude-haiku-4-5-20251001', capabilities=[NativeTool(advisor)])
 
 
 async def main():
