@@ -1059,7 +1059,7 @@ for mode, data in graph.stream(
 
 > **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. For new code, build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
 
-`create_react_agent` builds a ReAct-style agent graph in one call. It returns a compiled `StateGraph` with two nodes: `agent` (the LLM) and `tools` (a `ToolNode`), wired with `tools_condition`.
+`create_react_agent` builds a ReAct-style agent graph in one call. It returns a compiled `StateGraph` with at minimum two nodes — `agent` (the LLM) and `tools` (a `ToolNode`) — wired with `tools_condition`. When `response_format` is set, a third `generate_structured_response` node is appended after `agent`/`tools`; it makes a **separate** structured-output LLM call and adds latency and cost. When hooks are provided, `pre_model_hook` and/or `post_model_hook` nodes are also inserted around `agent`.
 
 ### Signature
 
@@ -1072,8 +1072,8 @@ graph = create_react_agent(
     *,
     prompt=None,                    # SystemMessage | str | Callable | None
     response_format=None,           # type | (str, type) | None — structured output schema
-    pre_model_hook=None,            # Callable[[state], dict] | None
-    post_model_hook=None,           # Callable[[state], dict] | None
+    pre_model_hook=None,            # Callable[[state], dict | None] — must include 'messages' or 'llm_input_messages'
+    post_model_hook=None,           # Callable[[state], Command | dict | None] — Command overrides default routing
     state_schema=None,              # None uses built-in AgentState (messages + remaining_steps)
     context_schema=None,            # type | None — for Runtime[Ctx] injection
     checkpointer=None,              # BaseCheckpointSaver | None
@@ -1094,8 +1094,8 @@ Key parameters:
 | `tools` | List of tools the agent can call. Passed to both `model.bind_tools()` and `ToolNode`. |
 | `prompt` | Optional system-level instructions. Pass a `str` or `SystemMessage` for static prompts; a callable for dynamic prompts that read from state. |
 | `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
-| `pre_model_hook` | Called before every LLM call. Return a dict to merge into state (e.g., inject a formatted system message). |
-| `post_model_hook` | Called after every LLM call. Return a dict to merge into state (e.g., trim history, record tokens). |
+| `pre_model_hook` | Separate node inserted **before** `agent`. Returns `dict \| None`; must include at least `messages` or `llm_input_messages`. Returning `None` is a no-op. Use for message trimming, injecting system prompts, etc. |
+| `post_model_hook` | Separate node inserted **after** `agent` (v2 only). Returns `Command \| dict \| None`. Returning a `Command` overrides the default conditional routing (tools → end). Returning `None` is a no-op. Use for guardrails, human-in-the-loop, token tracking, etc. |
 | `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` which has both `messages` (annotated with `add_messages`) and `remaining_steps: int`. Custom schemas must include both fields — `MessagesState` alone is rejected because it lacks `remaining_steps`. |
 | `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
 
