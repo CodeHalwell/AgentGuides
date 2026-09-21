@@ -364,8 +364,9 @@ class InMemorySampler(Sampler[UnstructuredSamplingResult]):
                 outputs[ex_id] = answer
 
         # When capture_full_eval_data=True (required by GEPARootAgentOptimizer
-        # for its reflection step), populate data with the raw model outputs.
-        data = {"outputs": outputs} if capture_full_eval_data else {}
+        # for its reflection step), data must be keyed by example ID so GEPA
+        # can look up each example's raw output via data[ex_id].
+        data = {ex_id: {"output": ans} for ex_id, ans in outputs.items()} if capture_full_eval_data else None
         return UnstructuredSamplingResult(scores=scores, data=data)
 
 # Wire it up:
@@ -1146,6 +1147,7 @@ Without an environment, load skills as `Skill` objects and pass them via `skills
 
 ```bash
 pip install google-cloud-aiplatform   # provides the `agentplatform` package
+pip install "google-adk[db]" aiosqlite  # DatabaseSessionService (SQLAlchemy + async driver)
 ```
 
 Create a RAG corpus in Google Cloud:
