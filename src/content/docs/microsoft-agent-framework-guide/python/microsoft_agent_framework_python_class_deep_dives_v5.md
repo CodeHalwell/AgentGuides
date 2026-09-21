@@ -1183,13 +1183,16 @@ class ToolAuditMiddleware(FunctionMiddleware):
         print(f"[Audit] {context.function.name} → {context.result!r}")
 ```
 
-### Example — argument sanitisation middleware
+### Example — argument pattern-matching middleware
+
+> **Security note:** A substring blocklist is **not** a reliable SQL injection guard — it covers only a small subset of payloads, ignores nested structures and encoding variants, and should never be the primary defence. Real SQL injection protection requires parameterized queries (e.g. SQLAlchemy bound parameters). The example below shows how to use function middleware to inspect and reject tool arguments by pattern, which is useful for logging, rate-limiting, or format validation — not as a security boundary.
 
 ```python
 from agent_framework import FunctionMiddleware, FunctionInvocationContext, MiddlewareTermination
 
 
-class SqlInjectionGuard(FunctionMiddleware):
+class ToolInputPatternGuard(FunctionMiddleware):
+    """Illustrative example: block tool calls containing specific substrings."""
     BLOCKED = {"'; drop table", "union select", "--"}
 
     async def process(self, context: FunctionInvocationContext, call_next):
@@ -1201,7 +1204,7 @@ class SqlInjectionGuard(FunctionMiddleware):
             if isinstance(value, str):
                 lower = value.lower()
                 if any(bad in lower for bad in self.BLOCKED):
-                    raise MiddlewareTermination("Blocked: potential SQL injection.")
+                    raise MiddlewareTermination("Input blocked by pattern guard.")
         await call_next()
 ```
 
