@@ -113,7 +113,12 @@ async def main():
                   instructions="Summarize the user's text in one sentence.")
 
     workflow = WorkflowBuilder(start_executor=agent).build()
-    result = await workflow.run("The quick brown fox jumps over the lazy dog.")
+    # include_status_events=True adds status/failed events to the iterable list;
+    # without it they are only accessible via result.status_timeline().
+    result = await workflow.run(
+        "The quick brown fox jumps over the lazy dog.",
+        include_status_events=True,
+    )
 
     for event in result:
         if event.type == "output":
@@ -263,7 +268,7 @@ class TimingMiddleware(AgentMiddleware):
         elapsed = time.perf_counter() - context.metadata["start_time"]
         print(f"Elapsed:       {elapsed:.3f}s")
         if not context.stream:
-            print(f"Tokens used:   {context.result.usage}")
+            print(f"Tokens used:   {context.result.usage_details}")
 
 
 async def main():
@@ -311,7 +316,7 @@ class MockMiddleware(AgentMiddleware):
     async def process(self, context: AgentContext, call_next):
         # Skip call_next entirely — return canned response
         context.result = AgentResponse(
-            message=Message.from_assistant(self._text),
+            messages=Message.from_assistant(self._text),
         )
 ```
 
@@ -466,19 +471,18 @@ async def factual_check(item: EvalItem) -> CheckResult:
 
 
 async def main():
+    # split_strategy belongs on EvalItem, not on evaluate()
     item = EvalItem(
         conversation=[
             {"role": "user", "content": "What is the capital of France?"},
             {"role": "assistant", "content": "The capital of France is Paris."},
-        ]
+        ],
+        split_strategy=ConversationSplit.LAST_TURN,
     )
 
     evaluator = LocalEvaluator(factual_check)
 
-    results = await evaluator.evaluate(
-        items=[item],
-        split=ConversationSplit.LAST_TURN,
-    )
+    results = await evaluator.evaluate(items=[item])
     for r in results.items:
         print(r.passed, r.reason)
 
@@ -585,8 +589,8 @@ VectorStoreHistoryProvider(
 
 | Method | Signature | Notes |
 |---|---|---|
-| `get_messages` | `async (session_id, *, state, **kwargs) → list[Message]` | Returns the full scoped transcript, sorted by creation time. |
-| `save_messages` | `async (session_id, messages, *, state, **kwargs) → None` | Upserts new messages; assigns IDs to messages that lack one. |
+| `get_messages` | `async (session_id, *, state=None, **kwargs) → list[Message]` | Returns the full scoped transcript, sorted by creation time. |
+| `save_messages` | `async (session_id, messages, *, state=None, **kwargs) → None` | Upserts new messages; assigns IDs to messages that lack one. |
 | `clear` | `async (session_id) → None` | Deletes all records for the scoped history. |
 | `before_run` | `async (*, agent, session, context, state) → None` | Loads history, runs optional compaction, adds search tool. |
 
@@ -736,7 +740,7 @@ MemoryFileStore(
 | `owner_prefix` | String prepended to the resolved owner ID for namespacing. |
 | `dumps` / `loads` | Custom JSON serialization hooks (defaults to `json.dumps` / `json.loads`). |
 
-**Path resolution** follows `base_path / source_component / owner_component / kind`. Path traversal in owner IDs (`..", absolute paths) raises `ValueError`.
+**Path resolution** follows `base_path / source_component / owner_component / kind`. Path traversal in owner IDs (`..`, absolute paths) raises `ValueError`.
 
 ### Example — file-backed memory with `MemoryContextProvider`
 
@@ -1376,7 +1380,8 @@ async def main():
     )
 
     result = await agent.run("autumn leaves")
-    haiku = Haiku.model_validate_json(result.text)
+    # result.value holds the validated Pydantic model when response_format is set
+    haiku: Haiku = result.value
     print(f"{haiku.line1} / {haiku.line2} / {haiku.line3}")
 
 asyncio.run(main())
@@ -1385,7 +1390,8 @@ asyncio.run(main())
 ### Example — type-safe option forwarding
 
 ```python
-from typing import Unpack
+# typing.Unpack requires Python 3.11+; use typing_extensions on Python 3.10
+from typing_extensions import Unpack
 from agent_framework import Agent, ChatOptions
 from agent_framework.openai import OpenAIChatClient
 
@@ -1426,7 +1432,7 @@ The 1.19.0 release refines several of the APIs deep-dived in this and prior volu
 
 ## See also
 
-- [Python Comprehensive Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — framework overview with 1.18.0 feature table
+- [Python Comprehensive Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — framework overview, verified against 1.19.0
 - [Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) — workflow visualization, file memory, background agents, tool approval
 - [Class Deep Dives Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — fan-in/out edges, functional workflows, checkpointing, MCP tools
 - [Class Deep Dives Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) — workflow builder, compaction strategies, evaluation, inline skills, file access
