@@ -266,9 +266,15 @@ class TimingMiddleware(AgentMiddleware):
         await call_next()
 
         elapsed = time.perf_counter() - context.metadata["start_time"]
-        print(f"Elapsed:       {elapsed:.3f}s")
         if not context.stream:
+            # Non-streaming: elapsed covers the full model round-trip.
+            print(f"Elapsed:       {elapsed:.3f}s")
             print(f"Tokens used:   {context.result.usage_details}")
+        else:
+            # Streaming: call_next() returns a ResponseStream quickly; elapsed
+            # measures stream setup only. Measure inside the consumer loop for
+            # accurate generation latency.
+            print(f"Stream ready in {elapsed:.3f}s (measure generation in the consumer)")
 
 
 async def main():
@@ -803,9 +809,15 @@ asyncio.run(main())
 ### Example — custom `MemoryStore` implementation
 
 ```python
+import re
 from pathlib import Path
 from agent_framework import AgentSession
 from agent_framework._harness._memory import MemoryStore, MemoryTopicRecord, MemoryIndexEntry
+
+
+def _safe(s: str) -> str:
+    """Sanitize a string for use as a path component."""
+    return re.sub(r'[^a-zA-Z0-9._-]', '_', s)[:64] or 'default'
 
 
 class InMemoryMemoryStore(MemoryStore):
@@ -820,6 +832,9 @@ class InMemoryMemoryStore(MemoryStore):
 
     def _key(self, session: AgentSession, source_id: str) -> tuple[str, str]:
         return (source_id, str(session.state.get("user_id", "default")))
+
+    def get_owner_id(self, session: AgentSession) -> str:
+        return str(session.state.get("user_id", "default"))
 
     def list_topics(self, session, *, source_id):
         return sorted(self._topics.get(self._key(session, source_id), {}).values(),
@@ -862,8 +877,8 @@ class InMemoryMemoryStore(MemoryStore):
 
     def get_transcripts_directory(self, session, *, source_id):
         owner = self._key(session, source_id)[1]
-        # Scope by source_id and owner so transcript files don't collide
-        scoped = self._tmp / source_id.replace("/", "_") / owner
+        # Sanitize both components to prevent path traversal
+        scoped = self._tmp / _safe(source_id) / _safe(owner)
         scoped.mkdir(parents=True, exist_ok=True)
         return scoped
 
@@ -1124,6 +1139,8 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
             responses=responses,
             checkpoint_id=checkpoint_id,
         )
+        # Advance to the new checkpoint written by this round
+        checkpoint_id = result.checkpoint_id
 
     return result.get_outputs()
 ```
