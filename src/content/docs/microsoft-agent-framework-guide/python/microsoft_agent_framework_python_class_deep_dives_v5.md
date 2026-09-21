@@ -180,7 +180,7 @@ async def handle_pending_request(run_result, workflow, checkpoint_id: str):
     req: WorkflowEvent = pending[0]
     # req.request_id, req.source_executor_id, req.data, req.response_type
     print(f"Workflow is asking: {req.data}")
-    user_answer = input("Your answer: ")
+    user_answer = await asyncio.to_thread(input, "Your answer: ")
 
     resumed = await workflow.run(
         responses={req.request_id: user_answer},
@@ -861,8 +861,11 @@ class InMemoryMemoryStore(MemoryStore):
         self._states[self._key(session, source_id)] = dict(state)
 
     def get_transcripts_directory(self, session, *, source_id):
-        self._tmp.mkdir(parents=True, exist_ok=True)
-        return self._tmp
+        owner = self._key(session, source_id)[1]
+        # Scope by source_id and owner so transcript files don't collide
+        scoped = self._tmp / source_id.replace("/", "_") / owner
+        scoped.mkdir(parents=True, exist_ok=True)
+        return scoped
 
     def search_transcripts(self, session, *, source_id, query, session_id=None, limit=20):
         return []
@@ -1116,7 +1119,7 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_id: str):
         responses = {}
         for req_event in pending:
             print(f"Workflow is asking ({req_event.source_executor_id}): {req_event.data}")
-            responses[req_event.request_id] = input("Your answer: ")
+            responses[req_event.request_id] = await asyncio.to_thread(input, "Your answer: ")
         result = await workflow.run(
             responses=responses,
             checkpoint_id=checkpoint_id,
