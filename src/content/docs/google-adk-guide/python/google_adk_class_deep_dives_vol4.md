@@ -1110,6 +1110,20 @@ agent = LlmAgent(
 
 ### Registry + code executor combo
 
+`additional_tools` defines a **pool** of tools the agent can unlock — it does not expose them immediately. A tool in the pool only becomes available when a currently-activated skill's frontmatter explicitly lists its name in `metadata.adk_additional_tools`:
+
+```yaml
+# SKILL.md frontmatter for a skill that needs my_api_tool
+---
+name: my-api-skill
+metadata:
+  adk_additional_tools:
+    - my_api_tool
+---
+```
+
+When the agent calls `load_skill` for that skill, `SkillToolset` checks `adk_additional_tools` in the skill's frontmatter, matches names against the pool, and surfaces the matching tools for that turn.
+
 ```python
 from google.adk.code_executors import UnsafeLocalCodeExecutor
 from google.adk.tools.skill_toolset import SkillToolset
@@ -1121,7 +1135,7 @@ toolset = SkillToolset(
     registry=registry,             # custom SkillRegistry from §8
     code_executor=UnsafeLocalCodeExecutor(),
     script_timeout=120,
-    additional_tools=[my_api_tool],  # available inside the skill's sub-agent
+    additional_tools=[my_api_tool],  # pool; activated per-skill via adk_additional_tools frontmatter
 )
 ```
 
