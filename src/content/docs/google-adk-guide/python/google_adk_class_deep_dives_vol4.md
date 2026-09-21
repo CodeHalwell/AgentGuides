@@ -1059,8 +1059,12 @@ toolset = SkillToolset(
 )
 
 # Predicate: dynamic filtering
-def only_stable(skill_name: str) -> bool:
-    return not skill_name.startswith("experimental-")
+# Predicate receives (tool: BaseTool, context: ReadonlyContext | None)
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.base_toolset import ReadonlyContext
+
+def only_stable(tool: BaseTool, context: ReadonlyContext | None) -> bool:
+    return not tool.name.startswith("experimental-")
 
 toolset = SkillToolset(skills=all_skills, tool_filter=only_stable)
 ```
@@ -1307,7 +1311,7 @@ agent = LlmAgent(
 | `ImportError: No module named 'agentplatform'` | `pip install --upgrade google-cloud-aiplatform` |
 | `ValueError: rag_corpus must be set` | Pass the full corpus resource name or set corpus on every `rag_resource` |
 | `DeprecationWarning: vertexai.preview.rag` | Already on the new `agentplatform` path; warning means mixed install — upgrade `google-cloud-aiplatform` |
-| High latency on `search_memory` | Reduce `similarity_top_k` or increase `vector_distance_threshold` to fetch fewer chunks |
+| High latency on `search_memory` | Reduce `similarity_top_k` or lower `vector_distance_threshold` to fetch fewer chunks (threshold is a maximum distance — lower = stricter) |
 | Stale data returned | `add_session_to_memory()` must be called explicitly; `Runner` does not auto-ingest. Use a callback or call it after `runner.run()` completes |
 
 ---
