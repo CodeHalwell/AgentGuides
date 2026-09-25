@@ -247,7 +247,7 @@ Save with `session_id=None` (or `filename="user:history.json"`). The artifact su
 Each run saves a new version of `report.pdf`. The UI lists `list_artifact_versions(...)` with timestamps so a reviewer can diff outputs turn-by-turn.
 
 ### 5 — RAG corpus-backed memory
-`VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The corpus is updated by a separate ingestion job (files, web pages, BigQuery). Agents retrieve only — they never mutate the corpus.
+`VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The service writes to the corpus via `add_session_to_memory()` (called once when a session ends — see the Vol. 4 class deep dive). Static content (files, web pages, BigQuery) can also be loaded via the Agent Platform corpus management API. `add_events_to_memory()` is not supported and raises `NotImplementedError`.
 
 ## Complete examples
 

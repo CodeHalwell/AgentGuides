@@ -1337,7 +1337,7 @@ agent = LlmAgent(
 | Symptom | Fix |
 |---|---|
 | `ImportError: No module named 'agentplatform'` | `pip install "google-adk[gcp]"` |
-| `ValueError: rag_corpus must be set` | Pass the full corpus resource name or set corpus on every `rag_resource` |
+| `ValueError: rag_corpus must be set` | Pass the full corpus resource name as the `rag_corpus` constructor argument — e.g., `VertexAiRagMemoryService(rag_corpus='projects/…/ragCorpora/…')` |
 | `DeprecationWarning: vertexai.preview.rag` | Already on the new `agentplatform` path; warning means mixed install — reinstall with `pip install "google-adk[gcp]"` |
 | High latency on `search_memory` | Reduce `similarity_top_k` or lower `vector_distance_threshold` to fetch fewer chunks (threshold is a maximum distance — lower = stricter) |
 | Stale data returned | `add_session_to_memory()` must be called explicitly; `Runner` does not auto-ingest. Call it once when the session ends |

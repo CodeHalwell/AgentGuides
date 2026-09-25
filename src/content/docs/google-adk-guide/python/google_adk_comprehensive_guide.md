@@ -5679,7 +5679,7 @@ async def add_session_to_memory(self) -> None: ...
 | Method | Use when | Support |
 |---|---|---|
 | `add_session_to_memory()` | ingest the entire session at run end | all services |
-| `add_events_to_memory(events=...)` | persist only the current turn's delta | `InMemoryMemoryService`, `VertexAiMemoryBankService`, `VertexAiRagMemoryService`; `NotImplementedError` elsewhere |
+| `add_events_to_memory(events=...)` | persist only the current turn's delta | `InMemoryMemoryService`, `VertexAiMemoryBankService`; `NotImplementedError` on `VertexAiRagMemoryService` and others |
 | `add_memory(memories=...)` | write structured `MemoryEntry` facts directly, bypassing event extraction | Vertex AI Memory Bank; `NotImplementedError` on `InMemoryMemoryService` |
 
 ```python
