@@ -7,7 +7,7 @@ sidebar:
   order: 60
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/memory/`, `google/adk/artifacts/`). The latest release is **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against google-adk==2.3.0 (`google/adk/memory/`, `google/adk/artifacts/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 

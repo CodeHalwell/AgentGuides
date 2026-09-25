@@ -170,7 +170,14 @@ optimizer = SimplePromptOptimizer(
 
 **Module:** `google.adk.optimization.gepa_root_agent_optimizer`
 
-`GEPARootAgentOptimizer` implements the **GEPA** (Guided Evolutionary Prompt Adaptation) framework. It uses evolutionary search with LLM-generated reflections to explore the prompt space more efficiently than the greedy approach in `SimplePromptOptimizer`. It requires the optional `gepa` package.
+`GEPARootAgentOptimizer` wraps the **GEPA** (Genetic-Pareto) reflective prompt optimizer. It uses evolutionary search over a Pareto front of candidates, guided by LLM-generated reflections on evaluation traces, to explore the prompt space more broadly than the greedy approach in `SimplePromptOptimizer`. It requires the optional `gepa` package.
+
+What gets optimized (source-verified from `optimize()`):
+
+- The root agent's `instruction` — it **must be a static string**; a callable/`InstructionProvider` instruction raises `ValueError`.
+- The `instructions` of every `Skill` in any `SkillToolset` attached to the root agent's `tools`. Skills are seeded into the candidate first, so they are optimized alongside the root prompt.
+
+Use distinct training and validation example IDs: if they overlap, the optimizer logs a warning that this will cause aliasing issues.
 
 > **Experimental.** The class is decorated `@experimental`; the API may change in a minor release.
 
@@ -216,6 +223,8 @@ sampler = LocalEvalSampler(
         eval_config=EvalConfig(criteria={"response_match_score": 0.5}),
         app_name="classifier",
         train_eval_set="sentiment_train",
+        # Held-out set: GEPA warns if train and validation IDs overlap.
+        validation_eval_set="sentiment_val",
     ),
     eval_sets_manager=LocalEvalSetsManager(agents_dir="./agents"),
 )
@@ -272,7 +281,7 @@ config = GEPARootAgentOptimizerConfig(
 
 ```python
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import Generic, Literal, Optional, TypeVar
 
 SamplingResultT = TypeVar("SamplingResultT")
 
@@ -291,18 +300,20 @@ class Sampler(ABC, Generic[SamplingResultT]):
     async def sample_and_score(
         self,
         candidate: Agent,
-        example_set: str,         # Sampler.TRAIN_SET or VALIDATION_SET
-        batch: list[str],         # example IDs from get_*_example_ids()
-        capture_full_eval_data: bool,
+        example_set: Literal["train", "validation"] = VALIDATION_SET,
+        batch: Optional[list[str]] = None,   # None → every example in the set
+        capture_full_eval_data: bool = False,
     ) -> SamplingResultT: ...
 ```
+
+Keep these defaults in your override: `SimplePromptOptimizer` runs its final validation as `sampler.sample_and_score(best_agent, "validation")`, passing no `batch`, so an override that makes `batch` required (or does not handle `None`) fails with `TypeError`.
 
 ### Implementing a custom `Sampler`
 
 Use a custom `Sampler` when your evaluation data lives somewhere other than a local ADK eval JSON file — for example a BigQuery table, a Firestore collection, or an in-memory test fixture:
 
 ```python
-import asyncio
+from typing import Optional
 from google.adk.agents import LlmAgent
 from google.adk.optimization.sampler import Sampler
 from google.adk.optimization.data_types import UnstructuredSamplingResult
@@ -329,10 +340,18 @@ class InMemorySampler(Sampler[UnstructuredSamplingResult]):
     async def sample_and_score(
         self,
         candidate: LlmAgent,
-        example_set: str,
-        batch: list[str],
-        capture_full_eval_data: bool,
+        example_set: str = Sampler.VALIDATION_SET,
+        batch: Optional[list[str]] = None,
+        capture_full_eval_data: bool = False,
     ) -> UnstructuredSamplingResult:
+        # batch=None means "every example in the chosen set" — the optimizer's
+        # final validation call relies on this.
+        if batch is None:
+            batch = (
+                self._train_ids
+                if example_set == Sampler.TRAIN_SET
+                else self._val_ids
+            )
         scores: dict[str, float] = {}
         outputs: dict[str, str] = {}
         runner = InMemoryRunner(agent=candidate, app_name="opt_eval")
@@ -342,16 +361,15 @@ class InMemorySampler(Sampler[UnstructuredSamplingResult]):
             session = await runner.session_service.create_session(
                 app_name="opt_eval", user_id="opt"
             )
-            events = runner.run(
+            answer = ""
+            async for event in runner.run_async(
                 user_id="opt",
                 session_id=session.id,
                 new_message=types.Content(
                     role="user",
                     parts=[types.Part(text=question)],
                 ),
-            )
-            answer = ""
-            for event in events:
+            ):
                 if event.content and event.content.parts:
                     answer = "".join(p.text for p in event.content.parts if p.text)
 
@@ -525,7 +543,7 @@ The training and validation splits are explicitly named eval sets (not auto-deri
 class TelemetryConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    genai_semconv_stability_opt_in: str | None = None
+    genai_semconv_stability_opt_in: Optional[Literal["stable", "experimental"]] = None
     """Stability opt-in for GenAI semantic conventions.
     Options: 'experimental' (GenAI semconv), 'stable' (legacy path).
     Maps to OTEL_SEMCONV_STABILITY_OPT_IN.
@@ -535,8 +553,8 @@ class TelemetryConfig(BaseModel):
     """Controls which telemetry destinations receive message content.
     Falls back to OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT env var when None."""
 
-    adk_experimental_telemetry_opt_in: str | None = None
-    """Opt-in to experimental ADK-specific semantic conventions.
+    adk_experimental_telemetry_opt_in: Optional[StrictBool] = None
+    """Opt-in to experimental ADK-specific telemetry (True/False — strings rejected).
     Falls back to ADK_EXPERIMENTAL_TELEMETRY env var when None."""
 ```
 
@@ -564,7 +582,7 @@ Setting `ADK_TELEMETRY_IGNORE_RUN_CONFIG=1` is the operator's way to prevent ten
 |---|---|---|
 | `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | GenAI semantic conventions stability level (`"experimental"` or `"stable"`) |
 | `capture_message_content` | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | Which telemetry destinations receive message content (`ContentCapturingMode`) |
-| `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY` | ADK-specific experimental semantic conventions |
+| `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY` | ADK-specific experimental telemetry; `StrictBool`, so pass `True`/`False` (a string such as `"true"` fails validation) |
 
 ### Attaching `TelemetryConfig` to a run
 
@@ -596,15 +614,14 @@ async def main():
         )
     )
 
-    events = runner.run(
+    async for event in runner.run_async(
         user_id="user1",
         session_id=session.id,
         new_message=types.Content(
             role="user", parts=[types.Part(text="Hello!")]
         ),
         run_config=run_config,
-    )
-    for event in events:
+    ):
         if event.content and event.content.parts:
             print(event.content.parts[0].text)
 
@@ -647,31 +664,13 @@ Once set, `RunConfig.telemetry` is silently ignored; the operator's env vars are
 
 ### How it works (source-verified)
 
-```python
-class UrlContextTool(BaseTool):
-    """Allows the agent to fetch and use content from URLs."""
+`UrlContextTool` subclasses `BaseTool` with name `url_context` and overrides only `process_llm_request`. It exposes no function declaration, so the model never "calls" it as a Python function. On every request it:
 
-    def __init__(self):
-        super().__init__(name="url_context", description="...")
+1. Ensures `llm_request.config` and `llm_request.config.tools` exist.
+2. Appends `types.Tool(url_context=types.UrlContext())` if **any** of these hold: `is_gemini_model(llm_request.model)` is true, the Gemini model-ID check is disabled (`ADK_DISABLE_GEMINI_MODEL_ID_CHECK`), or the request targets a managed agent.
+3. Otherwise raises `ValueError("Url context tool is not supported for model …")`.
 
-    def _get_declaration(self) -> types.FunctionDeclaration | None:
-        return None  # no function declaration; uses built-in Gemini tool
-
-    async def process_llm_request(
-        self,
-        *,
-        tool_context: ToolContext,
-        llm_request: LlmRequest,
-    ) -> None:
-        _check_gemini_model(tool_context)  # raises ValueError for non-Gemini
-        llm_request.config = llm_request.config or types.GenerateContentConfig()
-        llm_request.config.tools = llm_request.config.tools or []
-        llm_request.config.tools.append(
-            types.Tool(url_context=types.UrlContext())
-        )
-```
-
-`UrlContextTool` has **no Python-side function** — it works entirely at the LLM request level by appending a `types.Tool(url_context=types.UrlContext())` entry.
+The module also exports a ready-made instance, `google.adk.tools.url_context` (`url_context = UrlContextTool()`), which you can pass straight into `tools=[...]`.
 
 ### Restrictions
 
@@ -683,7 +682,7 @@ class UrlContextTool(BaseTool):
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.tools.url_context_tool import UrlContextTool
+from google.adk.tools import url_context  # ready-made UrlContextTool instance
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 import asyncio
@@ -692,10 +691,10 @@ agent = LlmAgent(
     name="researcher",
     model="gemini-2.5-flash",   # must be a Gemini model
     instruction=(
-        "You are a research assistant. When asked about a URL, "
-        "use the url_context tool to read it and summarise the content."
+        "You are a research assistant. When the user gives you a URL, "
+        "read its content and summarise it."
     ),
-    tools=[UrlContextTool()],
+    tools=[url_context],  # equivalent to UrlContextTool()
 )
 
 runner = InMemoryRunner(agent=agent, app_name="url_demo")
@@ -704,7 +703,7 @@ async def main():
     session = await runner.session_service.create_session(
         app_name="url_demo", user_id="user1"
     )
-    events = runner.run(
+    async for event in runner.run_async(
         user_id="user1",
         session_id=session.id,
         new_message=types.Content(
@@ -713,8 +712,7 @@ async def main():
                 text="Please summarise https://adk.google.dev/api/python/google/adk/agents/LlmAgent"
             )],
         ),
-    )
-    for event in events:
+    ):
         if event.is_final_response() and event.content:
             print(event.content.parts[0].text)
 
@@ -828,30 +826,22 @@ print(skill.name)         # "write-unit-test"
 print(skill.description)  # "Generate a pytest unit test ..."
 ```
 
-### Parsing a `SKILL.md` file manually
+### Loading skills from disk
+
+Don't hand-parse `SKILL.md`. `google.adk.skills` ships loaders that parse the frontmatter, validate it, and also load `references/`, `assets/` and `scripts/` into `Resources`:
 
 ```python
-from pathlib import Path
-from google.adk.skills.models import Skill, Frontmatter, Resources
-import yaml
+from google.adk.skills import load_skill_from_dir, load_skills_from_dir
 
-def load_skill_from_file(skill_md_path: str) -> Skill:
-    text = Path(skill_md_path).read_text()
-    if text.startswith("---"):
-        _, fm_block, body = text.split("---", 2)
-        fm_data = yaml.safe_load(fm_block)
-        instructions = body.strip()
-    else:
-        raise ValueError("SKILL.md must begin with YAML front matter.")
+# One skill — the directory name must equal the frontmatter `name`
+# (otherwise ValueError).
+skill = load_skill_from_dir("skills/write-unit-test")
 
-    return Skill(
-        frontmatter=Frontmatter(**fm_data),
-        instructions=instructions,
-        resources=Resources(),
-    )
-
-skill = load_skill_from_file("skills/write-unit-test/SKILL.md")
+# Every subdirectory of skills/ that contains a SKILL.md.
+all_skills = load_skills_from_dir("skills")
 ```
+
+Async variants (`load_skill_from_dir_async`, `load_skills_from_dir_async`) and GCS variants (`load_skill_from_gcs_dir`, `load_skill_from_gcs_dir_async`) are exported from the same package.
 
 ---
 
@@ -867,20 +857,20 @@ skill = load_skill_from_file("skills/write-unit-test/SKILL.md")
 class SkillRegistry(ABC):
 
     @abstractmethod
-    async def get_skill(self, name: str) -> Skill | None:
-        """Returns the Skill with the given name, or None if not found."""
-        ...
+    async def get_skill(self, *, name: str) -> Skill:
+        """Fetches a skill. Raises if the skill does not exist."""
 
     @abstractmethod
-    async def search_skills(self, query: str) -> list[Frontmatter]:
-        """Returns Frontmatter discovery metadata for skills matching the query."""
-        ...
+    async def search_skills(self, *, query: str) -> list[Frontmatter]:
+        """Returns Frontmatter objects for discovery."""
 
-    def search_tool_description(self) -> str:
-        """Human-readable description of how to search this registry.
-        Included in the search tool's Gemini function declaration."""
-        return "Search skills by name or description."
+    def search_tool_description(self) -> str | None:
+        """Optional custom description for the search_skills tool.
+        Returns None by default (SkillToolset then uses its built-in text)."""
+        return None
 ```
+
+Both abstract methods take **keyword-only** arguments — `SkillToolset` calls them as `get_skill(name=...)` and `search_skills(query=...)`. When `get_skill` raises, `load_skill` reports a `REGISTRY_ERROR` to the model; a falsy return is reported as `SKILL_NOT_FOUND`.
 
 ### Implementing a GCS-backed registry
 
@@ -918,11 +908,13 @@ class GcsSkillRegistry(SkillRegistry):
         self._cache = await asyncio.to_thread(_fetch)
         return self._cache
 
-    async def get_skill(self, name: str) -> Skill | None:
+    async def get_skill(self, *, name: str) -> Skill:
         all_skills = await self._load_all()
-        return all_skills.get(name)
+        if name not in all_skills:
+            raise KeyError(f"Skill '{name}' not found in GCS registry.")
+        return all_skills[name]
 
-    async def search_skills(self, query: str) -> list[Frontmatter]:
+    async def search_skills(self, *, query: str) -> list[Frontmatter]:
         all_skills = await self._load_all()
         q = query.lower()
         return [
@@ -950,10 +942,10 @@ class InMemorySkillRegistry(SkillRegistry):
     def __init__(self, skills: list[Skill]):
         self._skills = {s.name: s for s in skills}
 
-    async def get_skill(self, name: str) -> Skill | None:
-        return self._skills.get(name)
+    async def get_skill(self, *, name: str) -> Skill:
+        return self._skills[name]  # KeyError → reported as REGISTRY_ERROR
 
-    async def search_skills(self, query: str) -> list[Frontmatter]:
+    async def search_skills(self, *, query: str) -> list[Frontmatter]:
         q = query.lower()
         return [s.frontmatter for s in self._skills.values()
                 if q in s.name.lower() or q in s.description.lower()]
@@ -979,14 +971,15 @@ class SkillToolset(BaseToolset):
     def __init__(
         self,
         skills: list[Skill] | None = None,
+        *,                                       # everything below is keyword-only
         registry: SkillRegistry | None = None,
         code_executor: BaseCodeExecutor | None = None,
-        environment: BaseEnvironment | None = None,
-        skills_folder: str | None = None,        # must be absolute when environment is set
+        environment: BaseEnvironment | None = None,   # mutually exclusive with code_executor
+        skills_folder: Path | str | None = None,  # absolute; requires environment
         script_timeout: int = 300,               # seconds
-        additional_tools: list[BaseTool] | None = None,
+        additional_tools: list[ToolUnion] | None = None,
         tool_name_prefix: str | None = None,
-        tool_filter: list[str] | Callable | None = None,
+        tool_filter: ToolPredicate | list[str] | None = None,
     ): ...
 ```
 
@@ -996,13 +989,13 @@ class SkillToolset(BaseToolset):
 |---|---|---|---|
 | `skills` | `list[Skill] \| None` | `None` | Pre-constructed `Skill` objects to expose |
 | `registry` | `SkillRegistry \| None` | `None` | Remote/custom skill discovery backend |
-| `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for code blocks inside skills |
-| `environment` | `BaseEnvironment \| None` | `None` | Execution environment for code skills |
-| `skills_folder` | `str \| None` | `None` | **Requires `environment` to be set**; must be an absolute path |
+| `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for skill scripts. **Mutually exclusive with `environment`** (passing both raises `ValueError`) |
+| `environment` | `BaseEnvironment \| None` | `None` | Execution environment for skill scripts. **Mutually exclusive with `code_executor`** |
+| `skills_folder` | `Path \| str \| None` | `None` | **Requires `environment` to be set**; must be an absolute path |
 | `script_timeout` | `int` | `300` | Max seconds for a skill's code block to run |
-| `additional_tools` | `list[BaseTool] \| None` | `None` | Pool of tools the agent unlocks when an activated skill's frontmatter lists them in `metadata.adk_additional_tools`; not exposed automatically |
-| `tool_name_prefix` | `str \| None` | `None` | String prepended to every skill tool's name |
-| `tool_filter` | `list[str] \| Callable \| None` | `None` | Allowlist of **management tool names** (`list_skills`, `load_skill`, `load_skill_resource`, `run_skill_script`; plus `search_skills` when `registry` is set) or a `ToolPredicate`; does **not** filter by skill name |
+| `additional_tools` | `list[ToolUnion] \| None` | `None` | Pool of tools the agent unlocks when an activated skill's frontmatter lists them in `metadata.adk_additional_tools`; not exposed automatically |
+| `tool_name_prefix` | `str \| None` | `None` | Prefix joined to every management tool name with `_` (`"coding"` → `coding_list_skills`) |
+| `tool_filter` | `ToolPredicate \| list[str] \| None` | `None` | Allowlist of **management tool names** (`list_skills`, `load_skill`, `load_skill_resource`, `run_skill_script`; plus `search_skills` when `registry` is set) or a `ToolPredicate`; does **not** filter by skill name |
 
 ### How the agent uses skills
 
@@ -1013,7 +1006,7 @@ When an agent has a `SkillToolset`, it gets these skill-management tools:
 | `list_skills` | Returns names and descriptions of all available skills |
 | `load_skill` | Activates a skill — returns its full instruction text |
 | `load_skill_resource` | Fetches a reference, asset, or script file from a loaded skill |
-| `run_skill_script` | Executes a script from a skill (requires `code_executor`) |
+| `run_skill_script` | Executes a script from a skill (only exposed when the toolset has a `code_executor` or `environment`, or the agent itself has a `code_executor`) |
 | `search_skills` | Fuzzy-searches the registry (only when `registry` is set) |
 
 ### Loading from a `skills` list
@@ -1091,19 +1084,20 @@ toolset = SkillToolset(skills=all_skills, tool_filter=no_script_execution)
 
 ```python
 # Prevents collisions when merging two toolsets in one agent
+# BaseToolset joins prefix and name with "_": f"{prefix}_{tool.name}".
 coding_toolset = SkillToolset(
     skills=coding_skills,
-    tool_name_prefix="coding__",  # tools become coding__list_skills, etc.
+    tool_name_prefix="coding",  # tools become coding_list_skills, coding_load_skill, ...
 )
 writing_toolset = SkillToolset(
     skills=writing_skills,
-    tool_name_prefix="writing__",
+    tool_name_prefix="writing",  # writing_list_skills, writing_load_skill, ...
 )
 
 agent = LlmAgent(
     name="super_agent",
     model="gemini-2.5-flash",
-    instruction="Help with coding and writing. Use coding__list_skills or writing__list_skills to start.",
+    instruction="Help with coding and writing. Use coding_list_skills or writing_list_skills to start.",
     tools=[coding_toolset, writing_toolset],
 )
 ```
@@ -1142,20 +1136,22 @@ toolset = SkillToolset(
 
 ### Skills folder with a sandboxed environment
 
-`skills_folder` is **only valid when `environment` is also set** — it tells the toolset where skills are located inside the environment's filesystem. Passing `skills_folder` without `environment` raises `ValueError`.
+`skills_folder` is **only valid when `environment` is also set** — it tells the toolset where skills are materialized inside the environment's filesystem (default: `<environment.working_dir>/skills`). Passing `skills_folder` without `environment` raises `ValueError`. The environment runs skill scripts itself, so do **not** also pass `code_executor` — `environment` and `code_executor` are mutually exclusive (`ValueError: Cannot have both code_executor and environment`).
 
 ```python
-import os
 from google.adk.tools.skill_toolset import SkillToolset
 
 # WRONG — raises ValueError: Cannot specify skills_folder without an environment:
 # toolset = SkillToolset(skills_folder="/abs/path/to/skills")
 
-# CORRECT — skills_folder requires environment:
+# WRONG — raises ValueError: Cannot have both code_executor and environment:
+# toolset = SkillToolset(environment=my_env, code_executor=my_executor)
+
+# CORRECT — skills_folder requires environment (and no code_executor):
 toolset = SkillToolset(
-    skills_folder=os.path.abspath("skills"),  # must also be absolute
-    environment=my_env,
-    code_executor=my_executor,
+    skills=all_skills,
+    skills_folder="/workspace/skills",  # absolute path inside the environment
+    environment=my_env,                 # any BaseEnvironment, e.g. google.adk.environment.LocalEnvironment()
 )
 ```
 
@@ -1167,23 +1163,26 @@ Without an environment, load skills as `Skill` objects and pass them via `skills
 
 **Module:** `google.adk.memory.vertex_ai_rag_memory_service`
 
-`VertexAiRagMemoryService` stores conversation history in an **Agent Platform RAG corpus** (via the `agentplatform` package). At the end of a session, `add_session_to_memory()` serialises all events to a temporary text file and uploads it to the RAG corpus. `search_memory()` queries the corpus with semantic similarity and returns the most relevant past exchanges.
+`VertexAiRagMemoryService` stores conversation history in an **Agent Platform RAG corpus** (via the `agentplatform` package). `add_session_to_memory()` serialises **all** of the session's text events to a temporary file and uploads it to the corpus as a **new RAG file** on every call — so call it once, when the session ends, not after every turn (otherwise each turn re-uploads the whole growing transcript and the corpus fills with duplicates). The service does not support incremental `add_events_to_memory` (it raises `NotImplementedError`). `search_memory()` queries the corpus with semantic similarity and returns the most relevant past exchanges.
 
 ### Prerequisites
 
 ```bash
-pip install google-cloud-aiplatform   # provides the `agentplatform` package
-pip install "google-adk[db]" aiosqlite  # DatabaseSessionService (SQLAlchemy + async driver)
+pip install "google-adk[gcp]"           # pulls google-cloud-aiplatform, which provides `agentplatform`
+pip install "google-adk[db]" aiosqlite greenlet  # DatabaseSessionService: SQLAlchemy + async driver (SQLAlchemy 2.1 no longer installs greenlet for asyncio)
 ```
 
-Create a RAG corpus in Google Cloud:
+Create a RAG corpus with the `agentplatform` SDK (the path ADK's own deprecation notice recommends):
 
-```bash
-gcloud ai rag-corpora create \
-    --display-name="agent-memory" \
-    --location=us-central1 \
-    --project=my-project
-# Note the returned corpus resource name.
+```python
+import agentplatform
+from agentplatform import types
+
+client = agentplatform.Client(project="my-project", location="us-central1")
+corpus = client.rag.create_corpus(          # waits for the long-running operation
+    rag_corpus=types.RagCorpus(display_name="agent-memory"),
+)
+print(corpus.name)  # projects/…/locations/us-central1/ragCorpora/… — pass as rag_corpus
 ```
 
 ### Constructor (source-verified)
@@ -1210,10 +1209,10 @@ If `rag_corpus` is the full resource name and `project`/`location` are not set, 
 
 ### Important: `agentplatform` not `vertexai.preview.rag`
 
-Previous versions of ADK used `vertexai.preview.rag`. That import is **deprecated**. The current implementation imports `agentplatform` (installed via `google-cloud-aiplatform ≥ 1.87`). If you see a deprecation warning, upgrade:
+Previous versions of ADK used `vertexai.preview.rag`. That import is **deprecated**. The current implementation imports `agentplatform`, which ships with the `google-cloud-aiplatform` version pinned by ADK's `gcp` extra. If the import fails, the constructor tells you to install that extra:
 
 ```bash
-pip install --upgrade google-cloud-aiplatform
+pip install "google-adk[gcp]"
 ```
 
 ### Basic setup
@@ -1282,31 +1281,35 @@ async def chat(user_id: str, message: str, session_id: str | None = None):
         session_id=session_id,
     )
 
-    events = runner.run(
+    response = ""
+    async for event in runner.run_async(
         user_id=user_id,
         session_id=session.id,
         new_message=types.Content(
             role="user", parts=[types.Part(text=message)]
         ),
-    )
-    response = ""
-    for event in events:
+    ):
         if event.is_final_response() and event.content:
             response = "".join(
                 p.text for p in event.content.parts if p.text
             )
+    return response, session.id
 
-    # Runner does NOT automatically ingest the session.
-    # Reload the updated session and persist it to the RAG corpus explicitly.
-    updated_session = await runner.session_service.get_session(
+
+async def end_session(user_id: str, session_id: str) -> None:
+    """Call ONCE when the conversation is over.
+
+    Runner does NOT ingest sessions automatically, and every
+    add_session_to_memory() call uploads the full transcript as a new RAG
+    file — so ingesting per turn would duplicate earlier turns in the corpus.
+    """
+    session = await runner.session_service.get_session(
         app_name="persistent_assistant",
         user_id=user_id,
-        session_id=session.id,
+        session_id=session_id,
     )
-    if updated_session:
-        await runner.memory_service.add_session_to_memory(updated_session)
-
-    return response, session.id
+    if session:
+        await runner.memory_service.add_session_to_memory(session)
 ```
 
 ### Automatic memory preloading with `PreloadMemoryTool`
@@ -1325,34 +1328,20 @@ agent = LlmAgent(
 # The model never sees or calls "preload_memory" — it just receives the context.
 ```
 
-### Triggering memory ingestion via a callback
+### Why not ingest from a callback?
 
-If you prefer to ingest at the end of each turn rather than calling `add_session_to_memory` after every `runner.run()` call, use an `after_agent_callback`:
-
-```python
-from google.adk.agents import LlmAgent
-from google.adk.agents.callback_context import CallbackContext
-
-async def save_to_memory(ctx: CallbackContext) -> None:
-    await ctx.add_session_to_memory()
-
-agent = LlmAgent(
-    name="assistant",
-    model="gemini-2.5-flash",
-    instruction="You are a persistent assistant.",
-    after_agent_callback=save_to_memory,
-)
-```
+`CallbackContext.add_session_to_memory()` exists, but an `after_agent_callback` fires at the end of **every** invocation (every user turn), so wiring ingestion there has the same duplication problem as calling it after every `runner.run_async()`. Trigger ingestion from whatever marks the end of a conversation in your app (an explicit "end chat", an idle timeout, a session-close hook) as in `end_session()` above.
 
 ### Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `ImportError: No module named 'agentplatform'` | `pip install --upgrade google-cloud-aiplatform` |
+| `ImportError: No module named 'agentplatform'` | `pip install "google-adk[gcp]"` |
 | `ValueError: rag_corpus must be set` | Pass the full corpus resource name or set corpus on every `rag_resource` |
-| `DeprecationWarning: vertexai.preview.rag` | Already on the new `agentplatform` path; warning means mixed install — upgrade `google-cloud-aiplatform` |
+| `DeprecationWarning: vertexai.preview.rag` | Already on the new `agentplatform` path; warning means mixed install — reinstall with `pip install "google-adk[gcp]"` |
 | High latency on `search_memory` | Reduce `similarity_top_k` or lower `vector_distance_threshold` to fetch fewer chunks (threshold is a maximum distance — lower = stricter) |
-| Stale data returned | `add_session_to_memory()` must be called explicitly; `Runner` does not auto-ingest. Use a callback or call it after `runner.run()` completes |
+| Stale data returned | `add_session_to_memory()` must be called explicitly; `Runner` does not auto-ingest. Call it once when the session ends |
+| Duplicate / repeated memories | `add_session_to_memory()` was called per turn; each call uploads the whole transcript as a new file. Ingest once per session |
 
 ---
 
@@ -1368,5 +1357,5 @@ agent = LlmAgent(
 | `UrlContextTool` | Let Gemini read live web pages without writing a custom tool |
 | `Skill` | Inspect or programmatically create skill objects from Markdown |
 | `SkillRegistry` | Custom skill discovery backend (remote registry, database) |
-| `SkillToolset` | Attach a folder or registry of skills as tools to any `LlmAgent` |
+| `SkillToolset` | Attach a list or registry of skills (as skill-management tools) to any `LlmAgent` |
 | `VertexAiRagMemoryService` | Production long-term memory backed by Agent Platform RAG |
