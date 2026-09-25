@@ -876,7 +876,7 @@ tool_node = ToolNode([get_weather], wrap_tool_call=cached_tool_wrapper)
 
 `ToolCallTransformer` (module: `langgraph.prebuilt._tool_call_transformer`) is a built-in **`StreamTransformer`** that turns the raw `tools`-channel protocol events emitted during graph streaming into convenient **`ToolCallStream`** handles — one per tool invocation. It lets you consume per-tool incremental output (delta streaming), final output, and errors in a structured way without parsing raw event dicts.
 
-> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. The raw `tools` protocol events and `ToolCallTransformer` are both part of `stream_mode="tools"` — see also the [Streaming modes reference](./reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
+> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. Its `run.tool_calls` projection is consumed through `stream_events(..., version="v3")` (experimental in 1.2.11); plain `stream(stream_mode="tools")` always yields the raw protocol event dicts — see also the [Streaming modes reference](./reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
 
 ### Registration
 
@@ -888,7 +888,7 @@ from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 graph = builder.compile(transformers=[ToolCallTransformer])
 ```
 
-After registration the `tools` stream channel emits `ToolCallStream` objects instead of raw event dicts when you include `"tools"` in `stream_mode`.
+After registration, `stream_events(..., version="v3")` returns a `GraphRunStream` whose `run.tool_calls` projection yields `ToolCallStream` objects. (You can also pass `transformers=[ToolCallTransformer]` to `stream_events` per call.) Plain `graph.stream(..., stream_mode="tools")` is unaffected and still yields raw event dicts.
 
 ### `ToolCallStream` fields
 
@@ -898,7 +898,7 @@ After registration the `tools` stream channel emits `ToolCallStream` objects ins
 | `tool_name` | `str` | Name of the tool being invoked. |
 | `input` | `dict \| None` | Input arguments as received by the tool (from `on_tool_start`). `None` if not captured. |
 | `output_deltas` | `StreamChannel[Any]` | Channel of incremental delta chunks. Iterate sync or async as they arrive. |
-| `output` | `Any` | Terminal output from `tool-finished`. `None` until the tool completes successfully. |
+| `output` | `Any` | Terminal output from `tool-finished` — for `ToolNode` this is the `ToolMessage` (use `.content` for the text). `None` until the tool completes successfully. |
 | `error` | `str \| None` | Terminal error message from `tool-error`. `None` until the tool fails. |
 | `completed` | `bool` | `True` once either `tool-finished` or `tool-error` has been observed. |
 
@@ -940,10 +940,10 @@ graph = builder.compile(transformers=[ToolCallTransformer])
 
 config = {"configurable": {"thread_id": "t1"}}
 
-with graph.stream(
+with graph.stream_events(
     {"messages": [("user", "Search for LangGraph docs")]},
     config,
-    stream_mode="tools",
+    version="v3",
 ) as run:
     for tc_stream in run.tool_calls:
         print(f"→ Tool started: {tc_stream.tool_name} (id={tc_stream.tool_call_id})")
@@ -957,7 +957,7 @@ with graph.stream(
         if tc_stream.error:
             print(f"  ERROR: {tc_stream.error}")
         else:
-            print(f"  Output: {tc_stream.output}")
+            print(f"  Output: {tc_stream.output.content}")  # output is a ToolMessage
 ```
 
 ### Asynchronous example
@@ -1000,11 +1000,12 @@ config = {"configurable": {"thread_id": "async-1"}}
 
 
 async def main():
-    async with graph.astream(
+    run = await graph.astream_events(
         {"messages": [("user", "Search for async patterns")]},
         config,
-        stream_mode="tools",
-    ) as run:
+        version="v3",
+    )
+    async with run:
         async for tc_stream in run.tool_calls:
             print(f"→ {tc_stream.tool_name} started (id={tc_stream.tool_call_id})")
             async for delta in tc_stream:
@@ -1012,7 +1013,7 @@ async def main():
             if tc_stream.error:
                 print(f"  ERROR: {tc_stream.error}")
             else:
-                print(f"  Final: {tc_stream.output}")
+                print(f"  Final: {tc_stream.output.content}")
 
 
 asyncio.run(main())
@@ -1020,12 +1021,9 @@ asyncio.run(main())
 
 ### Combining `"tools"` with other stream modes
 
-`ToolCallTransformer` works when `"tools"` is included in a list of stream modes:
+`"tools"` can be combined with other modes in plain `stream()`, but there it always yields **raw event dicts** — `ToolCallTransformer` does not change them:
 
 ```python
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
-
-graph = builder.compile(transformers=[ToolCallTransformer])
 config = {"configurable": {"thread_id": "multi"}}
 
 for mode, data in graph.stream(
@@ -1036,10 +1034,9 @@ for mode, data in graph.stream(
     if mode == "updates":
         # Normal state-delta events
         print(f"[update] {list(data.keys())}")
-    elif mode == "tools":
-        # data is a run-level object; iterate its tool_calls
-        for tc in data.tool_calls:
-            print(f"[tool]   {tc.tool_name} → {tc.output}")
+    elif mode == "tools" and data["event"] == "tool-finished":
+        # data is a raw event dict: {"event": ..., "tool_call_id": ..., ...}
+        print(f"[tool]   {data['tool_call_id']} → {data['output'].content}")
 ```
 
 ### How it works internally
@@ -1057,7 +1054,7 @@ for mode, data in graph.stream(
 
 ## `create_react_agent`
 
-> **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. For new code, build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
+> **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. Calling it emits a `LangGraphDeprecatedSinceV10` warning. For new code, use `from langchain.agents import create_agent` (middleware-based replacement), or build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
 
 `create_react_agent` builds a ReAct-style agent graph in one call. The exact nodes depend on the arguments:
 

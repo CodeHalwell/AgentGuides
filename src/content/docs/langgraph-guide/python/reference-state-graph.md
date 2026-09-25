@@ -129,7 +129,7 @@ All overloads accept the same keyword options:
 | `cache_policy` | `CachePolicy` | Cache the node's output by input hash. Requires a `cache=` backend on `.compile()`. |
 | `timeout` | `float \| timedelta \| TimeoutPolicy \| None` | Per-attempt timeout. A plain `float`/`timedelta` is the wall-clock limit; `TimeoutPolicy` adds idle-timeout and heartbeat support. |
 | `destinations` | `dict[str, str] \| tuple[str, ...]` | Visualization hint for edgeless nodes that return `Command(goto=...)`. Does **not** affect execution. |
-| `trace_policy` | `TracePolicy \| None` | Control how this node's run is traced in LangSmith (omit inputs, outputs, or both). See [TracePolicy reference](./reference-trace-policy/). |
+| `trace_policy` | `TracePolicy \| None` | Control how this node's run is traced in LangSmith (omit inputs, outputs, or both). See [TracePolicy reference](/langgraph-guide/python/reference-trace-policy/). |
 
 A node's callable signature can be any of:
 

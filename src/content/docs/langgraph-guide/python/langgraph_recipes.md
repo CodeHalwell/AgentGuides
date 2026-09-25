@@ -25,7 +25,7 @@ This guide includes recipes demonstrating the latest v1.2.11 features:
 - `BinaryOperatorAggregate` custom reducer patterns (Recipe 15)
 - `Send` with per-instance timeout for safe parallel map-reduce (Recipe 16)
 - `Command` with `Command.PARENT` for subgraph-to-parent signalling (Recipe 17)
-- `TracePolicy` + `omit_payload` for hiding sensitive node payloads in LangSmith (Recipe 18)
+- `TracePolicy` + `omit_payload` for trimming a node's payload in LangSmith traces (Recipe 18)
 - `ToolNode` with `ToolRuntime.emit_output_delta` for incremental tool streaming (Recipe 19)
 - `entrypoint.final` for separating return value from checkpoint state (Recipe 20)
 - `GraphOutput` + `Durability` for the v2 invoke API (Recipe 21)
@@ -3110,9 +3110,9 @@ print(result)
 - Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
 - Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.
 
-## Recipe 18: `TracePolicy` — Hiding Sensitive Payloads in LangSmith (v1.2.11)
+## Recipe 18: `TracePolicy` — Controlling a Node's Trace Payload (v1.2.11)
 
-**Goal:** Run an agent that handles PII (personally identifiable information). The node's inputs and outputs must never appear in LangSmith traces, but everything else in the graph is traced normally.
+**Goal:** Keep one node's inputs and outputs out of its LangSmith span (here, a node that handles PII) while every other node is traced normally. For real secrets/PII redaction, see the note at the end of this recipe.
 
 **Uses:** `TracePolicy`, `omit_payload` helper, `add_node(trace_policy=...)`
 
@@ -3189,7 +3189,7 @@ from langgraph.graph import StateGraph, START, END
 _PII_KEYS = {"raw_pii", "ssn", "email", "phone", "credit_card"}
 
 def scrub_pii(payload: dict) -> dict:
-    """Return a safe version of the payload — called by LangSmith before the run is stored."""
+    """Return a safe version of the payload — called by LangGraph before the node's run is recorded."""
     return {k: "[REDACTED]" if k.lower() in _PII_KEYS else v for k, v in payload.items()}
 
 builder2 = StateGraph(State)
@@ -3209,9 +3209,11 @@ print(result2["result"])   # Processed: [REDACTED]
 ```
 
 **When to use `TracePolicy`:**
-- Nodes that receive raw PII (names, addresses, financial data).
-- Nodes that embed secrets or credentials in their input/output.
-- High-volume nodes where storing full payloads in LangSmith is expensive.
+- High-volume nodes where storing full payloads in LangSmith is expensive (e.g. long message histories).
+- Keeping a single node's span readable by summarizing or omitting bulky inputs/outputs.
+- As a defence-in-depth measure on nodes that touch PII — **not** as your redaction mechanism.
+
+> **Not a secrets/PII redaction tool.** Per the `TracePolicy` docstring in 1.2.11, it only transforms the annotated node's own run and is "not intended to redact secrets". To redact inputs/outputs across every run (root graph run and child runs included), configure the LangSmith client instead — `Client(hide_inputs=..., hide_outputs=..., anonymizer=...)` (or the `LANGSMITH_HIDE_INPUTS` / `LANGSMITH_HIDE_OUTPUTS` environment variables).
 
 ---
 
@@ -3219,7 +3221,7 @@ print(result2["result"])   # Processed: [REDACTED]
 
 **Goal:** Stream a tool-calling agent and consume each tool's output incrementally as it arrives, using the structured `ToolCallStream` API rather than parsing raw event dicts.
 
-**Uses:** `ToolCallTransformer`, `ToolCallStream`, `compile(transformers=[...])`, `stream_mode="tools"`
+**Uses:** `ToolCallTransformer`, `ToolCallStream`, `compile(transformers=[...])`, `stream_events(version="v3")`
 
 ```python
 import asyncio
@@ -3278,24 +3280,26 @@ graph = builder.compile(
 
 cfg = {"configurable": {"thread_id": "stocks-1"}}
 
-# --- Sync streaming (context manager required for run.tool_calls) ---
+# --- Sync streaming via the v3 event protocol ---
 
 print("=== Sync stream ===")
-# The structured ToolCallStream API requires opening stream() as a context manager.
-# Using an ordinary for-loop over (mode, data) pairs does NOT give you run.tool_calls.
-with graph.stream(
+# run.tool_calls is a projection on the GraphRunStream returned by
+# stream_events(version="v3"). Plain graph.stream(stream_mode="tools") is a
+# generator of raw event dicts and cannot be used as a context manager.
+with graph.stream_events(
     {"messages": [("user", "What is the price and latest news for AAPL?")]},
     cfg,
-    stream_mode="tools",
+    version="v3",
 ) as run:
     for tc_stream in run.tool_calls:
         print(f"→ Tool started: {tc_stream.tool_name} (input={tc_stream.input})")
-        for delta in tc_stream:
+        for delta in tc_stream:          # drain deltas; output is set once the tool finishes
             print(f"  delta: {delta!r}")
         if tc_stream.error:
             print(f"  ERROR: {tc_stream.error}")
         else:
-            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output}")
+            # output is the ToolMessage produced by the tool call
+            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output.content}")
 
 # To also see state-update events, stream separately with "updates" mode:
 for update in graph.stream(
@@ -3311,11 +3315,13 @@ for update in graph.stream(
 
 async def main():
     print("\n=== Async stream ===")
-    async with graph.astream(
+    # astream_events() is a coroutine — await it to get the AsyncGraphRunStream
+    run = await graph.astream_events(
         {"messages": [("user", "Check MSFT price")]},
         {"configurable": {"thread_id": "stocks-2"}},
-        stream_mode="tools",
-    ) as run:
+        version="v3",
+    )
+    async with run:
         async for tc_stream in run.tool_calls:
             print(f"→ {tc_stream.tool_name} started (input={tc_stream.input})")
             async for delta in tc_stream:
@@ -3324,23 +3330,23 @@ async def main():
             if tc_stream.error:
                 print(f"  ERROR: {tc_stream.error}")
             else:
-                print(f"  Final output: {tc_stream.output}")
+                print(f"  Final output: {tc_stream.output.content}")
 
 
 asyncio.run(main())
 ```
 
 **Key points:**
-- `compile(transformers=[ToolCallTransformer])` must be set — without it `stream_mode="tools"` yields raw event dicts.
-- `ToolCallStream.output_deltas` / async `__aiter__` iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
-- `ToolCallStream.completed` becomes `True` once `tool-finished` or `tool-error` fires.
-- You can mix `"tools"` with other stream modes: `stream_mode=["updates", "tools"]`.
+- `run.tool_calls` exists only on the `GraphRunStream` returned by `stream_events(..., version="v3")` (async: `await graph.astream_events(..., version="v3")`), and only when `ToolCallTransformer` is registered — via `compile(transformers=[...])` or `stream_events(..., transformers=[...])`. The v3 protocol is marked experimental in 1.2.11.
+- Plain `graph.stream(..., stream_mode="tools")` (alone or in a list such as `["updates", "tools"]`) always yields raw event dicts (`{"event": "tool-started" | "tool-output-delta" | "tool-finished" | "tool-error", ...}`), whether or not a transformer is registered.
+- `ToolCallStream` `__iter__` / `__aiter__` (or `.output_deltas`) iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
+- `ToolCallStream.output` is the `ToolMessage` returned by the tool call (use `.content` for the text); it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
 
 ---
 
 ## Recipe 20: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
 
-**Goal:** Build a conversation workflow where the agent returns a user-friendly summary to the caller but persists only the raw internal state to the checkpoint — so the heavy intermediate data doesn't bloat the stored thread.
+**Goal:** Build a conversation workflow where the agent returns a rich result to the caller but feeds only a compact state forward to the next turn via `previous`.
 
 **Uses:** `entrypoint.final`, `@entrypoint(checkpointer=...)`, `previous`
 
@@ -3414,7 +3420,7 @@ def qa_agent(
         context_used=context,
     )
 
-    # What is saved to the checkpoint — compact, no context snippets
+    # What the next call receives as `previous` — compact, no context snippets
     saved_state = ThreadState(
         turn_count=turn_count,
         last_query=query,
@@ -3442,9 +3448,10 @@ print(type(snap.values))   # TurnResult — the value= output from the last entr
 ```
 
 **Why `entrypoint.final`?**
-- `value=` controls what `invoke`/`stream` returns to the caller.
-- `save=` controls what is written to the checkpoint and surfaced as `previous` on the next call.
-- The two can be completely different types — useful when you want rich, ephemeral return values but cheap, serializable checkpoint state.
+- `value=` controls what `invoke`/`stream` returns to the caller. It is **also checkpointed** — it is the entrypoint's output (`__end__` channel) and what `get_state().values` returns.
+- `save=` controls what is stored in the `__previous__` channel and surfaced as `previous` on the next call.
+- The two can be completely different types. `entrypoint.final` does **not** shrink the checkpoint — both values are persisted — so keep large or sensitive data out of `value=` if checkpoint size matters.
+- Both values go through the checkpointer's serializer. Custom classes defined in `__main__` (like the dataclasses above) currently log a "Deserializing unregistered type" warning on reload, which a future release will turn into an error. Use plain dicts / TypedDicts, define the classes in an importable module, or allow them explicitly via the serializer's `allowed_msgpack_modules`.
 
 ---
 
