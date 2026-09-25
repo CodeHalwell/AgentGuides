@@ -5,7 +5,7 @@ framework: google-adk
 language: python
 ---
 
-Latest: google-adk 2.8.0 | Guide verified against: 2.7.1 | Updated: August 21, 2026
+Latest as of 2026-09-21: google-adk 2.9.2 | Guide verified against: 2.7.1 | Updated: September 21, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.1  
@@ -72,7 +72,7 @@ python3 -m venv adk_env
 source adk_env/bin/activate  # On Windows: adk_env\Scripts\activate
 
 # Install the ADK package
-pip install google-adk>=2.8.0
+pip install google-adk>=2.9.2
 
 # Verify installation
 python -c "import google.adk; print('ADK installed successfully')"
@@ -104,7 +104,7 @@ pip install aiohttp
 For production deployments, create a `requirements.txt` file:
 
 ```
-google-adk>=2.8.0
+google-adk>=2.9.2
 google-genai>=0.3.0
 pydantic>=2.0
 google-cloud-firestore>=2.14.0
@@ -5679,7 +5679,7 @@ async def add_session_to_memory(self) -> None: ...
 | Method | Use when | Support |
 |---|---|---|
 | `add_session_to_memory()` | ingest the entire session at run end | all services |
-| `add_events_to_memory(events=...)` | persist only the current turn's delta | `InMemoryMemoryService`, `VertexAiMemoryBankService`, `VertexAiRagMemoryService`; `NotImplementedError` elsewhere |
+| `add_events_to_memory(events=...)` | persist only the current turn's delta | `InMemoryMemoryService`, `VertexAiMemoryBankService`; `NotImplementedError` on `VertexAiRagMemoryService` and others |
 | `add_memory(memories=...)` | write structured `MemoryEntry` facts directly, bypassing event extraction | Vertex AI Memory Bank; `NotImplementedError` on `InMemoryMemoryService` |
 
 ```python

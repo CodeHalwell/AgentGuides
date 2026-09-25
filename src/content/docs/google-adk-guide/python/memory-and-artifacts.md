@@ -7,7 +7,7 @@ sidebar:
   order: 60
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/memory/`, `google/adk/artifacts/`). The latest release is **2.9.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against google-adk==2.3.0 (`google/adk/memory/`, `google/adk/artifacts/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 
@@ -247,7 +247,7 @@ Save with `session_id=None` (or `filename="user:history.json"`). The artifact su
 Each run saves a new version of `report.pdf`. The UI lists `list_artifact_versions(...)` with timestamps so a reviewer can diff outputs turn-by-turn.
 
 ### 5 — RAG corpus-backed memory
-`VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The corpus is updated by a separate ingestion job (files, web pages, BigQuery). Agents retrieve only — they never mutate the corpus.
+`VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The service writes to the corpus via `add_session_to_memory()` (called once when a session ends — see the Vol. 4 class deep dive). Static content (files, web pages, BigQuery) can also be loaded via the Agent Platform corpus management API. `add_events_to_memory()` is not supported and raises `NotImplementedError`.
 
 ## Complete examples
 

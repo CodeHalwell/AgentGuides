@@ -7,7 +7,7 @@ sidebar:
   order: 40
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`). The latest release is **2.9.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against google-adk==2.3.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
 
 Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py:41-71`).
 
