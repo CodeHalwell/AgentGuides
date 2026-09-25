@@ -1054,7 +1054,7 @@ for mode, data in graph.stream(
 
 ## `create_react_agent`
 
-> **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. Calling it emits a `LangGraphDeprecatedSinceV10` warning. For new code, use `from langchain.agents import create_agent` (middleware-based replacement), or build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
+> **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. The function carries a `@deprecated` decorator that emits `LangGraphDeprecatedSinceV10` (a `DeprecationWarning` subclass) on every call; Python silences `DeprecationWarning` by default in library code, so the warning is only visible under `python -W all`, in pytest, or when `warnings.simplefilter("always")` is active. For new code, use `from langchain.agents import create_agent` (middleware-based replacement), or build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
 
 `create_react_agent` builds a ReAct-style agent graph in one call. The exact nodes depend on the arguments:
 
