@@ -1,6 +1,6 @@
 ---
 title: "ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference"
-description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.2."
+description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.11."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference
 
-Verified against **`langgraph==1.2.2`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
+Verified against **`langgraph==1.2.11`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
 
 `ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` — let tools read graph state, access the long-term store, stream partial output, intercept calls before execution, and consume per-tool-call streaming results in a structured way.
 
@@ -876,7 +876,7 @@ tool_node = ToolNode([get_weather], wrap_tool_call=cached_tool_wrapper)
 
 `ToolCallTransformer` (module: `langgraph.prebuilt._tool_call_transformer`) is a built-in **`StreamTransformer`** that turns the raw `tools`-channel protocol events emitted during graph streaming into convenient **`ToolCallStream`** handles — one per tool invocation. It lets you consume per-tool incremental output (delta streaming), final output, and errors in a structured way without parsing raw event dicts.
 
-> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. The raw `tools` protocol events and `ToolCallTransformer` are both part of `stream_mode="tools"` — see also the [Streaming modes reference](./reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
+> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. Its `run.tool_calls` projection is consumed through `stream_events(..., version="v3")` (experimental in 1.2.11); plain `stream(stream_mode="tools")` always yields the raw protocol event dicts — see also the [Streaming modes reference](./reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
 
 ### Registration
 
@@ -888,7 +888,7 @@ from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 graph = builder.compile(transformers=[ToolCallTransformer])
 ```
 
-After registration the `tools` stream channel emits `ToolCallStream` objects instead of raw event dicts when you include `"tools"` in `stream_mode`.
+After registration, `stream_events(..., version="v3")` returns a `GraphRunStream` whose `run.tool_calls` projection yields `ToolCallStream` objects. (You can also pass `transformers=[ToolCallTransformer]` to `stream_events` per call.) Plain `graph.stream(..., stream_mode="tools")` is unaffected and still yields raw event dicts.
 
 ### `ToolCallStream` fields
 
@@ -898,7 +898,7 @@ After registration the `tools` stream channel emits `ToolCallStream` objects ins
 | `tool_name` | `str` | Name of the tool being invoked. |
 | `input` | `dict \| None` | Input arguments as received by the tool (from `on_tool_start`). `None` if not captured. |
 | `output_deltas` | `StreamChannel[Any]` | Channel of incremental delta chunks. Iterate sync or async as they arrive. |
-| `output` | `Any` | Terminal output from `tool-finished`. `None` until the tool completes successfully. |
+| `output` | `Any` | Terminal output from `tool-finished` — for `ToolNode` this is the `ToolMessage` (use `.content` for the text). `None` until the tool completes successfully. |
 | `error` | `str \| None` | Terminal error message from `tool-error`. `None` until the tool fails. |
 | `completed` | `bool` | `True` once either `tool-finished` or `tool-error` has been observed. |
 
@@ -940,10 +940,10 @@ graph = builder.compile(transformers=[ToolCallTransformer])
 
 config = {"configurable": {"thread_id": "t1"}}
 
-with graph.stream(
+with graph.stream_events(
     {"messages": [("user", "Search for LangGraph docs")]},
     config,
-    stream_mode="tools",
+    version="v3",
 ) as run:
     for tc_stream in run.tool_calls:
         print(f"→ Tool started: {tc_stream.tool_name} (id={tc_stream.tool_call_id})")
@@ -957,7 +957,7 @@ with graph.stream(
         if tc_stream.error:
             print(f"  ERROR: {tc_stream.error}")
         else:
-            print(f"  Output: {tc_stream.output}")
+            print(f"  Output: {tc_stream.output.content}")  # output is a ToolMessage
 ```
 
 ### Asynchronous example
@@ -1000,11 +1000,12 @@ config = {"configurable": {"thread_id": "async-1"}}
 
 
 async def main():
-    async with graph.astream(
+    run = await graph.astream_events(
         {"messages": [("user", "Search for async patterns")]},
         config,
-        stream_mode="tools",
-    ) as run:
+        version="v3",
+    )
+    async with run:
         async for tc_stream in run.tool_calls:
             print(f"→ {tc_stream.tool_name} started (id={tc_stream.tool_call_id})")
             async for delta in tc_stream:
@@ -1012,7 +1013,7 @@ async def main():
             if tc_stream.error:
                 print(f"  ERROR: {tc_stream.error}")
             else:
-                print(f"  Final: {tc_stream.output}")
+                print(f"  Final: {tc_stream.output.content}")
 
 
 asyncio.run(main())
@@ -1020,12 +1021,9 @@ asyncio.run(main())
 
 ### Combining `"tools"` with other stream modes
 
-`ToolCallTransformer` works when `"tools"` is included in a list of stream modes:
+`"tools"` can be combined with other modes in plain `stream()`, but there it always yields **raw event dicts** — `ToolCallTransformer` does not change them:
 
 ```python
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
-
-graph = builder.compile(transformers=[ToolCallTransformer])
 config = {"configurable": {"thread_id": "multi"}}
 
 for mode, data in graph.stream(
@@ -1036,10 +1034,9 @@ for mode, data in graph.stream(
     if mode == "updates":
         # Normal state-delta events
         print(f"[update] {list(data.keys())}")
-    elif mode == "tools":
-        # data is a run-level object; iterate its tool_calls
-        for tc in data.tool_calls:
-            print(f"[tool]   {tc.tool_name} → {tc.output}")
+    elif mode == "tools" and data["event"] == "tool-finished":
+        # data is a raw event dict: {"event": ..., "tool_call_id": ..., ...}
+        print(f"[tool]   {data['tool_call_id']} → {data['output'].content}")
 ```
 
 ### How it works internally
@@ -1054,6 +1051,252 @@ for mode, data in graph.stream(
 | `tool-error` | Calls `tc_stream._fail(message)` — sets `error`, marks `completed=True`, closes `output_deltas`. |
 
 `ToolCallStream` is not meant to be constructed directly — it is always produced by `ToolCallTransformer` as events flow through the stream mux.
+
+## `create_react_agent`
+
+> **Deprecated since v1.0.** `create_react_agent` was moved to the separate `langchain` package (`langchain.agents.create_agent`). It remains in `langgraph.prebuilt` for backward compatibility and is scheduled for removal in v2.0.0. The function carries a `@deprecated` decorator that emits `LangGraphDeprecatedSinceV10` (a `DeprecationWarning` subclass) on every call; Python silences `DeprecationWarning` by default in library code, so the warning is only visible under `python -W all`, in pytest, or when `warnings.simplefilter("always")` is active. For new code, use `from langchain.agents import create_agent` (middleware-based replacement), or build a `StateGraph` with a `ToolNode` directly (as shown in the minimal example at the top of this page).
+
+`create_react_agent` builds a ReAct-style agent graph in one call. The exact nodes depend on the arguments:
+
+- **`agent`** — always present (the LLM call).
+- **`tools`** (`ToolNode`) — added only when `tools` is non-empty; omitted entirely for tool-free agents (`tools=[]`).
+- **`generate_structured_response`** — added when `response_format` is set; makes a **separate** structured-output LLM call and adds latency and cost.
+- **`pre_model_hook`** / **`post_model_hook`** — added when the corresponding hook argument is provided.
+
+A tool-free agent compiles a graph with just `agent` (plus any optional hook/response nodes), so `interrupt_before`/`interrupt_after` lists and streamed-update keys reflect only the nodes that actually exist.
+
+### Signature
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+graph = create_react_agent(
+    model,                          # BaseChatModel or callable(state, runtime) -> BaseChatModel
+    tools,                          # list[BaseTool | Callable]
+    *,
+    prompt=None,                    # SystemMessage | str | Callable | None
+    response_format=None,           # type | (str, type) | None — structured output schema
+    pre_model_hook=None,            # Callable[[state], dict | None] — must include 'messages' or 'llm_input_messages'
+    post_model_hook=None,           # Callable[[state], Command | dict | None] — to suppress tools, clear tool_calls on the AIMessage in state
+    state_schema=None,              # None uses built-in AgentState (messages + remaining_steps)
+    context_schema=None,            # type | None — for Runtime[Ctx] injection
+    checkpointer=None,              # BaseCheckpointSaver | None
+    store=None,                     # BaseStore | None
+    interrupt_before=None,
+    interrupt_after=None,
+    debug=False,
+    version="v2",                   # "v1" batches all tool calls into one ToolNode invocation (concurrent within the node); "v2" (default) fans each call out as an independent Send task
+    name=None,                      # graph name; defaults to None
+)
+```
+
+Key parameters:
+
+| Parameter | Description |
+|---|---|
+| `model` | A `BaseChatModel` with `.bind_tools()` support, **or** a callable `(state, runtime) -> BaseChatModel` for dynamic model selection. |
+| `tools` | List of tools the agent can call. Passed to both `model.bind_tools()` and `ToolNode`. |
+| `prompt` | Optional system-level instructions. Pass a `str` or `SystemMessage` for static prompts; a callable for dynamic prompts that read from state. |
+| `response_format` | Pydantic model or `(system_prompt, model)` tuple for structured output on the final response. |
+| `pre_model_hook` | Separate node inserted **before** `agent`. Returns `dict \| None`; must include at least `messages` or `llm_input_messages`. Returning `None` is a no-op. Use for message trimming, injecting system prompts, etc. |
+| `post_model_hook` | Separate node inserted **after** `agent` (v2 only). Returns `Command \| dict \| None`. Returning `None` is a no-op. To prevent tool execution, the hook must clear `tool_calls` on the last `AIMessage` — `post_model_hook_router` is a separate conditional edge that still fires regardless of any `Command.goto`. Use for guardrails, human-in-the-loop, token tracking, etc. |
+| `state_schema` | Custom state schema. Default `None` resolves to the built-in `AgentState` (`messages` + `remaining_steps`). Custom schemas must include `messages` and `remaining_steps`; when `response_format` is also set, `structured_response` is required too — missing any of these raises `ValueError`. |
+| `context_schema` | Enables `Runtime[Ctx]` injection into hooks and nodes. |
+
+#### Custom state schema example
+
+When you need extra state fields, extend `MessagesState` and add `remaining_steps`. If you also pass `response_format`, add `structured_response` — the factory raises `ValueError` if it is missing:
+
+```python
+from typing import Any
+from typing_extensions import NotRequired  # typing.NotRequired requires Python 3.11+; use typing_extensions for 3.10
+from langgraph.managed import RemainingSteps
+from langgraph.graph.message import MessagesState
+
+class MyAgentState(MessagesState):
+    remaining_steps: NotRequired[RemainingSteps]   # managed — auto-injected and decremented by the graph
+    user_name: str                                  # any extra fields you need
+
+graph = create_react_agent(llm, tools, state_schema=MyAgentState)
+
+# When response_format is set, structured_response is also required:
+class MyAgentStateWithOutput(MessagesState):
+    remaining_steps: NotRequired[RemainingSteps]
+    structured_response: Any                        # populated by generate_structured_response node
+    user_name: str
+
+from pydantic import BaseModel
+
+class Answer(BaseModel):
+    value: int
+
+graph_with_output = create_react_agent(
+    llm, tools, state_schema=MyAgentStateWithOutput, response_format=Answer
+)
+```
+
+`RemainingSteps` is a **managed value**: the graph injects and decrements it automatically each step. Annotating it as `NotRequired` means you never need to provide it when invoking the graph.
+
+### Pre/post model hooks
+
+`pre_model_hook` and `post_model_hook` are **separate graph nodes** inserted immediately before and after the `agent` (LLM-call) node respectively. They are not callbacks inside the `agent` node.
+
+**`pre_model_hook`** receives the current state dict and must return `dict | None`:
+- Return `None` for a no-op.
+- Return a dict with `messages` to overwrite the persistent message history (use `RemoveMessage` to trim).
+- Return a dict with `llm_input_messages` to supply a different message list **only to the LLM for this call** — this is ephemeral and is not merged into checkpointed state. Use it to prepend a system prompt without polluting the conversation history.
+
+**`post_model_hook`** receives the current state dict and must return `Command | dict | None`:
+- Return `None` for a no-op.
+- Return a dict to merge into state (e.g., record token usage).
+- To prevent tool execution, replace the last `AIMessage` with one that has `tool_calls=[]` — the `post_model_hook_router` checks pending tool calls in the **updated state**, so clearing them reroutes to `END`. `Command(goto=END)` alone is not enough: the router is a separate conditional edge that runs regardless of any `Command.goto`.
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langchain_core.messages import SystemMessage
+from langgraph.prebuilt import create_react_agent
+from langgraph.graph.message import MessagesState
+
+llm = ChatOpenAI(model="gpt-4o-mini")
+
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two integers."""
+    return a * b
+
+
+def inject_system_prompt(state: MessagesState) -> dict | None:
+    """Prepend a system message for each model call without modifying persistent state."""
+    msgs = state["messages"]
+    if not msgs or msgs[0].type != "system":
+        system = SystemMessage(content="You are a helpful math assistant.")
+        # Use llm_input_messages to control what the model sees without going
+        # through add_messages, which cannot reorder existing messages by ID.
+        return {"llm_input_messages": [system] + list(msgs)}
+    return None
+
+
+def trim_history(state: MessagesState) -> dict:
+    """Keep only the last 10 messages to avoid token bloat.
+
+    Trims at a clean boundary: if the naive last-10 slice starts with a
+    ToolMessage whose parent AIMessage was cut off, those orphaned tool
+    messages are discarded. OpenAI-compatible backends reject ToolMessages
+    that have no corresponding AIMessage with matching tool_calls.
+    """
+    from langchain_core.messages import AIMessage, RemoveMessage, ToolMessage
+    from langgraph.graph.message import REMOVE_ALL_MESSAGES
+
+    msgs = state["messages"]
+    if len(msgs) <= 10:
+        return {}
+
+    to_keep = list(msgs[-10:])
+
+    # IDs of tool calls whose parent AIMessage is already in the slice
+    covered_ids = {
+        c["id"]
+        for m in to_keep
+        if isinstance(m, AIMessage)
+        for c in (m.tool_calls or [])
+    }
+    # Drop any leading ToolMessages whose parent was cut off
+    while to_keep and isinstance(to_keep[0], ToolMessage) and to_keep[0].tool_call_id not in covered_ids:
+        to_keep.pop(0)
+
+    if not to_keep:
+        return {}
+
+    return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)] + to_keep}
+
+
+graph = create_react_agent(
+    llm,
+    [multiply],
+    pre_model_hook=inject_system_prompt,
+    post_model_hook=trim_history,
+)
+
+result = graph.invoke({"messages": [("user", "What is 6 times 7?")]})
+print(result["messages"][-1].content)  # 42
+```
+
+### Dynamic model selection
+
+Pass a callable instead of a model to pick a model at runtime based on state:
+
+```python
+from dataclasses import dataclass
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from langgraph.runtime import Runtime
+from langgraph.graph.message import MessagesState
+
+
+@dataclass
+class UserCtx:
+    is_premium: bool
+
+
+def pick_model(state: MessagesState, runtime: Runtime[UserCtx]):
+    model_id = "gpt-4o" if runtime.context.is_premium else "gpt-4o-mini"
+    return ChatOpenAI(model=model_id).bind_tools([search])
+
+
+@tool
+def search(query: str) -> str:
+    """Search the web."""
+    return f"Results for: {query}"
+
+
+graph = create_react_agent(
+    pick_model,
+    [search],
+    context_schema=UserCtx,
+)
+
+result = graph.invoke(
+    {"messages": [("user", "Search for LangGraph")]},
+    context=UserCtx(is_premium=True),
+)
+```
+
+### Structured output with `response_format`
+
+Force the final response into a typed Pydantic schema:
+
+```python
+from pydantic import BaseModel
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+
+
+class Answer(BaseModel):
+    value: float
+    explanation: str
+
+
+@tool
+def add(a: float, b: float) -> float:
+    """Add two numbers."""
+    return a + b
+
+
+graph = create_react_agent(
+    ChatOpenAI(model="gpt-4o-mini"),
+    [add],
+    response_format=Answer,
+)
+
+result = graph.invoke({"messages": [("user", "What is 3.5 plus 2.1?")]})
+# result["structured_response"] is an Answer instance
+print(result["structured_response"].value)        # 5.6
+print(result["structured_response"].explanation)  # "3.5 + 2.1 = 5.6"
+```
 
 ## Gotchas
 

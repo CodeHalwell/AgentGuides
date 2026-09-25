@@ -1,15 +1,15 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.10 (August 2026)"
+description: "Updated for LangGraph 1.2.11 (September 2026)"
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.2.10 (August 2026)**
+**Updated for LangGraph 1.2.11 (September 2026)**
 
-This guide includes recipes demonstrating the latest v1.2.10 features:
+This guide includes recipes demonstrating the latest v1.2.11 features:
 - Node Caching for performance
 - Deferred Nodes for fan-in patterns
 - Pre/Post Model Hooks for LLM customization
@@ -25,6 +25,10 @@ This guide includes recipes demonstrating the latest v1.2.10 features:
 - `BinaryOperatorAggregate` custom reducer patterns (Recipe 15)
 - `Send` with per-instance timeout for safe parallel map-reduce (Recipe 16)
 - `Command` with `Command.PARENT` for subgraph-to-parent signalling (Recipe 17)
+- `TracePolicy` + `omit_payload` for trimming a node's payload in LangSmith traces (Recipe 18)
+- `ToolNode` with `ToolRuntime.emit_output_delta` for incremental tool streaming (Recipe 19)
+- `entrypoint.final` for separating return value from checkpoint state (Recipe 20)
+- `GraphOutput` + `Durability` for the v2 invoke API (Recipe 21)
 
 ---
 
@@ -3105,3 +3109,450 @@ print(result)
 - You want to decouple the subgraph's internal state from what it exposes upward.
 - Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
 - Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.
+
+## Recipe 18: `TracePolicy` — Controlling a Node's Trace Payload (v1.2.11)
+
+**Goal:** Keep one node's inputs and outputs out of its LangSmith span (here, a node that handles PII) while every other node is traced normally. For real secrets/PII redaction, see the note at the end of this recipe.
+
+**Uses:** `TracePolicy`, `omit_payload` helper, `add_node(trace_policy=...)`
+
+```python
+from dataclasses import dataclass
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import TracePolicy, omit_payload  # omit_payload is in langgraph.types
+
+
+# --- State ---
+
+class State(TypedDict):
+    raw_pii: str        # e.g., full name + SSN
+    anonymized: str
+    result: str
+
+
+# --- Nodes ---
+
+def anonymize(state: State) -> dict:
+    """Replace PII with a placeholder and clear the raw field.
+
+    Clearing raw_pii ensures downstream nodes never receive it in state,
+    so their LangSmith spans won't record the sensitive value either.
+    """
+    text = state["raw_pii"]
+    # Real implementation would use a NER model or regex; toy version here:
+    return {"anonymized": "[REDACTED]", "raw_pii": ""}   # wipe raw field
+
+
+def process(state: State) -> dict:
+    """Safe to trace — state['raw_pii'] is empty by the time this runs."""
+    return {"result": f"Processed: {state['anonymized']}"}
+
+
+# --- Graph ---
+
+builder = StateGraph(State)
+
+# anonymize node: strip both inputs and outputs from LangSmith traces.
+# omit_payload is a processor fn that returns {}; pass it for both sides.
+builder.add_node(
+    "anonymize",
+    anonymize,
+    trace_policy=TracePolicy(process_inputs=omit_payload, process_outputs=omit_payload),
+)
+builder.add_node("process", process)   # traced normally
+builder.add_edge(START, "anonymize")
+builder.add_edge("anonymize", "process")
+builder.add_edge("process", END)
+
+graph = builder.compile()
+
+result = graph.invoke({"raw_pii": "Alice Smith, SSN 123-45-6789", "anonymized": "", "result": ""})
+print(result["result"])   # Processed: [REDACTED]
+```
+
+**What `omit_payload` does:** A processor function (from `langgraph.types`) that returns an empty dict `{}`, dropping the entire payload. Pass it as `process_inputs` and/or `process_outputs` on a `TracePolicy` to keep the node's span (run ID, timing, parent/child links) while omitting its data from the trace.
+
+> **Scope limitations to keep in mind:**
+> - `TracePolicy` only hides the annotated node's own LangSmith span. Without also clearing `raw_pii` from state (as `anonymize` does above), every downstream node's span would still record the raw value in its input state.
+> - The **root graph run** still records the full invocation input (which contains `raw_pii`) in its LangSmith entry. For complete removal, strip sensitive data before it enters the graph, or use graph-level LangSmith project settings.
+
+You can also supply custom processors instead of `omit_payload`. Build a
+fresh graph using the same node functions defined above, replacing
+`omit_payload` with your own callable:
+
+```python
+from langgraph.types import TracePolicy
+from langgraph.graph import StateGraph, START, END
+
+# Match known PII field names (including raw_pii as used in this example).
+_PII_KEYS = {"raw_pii", "ssn", "email", "phone", "credit_card"}
+
+def scrub_pii(payload: dict) -> dict:
+    """Return a safe version of the payload — called by LangGraph before the node's run is recorded."""
+    return {k: "[REDACTED]" if k.lower() in _PII_KEYS else v for k, v in payload.items()}
+
+builder2 = StateGraph(State)
+builder2.add_node(
+    "anonymize",
+    anonymize,
+    trace_policy=TracePolicy(process_inputs=scrub_pii, process_outputs=scrub_pii),
+)
+builder2.add_node("process", process)
+builder2.add_edge(START, "anonymize")
+builder2.add_edge("anonymize", "process")
+builder2.add_edge("process", END)
+
+graph2 = builder2.compile()
+result2 = graph2.invoke({"raw_pii": "Bob Jones, SSN 987-65-4321", "anonymized": "", "result": ""})
+print(result2["result"])   # Processed: [REDACTED]
+```
+
+**When to use `TracePolicy`:**
+- High-volume nodes where storing full payloads in LangSmith is expensive (e.g. long message histories).
+- Keeping a single node's span readable by summarizing or omitting bulky inputs/outputs.
+- As a defence-in-depth measure on nodes that touch PII — **not** as your redaction mechanism.
+
+> **Not a secrets/PII redaction tool.** Per the `TracePolicy` docstring in 1.2.11, it only transforms the annotated node's own run and is "not intended to redact secrets". To redact inputs/outputs across every run (root graph run and child runs included), configure the LangSmith client instead — `Client(hide_inputs=..., hide_outputs=..., anonymizer=...)` (or the `LANGSMITH_HIDE_INPUTS` / `LANGSMITH_HIDE_OUTPUTS` environment variables).
+
+---
+
+## Recipe 19: `ToolCallTransformer` — Structured Per-Tool Streaming (v1.2.11)
+
+**Goal:** Stream a tool-calling agent and consume each tool's output incrementally as it arrives, using the structured `ToolCallStream` API rather than parsing raw event dicts.
+
+**Uses:** `ToolCallTransformer`, `ToolCallStream`, `compile(transformers=[...])`, `stream_events(version="v3")`
+
+```python
+import asyncio
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import MessagesState
+from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
+from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- Tools ---
+
+@tool
+def fetch_price(ticker: str, runtime: ToolRuntime) -> str:
+    """Get the current price for a stock ticker."""
+    # emit_output_delta pushes incremental chunks onto the "tools" stream channel.
+    # Each call produces a "tool-output-delta" event that ToolCallStream exposes
+    # via its __iter__ / __aiter__ so callers can consume partial results in order.
+    runtime.emit_output_delta(f"Looking up ticker {ticker.upper()}…")
+    prices = {"AAPL": "182.50", "GOOG": "141.20", "MSFT": "378.90"}
+    price = prices.get(ticker.upper(), "Unknown ticker")
+    runtime.emit_output_delta(f"Found: ${price}")
+    return price
+
+
+@tool
+def summarize_news(ticker: str) -> str:
+    """Get a one-line news summary for a ticker (no streaming deltas)."""
+    return f"No major news for {ticker} today."
+
+
+# --- Graph ---
+
+tools = [fetch_price, summarize_news]
+llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+
+
+def call_model(state: MessagesState) -> dict:
+    return {"messages": [llm.invoke(state["messages"])]}
+
+
+builder = StateGraph(MessagesState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", ToolNode(tools))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+# Register ToolCallTransformer — projects raw protocol events into ToolCallStream handles
+graph = builder.compile(
+    checkpointer=InMemorySaver(),
+    transformers=[ToolCallTransformer],
+)
+
+cfg = {"configurable": {"thread_id": "stocks-1"}}
+
+# --- Sync streaming via the v3 event protocol ---
+
+print("=== Sync stream ===")
+# run.tool_calls is a projection on the GraphRunStream returned by
+# stream_events(version="v3"). Plain graph.stream(stream_mode="tools") is a
+# generator of raw event dicts and cannot be used as a context manager.
+with graph.stream_events(
+    {"messages": [("user", "What is the price and latest news for AAPL?")]},
+    cfg,
+    version="v3",
+) as run:
+    for tc_stream in run.tool_calls:
+        print(f"→ Tool started: {tc_stream.tool_name} (input={tc_stream.input})")
+        for delta in tc_stream:          # drain deltas; output is set once the tool finishes
+            print(f"  delta: {delta!r}")
+        if tc_stream.error:
+            print(f"  ERROR: {tc_stream.error}")
+        else:
+            # output is the ToolMessage produced by the tool call
+            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output.content}")
+
+# To also see state-update events, stream separately with "updates" mode:
+for update in graph.stream(
+    {"messages": [("user", "What is the price and latest news for AAPL?")]},
+    {"configurable": {"thread_id": "stocks-1b"}},
+    stream_mode="updates",
+):
+    node = list(update.keys())[0]
+    print(f"[update] node={node}")
+
+
+# --- Async streaming ---
+
+async def main():
+    print("\n=== Async stream ===")
+    # astream_events() is a coroutine — await it to get the AsyncGraphRunStream
+    run = await graph.astream_events(
+        {"messages": [("user", "Check MSFT price")]},
+        {"configurable": {"thread_id": "stocks-2"}},
+        version="v3",
+    )
+    async with run:
+        async for tc_stream in run.tool_calls:
+            print(f"→ {tc_stream.tool_name} started (input={tc_stream.input})")
+            async for delta in tc_stream:
+                # delta chunks arrive as the tool streams partial output
+                print(f"  chunk: {delta!r}")
+            if tc_stream.error:
+                print(f"  ERROR: {tc_stream.error}")
+            else:
+                print(f"  Final output: {tc_stream.output.content}")
+
+
+asyncio.run(main())
+```
+
+**Key points:**
+- `run.tool_calls` exists only on the `GraphRunStream` returned by `stream_events(..., version="v3")` (async: `await graph.astream_events(..., version="v3")`), and only when `ToolCallTransformer` is registered — via `compile(transformers=[...])` or `stream_events(..., transformers=[...])`. The v3 protocol is marked experimental in 1.2.11.
+- Plain `graph.stream(..., stream_mode="tools")` (alone or in a list such as `["updates", "tools"]`) always yields raw event dicts (`{"event": "tool-started" | "tool-output-delta" | "tool-finished" | "tool-error", ...}`), whether or not a transformer is registered.
+- `ToolCallStream` `__iter__` / `__aiter__` (or `.output_deltas`) iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
+- `ToolCallStream.output` is the `ToolMessage` returned by the tool call (use `.content` for the text); it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
+
+---
+
+## Recipe 20: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
+
+**Goal:** Build a conversation workflow where the agent returns a rich result to the caller but feeds only a compact state forward to the next turn via `previous`.
+
+**Uses:** `entrypoint.final`, `@entrypoint(checkpointer=...)`, `previous`
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Any
+from langgraph.func import entrypoint, task
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- What we persist (compact) ---
+
+@dataclass
+class ThreadState:
+    turn_count: int
+    last_query: str
+    last_answer: str
+
+
+# --- What we return to the caller (richer) ---
+
+@dataclass
+class TurnResult:
+    answer: str
+    turn_count: int
+    context_used: list[str]
+
+
+# --- Tasks ---
+
+@task
+def retrieve(query: str) -> list[str]:
+    """Toy retrieval — returns relevant context snippets."""
+    corpus = {
+        "langgraph": ["LangGraph builds stateful graphs.", "It supports checkpointing."],
+        "python": ["Python is a high-level language.", "pip installs packages."],
+    }
+    for k, docs in corpus.items():
+        if k in query.lower():
+            return docs
+    return ["No specific context found."]
+
+
+@task
+def answer(query: str, context: list[str]) -> str:
+    """Generate an answer using retrieved context (toy version)."""
+    ctx_str = " | ".join(context)
+    return f"Based on [{ctx_str}]: answer to '{query}'"
+
+
+# --- Entrypoint ---
+
+@entrypoint(checkpointer=InMemorySaver())
+def qa_agent(
+    query: str,
+    *,
+    previous: ThreadState | None = None,
+) -> entrypoint.final[TurnResult, ThreadState]:
+    prev = previous or ThreadState(turn_count=0, last_query="", last_answer="")
+
+    context = retrieve(query).result()
+    ans = answer(query, context).result()
+
+    turn_count = prev.turn_count + 1
+
+    # What the caller receives — rich object with context included
+    caller_result = TurnResult(
+        answer=ans,
+        turn_count=turn_count,
+        context_used=context,
+    )
+
+    # What the next call receives as `previous` — compact, no context snippets
+    saved_state = ThreadState(
+        turn_count=turn_count,
+        last_query=query,
+        last_answer=ans,
+    )
+
+    return entrypoint.final(value=caller_result, save=saved_state)
+
+
+# --- Usage ---
+
+cfg = {"configurable": {"thread_id": "qa-session-1"}}
+
+r1: TurnResult = qa_agent.invoke("Tell me about LangGraph", cfg)
+print(f"Turn {r1.turn_count}: {r1.answer}")
+print(f"Context used: {r1.context_used}")
+
+r2: TurnResult = qa_agent.invoke("What about Python?", cfg)
+print(f"Turn {r2.turn_count}: {r2.answer}")   # turn_count is 2 — loaded from checkpoint
+
+# get_state().values returns the value= output (TurnResult), NOT the save= state (ThreadState).
+# ThreadState is only accessible as the `previous` argument on the *next* call.
+snap = qa_agent.get_state(cfg)
+print(type(snap.values))   # TurnResult — the value= output from the last entrypoint.final
+```
+
+**Why `entrypoint.final`?**
+- `value=` controls what `invoke`/`stream` returns to the caller. It is **also checkpointed** — it is the entrypoint's output (`__end__` channel) and what `get_state().values` returns.
+- `save=` controls what is stored in the `__previous__` channel and surfaced as `previous` on the next call.
+- The two can be completely different types. `entrypoint.final` does **not** shrink the checkpoint — both values are persisted — so keep large or sensitive data out of `value=` if checkpoint size matters.
+- Both values go through the checkpointer's serializer. Custom classes defined in `__main__` (like the dataclasses above) currently log a "Deserializing unregistered type" warning on reload, which a future release will turn into an error. Use plain dicts / TypedDicts, define the classes in an importable module, or allow them explicitly via the serializer's `allowed_msgpack_modules`.
+
+---
+
+## Recipe 21: `GraphOutput` and `Durability` — v2 Invoke API (v1.2.11)
+
+**Goal:** Use the v2 invoke API to get a typed `GraphOutput` wrapper that includes both the final state and any interrupts that occurred, while controlling when checkpoints are persisted with `Durability` modes.
+
+**Uses:** `GraphOutput`, `Durability`, `version="v2"`, `interrupt()`
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import interrupt, GraphOutput
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+# --- State ---
+
+class ApprovalState(TypedDict):
+    document: str
+    approved: bool
+    approver: str
+
+
+# --- Nodes ---
+
+def draft(state: ApprovalState) -> dict:
+    return {"document": f"Draft: {state['document']}"}
+
+
+def review(state: ApprovalState) -> dict:
+    approval = interrupt({
+        "message": "Please approve or reject this document.",
+        "document": state["document"],
+    })
+    return {"approved": approval["decision"] == "approve", "approver": approval.get("by", "unknown")}
+
+
+def publish(state: ApprovalState) -> dict:
+    if state["approved"]:
+        print(f"Published by {state['approver']}: {state['document']}")
+    return {}
+
+
+# --- Graph ---
+
+builder = StateGraph(ApprovalState)
+builder.add_node("draft", draft)
+builder.add_node("review", review)
+builder.add_node("publish", publish)
+builder.add_edge(START, "draft")
+builder.add_edge("draft", "review")
+builder.add_edge("review", "publish")
+builder.add_edge("publish", END)
+
+graph = builder.compile(checkpointer=InMemorySaver())
+cfg = {"configurable": {"thread_id": "approval-1"}}
+
+# --- v2 invoke: returns GraphOutput ---
+
+# durability="exit": only checkpoint once the graph exits (cheapest — no mid-run persistence)
+output: GraphOutput = graph.invoke(
+    {"document": "Quarterly report", "approved": False, "approver": ""},
+    cfg,
+    version="v2",
+    durability="exit",
+)
+
+print(type(output))           # <class 'langgraph.types.GraphOutput'>
+print(output.value)           # ApprovalState dict (final state up to the interrupt)
+print(len(output.interrupts)) # 1 — contains the Interrupt raised by review()
+print(output.interrupts[0].value)  # {'message': '...', 'document': '...'}
+
+# --- Resume with a Command ---
+
+from langgraph.types import Command
+
+resumed: GraphOutput = graph.invoke(
+    Command(resume={"decision": "approve", "by": "alice"}),
+    cfg,
+    version="v2",
+    durability="sync",   # strongest guarantee: checkpoint before every step
+)
+print(resumed.value["approved"])   # True
+print(resumed.value["approver"])   # alice
+print(len(resumed.interrupts))     # 0 — no pending interrupts
+```
+
+**`Durability` modes:**
+
+| Mode | When checkpointed | Cost | Use case |
+|---|---|---|---|
+| `"sync"` | Before each step begins | Highest | Critical workflows where every step must survive a crash |
+| `"async"` | Concurrently as the next step runs | Medium | **Default** — good balance of speed and safety |
+| `"exit"` | Only when the graph exits | Lowest | Short-lived, low-stakes runs; CI test graphs |
+
+**`GraphOutput` fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `value` | `OutputT` | The final state (or output schema value) after the run. |
+| `interrupts` | `tuple[Interrupt, ...]` | All `interrupt()` calls that fired during the run. Empty when no interrupts occurred. |
+
+Use `version="v2"` to opt into the typed `GraphOutput` wrapper. The v1 API (default) returns the raw state dict.

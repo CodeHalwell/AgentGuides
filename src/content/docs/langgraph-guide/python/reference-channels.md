@@ -10,7 +10,7 @@ sidebar:
 
 # Channels — API reference
 
-Verified against **`langgraph==1.2.2`** (module: `langgraph.channels`).
+Verified against **`langgraph==1.2.11`** (module: `langgraph.channels`).
 
 Every key in a `StateGraph` state schema is backed by a **channel**. Channels define how values are stored and how concurrent writes within the same super-step are resolved. Most users interact with channels only through `Annotated[type, reducer]` syntax; this page documents what those annotations actually create, their semantics under parallel execution, and when to choose each one.
 
@@ -165,6 +165,59 @@ def worker_b(state): return {"hits": 5}
 ```
 
 The initial value for `BinaryOperatorAggregate` is the zero value of the declared type (`0` for `int`, `""` for `str`, `[]` for `list`, etc.). For types whose zero value is not constructable, the channel starts as `MISSING` and the first write sets it directly.
+
+### `Overwrite` — bypassing the reducer for a single write
+
+`Overwrite` (from `langgraph.types`) lets one write **replace** the accumulated value rather than being merged through the reducer. This is useful when you need to reset a counter or clear an accumulated list mid-run.
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Overwrite
+
+
+class State(TypedDict):
+    hits: Annotated[int, operator.add]     # accumulates on every write
+    log: Annotated[list[str], operator.add]
+
+
+def accumulate(state: State) -> dict:
+    return {"hits": 1, "log": ["event"]}
+
+
+def reset(state: State) -> dict:
+    # Overwrite bypasses operator.add and replaces the value outright
+    return {
+        "hits": Overwrite(value=0),
+        "log": Overwrite(value=[]),
+    }
+
+
+builder = StateGraph(State)
+builder.add_node("accumulate", accumulate)
+builder.add_node("reset", reset)
+builder.add_edge(START, "accumulate")
+builder.add_edge("accumulate", "reset")
+builder.add_edge("reset", END)
+
+graph = builder.compile()
+result = graph.invoke({"hits": 5, "log": ["old_event"]})
+print(result["hits"])   # 0  — reset by Overwrite, not 6
+print(result["log"])    # []  — replaced, not appended
+```
+
+`Overwrite` also works in JSON-serialized form when crossing an API boundary (e.g., LangGraph Platform):
+
+```python
+# These three forms are all equivalent; LangGraph recognises all of them:
+{"hits": Overwrite(value=0)}                     # typed dataclass
+{"hits": {"__overwrite__": 0}}                   # sentinel-key dict
+{"hits": {"value": 0, "type": "__overwrite__"}}  # JSON-serialized form
+```
+
+Only **one** `Overwrite` per channel per super-step is allowed; a second raises `InvalidUpdateError`.
 
 ### `add_messages` reducer
 

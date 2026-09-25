@@ -10,7 +10,7 @@ sidebar:
 
 # Streaming modes — API reference
 
-Verified against **`langgraph==1.2.2`** (modules: `langgraph.types`, `langgraph.pregel.main`, `langgraph.config`).
+Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.pregel.main`, `langgraph.config`).
 
 Every compiled graph (both `StateGraph` and `@entrypoint` workflows) exposes:
 
@@ -712,7 +712,7 @@ for part in graph.stream(
 
 ## `stream_mode="tools"` — per-tool-call streaming
 
-The `"tools"` mode emits low-level protocol events as each tool call executes inside a `ToolNode`. Three event types flow through:
+The `"tools"` mode emits low-level protocol events as each tool call executes inside a `ToolNode`. Four event types flow through:
 
 | Event type | When it fires | Data fields |
 |---|---|---|
@@ -758,8 +758,8 @@ for event in graph.stream(
 ):
     print(event)
 # Example output:
-# {'method': 'tools', 'params': {'namespace': (), 'data': {'event': 'tool-started', 'tool_call_id': 'tc_01', 'tool_name': 'multiply', 'input': {'a': 6, 'b': 7}}}}
-# {'method': 'tools', 'params': {'namespace': (), 'data': {'event': 'tool-finished', 'tool_call_id': 'tc_01', 'output': 42}}}
+# {'event': 'tool-started', 'tool_call_id': 'tc_01', 'tool_name': 'multiply', 'input': {'a': 6, 'b': 7}}
+# {'event': 'tool-finished', 'tool_call_id': 'tc_01', 'output': ToolMessage(content='42', name='multiply', tool_call_id='tc_01', ...)}
 ```
 
 ### Structured streaming with `ToolCallTransformer`
@@ -774,13 +774,13 @@ from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 graph = builder.compile(transformers=[ToolCallTransformer])
 ```
 
-Then iterate `run.tool_calls` to get `ToolCallStream` objects as tools start:
+Then open the run with `stream_events(..., version="v3")` (experimental in 1.2.11) and iterate `run.tool_calls` to get `ToolCallStream` objects as tools start. Plain `graph.stream(..., stream_mode="tools")` is a generator of raw event dicts (above) even with the transformer registered, and cannot be used as a context manager:
 
 ```python
 # Sync iteration
-with graph.stream(
+with graph.stream_events(
     {"messages": [("user", "What is 6 times 7?")]},
-    stream_mode="tools",
+    version="v3",
 ) as run:
     for tool_call_stream in run.tool_calls:
         print(f"Tool started: {tool_call_stream.tool_name}, id={tool_call_stream.tool_call_id}")
@@ -788,7 +788,7 @@ with graph.stream(
         # Iterate output deltas in real time
         for delta in tool_call_stream.output_deltas:
             print(f"  delta: {delta}")
-        print(f"Final output: {tool_call_stream.output}")
+        print(f"Final output: {tool_call_stream.output.content}")  # output is a ToolMessage
 ```
 
 ### `ToolCallStream` fields
@@ -799,7 +799,7 @@ with graph.stream(
 | `tool_name` | `str` | Name of the tool being executed. |
 | `input` | `dict \| None` | The tool's input arguments (from the `tool-started` event). |
 | `output_deltas` | `StreamChannel[Any]` | Channel of incremental output chunks. Iterate sync or async. |
-| `output` | `Any` | Final output from the `tool-finished` event. `None` until complete. |
+| `output` | `Any` | Final output from the `tool-finished` event — for `ToolNode`, the `ToolMessage`. `None` until complete. |
 | `error` | `str \| None` | Error message from `tool-error`. `None` on success. |
 | `completed` | `bool` | `True` once a terminal event has been seen. |
 
@@ -812,10 +812,11 @@ from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
 graph = builder.compile(transformers=[ToolCallTransformer])
 
 async def stream_tools():
-    async with graph.astream(
+    run = await graph.astream_events(
         {"messages": [("user", "What is 6 times 7?")]},
-        stream_mode="tools",
-    ) as run:
+        version="v3",
+    )
+    async with run:
         async for tool_call_stream in run.tool_calls:
             print(f"Tool: {tool_call_stream.tool_name} ({tool_call_stream.tool_call_id})")
             async for delta in tool_call_stream.output_deltas:
@@ -823,7 +824,7 @@ async def stream_tools():
             if tool_call_stream.error:
                 print(f"  ERROR: {tool_call_stream.error}")
             else:
-                print(f"  output: {tool_call_stream.output}")
+                print(f"  output: {tool_call_stream.output.content}")
 
 asyncio.run(stream_tools())
 ```
@@ -838,10 +839,9 @@ for mode, data in graph.stream(
     if mode == "updates":
         print("Node update:", data)
     elif mode == "tools":
-        # Raw tools event dict
-        event_data = data["params"]["data"]
-        if event_data.get("event") == "tool-finished":
-            print("Tool finished, output:", event_data.get("output"))
+        # Raw tools event dict: {"event": ..., "tool_call_id": ..., ...}
+        if data["event"] == "tool-finished":
+            print("Tool finished, output:", data["output"].content)
 ```
 
 ## Durability interacts with streaming
