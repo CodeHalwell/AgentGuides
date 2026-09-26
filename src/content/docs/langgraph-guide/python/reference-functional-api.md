@@ -266,7 +266,7 @@ for mode, data in pipeline.stream(["a", "b"], cfg, stream_mode=["updates", "mess
     print(mode, data)
 ```
 
-All stream modes from the [Streaming modes reference](./reference-streaming-modes/) apply — `values`, `updates`, `messages`, `custom`, `checkpoints`, `tasks`, `debug`.
+All stream modes from the [Streaming modes reference](/langgraph-guide/python/reference-streaming-modes/) apply — `values`, `updates`, `messages`, `custom`, `checkpoints`, `tasks`, `debug`.
 
 ## Custom streaming from inside a task
 

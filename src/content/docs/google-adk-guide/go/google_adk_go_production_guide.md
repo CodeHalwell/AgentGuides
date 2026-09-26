@@ -1096,5 +1096,5 @@ jobs:
 
 ---
 
-**This production guide provides complete deployment patterns for ADK Go agents. Combine with [google_adk_go_comprehensive_guide.md](./google_adk_go_comprehensive_guide/) for complete coverage.**
+**This production guide provides complete deployment patterns for ADK Go agents. Combine with [google_adk_go_comprehensive_guide.md](/google-adk-guide/go/google_adk_go_comprehensive_guide/) for complete coverage.**
 

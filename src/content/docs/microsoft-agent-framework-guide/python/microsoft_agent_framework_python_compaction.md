@@ -746,7 +746,7 @@ Excluded messages stay in the original list — `apply_compaction` mutates in pl
 
 **Multi-tool pipelines.** Tool results often dwarf user/assistant turns. `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=2)` preserves the important reasoning while dropping the polling noise.
 
-**A/B test strategies.** Run `evaluate_agent` (see [Evaluation](./microsoft_agent_framework_python_evaluation/)) twice with different `compaction_strategy=` overrides and compare pass rates.
+**A/B test strategies.** Run `evaluate_agent` (see [Evaluation](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/)) twice with different `compaction_strategy=` overrides and compare pass rates.
 
 ## End-to-end recipes for each strategy
 

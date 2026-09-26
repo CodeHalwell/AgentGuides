@@ -1076,5 +1076,5 @@ TypeScript Agents SDK (2025) provides:
 **Last Updated:** January 2025
 **SDK Version:** Latest
 **TypeScript Version:** 5.0+
-**Next:** [Swarm Migration Guide](./openai_agents_sdk_typescript_swarm_migration_guide/)
+**Next:** [Swarm Migration Guide](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_swarm_migration_guide/)
 

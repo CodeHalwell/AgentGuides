@@ -399,7 +399,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-For LLM-as-judge or weighted scoring patterns see the [evaluation guide](./microsoft_agent_framework_python_evaluation/).
+For LLM-as-judge or weighted scoring patterns see the [evaluation guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/).
 
 ### Recipe 10 — Skills for progressive-disclosure knowledge
 
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`**kwargs` in the resource signature opts the function in to runtime data the model never sees (tenant id, request id, user id). Without `**kwargs` the framework calls the resource with no args. See the [skills guide](./microsoft_agent_framework_python_skills/) for file-based skills, executable scripts, and approval gates.
+`**kwargs` in the resource signature opts the function in to runtime data the model never sees (tenant id, request id, user id). Without `**kwargs` the framework calls the resource with no args. See the [skills guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) for file-based skills, executable scripts, and approval gates.
 
 ---
 
@@ -503,7 +503,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`MCPStdioTool` spawns a subprocess; `async with` cleans it up deterministically. For long-running servers, manage `connect()` / `close()` explicitly so the same MCP session survives across many agent runs (see the [MCP guide](./microsoft_agent_framework_python_mcp/)).
+`MCPStdioTool` spawns a subprocess; `async with` cleans it up deterministically. For long-running servers, manage `connect()` / `close()` explicitly so the same MCP session survives across many agent runs (see the [MCP guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/)).
 
 ### Recipe 12 — Per-tenant MCP via `header_provider`
 
@@ -747,7 +747,7 @@ agent = Agent(
 )
 ```
 
-`MiddlewareTermination(result=...)` lets you return a fully-formed synthetic response without invoking the model. See the [middleware guide](./microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
+`MiddlewareTermination(result=...)` lets you return a fully-formed synthetic response without invoking the model. See the [middleware guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
 
 ### Recipe 16 — Expose an agent over MCP
 
@@ -1023,7 +1023,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-For custom types in `session.state`, register them once at module import via `register_state_type(...)` so cold-starts work even before the model is serialised. See the [sessions guide](./microsoft_agent_framework_python_sessions/) for the full contract.
+For custom types in `session.state`, register them once at module import via `register_state_type(...)` so cold-starts work even before the model is serialised. See the [sessions guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/) for the full contract.
 
 ### Recipe 22 — Agent todo list with `TodoProvider` (Experimental)
 
@@ -1224,7 +1224,7 @@ Key points:
 - It also registers two built-in security tools: `quarantined_llm` (runs a sub-prompt through an isolated model without privileged tool access) and `inspect_variable` (lets the agent examine labelled variables before acting).
 - This feature is `ExperimentalFeature.FIDES` — the API is functional but may change between minor releases.
 
-See the [comprehensive guide's SecureAgentConfig section](./microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defense--secureagentconfig-experimental) for the full constructor reference table.
+See the [comprehensive guide's SecureAgentConfig section](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defense--secureagentconfig-experimental) for the full constructor reference table.
 
 ### Recipe 25 — `FunctionExecutor` data pipeline
 
@@ -1518,4 +1518,4 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Intercept tool calls | Subclass `FunctionMiddleware`, override `async process(context, call_next)` |
 | Early-exit from middleware | `raise MiddlewareTermination(result=AgentResponse(...))` |
 
-For deep dives see the framework's other Python guides: [tools](./microsoft_agent_framework_python_tools/), [sessions](./microsoft_agent_framework_python_sessions/), [middleware](./microsoft_agent_framework_python_middleware/), [MCP](./microsoft_agent_framework_python_mcp/), [skills](./microsoft_agent_framework_python_skills/), [evaluation](./microsoft_agent_framework_python_evaluation/), [checkpointing](./microsoft_agent_framework_python_checkpointing/), and [orchestration](./microsoft_agent_framework_python_orchestration/).
+For deep dives see the framework's other Python guides: [tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/), [sessions](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/), [middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/), [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/), [skills](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/), [evaluation](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/), [checkpointing](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/), and [orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/).

@@ -876,7 +876,7 @@ tool_node = ToolNode([get_weather], wrap_tool_call=cached_tool_wrapper)
 
 `ToolCallTransformer` (module: `langgraph.prebuilt._tool_call_transformer`) is a built-in **`StreamTransformer`** that turns the raw `tools`-channel protocol events emitted during graph streaming into convenient **`ToolCallStream`** handles — one per tool invocation. It lets you consume per-tool incremental output (delta streaming), final output, and errors in a structured way without parsing raw event dicts.
 
-> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. Its `run.tool_calls` projection is consumed through `stream_events(..., version="v3")` (experimental in 1.2.11); plain `stream(stream_mode="tools")` always yields the raw protocol event dicts — see also the [Streaming modes reference](./reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
+> **Note:** `ToolCallTransformer` is **not** a base class to subclass; it is a concrete transformer you register with `compile()`. Its `run.tool_calls` projection is consumed through `stream_events(..., version="v3")` (experimental in 1.2.11); plain `stream(stream_mode="tools")` always yields the raw protocol event dicts — see also the [Streaming modes reference](/langgraph-guide/python/reference-streaming-modes/#stream_modetools--per-tool-call-streaming).
 
 ### Registration
 

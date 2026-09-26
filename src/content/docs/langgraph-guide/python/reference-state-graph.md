@@ -404,7 +404,7 @@ Returns a `CompiledStateGraph`, which exposes (all inherited from `Pregel`):
 | Method | Purpose |
 |---|---|
 | `invoke(input, config=None, *, context=None, stream_mode=None, interrupt_before=None, interrupt_after=None, durability=None, version="v1")` | Run to completion, return final state. |
-| `stream(...)` | Yield per-step events (see the [Streaming modes reference](./reference-streaming-modes/)). |
+| `stream(...)` | Yield per-step events (see the [Streaming modes reference](/langgraph-guide/python/reference-streaming-modes/)). |
 | `ainvoke` / `astream` | Async variants. |
 | `get_state(config, *, subgraphs=False)` | Return the current `StateSnapshot` for a thread. Requires a checkpointer. |
 | `get_state_history(config, *, filter=None, before=None, limit=None)` | Iterate historical snapshots (newest first). |

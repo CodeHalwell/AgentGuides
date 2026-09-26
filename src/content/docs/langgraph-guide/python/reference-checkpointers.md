@@ -760,7 +760,7 @@ cfg = {"configurable": {"thread_id": f"user:{user_id}:conv:{conv_id}"}}
 graph.invoke({"messages": msgs}, cfg)
 ```
 
-For cross-thread (long-term) memory, pair with a `Store` — see the [Store reference](./reference-store/).
+For cross-thread (long-term) memory, pair with a `Store` — see the [Store reference](/langgraph-guide/python/reference-store/).
 
 ### 7. Listing all threads for a user (audit / GDPR)
 

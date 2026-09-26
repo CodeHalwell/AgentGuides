@@ -1325,7 +1325,7 @@ bq_tools = BigQueryToolset(
 
 Pass `external_access_token_key="my_token"` to `BigQueryCredentialsConfig` instead of `credentials` if you want the agent to inject a short-lived token from session state at query time.
 
-> Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
+> Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](/google-adk-guide/python/google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## PubSubToolset (experimental)
 
@@ -1349,7 +1349,7 @@ agent = LlmAgent(
 )
 ```
 
-> Full constructor reference, message tool signatures, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
+> Full constructor reference, message tool signatures, and more examples → the [Class & API Reference — Tools & Toolsets](/google-adk-guide/python/google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## SpannerToolset (experimental)
 
@@ -1378,7 +1378,7 @@ agent = LlmAgent(
 )
 ```
 
-> Full constructor reference, vector similarity search setup, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
+> Full constructor reference, vector similarity search setup, and more examples → the [Class & API Reference — Tools & Toolsets](/google-adk-guide/python/google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## SkillToolset (experimental)
 
@@ -1557,4 +1557,4 @@ Spin up `McpToolset` at runtime (e.g. per-tenant filesystem); pass `tool_name_pr
 - `FunctionTool` treats the first sentence of the docstring as the tool description. Keep it focused — the model obeys it.
 - Built-in Gemini tools (`google_search`, `url_context`, `google_maps_grounding`) cannot coexist freely. ADK tries to wrap them, but if you hit `400 INVALID_ARGUMENT` try `bypass_multi_tools_limit=True` where available.
 - `LongRunningFunctionTool` is just a `FunctionTool` with `is_long_running=True`. The model is separately instructed not to re-call it while pending.
-- Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](./runner-and-sessions/).
+- Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](/google-adk-guide/python/runner-and-sessions/).

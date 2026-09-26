@@ -880,7 +880,7 @@ analyst_tool = analyst.as_tool(
 
 Beyond graph-based `WorkflowBuilder`, the framework ships `@workflow` and `@step` — a decorator-based pattern for writing workflows as plain `async` Python functions. See the dedicated page for full coverage:
 
-**[Functional Workflows →](./python/microsoft_agent_framework_python_functional_workflows/)**
+**[Functional Workflows →](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/)**
 
 One-glance example:
 

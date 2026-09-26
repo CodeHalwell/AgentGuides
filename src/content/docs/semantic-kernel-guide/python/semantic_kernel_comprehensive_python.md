@@ -2193,9 +2193,9 @@ This comprehensive guide covers Semantic Kernel Python from fundamentals to adva
 - ✅ Production best practices
 
 For production deployment, recipes, and more examples, see:
-- [Production Guide](./semantic_kernel_production_python/)
-- [Recipes](./semantic_kernel_recipes_python/)
-- [Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/)
+- [Production Guide](/semantic-kernel-guide/python/semantic_kernel_production_python/)
+- [Recipes](/semantic-kernel-guide/python/semantic_kernel_recipes_python/)
+- [Advanced Multi-Agent Guide](/semantic-kernel-guide/python/semantic_kernel_advanced_multi_agent_python/)
 
 ---
 

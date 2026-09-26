@@ -19,7 +19,7 @@ Semantic Kernel .NET: 1.74.0+
 
 Production deployment of Semantic Kernel .NET applications including Docker/Kubernetes deployment, monitoring, security, performance optimization.
 
-**See Also:** [../semantic_kernel_production_guide.md](../semantic_kernel_production_guide/) for language-agnostic patterns.
+**See Also:** [../semantic_kernel_production_guide.md](/semantic-kernel-guide/semantic_kernel_production_guide/) for language-agnostic patterns.
 
 ---
 
@@ -197,7 +197,7 @@ public class KernelServiceTests
 
 ---
 
-For complete production patterns, see [../semantic_kernel_production_guide.md](../semantic_kernel_production_guide/)
+For complete production patterns, see [../semantic_kernel_production_guide.md](/semantic-kernel-guide/semantic_kernel_production_guide/)
 
 **[Back to .NET README](./)** | **[Overview](./)**
 

@@ -211,7 +211,7 @@ async with MCPWebsocketTool(
     agent = Agent(client=OpenAIChatClient(), tools=rt)
 ```
 
-When a tool requires approval, the workflow emits a `function_approval_request` event. Respond with `event.data.to_function_approval_response(approved=True)` and re-run — see the [HITL page](./microsoft_agent_framework_python_hitl/) for the full loop.
+When a tool requires approval, the workflow emits a `function_approval_request` event. Respond with `event.data.to_function_approval_response(approved=True)` and re-run — see the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) for the full loop.
 
 > **Note:** `MCPWebsocketTool` keeps a single persistent connection open for the lifetime of the `async with` block. If the server drops the connection, call `await rt.connect(reset=True)` to re-establish it. WebSocket servers that rotate tokens will require you to rebuild the tool instance with the new credentials.
 
@@ -245,7 +245,7 @@ mcp = MCPStdioTool(
 )
 ```
 
-Tools listed in **both** lists require approval (the safe default). Tools not in either list inherit the server-side default. When approval is required the workflow emits a `function_approval_request` event; respond with `event.data.to_function_approval_response(approved=True)` and re-run with that response. See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for the full loop.
+Tools listed in **both** lists require approval (the safe default). Tools not in either list inherit the server-side default. When approval is required the workflow emits a `function_approval_request` event; respond with `event.data.to_function_approval_response(approved=True)` and re-run with that response. See the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) for the full loop.
 
 ### Approval + middleware audit log
 
@@ -503,7 +503,7 @@ When to stick with in-process (`MCPStdioTool` / `MCPStreamableHTTPTool` / `MCPWe
 - You want `approval_mode` gating every individual tool — this is an in-process feature.
 - You need to parse `CallToolResult` with a custom `parse_tool_results=` callback.
 
-The `SupportsMCPTool` protocol is `runtime_checkable`, so the `isinstance(...)` guard is a normal runtime check — no stub subclassing needed. See the [Advanced → Capability protocols](./microsoft_agent_framework_python_advanced/#capability-protocols--supports) section for the full set of `Supports*` protocols (file search, web search, code interpreter, image generation).
+The `SupportsMCPTool` protocol is `runtime_checkable`, so the `isinstance(...)` guard is a normal runtime check — no stub subclassing needed. See the [Advanced → Capability protocols](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#capability-protocols--supports) section for the full set of `Supports*` protocols (file search, web search, code interpreter, image generation).
 
 ## Lifecycle — connect, reset, close
 

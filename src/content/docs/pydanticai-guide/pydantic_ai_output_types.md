@@ -342,7 +342,7 @@ Up to `output_retries` (defaults to the agent `retries`) validator-triggered ret
 
 ## Output streaming
 
-See the [streaming guide](./pydantic_ai_streaming/). `StreamedRunResult.get_output()` validates the final assembled output using the same `output_type` pipeline.
+See the [streaming guide](/pydanticai-guide/pydantic_ai_streaming/). `StreamedRunResult.get_output()` validates the final assembled output using the same `output_type` pipeline.
 
 ## Gotchas
 
@@ -628,4 +628,4 @@ asyncio.run(main())
 - `output_validator` decorator — `agent/__init__.py:1911`
 - `OutputSpec` type alias — `output.py`
 - `TextOutputFunc` — `output.py` — `Callable[[str], T] | Callable[[RunContext, str], T]`
-- Advanced patterns with `AgentSpec` and output — see [Class & API Reference](./pydantic_ai_comprehensive_guide/#class--api-reference) in the comprehensive guide
+- Advanced patterns with `AgentSpec` and output — see [Class & API Reference](/pydanticai-guide/pydantic_ai_comprehensive_guide/#class--api-reference) in the comprehensive guide

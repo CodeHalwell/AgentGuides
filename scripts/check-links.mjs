@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// Scan src/content/docs for internal markdown links and report any that
-// don't resolve to a real file/folder in the collection.
+// Scan src/content/docs for internal links and report any that don't resolve
+// to a real page in the collection.
 //
-// For Starlight:
-// - /foo/bar/ resolves to src/content/docs/foo/bar/index.md[x] or foo/bar.md[x]
-// - ./baz/ inside src/content/docs/foo/ resolves the same way relative to foo/
+// Links are resolved the way the browser resolves them on the deployed site,
+// i.e. against the page's URL rather than its source folder:
+// - src/content/docs/foo/bar.md       is served at /foo/bar/
+// - src/content/docs/foo/index.md     is served at /foo/
+// So `./baz/` in foo/bar.md points at /foo/bar/baz/ (usually a 404), while in
+// foo/index.md it points at /foo/baz/. Use `../baz/` or `/foo/baz/` from a
+// non-index page.
 //
+// Checks markdown links, reference definitions and MDX href="..." attributes.
 // Anchors (#) and external URLs are ignored. Query strings (?) are stripped.
 
 import { promises as fs } from 'node:fs';
@@ -43,52 +48,43 @@ function* extractLinks(md) {
   while ((m = ref.exec(md))) {
     yield { text: '', href: m[1], index: m.index };
   }
-}
-
-async function exists(absPath) {
-  try {
-    await fs.access(absPath);
-    return true;
-  } catch {
-    return false;
+  // MDX/JSX attributes such as <LinkCard href="./foo/" />.
+  const attr = /\bhref=["']([^"']+)["']/g;
+  while ((m = attr.exec(md))) {
+    yield { text: '', href: m[1], index: m.index };
   }
 }
 
-async function resolveLink(href, fromFile) {
-  // Returns {ok, target} where target is the canonical file path.
+// Site URL path (without base) that Starlight serves a docs file at.
+function pageUrl(file) {
+  const rel = path.relative(docsRoot, file).split(path.sep).join('/');
+  const noExt = rel.replace(/\.(md|mdx)$/i, '');
+  const segs = noExt.split('/');
+  if (segs[segs.length - 1].toLowerCase() === 'index') segs.pop();
+  const slug = segs.map((seg) => seg.toLowerCase().replace(/\s+/g, '-')).join('/');
+  return slug ? `/${slug}/` : '/';
+}
+
+async function resolveLink(href, fromFile, pages) {
+  // Returns {ok, target} where target is the site path the link points at.
   const [bare] = href.split(/[#?]/);
   if (!bare) return { ok: true, target: null }; // pure anchor
-  if (/^(https?:|mailto:|tel:)/i.test(bare)) return { ok: true, target: null };
-  if (/\.(png|jpe?g|gif|svg|webp|pdf|zip|ico|json|xml)$/i.test(bare))
+  if (/^(https?:|mailto:|tel:|data:)/i.test(bare) || bare.startsWith('//'))
+    return { ok: true, target: null };
+  if (/\.(png|jpe?g|gif|svg|webp|pdf|zip|ico|json|xml|txt)$/i.test(bare))
     return { ok: true, target: null };
 
-  // Resolve to absolute within docsRoot.
-  let absDir;
-  if (bare.startsWith('/')) {
-    // Root-relative, strip leading slash to join with docsRoot.
-    // If it starts with /AgentGuides/, strip that too.
-    const stripped = bare.replace(/^\/AgentGuides\//, '/').replace(/^\//, '');
-    absDir = path.join(docsRoot, stripped);
-  } else {
-    absDir = path.resolve(path.dirname(fromFile), bare);
-  }
-  // Trim trailing slash for candidate building.
-  const trimmed = absDir.replace(/\/+$/, '');
-
-  const candidates = [
-    trimmed + '.md',
-    trimmed + '.mdx',
-    path.join(trimmed, 'index.md'),
-    path.join(trimmed, 'index.mdx'),
-  ];
-  for (const c of candidates) {
-    if (await exists(c)) return { ok: true, target: c };
-  }
-  return { ok: false, target: trimmed };
+  // Resolve like a browser, against the page URL (base prefix stripped).
+  const from = new URL(pageUrl(fromFile), 'https://site.invalid');
+  let target = new URL(bare.replace(/^\/AgentGuides(?=\/|$)/, '') || '/', from).pathname;
+  target = decodeURIComponent(target).toLowerCase();
+  if (!target.endsWith('/')) target += '/';
+  return { ok: pages.has(target), target };
 }
 
 async function main() {
   const files = await walk(docsRoot);
+  const pages = new Set(files.map(pageUrl));
   const broken = [];
   let totalLinks = 0;
   for (const file of files) {
@@ -101,7 +97,7 @@ async function main() {
       .replace(/`[^`\n]*`/g, '');
     for (const { href } of extractLinks(body)) {
       totalLinks++;
-      const r = await resolveLink(href, file);
+      const r = await resolveLink(href, file, pages);
       if (!r.ok) broken.push({ file: path.relative(docsRoot, file), href, expected: r.target });
     }
   }
@@ -120,6 +116,7 @@ async function main() {
     if (filesList.length > 3) console.log(`         …and ${filesList.length - 3} more`);
   }
   if (sorted.length > 30) console.log(`\n(${sorted.length - 30} more unique broken hrefs)`);
+  if (broken.length) process.exitCode = 1;
 }
 
 main().catch((e) => {

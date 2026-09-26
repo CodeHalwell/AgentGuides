@@ -590,7 +590,7 @@ events_all = result.events
 
 ## See also
 
-- [HITL — `request_info` in graph workflows](./microsoft_agent_framework_python_hitl/)
-- [Checkpointing — `FileCheckpointStorage`](./microsoft_agent_framework_python_checkpointing/)
-- [Workflows & Declarative Agents](../microsoft_agent_framework_graphs_declarative/) — graph-based `WorkflowBuilder` and YAML workflows
-- [Orchestration](./microsoft_agent_framework_python_orchestration/) — `SequentialBuilder`, `MagenticBuilder`, etc.
+- [HITL — `request_info` in graph workflows](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/)
+- [Checkpointing — `FileCheckpointStorage`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/)
+- [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) — graph-based `WorkflowBuilder` and YAML workflows
+- [Orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/) — `SequentialBuilder`, `MagenticBuilder`, etc.

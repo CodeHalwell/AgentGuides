@@ -79,7 +79,7 @@ Optional knobs:
 
 - `chain_only_agent_responses=True` — pass only assistant messages between agents (skip user history). Useful when the conversation would otherwise balloon.
 - `intermediate_outputs=True` — yield per-participant responses as events, not just the final one.
-- `checkpoint_storage=...` — persist state between runs; see the [HITL page](./microsoft_agent_framework_python_hitl/) for resuming from a checkpoint.
+- `checkpoint_storage=...` — persist state between runs; see the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) for resuming from a checkpoint.
 - `.with_request_info(agents=[...])` — pause after each (or a subset of) participants for human review.
 
 ```python
@@ -293,7 +293,7 @@ async for event in workflow.run("…", stream=True):
             print("Final answer:", event.data)
 ```
 
-See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for how to respond to request-info events from your caller.
+See the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) for how to respond to request-info events from your caller.
 
 ## Picking a pattern
 

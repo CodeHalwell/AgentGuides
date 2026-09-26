@@ -1353,5 +1353,5 @@ func main() {
 
 ---
 
-**These recipes provide ready-to-use code for common ADK patterns. Modify them for your specific needs. For complete API reference, see [google_adk_go_comprehensive_guide.md](./google_adk_go_comprehensive_guide/).**
+**These recipes provide ready-to-use code for common ADK patterns. Modify them for your specific needs. For complete API reference, see [google_adk_go_comprehensive_guide.md](/google-adk-guide/go/google_adk_go_comprehensive_guide/).**
 

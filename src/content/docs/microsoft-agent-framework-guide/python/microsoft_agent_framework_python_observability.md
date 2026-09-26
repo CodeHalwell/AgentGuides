@@ -216,7 +216,7 @@ with tracer.start_as_current_span("process_order", attributes={"order.id": order
     response = await agent.run(f"Draft reply for order {order_id}")
 ```
 
-For agent-level wrapping use `AgentMiddleware` instead — see the [middleware page](./microsoft_agent_framework_python_middleware/#emitting-opentelemetry-spans).
+For agent-level wrapping use `AgentMiddleware` instead — see the [middleware page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#emitting-opentelemetry-spans).
 
 ### Use the framework's tracer / meter helpers
 

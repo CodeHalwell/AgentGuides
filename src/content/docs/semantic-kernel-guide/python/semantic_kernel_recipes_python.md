@@ -18,7 +18,7 @@ Semantic Kernel Python: 1.41.2+
 
 This document provides production-ready Python recipes for common Semantic Kernel patterns. Each recipe includes complete, tested code that can be adapted for your use case.
 
-**See Also:** [../semantic_kernel_recipes.md](../semantic_kernel_recipes/) for additional language-agnostic recipes.
+**See Also:** [../semantic_kernel_recipes.md](/semantic-kernel-guide/semantic_kernel_recipes/) for additional language-agnostic recipes.
 
 ---
 
@@ -514,10 +514,10 @@ asyncio.run(vector_store_v134_recipe())
 ---
 
 For more recipes, see:
-- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) - Detailed examples
-- [Production Guide](./semantic_kernel_production_python/) - Production patterns
-- [Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/) - Complex multi-agent patterns
-- [General Recipes](../semantic_kernel_recipes/) - Language-agnostic examples
+- [Comprehensive Guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) - Detailed examples
+- [Production Guide](/semantic-kernel-guide/python/semantic_kernel_production_python/) - Production patterns
+- [Advanced Multi-Agent Guide](/semantic-kernel-guide/python/semantic_kernel_advanced_multi_agent_python/) - Complex multi-agent patterns
+- [General Recipes](/semantic-kernel-guide/semantic_kernel_recipes/) - Language-agnostic examples
 
 **[Back to Python README](./)** | **[Overview](./)**
 

@@ -91,7 +91,7 @@ Lightweight Python framework where agents write code instead of JSON.
 - [Anthropic Claude TypeScript](/anthropic-claude-agent-sdk-typescript-guide/) - TypeScript
 - [OpenAI Agents TypeScript](/openai-agents-sdk-typescript-guide/) - TypeScript
 
-[View All Guides →](./guides)
+[View All Guides →](/guides/)
 
 ---
 
@@ -177,7 +177,7 @@ State management:
 
 ## 📊 Framework Comparison
 
-Want to compare features across frameworks? Check out our [Comparison Guide](./frameworks).
+Want to compare features across frameworks? Check out our [Comparison Guide](/frameworks/).
 
 ---
 
@@ -232,6 +232,6 @@ This collection is maintained by the community for the community. Thank you to a
 
 ---
 
-**Start exploring**: [Browse All Guides →](./guides)
+**Start exploring**: [Browse All Guides →](/guides/)
 
 

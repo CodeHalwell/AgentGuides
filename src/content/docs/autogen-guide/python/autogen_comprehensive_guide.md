@@ -2167,7 +2167,7 @@ print(f"Cost: ${cost_stats['total_cost']:.4f}")
 
 ---
 
-This comprehensive guide now covers both AutoGen and AG2, including the 2025 enhancements and migration guidance. For a detailed migration walkthrough, see the dedicated [AutoGen to AG2 Migration Guide](./autogen_to_ag2_migration_guide/).
+This comprehensive guide now covers both AutoGen and AG2, including the 2025 enhancements and migration guidance. For a detailed migration walkthrough, see the dedicated [AutoGen to AG2 Migration Guide](/autogen-guide/python/autogen_to_ag2_migration_guide/).
 
 **Welcome to the AG2 era of agentic AI development!**
 

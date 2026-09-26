@@ -583,4 +583,4 @@ For multi-process workflows (e.g. Azure Functions scaled out) use Cosmos or Redi
 
 ## Observability
 
-Each checkpoint save/load emits structured logs on `agent_framework._workflows._checkpoint`. When OpenTelemetry is on (see [Observability](./microsoft_agent_framework_python_observability/)), checkpoint operations appear as events inside the `workflow.run` span with `workflow.id` and `workflow.name` attributes.
+Each checkpoint save/load emits structured logs on `agent_framework._workflows._checkpoint`. When OpenTelemetry is on (see [Observability](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/)), checkpoint operations appear as events inside the `workflow.run` span with `workflow.id` and `workflow.name` attributes.

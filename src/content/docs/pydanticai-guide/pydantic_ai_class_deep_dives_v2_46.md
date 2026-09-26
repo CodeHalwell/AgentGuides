@@ -1498,8 +1498,8 @@ print(result.output)
 
 | Series | Classes |
 |--------|---------|
-| [Aug 2026 (2.33.0)](./pydantic_ai_class_examples_2026_08/) | Agent, RunContext, UsageLimits, ToolReturn, DeferredToolRequests/Results, CachePoint, PrefixedToolset/FilteredToolset/RenamedToolset, WebSearchTool, ModelRetry/UnexpectedModelBehavior |
-| [v2.36.0](./pydantic_ai_class_deep_dives_v2_36/) | AgentRun, AgentRunResult, StreamedRunResult, ModelSettings, Tool, ToolDefinition, RunUsage/RequestUsage, ConcurrencyLimiter, MCPToolset, ApprovalRequiredToolset/DynamicToolset |
-| [v2.40.0](./pydantic_ai_class_deep_dives_v2_40/) | RealtimeSession, RealtimeModelSettings/TurnDetection, AgentRealtime, Capability, Hooks, TemplateStr, ExternalToolset, RetryConfig/HTTPX2TenacityTransport, DuckDuckGoSearchTool, ImageGenerationSubagentTool |
-| [v2.43.0](./pydantic_ai_class_deep_dives_v2_43/) | ToolFailed, RunCancelled, ToolSelector, ToolOrOutput, ServiceTier/ThinkingLevel, AgentStream/StreamedRunResult, SkipModelRequest/SkipToolValidation/SkipToolExecution, ToolDefinition.sequential, OutputContext, ApprovalRequired |
+| [Aug 2026 (2.33.0)](/pydanticai-guide/pydantic_ai_class_examples_2026_08/) | Agent, RunContext, UsageLimits, ToolReturn, DeferredToolRequests/Results, CachePoint, PrefixedToolset/FilteredToolset/RenamedToolset, WebSearchTool, ModelRetry/UnexpectedModelBehavior |
+| [v2.36.0](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_36/) | AgentRun, AgentRunResult, StreamedRunResult, ModelSettings, Tool, ToolDefinition, RunUsage/RequestUsage, ConcurrencyLimiter, MCPToolset, ApprovalRequiredToolset/DynamicToolset |
+| [v2.40.0](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_40/) | RealtimeSession, RealtimeModelSettings/TurnDetection, AgentRealtime, Capability, Hooks, TemplateStr, ExternalToolset, RetryConfig/HTTPX2TenacityTransport, DuckDuckGoSearchTool, ImageGenerationSubagentTool |
+| [v2.43.0](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_43/) | ToolFailed, RunCancelled, ToolSelector, ToolOrOutput, ServiceTier/ThinkingLevel, AgentStream/StreamedRunResult, SkipModelRequest/SkipToolValidation/SkipToolExecution, ToolDefinition.sequential, OutputContext, ApprovalRequired |
 | **v2.46.0 (this page)** | **FallbackModel, FunctionToolset, TextOutput/ToolOutput/NativeOutput/PromptedOutput, Embedder/EmbeddingResult, MCPToolset v2.46.0/FastMCP 4, load_mcp_toolsets, CombinedToolset, StructuredDict, ModelSettings lesser-known fields, AdvisorTool** |

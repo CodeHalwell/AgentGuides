@@ -9,7 +9,7 @@ sidebar:
 
 Verified against google-adk==2.3.0 (`google/adk/agents/`). As of 2026-09-21 the latest release was **2.9.2**. Most examples require 2.3.0 or later; `LangGraphAgent` requires 2.5.0+; `ManagedAgent` requires 2.4.0+. Per-section minimums are noted where they differ.
 
-ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](./workflows/).
+ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](/google-adk-guide/python/workflows/).
 
 ## Minimal example
 
@@ -50,7 +50,7 @@ asyncio.run(main())
 
 The deprecation notices are emitted via `typing_extensions.deprecated` at class level (see `sequential_agent.py:48`, `parallel_agent.py:150`, `loop_agent.py:52`).
 
-> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) and [— A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) sections.
+> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in the [Class & API Reference — Agents & Context](/google-adk-guide/python/google_adk_comprehensive_guide/#agents--context) and [— A2A Protocol](/google-adk-guide/python/google_adk_comprehensive_guide/#a2a-protocol) sections.
 
 ## LlmAgent
 
@@ -97,7 +97,7 @@ agent = LlmAgent(
 | `planner` | `BasePlanner` | `None` | `BuiltInPlanner` forwards `thinking_config` to the model |
 | `code_executor` | `BaseCodeExecutor` | `None` | See [code executors](#code-executors) |
 | `disallow_transfer_to_parent` / `disallow_transfer_to_peers` | `bool` | `False` | Governs agent-transfer reachability |
-| `before_model_callback` / `after_model_callback` / `on_model_error_callback` | fn or list | `None` | See [callbacks-and-plugins](./callbacks-and-plugins/) |
+| `before_model_callback` / `after_model_callback` / `on_model_error_callback` | fn or list | `None` | See [callbacks-and-plugins](/google-adk-guide/python/callbacks-and-plugins/) |
 | `before_tool_callback` / `after_tool_callback` / `on_tool_error_callback` | fn or list | `None` | Same |
 | `before_agent_callback` / `after_agent_callback` | fn or list | `None` | Inherited from `BaseAgent` |
 
@@ -606,7 +606,7 @@ asyncio.run(main())
 
 ## Migration to `Workflow`
 
-The deprecated shells map to `Workflow` like this (full details in the [workflows page](./workflows/)):
+The deprecated shells map to `Workflow` like this (full details in the [workflows page](/google-adk-guide/python/workflows/)):
 
 ```python
 from google.adk.workflow import Workflow, START
@@ -858,11 +858,11 @@ agent = LangGraphAgent(
 
 **Memory rules:** If `graph.checkpointer` is set, ADK sends only the latest user messages and LangGraph manages history via its checkpointer. If no checkpointer, ADK sends the full conversation for that agent.
 
-> For detailed examples — multi-turn with `MemorySaver`, as a sub-agent in a multi-agent system — see the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) section.
+> For detailed examples — multi-turn with `MemorySaver`, as a sub-agent in a multi-agent system — see the [Class & API Reference — Agents & Context](/google-adk-guide/python/google_adk_comprehensive_guide/#agents--context) section.
 
 ## RemoteA2aAgent
 
-`RemoteA2aAgent` calls a remote A2A-compatible agent over HTTP, exposing it as a local `BaseAgent`. See also [MCP & A2A](./mcp-and-a2a/).
+`RemoteA2aAgent` calls a remote A2A-compatible agent over HTTP, exposing it as a local `BaseAgent`. See also [MCP & A2A](/google-adk-guide/python/mcp-and-a2a/).
 
 ```python
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
@@ -882,7 +882,7 @@ root = LlmAgent(
 )
 ```
 
-> For full constructor reference and examples (signed requests, file-based cards, interceptors) — see the [Class & API Reference — A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) section.
+> For full constructor reference and examples (signed requests, file-based cards, interceptors) — see the [Class & API Reference — A2A Protocol](/google-adk-guide/python/google_adk_comprehensive_guide/#a2a-protocol) section.
 
 ## ManagedAgent
 
@@ -961,7 +961,7 @@ managed_maps = ManagedAgent(
 )
 ```
 
-> `ManagedAgent` requires a Managed Agents API project allowlist. See the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) section for the full constructor signature.
+> `ManagedAgent` requires a Managed Agents API project allowlist. See the [Class & API Reference — Agents & Context](/google-adk-guide/python/google_adk_comprehensive_guide/#agents--context) section for the full constructor signature.
 
 ## Gotchas
 

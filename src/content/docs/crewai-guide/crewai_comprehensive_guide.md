@@ -2182,13 +2182,13 @@ print(f"Final result: {result}")
 5. **Testing**: Test flows with various scenarios and edge cases
 6. **Documentation**: Document flow logic, state transitions, and decision points
 
-**For comprehensive Flow examples and patterns, see the dedicated [CrewAI Flows Guide](./crewai_flows_guide/).**
+**For comprehensive Flow examples and patterns, see the dedicated [CrewAI Flows Guide](/crewai-guide/crewai_flows_guide/).**
 
 ---
 
 ## CrewAI AMP Suite
 
-> **Errata (April 2026):** the Python snippets below reference a `crewai.amp` module that **does not exist** in the installed package (`crewai==1.14.3a2`). The AMP platform is real but is accessed through the `crewai` CLI (`crewai login`, `crewai deploy ...`, `crewai org ...`, `crewai enterprise configure ...`) — see the [CLI page](./crewai_cli_python/). The `AMPCrew`, `AuthConfig`, `DeploymentConfig`, etc. names below are not importable. Treat this section as a conceptual overview until rewritten.
+> **Errata (April 2026):** the Python snippets below reference a `crewai.amp` module that **does not exist** in the installed package (`crewai==1.14.3a2`). The AMP platform is real but is accessed through the `crewai` CLI (`crewai login`, `crewai deploy ...`, `crewai org ...`, `crewai enterprise configure ...`) — see the [CLI page](/crewai-guide/crewai_cli_python/). The `AMPCrew`, `AuthConfig`, `DeploymentConfig`, etc. names below are not importable. Treat this section as a conceptual overview until rewritten.
 
 ### Introduction to CrewAI AMP
 
@@ -2463,7 +2463,7 @@ uv pip install package_name==1.2.3
 
 ---
 
-This comprehensive guide now includes all features through CrewAI v1.14.2 (April 2026), including the Checkpoint System (with forking and `from_checkpoint`), enriched LLM token tracking, native OpenAI-compatible providers, CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide/).
+This comprehensive guide now includes all features through CrewAI v1.14.2 (April 2026), including the Checkpoint System (with forking and `from_checkpoint`), enriched LLM token tracking, native OpenAI-compatible providers, CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](/crewai-guide/crewai_flows_guide/).
 
 ---
 

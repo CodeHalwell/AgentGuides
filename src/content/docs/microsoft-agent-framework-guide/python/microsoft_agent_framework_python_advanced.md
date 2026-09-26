@@ -394,7 +394,7 @@ class BatchedEmbeddingClient(BaseEmbeddingClient):
 
 ## Custom context provider — `ContextProvider`
 
-`ContextProvider` is the base class for anything that mutates the `SessionContext` before a run (injecting messages, tools, instructions, or middleware) or observes the response afterwards. The `SkillsProvider` from the [Skills page](./microsoft_agent_framework_python_skills/) is itself a `ContextProvider`. Roll your own when you have domain-specific context to attach.
+`ContextProvider` is the base class for anything that mutates the `SessionContext` before a run (injecting messages, tools, instructions, or middleware) or observes the response afterwards. The `SkillsProvider` from the [Skills page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) is itself a `ContextProvider`. Roll your own when you have domain-specific context to attach.
 
 ```python
 from typing import Any
@@ -1106,7 +1106,7 @@ The validation types currently emitted:
 Three composable layers:
 
 - **Per-tool circuit breaker** — `FunctionTool(max_invocation_exceptions=5)` stops calling a flapping tool.
-- **Per-request retry** — `FunctionMiddleware` with exponential backoff (see [Middleware → Retrying](./microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
+- **Per-request retry** — `FunctionMiddleware` with exponential backoff (see [Middleware → Retrying](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
 - **Per-run budget** — `AgentMiddleware` raising `MiddlewareTermination` when a usage cap is hit.
 
 Example combining all three:

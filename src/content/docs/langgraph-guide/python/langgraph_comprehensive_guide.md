@@ -4716,8 +4716,12 @@ builder.add_edge("tools", "model")
 An opt-in `_native = True` transformer (`required_stream_modes = ("tools",)`) that
 converts raw `"tools"`-channel protocol events into a live handle per tool call,
 exposed on `run.tool_calls` — register at compile time
-(`compile(transformers=[ToolCallTransformer])`), then iterate `run.tool_calls`
-while streaming with `stream_mode="tools"`. Under the hood this is powered by
+(`compile(transformers=[ToolCallTransformer])`) or per call
+(`stream_events(..., transformers=[...])`), then iterate `run.tool_calls` on the
+run stream returned by the experimental v3 API: `graph.stream_events(..., version="v3")`
+(async: `await graph.astream_events(..., version="v3")`). Plain
+`graph.stream(..., stream_mode="tools")` is a generator of raw event dicts, cannot be
+used as a context manager, and has no `run.tool_calls`. Under the hood this is powered by
 `StreamToolCallHandler` (`langgraph.pregel._tools`, private) which fires
 `tool-started`/`tool-output-delta`/`tool-finished`/`tool-error` events; tag a tool
 with `TAG_NOSTREAM` to suppress its events entirely. `process()` always returns
@@ -4727,7 +4731,7 @@ the per-call handles.
 ```python
 class ToolCallStream:
     tool_call_id: str; tool_name: str; input: dict | None
-    output: Any               # set on tool-finished
+    output: Any               # the ToolMessage, set on tool-finished
     error: str | None         # set on tool-error
     completed: bool
     output_deltas: StreamChannel[Any]   # iterate sync (`for`) or async (`async for`)
@@ -4736,12 +4740,13 @@ class ToolCallStream:
 ```python
 from langgraph.prebuilt import ToolNode, ToolCallTransformer
 graph = builder.compile(transformers=[ToolCallTransformer])
-async with graph.astream({"messages": []}, stream_mode="tools", version="v2") as run:
+run = await graph.astream_events({"messages": []}, version="v3")  # coroutine → AsyncGraphRunStream
+async with run:
     async for tc in run.tool_calls:
         print("started:", tc.tool_name, tc.input)
-        async for delta in tc.output_deltas:
+        async for delta in tc.output_deltas:   # drain deltas; output is set once the tool finishes
             print("  delta:", delta)
-        print("final:", tc.output)
+        print("final:", tc.output.content)      # output is the ToolMessage
 ```
 
 #### `create_react_agent` — and the `AgentState` / `ValidationNode` migration

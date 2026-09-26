@@ -18,7 +18,7 @@ Semantic Kernel .NET: 1.74.0+
 
 ## Overview
 
-This guide provides a complete C#/.NET reference for Semantic Kernel. For detailed conceptual explanations of features, see [Python Comprehensive Guide](../python/semantic_kernel_comprehensive_python/) - the concepts translate directly, with this guide focusing on C#-specific implementation.
+This guide provides a complete C#/.NET reference for Semantic Kernel. For detailed conceptual explanations of features, see [Python Comprehensive Guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) - the concepts translate directly, with this guide focusing on C#-specific implementation.
 
 ---
 
@@ -508,7 +508,7 @@ public class SkMcpServer
 
 ## 9. Google A2A Protocol
 
-**See:** [Python Comprehensive Guide → Section 18](../python/semantic_kernel_comprehensive_python/#18-google-a2a-protocol-integration---2025) for detailed A2A protocol patterns.
+**See:** [Python Comprehensive Guide → Section 18](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#18-google-a2a-protocol-integration---2025) for detailed A2A protocol patterns.
 
 **C# Implementation:**
 
@@ -922,9 +922,9 @@ This guide covers Semantic Kernel .NET with 2025 features:
 - ✅ **Google A2A Protocol**
 
 **Related Guides:**
-- [Production Guide](./semantic_kernel_production_dotnet/)
-- [Recipes](./semantic_kernel_recipes_dotnet/)
-- [Python Comprehensive Guide](../python/semantic_kernel_comprehensive_python/) - for detailed conceptual patterns
+- [Production Guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/)
+- [Recipes](/semantic-kernel-guide/dotnet/semantic_kernel_recipes_dotnet/)
+- [Python Comprehensive Guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) - for detailed conceptual patterns
 
 ---
 

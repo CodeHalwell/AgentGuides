@@ -351,7 +351,7 @@ async def index(client: SupportsGetEmbeddings, docs: list[str]) -> list[list[flo
 
 ### Custom embedding client
 
-Subclass `BaseEmbeddingClient` when you need to wrap a provider that isn't first-party or want to add batching/caching/shadowing on top of an existing one. The full pattern lives in the [Advanced page](./microsoft_agent_framework_python_advanced/#custom-embedding-client--baseembeddingclient); the short version:
+Subclass `BaseEmbeddingClient` when you need to wrap a provider that isn't first-party or want to add batching/caching/shadowing on top of an existing one. The full pattern lives in the [Advanced page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#custom-embedding-client--baseembeddingclient); the short version:
 
 ```python
 from agent_framework import BaseEmbeddingClient, Embedding, GeneratedEmbeddings
@@ -681,7 +681,7 @@ Mixing them is fine — a provider-specific dict is a superset of `ChatOptions`,
 
 ## Building your own chat client
 
-For a provider that isn't in the first-party list, or to wrap an existing client with caching / shadow traffic / logging, subclass `BaseChatClient`. Implement one method — `_inner_get_response` — and inherit middleware, telemetry, and the function calling loop for free. See the full recipe in [Advanced → Custom chat client](./microsoft_agent_framework_python_advanced/#custom-chat-client--basechatclient).
+For a provider that isn't in the first-party list, or to wrap an existing client with caching / shadow traffic / logging, subclass `BaseChatClient`. Implement one method — `_inner_get_response` — and inherit middleware, telemetry, and the function calling loop for free. See the full recipe in [Advanced → Custom chat client](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#custom-chat-client--basechatclient).
 
 ## Picking a provider
 

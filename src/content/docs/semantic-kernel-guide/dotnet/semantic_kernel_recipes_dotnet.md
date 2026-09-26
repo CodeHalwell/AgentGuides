@@ -18,7 +18,7 @@ Semantic Kernel .NET: 1.74.0+
 
 Production-ready C#/.NET recipes for common Semantic Kernel patterns.
 
-**See Also:** [../semantic_kernel_recipes.md](../semantic_kernel_recipes/) for language-agnostic recipes.
+**See Also:** [../semantic_kernel_recipes.md](/semantic-kernel-guide/semantic_kernel_recipes/) for language-agnostic recipes.
 
 ---
 
@@ -169,9 +169,9 @@ builder.Services.AddScoped<IAgentOrchestrator, ResearchWritingOrchestrator>();
 ---
 
 For more recipes, see:
-- [Comprehensive Guide](./semantic_kernel_comprehensive_dotnet/)
-- [Production Guide](./semantic_kernel_production_dotnet/)
-- [General Recipes](../semantic_kernel_recipes/)
+- [Comprehensive Guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/)
+- [Production Guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/)
+- [General Recipes](/semantic-kernel-guide/semantic_kernel_recipes/)
 
 **[Back to .NET README](./)** | **[Overview](./)**
 

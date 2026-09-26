@@ -668,6 +668,6 @@ The trade-off: every model call now incurs a history write. For short, single-tu
 
 ## See also
 
-- [Compaction](./microsoft_agent_framework_python_compaction/) — pair a `CompactionStrategy` with the history provider for long-running conversations.
-- [Middleware](./microsoft_agent_framework_python_middleware/) — read/write `AgentContext.session` from agent middleware.
-- [Production guide](./microsoft_agent_framework_python_production_guide/) — deploying stateful sessions across multi-instance services.
+- [Compaction](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/) — pair a `CompactionStrategy` with the history provider for long-running conversations.
+- [Middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) — read/write `AgentContext.session` from agent middleware.
+- [Production guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/) — deploying stateful sessions across multi-instance services.

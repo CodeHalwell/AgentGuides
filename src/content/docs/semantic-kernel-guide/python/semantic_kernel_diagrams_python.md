@@ -15,7 +15,7 @@ Last Updated: April 2026
 
 ## Overview
 
-This document provides Python-specific architecture diagrams and visual representations. For general SK architecture diagrams, see [../semantic_kernel_diagrams.md](../semantic_kernel_diagrams/).
+This document provides Python-specific architecture diagrams and visual representations. For general SK architecture diagrams, see [../semantic_kernel_diagrams.md](/semantic-kernel-guide/semantic_kernel_diagrams/).
 
 ---
 
@@ -206,7 +206,7 @@ Message Format:
 
 ---
 
-For more diagrams, see [../semantic_kernel_diagrams.md](../semantic_kernel_diagrams/)
+For more diagrams, see [../semantic_kernel_diagrams.md](/semantic-kernel-guide/semantic_kernel_diagrams/)
 
 **[Back to Python README](./)** | **[Overview](./)**
 

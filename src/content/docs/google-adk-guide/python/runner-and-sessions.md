@@ -862,7 +862,7 @@ Runners accept an optional `artifact_service=`. When configured, tools can call 
 | `FileArtifactService(root_dir=...)` | Local filesystem |
 | `GcsArtifactService(bucket_name=...)` | Google Cloud Storage |
 
-See [memory-and-artifacts](./memory-and-artifacts/) for detailed semantics and versioning.
+See [memory-and-artifacts](/google-adk-guide/python/memory-and-artifacts/) for detailed semantics and versioning.
 
 ## `InvocationContext` — invocation lifecycle
 

@@ -465,7 +465,7 @@ workflow = (
 result = await workflow.run("My card was charged twice last month.")
 ```
 
-For the full set of knobs — `with_request_info`, `with_autonomous_mode`, `enable_plan_review`, custom selection functions, etc. — see the [Multi-Agent Orchestration page](./microsoft_agent_framework_python_orchestration/).
+For the full set of knobs — `with_request_info`, `with_autonomous_mode`, `enable_plan_review`, custom selection functions, etc. — see the [Multi-Agent Orchestration page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/).
 
 ---
 
@@ -505,7 +505,7 @@ async def get_current_time(
 
 ### Built-in Azure Tools
 
-The `agent-framework-azure-ai` package provides chat clients and tool wrappers for Azure AI services. Retrieval against Azure AI Search is typically exposed as a `@tool`-decorated function that wraps the `azure-search-documents` SDK (see Recipe 6 in the [recipes page](./microsoft_agent_framework_python_recipes/)).
+The `agent-framework-azure-ai` package provides chat clients and tool wrappers for Azure AI services. Retrieval against Azure AI Search is typically exposed as a `@tool`-decorated function that wraps the `azure-search-documents` SDK (see Recipe 6 in the [recipes page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/)).
 
 ---
 
@@ -763,7 +763,7 @@ agent = Agent(
 )
 ```
 
-`store_context_from` accepts a set of `source_id` strings — only context messages tagged with one of those ids are persisted. Pair with the [advanced page's `ContextProvider` example](./microsoft_agent_framework_python_advanced/#custom-context-provider--contextprovider) so each provider's `source_id` is distinct and your audit log tells you which provider produced each captured message.
+`store_context_from` accepts a set of `source_id` strings — only context messages tagged with one of those ids are persisted. Pair with the [advanced page's `ContextProvider` example](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#custom-context-provider--contextprovider) so each provider's `source_id` is distinct and your audit log tells you which provider produced each captured message.
 
 ### Building a custom history backend
 
@@ -885,7 +885,7 @@ session = agent.create_session()
 await agent.run("Run the analysis.", session=session)   # history is compacted between turns
 ```
 
-Six strategies ship in the box: `TruncationStrategy`, `SlidingWindowStrategy`, `SelectiveToolCallCompactionStrategy`, `ToolResultCompactionStrategy`, `SummarizationStrategy` (LLM-driven), and `TokenBudgetComposedStrategy`. See the [compaction page](./microsoft_agent_framework_python_compaction/) for trade-offs.
+Six strategies ship in the box: `TruncationStrategy`, `SlidingWindowStrategy`, `SelectiveToolCallCompactionStrategy`, `ToolResultCompactionStrategy`, `SummarizationStrategy` (LLM-driven), and `TokenBudgetComposedStrategy`. See the [compaction page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/) for trade-offs.
 
 ---
 
@@ -916,7 +916,7 @@ agent = Agent(
 )
 ```
 
-Decorator forms (`@agent_middleware`, `@chat_middleware`, `@function_middleware`) tag plain async functions for the same pipeline. See the [middleware page](./microsoft_agent_framework_python_middleware/) for redaction, retries, and streaming hooks.
+Decorator forms (`@agent_middleware`, `@chat_middleware`, `@function_middleware`) tag plain async functions for the same pipeline. See the [middleware page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) for redaction, retries, and streaming hooks.
 
 ---
 
@@ -1415,7 +1415,7 @@ if latest:
     result = await workflow.run(checkpoint_id=latest.checkpoint_id)
 ```
 
-`InMemoryCheckpointStorage`, `FileCheckpointStorage`, the Redis backend, and the Cosmos backend all share the `CheckpointStorage` protocol — six async methods (`save`, `load`, `list_checkpoints`, `delete`, `get_latest`, `list_checkpoint_ids`). Roll your own backend by implementing those six methods and pass it to the builder. See the [checkpointing page](./microsoft_agent_framework_python_checkpointing/) for an S3-backed reference implementation.
+`InMemoryCheckpointStorage`, `FileCheckpointStorage`, the Redis backend, and the Cosmos backend all share the `CheckpointStorage` protocol — six async methods (`save`, `load`, `list_checkpoints`, `delete`, `get_latest`, `list_checkpoint_ids`). Roll your own backend by implementing those six methods and pass it to the builder. See the [checkpointing page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/) for an S3-backed reference implementation.
 
 ### Workflow human-in-the-loop
 
@@ -1455,7 +1455,7 @@ async def on_decision(self, original_request, approved, ctx):
     await ctx.yield_output("approved" if approved else "rejected")
 ```
 
-The full HITL loop on the caller side is in the [HITL page](./microsoft_agent_framework_python_hitl/).
+The full HITL loop on the caller side is in the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/).
 
 ### Exposing a workflow as an agent — `Workflow.as_agent()`
 
@@ -1669,7 +1669,7 @@ workflow = (
 )
 ```
 
-For the full set of optional knobs (intermediate outputs, request-info filters, autonomous mode for handoff, custom selection functions for group chat) see the [orchestration page](./microsoft_agent_framework_python_orchestration/).
+For the full set of optional knobs (intermediate outputs, request-info filters, autonomous mode for handoff, custom selection functions for group chat) see the [orchestration page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/).
 
 ---
 
@@ -1716,7 +1716,7 @@ mcp = MCPStreamableHTTPTool(
 await agent.run("What's my balance?", function_invocation_kwargs={"token": user_token})
 ```
 
-`header_provider` reads from `function_invocation_kwargs` on the outer `agent.run(...)` call — no per-tenant `httpx.AsyncClient` needed. See the [MCP page](./microsoft_agent_framework_python_mcp/) for approval gates, custom result parsers, and the `SupportsMCPTool` protocol for hosted MCP.
+`header_provider` reads from `function_invocation_kwargs` on the outer `agent.run(...)` call — no per-tenant `httpx.AsyncClient` needed. See the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) for approval gates, custom result parsers, and the `SupportsMCPTool` protocol for hosted MCP.
 
 ---
 
@@ -1772,7 +1772,7 @@ response = await agent.run("Hello")
 assert response.text == "Hello"
 ```
 
-Wrap any real client to add caching, request coalescing, or shadow traffic — see the [Advanced Patterns page](./microsoft_agent_framework_python_advanced/#caching-wrapper) for a SHA-256-keyed cache wrapper.
+Wrap any real client to add caching, request coalescing, or shadow traffic — see the [Advanced Patterns page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#caching-wrapper) for a SHA-256-keyed cache wrapper.
 
 ---
 
@@ -1811,7 +1811,7 @@ for client in [OpenAIChatClient(), AnthropicClient()]:
     agent = Agent(client=client, tools=build_tools(client))
 ```
 
-Same pattern works for `SupportsAgentRun`, `SupportsChatGetResponse`, and `SupportsImageGenerationTool`. See the [Advanced Patterns page](./microsoft_agent_framework_python_advanced/) for the full table.
+Same pattern works for `SupportsAgentRun`, `SupportsChatGetResponse`, and `SupportsImageGenerationTool`. See the [Advanced Patterns page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/) for the full table.
 
 ---
 
@@ -2446,7 +2446,7 @@ asyncio.run(main())
 - **One agent per role**, reused across requests. Sessions are per-conversation. Chat clients own HTTP pools — close them with `async with` at process shutdown.
 - **Compaction** — pair an `InMemoryHistoryProvider` (or Redis/Cosmos for cross-process) with a `CompactionProvider` so long-lived sessions stay inside the context window.
 - **Checkpointing** — `FileCheckpointStorage` for single-process services; Cosmos / Redis for multi-process workers; custom `CheckpointStorage` (S3, etc.) for cross-cloud.
-- **Observability** — call `configure_otel_providers()` once at startup, or `enable_instrumentation()` if you already wire OTel yourself. See the [observability page](./microsoft_agent_framework_python_observability/) for Azure Monitor wiring.
+- **Observability** — call `configure_otel_providers()` once at startup, or `enable_instrumentation()` if you already wire OTel yourself. See the [observability page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/) for Azure Monitor wiring.
 - **HITL durability** — combine HITL request_info with checkpointing so a human can come back hours later in a different process and the workflow resumes exactly where it paused.
 
 ---
@@ -3439,7 +3439,7 @@ result = await workflow.run({"topic": "Quantum computing"})
 
 ## Appendix: azure-ai-agents Add-on (separate package)
 
-> `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — a distinct package from `agent-framework`, not a replacement for it (see [the migration notice page](./microsoft_agent_framework_python_sdk_migration_notice/) for when to reach for it alongside the framework). Condensed from five source-verified per-volume pages claiming `azure-ai-agents==1.1.0`; **not** independently re-installed/re-verified in this consolidation pass (no network access was used to `pip install` it fresh) — best-effort cross-checked only for internal consistency across the five source pages, which largely repeated the same ~10 core classes with increasing depth (the later volume in particular re-covered the first volume's classes almost entirely, which is folded in here rather than duplicated).
+> `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — a distinct package from `agent-framework`, not a replacement for it (see [the migration notice page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sdk_migration_notice/) for when to reach for it alongside the framework). Condensed from five source-verified per-volume pages claiming `azure-ai-agents==1.1.0`; **not** independently re-installed/re-verified in this consolidation pass (no network access was used to `pip install` it fresh) — best-effort cross-checked only for internal consistency across the five source pages, which largely repeated the same ~10 core classes with increasing depth (the later volume in particular re-covered the first volume's classes almost entirely, which is folded in here rather than duplicated).
 
 ```bash
 pip install azure-ai-agents azure-identity
@@ -3580,13 +3580,13 @@ client.delete_agent(agent.id)
 
 | Topic | Page |
 |---|---|
-| Per-call middleware, retries, redaction | [Middleware](./microsoft_agent_framework_python_middleware/) |
-| Six compaction strategies + custom strategies | [Compaction](./microsoft_agent_framework_python_compaction/) |
-| Workflow checkpoint backends + S3 example | [Checkpointing](./microsoft_agent_framework_python_checkpointing/) |
-| Sequential / Concurrent / Handoff / GroupChat / Magentic | [Orchestration](./microsoft_agent_framework_python_orchestration/) |
-| `request_info` + tool approval + plan review | [HITL](./microsoft_agent_framework_python_hitl/) |
-| OpenTelemetry traces / metrics / Azure Monitor | [Observability](./microsoft_agent_framework_python_observability/) |
-| MCPStdio / HTTP / WebSocket transports | [MCP](./microsoft_agent_framework_python_mcp/) |
-| Skills (progressive-disclosure knowledge) | [Skills](./microsoft_agent_framework_python_skills/) |
+| Per-call middleware, retries, redaction | [Middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) |
+| Six compaction strategies + custom strategies | [Compaction](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/) |
+| Workflow checkpoint backends + S3 example | [Checkpointing](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/) |
+| Sequential / Concurrent / Handoff / GroupChat / Magentic | [Orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/) |
+| `request_info` + tool approval + plan review | [HITL](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) |
+| OpenTelemetry traces / metrics / Azure Monitor | [Observability](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/) |
+| MCPStdio / HTTP / WebSocket transports | [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) |
+| Skills (progressive-disclosure knowledge) | [Skills](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) |
 | Long-term memory (`MemoryStore`, `MemoryContextProvider`) | See "Long-Term Memory" section above |
-| BaseChatClient / BaseEmbeddingClient / ContextProvider extension points | [Advanced Patterns](./microsoft_agent_framework_python_advanced/) |
+| BaseChatClient / BaseEmbeddingClient / ContextProvider extension points | [Advanced Patterns](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/) |

@@ -9,7 +9,7 @@ language: python
 
 Tools are how agents call back into your code. Agent Framework offers two ways to define them — the `@tool` decorator for the common case and the `FunctionTool` class for advanced construction. Both target the same `FunctionTool` object that the agent sees.
 
-This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
+This page covers first-party function tools. For MCP tools see the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/).
 
 Verified against `agent-framework-core==1.6.0` (`agent_framework._tools`).
 
@@ -214,7 +214,7 @@ async def block_mutating_without_approval(
     await call_next()
 ```
 
-`ctx.metadata` also flows from any function middleware in the pipeline — see the [Middleware page](./microsoft_agent_framework_python_middleware/) for the full middleware reference.
+`ctx.metadata` also flows from any function middleware in the pipeline — see the [Middleware page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) for the full middleware reference.
 
 ## Approval gates
 
@@ -231,7 +231,7 @@ Per-tool gate values:
 - `"never_require"` (default) — always runs.
 - `"always_require"` — pauses and emits a `function_approval_request` event; caller approves via `event.data.to_function_approval_response(approved=True)`.
 
-See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/#tool-approval) for the approval loop pattern.
+See the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval) for the approval loop pattern.
 
 ## Result parsing
 
@@ -595,7 +595,7 @@ def divide(a: float, b: float) -> float:
     return a / b
 ```
 
-For transient failures, add a `FunctionMiddleware` retry wrapper (see [Middleware → Retrying a failed tool call](./microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
+For transient failures, add a `FunctionMiddleware` retry wrapper (see [Middleware → Retrying a failed tool call](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
 
 ## Streaming tool outputs
 

@@ -71,7 +71,7 @@ HTTP Request
 
 ---
 
-For more diagrams, see [../semantic_kernel_diagrams.md](../semantic_kernel_diagrams/)
+For more diagrams, see [../semantic_kernel_diagrams.md](/semantic-kernel-guide/semantic_kernel_diagrams/)
 
 **[Back to .NET README](./)** | **[Overview](./)**
 

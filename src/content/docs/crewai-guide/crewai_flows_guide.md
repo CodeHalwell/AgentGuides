@@ -1468,10 +1468,10 @@ CrewAI Flows represents the future of agentic AI automation. By combining event-
 
 ### Next Steps
 
-- Explore the [CrewAI Comprehensive Guide](./crewai_comprehensive_guide/) for foundation concepts
+- Explore the [CrewAI Comprehensive Guide](/crewai-guide/crewai_comprehensive_guide/) for foundation concepts
 - Build your own flows for real-world use cases
 - Join the CrewAI community: https://www.crewai.com/community
-- Review production deployment patterns in the [CrewAI Production Guide](./crewai_production_guide/)
+- Review production deployment patterns in the [CrewAI Production Guide](/crewai-guide/crewai_production_guide/)
 
 **Happy Building with CrewAI Flows!**
 

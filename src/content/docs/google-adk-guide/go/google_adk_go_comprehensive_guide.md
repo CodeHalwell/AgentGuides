@@ -2259,5 +2259,5 @@ agent, err := adk.NewAgent(
 
 ---
 
-**This comprehensive guide covers the complete ADK for Go API. For production deployment, see [google_adk_go_production_guide.md](./google_adk_go_production_guide/). For copy-paste examples, see [google_adk_go_recipes.md](./google_adk_go_recipes/).**
+**This comprehensive guide covers the complete ADK for Go API. For production deployment, see [google_adk_go_production_guide.md](/google-adk-guide/go/google_adk_go_production_guide/). For copy-paste examples, see [google_adk_go_recipes.md](/google-adk-guide/go/google_adk_go_recipes/).**
 
