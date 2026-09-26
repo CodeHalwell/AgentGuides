@@ -60,7 +60,7 @@ WorkflowEvent(
 | `"failed"` | `WorkflowEvent.failed(details)` | `None` / DataT | `details` |
 | `"warning"` | `WorkflowEvent.warning(msg)` | `str` | — |
 | `"error"` | `WorkflowEvent.error(exc)` | `Exception` | — |
-| `"data"` | `WorkflowEvent.emit(data)` *(deprecated)* | DataT | — |
+| `"data"` | `WorkflowEvent.emit(executor_id, data)` *(deprecated)* | DataT | `executor_id` |
 | `"output"` | emitted by `ctx.yield_output()` | DataT | `executor_id` |
 | `"intermediate"` | emitted by `ctx.yield_output()` (intermediate) | DataT | `executor_id` |
 | `"request_info"` | `WorkflowEvent.request_info(...)` | DataT | `request_id`, `source_executor_id` |
@@ -70,6 +70,9 @@ WorkflowEvent(
 | `"executor_completed"` | `WorkflowEvent.executor_completed(id)` | `None` / DataT | `executor_id` |
 | `"executor_failed"` | `WorkflowEvent.executor_failed(id, details)` | `WorkflowErrorDetails` | `executor_id`, `details` |
 | `"executor_bypassed"` | `WorkflowEvent.executor_bypassed(id)` | `None` / DataT | `executor_id` — cache-hit replay |
+| `"group_chat"` | emitted by group-chat orchestrations | `GroupChatRequestSentEvent` \| `GroupChatResponseReceivedEvent` | orchestration-internal |
+| `"handoff_sent"` | emitted by handoff orchestrations | `HandoffSentEvent` | orchestration-internal |
+| `"magentic_orchestrator"` | emitted by Magentic orchestrations | `MagenticOrchestratorEvent` | orchestration-internal |
 
 ### Factory methods (classmethod)
 
@@ -80,7 +83,7 @@ WorkflowEvent(
 | `failed` | `(details: WorkflowErrorDetails, data=None) → WorkflowEvent[DataT]` | Run termination |
 | `warning` | `(message: str) → WorkflowEvent[str]` | User-emitted diagnostic |
 | `error` | `(exception: Exception) → WorkflowEvent[Exception]` | User-emitted diagnostic |
-| `emit` | `(data: DataT) → WorkflowEvent[DataT]` *(deprecated)* | Produces `"data"` events; prefer `ctx.yield_output()` |
+| `emit` | `(executor_id: str, data: DataT) → WorkflowEvent[DataT]` *(deprecated, emits `DeprecationWarning`)* | Produces `"data"` events; prefer `ctx.yield_output()` |
 | `request_info` | `(request_id, source_executor_id, request_data, response_type) → WorkflowEvent[DataT]` | Human-in-the-loop pause |
 | `superstep_started` | `(iteration: int, data=None) → WorkflowEvent[DataT]` | Pregel superstep begin |
 | `superstep_completed` | `(iteration: int, data=None) → WorkflowEvent[DataT]` | Pregel superstep end |
@@ -234,7 +237,7 @@ AgentContext(
 | `messages` | `list[Message]` | Messages sent to the agent. Mutate to inject/remove messages before the call. |
 | `session` | `AgentSession \| None` | The current session, or `None` for stateless runs. |
 | `tools` | tool types | Run-level tool overrides. `None` → agent's declared tools apply. |
-| `options` | `dict[str, Any]` | Merged run options (model, temperature, etc.). |
+| `options` | `Mapping[str, Any] \| None` | Merged run options (model, temperature, etc.). May be `None` when no options were supplied — guard before indexing. |
 | `stream` | `bool` | `True` for streaming invocations. |
 | `compaction_strategy` | `CompactionStrategy \| None` | Per-run compaction override. |
 | `tokenizer` | `TokenizerProtocol \| None` | Per-run tokenizer override. |
@@ -303,7 +306,7 @@ class DateInjectorMiddleware(AgentMiddleware):
         import datetime
         today = datetime.date.today().isoformat()
         context.messages = [
-            Message.from_system(f"Today's date is {today}."),
+            Message("system", [f"Today's date is {today}."]),
             *context.messages,
         ]
         await call_next()
@@ -324,7 +327,7 @@ class MockMiddleware(AgentMiddleware):
     async def process(self, context: AgentContext, call_next):
         # Skip call_next entirely — return canned response
         context.result = AgentResponse(
-            messages=[Message.from_assistant(self._text)],
+            messages=[Message("assistant", [self._text])],
         )
 ```
 
@@ -334,7 +337,7 @@ class MockMiddleware(AgentMiddleware):
 
 **Module:** `agent_framework._middleware` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.AGENT_HOOKS` to be acknowledged.
+> **Experimental** (`ExperimentalFeature.AGENT_HOOKS`): there is no opt-in call. The first use of an API in this feature emits a one-time `ExperimentalWarning` (a `FutureWarning` subclass). To silence it: `from agent_framework._feature_stage import ExperimentalWarning` then `warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
 
 A `MiddlewareBundle` groups several middleware objects into one opaque, indivisible unit. Features like `create_agent_hooks_middleware()` return a bundle because their internal middleware objects only uphold their contract when installed together — a bundle prevents accidental partial installation.
 
@@ -401,23 +404,23 @@ agent = Agent(
 ### Example — bundle returned by a factory (agent-hooks pattern)
 
 ```python
-from agent_framework import Agent, acknowledge_experimental_feature, ExperimentalFeature
-from agent_framework import create_agent_hooks_middleware
+from typing import Any
+
+from agent_framework import Agent, create_agent_hooks_middleware
 from agent_framework.openai import OpenAIChatClient
 
 # agent_hooks Interceptor objects come from the agent-hooks-sdk package.
 # Install it: pip install --pre agent-hooks-sdk
-from agent_hooks import Interceptor, InterceptionContext, Verdict
-
-acknowledge_experimental_feature(ExperimentalFeature.AGENT_HOOKS)
+from agent_hooks import AgentContext as HookContext, Interceptor, Verdict
 
 
 class LoggingInterceptor(Interceptor):
     """Log each interception point and allow all through."""
 
-    def intercept(self, context: InterceptionContext) -> Verdict:
-        # InterceptionContext is a mapping; access data via .get()
-        print(f"[Hook] point={context.get('interception_point')!r} agent={context.get('agent_id')!r}")
+    def intercept(self, context: HookContext) -> Verdict:
+        # agent_hooks.AgentContext is a plain Mapping[str, Any]; read it by key.
+        point: Any = context.get("interception_point")
+        print(f"[Hook] point={point!r}")
         return Verdict.allow()
 
 
@@ -438,7 +441,7 @@ agent = Agent(
 
 **Module:** `agent_framework._evaluation` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.EVALS` to be acknowledged.
+> **Experimental** (`ExperimentalFeature.EVALS`): there is no opt-in call. The first use of an API in this feature emits a one-time `ExperimentalWarning` (a `FutureWarning` subclass). To silence it: `from agent_framework._feature_stage import ExperimentalWarning` then `warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
 
 These two types work together in the evaluation harness. `ConversationSplitter` is a **structural protocol** — any callable with the signature `(list[Message]) → tuple[list[Message], list[Message]]` satisfies it. `ConversationSplit` is an **enum** of built-in splitters that also satisfy the protocol.
 
@@ -454,6 +457,8 @@ Both members are callable: `query_msgs, response_msgs = ConversationSplit.LAST_T
 ### `ConversationSplitter` protocol
 
 ```python
+from agent_framework import Message
+
 # Any callable with this signature satisfies ConversationSplitter:
 def my_splitter(
     conversation: list[Message],
@@ -466,15 +471,12 @@ def my_splitter(
 ```python
 import asyncio
 from agent_framework import (
-    Agent, EvalItem, EvalCheck, CheckResult, LocalEvaluator, ConversationSplit,
-    Message, acknowledge_experimental_feature, ExperimentalFeature,
+    EvalItem, CheckResult, LocalEvaluator, ConversationSplit, Message,
 )
-from agent_framework.openai import OpenAIChatClient
-
-acknowledge_experimental_feature(ExperimentalFeature.EVALS)
 
 
-# An EvalCheck is a callable: (EvalItem) -> CheckResult
+# A check is any callable (EvalItem) -> CheckResult | Awaitable[CheckResult].
+# (The EvalCheck alias lives in agent_framework._evaluation; it is not re-exported.)
 # item.response is already a str (the joined assistant text from the response split).
 async def factual_check(item: EvalItem) -> CheckResult:
     """Pass if the response contains 'Paris'."""
@@ -539,10 +541,10 @@ def split_before_tool_call(
 from agent_framework import ConversationSplit, Message
 
 conversation = [
-    Message.from_user("Plan a weekend trip to London."),
-    Message.from_assistant("Sure! Day 1: Arrive and check into your hotel..."),
-    Message.from_user("What about museums?"),
-    Message.from_assistant("London has the British Museum, the Tate Modern, and the Natural History Museum..."),
+    Message("user", ["Plan a weekend trip to London."]),
+    Message("assistant", ["Sure! Day 1: Arrive and check into your hotel..."]),
+    Message("user", ["What about museums?"]),
+    Message("assistant", ["London has the British Museum, the Tate Modern, and the Natural History Museum..."]),
 ]
 
 query, response = ConversationSplit.FULL(conversation)
@@ -556,7 +558,7 @@ print("Response messages:", [m.role for m in response]) # ['assistant', 'user', 
 
 **Module:** `agent_framework._vectors` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.VECTOR_STORES` to be acknowledged.
+> **Experimental** (`ExperimentalFeature.VECTOR_STORES`): there is no opt-in call. The first use of an API in this feature emits a one-time `ExperimentalWarning` (a `FutureWarning` subclass). To silence it: `from agent_framework._feature_stage import ExperimentalWarning` then `warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
 
 `VectorStoreHistoryProvider` stores full conversation history in a provider-owned vector collection. Unlike `VectorCollectionContextProvider` (which exposes a caller-owned data model), this provider owns the collection schema and translates `Message` objects into a fixed history schema with optional embedding support.
 
@@ -619,16 +621,9 @@ VectorStoreHistoryProvider(
 
 ```python
 import asyncio
-from agent_framework import (
-    Agent, acknowledge_experimental_feature, ExperimentalFeature,
-)
-from agent_framework._vectors import VectorStoreHistoryProvider
-from agent_framework.openai import OpenAIChatClient
-
 # Use any supported vector store, e.g. InMemoryStore (already deep-dived in Vol. 4)
-from agent_framework import InMemoryStore
-
-acknowledge_experimental_feature(ExperimentalFeature.VECTOR_STORES)
+from agent_framework import Agent, InMemoryStore, VectorStoreHistoryProvider
+from agent_framework.openai import OpenAIChatClient
 
 
 async def main():
@@ -661,13 +656,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import (
-    Agent, InMemoryStore, acknowledge_experimental_feature, ExperimentalFeature,
-)
-from agent_framework._vectors import VectorStoreHistoryProvider
+from agent_framework import Agent, InMemoryStore, VectorStoreHistoryProvider
 from agent_framework.openai import OpenAIChatClient, OpenAIEmbeddingClient
-
-acknowledge_experimental_feature(ExperimentalFeature.VECTOR_STORES)
 
 
 async def main():
@@ -711,7 +701,7 @@ async def reset_user_history(history_provider, session_id: str):
 
 **Module:** `agent_framework._harness._memory` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.HARNESS` to be acknowledged.
+> **Experimental** (`ExperimentalFeature.HARNESS`): there is no opt-in call. The first use of an API in this feature emits a one-time `ExperimentalWarning` (a `FutureWarning` subclass). To silence it: `from agent_framework._feature_stage import ExperimentalWarning` then `warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
 
 `MemoryStore` is the **abstract base class** for all memory backing stores used by `MemoryContextProvider`. It manages topic-based long-term memory organised as a set of per-topic markdown files plus a `MEMORY.md` index and a transcript archive.
 
@@ -767,13 +757,8 @@ MemoryFileStore(
 
 ```python
 import asyncio
-from agent_framework import (
-    Agent, MemoryContextProvider, acknowledge_experimental_feature, ExperimentalFeature,
-)
-from agent_framework._harness._memory import MemoryFileStore
+from agent_framework import Agent, MemoryContextProvider, MemoryFileStore
 from agent_framework.openai import OpenAIChatClient
-
-acknowledge_experimental_feature(ExperimentalFeature.HARNESS)
 
 
 async def main():
@@ -920,7 +905,7 @@ class InMemoryMemoryStore(MemoryStore):
 
 **Module:** `agent_framework._harness._memory` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.HARNESS`.
+> **Experimental** (`ExperimentalFeature.HARNESS`): there is no opt-in call. The first use of an API in this feature emits a one-time `ExperimentalWarning` (a `FutureWarning` subclass). To silence it: `from agent_framework._feature_stage import ExperimentalWarning` then `warnings.filterwarnings("ignore", category=ExperimentalWarning)`.
 
 `MemoryTopicRecord` represents one **topic memory file** — the unit of long-term memory storage. Each record has a human-readable topic, a stable `slug` (filesystem name), a short `summary`, a deduplicated list of `memories` (bullet points), a timestamp, and the session IDs that contributed to this topic.
 
@@ -1223,7 +1208,7 @@ FunctionInvocationContext(
 | `kwargs` | `dict[str, Any]` | Extra kwargs forwarded to the tool. |
 | `tools` | `list[ToolTypes] \| None` | **Live** mutable tool list for the current agent run. `None` outside a function-calling loop. |
 
-### Methods (experimental: `ExperimentalFeature.PROGRESSIVE_TOOLS`)
+### Methods (experimental: `ExperimentalFeature.PROGRESSIVE_TOOLS`, emits `ExperimentalWarning` on first use)
 
 ```python
 context.add_tools(
@@ -1286,13 +1271,8 @@ class ToolInputPatternGuard(FunctionMiddleware):
 
 ```python
 import asyncio
-from agent_framework import (
-    Agent, FunctionInvocationContext, tool,
-    acknowledge_experimental_feature, ExperimentalFeature,
-)
+from agent_framework import Agent, FunctionInvocationContext, tool
 from agent_framework.openai import OpenAIChatClient
-
-acknowledge_experimental_feature(ExperimentalFeature.PROGRESSIVE_TOOLS)
 
 
 @tool
@@ -1509,15 +1489,16 @@ class ConfigurableAgent:
 
 ## What's new in 1.19.0
 
-The 1.19.0 release refines several of the APIs deep-dived in this and prior volumes. Key areas:
+Comparing the public `agent_framework` exports of 1.18.0 and 1.19.0, the release adds the vector-store memory layer covered in section 5 of this volume. Nothing was removed.
 
-| Area | Change |
+| Addition | Notes |
 |---|---|
-| **Progressive tools** | `FunctionInvocationContext.add_tools()` / `remove_tools()` stabilised under `ExperimentalFeature.PROGRESSIVE_TOOLS`. All-or-nothing batch semantics: a duplicate name raises before the live list is mutated. |
-| **Vector history** | `VectorStoreHistoryProvider` adds `store_context_from` for fine-grained control over which source IDs have their context messages persisted. |
-| **Memory harness** | `MemoryFileStore.search_transcripts` now resolves the target transcript file stem via `_transcript_file_stem()` — supporting even very long session IDs stored under an irreversible digest. |
-| **WorkflowEvent** | `WorkflowEvent.executor_bypassed` documents the cache-hit replay path more precisely. The `emit()` factory deprecation warning is now emitted with `stacklevel=2` for correct source attribution. |
-| **ChatOptions** | `conversation_id` field added for providers that support conversation-level threading. |
+| `VectorStoreHistoryProvider` | New in 1.19.0 (see section 5). Experimental under `ExperimentalFeature.VECTOR_STORES`. |
+| `VectorCollectionContextProvider` | New context provider that retrieves from a vector collection. Also experimental under `VECTOR_STORES`. |
+| `create_get_tool`, `create_upsert_tool`, `create_delete_tool` | New factories that expose a vector collection to an agent as function tools. Experimental under `VECTOR_STORES`. |
+| `ResponseInvalidatedException` | New `ChatClientException` subclass. |
+
+The other APIs in this volume (`WorkflowEvent`, the memory harness, `ChatOptions`, progressive tools) behave the same as in 1.18.0. They are documented here because earlier volumes didn't cover them, not because they changed.
 
 ---
 
