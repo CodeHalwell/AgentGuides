@@ -862,8 +862,15 @@ class InMemoryMemoryStore(MemoryStore):
 
     def write_topic(self, session, record, *, source_id):
         key = self._key(session, source_id)
-        self._topics.setdefault(key, {})[record.topic] = record
-        self._slug_idx.setdefault(key, {})[record.slug] = record.topic
+        topics = self._topics.setdefault(key, {})
+        slug_idx = self._slug_idx.setdefault(key, {})
+        # If this slug already points to a different topic name, remove the old
+        # record so list_topics() never returns both the stale and renamed copies.
+        prior_topic = slug_idx.get(record.slug)
+        if prior_topic is not None and prior_topic != record.topic:
+            topics.pop(prior_topic, None)
+        topics[record.topic] = record
+        slug_idx[record.slug] = record.topic
 
     def delete_topic(self, session, *, source_id, topic):
         key = self._key(session, source_id)
