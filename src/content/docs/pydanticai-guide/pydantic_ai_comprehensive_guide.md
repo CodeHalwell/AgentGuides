@@ -1,14 +1,14 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.43.0 (September 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Version: 2.46.0 (September 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
 framework: pydanticai
 ---
 
-Latest: pydantic-ai 2.43.0 | Class & API Reference verified against: 2.33.0 · new classes in 2.43.0 addendum | Updated: September 2026
+Latest: pydantic-ai 2.46.0 | Class & API Reference verified against: 2.33.0 · new classes in 2.43.0 addendum · 2.46.0 classes in companion guide | Updated: September 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.43.0 (September 2026)  
+**Version:** 2.46.0 (September 2026)  
 **Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
 **Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
 
