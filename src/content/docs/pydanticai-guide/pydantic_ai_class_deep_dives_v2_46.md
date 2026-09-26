@@ -1228,7 +1228,8 @@ are less commonly used but highly useful in production.
 
 When `False`, the model issues at most one tool call per response instead of fanning out in
 parallel. This limits concurrent side-effects — it does **not** enforce call ordering between
-different tools; the model still chooses which tool to call first.
+different tools; the model still chooses which tool to call first. Providers that do not support
+this setting silently ignore it, so verify your target provider's adapter before relying on it.
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, RunContext
