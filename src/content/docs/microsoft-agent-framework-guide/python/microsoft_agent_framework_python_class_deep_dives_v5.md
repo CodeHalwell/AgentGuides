@@ -1141,6 +1141,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import shutil
 import uuid
 from agent_framework import WorkflowRunState, FileCheckpointStorage
 
@@ -1151,6 +1152,11 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_storage):
     # name in the given store — if two concurrent runs share the same store
     # they can cross-contaminate.  Callers should create a fresh, run-scoped
     # FileCheckpointStorage instance for every invocation (see below).
+    #
+    # NOTE: this helper reads responses via input() and assumes every pending
+    # request has response_type=str.  For requests that declare bool, a
+    # dataclass, or a Pydantic model, production code should parse the raw
+    # string according to req_event.response_type before submitting it.
     result = await workflow.run(initial_prompt, checkpoint_storage=checkpoint_storage)
 
     # Each resumed run saves a FRESH checkpoint forming a previous_checkpoint_id
@@ -1173,10 +1179,16 @@ async def run_and_handle(workflow, initial_prompt: str, checkpoint_storage):
 
 # Usage: create a run-scoped FileCheckpointStorage so get_latest() only ever
 # sees checkpoints from this specific invocation, even in multi-user deployments.
+# The checkpoint directory is removed in a finally block so completed runs do
+# not accumulate checkpoint data indefinitely.
 async def handle_request(workflow, prompt: str):
     run_id = uuid.uuid4().hex
-    storage = FileCheckpointStorage(f"./checkpoints/{run_id}")
-    return await run_and_handle(workflow, prompt, storage)
+    storage_path = f"./checkpoints/{run_id}"
+    storage = FileCheckpointStorage(storage_path)
+    try:
+        return await run_and_handle(workflow, prompt, storage)
+    finally:
+        shutil.rmtree(storage_path, ignore_errors=True)
 ```
 
 ---
