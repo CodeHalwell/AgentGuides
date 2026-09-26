@@ -52,6 +52,10 @@ def __init__(
   or a response handler (first param typed as `ModelResponse`).
 - A **sequence mixing** exception types and callables.
 
+> **Gotcha — tuples mean exception types only**: any `tuple` passed to `fallback_on` is treated as
+> a tuple of exception types. Pass handlers as a bare callable or inside a **list** —
+> `fallback_on=(my_handler,)` either raises `TypeError` or silently ignores the handler.
+
 ### Example 1 — basic provider failover
 
 ```python
@@ -95,7 +99,7 @@ def should_fallback(exc: Exception) -> bool:
 model = FallbackModel(
     'openai:gpt-5',
     'anthropic:claude-sonnet-5',
-    fallback_on=(should_fallback,),
+    fallback_on=[should_fallback],  # list, not tuple
 )
 
 agent = Agent(model, output_type=str)
@@ -132,7 +136,7 @@ def response_too_short(response: ModelResponse) -> bool:
 model = FallbackModel(
     'openai:gpt-5',
     'anthropic:claude-sonnet-5',
-    fallback_on=(response_too_short,),
+    fallback_on=response_too_short,  # bare callable (or a list)
 )
 
 agent = Agent(model, output_type=str)
@@ -171,7 +175,7 @@ async def is_provider_down(exc: Exception) -> bool:
 model = FallbackModel(
     'openai:gpt-5',
     'anthropic:claude-sonnet-5',
-    fallback_on=(is_provider_down,),
+    fallback_on=[is_provider_down],
 )
 ```
 
@@ -193,7 +197,7 @@ model = FallbackModel(
     'openai:gpt-4o-mini',
     'openai:gpt-5',
     'anthropic:claude-opus-5',
-    fallback_on=(ModelAPIError, low_confidence),  # mix of type and handler
+    fallback_on=[ModelAPIError, low_confidence],  # list mixing type and handler
 )
 ```
 
@@ -355,8 +359,9 @@ if isinstance(result.output, DeferredToolRequests):
 
 ### Example 5 — `defer_loading=True` to hide tools until discovered
 
-`defer_loading=True` **hides** the toolset's tools from the model entirely. To enable discovery,
-add the `ToolSearch` capability explicitly. On providers that support native search (Anthropic
+`defer_loading=True` **hides** the toolset's tools from the model until discovered. The
+`ToolSearch` capability is auto-injected into every agent, so discovery works without extra
+setup; pass `ToolSearch(...)` explicitly only to configure it (strategy, `max_results`). On providers that support native search (Anthropic
 BM25/regex, OpenAI Responses), the provider exposes hidden tools once discovered; elsewhere a
 local `search_tools` function is added to the model's tool list.
 
@@ -529,7 +534,11 @@ agent_native = Agent('openai:gpt-5', output_type=NativeOutput(Answer, strict=Tru
 agent_prompted = Agent('ollama:llama3.2', output_type=PromptedOutput(Answer))
 
 # TextOutput — when you just need a string transformation
-agent_text = Agent('openai:gpt-5', output_type=TextOutput(str.upper))
+def shout(text: str) -> str:
+    return text.upper()
+
+
+agent_text = Agent('openai:gpt-5', output_type=TextOutput(shout))
 ```
 
 ---
@@ -961,8 +970,9 @@ class CombinedToolset(AbstractToolset[AgentDepsT]):
 
 ### Name conflict resolution
 
-When two toolsets expose the same tool name, `CombinedToolset` raises `UserError` unless one is
-already a `PrefixedToolset`. The right pattern is to prefix before combining:
+When two toolsets expose the same tool name, `CombinedToolset` raises `UserError` when the tools
+are listed. Wrapping each toolset in a `PrefixedToolset` renames its tools so the names no longer
+clash. The right pattern is to prefix before combining:
 
 ```python
 from pydantic_ai import Agent, FunctionToolset, PrefixedToolset, CombinedToolset, RunContext
@@ -1111,7 +1121,7 @@ agent = Agent('openai:gpt-5', output_type=PersonDict)
 
 result = agent.run_sync('Create a person called John who is 30 years old')
 print(result.output)          # {'name': 'John', 'age': 30}
-print(type(result.output))    # <class 'PersonDict'>
+print(type(result.output))    # <class 'dict'>
 ```
 
 ### Example 2 — nested schemas with `$defs`
