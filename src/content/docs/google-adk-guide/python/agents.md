@@ -437,20 +437,23 @@ The field is declared on `LlmAgent` itself (`agents/llm_agent.py`) and is wired 
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow, node, START
+from google.adk.workflow._parallel_worker import _ParallelWorker
 from google.adk.apps import App
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-# ── Fan-out agent: runs once per item in the input list ──────────────────────
-# parallel_worker=True + max_parallel_workers caps concurrency at 3
-summariser = LlmAgent(
+# ── Fan-out agent ─────────────────────────────────────────────────────────────
+# LlmAgent declares parallel_worker=True so build_node() knows to wrap it.
+_summariser_agent = LlmAgent(
     name="summariser",
     model="gemini-2.5-flash",
     mode="single_turn",
     instruction="Summarise the given text in one sentence.",
     parallel_worker=True,
-    # max_parallel_workers=3,  # optional; None = unlimited
 )
+# To cap per-item concurrency, wrap explicitly with _ParallelWorker.
+# max_parallel_workers is a _ParallelWorker param, not an LlmAgent param.
+summariser = _ParallelWorker(node=_summariser_agent, max_parallel_workers=3)
 
 # ── Upstream node produces a list for the fan-out ────────────────────────────
 @node
@@ -467,7 +470,6 @@ def combine(node_input: list[str]) -> str:
 pipeline = Workflow(
     name="batch_summariser",
     edges=[(START, split_articles, summariser, combine)],
-    max_concurrency=5,   # overall graph-scheduled node cap
 )
 
 async def main():
@@ -486,15 +488,16 @@ async def main():
         session_id=session.id,
         new_message=types.Content(role="user", parts=[types.Part(text=articles)]),
     ):
-        if event.is_final_response() and event.content:
-            print(event.content.parts[0].text)
+        # FunctionNode (@node) returns land in event.output, not event.content.
+        if event.node_name == "combine" and event.output is not None:
+            print(event.output)
 
 asyncio.run(main())
 ```
 
-**How it works internally:** `build_node()` sees `parallel_worker=True` and wraps the `LlmAgent` in a `_ParallelWorker` node. When the predecessor outputs a list, `_ParallelWorker` fans out — spawning one `LlmAgent` invocation per element — and collects the results back into a list that it passes to the next node. Setting `max_parallel_workers=N` caps the concurrent worker count; without it every element runs in parallel simultaneously.
+**How it works internally:** `build_node()` sees `parallel_worker=True` and wraps the `LlmAgent` in a `_ParallelWorker` node. When the predecessor outputs a list, `_ParallelWorker` fans out — spawning one `LlmAgent` invocation per element — and collects the results back into a list that it passes to the next node. `max_parallel_workers` is a `_ParallelWorker` constructor argument that caps concurrent worker count; use `_ParallelWorker(node=agent, max_parallel_workers=N)` directly in `edges`. `LlmAgent.parallel_worker=True` is only the signal that wrapping should happen — it does not accept a concurrency cap itself. `@node`-decorated functions emit results via `event.output`; `LlmAgent` nodes emit via `event.content`.
 
-> The `parallel_worker` feature is available in google-adk 2.4.0+. Setting `max_parallel_workers` without `parallel_worker=True` raises `WorkflowConfigurationError`.
+> The `parallel_worker` feature is available in google-adk 2.4.0+. Passing `max_parallel_workers` to the `@node` decorator without `parallel_worker=True` raises `WorkflowConfigurationError`.
 
 ## Transfer and routing
 

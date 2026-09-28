@@ -5,7 +5,7 @@ framework: google-adk
 language: python
 ---
 
-Latest as of 2026-09-28: google-adk 2.10.0 | Guide verified against: 2.10.0 | Updated: September 28, 2026
+Latest as of 2026-09-28: google-adk 2.10.0 | Version headers updated to 2.10.0 | New sections verified against 2.10.0 source | Existing body sections verified against 2.7.1 | Updated: September 28, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
 **Version:** 1.1  
