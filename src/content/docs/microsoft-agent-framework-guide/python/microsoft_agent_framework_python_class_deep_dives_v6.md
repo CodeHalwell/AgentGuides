@@ -513,17 +513,38 @@ book_search = FunctionTool(
 )
 ```
 
-### Declaration-only tool (schema without implementation)
+### Declaration-only tool (caller-implemented, surfaced via user_input_requests)
+
+`func=None` creates a **declaration-only** tool. The model can call it, but the
+framework does not execute anything locally — instead the invocation appears in
+`response.user_input_requests` for the host application to handle. Use this when
+your application owns the implementation and needs to inspect or approve the call
+before acting.
 
 ```python
-# Useful when the implementation is on the model side (e.g. built-in tools)
+from agent_framework import Agent, FunctionTool
+from agent_framework.openai import OpenAIChatClient
+
+# Declaration: no func — host application handles execution
 shell_tool = FunctionTool(
     name="shell",
     description="Execute a shell command.",
-    kind="shell",          # provider-agnostic classification
-    func=None,             # no local implementation
+    func=None,             # declaration only; invocation surfaced via user_input_requests
     input_model={"type": "object", "properties": {"command": {"type": "string"}}},
 )
+
+agent = Agent(
+    client=OpenAIChatClient(model="gpt-4o-mini"),
+    instructions="Use the shell tool when the user asks to run commands.",
+    tools=[shell_tool],
+)
+
+response = await agent.run("List the files in /tmp.")
+
+# The model will have issued a shell-tool call; surface it to the host:
+for req in response.user_input_requests:
+    print("Tool requested:", req)
+    # Your application decides whether to execute and how to respond.
 ```
 
 ### Invocation limit pattern
