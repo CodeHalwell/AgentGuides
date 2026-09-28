@@ -864,10 +864,10 @@ CompactionProvider(
 |---|---|---|
 | `SlidingWindowStrategy` | `keep_last_groups: int` | Keeps the last N tool-call groups. |
 | `TruncationStrategy` | `max_n: int, compact_to: int` | Drops oldest messages until `compact_to` messages remain, once `max_n` is exceeded. |
-| `SummarizationStrategy` | `agent: Agent`, `token_threshold: int` | Summarises old messages with a dedicated agent when the context grows large. |
+| `SummarizationStrategy` | `client: SupportsChatGetResponse`, `target_count: int = 4`, `threshold: int = 2` | Summarises old messages with a chat client once history exceeds `threshold` groups; retains `target_count` groups. |
 | `ToolResultCompactionStrategy` | `keep_last_tool_call_groups: int` | Replaces old tool-call/result pairs with a brief summary message. |
-| `SelectiveToolCallCompactionStrategy` | `tool_names: list[str]`, `keep_last: int` | Compacts only calls to specific tools. |
-| `ContextWindowCompactionStrategy` | `agent: Agent`, `max_tokens: int` | Keeps only the last N tokens, summarising what's dropped. |
+| `SelectiveToolCallCompactionStrategy` | `keep_last_tool_call_groups: int = 1` | Evicts old tool-call/result pairs, keeping only the last N groups. |
+| `ContextWindowCompactionStrategy` | `max_context_window_tokens: int`, `max_output_tokens: int` | Evicts old tool results and truncates history to fit within the token budget; does not use an LLM. |
 | `TokenBudgetComposedStrategy` | `token_budget: int, tokenizer: TokenizerProtocol, strategies: list[...]` | Runs strategies in sequence, stopping once under the budget. `tokenizer` is required. |
 
 ### Example: sliding window before + tool-result compaction after
