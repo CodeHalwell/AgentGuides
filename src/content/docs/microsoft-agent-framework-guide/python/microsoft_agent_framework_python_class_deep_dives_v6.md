@@ -351,7 +351,7 @@ AgentResponse(
 |---|---|---|
 | `text` | `str` | Text of the last assistant message. Empty string when no messages. |
 | `value` | `T \| None` | Lazily parses `response_format` on first access. Raises `ValidationError` on schema mismatch. |
-| `user_input_requests` | `list[Content]` | All `BaseUserInputRequest` content items — non-empty only when an agent issued a `request_info` event. |
+| `user_input_requests` | `list[Content]` | All `BaseUserInputRequest` content items — non-empty when an agent issued a `request_info` (HITL) event or a tool-approval request. |
 | `messages` | `list[Message]` | All messages (including intermediate tool-call messages). |
 | `response_id` | `str \| None` | Provider-issued response identifier. |
 | `finish_reason` | `str \| FinishReason \| None` | `"stop"`, `"length"`, `"tool_calls"`, etc. |
@@ -879,7 +879,9 @@ from agent_framework._compaction import SlidingWindowStrategy, ToolResultCompact
 from agent_framework.openai import OpenAIChatClient
 
 async def main():
-    history = InMemoryHistoryProvider()
+    # skip_excluded=True is required when using after_strategy: CompactionProvider marks
+    # compacted messages as excluded, and without this flag they reload on the next turn.
+    history = InMemoryHistoryProvider(skip_excluded=True)
 
     compaction = CompactionProvider(
         before_strategy=SlidingWindowStrategy(keep_last_groups=15),
