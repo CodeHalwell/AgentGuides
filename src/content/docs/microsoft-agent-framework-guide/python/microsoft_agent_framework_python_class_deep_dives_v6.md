@@ -767,8 +767,7 @@ workflow = (
         start_executor=dispatch,
         output_from=[analyse],
     )
-    .add_edge(dispatch, fetch_prices)
-    .add_edge(dispatch, fetch_news)
+    .add_fan_out_edges(dispatch, [fetch_prices, fetch_news])
     .add_fan_in_edges([fetch_prices, fetch_news], analyse)
     .build()
 )
