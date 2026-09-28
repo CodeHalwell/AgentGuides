@@ -1082,7 +1082,7 @@ asyncio.run(main())
 
 ## 9. `SourcedInstruction` / `InstructionPart` — the instruction system
 
-**Module:** `pydantic_ai._instructions`
+**Modules:** `pydantic_ai._instructions` (`SourcedInstruction`), `pydantic_ai.messages` (`InstructionPart`)
 
 Starting in 2.46.0, Pydantic AI introduced a first-class *instructions* system as an
 alternative (and complement) to `system_prompt`.  Instructions are typed, addressable, and
