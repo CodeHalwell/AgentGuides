@@ -1033,6 +1033,9 @@ async def main():
         await session.send_audio(b"<pcm audio>")
         # Manually commit the audio to signal end of user turn
         await session.commit_audio()
+        # With VAD off, commit_audio() only closes the turn;
+        # create_response() is required to ask the model to respond now.
+        await session.create_response()
         async for event in session:
             print(event)
 
