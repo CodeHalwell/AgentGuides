@@ -7,7 +7,7 @@ sidebar:
   order: 20
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/agents/`). As of 2026-09-21 the latest release was **2.9.2**. Most examples require 2.3.0 or later; `LangGraphAgent` requires 2.5.0+; `ManagedAgent` requires 2.4.0+. Per-section minimums are noted where they differ.
+Verified against google-adk==2.10.0 (`google/adk/agents/`). As of 2026-09-28 the latest release was **2.10.0**. Most examples require 2.3.0 or later; `LangGraphAgent` requires 2.5.0+; `ManagedAgent` requires 2.4.0+. Per-section minimums are noted where they differ.
 
 ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](./workflows/).
 
@@ -168,7 +168,64 @@ async def instruction_provider(ctx):
 agent = LlmAgent(name="greeter", instruction=instruction_provider)
 ```
 
-When you set `static_instruction`, the runtime places it as `system_instruction` (ideal for cache keys) and routes `instruction` into the user content instead (`agents/llm_agent.py:248-297`).
+### `static_instruction` — context-cache optimisation
+
+`static_instruction` is a fixed system-level prefix that never changes between turns. When set, the runtime sends it as `system_instruction` (the ideal cache key for Gemini's implicit context cache) and moves the dynamic `instruction` field into user content. This layout maximises cache hits because the static prefix is always the first thing the model sees.
+
+```python
+from google.adk.agents import LlmAgent
+from google.genai import types
+
+# ── Without static_instruction (no caching benefit) ─────────────────────────
+agent_no_cache = LlmAgent(
+    name="legal_assistant",
+    model="gemini-2.5-flash",
+    instruction="You are a legal assistant specialising in UK contract law. "
+                "Always cite relevant legislation. User: {user_name}.",
+)
+
+# ── With static_instruction (static part is cache-eligible) ─────────────────
+# The static part (large reference content) is sent as system_instruction.
+# The dynamic part (personalisation) is injected as user content each turn.
+agent_with_cache = LlmAgent(
+    name="legal_assistant",
+    model="gemini-2.5-flash",
+    # This large, fixed block is eligible for Gemini's implicit context cache:
+    static_instruction=(
+        "You are a legal assistant specialising in UK contract law. "
+        "Always cite relevant legislation. "
+        "Reference: Sale of Goods Act 1979, Consumer Rights Act 2015, "
+        "Companies Act 2006. When citing a section, include the full section "
+        "number and a one-sentence summary. Never give legal advice; only "
+        "provide general information about how the law operates."
+    ),
+    # Dynamic per-turn personalisation — sent as user content, not cached:
+    instruction="You are currently helping {user_name} ({user_role}).",
+)
+
+# ── With rich content (files, images) ────────────────────────────────────────
+# static_instruction accepts types.ContentUnion, so you can include file refs:
+agent_with_doc = LlmAgent(
+    name="doc_analyst",
+    model="gemini-2.5-flash",
+    static_instruction=types.Content(
+        role="user",
+        parts=[
+            types.Part(text="You are an expert document analyst. Refer to the "
+                            "attached policy document for all answers."),
+            types.Part(
+                file_data=types.FileData(
+                    mime_type="application/pdf",
+                    file_uri="gs://my-bucket/policy-v3.pdf",
+                )
+            ),
+        ],
+    ),
+    instruction="Answer questions about the policy document. Keep answers under 3 sentences.",
+)
+```
+
+> **Note:** Setting `static_instruction` does **not** automatically create an explicit cache entry. Explicit cache management requires `ContextCacheConfig` at the `App` level. `static_instruction` simply optimises the prompt layout so Gemini's **implicit** (automatic) cache can recognise the fixed prefix as a stable cache key.
 
 ## LlmAgent modes
 
@@ -369,6 +426,75 @@ wf = Workflow(name="research_pipeline", edges=[(START, orchestrate)])
 ```
 
 **When `output_key` does not apply.** In `task` mode, `output_key` has no effect — the result surfaces only via `event.output`, not via `session.state`. Use `ctx.state["key"] = result` in the calling `@node` if you need to thread the output through session state.
+
+## `parallel_worker` — fan-out over a list input
+
+Setting `parallel_worker=True` on an `LlmAgent` tells the Workflow engine to invoke the agent **once per item** in a list input, running all items concurrently up to `max_parallel_workers`. This is the idiomatic way to process a batch of inputs with an LLM agent without writing explicit fan-out logic in a `@node`.
+
+The field is declared on `LlmAgent` itself (`agents/llm_agent.py`) and is wired up by `build_node()` when the agent appears in a `Workflow` edge.
+
+```python
+import asyncio
+from google.adk.agents import LlmAgent
+from google.adk.workflow import Workflow, node, START
+from google.adk.apps import App
+from google.adk.runners import InMemoryRunner
+from google.genai import types
+
+# ── Fan-out agent: runs once per item in the input list ──────────────────────
+# parallel_worker=True + max_parallel_workers caps concurrency at 3
+summariser = LlmAgent(
+    name="summariser",
+    model="gemini-2.5-flash",
+    mode="single_turn",
+    instruction="Summarise the given text in one sentence.",
+    parallel_worker=True,
+    # max_parallel_workers=3,  # optional; None = unlimited
+)
+
+# ── Upstream node produces a list for the fan-out ────────────────────────────
+@node
+def split_articles(node_input: str) -> list[str]:
+    """Split a newline-separated batch into individual articles."""
+    return [line.strip() for line in node_input.splitlines() if line.strip()]
+
+# ── Downstream node collects all summaries ───────────────────────────────────
+@node
+def combine(node_input: list[str]) -> str:
+    """Join per-article summaries into a single digest."""
+    return "\n".join(f"• {s}" for s in node_input)
+
+pipeline = Workflow(
+    name="batch_summariser",
+    edges=[(START, split_articles, summariser, combine)],
+    max_concurrency=5,   # overall graph-scheduled node cap
+)
+
+async def main():
+    app = App(name="batch_app", root_agent=pipeline)
+    runner = InMemoryRunner(app=app)
+    session = await runner.session_service.create_session(
+        app_name="batch_app", user_id="u1"
+    )
+    articles = "\n".join([
+        "Google releases Gemini 3.5 with 2M context window.",
+        "EU AI Act enters enforcement phase from August 2026.",
+        "Anthropic publishes Claude's model spec publicly.",
+    ])
+    async for event in runner.run_async(
+        user_id="u1",
+        session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text=articles)]),
+    ):
+        if event.is_final_response() and event.content:
+            print(event.content.parts[0].text)
+
+asyncio.run(main())
+```
+
+**How it works internally:** `build_node()` sees `parallel_worker=True` and wraps the `LlmAgent` in a `_ParallelWorker` node. When the predecessor outputs a list, `_ParallelWorker` fans out — spawning one `LlmAgent` invocation per element — and collects the results back into a list that it passes to the next node. Setting `max_parallel_workers=N` caps the concurrent worker count; without it every element runs in parallel simultaneously.
+
+> The `parallel_worker` feature is available in google-adk 2.4.0+. Setting `max_parallel_workers` without `parallel_worker=True` raises `WorkflowConfigurationError`.
 
 ## Transfer and routing
 

@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). As of 2026-09-21 the latest release was **2.9.2** — most examples are compatible with 2.3.0 and later; the `BigQueryToolset` section requires 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
+Verified against google-adk==2.10.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). As of 2026-09-28 the latest release was **2.10.0** — most examples are compatible with 2.3.0 and later; the `BigQueryToolset` section requires 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -91,6 +91,55 @@ Signature rules (`function_tool.py`):
 - Parameters are introspected with `inspect.signature` + `get_type_hints`. Pydantic model params are auto-converted (`_preprocess_args`, `function_tool.py:106`).
 - A parameter named `tool_context` (or typed as `ToolContext`) gets the `ToolContext` injected — it is **not** exposed to the model.
 - Sync and async callables both work.
+
+### `ToolContext` is `Context`
+
+In google-adk 2.x, `ToolContext` is a type alias for `Context` (`tools/tool_context.py`):
+
+```python
+from google.adk.tools.tool_context import ToolContext   # == Context
+```
+
+Every tool receives the full `Context` surface, not a restricted view. The most commonly used members inside tools:
+
+| Member | Type | Purpose |
+|---|---|---|
+| `tool_context.state` | `State` | Read/write session state (supports prefixes `app:`, `user:`, `temp:`) |
+| `tool_context.function_call_id` | `str` | ID of the current tool invocation (required for credential/confirmation APIs) |
+| `tool_context.actions` | `EventActions` | Set `skip_summarization`, `transfer_to_agent`, `escalate`, `state_delta` |
+| `tool_context.load_artifact(filename, version=None)` | `async` | Load a stored artifact |
+| `tool_context.save_artifact(filename, artifact)` | `async` | Save a `types.Part` as an artifact |
+| `tool_context.list_artifacts()` | `async` | List artifact filenames in session |
+| `tool_context.request_credential(auth_config)` | `async` | Interrupt to request OAuth/API key credentials |
+| `tool_context.request_confirmation(confirmation_event)` | Raise `ToolConfirmationException` | Pause and ask the user to confirm the call |
+
+```python
+from google.adk.tools.tool_context import ToolContext
+
+async def save_and_return(
+    data: str,
+    filename: str,
+    tool_context: ToolContext,
+) -> dict:
+    """Save data as an artifact and record its name in state.
+
+    Args:
+      data: The text to persist.
+      filename: Name to use for the artifact.
+    Returns:
+      A dict with the artifact filename and state key.
+    """
+    from google.genai import types as gtypes
+
+    artifact = gtypes.Part(inline_data=gtypes.Blob(
+        mime_type="text/plain",
+        data=data.encode(),
+    ))
+    await tool_context.save_artifact(filename=filename, artifact=artifact)
+    # Write to session state so other agents/tools can find it
+    tool_context.state["last_saved_artifact"] = filename
+    return {"saved": filename}
+```
 
 **Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py:219-224`).
 
