@@ -885,7 +885,7 @@ CompactionProvider(
 |---|---|---|
 | `SlidingWindowStrategy` | `keep_last_groups: int` | Keeps the last N tool-call groups. |
 | `TruncationStrategy` | `max_n: int, compact_to: int` | Drops oldest messages until `compact_to` messages remain, once `max_n` is exceeded. |
-| `SummarizationStrategy` | `client: SupportsChatGetResponse`, `target_count: int = 4`, `threshold: int = 2` | Summarises old messages with a chat client once history exceeds `threshold` groups; retains `target_count` groups. |
+| `SummarizationStrategy` | `client: SupportsChatGetResponse`, `target_count: int = 4`, `threshold: int = 2` | Summarises old messages with a chat client once the included non-system message count exceeds `target_count + threshold`; retains approximately `target_count` messages. `threshold` is a hysteresis buffer — with `target_count=4, threshold=2` summarisation triggers after 6+ messages. |
 | `ToolResultCompactionStrategy` | `keep_last_tool_call_groups: int` | Replaces old tool-call/result pairs with a brief summary message. |
 | `SelectiveToolCallCompactionStrategy` | `keep_last_tool_call_groups: int = 1` | Evicts old tool-call/result pairs, keeping only the last N groups. |
 | `ContextWindowCompactionStrategy` | `max_context_window_tokens: int`, `max_output_tokens: int` | Evicts old tool results and truncates history to fit within the token budget; does not use an LLM. |
@@ -1041,13 +1041,15 @@ async def main():
     collection = store.get_collection(Product)
     await collection.ensure_collection_exists()
 
-    # Seed with pre-computed vectors (generate_vectors=False skips re-embedding on upsert)
+    # Let the store generate vectors from the description field via the embedding model.
+    # generate_vectors=True (the default) calls embedding_client to embed each record's
+    # VectorStoreField("vector") source fields before upsert so semantic search works correctly.
     await collection.upsert([
         Product(id="p1", name="Widget A", description="A sturdy blue widget",
-                description_vec=[0.1] * 1536, price=9.99),
+                description_vec=[], price=9.99),
         Product(id="p2", name="Gadget B", description="A portable red gadget",
-                description_vec=[0.2] * 1536, price=24.99),
-    ], generate_vectors=False)
+                description_vec=[], price=24.99),
+    ], generate_vectors=True)
 
     vector_provider = VectorCollectionContextProvider(
         collection=collection,
