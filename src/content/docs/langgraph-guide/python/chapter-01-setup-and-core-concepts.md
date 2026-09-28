@@ -720,6 +720,7 @@ This avoids repeating the same `retry_policy=` / `timeout=` on every `add_node` 
 **Source:** `langgraph.graph.state.StateGraph.set_node_defaults`
 
 ```python
+import asyncio
 from datetime import timedelta
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -772,10 +773,10 @@ graph = (
     .compile(checkpointer=InMemorySaver(), cache=cache)
 )
 
-result = graph.invoke(
+result = asyncio.run(graph.ainvoke(
     {"text": "hello", "step1_out": "", "step2_out": "", "step3_out": ""},
     config={"configurable": {"thread_id": "t1"}},
-)
+))
 print(result["step3_out"])  # final:processed:HELLO
 ```
 

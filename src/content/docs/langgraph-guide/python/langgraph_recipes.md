@@ -3566,6 +3566,7 @@ Use `version="v2"` to opt into the typed `GraphOutput` wrapper. The v1 API (defa
 **Uses:** `StateGraph.set_node_defaults`, `RetryPolicy`, `CachePolicy`, `TimeoutPolicy`
 
 ```python
+import asyncio
 import httpx
 from datetime import timedelta
 from typing_extensions import TypedDict
@@ -3603,7 +3604,7 @@ async def format_node(state: PipelineState) -> dict:
 
 # --- Global error fallback ---
 
-def global_error_handler(state: PipelineState, error: Exception) -> Command:
+async def global_error_handler(state: PipelineState, error: Exception) -> Command:
     """Runs for any node that exhausts its retries without a per-node handler.
     Returns Command(goto=END) to short-circuit the remaining pipeline."""
     return Command(
@@ -3653,18 +3654,18 @@ graph = (
 )
 
 # Normal run
-result = graph.invoke(
+result = asyncio.run(graph.ainvoke(
     {"query": "langgraph", "raw": "", "enriched": "", "result": "", "error_msg": ""},
     config={"configurable": {"thread_id": "pipe-1"}},
-)
+))
 print(result["result"])   # formatted:enriched:raw_data:langgraph
 print(result["error_msg"])  # ""  (empty — no error)
 
 # Failing run — error handler takes over after retries are exhausted
-failed = graph.invoke(
+failed = asyncio.run(graph.ainvoke(
     {"query": "fail", "raw": "", "enriched": "", "result": "", "error_msg": ""},
     config={"configurable": {"thread_id": "pipe-2"}},
-)
+))
 print(failed["error_msg"])  # pipeline failed at query='fail'
 print(failed["result"])     # error
 ```

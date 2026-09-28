@@ -1477,6 +1477,7 @@ print(running_stats.invoke([4.0, 5.0], cfg))
 **Source:** `langgraph.graph.state.StateGraph.set_node_defaults`
 
 ```python
+import asyncio
 import httpx
 from datetime import timedelta
 from typing_extensions import TypedDict
@@ -1511,7 +1512,7 @@ async def summarise_node(state: PipeState) -> dict:
     return {"result": f"summary:{state['enriched']}"}
 
 
-def error_fallback(state: PipeState, error: Exception) -> dict:
+async def error_fallback(state: PipeState, error: Exception) -> dict:
     """Graph-wide fallback: runs when any node exhausts its retries."""
     return {"result": f"fallback:{state.get('query', 'unknown')}"}
 
@@ -1547,10 +1548,10 @@ graph = (
     .compile(checkpointer=InMemorySaver(), cache=cache)
 )
 
-result = graph.invoke(
+result = asyncio.run(graph.ainvoke(
     {"query": "langgraph patterns", "fetched": "", "enriched": "", "result": ""},
     config={"configurable": {"thread_id": "pipe-1"}},
-)
+))
 print(result["result"])   # summary:enriched:data:langgraph patterns
 ```
 

@@ -68,7 +68,7 @@ print(result["messages"][-1].content)  # 42
 | `ValidationNode` | `langgraph.prebuilt.tool_validator` (deprecated) |
 | `MessagesState` | `langgraph.graph.message` |
 
-The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, and `InjectedStore`. `ToolRuntime`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` must be imported from their specific sub-modules directly.
+The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, `InjectedStore`, and `ToolRuntime`. `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` must be imported from their specific sub-modules directly.
 
 ## `ToolNode`
 
