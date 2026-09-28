@@ -496,11 +496,13 @@ class WebFetchResult(TypedDict):
 ```python
 @dataclass
 class WebFetchLocalTool:
-    max_content_length: int | None   # None = no limit
-    allow_local_urls: bool           # False by default (SSRF protection)
-    timeout: int                     # Request timeout in seconds
-    max_download_bytes: int | None   # Default: 50 MB
-    allowed_domains: list[str] | None = None  # Exact hostname allowlist
+    max_content_length: int | None          # None = no limit
+    allow_local_urls: bool                  # False by default (SSRF protection)
+    timeout: int                            # Request timeout in seconds
+    max_download_bytes: int | None          # Default: 50 MB
+    allowed_domains: list[str] | None = None  # Exact hostname allowlist (ModelRetry on violation)
+    blocked_domains: list[str] | None = None  # Exact hostname blocklist (ModelRetry on violation)
+    headers: dict[str, str] | None = None     # Extra HTTP headers; use allowed_domains if headers include credentials
 ```
 
 ### Example 1 — basic web fetch
@@ -1225,16 +1227,40 @@ except UserError as e:
 
 ### Supported hook names (from source)
 
+All hooks are registered via `@hooks.on.<name>`. The wrap form of each lifecycle phase
+is named after the phase itself (e.g. `node_run`, `tool_validate`), except for
+`wrap_model_request` which keeps the `wrap_` prefix.
+
 ```
+# Run lifecycle
+run_error
+
+# Node lifecycle
+before_node_run          after_node_run
+node_run                 node_run_error
+
+# Model request lifecycle
 before_model_request     after_model_request
-wrap_model_request       wrap_node_run
+wrap_model_request       model_request_error
+
+# Tool validate lifecycle
 before_tool_validate     after_tool_validate
-wrap_tool_validate       before_tool_execute
-after_tool_execute       wrap_tool_execute
+tool_validate            tool_validate_error
+
+# Tool execute lifecycle
+before_tool_execute      after_tool_execute
+tool_execute             tool_execute_error
+
+# Output validate lifecycle
 before_output_validate   after_output_validate
-wrap_output_validate     before_output_process
-after_output_process     wrap_output_process
-on_wrap_run
+output_validate          output_validate_error
+
+# Output process lifecycle
+before_output_process    after_output_process
+output_process           output_process_error
+
+# Deferred tools
+deferred_tool_calls
 ```
 
 ### Example 1 — log every model request and response
