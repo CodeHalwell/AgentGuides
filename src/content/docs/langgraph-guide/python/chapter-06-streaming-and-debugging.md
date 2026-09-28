@@ -597,7 +597,7 @@ asyncio.run(main())
 
 > **Multi-projection consumption.** `StreamChannel` uses **lazy-subscribe** — items are only buffered on a channel after something has subscribed to it. If you drain `run.values` fully before touching `run.messages`, the graph pumps to completion while `run.messages` has no subscriber, and every token pushed to it is silently discarded.
 >
-> Use `run.interleave("values", "messages", ...)` on `GraphRunStream` for the sync case; it yields `(name, item)` tuples in arrival order across the named projections and locks each channel for the duration. For async, subscribe every projection **before** starting the pump (e.g. `asyncio.gather` over per-projection consumer tasks) — `AsyncGraphRunStream` does not expose an `ainterleave` helper in 1.2.11.
+> Use `run.interleave("values", "messages", ...)` on `GraphRunStream` for the sync case; it yields `(name, item)` tuples in arrival order across the named projections and locks each channel for the duration. For async, subscribe every projection **before** starting the pump (e.g. `asyncio.gather` over per-projection consumer tasks) — `AsyncGraphRunStream` does not expose an `ainterleave` helper in 1.2.12.
 
 ```python
 # Sync multi-projection consumption — arrival-ordered, no dropped events.
@@ -799,7 +799,7 @@ Verified against **`langgraph==1.2.12`** (module: `langgraph.graph.ui`).
 ### `UIMessage` TypedDict (source-verified)
 
 ```python
-# langgraph.graph.ui (source-verified, langgraph 1.2.11)
+# langgraph.graph.ui (source-verified, langgraph 1.2.12)
 class UIMessage(TypedDict):
     type: Literal["ui"]         # always "ui"
     id: str                     # unique identifier (UUID if not provided)

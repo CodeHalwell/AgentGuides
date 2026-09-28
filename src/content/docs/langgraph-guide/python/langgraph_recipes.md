@@ -1,15 +1,15 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.11 (September 2026)"
+description: "Updated for LangGraph 1.2.12 (September 2026)"
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.2.11 (September 2026)**
+**Updated for LangGraph 1.2.12 (September 2026)**
 
-This guide includes recipes demonstrating the latest v1.2.11 features:
+This guide includes recipes demonstrating the latest v1.2.12 features:
 - Node Caching for performance
 - Deferred Nodes for fan-in patterns
 - Pre/Post Model Hooks for LLM customization

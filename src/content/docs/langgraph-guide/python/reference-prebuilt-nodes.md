@@ -61,7 +61,7 @@ print(result["messages"][-1].content)  # 42
 | `tools_condition` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
 | `InjectedState` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
 | `InjectedStore` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
-| `ToolRuntime` | `langgraph.prebuilt.tool_node` |
+| `ToolRuntime` | `langgraph.prebuilt` |
 | `ToolCallRequest` | `langgraph.prebuilt.tool_node` |
 | `ToolCallTransformer` | `langgraph.prebuilt._tool_call_transformer` |
 | `ToolCallStream` | `langgraph.prebuilt._tool_call_stream` |
@@ -298,7 +298,7 @@ A dataclass injected into tools that declare a `runtime` parameter with type `To
 
 ```python
 from dataclasses import dataclass, field
-from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.prebuilt import ToolRuntime
 
 @dataclass
 class ToolRuntime:
@@ -525,7 +525,7 @@ graph.invoke({"messages": [("user", "Remember that the answer is 42")]})
 
 ```python
 from langchain_core.tools import tool
-from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.prebuilt import ToolRuntime
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
@@ -681,7 +681,7 @@ Access the list of all tools registered with the `ToolNode` from inside a tool:
 
 ```python
 from langchain_core.tools import tool
-from langgraph.prebuilt.tool_node import ToolRuntime, ToolNode
+from langgraph.prebuilt import ToolRuntime, ToolNode
 
 
 @tool

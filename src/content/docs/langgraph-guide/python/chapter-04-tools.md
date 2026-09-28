@@ -332,7 +332,7 @@ builder.add_edge("tools", "agent")
 graph = builder.compile(store=memory_store)
 ```
 
-### Example 6: `ToolRuntime` — all-in-one injection (new in 1.2.1)
+### Example 6: `ToolRuntime` — all-in-one injection
 
 `ToolRuntime` is a dataclass that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
 
