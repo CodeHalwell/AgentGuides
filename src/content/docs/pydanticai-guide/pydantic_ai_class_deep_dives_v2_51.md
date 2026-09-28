@@ -111,17 +111,24 @@ def delete_record(record_id: str) -> str:
     """Deletes a record — dangerous, requires approval."""
     return f"Record {record_id} deleted"
 
+def transfer_funds(account_id: str, amount: float) -> str:
+    """Transfers funds to an account. Requires approval for amounts over the threshold."""
+    return f"Transferred ${amount:.2f} to {account_id}"
+
 toolset = ApprovalRequiredToolset(
-    FunctionToolset([read_record, delete_record]),
+    FunctionToolset([read_record, delete_record, transfer_funds]),
     approval_required_func=approval_policy,
 )
 
 agent = Agent("openai:gpt-4o-mini", toolsets=[toolset])
 
 async def main():
-    # read_record runs without approval
-    result = await agent.run("Read record ABC-001")
+    # Small transfer: amount=50 < 1000 → no approval needed
+    result = await agent.run("Transfer $50 to account ACC-123")
     print(result.output)
+
+    # Large transfer: amount=5000 > 1000 → triggers approval (DeferredToolRequests)
+    result = await agent.run("Transfer $5000 to account ACC-456")
 
 asyncio.run(main())
 ```
@@ -1318,7 +1325,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 4 — `wrap_model_request` for retry injection
+### Example 4 — `wrap_model_request` for request logging
 
 ```python
 import asyncio
@@ -1329,11 +1336,11 @@ hooks = Hooks()
 attempt_count: dict[str, int] = {}
 
 @hooks.on.wrap_model_request
-async def add_retry_context(ctx, *, request_context, handler):
+async def log_request(ctx, *, request_context, handler):
     run_id = id(ctx)
     attempt_count[run_id] = attempt_count.get(run_id, 0) + 1
 
-    # Inject the attempt number into the context so the model knows
+    # Log the attempt number before forwarding the request unchanged
     print(f"Attempt #{attempt_count[run_id]} for run {run_id}")
 
     return await handler(request_context)
