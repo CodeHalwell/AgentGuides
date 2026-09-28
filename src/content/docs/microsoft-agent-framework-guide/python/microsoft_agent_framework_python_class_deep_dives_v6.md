@@ -206,14 +206,18 @@ from agent_framework.openai import OpenAIChatClient
 class LoggingAgent(RawAgent):
     """Minimal agent that logs every call — no telemetry wrapper overhead."""
 
-    async def run(self, messages=None, *, stream=False, session=None, **kwargs):
+    def run(self, messages=None, *, stream=False, session=None, **kwargs):
+        # RawAgent.run is a plain def (not async) — override must match.
         print(f"[{self.name}] run called — session={getattr(session, 'session_id', None)}")
+        inner = super().run(messages, stream=stream, session=session, **kwargs)
         if stream:
-            # stream=True returns ResponseStream directly — do NOT await it
-            return super().run(messages, stream=True, session=session, **kwargs)
-        result = await super().run(messages, stream=False, session=session, **kwargs)
-        print(f"[{self.name}] finished — text length={len(result.text)}")
-        return result
+            return inner  # ResponseStream — return directly, no await
+        # Wrap the Awaitable to add post-run logging without changing the return type.
+        async def _log_result():
+            result = await inner
+            print(f"[{self.name}] finished — text length={len(result.text)}")
+            return result
+        return _log_result()
 
 async def main():
     agent = LoggingAgent(
@@ -978,38 +982,33 @@ VectorCollectionContextProvider(
 
 ```python
 import asyncio
+from typing import Annotated, Optional
 from pydantic import BaseModel
-from agent_framework import Agent, VectorCollectionContextProvider
-from agent_framework._vectors import InMemoryStore, VectorStoreCollectionDefinition, VectorStoreField
+from agent_framework import Agent, VectorCollectionContextProvider, vectorstoremodel, VectorStoreField, InMemoryStore
 from agent_framework.openai import OpenAIChatClient
 
+# @vectorstoremodel requires Annotated field metadata to describe the vector schema.
+# A separate *_vec field holds the pre-computed float embeddings.
+@vectorstoremodel(collection_name="products")
 class Product(BaseModel):
-    id: str
-    name: str
-    description: str
-    price: float
-
-    model_config = {"arbitrary_types_allowed": True}
-
-definition = VectorStoreCollectionDefinition(
-    collection_name="products",
-    fields=[
-        VectorStoreField("key", name="id"),                          # primary key
-        VectorStoreField("data", name="name", is_indexed=True),      # filterable text
-        VectorStoreField("vector", name="description", dimensions=1536),  # embedded field
-        VectorStoreField("data", name="price"),                      # plain numeric field
-    ],
-)
+    id: Annotated[str, VectorStoreField("key")]
+    name: Annotated[str, VectorStoreField("data")]
+    description: Annotated[str, VectorStoreField("data")]
+    description_vec: Annotated[Optional[list[float]], VectorStoreField("vector", dimensions=1536)] = None
+    price: Annotated[float, VectorStoreField("data")]
 
 async def main():
     store = InMemoryStore()
-    collection = store.get_collection(Product, definition=definition)
+    collection = store.get_collection(Product)
+    await collection.ensure_collection_exists()
 
-    # Seed some data
+    # Seed some data — provide pre-computed embeddings and disable auto-generation
     await collection.upsert([
-        Product(id="p1", name="Widget A", description="A sturdy blue widget", price=9.99),
-        Product(id="p2", name="Gadget B", description="A portable red gadget", price=24.99),
-    ])
+        Product(id="p1", name="Widget A", description="A sturdy blue widget",
+                description_vec=[0.1] * 1536, price=9.99),
+        Product(id="p2", name="Gadget B", description="A portable red gadget",
+                description_vec=[0.2] * 1536, price=24.99),
+    ], generate_vectors=False)
 
     vector_provider = VectorCollectionContextProvider(
         collection=collection,
