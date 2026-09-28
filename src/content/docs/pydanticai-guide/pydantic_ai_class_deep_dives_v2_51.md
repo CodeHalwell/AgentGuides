@@ -14,7 +14,7 @@ Modules consulted: `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/too
 `pydantic_ai/toolsets/external.py`, `pydantic_ai/common_tools/web_fetch.py`,
 `pydantic_ai/common_tools/duckduckgo.py`, `pydantic_ai/common_tools/image_generation.py`,
 `pydantic_ai/format_prompt.py`, `pydantic_ai/realtime/settings.py`,
-`pydantic_ai/_instructions.py`, `pydantic_ai/capabilities/hooks.py`.
+`pydantic_ai/_instructions.py`, `pydantic_ai/messages.py`, `pydantic_ai/capabilities/hooks.py`.
 
 This page covers classes that are **new since 2.46.0** or were only **thinly documented**
 in earlier deep-dive pages. Cross-references to the earlier series appear at the end.
@@ -496,10 +496,10 @@ class WebFetchResult(TypedDict):
 ```python
 @dataclass
 class WebFetchLocalTool:
-    max_content_length: int | None          # None = no limit
-    allow_local_urls: bool                  # False by default (SSRF protection)
-    timeout: int                            # Request timeout in seconds
-    max_download_bytes: int | None          # Default: 50 MB
+    max_content_length: int | None          # required; web_fetch_tool() factory default: 50_000 chars
+    allow_local_urls: bool                  # required; factory default: False (SSRF protection)
+    timeout: int                            # required; factory default: 30 s
+    max_download_bytes: int | None          # factory default: 50 MB (_MAX_DOWNLOAD_BYTES)
     allowed_domains: list[str] | None = None  # Exact hostname allowlist (ModelRetry on violation)
     blocked_domains: list[str] | None = None  # Exact hostname blocklist (ModelRetry on violation)
     headers: dict[str, str] | None = None     # Extra HTTP headers; use allowed_domains if headers include credentials
@@ -1378,7 +1378,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities.hooks import Hooks
 
 hooks = Hooks()
-attempt_count: dict[str, int] = {}
+attempt_count: dict[int, int] = {}
 
 @hooks.on.wrap_model_request
 async def log_request(ctx, *, request_context, handler):
