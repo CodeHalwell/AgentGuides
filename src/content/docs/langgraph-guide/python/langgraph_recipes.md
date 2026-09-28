@@ -3738,9 +3738,12 @@ def intelligent_search(
     results: list[str] = []
     if runtime.store:
         # Plain namespace search (no index configured).
+        # Scan all documents first, then filter — applying limit before the
+        # predicate would miss matches beyond the first page.
         # For semantic/vector search, initialise InMemoryStore with an embeddings index.
-        hits = runtime.store.search(("docs", tenant_id), limit=5)
-        results = [h.value.get("text", "") for h in hits if query.lower() in h.value.get("text", "").lower()]
+        all_hits = runtime.store.search(("docs", tenant_id), limit=100)
+        matches = [h.value.get("text", "") for h in all_hits if query.lower() in h.value.get("text", "").lower()]
+        results = matches[:5]   # return at most 5 matching documents
 
     # ── Audit log with the exact tool call ID ────────────────────────────
     print(
