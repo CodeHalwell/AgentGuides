@@ -120,11 +120,13 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 3 — pre-approving a specific call via `ctx.tool_call_approved`
+### Example 3 — resuming an approved call via `deferred_tool_results`
 
-When a human approves a pending call, re-run the agent with `tool_call_approved=True` on the
-context.  The toolset checks `ctx.tool_call_approved` first; if it is set, the call proceeds
-even if `approval_required_func` returns `True`.
+`ApprovalRequired` is raised before the tool body runs.  The correct way to resume is to
+capture the pending `DeferredToolRequests` from the first run, build a `ToolApproved` result
+for the call the human approved, then re-invoke the agent with those results via
+`deferred_tool_results`.  The toolset sees `ctx.tool_call_approved = True` on the replayed
+call and bypasses the approval check.
 
 ```python
 import asyncio
@@ -132,42 +134,39 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.exceptions import ApprovalRequired
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved
 
 def wire_transfer(amount: float, destination: str) -> str:
     return f"Transferred ${amount:.2f} to {destination}"
 
 toolset = ApprovalRequiredToolset(FunctionToolset([wire_transfer]))
-agent = Agent("openai:gpt-4o-mini", toolsets=[toolset])
+# Include DeferredToolRequests as a possible output type so the run can
+# surface pending calls instead of raising immediately.
+agent = Agent(
+    "openai:gpt-4o-mini",
+    toolsets=[toolset],
+    output_type=str | DeferredToolRequests,
+)
 
 async def main():
-    messages = []
-    while True:
-        try:
-            result = await agent.run(
-                "Transfer $500 to account 9876",
-                message_history=messages,
-            )
-            print(result.output)
-            break
-        except ApprovalRequired:
-            print("Human approved the transfer — retrying with approval flag")
-            # In a real app you'd capture which tool call needs approval
-            # and replay only that one.  Here we approve all subsequent calls.
-            agent2 = Agent(
-                "openai:gpt-4o-mini",
-                toolsets=[
-                    ApprovalRequiredToolset(
-                        FunctionToolset([wire_transfer]),
-                        approval_required_func=lambda ctx, td, args: False,
-                    )
-                ],
-            )
-            result = await agent2.run(
-                "Transfer $500 to account 9876",
-                message_history=messages,
-            )
-            print(result.output)
-            break
+    result = await agent.run("Transfer $500 to account 9876")
+
+    if isinstance(result.output, DeferredToolRequests):
+        deferred = result.output
+        print(f"Approval needed for: {[c.tool_name for c in deferred.calls]}")
+
+        # Human reviews the calls and approves them
+        approvals = DeferredToolResults(
+            results=[ToolApproved(call_id=c.tool_call_id) for c in deferred.calls]
+        )
+        # Resume from the same message history with the approved results
+        result = await agent.run(
+            "",
+            message_history=result.all_messages(),
+            deferred_tool_results=approvals,
+        )
+
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -326,11 +325,15 @@ class ExternalToolset(AbstractToolset[AgentDepsT]):
 
 ### Example 1 — declare external tools and capture calls
 
+`ExternalToolset` surfaces pending calls as `DeferredToolRequests` so your application
+can fulfil them and reinject the results.  Include `DeferredToolRequests` in `output_type`
+so the run returns it rather than blocking.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.external import ExternalToolset
-from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.tools import ToolDefinition, DeferredToolRequests, DeferredToolResults, ToolReturn
 
 # Describe the tools the model may call
 external_toolset = ExternalToolset(
@@ -351,13 +354,32 @@ external_toolset = ExternalToolset(
     ]
 )
 
-agent = Agent("openai:gpt-4o", toolsets=[external_toolset])
+agent = Agent(
+    "openai:gpt-4o",
+    toolsets=[external_toolset],
+    output_type=str | DeferredToolRequests,  # surface deferred calls to the caller
+)
 
 async def main():
-    async with agent.run_stream("Book a 30-min team sync for tomorrow at 10am") as stream:
-        async for event in stream:
-            print(event)
-        result = await stream.get_result()
+    result = await agent.run("Book a 30-min team sync for tomorrow at 10am")
+
+    if isinstance(result.output, DeferredToolRequests):
+        # Fulfil each call externally — e.g. call your calendar API
+        tool_results = []
+        for call in result.output.calls:
+            print(f"Fulfilling external tool call: {call.tool_name}({call.args})")
+            # In production, call your external service here
+            tool_results.append(
+                ToolReturn(call_id=call.tool_call_id, content="Meeting booked: Team Sync at 10am tomorrow")
+            )
+
+        # Resume the run with the fulfilled results
+        result = await agent.run(
+            "",
+            message_history=result.all_messages(),
+            deferred_tool_results=DeferredToolResults(results=tool_results),
+        )
+
     print(result.output)
 
 asyncio.run(main())
@@ -567,8 +589,8 @@ from ddgs.ddgs import DDGS
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 
-# DDGS supports proxies, headers, etc.
-client = DDGS(proxies=None, timeout=10)
+# DDGS uses the singular `proxy` parameter (not `proxies`)
+client = DDGS(proxy=None, timeout=10)
 
 agent = Agent(
     "openai:gpt-4o",
@@ -657,8 +679,9 @@ agent = Agent(
 
 async def main():
     result = await agent.run("Draw a sunset over a futuristic city in watercolour style")
-    # result.output is a BinaryImage
-    print(f"Image generated: {len(result.output.data)} bytes")
+    # result.output is the model's text response describing the generated image.
+    # The BinaryImage itself is stored in the ToolReturnPart of result.all_messages().
+    print(result.output)  # e.g. "Here is your sunset watercolour image."
 
 asyncio.run(main())
 ```
@@ -697,7 +720,9 @@ async def main():
         "Create a logo for a startup called Nexus",
         deps=AppDeps(use_premium_model=True),
     )
-    print(f"Image: {len(result.output.data)} bytes")
+    # result.output is the model's text acknowledgement; the BinaryImage is in
+    # the tool return messages: result.all_messages()
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -729,7 +754,9 @@ agent = Agent(
 
 async def main():
     result = await agent.run("Make an image of Paris for our travel campaign")
-    print(f"Image: {len(result.output.data)} bytes")
+    # The outer agent returns a text response; the generated BinaryImage lives
+    # in the tool return messages accessible via result.all_messages().
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -883,35 +910,35 @@ class TurnDetection(TypedDict, total=False):
 
 ### Example 1 — basic realtime session
 
+`agent.realtime(model)` returns an `AgentRealtime` binding (not an async context manager).
+Open a session with `async with agent.realtime(model).session() as session:`.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.realtime.openai import OpenAIRealtimeModel
 
-model = OpenAIRealtimeModel("gpt-4o-realtime-preview")
-agent = Agent(model, system_prompt="You are a helpful voice assistant.")
+agent = Agent(system_prompt="You are a helpful voice assistant.")
 
 async def main():
-    async with agent.realtime() as realtime:
-        async with realtime.session() as session:
-            # Send audio bytes (PCM 16-bit, 24 kHz) from a microphone
-            await session.send_audio(b"<pcm audio bytes>")
-            async for event in session:
-                print(event)
+    async with agent.realtime(OpenAIRealtimeModel("gpt-4o-realtime-preview")).session() as session:
+        # Send audio bytes (PCM 16-bit, 24 kHz) from a microphone
+        await session.send_audio(b"<pcm audio bytes>")
+        async for event in session:
+            print(event)
 
 asyncio.run(main())
 ```
 
 ### Example 2 — configure VAD sensitivity and token limit
 
+`model_settings` goes to `agent.realtime(model, model_settings=...)`.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.realtime.openai import OpenAIRealtimeModel
 from pydantic_ai.realtime.settings import RealtimeModelSettings, TurnDetection
-
-model = OpenAIRealtimeModel("gpt-4o-realtime-preview")
-agent = Agent(model)
 
 settings: RealtimeModelSettings = {
     "max_tokens": 512,
@@ -923,38 +950,41 @@ settings: RealtimeModelSettings = {
     ),
 }
 
+agent = Agent()
+
 async def main():
-    async with agent.realtime() as realtime:
-        async with realtime.session(model_settings=settings) as session:
-            await session.send_audio(b"<pcm audio>")
-            async for event in session:
-                print(event)
+    realtime = agent.realtime(
+        OpenAIRealtimeModel("gpt-4o-realtime-preview"),
+        model_settings=settings,
+    )
+    async with realtime.session() as session:
+        await session.send_audio(b"<pcm audio>")
+        async for event in session:
+            print(event)
 
 asyncio.run(main())
 ```
 
 ### Example 3 — retain both sides' audio for transcription
 
+`audio_retention` is a parameter of `session()`, not of `model_settings`.
+`AudioRetention` is a `Literal` alias — assign the string value directly.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.realtime.openai import OpenAIRealtimeModel
-from pydantic_ai.realtime.settings import RealtimeModelSettings, AudioRetention
 
-model = OpenAIRealtimeModel("gpt-4o-realtime-preview")
-agent = Agent(model)
-
-settings: RealtimeModelSettings = {
-    "audio_retention": AudioRetention("all"),  # Keep input + output audio as WAV
-}
+agent = Agent()
 
 async def main():
-    async with agent.realtime() as realtime:
-        async with realtime.session(model_settings=settings) as session:
-            await session.send_audio(b"<pcm audio>")
-            async for event in session:
-                if hasattr(event, "audio"):
-                    print(f"WAV audio retained: {len(event.audio.data)} bytes")
+    realtime = agent.realtime(OpenAIRealtimeModel("gpt-4o-realtime-preview"))
+    # audio_retention='all' retains both input and output audio as WAV
+    async with realtime.session(audio_retention="all") as session:
+        await session.send_audio(b"<pcm audio>")
+        async for event in session:
+            if hasattr(event, "audio"):
+                print(f"WAV audio retained: {len(event.audio.data)} bytes")
 
 asyncio.run(main())
 ```
@@ -967,21 +997,23 @@ from pydantic_ai import Agent
 from pydantic_ai.realtime.openai import OpenAIRealtimeModel
 from pydantic_ai.realtime.settings import RealtimeModelSettings
 
-model = OpenAIRealtimeModel("gpt-4o-realtime-preview")
-agent = Agent(model)
-
 settings: RealtimeModelSettings = {
     "turn_detection": False,  # Disable VAD — user controls turn boundaries
 }
 
+agent = Agent()
+
 async def main():
-    async with agent.realtime() as realtime:
-        async with realtime.session(model_settings=settings) as session:
-            await session.send_audio(b"<pcm audio>")
-            # Manually commit the audio to signal end of user turn
-            await session.commit_audio()
-            async for event in session:
-                print(event)
+    realtime = agent.realtime(
+        OpenAIRealtimeModel("gpt-4o-realtime-preview"),
+        model_settings=settings,
+    )
+    async with realtime.session() as session:
+        await session.send_audio(b"<pcm audio>")
+        # Manually commit the audio to signal end of user turn
+        await session.commit_audio()
+        async for event in session:
+            print(event)
 
 asyncio.run(main())
 ```
@@ -1190,13 +1222,14 @@ hooks = Hooks()
 _start_times: dict[str, float] = {}
 
 @hooks.on.before_tool_execute
-async def record_start(ctx, tool_call_part, validated_args, tool):
-    _start_times[tool_call_part.tool_call_id] = time.monotonic()
+async def record_start(ctx, *, call, tool_def, args):
+    # Keyword names from source: call (ToolCallPart), tool_def, args
+    _start_times[call.tool_call_id] = time.monotonic()
 
 @hooks.on.after_tool_execute
-async def record_end(ctx, tool_call_part, validated_args, tool, result):
-    elapsed = time.monotonic() - _start_times.pop(tool_call_part.tool_call_id, 0)
-    print(f"Tool {tool_call_part.tool_name!r} took {elapsed*1000:.1f}ms")
+async def record_end(ctx, *, call, tool_def, args, result):
+    elapsed = time.monotonic() - _start_times.pop(call.tool_call_id, 0)
+    print(f"Tool {call.tool_name!r} took {elapsed*1000:.1f}ms")
 
 agent = Agent(
     "openai:gpt-4o-mini",
@@ -1222,9 +1255,9 @@ security_hooks = Hooks()
 observability_hooks = Hooks()
 
 @security_hooks.on.before_tool_execute
-async def security_check(ctx, tool_call_part, validated_args, tool):
-    if "delete" in tool_call_part.tool_name.lower():
-        print(f"Security alert: destructive tool called — {tool_call_part.tool_name}")
+async def security_check(ctx, *, call, tool_def, args):
+    if "delete" in call.tool_name.lower():
+        print(f"Security alert: destructive tool called — {call.tool_name}")
 
 @observability_hooks.on.after_model_request
 async def emit_metric(ctx, response, request_context):
