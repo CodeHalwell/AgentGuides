@@ -304,12 +304,11 @@ class UserPrefsProvider(ContextProvider):
         super().__init__("user_prefs")
         self._prefs = prefs
 
-    async def before_run(self, session: AgentSession, messages: list[Message]) -> list[Message]:
+    async def before_run(self, *, agent, session: AgentSession, context, state: dict) -> None:
         # Stamp preferences into session state so other providers can read them
-        session.state["user_prefs"] = self._prefs
-        # Inject a system message
-        messages.insert(0, Message("system", [f"User preferences: {self._prefs}"]))
-        return messages
+        state["user_prefs"] = self._prefs
+        # Inject a system message into the live context
+        context.add_message(Message("system", [f"User preferences: {self._prefs}"]))
 ```
 
 ---
@@ -397,12 +396,14 @@ asyncio.run(main())
 
 ### Example: inspecting token usage
 
+`UsageDetails` is a `TypedDict` — access its values via dict keys, not attribute access.
+
 ```python
 response = await agent.run("Explain quantum entanglement in one sentence.")
 if response.usage_details:
-    print(f"Prompt: {response.usage_details.prompt_tokens}")
-    print(f"Completion: {response.usage_details.completion_tokens}")
-    print(f"Total: {response.usage_details.total_tokens}")
+    print(f"Input tokens:  {response.usage_details.get('input_token_count')}")
+    print(f"Output tokens: {response.usage_details.get('output_token_count')}")
+    print(f"Total tokens:  {response.usage_details.get('total_token_count')}")
 ```
 
 ---
@@ -617,11 +618,12 @@ async def write_executor(message: str, ctx: WorkflowContext[None, str]) -> None:
     await ctx.yield_output(response.text)
 
 workflow = (
-    WorkflowBuilder("research-pipeline")
-    .add_edge("research", research_executor, entry=True)
-    .add_edge("write", write_executor)
-    .add_chain(["research", "write"])
-    .output_from("write")
+    WorkflowBuilder(
+        name="research-pipeline",
+        start_executor=research_executor,  # required kwarg; marks the entry point
+        output_from=[write_executor],      # list of executors whose output becomes workflow output
+    )
+    .add_edge(research_executor, write_executor)  # connect executors by object reference
     .build()
 )
 
@@ -641,8 +643,10 @@ asyncio.run(main())
 
 ### Embedding `WorkflowAgent` in a `GroupChatBuilder`
 
+`GroupChatBuilder` takes all participants in its constructor — there is no `.add_agent()` fluent method. Import from `agent_framework.orchestrations` (not the private `_orchestration` module).
+
 ```python
-from agent_framework._orchestration import GroupChatBuilder
+from agent_framework.orchestrations import GroupChatBuilder
 
 specialist = WorkflowAgent(
     deep_analysis_workflow,
@@ -650,12 +654,10 @@ specialist = WorkflowAgent(
     description="Runs a deep multi-step analysis workflow.",
 )
 
-group_chat = (
-    GroupChatBuilder()
-    .add_agent(coordinator)
-    .add_agent(specialist)         # workflow drops in as a peer
-    .build()
-)
+group_chat = GroupChatBuilder(
+    participants=[coordinator, specialist],  # workflow drops in as a peer
+    orchestrator_agent=coordinator,          # decides who speaks next
+).build()
 
 result = await group_chat.run("Analyse the quarterly earnings data.")
 ```
@@ -778,22 +780,27 @@ class ApprovalResponse:
     approved: bool
     reason: str
 
-async def approval_executor(
-    message: str, ctx: WorkflowContext[None, str]
-) -> None:
-    await ctx.request_info(
-        ApprovalRequest(action="send_email", details=message),
-        response_type=ApprovalResponse,
-    )
+class EmailApprovalExecutor:
+    """Executor class that uses @response_handler for HITL approval."""
 
-@response_handler(ApprovalRequest, ApprovalResponse)
-async def handle_approval(
-    message: str, ctx: WorkflowContext[None, str], response: ApprovalResponse
-) -> None:
-    if response.approved:
-        await ctx.yield_output(f"Email sent: {message}")
-    else:
-        await ctx.yield_output(f"Rejected: {response.reason}")
+    async def __call__(
+        self, message: str, ctx: WorkflowContext[None, str]
+    ) -> None:
+        await ctx.request_info(
+            ApprovalRequest(action="send_email", details=message),
+            response_type=ApprovalResponse,
+        )
+
+    @response_handler(request=ApprovalRequest, response=ApprovalResponse)
+    async def handle_approval(
+        self, message: str, ctx: WorkflowContext[None, str], response: ApprovalResponse
+    ) -> None:
+        if response.approved:
+            await ctx.yield_output(f"Email sent: {message}")
+        else:
+            await ctx.yield_output(f"Rejected: {response.reason}")
+
+approval_executor = EmailApprovalExecutor()
 ```
 
 ---
@@ -973,17 +980,16 @@ class Product(BaseModel):
 definition = VectorStoreCollectionDefinition(
     collection_name="products",
     fields=[
-        VectorStoreField("id", is_key=True),
-        VectorStoreField("name", is_filterable=True),
-        VectorStoreField("description", has_embedding=True, embedding_dimensions=1536),
-        VectorStoreField("price", is_filterable=True),
+        VectorStoreField("key", name="id"),                          # primary key
+        VectorStoreField("data", name="name", is_indexed=True),      # filterable text
+        VectorStoreField("vector", name="description", dimensions=1536),  # embedded field
+        VectorStoreField("data", name="price"),                      # plain numeric field
     ],
-    model_type=Product,
 )
 
 async def main():
     store = InMemoryStore()
-    collection = await store.get_or_create_collection(definition)
+    collection = store.get_collection(Product, definition=definition)
 
     # Seed some data
     await collection.upsert([
