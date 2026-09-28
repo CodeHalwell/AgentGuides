@@ -153,17 +153,17 @@ async def main():
 
     if isinstance(result.output, DeferredToolRequests):
         deferred = result.output
-        print(f"Approval needed for: {[c.tool_name for c in deferred.calls]}")
+        # Approval calls land in .approvals (not .calls which is for ExternalToolset)
+        print(f"Approval needed for: {[c.tool_name for c in deferred.approvals]}")
 
-        # Human reviews the calls and approves them
-        approvals = DeferredToolResults(
-            results=[ToolApproved(call_id=c.tool_call_id) for c in deferred.calls]
-        )
+        # build_results(approve_all=True) is the ergonomic helper; it creates
+        # DeferredToolResults(approvals={id: ToolApproved() for each pending call})
+        approved = deferred.build_results(approve_all=True)
         # Resume from the same message history with the approved results
         result = await agent.run(
             "",
             message_history=result.all_messages(),
-            deferred_tool_results=approvals,
+            deferred_tool_results=approved,
         )
 
     print(result.output)
@@ -333,7 +333,7 @@ so the run returns it rather than blocking.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.external import ExternalToolset
-from pydantic_ai.tools import ToolDefinition, DeferredToolRequests, DeferredToolResults, ToolReturn
+from pydantic_ai.tools import ToolDefinition, DeferredToolRequests, DeferredToolResults
 
 # Describe the tools the model may call
 external_toolset = ExternalToolset(
@@ -365,19 +365,19 @@ async def main():
 
     if isinstance(result.output, DeferredToolRequests):
         # Fulfil each call externally — e.g. call your calendar API
-        tool_results = []
+        # DeferredToolResults.calls is a {tool_call_id: result} dict; bare strings
+        # are auto-wrapped in ToolReturn by the framework
+        call_results = {}
         for call in result.output.calls:
             print(f"Fulfilling external tool call: {call.tool_name}({call.args})")
             # In production, call your external service here
-            tool_results.append(
-                ToolReturn(call_id=call.tool_call_id, content="Meeting booked: Team Sync at 10am tomorrow")
-            )
+            call_results[call.tool_call_id] = "Meeting booked: Team Sync at 10am tomorrow"
 
         # Resume the run with the fulfilled results
         result = await agent.run(
             "",
             message_history=result.all_messages(),
-            deferred_tool_results=DeferredToolResults(results=tool_results),
+            deferred_tool_results=DeferredToolResults(calls=call_results),
         )
 
     print(result.output)
@@ -394,7 +394,7 @@ asyncio.run(main())
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.external import ExternalToolset
-from pydantic_ai.tools import ToolDefinition, DeferredToolRequests, DeferredToolResults, ToolReturn
+from pydantic_ai.tools import ToolDefinition, DeferredToolRequests, DeferredToolResults
 
 CALENDAR_TOOLS = ExternalToolset(
     id="calendar-service",
@@ -434,17 +434,15 @@ async def main():
 
     if isinstance(result.output, DeferredToolRequests):
         # Fulfil each pending call via your external calendar service
-        tool_results = []
+        call_results = {}
         for call in result.output.calls:
             print(f"External call to calendar-service: {call.tool_name}({call.args})")
-            tool_results.append(
-                ToolReturn(call_id=call.tool_call_id, content='[{"title": "Team sync", "time": "09:00"}]')
-            )
+            call_results[call.tool_call_id] = '[{"title": "Team sync", "time": "09:00"}]'
 
         result = await agent.run(
             "",
             message_history=result.all_messages(),
-            deferred_tool_results=DeferredToolResults(results=tool_results),
+            deferred_tool_results=DeferredToolResults(calls=call_results),
         )
 
     print(result.output)
