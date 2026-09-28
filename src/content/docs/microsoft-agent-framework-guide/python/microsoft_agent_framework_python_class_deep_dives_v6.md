@@ -593,6 +593,7 @@ import asyncio
 from agent_framework import Agent, WorkflowAgent, tool, executor
 from agent_framework._workflows import WorkflowBuilder
 from agent_framework._workflows._workflow_context import WorkflowContext
+from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
 
 client = OpenAIChatClient(model="gpt-4o-mini")
@@ -616,8 +617,9 @@ writer = Agent(
 )
 
 @executor
-async def research_executor(message: str, ctx: WorkflowContext[str]) -> None:
-    response = await researcher.run(message)
+async def research_executor(messages: list[Message], ctx: WorkflowContext[str]) -> None:
+    # WorkflowAgent validates that the start executor accepts list[Message]
+    response = await researcher.run(messages)
     await ctx.send_message(response.text)
 
 @executor
