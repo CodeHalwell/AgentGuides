@@ -1,6 +1,6 @@
 ---
 title: "TracePolicy — per-node LangSmith tracing API reference"
-description: "Control how individual graph nodes are traced in LangSmith with TracePolicy, omit_payload, and process_inputs/process_outputs processors — source-verified for LangGraph 1.2.11."
+description: "Control how individual graph nodes are traced in LangSmith with TracePolicy, omit_payload, and process_inputs/process_outputs processors — source-verified for LangGraph 1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # TracePolicy — per-node LangSmith tracing
 
-Verified against **`langgraph==1.2.11`** (module: `langgraph.types`).
+Verified against **`langgraph==1.2.12`** (module: `langgraph.types`).
 
 `TracePolicy` lets you control what each node records in LangSmith at a fine-grained level. Rather than blanket-hiding inputs/outputs across all runs, you can selectively truncate, redact, or silence individual nodes while leaving the rest fully traced.
 
@@ -398,6 +398,6 @@ omit_payload(value: Any) -> dict[str, Any]
 
 | Version | Change |
 |---|---|
-| 1.2.11 | `TracePolicy`, `omit_payload` production-stable |
+| 1.2.12 | `TracePolicy`, `omit_payload` production-stable |
 | 1.2.0 | `set_node_defaults(trace_policy=...)` support added |
 | 1.1.0 | `TracePolicy` first introduced |
