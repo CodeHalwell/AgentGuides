@@ -88,14 +88,20 @@ from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import RunContext, ToolDefinition
 
 DANGEROUS_TOOLS = {"delete_record", "send_email", "execute_sql"}
+HIGH_VALUE_THRESHOLD = 1000
 
 def approval_policy(
     ctx: RunContext[None],
     tool_def: ToolDefinition,
     tool_args: dict,
 ) -> bool:
-    # Only require approval for known high-risk tools
-    return tool_def.name in DANGEROUS_TOOLS
+    # Require approval for high-risk tool names
+    if tool_def.name in DANGEROUS_TOOLS:
+        return True
+    # Also require approval for transfers above the threshold
+    if tool_def.name == "transfer_funds" and tool_args.get("amount", 0) > HIGH_VALUE_THRESHOLD:
+        return True
+    return False
 
 def read_record(record_id: str) -> dict:
     """Reads a record — safe, no approval needed."""
@@ -456,8 +462,9 @@ asyncio.run(main())
 
 **Module:** `pydantic_ai.common_tools.web_fetch`
 
-`web_fetch_tool` is a ready-made `Tool` that fetches a URL, converts the HTML to Markdown,
-and returns a `WebFetchResult` dict — all with SSRF protection built in.
+`web_fetch_tool` is a ready-made `Tool` that fetches a URL and returns either a `WebFetchResult`
+dict (HTML/JSON/text → Markdown) or a `BinaryContent` object (PDFs, images, other binary
+media) — all with SSRF protection built in.
 
 ### `WebFetchResult` (from source)
 
@@ -1098,6 +1105,7 @@ asyncio.run(main())
 import asyncio
 from datetime import datetime
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 from pydantic_ai import Agent
 from pydantic_ai.tools import RunContext
 
@@ -1107,7 +1115,7 @@ class UserDeps:
     timezone: str
 
 def personalised_greeting(ctx: RunContext[UserDeps]) -> str:
-    hour = datetime.now().hour
+    hour = datetime.now(tz=ZoneInfo(ctx.deps.timezone)).hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
     return f"{greeting}, {ctx.deps.username}! I'll use {ctx.deps.timezone} for any time references."
 
@@ -1321,14 +1329,14 @@ hooks = Hooks()
 attempt_count: dict[str, int] = {}
 
 @hooks.on.wrap_model_request
-async def add_retry_context(ctx, request_context, next_handler):
+async def add_retry_context(ctx, *, request_context, handler):
     run_id = id(ctx)
     attempt_count[run_id] = attempt_count.get(run_id, 0) + 1
 
     # Inject the attempt number into the context so the model knows
     print(f"Attempt #{attempt_count[run_id]} for run {run_id}")
 
-    return await next_handler(request_context)
+    return await handler(request_context)
 
 agent = Agent("openai:gpt-4o-mini", capabilities=[hooks])
 
