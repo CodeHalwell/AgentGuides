@@ -3777,15 +3777,23 @@ builder.add_edge("tools", "agent")
 
 graph = builder.compile(store=store)
 
-result = graph.invoke(
+last_state = None
+for kind, data in graph.stream(
     {
         "messages": [{"role": "user", "content": "Search for LangGraph checkpointing"}],
         "user_id": "alice",
         "session_id": "sess-42",
     },
     context=TenantCtx(tenant_id="acme"),
-)
-print(result["messages"][-1].content)
+    stream_mode=["custom", "values"],
+):
+    if kind == "custom":
+        # {'event': 'search_start', 'query': 'Search for LangGraph checkpointing'}
+        print(f"[stream] {data}")
+    elif kind == "values":
+        last_state = data
+
+print(last_state["messages"][-1].content)
 ```
 
 **`ToolRuntime` field summary (from `langgraph-prebuilt==1.1.0`):**

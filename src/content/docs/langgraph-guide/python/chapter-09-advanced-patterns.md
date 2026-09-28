@@ -1322,11 +1322,10 @@ async def fetch_url(url: str) -> str:
 @entrypoint(checkpointer=InMemorySaver())
 async def crawl(urls: list[str]) -> list[str]:
     futures = [fetch_url(u) for u in urls]
-    return [f.result() for f in futures]
+    return await asyncio.gather(*futures)
 
 
 cfg = {"configurable": {"thread_id": "crawl-1"}}
-import asyncio
 results = asyncio.run(crawl.ainvoke(["a.com", "b.com", "c.com"], cfg))
 print(results)
 ```
@@ -1484,7 +1483,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
-from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy, Command
 
 
 class PipeState(TypedDict):
@@ -1512,9 +1511,12 @@ async def summarise_node(state: PipeState) -> dict:
     return {"result": f"summary:{state['enriched']}"}
 
 
-async def error_fallback(state: PipeState, error: Exception) -> dict:
+async def error_fallback(state: PipeState, error: Exception) -> Command:
     """Graph-wide fallback: runs when any node exhausts its retries."""
-    return {"result": f"fallback:{state.get('query', 'unknown')}"}
+    return Command(
+        update={"result": f"fallback:{state.get('query', 'unknown')}"},
+        goto=END,
+    )
 
 
 cache = InMemoryCache()
