@@ -313,8 +313,8 @@ class UserPrefsProvider(ContextProvider):
     async def before_run(self, *, agent, session: AgentSession, context, state: dict) -> None:
         # Stamp preferences into session state so other providers can read them
         state["user_prefs"] = self._prefs
-        # Inject a system message into the live context
-        context.add_message(Message("system", [f"User preferences: {self._prefs}"]))
+        # Inject a system message into the live context via extend_messages
+        context.extend_messages(self.source_id, [Message("system", [f"User preferences: {self._prefs}"])])
 ```
 
 ---
@@ -754,16 +754,22 @@ async def analyse(data: list[dict], ctx: WorkflowContext[None, str]) -> None:
     summary = f"Price: ${prices[0]['price']} | News: {news[0]['headline']}"
     await ctx.yield_output(summary)
 
-# Parallel start: both fetch_prices and fetch_news run from the same entry point.
-# WorkflowBuilder requires a single start_executor; route to both via add_edge.
+# WorkflowBuilder requires a single start_executor.
+# Use a dispatcher to fan out to both fetchers, then fan-in to analyse.
+@executor
+async def dispatch(symbol: str, ctx: WorkflowContext[str]) -> None:
+    await ctx.send_message(symbol, target_id=fetch_prices.id)
+    await ctx.send_message(symbol, target_id=fetch_news.id)
+
 workflow = (
     WorkflowBuilder(
         name="market-analysis",
-        start_executor=fetch_prices,
+        start_executor=dispatch,
         output_from=[analyse],
     )
-    .add_edge(fetch_prices, analyse)
-    .add_edge(fetch_news, analyse)
+    .add_edge(dispatch, fetch_prices)
+    .add_edge(dispatch, fetch_news)
+    .add_fan_in_edges([fetch_prices, fetch_news], analyse)
     .build()
 )
 
@@ -781,7 +787,8 @@ asyncio.run(main())
 
 ```python
 from dataclasses import dataclass
-from agent_framework._workflows._decorator import response_handler
+from agent_framework import Executor, handler, response_handler
+from agent_framework._workflows._workflow_context import WorkflowContext
 
 @dataclass
 class ApprovalRequest:
@@ -793,10 +800,11 @@ class ApprovalResponse:
     approved: bool
     reason: str
 
-class EmailApprovalExecutor:
-    """Executor class that uses @response_handler for HITL approval."""
+class EmailApprovalExecutor(Executor):
+    """Executor subclass that uses @handler + @response_handler for HITL approval."""
 
-    async def __call__(
+    @handler
+    async def run(
         self, message: str, ctx: WorkflowContext[None, str]
     ) -> None:
         await ctx.request_info(
@@ -806,12 +814,15 @@ class EmailApprovalExecutor:
 
     @response_handler(request=ApprovalRequest, response=ApprovalResponse)
     async def handle_approval(
-        self, message: str, ctx: WorkflowContext[None, str], response: ApprovalResponse
+        self,
+        original_request: ApprovalRequest,
+        response: ApprovalResponse,
+        context: WorkflowContext[None, str],
     ) -> None:
         if response.approved:
-            await ctx.yield_output(f"Email sent: {message}")
+            await context.yield_output(f"Email sent: {original_request.details}")
         else:
-            await ctx.yield_output(f"Rejected: {response.reason}")
+            await context.yield_output(f"Rejected: {response.reason}")
 
 approval_executor = EmailApprovalExecutor()
 ```
@@ -851,12 +862,12 @@ CompactionProvider(
 | Class | Key params | What it does |
 |---|---|---|
 | `SlidingWindowStrategy` | `keep_last_groups: int` | Keeps the last N tool-call groups. |
-| `TruncationStrategy` | `max_tokens: int` | Drops oldest messages once the token budget is exceeded. |
+| `TruncationStrategy` | `max_n: int, compact_to: int` | Drops oldest messages until `compact_to` messages remain, once `max_n` is exceeded. |
 | `SummarizationStrategy` | `agent: Agent`, `token_threshold: int` | Summarises old messages with a dedicated agent when the context grows large. |
 | `ToolResultCompactionStrategy` | `keep_last_tool_call_groups: int` | Replaces old tool-call/result pairs with a brief summary message. |
 | `SelectiveToolCallCompactionStrategy` | `tool_names: list[str]`, `keep_last: int` | Compacts only calls to specific tools. |
 | `ContextWindowCompactionStrategy` | `agent: Agent`, `max_tokens: int` | Keeps only the last N tokens, summarising what's dropped. |
-| `TokenBudgetComposedStrategy` | `strategies: list[...]`, `token_budget: int` | Runs strategies in sequence, stopping once under the budget. |
+| `TokenBudgetComposedStrategy` | `token_budget: int, tokenizer: TokenizerProtocol, strategies: list[...]` | Runs strategies in sequence, stopping once under the budget. `tokenizer` is required. |
 
 ### Example: sliding window before + tool-result compaction after
 
