@@ -1,6 +1,6 @@
 ---
 title: "BaseCache & InMemoryCache — cache backend API reference"
-description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration for LangGraph 1.2.11."
+description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration for LangGraph 1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # BaseCache & InMemoryCache — cache backends
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
+Verified against **`langgraph==1.2.12`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
 
 LangGraph node caching is a two-part system:
 

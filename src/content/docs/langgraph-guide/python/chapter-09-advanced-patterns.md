@@ -1,6 +1,6 @@
 ---
 title: "Chapter 9 — Advanced Patterns"
-description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, add_sequence, Overwrite, GraphOutput v2, and the Functional API — source-verified patterns for LangGraph 1.2.1."
+description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, add_sequence, Overwrite, GraphOutput v2, set_node_defaults, and the Functional API — source-verified patterns for LangGraph 1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -10,9 +10,9 @@ sidebar:
 
 # Chapter 9 — Advanced Patterns
 
-**What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send` (including per-send timeouts), `add_sequence()` for concise linear pipelines, `Overwrite` for bypassing reducers, `GraphOutput` with the `version="v2"` invoke API, plus the Functional API `@entrypoint`/`@task`.
+**What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send` (including per-send timeouts), `add_sequence()` for concise linear pipelines, `Overwrite` for bypassing reducers, `GraphOutput` with the `version="v2"` invoke API, `set_node_defaults()` for graph-wide policies, plus the Functional API `@entrypoint`/`@task` with async, timeout, context and more.
 
-Verified against **`langgraph==1.2.1`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`).
+Verified against **`langgraph==1.2.12`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`, `langgraph.graph.state`).
 
 **Time:** ~50 minutes. Most of this is reference — skim for patterns you need.
 
@@ -1296,3 +1296,264 @@ for ev in review_flow.stream(Command(resume="Make it shorter"), cfg):
     print(ev)
 # {'review_flow': {'draft': '...', 'edit': 'Make it shorter'}}
 ```
+
+### Async tasks with timeout
+
+`@task` supports an optional `timeout` parameter for async functions. When the deadline fires, `NodeTimeoutError` is raised (the retry policy decides whether to retry):
+
+```python
+import asyncio
+from datetime import timedelta
+from langgraph.func import entrypoint, task
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import RetryPolicy, TimeoutPolicy
+
+
+@task(
+    timeout=TimeoutPolicy(run_timeout=5.0, idle_timeout=2.0),
+    retry_policy=RetryPolicy(max_attempts=3),
+)
+async def fetch_url(url: str) -> str:
+    """Fetch a URL with a 5-second hard cap and 2-second idle cap."""
+    await asyncio.sleep(0.1)   # simulate network I/O
+    return f"content:{url}"
+
+
+@entrypoint(checkpointer=InMemorySaver())
+async def crawl(urls: list[str]) -> list[str]:
+    futures = [fetch_url(u) for u in urls]
+    return [f.result() for f in futures]
+
+
+cfg = {"configurable": {"thread_id": "crawl-1"}}
+import asyncio
+results = asyncio.run(crawl.ainvoke(["a.com", "b.com", "c.com"], cfg))
+print(results)
+```
+
+### `@task` with explicit `name`
+
+Use `name=` when the decorated function's `__name__` is not descriptive enough for traces, or when you want stable names across refactors:
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import CachePolicy
+from langgraph.cache.memory import InMemoryCache
+
+
+@task(name="embed_document", cache_policy=CachePolicy(ttl=3600))
+def embed(text: str) -> list[float]:
+    """Expensive embedding — cached for 1 hour under the name 'embed_document'."""
+    return [len(text) * 0.01, 0.5]
+
+
+cache = InMemoryCache()
+
+
+@entrypoint(checkpointer=InMemorySaver(), cache=cache)
+def index_pipeline(docs: list[str]) -> list[list[float]]:
+    futures = [embed(doc) for doc in docs]
+    return [f.result() for f in futures]
+
+
+cfg = {"configurable": {"thread_id": "index-1"}}
+print(index_pipeline.invoke(["hello world", "foo bar"], cfg))
+```
+
+### `@entrypoint` with `context_schema` and `runtime` injection
+
+An `@entrypoint` can declare a `context_schema` — the `runtime` parameter is then injected automatically, giving access to `context`, `store`, `stream_writer`, `previous`, and `execution_info`:
+
+```python
+from dataclasses import dataclass
+from langgraph.func import entrypoint, task
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
+from langgraph.runtime import Runtime
+
+
+@dataclass
+class UserCtx:
+    user_id: str
+    is_premium: bool = False
+
+
+@task
+def analyse(doc: str) -> str:
+    tier = "detailed" if len(doc) > 100 else "brief"
+    return f"{tier} analysis of: {doc[:40]}"
+
+
+store = InMemoryStore()
+
+@entrypoint(
+    checkpointer=InMemorySaver(),
+    store=store,
+    context_schema=UserCtx,
+)
+def analyse_flow(docs: list[str], *, runtime: Runtime[UserCtx]) -> dict:
+    """Analyse documents, personalise output, and persist a summary per user."""
+    ctx = runtime.context                        # fully typed as UserCtx
+    limit = 10 if ctx.is_premium else 3
+    docs_to_process = docs[:limit]
+
+    futures = [analyse(d) for d in docs_to_process]
+    analyses = [f.result() for f in futures]
+
+    # Persist summary to long-term store
+    if runtime.store:
+        runtime.store.put(
+            ("analyses", ctx.user_id),
+            "latest",
+            {"results": analyses},
+        )
+
+    return {"user": ctx.user_id, "analyses": analyses}
+
+
+cfg = {"configurable": {"thread_id": "flow-1"}}
+result = analyse_flow.invoke(
+    ["Doc about Python.", "Doc about TypeScript." * 10, "Short doc."],
+    cfg,
+    context=UserCtx(user_id="alice", is_premium=True),
+)
+print(result["user"])       # alice
+print(len(result["analyses"]))  # up to 10 (premium)
+```
+
+### `previous` parameter — accumulate state across calls
+
+The `previous` parameter receives the return value of the last call on the same thread. Use `entrypoint.final` when you want to return something different from what you save:
+
+```python
+from typing import Any
+from langgraph.func import entrypoint
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+@entrypoint(checkpointer=InMemorySaver())
+def running_stats(
+    new_values: list[float],
+    *,
+    previous: dict[str, Any] | None = None,
+) -> entrypoint.final[dict, dict]:
+    """Return stats to the caller while saving a compact state to the checkpoint."""
+    prev = previous or {"n": 0, "total": 0.0, "min": float("inf"), "max": float("-inf")}
+
+    n = prev["n"] + len(new_values)
+    total = prev["total"] + sum(new_values)
+    lo = min(prev["min"], *new_values)
+    hi = max(prev["max"], *new_values)
+
+    # What the caller gets: full stats
+    output = {"n": n, "mean": total / n, "min": lo, "max": hi}
+    # What the checkpoint saves: compact state for next call
+    save = {"n": n, "total": total, "min": lo, "max": hi}
+
+    return entrypoint.final(value=output, save=save)
+
+
+cfg = {"configurable": {"thread_id": "stats-1"}}
+print(running_stats.invoke([1.0, 2.0, 3.0], cfg))
+# {'n': 3, 'mean': 2.0, 'min': 1.0, 'max': 3.0}
+print(running_stats.invoke([4.0, 5.0], cfg))
+# {'n': 5, 'mean': 3.0, 'min': 1.0, 'max': 5.0}
+```
+
+---
+
+### Pattern 15: `set_node_defaults()` — graph-wide node policies
+
+`set_node_defaults()` sets fallback retry, cache, timeout, and error-handler policies for every node in the graph. Per-node values take precedence.
+
+**Source:** `langgraph.graph.state.StateGraph.set_node_defaults`
+
+```python
+import httpx
+from datetime import timedelta
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+
+
+class PipeState(TypedDict):
+    query: str
+    fetched: str
+    enriched: str
+    result: str
+
+
+# Retry only on transient network errors
+def network_retry(exc: Exception) -> bool:
+    return isinstance(exc, (httpx.TransportError, httpx.TimeoutException))
+
+
+def fetch_node(state: PipeState) -> dict:
+    # Simulates an external API call — retried on network errors
+    return {"fetched": f"data:{state['query']}"}
+
+
+def enrich_node(state: PipeState) -> dict:
+    return {"enriched": f"enriched:{state['fetched']}"}
+
+
+def summarise_node(state: PipeState) -> dict:
+    return {"result": f"summary:{state['enriched']}"}
+
+
+def error_fallback(state: PipeState) -> dict:
+    """Graph-wide fallback: runs when any node exhausts its retries."""
+    return {"result": f"fallback:{state.get('query', 'unknown')}"}
+
+
+cache = InMemoryCache()
+
+graph = (
+    StateGraph(PipeState)
+    .set_node_defaults(
+        retry_policy=RetryPolicy(
+            max_attempts=4,
+            initial_interval=1.0,
+            backoff_factor=2.0,
+            retry_on=network_retry,
+        ),
+        cache_policy=CachePolicy(ttl=600),          # 10-minute result cache
+        timeout=TimeoutPolicy(run_timeout=timedelta(seconds=20)),
+        error_handler=error_fallback,
+    )
+    # Every node inherits the defaults above
+    .add_node("fetch", fetch_node)
+    .add_node("enrich", enrich_node)
+    .add_node(
+        "summarise",
+        summarise_node,
+        retry_policy=RetryPolicy(max_attempts=2),   # override: fewer retries
+        cache_policy=CachePolicy(ttl=3600),          # override: longer cache
+    )
+    .add_edge(START, "fetch")
+    .add_edge("fetch", "enrich")
+    .add_edge("enrich", "summarise")
+    .add_edge("summarise", END)
+    .compile(checkpointer=InMemorySaver(), cache=cache)
+)
+
+result = graph.invoke(
+    {"query": "langgraph patterns", "fetched": "", "enriched": "", "result": ""},
+    config={"configurable": {"thread_id": "pipe-1"}},
+)
+print(result["result"])   # summary:enriched:data:langgraph patterns
+```
+
+`set_node_defaults` returns `Self`, so it chains fluently with `add_node`, `add_edge`, and `compile`. It must be called before `compile()`.
+
+**Policy inheritance rules:**
+
+| Policy | Applied to | Not applied to |
+|---|---|---|
+| `retry_policy` | All regular nodes AND error-handler nodes | — |
+| `cache_policy` | Regular nodes only | Error-handler nodes (unsafe to cache) |
+| `timeout` | All regular nodes AND error-handler nodes | — |
+| `error_handler` | Regular nodes without their own handler | Other error-handler nodes |

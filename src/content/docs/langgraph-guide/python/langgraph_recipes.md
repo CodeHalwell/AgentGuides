@@ -3556,3 +3556,256 @@ print(len(resumed.interrupts))     # 0 — no pending interrupts
 | `interrupts` | `tuple[Interrupt, ...]` | All `interrupt()` calls that fired during the run. Empty when no interrupts occurred. |
 
 Use `version="v2"` to opt into the typed `GraphOutput` wrapper. The v1 API (default) returns the raw state dict.
+
+---
+
+## Recipe 22: `set_node_defaults()` — Graph-Wide Node Policies (v1.2.11+)
+
+**Goal:** Apply consistent retry, cache, timeout, and error-handler policies to every node in a graph without repeating the same arguments on each `add_node` call. Override for specific nodes when needed.
+
+**Uses:** `StateGraph.set_node_defaults`, `RetryPolicy`, `CachePolicy`, `TimeoutPolicy`
+
+```python
+import httpx
+from datetime import timedelta
+from typing_extensions import TypedDict
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+
+
+class PipelineState(TypedDict):
+    query: str
+    raw: str
+    enriched: str
+    result: str
+    error_msg: str
+
+
+# --- Nodes ---
+
+def fetch_node(state: PipelineState) -> dict:
+    """Simulates a potentially flaky external API call."""
+    if state["query"] == "fail":
+        raise httpx.TransportError("Simulated network failure")
+    return {"raw": f"raw_data:{state['query']}"}
+
+
+def enrich_node(state: PipelineState) -> dict:
+    return {"enriched": f"enriched:{state['raw']}"}
+
+
+def format_node(state: PipelineState) -> dict:
+    return {"result": f"formatted:{state['enriched']}"}
+
+
+# --- Global error fallback ---
+
+def global_error_handler(state: PipelineState) -> dict:
+    """Runs for any node that exhausts its retries without a per-node handler."""
+    return {"error_msg": f"pipeline failed at query={state['query']!r}", "result": "error"}
+
+
+# --- Wire up the graph ---
+
+cache = InMemoryCache()
+
+# Retry transient network errors only
+def _is_transient(exc: Exception) -> bool:
+    return isinstance(exc, (httpx.TransportError, httpx.TimeoutException, ConnectionError))
+
+
+graph = (
+    StateGraph(PipelineState)
+    .set_node_defaults(
+        # All three nodes get 3 retry attempts with exponential backoff,
+        # only on transient errors.
+        retry_policy=RetryPolicy(
+            max_attempts=3,
+            initial_interval=0.5,
+            backoff_factor=2.0,
+            retry_on=_is_transient,
+        ),
+        # Cache all node outputs for 10 minutes.
+        cache_policy=CachePolicy(ttl=600),
+        # Hard 30-second cap on any single node execution.
+        timeout=TimeoutPolicy(run_timeout=timedelta(seconds=30)),
+        # Global fallback — runs if a node raises and exhausts all retries.
+        error_handler=global_error_handler,
+    )
+    .add_node("fetch", fetch_node)
+    .add_node("enrich", enrich_node)
+    .add_node(
+        "format",
+        format_node,
+        # format_node is cheap and deterministic — no retries or cache needed.
+        retry_policy=RetryPolicy(max_attempts=1),
+        cache_policy=None,
+    )
+    .add_edge(START, "fetch")
+    .add_edge("fetch", "enrich")
+    .add_edge("enrich", "format")
+    .add_edge("format", END)
+    .compile(checkpointer=InMemorySaver(), cache=cache)
+)
+
+# Normal run
+result = graph.invoke(
+    {"query": "langgraph", "raw": "", "enriched": "", "result": "", "error_msg": ""},
+    config={"configurable": {"thread_id": "pipe-1"}},
+)
+print(result["result"])   # formatted:enriched:raw_data:langgraph
+print(result["error_msg"])  # ""  (empty — no error)
+
+# Failing run — error handler takes over after retries are exhausted
+failed = graph.invoke(
+    {"query": "fail", "raw": "", "enriched": "", "result": "", "error_msg": ""},
+    config={"configurable": {"thread_id": "pipe-2"}},
+)
+print(failed["error_msg"])  # pipeline failed at query='fail'
+print(failed["result"])     # error
+```
+
+**Policy resolution rules:**
+
+| Policy | Default scope | Per-node override |
+|---|---|---|
+| `retry_policy` | All nodes (regular + error-handler) | `add_node(..., retry_policy=RetryPolicy(...))` |
+| `cache_policy` | Regular nodes only (handlers excluded) | `add_node(..., cache_policy=CachePolicy(...))` |
+| `timeout` | All nodes (regular + error-handler) | `add_node(..., timeout=10.0)` |
+| `error_handler` | Regular nodes only | `add_node(..., error_handler=my_fn)` |
+
+Setting `cache_policy=None` in `add_node` disables the graph default for that node.
+`set_node_defaults` returns `Self` so it can be chained fluently with `add_node` and `add_edge`.
+
+---
+
+## Recipe 23: `ToolRuntime` — All-in-One Tool Injection
+
+**Goal:** Access graph state, the long-term store, the tool call ID, and the stream writer from inside a tool without stacking multiple `Annotated` parameters.
+
+**Uses:** `ToolRuntime` (from `langgraph.prebuilt`), `ToolNode`, `InjectedStore` (comparison)
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from typing_extensions import TypedDict
+
+from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
+from langgraph.store.memory import InMemoryStore
+from langgraph.runtime import ExecutionInfo
+
+
+@dataclass
+class TenantCtx:
+    tenant_id: str
+
+
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    user_id: str
+    session_id: str
+
+
+@tool
+def intelligent_search(
+    query: str,
+    runtime: ToolRuntime[TenantCtx, AgentState],  # injected — hidden from the LLM
+) -> str:
+    """Search project documents and stream progress back to the client."""
+    # ── Access current graph state ──────────────────────────────────────
+    state: AgentState | None = runtime.state
+    user_id = state["user_id"] if state else "anonymous"
+    session = state["session_id"] if state else "unknown"
+
+    # ── Access run-scoped context ────────────────────────────────────────
+    tenant_id = runtime.context.tenant_id if runtime.context else "default"
+
+    # ── Stream a progress token mid-tool ────────────────────────────────
+    if runtime.stream_writer:
+        runtime.stream_writer({"event": "search_start", "query": query})
+
+    # ── Query the long-term store ────────────────────────────────────────
+    results: list[str] = []
+    if runtime.store:
+        hits = runtime.store.search(
+            ("docs", tenant_id),
+            query=query,
+            limit=5,
+        )
+        results = [h.value.get("text", "") for h in hits]
+
+    # ── Audit log with the exact tool call ID ────────────────────────────
+    print(
+        f"[AUDIT] tool_call_id={runtime.tool_call_id!r} "
+        f"user={user_id} session={session} query={query!r}"
+    )
+
+    if not results:
+        return "No documents found."
+    return "\n".join(f"• {r}" for r in results)
+
+
+# ── Populate the store ──────────────────────────────────────────────────────
+
+store = InMemoryStore()
+store.put(("docs", "acme"), "doc1", {"text": "LangGraph orchestration guide"})
+store.put(("docs", "acme"), "doc2", {"text": "LangGraph checkpointing reference"})
+
+# ── Build the graph ─────────────────────────────────────────────────────────
+
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([intelligent_search])
+
+
+def agent_node(state: AgentState) -> dict:
+    return {"messages": [model.invoke(state["messages"])]}
+
+
+builder = StateGraph(AgentState, context_schema=TenantCtx)
+builder.add_node("agent", agent_node)
+builder.add_node("tools", ToolNode([intelligent_search]))
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(store=store)
+
+result = graph.invoke(
+    {
+        "messages": [{"role": "user", "content": "Search for LangGraph checkpointing"}],
+        "user_id": "alice",
+        "session_id": "sess-42",
+    },
+    context=TenantCtx(tenant_id="acme"),
+)
+print(result["messages"][-1].content)
+```
+
+**`ToolRuntime` field summary (from `langgraph-prebuilt==1.1.0`):**
+
+| Field | Type | Source |
+|---|---|---|
+| `state` | `StateT \| None` | Current graph state dict |
+| `context` | `ContextT \| None` | Context passed as `context=` at invoke time |
+| `config` | `RunnableConfig \| None` | LangChain runnable config for this run |
+| `stream_writer` | `StreamWriter \| None` | Write to `stream_mode="custom"` |
+| `tool_call_id` | `str \| None` | ID of the triggering tool call (for audit/tracing) |
+| `store` | `BaseStore \| None` | Store passed to `compile(store=...)` |
+| `tools` | `list[BaseTool]` | All tools registered with this `ToolNode` |
+
+Use `ToolRuntime[ContextT, StateT]` to get typed `context` and `state`. With no generics, both default to `Any`.
+
+**When to use `ToolRuntime` vs individual annotations:**
+
+| Scenario | Recommendation |
+|---|---|
+| Only state | `Annotated[MyState, InjectedState]` |
+| Only store | `Annotated[BaseStore, InjectedStore()]` |
+| State + store + streaming + audit | `runtime: ToolRuntime` — fewer parameters, cleaner signature |

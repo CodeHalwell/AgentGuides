@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
+Verified against **`langgraph==1.2.12`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -334,7 +334,7 @@ graph = builder.compile(store=memory_store)
 
 ### Example 6: `ToolRuntime` — all-in-one injection (new in 1.2.1)
 
-`ToolRuntime` is a dataclass introduced in LangGraph 1.2.1 that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
+`ToolRuntime` is a dataclass that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
 
 Verified against the installed source (`langgraph-prebuilt==1.1.0`):
 
@@ -358,8 +358,7 @@ Use `ToolRuntime` when a single tool needs two or more of these values — it av
 from typing import Annotated
 from typing_extensions import TypedDict
 from langchain_core.tools import tool
-from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.prebuilt.tool_node import ToolRuntime   # new in 1.2.1
+from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.store.memory import InMemoryStore
