@@ -86,6 +86,7 @@ from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.tools import RunContext, ToolDefinition
+from pydantic_ai.tools import DeferredToolRequests
 
 DANGEROUS_TOOLS = {"delete_record", "send_email", "execute_sql"}
 HIGH_VALUE_THRESHOLD = 1000
@@ -120,15 +121,23 @@ toolset = ApprovalRequiredToolset(
     approval_required_func=approval_policy,
 )
 
-agent = Agent("openai:gpt-4o-mini", toolsets=[toolset])
+# DeferredToolRequests must be in output_type so the agent can surface
+# pending approvals as a return value rather than raising ApprovalRequired.
+agent = Agent(
+    "openai:gpt-4o-mini",
+    toolsets=[toolset],
+    output_type=str | DeferredToolRequests,
+)
 
 async def main():
-    # Small transfer: amount=50 < 1000 → no approval needed
+    # Small transfer: amount=50 < 1000 → no approval needed → returns str
     result = await agent.run("Transfer $50 to account ACC-123")
-    print(result.output)
+    print(result.output)  # "Transferred $50.00 to ACC-123"
 
-    # Large transfer: amount=5000 > 1000 → triggers approval (DeferredToolRequests)
+    # Large transfer: amount=5000 > 1000 → triggers approval → returns DeferredToolRequests
     result = await agent.run("Transfer $5000 to account ACC-456")
+    if isinstance(result.output, DeferredToolRequests):
+        print(f"Approval required for: {[c.tool_name for c in result.output.approvals]}")
 
 asyncio.run(main())
 ```
