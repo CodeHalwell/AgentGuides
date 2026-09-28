@@ -274,7 +274,7 @@ for intr in snapshot.interrupts:
 
 ---
 
-## `Interrupt` — struct reference (source-verified, 1.2.11)
+## `Interrupt` — struct reference (source-verified, 1.2.12)
 
 `Interrupt` is a frozen dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
 
@@ -359,7 +359,7 @@ print(result["approved"])  # True
 
 ---
 
-## `PregelTask` — task introspection (source-verified, 1.2.11)
+## `PregelTask` — task introspection (source-verified, 1.2.12)
 
 `PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
 
