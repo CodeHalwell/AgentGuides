@@ -85,7 +85,7 @@ final: AgentResponse = await stream.get_final_response()
 # Per-call tool override
 response = await agent.run(
     "Check the weather.",
-    tools=[get_weather],          # replaces agent-level tools for this call
+    tools=[get_weather],          # merged with agent-level tools for this call (additive)
     options={"temperature": 0.0}, # merged with default_options
 )
 ```
@@ -311,8 +311,8 @@ class UserPrefsProvider(ContextProvider):
         self._prefs = prefs
 
     async def before_run(self, *, agent, session: AgentSession, context, state: dict) -> None:
-        # Stamp preferences into session state so other providers can read them
-        state["user_prefs"] = self._prefs
+        # `state` is scoped to this provider; use session.state for cross-provider sharing
+        session.state["user_prefs"] = self._prefs
         # Inject a system message into the live context via extend_messages
         context.extend_messages(self.source_id, [Message("system", [f"User preferences: {self._prefs}"])])
 ```
