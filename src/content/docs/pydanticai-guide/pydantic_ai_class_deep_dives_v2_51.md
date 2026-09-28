@@ -483,6 +483,7 @@ class WebFetchLocalTool:
 ### Example 1 — basic web fetch
 
 ```python
+# pip install "pydantic-ai[web-fetch]"
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.common_tools.web_fetch import web_fetch_tool
