@@ -208,9 +208,11 @@ class LoggingAgent(RawAgent):
 
     async def run(self, messages=None, *, stream=False, session=None, **kwargs):
         print(f"[{self.name}] run called — session={getattr(session, 'session_id', None)}")
-        result = await super().run(messages, stream=stream, session=session, **kwargs)
-        if not stream:
-            print(f"[{self.name}] finished — text length={len(result.text)}")
+        if stream:
+            # stream=True returns ResponseStream directly — do NOT await it
+            return super().run(messages, stream=True, session=session, **kwargs)
+        result = await super().run(messages, stream=False, session=session, **kwargs)
+        print(f"[{self.name}] finished — text length={len(result.text)}")
         return result
 
 async def main():
@@ -343,7 +345,7 @@ AgentResponse(
 
 | Name | Returns | Notes |
 |---|---|---|
-| `text` | `str` | Concatenated text of all messages. Empty string when no messages. |
+| `text` | `str` | Text of the last assistant message. Empty string when no messages. |
 | `value` | `T \| None` | Lazily parses `response_format` on first access. Raises `ValidationError` on schema mismatch. |
 | `user_input_requests` | `list[Content]` | All `BaseUserInputRequest` content items — non-empty only when an agent issued a `request_info` event. |
 | `messages` | `list[Message]` | All messages (including intermediate tool-call messages). |
@@ -367,7 +369,7 @@ response = AgentResponse.from_updates(updates, output_format_type=MyModel)
 ```python
 import asyncio
 from pydantic import BaseModel
-from agent_framework import Agent
+from agent_framework import Agent, AgentResponse
 from agent_framework.openai import OpenAIChatClient
 
 class WeatherReport(BaseModel):
@@ -444,7 +446,7 @@ FunctionTool(
 | `max_invocation_exceptions` | Hard cap on cumulative exceptions. |
 | `func` | The callable to invoke. `None` creates a declaration-only tool (schema exposed but no implementation). |
 | `input_model` | Pydantic `BaseModel` subclass for schema + runtime validation, or a raw JSON-schema `Mapping` passed through to the provider. |
-| `result_parser` | Transform the return value before sending to the model. Pass `FunctionTool.SKIP_PARSING` to forward the raw value. |
+| `result_parser` | Transform the return value before sending to the model. Pass the top-level `SKIP_PARSING` sentinel (imported from `agent_framework`) to forward the raw value. |
 
 ### Key attributes and methods
 
@@ -584,7 +586,7 @@ WorkflowAgent(
 
 ```python
 import asyncio
-from agent_framework import Agent, WorkflowAgent, tool
+from agent_framework import Agent, WorkflowAgent, tool, executor
 from agent_framework._workflows import WorkflowBuilder
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework.openai import OpenAIChatClient
@@ -609,10 +611,12 @@ writer = Agent(
     instructions="You are a technical writer. Summarise the research you receive.",
 )
 
+@executor
 async def research_executor(message: str, ctx: WorkflowContext[str]) -> None:
     response = await researcher.run(message)
     await ctx.send_message(response.text)
 
+@executor
 async def write_executor(message: str, ctx: WorkflowContext[None, str]) -> None:
     response = await writer.run(f"Summarise this research: {message}")
     await ctx.yield_output(response.text)
@@ -721,44 +725,48 @@ ctx.request_id -> str | None   # non-None only inside a @response_handler
 
 ```python
 import asyncio
-from agent_framework import Agent
+from agent_framework import executor
 from agent_framework._workflows import WorkflowBuilder
 from agent_framework._workflows._workflow_context import WorkflowContext
-from agent_framework.openai import OpenAIChatClient
 
-client = OpenAIChatClient(model="gpt-4o-mini")
-
+@executor
 async def fetch_prices(symbol: str, ctx: WorkflowContext[dict]) -> None:
     # Simulate fetching price data
     await ctx.send_message({"symbol": symbol, "price": 42.0})
 
+@executor
 async def fetch_news(symbol: str, ctx: WorkflowContext[dict]) -> None:
     await ctx.send_message({"symbol": symbol, "headline": "Earnings beat expectations"})
 
+@executor
 async def analyse(data: list[dict], ctx: WorkflowContext[None, str]) -> None:
     # Fan-in receives all upstream messages as a list
     prices = [d for d in data if "price" in d]
     news = [d for d in data if "headline" in d]
-    
+
     # Write to shared workflow state
     ctx.set_state("analysis_done", True)
-    
+
     summary = f"Price: ${prices[0]['price']} | News: {news[0]['headline']}"
     await ctx.yield_output(summary)
 
+# Parallel start: both fetch_prices and fetch_news run from the same entry point.
+# WorkflowBuilder requires a single start_executor; route to both via add_edge.
 workflow = (
-    WorkflowBuilder("market-analysis")
-    .add_edge("prices", fetch_prices, entry=True)
-    .add_edge("news", fetch_news, entry=True)
-    .add_fan_in_edges(["prices", "news"], "analyse")
-    .add_edge("analyse", analyse)
-    .output_from("analyse")
+    WorkflowBuilder(
+        name="market-analysis",
+        start_executor=fetch_prices,
+        output_from=[analyse],
+    )
+    .add_edge(fetch_prices, analyse)
+    .add_edge(fetch_news, analyse)
     .build()
 )
 
 async def main():
-    result = await workflow.run("AAPL")
-    async for event in result:
+    # stream=True returns ResponseStream directly (not an awaitable)
+    stream = workflow.run("AAPL", stream=True)
+    async for event in stream:
         if event.type == "output":
             print(event.data)   # "Price: $42.0 | News: Earnings beat expectations"
 
@@ -768,6 +776,7 @@ asyncio.run(main())
 ### Example: human-in-the-loop pause with `request_info`
 
 ```python
+from dataclasses import dataclass
 from agent_framework._workflows._decorator import response_handler
 
 @dataclass
@@ -887,13 +896,18 @@ from agent_framework._compaction import (
     TokenBudgetComposedStrategy,
 )
 
+from agent_framework._compaction import CharacterEstimatorTokenizer
+
+tokenizer = CharacterEstimatorTokenizer()
+
 compaction = CompactionProvider(
     before_strategy=TokenBudgetComposedStrategy(
         strategies=[
-            SlidingWindowStrategy(keep_last_groups=30),  # first pass: drop old groups
-            TruncationStrategy(max_tokens=4000),          # second pass: hard token cap
+            SlidingWindowStrategy(keep_last_groups=30),          # first pass: drop old groups
+            TruncationStrategy(max_n=4000, compact_to=3000),     # second pass: hard cap
         ],
         token_budget=4000,
+        tokenizer=tokenizer,  # required by TokenBudgetComposedStrategy
     ),
 )
 ```
@@ -1052,13 +1066,13 @@ TodoItem(
 
 ```python
 class TodoStore(ABC):
-    async def load_state(session, *, source_id) -> tuple[list[TodoItem], int]:
+    async def load_state(self, session, *, source_id) -> tuple[list[TodoItem], int]:
         """Return (items, next_id)."""
 
-    async def save_state(session, items, *, next_id, source_id) -> None:
+    async def save_state(self, session, items, *, next_id, source_id) -> None:
         """Persist items and the next-ID counter."""
 
-    async def load_items(session, *, source_id) -> list[TodoItem]:
+    async def load_items(self, session, *, source_id) -> list[TodoItem]:
         """Convenience: load items only (next_id discarded)."""
 ```
 
@@ -1140,7 +1154,7 @@ from agent_framework._harness._todo import TodoFileStore, TodoItem
 async def list_todos(session_id: str) -> None:
     store = TodoFileStore(base_path=Path("/tmp/agent_todos"))
     session = AgentSession(session_id=session_id)
-    items = await store.load_items(session, source_id="todos")
+    items = await store.load_items(session, source_id="todo")  # matches TodoProvider default
     for item in items:
         status = "✓" if item.is_complete else "○"
         print(f"  {status} [{item.id}] {item.title}")
