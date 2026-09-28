@@ -93,10 +93,9 @@ async def inject_user_name(
     llm_request: LlmRequest,
 ) -> LlmResponse | None:
     name = callback_context.state.get("user:display_name", "user")
-    llm_request.config.system_instruction = (
-        f"You are talking to {name}. "
-        + (llm_request.config.system_instruction or "")
-    )
+    # system_instruction may be str, types.Content, or None — use append_instructions
+    # which handles all variants safely rather than string-concatenating directly.
+    llm_request.append_instructions([f"You are talking to {name}."])
     return None
 
 async def audit_tool(

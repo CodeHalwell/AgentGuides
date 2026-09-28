@@ -110,8 +110,8 @@ Every tool receives the full `Context` surface, not a restricted view. The most 
 | `tool_context.load_artifact(filename, version=None)` | `async` | Load a stored artifact |
 | `tool_context.save_artifact(filename, artifact)` | `async` | Save a `types.Part` as an artifact |
 | `tool_context.list_artifacts()` | `async` | List artifact filenames in session |
-| `tool_context.request_credential(auth_config)` | `async` | Interrupt to request OAuth/API key credentials |
-| `tool_context.request_confirmation(confirmation_event)` | Raise `ToolConfirmationException` | Pause and ask the user to confirm the call |
+| `tool_context.request_credential(auth_config)` | sync → `None` | Record an auth request in event actions; the framework pauses the turn to collect credentials |
+| `tool_context.request_confirmation(*, hint=None, payload=None)` | sync → `None` | Record a confirmation request in event actions; the framework pauses the turn to collect user approval |
 
 ```python
 from google.adk.tools.tool_context import ToolContext
