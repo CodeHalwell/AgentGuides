@@ -7,7 +7,7 @@ sidebar:
   order: 50
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against google-adk==2.10.0 (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 
@@ -107,12 +107,19 @@ All `run_*` methods work with `asyncio`. Wire `async with Runner(...) as runner:
 
 ## RunConfig
 
-Passed to each `run_async`/`run_live` call (`agents/run_config.py:184`). Notable fields:
+Passed to each `run_async`/`run_live` call (`agents/run_config.py`). Notable fields:
 
 | Field | Default | Notes |
 |---|---|---|
 | `streaming_mode` | `StreamingMode.NONE` | `SSE` for HTTP streaming, `BIDI` for live API |
-| `max_llm_calls` | `500` | Hard cap per run. `<=0` disables |
+| `max_llm_calls` | `500` | Hard cap per run (env: `ADK_MAX_LLM_CALLS`). `<=0` disables |
+| `service_tier` | `None` | `ServiceTier.DEFERRED` queues model calls for off-peak capacity; incompatible with `StreamingMode.SSE` |
+| `labels` | `None` | `dict[str, str]` forwarded to Gemini billing/attribution (e.g. `{"team": "growth"}`) |
+| `http_options` | `None` | `types.HttpOptions` — per-invocation timeout/header overrides (ms units for `timeout`) |
+| `custom_metadata` | `None` | Merged into every emitted event; useful for APM trace correlation |
+| `telemetry` | `None` | `TelemetryConfig` — overrides process-global OTel env vars for this invocation |
+| `model_input_context` | `None` | `list[types.Content]` injected into LLM input for this invocation; **not** saved to session history |
+| `include_thoughts_from_other_agents` | `False` | When `True`, sub-agent `<thinking>` blocks are passed to the coordinator's context |
 | `response_modalities` | `None` | e.g. `["TEXT"]` or `["AUDIO"]` for live |
 | `speech_config` / `avatar_config` | `None` | Live mode TTS / avatar |
 | `output_audio_transcription` / `input_audio_transcription` | `AudioTranscriptionConfig()` | Live transcription |
@@ -120,7 +127,7 @@ Passed to each `run_async`/`run_live` call (`agents/run_config.py:184`). Notable
 | `get_session_config` | `None` | Passes `num_recent_events` / `after_timestamp` through to the session service on load |
 | `support_cfc` | `False` | Experimental compositional function calling (requires Gemini 2.x + live API) |
 | `tool_thread_pool_config` | `None` | Runs tools in a thread pool during live mode |
-| `custom_metadata` | `None` | Merged into every emitted event |
+| `save_live_blob` | `False` | Persist audio/video frames to artifact service |
 | `save_input_blobs_as_artifacts` | `False` | **Deprecated** → `SaveFilesAsArtifactsPlugin` |
 | `save_live_audio` | `False` | **Deprecated** → `save_live_blob` |
 
@@ -133,6 +140,83 @@ cfg = RunConfig(
     max_llm_calls=50,
     get_session_config=GetSessionConfig(num_recent_events=20),
 )
+```
+
+### `ServiceTier.DEFERRED` — off-peak execution
+
+`ServiceTier.DEFERRED` queues each model call to run on off-peak capacity instead of returning results immediately. ADK waits for the queued result before yielding, so each tool-calling agent that calls the LLM multiple times queues once per LLM call rather than once per full run.
+
+**Key constraints (source-verified in `run_config.py`):**
+- Cannot be combined with `StreamingMode.SSE` — a deferred request returns an interaction ID, not a result, so there is nothing to stream. ADK raises `ValueError` at `RunConfig` construction time.
+- `ManagedAgent` ignores `service_tier` — it calls `interactions.create` from its own execution loop and never reads this field.
+
+```python
+from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.models._service_tier import ServiceTier
+
+# Off-peak — useful for batch jobs and background processing
+# ADK blocks on the queue result; total latency is queue time + compute time.
+deferred_cfg = RunConfig(
+    service_tier=ServiceTier.DEFERRED,
+    max_llm_calls=200,
+    labels={"job": "nightly-batch", "cost_center": "analytics"},
+)
+
+# Combining with SSE raises ValueError at construction:
+#   RunConfig(service_tier=ServiceTier.DEFERRED, streaming_mode=StreamingMode.SSE)
+#   → ValueError: "service_tier='deferred' cannot be used with StreamingMode.SSE"
+
+# Correct approach: use deferred without streaming
+async def run_batch_job(runner, user_id: str, session_id: str, messages: list):
+    from google.genai import types
+    results = []
+    for text in messages:
+        msg = types.Content(role="user", parts=[types.Part(text=text)])
+        events = []
+        async for event in runner.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=msg,
+            run_config=deferred_cfg,
+        ):
+            if event.is_final_response() and event.content:
+                events.append(event)
+        results.append(events)
+    return results
+```
+
+### `model_input_context` — transient per-turn context
+
+Inject additional context into a single LLM call without persisting it to session history. Useful for passing dynamic reference data (retrieved chunks, user profile) that should influence the response but not pollute the conversation history.
+
+```python
+from google.adk.agents.run_config import RunConfig
+from google.genai import types
+
+# Simulate per-turn RAG: inject retrieved documents as context
+retrieved_docs = [
+    types.Content(
+        role="user",
+        parts=[types.Part(text="Reference: Q3 revenue was $4.2M, up 18% YoY.")],
+    )
+]
+
+cfg = RunConfig(
+    model_input_context=retrieved_docs,   # not saved to session; only for this call
+    max_llm_calls=10,
+)
+
+# The agent sees the retrieved docs but they do not appear in future turns
+async for event in runner.run_async(
+    user_id="u1",
+    session_id="s1",
+    new_message=types.Content(
+        role="user", parts=[types.Part(text="Summarise our Q3 performance.")]
+    ),
+    run_config=cfg,
+):
+    if event.is_final_response() and event.content:
+        print(event.content.parts[0].text)
 ```
 
 ### SSE streaming — event filtering

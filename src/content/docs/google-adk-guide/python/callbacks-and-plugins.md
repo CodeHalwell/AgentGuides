@@ -7,7 +7,7 @@ sidebar:
   order: 40
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against google-adk==2.10.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
 
 Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py:41-71`).
 
@@ -64,10 +64,59 @@ agent = LlmAgent(
 )
 ```
 
-### `CallbackContext` vs `ToolContext`
+### `CallbackContext` and `ToolContext` — both are `Context`
 
-- `CallbackContext` — passed to agent- and model-level callbacks. Exposes `state`, `agent_name`, `invocation_id`, `session`, and read-only `user_content`.
-- `ToolContext` — passed to tool callbacks. Extends `CallbackContext` with `function_call_id`, `actions`, `request_confirmation()`, and artifact helpers (`load_artifact`, `save_artifact`).
+In google-adk 2.x, `CallbackContext` and `ToolContext` are **both type aliases for `Context`** (verified in `agents/callback_context.py` and `tools/tool_context.py`):
+
+```python
+# agents/callback_context.py
+CallbackContext = Context
+
+# tools/tool_context.py
+ToolContext = Context
+```
+
+This means every callback — whether agent-level, model-level, or tool-level — receives the same `Context` object with access to the full surface: `state`, `agent_name`, `invocation_id`, `session`, `function_call_id`, artifact helpers, `request_credential`, `request_confirmation`, and workflow APIs (`route`, `interrupt`, `run_node`).
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.agents.context import Context  # the real class
+from google.adk.agents.callback_context import CallbackContext  # alias
+from google.adk.tools.tool_context import ToolContext  # alias
+from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
+from google.adk.tools.base_tool import BaseTool
+
+# All three type annotations below accept the exact same runtime object:
+async def inject_user_name(
+    callback_context: CallbackContext,   # Context alias
+    llm_request: LlmRequest,
+) -> LlmResponse | None:
+    name = callback_context.state.get("user:display_name", "user")
+    # system_instruction may be str, types.Content, or None — use append_instructions
+    # which handles all variants safely rather than string-concatenating directly.
+    llm_request.append_instructions([f"You are talking to {name}."])
+    return None
+
+async def audit_tool(
+    tool: BaseTool,
+    args: dict,
+    tool_context: ToolContext,   # also Context alias
+) -> dict | None:
+    # tool_context IS a Context — function_call_id, state, artifact helpers all available
+    tool_context.state["temp:last_tool_call"] = tool.name
+    return None  # proceed with the original tool call
+
+agent = LlmAgent(
+    name="assistant",
+    model="gemini-2.5-flash",
+    instruction="Be helpful.",
+    before_model_callback=inject_user_name,
+    before_tool_callback=audit_tool,
+)
+```
+
+The `ReadonlyContext` variant is still separate — it is the read-only surface passed to dynamic instruction providers and `BaseToolset.get_tools(...)`.
 
 Both read and mutate **session state**. State keys with reserved prefixes behave differently:
 
