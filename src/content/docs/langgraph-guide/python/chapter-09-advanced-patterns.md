@@ -1299,7 +1299,9 @@ for ev in review_flow.stream(Command(resume="Make it shorter"), cfg):
 
 ### Async tasks with timeout
 
-`@task` supports an optional `timeout` parameter for async functions. When the deadline fires, `NodeTimeoutError` is raised (the retry policy decides whether to retry):
+`@task` supports an optional `timeout` parameter for async functions. When the deadline fires, `NodeTimeoutError` is raised (the retry policy decides whether to retry).
+
+> **Python 3.11+ required.** Async `@task` functions require Python 3.11 or later; they are not supported on Python 3.10.
 
 ```python
 import asyncio
@@ -1322,7 +1324,8 @@ async def fetch_url(url: str) -> str:
 @entrypoint(checkpointer=InMemorySaver())
 async def crawl(urls: list[str]) -> list[str]:
     futures = [fetch_url(u) for u in urls]
-    return await asyncio.gather(*futures)
+    # SyncAsyncFuture.result() resolves each future; asyncio.gather is incompatible
+    return [f.result() for f in futures]
 
 
 cfg = {"configurable": {"thread_id": "crawl-1"}}
