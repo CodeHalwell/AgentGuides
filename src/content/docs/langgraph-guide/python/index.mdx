@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.2.11** · August 2026 · Python 3.10 – 3.14
+    **v1.2.12** · September 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -53,7 +53,7 @@ A chaptered tutorial that takes you from a first graph to a production-ready age
   history for a single primitive, jump to the **Reference** section near the bottom
   of this page — one page per API (StateGraph, Checkpointers, Store, Functional
   API, Command/Send, streaming modes). Each is verified line-by-line against the
-  installed `langgraph==1.2.11` source.
+  installed `langgraph==1.2.12` source.
 </Aside>
 
 ## Jump to a topic
@@ -88,7 +88,7 @@ Need one specific concept? Land directly on the chapter that owns it.
 
 ## Reference
 
-The API reference pages below are introspected against the installed `langgraph==1.2.11` /
+The API reference pages below are introspected against the installed `langgraph==1.2.12` /
 `langgraph-checkpoint==4.2.0` / `langgraph-checkpoint-sqlite==3.0.3` /
 `langgraph-checkpoint-postgres==3.0.5` source. If a signature disagrees with an
 older blog post or docs page, the source wins.
@@ -122,9 +122,9 @@ older blog post or docs page, the source wins.
 </CardGrid>
 
 <Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==1.2.11`, `langgraph-checkpoint==4.2.0`,
+  Introspected against `langgraph==1.2.12`, `langgraph-checkpoint==4.2.0`,
   `langgraph-prebuilt==1.1.0`, `langgraph-checkpoint-sqlite==3.0.3`,
-  `langgraph-checkpoint-postgres==3.0.5` in August 2026. The full class/API
+  `langgraph-checkpoint-postgres==3.0.5` in September 2026. The full class/API
   surface — every symbol below and many more — is consolidated in the
   [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference)
   section of the single-page guide.
@@ -206,3 +206,4 @@ distinct versions only, oldest to newest.
 | 2026-07-20 | 1.2.9 | `RunControl`/cooperative draining, `RemainingSteps`, `ToolRuntime` execution metadata, `TimeoutPolicy` refinements. |
 | 2026-08-01 | 1.2.10 | Patch release; all core symbols re-verified against the installed source. |
 | 2026-08-17 | 1.2.11 | **Consolidated the 46 "class deep dive" volumes into one source-verified [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph==1.2.11`. |
+| 2026-09-28 | 1.2.12 | Version bump to 1.2.12; added `set_node_defaults()` section to ch1 and Pattern 15 to ch9; Functional API section expanded with async tasks, `context_schema`/`Runtime` injection, `entrypoint.final` accumulator, named `@task` with `CachePolicy`; fixed `ToolRuntime` canonical import; Recipes 22–23 added (`set_node_defaults` + `ToolRuntime` all-in-one injection). |

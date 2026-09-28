@@ -10,7 +10,7 @@ sidebar:
 
 # Checkpointers — API reference
 
-Verified against **`langgraph==1.2.1`**, **`langgraph-checkpoint==4.1.0`**, **`langgraph-checkpoint-sqlite==3.0.3`**, **`langgraph-checkpoint-postgres==3.0.5`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
+Verified against **`langgraph==1.2.12`**, **`langgraph-checkpoint==4.1.0`**, **`langgraph-checkpoint-sqlite==3.0.3`**, **`langgraph-checkpoint-postgres==3.0.5`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
 
 A checkpointer is a `BaseCheckpointSaver` subclass. It persists the per-thread history of `Checkpoint`/`CheckpointTuple` objects so the graph can pause (`interrupt`), resume (`Command(resume=...)`), replay (`get_state_history`), time-travel, and keep short-term memory across invocations.
 
@@ -274,7 +274,7 @@ for intr in snapshot.interrupts:
 
 ---
 
-## `Interrupt` — struct reference (source-verified, 1.2.11)
+## `Interrupt` — struct reference (source-verified, 1.2.12)
 
 `Interrupt` is a frozen dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
 
@@ -359,7 +359,7 @@ print(result["approved"])  # True
 
 ---
 
-## `PregelTask` — task introspection (source-verified, 1.2.11)
+## `PregelTask` — task introspection (source-verified, 1.2.12)
 
 `PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
 

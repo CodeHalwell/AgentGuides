@@ -1,6 +1,6 @@
 ---
 title: "ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference"
-description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.11."
+description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures for langgraph==1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference
 
-Verified against **`langgraph==1.2.11`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
+Verified against **`langgraph==1.2.12`** / **`langgraph-prebuilt==1.1.0`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
 
 `ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` — let tools read graph state, access the long-term store, stream partial output, intercept calls before execution, and consume per-tool-call streaming results in a structured way.
 
@@ -61,14 +61,14 @@ print(result["messages"][-1].content)  # 42
 | `tools_condition` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
 | `InjectedState` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
 | `InjectedStore` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
-| `ToolRuntime` | `langgraph.prebuilt.tool_node` |
+| `ToolRuntime` | `langgraph.prebuilt` |
 | `ToolCallRequest` | `langgraph.prebuilt.tool_node` |
 | `ToolCallTransformer` | `langgraph.prebuilt._tool_call_transformer` |
 | `ToolCallStream` | `langgraph.prebuilt._tool_call_stream` |
 | `ValidationNode` | `langgraph.prebuilt.tool_validator` (deprecated) |
 | `MessagesState` | `langgraph.graph.message` |
 
-The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, and `InjectedStore`. `ToolRuntime`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` must be imported from their specific sub-modules directly.
+The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, `InjectedStore`, and `ToolRuntime`. `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` must be imported from their specific sub-modules directly.
 
 ## `ToolNode`
 
@@ -298,7 +298,7 @@ A dataclass injected into tools that declare a `runtime` parameter with type `To
 
 ```python
 from dataclasses import dataclass, field
-from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.prebuilt import ToolRuntime
 
 @dataclass
 class ToolRuntime:
@@ -525,7 +525,7 @@ graph.invoke({"messages": [("user", "Remember that the answer is 42")]})
 
 ```python
 from langchain_core.tools import tool
-from langgraph.prebuilt.tool_node import ToolRuntime
+from langgraph.prebuilt import ToolRuntime
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
@@ -681,7 +681,7 @@ Access the list of all tools registered with the `ToolNode` from inside a tool:
 
 ```python
 from langchain_core.tools import tool
-from langgraph.prebuilt.tool_node import ToolRuntime, ToolNode
+from langgraph.prebuilt import ToolRuntime, ToolNode
 
 
 @tool

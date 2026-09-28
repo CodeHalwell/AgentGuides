@@ -10,7 +10,7 @@ sidebar:
 
 # Runtime, ToolRuntime & Managed Values
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.runtime`, `langgraph.prebuilt.tool_node`, `langgraph.managed.is_last_step`).
+Verified against **`langgraph==1.2.12`** (modules: `langgraph.runtime`, `langgraph.prebuilt.tool_node`, `langgraph.managed.is_last_step`).
 
 This page covers the three mechanisms LangGraph provides for injecting execution context into node and tool functions without threading values through graph state:
 
@@ -293,7 +293,7 @@ tool_node = ToolNode([fetch_user_data])
 
 ---
 
-## `ServerInfo` — LangGraph Cloud metadata (source-verified, 1.2.11)
+## `ServerInfo` — LangGraph Cloud metadata (source-verified, 1.2.12)
 
 `ServerInfo` is a frozen dataclass injected into `Runtime.server_info` and `ToolRuntime.server_info` when the graph runs inside a **LangGraph Cloud** (LangSmith Platform) deployment. It is always `None` when running open-source LangGraph locally.
 

@@ -1,6 +1,6 @@
 ---
 title: "RunControl & GraphDrained — graceful shutdown API reference"
-description: "Cooperative drain with RunControl.request_drain(), the GraphDrained exception, SIGTERM patterns, and safe checkpoint-based resumption for LangGraph 1.2.11."
+description: "Cooperative drain with RunControl.request_drain(), the GraphDrained exception, SIGTERM patterns, and safe checkpoint-based resumption for LangGraph 1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # RunControl & GraphDrained — graceful shutdown
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.runtime`, `langgraph.errors`).
+Verified against **`langgraph==1.2.12`** (modules: `langgraph.runtime`, `langgraph.errors`).
 
 LangGraph supports _cooperative drain_: a running graph can be told to stop at the next safe superstep boundary, flush its checkpoint, and raise `GraphDrained` — leaving the run in a state that can be resumed from exactly where it stopped. This is the right pattern for SIGTERM / scale-down scenarios.
 
