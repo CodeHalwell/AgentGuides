@@ -14,7 +14,7 @@ Latest: langgraph 1.2.12 | Updated: September 28, 2026
 
 > **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.12 (verified August 2026):**
+**What's real in v1.2.12 (verified September 2026):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
 - `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
 - `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
