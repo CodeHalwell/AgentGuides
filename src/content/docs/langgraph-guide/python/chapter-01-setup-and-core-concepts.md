@@ -786,6 +786,7 @@ print(result["step3_out"])  # final:processed:HELLO
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import RetryPolicy
+from langgraph.errors import NodeError
 
 class State(TypedDict):
     value: str
@@ -796,7 +797,7 @@ def fallible_node(state: State) -> dict:
         raise ValueError("bad input")
     return {"value": state["value"].upper()}
 
-def global_error_handler(state: State, error: Exception) -> dict:
+def global_error_handler(state: State, error: NodeError) -> dict:
     """Runs instead of crashing when fallible_node raises and exhausts retries."""
     return {"error": f"recovered: {state.get('value', 'unknown')}"}
 

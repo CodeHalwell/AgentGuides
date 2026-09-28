@@ -494,7 +494,7 @@ print(type(result))   # dict
 
 ## Experimental v3 Streaming — `stream_events(version="v3")`
 
-LangGraph 1.2.12 introduces an experimental v3 streaming protocol built on typed `StreamChannel` projections. Instead of iterating a flat event stream, you drive the graph by consuming named projections on a `GraphRunStream` context object. Each projection is a **single-consumer drainable queue** — there is no background thread; your `for` loop is the pump.
+LangGraph 1.2.11 introduces an experimental v3 streaming protocol built on typed `StreamChannel` projections. Instead of iterating a flat event stream, you drive the graph by consuming named projections on a `GraphRunStream` context object. Each projection is a **single-consumer drainable queue** — there is no background thread; your `for` loop is the pump.
 
 > **Warning:** `version="v3"` is experimental and may change in future releases. Gate it behind a feature flag in production.
 

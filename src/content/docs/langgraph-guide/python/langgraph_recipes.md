@@ -3575,6 +3575,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
 from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy, Command
+from langgraph.errors import NodeError
 
 
 class PipelineState(TypedDict):
@@ -3604,7 +3605,7 @@ async def format_node(state: PipelineState) -> dict:
 
 # --- Global error fallback ---
 
-async def global_error_handler(state: PipelineState, error: Exception) -> Command:
+async def global_error_handler(state: PipelineState, error: NodeError) -> Command:
     """Runs for any node that exhausts its retries without a per-node handler.
     Returns Command(goto=END) to short-circuit the remaining pipeline."""
     return Command(

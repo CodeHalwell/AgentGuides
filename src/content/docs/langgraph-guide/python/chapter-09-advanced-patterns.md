@@ -1487,6 +1487,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
 from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy, Command
+from langgraph.errors import NodeError
 
 
 class PipeState(TypedDict):
@@ -1514,7 +1515,7 @@ async def summarise_node(state: PipeState) -> dict:
     return {"result": f"summary:{state['enriched']}"}
 
 
-async def error_fallback(state: PipeState, error: Exception) -> Command:
+async def error_fallback(state: PipeState, error: NodeError) -> Command:
     """Graph-wide fallback: runs when any node exhausts its retries."""
     return Command(
         update={"result": f"fallback:{state.get('query', 'unknown')}"},
