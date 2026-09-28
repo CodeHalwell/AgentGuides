@@ -812,7 +812,7 @@ class EmailApprovalExecutor(Executor):
             response_type=ApprovalResponse,
         )
 
-    @response_handler(request=ApprovalRequest, response=ApprovalResponse)
+    @response_handler(request=ApprovalRequest, response=ApprovalResponse, workflow_output=str)
     async def handle_approval(
         self,
         original_request: ApprovalRequest,
@@ -919,7 +919,7 @@ compaction = CompactionProvider(
     before_strategy=TokenBudgetComposedStrategy(
         strategies=[
             SlidingWindowStrategy(keep_last_groups=30),          # first pass: drop old groups
-            TruncationStrategy(max_n=4000, compact_to=3000),     # second pass: hard cap
+            TruncationStrategy(max_n=40, compact_to=20),          # second pass: hard cap (message counts, not tokens)
         ],
         token_budget=4000,
         tokenizer=tokenizer,  # required by TokenBudgetComposedStrategy
@@ -1009,11 +1009,15 @@ class Product(BaseModel):
     price: Annotated[float, VectorStoreField("data")]
 
 async def main():
-    store = InMemoryStore()
+    # An embedding generator is required so VectorCollectionContextProvider can
+    # embed natural-language queries before comparing them with stored vectors.
+    from agent_framework.openai import OpenAIEmbeddingClient
+    embedding_client = OpenAIEmbeddingClient(model="text-embedding-3-small")
+    store = InMemoryStore(embedding_generator=embedding_client)
     collection = store.get_collection(Product)
     await collection.ensure_collection_exists()
 
-    # Seed some data — provide pre-computed embeddings and disable auto-generation
+    # Seed with pre-computed vectors (generate_vectors=False skips re-embedding on upsert)
     await collection.upsert([
         Product(id="p1", name="Widget A", description="A sturdy blue widget",
                 description_vec=[0.1] * 1536, price=9.99),
