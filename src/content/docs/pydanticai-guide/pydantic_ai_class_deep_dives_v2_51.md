@@ -1015,21 +1015,31 @@ asyncio.run(main())
 `audio_retention` is a parameter of `session()`, not of `model_settings`.
 `AudioRetention` is a `Literal` alias — assign the string value directly.
 
+Retained audio is stored as WAV in the session's message history (accessible via
+`session.all_messages()`), not emitted as session events. After the session closes,
+inspect messages for `SpeechPart` objects whose `.audio` field is populated.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.realtime.openai import OpenAIRealtimeModel
+from pydantic_ai.messages import SpeechPart
 
 agent = Agent()
 
 async def main():
     realtime = agent.realtime(OpenAIRealtimeModel("gpt-4o-realtime-preview"))
-    # audio_retention='all' retains both input and output audio as WAV
+    # audio_retention='all' stores both input and output audio as WAV in message history
     async with realtime.session(audio_retention="all") as session:
         await session.send_audio(b"<pcm audio>")
         async for event in session:
-            if hasattr(event, "audio"):
-                print(f"WAV audio retained: {len(event.audio.data)} bytes")
+            pass  # process events normally; retained audio is in history, not on events
+
+    # After the session closes, inspect all_messages() for retained WAV audio
+    for message in session.all_messages():
+        for part in message.parts:
+            if isinstance(part, SpeechPart) and part.audio is not None:
+                print(f"Retained {part.speaker} audio: {len(part.audio.data)} bytes (WAV)")
 
 asyncio.run(main())
 ```
