@@ -733,15 +733,15 @@ class PipelineState(TypedDict):
     step2_out: str
     step3_out: str
 
-def step1(state: PipelineState) -> dict:
+async def step1(state: PipelineState) -> dict:
     print("step1 running")
     return {"step1_out": state["text"].upper()}
 
-def step2(state: PipelineState) -> dict:
+async def step2(state: PipelineState) -> dict:
     print("step2 running")
     return {"step2_out": f"processed:{state['step1_out']}"}
 
-def step3(state: PipelineState) -> dict:
+async def step3(state: PipelineState) -> dict:
     print("step3 running")
     # This node overrides retry to 5 attempts
     return {"step3_out": f"final:{state['step2_out']}"}
@@ -795,7 +795,7 @@ def fallible_node(state: State) -> dict:
         raise ValueError("bad input")
     return {"value": state["value"].upper()}
 
-def global_error_handler(state: State) -> dict:
+def global_error_handler(state: State, error: Exception) -> dict:
     """Runs instead of crashing when fallible_node raises and exhausts retries."""
     return {"error": f"recovered: {state.get('value', 'unknown')}"}
 

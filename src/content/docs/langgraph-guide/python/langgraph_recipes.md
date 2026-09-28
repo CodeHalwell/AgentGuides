@@ -3573,7 +3573,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.cache.memory import InMemoryCache
-from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy, Command
 
 
 class PipelineState(TypedDict):
@@ -3586,26 +3586,30 @@ class PipelineState(TypedDict):
 
 # --- Nodes ---
 
-def fetch_node(state: PipelineState) -> dict:
+async def fetch_node(state: PipelineState) -> dict:
     """Simulates a potentially flaky external API call."""
     if state["query"] == "fail":
         raise httpx.TransportError("Simulated network failure")
     return {"raw": f"raw_data:{state['query']}"}
 
 
-def enrich_node(state: PipelineState) -> dict:
+async def enrich_node(state: PipelineState) -> dict:
     return {"enriched": f"enriched:{state['raw']}"}
 
 
-def format_node(state: PipelineState) -> dict:
+async def format_node(state: PipelineState) -> dict:
     return {"result": f"formatted:{state['enriched']}"}
 
 
 # --- Global error fallback ---
 
-def global_error_handler(state: PipelineState) -> dict:
-    """Runs for any node that exhausts its retries without a per-node handler."""
-    return {"error_msg": f"pipeline failed at query={state['query']!r}", "result": "error"}
+def global_error_handler(state: PipelineState, error: Exception) -> Command:
+    """Runs for any node that exhausts its retries without a per-node handler.
+    Returns Command(goto=END) to short-circuit the remaining pipeline."""
+    return Command(
+        update={"error_msg": f"pipeline failed at query={state['query']!r}", "result": "error"},
+        goto=END,
+    )
 
 
 # --- Wire up the graph ---
@@ -3620,29 +3624,26 @@ def _is_transient(exc: Exception) -> bool:
 graph = (
     StateGraph(PipelineState)
     .set_node_defaults(
-        # All three nodes get 3 retry attempts with exponential backoff,
-        # only on transient errors.
+        # All nodes get 3 retry attempts with exponential backoff on transient errors.
         retry_policy=RetryPolicy(
             max_attempts=3,
             initial_interval=0.5,
             backoff_factor=2.0,
             retry_on=_is_transient,
         ),
-        # Cache all node outputs for 10 minutes.
-        cache_policy=CachePolicy(ttl=600),
-        # Hard 30-second cap on any single node execution.
+        # Hard 30-second cap on any single node execution (requires async nodes).
         timeout=TimeoutPolicy(run_timeout=timedelta(seconds=30)),
         # Global fallback — runs if a node raises and exhausts all retries.
         error_handler=global_error_handler,
     )
-    .add_node("fetch", fetch_node)
-    .add_node("enrich", enrich_node)
+    # Cache only the nodes whose output is worth storing; set explicitly per node.
+    .add_node("fetch", fetch_node, cache_policy=CachePolicy(ttl=600))
+    .add_node("enrich", enrich_node, cache_policy=CachePolicy(ttl=600))
     .add_node(
         "format",
         format_node,
-        # format_node is cheap and deterministic — no retries or cache needed.
+        # format_node is cheap and non-deterministic enough that caching adds no value.
         retry_policy=RetryPolicy(max_attempts=1),
-        cache_policy=None,
     )
     .add_edge(START, "fetch")
     .add_edge("fetch", "enrich")
@@ -3677,8 +3678,8 @@ print(failed["result"])     # error
 | `timeout` | All nodes (regular + error-handler) | `add_node(..., timeout=10.0)` |
 | `error_handler` | Regular nodes only | `add_node(..., error_handler=my_fn)` |
 
-Setting `cache_policy=None` in `add_node` disables the graph default for that node.
 `set_node_defaults` returns `Self` so it can be chained fluently with `add_node` and `add_edge`.
+When no graph-wide `cache_policy` default is set, assign `cache_policy=CachePolicy(...)` selectively per `add_node` call to choose which nodes are cached.
 
 ---
 
@@ -3735,12 +3736,10 @@ def intelligent_search(
     # ── Query the long-term store ────────────────────────────────────────
     results: list[str] = []
     if runtime.store:
-        hits = runtime.store.search(
-            ("docs", tenant_id),
-            query=query,
-            limit=5,
-        )
-        results = [h.value.get("text", "") for h in hits]
+        # Plain namespace search (no index configured).
+        # For semantic/vector search, initialise InMemoryStore with an embeddings index.
+        hits = runtime.store.search(("docs", tenant_id), limit=5)
+        results = [h.value.get("text", "") for h in hits if query.lower() in h.value.get("text", "").lower()]
 
     # ── Audit log with the exact tool call ID ────────────────────────────
     print(

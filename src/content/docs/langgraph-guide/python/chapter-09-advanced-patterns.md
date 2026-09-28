@@ -1441,6 +1441,13 @@ def running_stats(
     """Return stats to the caller while saving a compact state to the checkpoint."""
     prev = previous or {"n": 0, "total": 0.0, "min": float("inf"), "max": float("-inf")}
 
+    if not new_values:
+        mean = prev["total"] / prev["n"] if prev["n"] else 0.0
+        return entrypoint.final(
+            value={"n": prev["n"], "mean": mean, "min": prev["min"], "max": prev["max"]},
+            save=prev,
+        )
+
     n = prev["n"] + len(new_values)
     total = prev["total"] + sum(new_values)
     lo = min(prev["min"], *new_values)
@@ -1491,20 +1498,20 @@ def network_retry(exc: Exception) -> bool:
     return isinstance(exc, (httpx.TransportError, httpx.TimeoutException))
 
 
-def fetch_node(state: PipeState) -> dict:
+async def fetch_node(state: PipeState) -> dict:
     # Simulates an external API call — retried on network errors
     return {"fetched": f"data:{state['query']}"}
 
 
-def enrich_node(state: PipeState) -> dict:
+async def enrich_node(state: PipeState) -> dict:
     return {"enriched": f"enriched:{state['fetched']}"}
 
 
-def summarise_node(state: PipeState) -> dict:
+async def summarise_node(state: PipeState) -> dict:
     return {"result": f"summary:{state['enriched']}"}
 
 
-def error_fallback(state: PipeState) -> dict:
+def error_fallback(state: PipeState, error: Exception) -> dict:
     """Graph-wide fallback: runs when any node exhausts its retries."""
     return {"result": f"fallback:{state.get('query', 'unknown')}"}
 
