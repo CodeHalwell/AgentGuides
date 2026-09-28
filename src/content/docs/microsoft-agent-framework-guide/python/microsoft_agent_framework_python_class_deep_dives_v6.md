@@ -724,10 +724,11 @@ async def main():
     ).build()
 
     # GroupChatBuilder.build() returns a Workflow, so run() returns WorkflowRunResult —
-    # not AgentResponse. Use get_outputs() to retrieve the yielded output strings.
+    # not AgentResponse. The orchestrator yields AgentResponse objects via ctx.yield_output(),
+    # so each item from get_outputs() is an AgentResponse with a .text property.
     result = await group_chat.run("Analyse the quarterly earnings data.")
-    outputs = result.get_outputs()
-    print(outputs[-1] if outputs else "(no output)")
+    outputs = result.get_outputs()   # list[AgentResponse]
+    print(outputs[-1].text if outputs else "(no output)")
 
 asyncio.run(main())
 ```
