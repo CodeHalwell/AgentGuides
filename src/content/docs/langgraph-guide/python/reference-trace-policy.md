@@ -398,6 +398,6 @@ omit_payload(value: Any) -> dict[str, Any]
 
 | Version | Change |
 |---|---|
-| 1.2.12 | `TracePolicy`, `omit_payload` production-stable |
+| 1.2.11 | `TracePolicy`, `omit_payload` production-stable |
 | 1.2.0 | `set_node_defaults(trace_policy=...)` support added |
 | 1.1.0 | `TracePolicy` first introduced |
