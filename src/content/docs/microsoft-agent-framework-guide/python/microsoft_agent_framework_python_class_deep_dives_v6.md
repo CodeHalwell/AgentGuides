@@ -677,7 +677,39 @@ asyncio.run(main())
 `GroupChatBuilder` takes all participants in its constructor — there is no `.add_agent()` fluent method. Import from `agent_framework.orchestrations` (not the private `_orchestration` module).
 
 ```python
+import asyncio
+from agent_framework import Agent, WorkflowAgent, tool, executor
+from agent_framework._workflows import WorkflowBuilder
+from agent_framework._workflows._workflow_context import WorkflowContext
+from agent_framework._types import Message
 from agent_framework.orchestrations import GroupChatBuilder
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient(model="gpt-4o-mini")
+
+# Coordinator: an ordinary Agent that drives the group chat
+coordinator = Agent(
+    client=client,
+    name="coordinator",
+    instructions="You are the coordinator. Decide which specialist to call and synthesise results.",
+)
+
+# Workflow for the specialist WorkflowAgent
+@executor
+async def deep_analysis_executor(messages: list[Message], ctx: WorkflowContext[str]) -> None:
+    analyst = Agent(client=client, name="analyst",
+                    instructions="Perform deep data analysis on the provided input.")
+    response = await analyst.run(messages)
+    await ctx.yield_output(response.text)
+
+deep_analysis_workflow = (
+    WorkflowBuilder(
+        name="deep-analysis",
+        start_executor=deep_analysis_executor,
+        output_from=[deep_analysis_executor],
+    )
+    .build()
+)
 
 specialist = WorkflowAgent(
     deep_analysis_workflow,
@@ -685,12 +717,16 @@ specialist = WorkflowAgent(
     description="Runs a deep multi-step analysis workflow.",
 )
 
-group_chat = GroupChatBuilder(
-    participants=[coordinator, specialist],  # workflow drops in as a peer
-    orchestrator_agent=coordinator,          # decides who speaks next
-).build()
+async def main():
+    group_chat = GroupChatBuilder(
+        participants=[coordinator, specialist],  # WorkflowAgent is a peer participant
+        orchestrator_agent=coordinator,          # decides who speaks next
+    ).build()
 
-result = await group_chat.run("Analyse the quarterly earnings data.")
+    result = await group_chat.run("Analyse the quarterly earnings data.")
+    print(result.text)
+
+asyncio.run(main())
 ```
 
 ---
@@ -927,26 +963,38 @@ asyncio.run(main())
 
 ### Example: token-budget composed strategy
 
+`TokenBudgetComposedStrategy` runs each strategy in sequence, stopping when the estimated
+token count drops below `token_budget`. Because `TruncationStrategy` counts messages (not
+tokens), add `ContextWindowCompactionStrategy` as a final, token-aware fallback so the
+composed strategy always terminates under budget.
+
 ```python
 from agent_framework import CompactionProvider
 from agent_framework._compaction import (
     SlidingWindowStrategy,
     TruncationStrategy,
+    ContextWindowCompactionStrategy,
     TokenBudgetComposedStrategy,
+    CharacterEstimatorTokenizer,
 )
 
-from agent_framework._compaction import CharacterEstimatorTokenizer
-
-tokenizer = CharacterEstimatorTokenizer()
+TOKEN_BUDGET = 4000
 
 compaction = CompactionProvider(
     before_strategy=TokenBudgetComposedStrategy(
+        token_budget=TOKEN_BUDGET,
+        tokenizer=CharacterEstimatorTokenizer(),  # required by TokenBudgetComposedStrategy
         strategies=[
-            SlidingWindowStrategy(keep_last_groups=30),          # first pass: drop old groups
-            TruncationStrategy(max_n=40, compact_to=20),          # second pass: hard cap (message counts, not tokens)
+            SlidingWindowStrategy(keep_last_groups=30),   # first pass: drop old groups
+            TruncationStrategy(max_n=40, compact_to=20),  # second pass: message-count cap
+            # Final token-aware fallback: evicts old tool results and truncates to fit
+            # the budget. Does not call an LLM. Runs only when earlier passes leave
+            # the history over budget.
+            ContextWindowCompactionStrategy(
+                max_context_window_tokens=TOKEN_BUDGET,
+                max_output_tokens=512,
+            ),
         ],
-        token_budget=4000,
-        tokenizer=tokenizer,  # required by TokenBudgetComposedStrategy
     ),
 )
 ```
@@ -1041,15 +1089,17 @@ async def main():
     collection = store.get_collection(Product)
     await collection.ensure_collection_exists()
 
-    # Let the store generate vectors from the description field via the embedding model.
-    # generate_vectors=True (the default) calls embedding_client to embed each record's
-    # VectorStoreField("vector") source fields before upsert so semantic search works correctly.
+    # _add_vectors_to_records embeds the CURRENT value of description_vec, not the description
+    # field. Pre-compute embeddings from the description strings explicitly, then upsert with
+    # generate_vectors=False to store the real float vectors that semantic search will compare.
+    descriptions = ["A sturdy blue widget", "A portable red gadget"]
+    embeddings = await embedding_client.get_embeddings(descriptions, options={"dimensions": 1536})
     await collection.upsert([
-        Product(id="p1", name="Widget A", description="A sturdy blue widget",
-                description_vec=[], price=9.99),
-        Product(id="p2", name="Gadget B", description="A portable red gadget",
-                description_vec=[], price=24.99),
-    ], generate_vectors=True)
+        Product(id="p1", name="Widget A", description=descriptions[0],
+                description_vec=embeddings[0].vector, price=9.99),
+        Product(id="p2", name="Gadget B", description=descriptions[1],
+                description_vec=embeddings[1].vector, price=24.99),
+    ], generate_vectors=False)  # vectors already computed from descriptions above
 
     vector_provider = VectorCollectionContextProvider(
         collection=collection,
