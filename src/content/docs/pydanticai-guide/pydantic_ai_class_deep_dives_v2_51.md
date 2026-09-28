@@ -288,7 +288,7 @@ deferred = DeferredLoadingToolset(large_toolset)
 agent = Agent(
     "openai:gpt-4o",
     toolsets=[deferred],
-    # tool_search capability is registered automatically when DeferredLoadingToolset is used
+    # ToolSearch is auto-injected into every agent; it reveals deferred tools at zero overhead
 )
 
 async def main():
@@ -387,11 +387,14 @@ asyncio.run(main())
 
 ### Example 2 — multiple external tools with an id for correlation
 
+`ExternalToolset` never executes calls locally, so `output_type` must include
+`DeferredToolRequests` — otherwise the pending call can never be surfaced.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.external import ExternalToolset
-from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.tools import ToolDefinition, DeferredToolRequests, DeferredToolResults, ToolReturn
 
 CALENDAR_TOOLS = ExternalToolset(
     id="calendar-service",
@@ -420,10 +423,30 @@ CALENDAR_TOOLS = ExternalToolset(
     ],
 )
 
-agent = Agent("openai:gpt-4o", toolsets=[CALENDAR_TOOLS])
+agent = Agent(
+    "openai:gpt-4o",
+    toolsets=[CALENDAR_TOOLS],
+    output_type=str | DeferredToolRequests,  # required — ExternalToolset never runs locally
+)
 
 async def main():
     result = await agent.run("What meetings do I have on 2026-10-01?")
+
+    if isinstance(result.output, DeferredToolRequests):
+        # Fulfil each pending call via your external calendar service
+        tool_results = []
+        for call in result.output.calls:
+            print(f"External call to calendar-service: {call.tool_name}({call.args})")
+            tool_results.append(
+                ToolReturn(call_id=call.tool_call_id, content='[{"title": "Team sync", "time": "09:00"}]')
+            )
+
+        result = await agent.run(
+            "",
+            message_history=result.all_messages(),
+            deferred_tool_results=DeferredToolResults(results=tool_results),
+        )
+
     print(result.output)
 
 asyncio.run(main())
@@ -1193,8 +1216,9 @@ async def log_request(ctx, request_context):
     return request_context
 
 @hooks.on.after_model_request
-async def log_response(ctx, response, request_context):
+async def log_response(ctx, *, response, request_context):
     print(f"← Model response: {response}")
+    return response  # transformation hook — must return the (possibly modified) response
 
 agent = Agent("openai:gpt-4o-mini", capabilities=[hooks])
 
@@ -1225,11 +1249,13 @@ _start_times: dict[str, float] = {}
 async def record_start(ctx, *, call, tool_def, args):
     # Keyword names from source: call (ToolCallPart), tool_def, args
     _start_times[call.tool_call_id] = time.monotonic()
+    return args  # must return args (possibly modified); returning None drops the args
 
 @hooks.on.after_tool_execute
 async def record_end(ctx, *, call, tool_def, args, result):
     elapsed = time.monotonic() - _start_times.pop(call.tool_call_id, 0)
     print(f"Tool {call.tool_name!r} took {elapsed*1000:.1f}ms")
+    return result  # must return result — dropping it would suppress the tool's output
 
 agent = Agent(
     "openai:gpt-4o-mini",
@@ -1258,14 +1284,16 @@ observability_hooks = Hooks()
 async def security_check(ctx, *, call, tool_def, args):
     if "delete" in call.tool_name.lower():
         print(f"Security alert: destructive tool called — {call.tool_name}")
+    return args  # must return args
 
 @observability_hooks.on.after_model_request
-async def emit_metric(ctx, response, request_context):
+async def emit_metric(ctx, *, response, request_context):
     token_count = sum(
         getattr(r, 'usage', None) and r.usage.total_tokens or 0
         for r in [response]
     )
     print(f"Tokens used: {token_count}")
+    return response  # must return response
 
 # Stack in the capabilities list — they run in order
 agent = Agent(
