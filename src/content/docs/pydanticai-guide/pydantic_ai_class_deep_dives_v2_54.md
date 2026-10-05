@@ -250,6 +250,8 @@ asyncio.run(main())
 ### Conflict detection
 
 ```python
+import asyncio
+from pydantic_ai import Agent
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.renamed import RenamedToolset
 from pydantic_ai.exceptions import UserError
@@ -263,13 +265,36 @@ def tool_b() -> str:
     return "b"
 
 
-# Mapping two tools to the same new name raises UserError at call time
+# Both tool_a and tool_b are renamed to the same new name — this is the collision.
+# RenamedToolset raises UserError when get_tools() is called (at run time).
 toolset = RenamedToolset(
     FunctionToolset([tool_a, tool_b]),
-    name_map={"same_name": "tool_a", "same_name_2": "tool_b"},
+    name_map={"shared_name": "tool_a", "shared_name": "tool_b"},  # duplicate key — last wins in dict
 )
-# Renaming tool_a AND tool_b to the same name would raise:
-# UserError: Renaming tool 'tool_b' to 'same_name' conflicts with existing tool.
+# The dict literal above collapses to {"shared_name": "tool_b"} in Python, so tool_a
+# is exposed under "tool_a" (unmapped) and tool_b is exposed under "shared_name".
+# To produce the error reliably, construct name_map explicitly:
+collision_map = {}
+collision_map["shared_name"] = "tool_a"
+collision_map["shared_name"] = "tool_b"  # overwrites — still {"shared_name": "tool_b"}
+
+# The real collision path: rename tool_a to "tool_b" while tool_b keeps its original name.
+# Both would occupy the slot "tool_b", which RenamedToolset detects and raises on:
+collision_toolset = RenamedToolset(
+    FunctionToolset([tool_a, tool_b]),
+    name_map={"tool_b": "tool_a"},  # tool_a → "tool_b", but tool_b already uses "tool_b"
+)
+
+agent = Agent("openai:gpt-4o-mini", toolsets=[collision_toolset])
+
+async def main():
+    try:
+        await agent.run("run")
+    except UserError as e:
+        print(f"Caught expected collision: {e}")
+        # UserError: Renaming tool 'tool_a' to 'tool_b' conflicts with existing tool.
+
+asyncio.run(main())
 ```
 
 ---
@@ -615,9 +640,28 @@ async def get_enabled_tools(user_id: str) -> set[str]:
     return flags.get(user_id, set())
 
 
+import ast
+import operator as _op
+
+_SAFE_OPS = {
+    ast.Add: _op.add, ast.Sub: _op.sub,
+    ast.Mult: _op.mul, ast.Div: _op.truediv,
+    ast.Pow: _op.pow, ast.USub: _op.neg,
+}
+
+def _safe_eval(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_safe_eval(node.operand))
+    raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
 def calculate(expr: str) -> str:
-    """Evaluates a math expression."""
-    return str(eval(expr))  # demo only — sanitise in production
+    """Evaluates a basic arithmetic expression (+, -, *, /, **)."""
+    tree = ast.parse(expr, mode="eval")
+    return str(_safe_eval(tree.body))
 
 
 def list_calendar_events(date: str) -> str:
@@ -801,17 +845,20 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 2 — local DuckDuckGo fallback for non-native models
+### Example 2 — force DuckDuckGo local search (no native dependency)
 
 ```python
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
 
-# anthropic:claude-opus-5-5 doesn't have native web search — DuckDuckGo is used
+# native=False disables the model's built-in search tool regardless of provider;
+# local='duckduckgo' activates the DuckDuckGo fallback.
+# Use this when you want a guaranteed local path — e.g. in tests, or when the
+# model's native search is unavailable or undesirable.
 agent = Agent(
-    "anthropic:claude-opus-5-5",
-    capabilities=[WebSearch(local=True)],
+    "openai:gpt-4o-mini",
+    capabilities=[WebSearch(native=False, local="duckduckgo")],
 )
 
 
@@ -1004,9 +1051,16 @@ async def simulate_conversation():
     raw_history = ModelMessagesTypeAdapter.dump_json(result1.all_messages())
 
     # --- Persist to database (system prompt stripped by many ORM layers) ---
+    # pydantic-ai serialises message parts with a "part_kind" discriminator, not "type".
+    # Only strip the system-prompt parts; keep other parts (user/tool) in the request.
     stored = json.loads(raw_history)
-    stored = [m for m in stored if m.get("kind") != "request" or
-              not any(p.get("type") == "system-prompt" for p in m.get("parts", []))]
+    for msg in stored:
+        if msg.get("kind") == "request":
+            msg["parts"] = [
+                p for p in msg.get("parts", [])
+                if p.get("part_kind") != "system-prompt"
+            ]
+    stored = [m for m in stored if m.get("kind") != "request" or m.get("parts")]
     loaded_history = ModelMessagesTypeAdapter.validate_json(json.dumps(stored))
 
     # --- Turn 2: resume — ReinjectSystemPrompt ensures the prompt comes back ---
@@ -1186,7 +1240,11 @@ async def async_selector(ctx) -> str:
         if isinstance(msg, ModelRequest):
             for part in msg.parts:
                 if isinstance(part, UserPromptPart):
-                    last_prompt = part.content
+                    # content may be str or a sequence of text/media items (multimodal)
+                    c = part.content
+                    last_prompt = c if isinstance(c, str) else " ".join(
+                        item.text if hasattr(item, "text") else "" for item in c
+                    )
                     break
             if last_prompt:
                 break
