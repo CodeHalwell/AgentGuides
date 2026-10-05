@@ -412,7 +412,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import (
-    Agent, AgentExecutor, WorkflowBuilder, WorkflowRunResult,
+    Agent, AgentExecutor, Content, WorkflowBuilder, WorkflowRunResult,
     ToolApprovalMiddleware, WorkflowRunState,
 )
 from agent_framework_openai import AzureOpenAIChatClient
@@ -430,10 +430,14 @@ workflow = wb.build()
 async def main() -> None:
     result: WorkflowRunResult = await workflow.run("Show me all orders from last week.")
 
-    # Approve pending tool calls
+    # Approve pending tool calls — each request event carries a Content payload;
+    # call .to_function_approval_response(approved=True) to build the correctly-typed reply
     while result.get_final_state() == WorkflowRunState.IDLE_WITH_PENDING_REQUESTS:
         events = result.get_request_info_events()
-        responses = {e.request_id: "APPROVED" for e in events}
+        responses: dict[str, Content] = {
+            e.request_id: e.data.to_function_approval_response(approved=True)
+            for e in events
+        }
         result = await workflow.run(responses=responses)
 
     print(result.get_outputs())
@@ -488,7 +492,8 @@ WorkflowExecutor(
 ```python
 import asyncio
 from agent_framework import (
-    Agent, AgentExecutor, WorkflowBuilder, WorkflowExecutor, WorkflowRunResult,
+    Agent, AgentExecutor, AgentResponse, WorkflowBuilder, WorkflowContext,
+    WorkflowExecutor, WorkflowRunResult, executor,
 )
 from agent_framework_openai import AzureOpenAIChatClient
 
@@ -500,13 +505,23 @@ summariser_exec = AgentExecutor(summariser)
 sub_wb = WorkflowBuilder(name="summarise-wf", start_executor=summariser_exec, output_from=[summariser_exec])
 sub_workflow = sub_wb.build()
 
-# ---- parent workflow: fetch → summarise → format ----
-formatter = Agent(client, name="formatter", instructions="Format the summary as bullet points.")
+# ---- adapter: AgentResponse → str ----
+# WorkflowExecutor with allow_direct_output=False forwards the sub-workflow's yielded
+# AgentResponse objects downstream. AgentExecutor has no AgentResponse handler, so an
+# adapter extracts the text and sends it as a plain str.
+@executor(id="extract_text", input=AgentResponse, output=str)
+async def extract_text(resp: AgentResponse, ctx: WorkflowContext) -> None:
+    await ctx.send_message(resp.text)
 
-sub_exec = WorkflowExecutor(sub_workflow, id="summarise", allow_direct_output=False)
+# ---- formatter agent ----
+formatter = Agent(client, name="formatter", instructions="Format the summary as bullet points.")
 formatter_exec = AgentExecutor(formatter)
+
+# ---- parent workflow: sub-workflow → extract_text → formatter ----
+sub_exec = WorkflowExecutor(sub_workflow, id="summarise", allow_direct_output=False)
 parent_wb = WorkflowBuilder(name="pipeline-wf", start_executor=sub_exec, output_from=[formatter_exec])
-parent_wb.add_edge(sub_exec, formatter_exec)
+parent_wb.add_edge(sub_exec, extract_text)
+parent_wb.add_edge(extract_text, formatter_exec)
 parent_workflow = parent_wb.build()
 
 async def main() -> None:
@@ -658,7 +673,7 @@ print(fan_in_msg.source_span_id)  # 'span-a'
 ### Constructor (dataclass)
 
 ```python
-@dataclass
+@dataclass(slots=True)
 class WorkflowCheckpoint:
     workflow_name: str
     graph_signature_hash: str
@@ -961,7 +976,6 @@ from agent_framework_openai import AzureOpenAIChatClient
 CONVERSION_TABLE = {
     "km_to_miles": 0.621371,
     "kg_to_lbs": 2.20462,
-    "c_to_f_offset": 32.0,
 }
 
 
@@ -979,16 +993,20 @@ class UnitConverterSkill(ClassSkill):
         return (
             "# Unit Converter\n\n"
             "Use the `read_skill_resource` tool with resource `table` to see available conversions.\n"
-            "Use the `unit-converter/convert` script to convert a value."
+            "Use the `unit-converter/convert` script to convert a value.\n"
+            "For Celsius to Fahrenheit, use conversion `c_to_f`."
         )
 
     @ClassSkill.resource(name="table")
     def conversion_table(self) -> str:
         rows = "\n".join(f"| {k} | {v} |" for k, v in CONVERSION_TABLE.items())
+        rows += "\n| c_to_f | value × 9/5 + 32 |"
         return f"| Conversion | Factor |\n|---|---|\n{rows}"
 
     @ClassSkill.script(name="convert")
     def convert(self, value: float, conversion: str) -> str:
+        if conversion == "c_to_f":
+            return json.dumps({"result": round(value * 9 / 5 + 32, 4)})
         factor = CONVERSION_TABLE.get(conversion)
         if factor is None:
             return json.dumps({"error": f"Unknown conversion: {conversion!r}"})
@@ -1125,7 +1143,7 @@ docs_skill = InlineSkill(
 )
 
 # Aggregate multiple sources — could include FileSkillsSource, MCPSkillsSource, etc.
-from agent_framework._skills import InMemorySkillsSource  # type: ignore[reportPrivateUsage]
+from agent_framework import InMemorySkillsSource
 
 source_a = InMemorySkillsSource([code_skill])
 source_b = InMemorySkillsSource([docs_skill])
@@ -1221,7 +1239,7 @@ skill_b = InlineSkill(
     instructions="# Skill B",
 )
 
-from agent_framework._skills import InMemorySkillsSource  # type: ignore[reportPrivateUsage]
+from agent_framework import InMemorySkillsSource
 
 combined = AggregatingSkillsSource([
     InMemorySkillsSource([skill_a]),
