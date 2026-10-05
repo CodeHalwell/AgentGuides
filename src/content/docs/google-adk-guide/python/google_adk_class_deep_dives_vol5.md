@@ -74,8 +74,13 @@ Computed properties: `node_info.run_id`, `node_info.parent_run_id`, `node_info.n
 ```python
 event.is_final_response() -> bool
 ```
-Returns `True` when the event is a complete, user-facing reply: no function calls, no function responses, not partial, no trailing code-execution result. Two exceptions also return `True` even when function calls are present: when `actions.skip_summarization` is set, or when `long_running_tool_ids` is non-empty — in both cases the client receives the event immediately so it can show a progress indicator.  
-Application code typically filters with this to find the text to show users.
+Returns `True` when the event is a complete, user-facing reply. Three cases (from source):
+
+1. **`skip_summarization` or `long_running_tool_ids`** — checked first; returns `True` immediately even when function calls are present. Signals the client to display a progress indicator.
+2. **Error events** — `bool(self.error_code)` is `True`, the event is not partial, and there are no function calls. Error events are final; clients should not assume every final event is a successful text reply.
+3. **Normal text reply** — no function calls, no function responses, not partial, no trailing code-execution result.
+
+Application code typically filters with this to find the content to show users.
 
 ```python
 event.has_trailing_code_execution_result() -> bool
@@ -186,6 +191,7 @@ Source-verified from `google/adk/events/event_actions.py`:
 | `route` | `RouteValue \| list[RouteValue] \| None` | `None` | Workflow graph edge(s) to take next |
 | `render_ui_widgets` | `list[UiWidget] \| None` | `None` | UI widgets for the client to render |
 | `set_model_response` | `Any \| None` | `None` | Override structured output for the model response |
+| `rewind_before_invocation_id` | `str \| None` | `None` | When set, signals a rewind event; history before the named invocation is discarded |
 
 ### `EventCompaction`
 
@@ -262,11 +268,18 @@ Context(
     *,
     event_actions: EventActions | None = None,
     function_call_id: str | None = None,
-    branch: str | None = None,
+    tool_confirmation: ToolConfirmation | None = None,
+    parent_ctx: Context | None = None,
+    node: BaseNode | None = None,
+    node_path: str | None = None,
+    run_id: str = '',
+    resume_inputs: dict[str, Any] | None = None,
+    attempt_count: int = 1,
+    use_as_output: bool = False,
 )
 ```
 
-You never construct `Context` yourself — the framework passes it to your callbacks and tools.
+You never construct `Context` yourself — the framework passes it to your callbacks and tools. (Note: `branch` is not a constructor parameter; it was removed in a prior version.)
 
 ### State access
 
@@ -287,7 +300,7 @@ State keys are scoped by prefix (no prefix = session scope, `app:` = app-wide, `
 # Save a file-like artifact
 version = await ctx.save_artifact(
     filename="report.pdf",
-    artifact=types.Part.from_bytes(pdf_bytes, mime_type="application/pdf"),
+    artifact=types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
 )
 
 # Load it back (most recent version by default)
@@ -446,7 +459,14 @@ FunctionTool(
 )
 ```
 
-`require_confirmation` can be a static bool or a callable that receives the same kwargs as `func` (except `tool_context`) and returns a bool. When `True`, the tool pauses and asks the user to approve via a `ToolConfirmation` response before executing.
+`require_confirmation` can be a static bool or a callable that returns a bool. The callable receives the **same prepared invocation arguments** as `func`, including any injected `tool_context` when `func` declares one. Always accept `**_` in the predicate to handle injected arguments gracefully:
+
+```python
+def needs_approval(amount: float, **_) -> bool:
+    return amount > 1000
+```
+
+When `True`, the tool pauses and asks the user to approve via a `ToolConfirmation` response before executing.
 
 ### Automatic name and schema extraction
 
@@ -818,7 +838,19 @@ news_tool = FunctionTool(get_news_headlines)
 
 ### Persisting credentials across sessions
 
-Credential saving must happen inside the tool itself (via `tool_context`), not in an after-tool callback. Call `await tool_context.save_credential(auth_config)` immediately after `get_auth_response` returns a valid credential. On the next session, call `await tool_context.load_credential(auth_config)` to restore it.
+Credential saving must happen inside the tool itself (via `tool_context`), not in an after-tool callback. `save_credential` persists `auth_config.exchanged_auth_credential`, so you must attach the returned credential to the config before saving. On the next session, call `await tool_context.load_credential(auth_config)` to restore it.
+
+```python
+# After get_auth_response() returns a valid credential, copy the config
+# and attach the credential before saving. Saving auth_config directly
+# would persist None because get_auth_response() does not mutate the config.
+cred = tool_context.get_auth_response(NEWS_AUTH)
+if cred:
+    auth_config_to_save = NEWS_AUTH.model_copy(
+        update={"exchanged_auth_credential": cred}
+    )
+    await tool_context.save_credential(auth_config_to_save)
+```
 
 The `AfterToolCallback` type signature (for reference when registering a callback on an agent):
 
@@ -855,11 +887,11 @@ pip install "google-adk[db]"
 ### Constructor overloads
 
 ```python
-# Overload 1 — pass a database URL string
+# Overload 1 — pass a database URL string (positional or keyword)
 DatabaseSessionService(db_url: str, **kwargs)
 
-# Overload 2 — pass an existing SQLAlchemy AsyncEngine
-DatabaseSessionService(db_engine: AsyncEngine)
+# Overload 2 — pass an existing engine (keyword-only; do NOT pass positionally)
+DatabaseSessionService(*, db_engine: AsyncEngine)
 ```
 
 `db_url` and `db_engine` are mutually exclusive. Providing neither or both raises `ValueError`.

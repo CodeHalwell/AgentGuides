@@ -186,9 +186,9 @@ async def run_batch_job(runner, user_id: str, session_id: str, messages: list):
     return results
 ```
 
-### `model_input_context` — transient per-turn context
+### `model_input_context` — transient per-invocation context
 
-Inject additional context into a single LLM call without persisting it to session history. Useful for passing dynamic reference data (retrieved chunks, user profile) that should influence the response but not pollute the conversation history.
+Inject additional context into every LLM call within a Runner invocation without persisting it to session history. Because `RunConfig` is read on each round, a tool-calling run with multiple model calls receives this context on every round, not just the first. Useful for passing dynamic reference data (retrieved chunks, user profile) that should influence the response but not pollute the conversation history.
 
 ```python
 from google.adk.agents.run_config import RunConfig
