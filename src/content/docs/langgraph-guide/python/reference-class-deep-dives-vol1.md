@@ -76,10 +76,10 @@ Set a deadline on individual parallel branches without touching the graph-wide p
 Timed-out branches raise `NodeTimeoutError`, which can be caught by an error handler.
 
 ```python
-from datetime import timedelta
+import asyncio
+import operator
 from typing import Annotated
 from typing_extensions import TypedDict
-import operator, time
 
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import Send, TimeoutPolicy
@@ -91,9 +91,9 @@ class State(TypedDict):
 class FetchState(TypedDict):
     url: str
 
-def fetch(state: FetchState) -> dict:
-    # Simulate a slow fetch — will be cancelled if it exceeds the timeout.
-    time.sleep(0.1)
+async def fetch(state: FetchState) -> dict:
+    # Simulate a slow fetch — TimeoutPolicy cancellation requires async execution.
+    await asyncio.sleep(0.1)
     return {"results": [f"content:{state['url']}"]}
 
 def start_fetches(state: State) -> list[Send]:
@@ -113,14 +113,15 @@ builder.add_conditional_edges(START, start_fetches)
 builder.add_edge("fetch", END)
 
 graph = builder.compile()
-out = graph.invoke({"urls": ["https://a.example", "https://b.example"]})
+out = asyncio.run(graph.ainvoke({"urls": ["https://a.example", "https://b.example"]}))
 print(out["results"])
 ```
 
-### Example 1c — Nested fan-out (Send from inside a parallel branch)
+### Example 1c — Nested fan-out (two-level parallelism via conditional edges)
 
-A branch spawned by `Send` can itself return `Send` objects from a subsequent
-conditional edge, enabling multi-level parallelism.
+A `Send` branch can itself fan out further using a **conditional edge** that
+returns another list of `Send` objects. Only conditional edge functions may
+return `list[Send]` — regular state nodes cannot.
 
 ```python
 import operator
@@ -136,37 +137,40 @@ class RootState(TypedDict):
 
 class SectionState(TypedDict):
     section: str
+    chunks: Annotated[list[str], operator.add]
 
 class ChunkState(TypedDict):
     chunk: str
 
-def split_section(state: SectionState) -> list[Send]:
-    """Each section is split into chunks and each chunk is sent to 'process_chunk'."""
-    words = state["section"].split()
-    mid = len(words) // 2
-    parts = [" ".join(words[:mid]), " ".join(words[mid:])]
-    return [Send("process_chunk", {"chunk": p}) for p in parts]
+# Level-1 conditional edge: fan out sections from root state
+def expand_sections(state: RootState) -> list[Send]:
+    return [Send("section_entry", {"section": s, "chunks": []}) for s in state["sections"]]
 
+# Level-1 node: exists to give the second conditional edge somewhere to hang
+def section_entry(state: SectionState) -> dict:
+    return {}
+
+# Level-2 conditional edge: fan out chunks from each section branch
+def split_section(state: SectionState) -> list[Send]:
+    words = state["section"].split()
+    mid = max(1, len(words) // 2)
+    parts = [" ".join(words[:mid]), " ".join(words[mid:])]
+    return [Send("process_chunk", {"chunk": p}) for p in parts if p]
+
+# Level-2 node: process each chunk independently
 def process_chunk(state: ChunkState) -> dict:
     return {"chunks": [state["chunk"].upper()]}
 
-def expand_sections(state: RootState) -> list[Send]:
-    return [Send("split_section", {"section": s}) for s in state["sections"]]
-
 builder = StateGraph(RootState)
-builder.add_node("split_section", split_section)
+builder.add_node("section_entry", section_entry)
 builder.add_node("process_chunk", process_chunk)
 builder.add_conditional_edges(START, expand_sections)
-builder.add_conditional_edges("split_section", lambda s: [])  # handled by Send
+builder.add_conditional_edges("section_entry", split_section)
 builder.add_edge("process_chunk", END)
 
-# simpler topology:
-builder2 = StateGraph(RootState)
-builder2.add_conditional_edges(START, expand_sections)
-builder2.add_node("split_section", split_section)
-builder2.add_conditional_edges("split_section", split_section)
-builder2.add_node("process_chunk", process_chunk)
-builder2.add_edge("process_chunk", END)
+graph = builder.compile()
+result = graph.invoke({"sections": ["hello world", "foo bar baz"], "chunks": []})
+print(result["chunks"])  # ['HELLO', 'WORLD', 'FOO BAR', 'BAZ'] (order may vary)
 ```
 
 ---
@@ -302,8 +306,9 @@ into state updates and routing signals. This lets tools drive agent hand-offs.
 ```python
 from typing import Annotated
 from typing_extensions import TypedDict
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import tool
+from langchain_core.tools.base import InjectedToolCallId
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -314,10 +319,18 @@ class AgentState(TypedDict):
     active_agent: str
 
 @tool
-def escalate_to_specialist(department: str) -> Command:
+def escalate_to_specialist(
+    department: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
     """Escalate this conversation to a specialist department."""
+    # When a tool returns Command, ToolNode requires a ToolMessage in the update
+    # so the message history stays valid (one ToolMessage per tool_call_id).
     return Command(
-        update={"active_agent": department},
+        update={
+            "active_agent": department,
+            "messages": [ToolMessage(content=f"Escalating to {department}.", tool_call_id=tool_call_id)],
+        },
         goto=department,
     )
 
@@ -471,9 +484,10 @@ for snap in history:
 # Find the snapshot where `double` is about to run
 fork_snap = next(s for s in history if "double" in s.next)
 
-# Inject a modified value and re-run from that point
-graph.update_state(fork_snap.config, {"value": 100})  # override to 100
-result = graph.invoke(None, config=fork_snap.config)
+# Inject a modified value and re-run from that point.
+# update_state returns a new RunnableConfig pointing at the fork checkpoint.
+new_config = graph.update_state(fork_snap.config, {"value": 100})
+result = graph.invoke(None, config=new_config)
 print(result)  # {'value': 200}  (100 * 2)
 ```
 
@@ -551,11 +565,12 @@ result = graph.invoke(Command(resume=answer), config=config)
 print(result["decision"])  # {'action': 'approve', 'reason': 'All checks passed.'}
 ```
 
-### Example 4b — Per-id resume for concurrent interrupts
+### Example 4b — Sequential resume by interrupt id
 
-When multiple `interrupt()` calls fire in the same node (or the node calls
-`interrupt()` more than once across pauses), each gets a unique stable ID.
-Use `Command(resume={id: value, ...})` to answer them selectively.
+When a node calls `interrupt()` more than once (each call pauses the graph
+and requires a separate resume), each interrupt gets a unique stable ID.
+Use `Command(resume={id: value})` to answer one interrupt at a time and
+advance through the sequence.
 
 ```python
 from typing_extensions import TypedDict
@@ -628,11 +643,12 @@ class TracePolicy:
 
 `TracePolicy` transforms what a **node's own trace run** records in LangSmith (or
 any tracer). It does **not** affect the value passed to or returned by the node —
-only the recorded span. Attach it via `add_node(..., metadata={"trace_policy": ...})`
-or `set_node_defaults(trace_policy=...)`.
+only the recorded span. Attach it via `add_node(..., trace_policy=...)` or
+`set_node_defaults(trace_policy=...)`.
 
-> **Scope:** only the node's own run is affected. Child runs created by traced
-> runnables bound inside the node are not filtered.
+> **Scope:** only the node's own run span is filtered. The root graph trace span
+> still records the original, unredacted inputs/outputs. Child runs created by
+> traced runnables inside the node are also unaffected.
 
 ### Example 5a — Redacting PII from inputs before tracing
 
@@ -657,7 +673,8 @@ def redact_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
                 if field in content.lower():
                     content = "[REDACTED]"
                     break
-            cleaned.append(msg.__class__(content=content))
+            # Use copy() to preserve message id, tool_call_id, and other fields.
+            cleaned.append(msg.copy(update={"content": content}))
         else:
             cleaned.append(msg)
     return cleaned
@@ -683,11 +700,10 @@ def chat_node(state: ChatState) -> dict:
     return {"messages": [AIMessage(content="I cannot share personal data.")]}
 
 builder = StateGraph(ChatState)
-# Attach the TracePolicy via node metadata
 builder.add_node(
     "chat",
     chat_node,
-    metadata={"trace_policy": pii_policy},
+    trace_policy=pii_policy,
 )
 builder.add_edge(START, "chat")
 builder.add_edge("chat", END)
@@ -731,7 +747,7 @@ builder = StateGraph(LongConvState)
 builder.add_node(
     "summarise",
     summarise_node,
-    metadata={"trace_policy": keep_last_n(5)},
+    trace_policy=keep_last_n(5),
 )
 builder.add_edge(START, "summarise")
 builder.add_edge("summarise", END)
@@ -748,16 +764,11 @@ def drop_outputs(_):
     return None  # Record nothing for outputs
 
 builder = StateGraph(dict)
-builder.set_node_defaults(
-    # All nodes will have their outputs dropped from traces.
-    # (trace_policy is not a set_node_defaults param directly;
-    #  attach it per node via metadata instead)
-)
-# Per-node metadata is the correct attachment point:
+# Per-node attachment via trace_policy= kwarg:
 builder.add_node(
     "my_node",
     lambda s: s,
-    metadata={"trace_policy": TracePolicy(process_outputs=drop_outputs)},
+    trace_policy=TracePolicy(process_outputs=drop_outputs),
 )
 builder.add_edge(START, "my_node")
 builder.add_edge("my_node", END)
@@ -876,6 +887,7 @@ for r in results:
 Use the user ID (or tenant ID) as a namespace segment to isolate data naturally.
 
 ```python
+import uuid
 from langgraph.store.memory import InMemoryStore
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
@@ -892,12 +904,11 @@ class State(TypedDict):
 def remember(state: State, *, store: InMemoryStore) -> dict:
     """Write the current message to the user's memory namespace."""
     ns = ("memories", state["user_id"])
-    existing = store.search(ns, limit=100)
-    key = f"msg_{len(existing)}"
+    key = uuid.uuid4().hex  # unique key avoids collisions on concurrent saves
     store.put(ns, key, {"text": state["message"]})
     return {}
 
-def recall(state: State, *, store: InMemoryStore) -> dict:
+def recall_node(state: State, *, store: InMemoryStore) -> dict:
     """Retrieve all stored memories for this user."""
     ns = ("memories", state["user_id"])
     items = store.search(ns, limit=50)
@@ -906,10 +917,10 @@ def recall(state: State, *, store: InMemoryStore) -> dict:
 
 builder = StateGraph(State)
 builder.add_node("remember", remember)
-builder.add_node("recall", recall)
+builder.add_node("recall_node", recall_node)
 builder.add_edge(START, "remember")
-builder.add_edge("remember", "recall")
-builder.add_edge("recall", END)
+builder.add_edge("remember", "recall_node")
+builder.add_edge("recall_node", END)
 
 graph = builder.compile(checkpointer=checkpointer, store=store)
 
@@ -1114,6 +1125,7 @@ The injected value is a `BaseStore` instance — use `put`, `get`, `search`,
 ### Example 8a — Persistent memory tool (read + write)
 
 ```python
+import uuid
 from typing import Annotated
 from typing_extensions import TypedDict
 from langchain_core.messages import AIMessage, BaseMessage
@@ -1136,8 +1148,7 @@ def save_memory(
 ) -> str:
     """Save a fact about the user to long-term memory."""
     ns = ("memories", user_id)
-    existing = store.search(ns, limit=1000)
-    key = f"fact_{len(existing)}"
+    key = uuid.uuid4().hex  # unique key avoids collisions on concurrent saves
     store.put(ns, key, {"content": content})
     return f"Saved: '{content}'"
 
@@ -1154,24 +1165,29 @@ def recall_memories(
     return "\n".join(f"- {i.value['content']}" for i in items)
 
 def agent_node(state: MemoryState) -> dict:
-    # Simulate: LLM calls save_memory then recall_memories
+    from langchain_core.messages import ToolMessage
+    msgs = state["messages"]
+    tool_names = [m.name for m in msgs if isinstance(m, ToolMessage)]
+    if "recall_memories" in tool_names:
+        # Both tools done — emit a plain response so tools_condition exits to END.
+        return {"messages": [AIMessage(content="Done.")]}
+    if "save_memory" in tool_names:
+        # Save is done — now recall.
+        return {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "recall_memories", "args": {}, "id": "c2", "type": "tool_call"}],
+                )
+            ]
+        }
+    # First turn — save the preference.
     return {
         "messages": [
             AIMessage(
                 content="",
                 tool_calls=[
-                    {
-                        "name": "save_memory",
-                        "args": {"content": "User prefers Python over Java"},
-                        "id": "c1",
-                        "type": "tool_call",
-                    },
-                    {
-                        "name": "recall_memories",
-                        "args": {},
-                        "id": "c2",
-                        "type": "tool_call",
-                    },
+                    {"name": "save_memory", "args": {"content": "User prefers Python over Java"}, "id": "c1", "type": "tool_call"}
                 ],
             )
         ]
@@ -1185,7 +1201,9 @@ builder.add_node("agent", agent_node)
 builder.add_node("tools", tool_node)
 builder.add_edge(START, "agent")
 builder.add_conditional_edges("agent", tools_condition)
-builder.add_edge("tools", END)
+# Loop back so agent can emit a second tool call after the save completes.
+# tools_condition routes to END when the last agent message has no tool_calls.
+builder.add_edge("tools", "agent")
 
 graph = builder.compile(store=long_term_store)
 result = graph.invoke({
@@ -1324,7 +1342,7 @@ builder = StateGraph(State)
 builder.add_node(
     "call_api",
     flaky_api_call,
-    retry=RetryPolicy(
+    retry_policy=RetryPolicy(
         initial_interval=0.01,   # fast for demos
         backoff_factor=2.0,
         max_attempts=5,
@@ -1376,8 +1394,8 @@ GRAPH_DEFAULT = RetryPolicy(
 
 builder = StateGraph(State)
 builder.set_node_defaults(retry_policy=GRAPH_DEFAULT)          # applies to all nodes
-builder.add_node("critical", critical_node, retry=AGGRESSIVE)  # overrides default
-builder.add_node("best_effort", best_effort_node, retry=LENIENT)  # overrides default
+builder.add_node("critical", critical_node, retry_policy=AGGRESSIVE)  # overrides default
+builder.add_node("best_effort", best_effort_node, retry_policy=LENIENT)  # overrides default
 builder.add_edge(START, "critical")
 builder.add_edge("critical", "best_effort")
 builder.add_edge("best_effort", END)
@@ -1387,10 +1405,13 @@ result = graph.invoke({"data": "start"})
 print(result)  # {'data': 'start:critical:best_effort'}
 ```
 
-### Example 9c — Sequence of retry policies (waterfall)
+### Example 9c — Policy list: first-match-wins per exception type
 
-Pass a list of `RetryPolicy` objects to try one after another. LangGraph works
-through the sequence until one succeeds or the list is exhausted.
+When you pass a **list** of `RetryPolicy` objects, LangGraph picks the **first
+policy whose `retry_on` predicate matches the raised exception**. The policies
+do not chain or waterfall — only the single matching policy's `max_attempts` and
+backoff apply. Use distinct predicates to give different exception classes
+different retry budgets.
 
 ```python
 from typing_extensions import TypedDict
@@ -1400,28 +1421,44 @@ from langgraph.types import RetryPolicy
 class State(TypedDict):
     value: int
 
+attempt_count = 0
+
 def unreliable_node(state: State) -> dict:
-    import random
-    if random.random() < 0.6:
-        raise ConnectionError("flaky")
+    global attempt_count
+    attempt_count += 1
+    if attempt_count < 3:
+        raise ConnectionError(f"transient network error (attempt {attempt_count})")
     return {"value": state["value"] + 1}
 
-# First policy: quick retries for transient blips
-QUICK = RetryPolicy(initial_interval=0.01, max_attempts=2, jitter=False)
-# Second policy: slower retries if the quick ones all failed
-SLOW  = RetryPolicy(initial_interval=0.5,  max_attempts=3, jitter=True)
+# Policy for transient network errors — quick retries
+NETWORK_POLICY = RetryPolicy(
+    initial_interval=0.01,
+    max_attempts=5,
+    retry_on=lambda e: isinstance(e, ConnectionError),
+)
+
+# Policy for value errors — fewer retries, slower
+VALUE_POLICY = RetryPolicy(
+    initial_interval=0.5,
+    max_attempts=2,
+    retry_on=lambda e: isinstance(e, ValueError),
+)
 
 builder = StateGraph(State)
 builder.add_node(
     "unreliable",
     unreliable_node,
-    retry=[QUICK, SLOW],  # waterfall: QUICK tried first, then SLOW
+    # NETWORK_POLICY matches ConnectionError, VALUE_POLICY matches ValueError.
+    # Only the first matching policy is used — they do not combine.
+    retry_policy=[NETWORK_POLICY, VALUE_POLICY],
 )
 builder.add_edge(START, "unreliable")
 builder.add_edge("unreliable", END)
 
 graph = builder.compile()
-# Will eventually succeed unless all 5 combined attempts fail.
+attempt_count = 0
+result = graph.invoke({"value": 0})
+print(result)  # {'value': 1}  — succeeded on attempt 3
 ```
 
 ---
@@ -1438,7 +1475,7 @@ class CachePolicy:
     ttl:      int | None = None                          # seconds; None = forever
 ```
 
-Attach a `CachePolicy` to a node via `add_node(..., cache=...)` or
+Attach a `CachePolicy` to a node via `add_node(..., cache_policy=...)` or
 `set_node_defaults(cache_policy=...)`. On a cache hit LangGraph returns the stored
 output without executing the node. The cache backend is passed to `compile(cache=...)`.
 
@@ -1470,7 +1507,7 @@ builder = StateGraph(State)
 builder.add_node(
     "expensive",
     expensive_node,
-    cache=CachePolicy(),   # default key = hash of the full input
+    cache_policy=CachePolicy(),   # default key = hash of the full input
 )
 builder.add_edge(START, "expensive")
 builder.add_edge("expensive", END)
@@ -1528,7 +1565,7 @@ builder = StateGraph(State)
 builder.add_node(
     "research",
     research_node,
-    cache=CachePolicy(key_func=query_only_key),
+    cache_policy=CachePolicy(key_func=query_only_key),
 )
 builder.add_edge(START, "research")
 builder.add_edge("research", END)
@@ -1574,7 +1611,7 @@ builder.set_node_defaults(cache_policy=CachePolicy(ttl=300))
 builder.add_node("slow_node", slow_node)
 
 # fast_node overrides: cache for 60 seconds only
-builder.add_node("fast_node", fast_node, cache=CachePolicy(ttl=60))
+builder.add_node("fast_node", fast_node, cache_policy=CachePolicy(ttl=60))
 
 builder.add_edge(START, "slow_node")
 builder.add_edge("slow_node", "fast_node")
@@ -1599,7 +1636,7 @@ print(result["output"])  # "HELLO!"
 | `InMemoryStore` | `langgraph.store.memory` | Cross-thread KV + vector search; multi-tenant namespacing |
 | `InjectedState` | `langgraph.prebuilt` | Pass graph state (or a single field) into a tool invisibly |
 | `InjectedStore` | `langgraph.prebuilt` | Pass the persistent store into a tool for RAG or memory writes |
-| `RetryPolicy` | `langgraph.types` | Custom retry predicates, waterfall policies, per-node overrides |
+| `RetryPolicy` | `langgraph.types` | Custom retry predicates, first-match policy lists, per-node overrides |
 | `CachePolicy` | `langgraph.types` | Memoise deterministic nodes with custom keys and TTL |
 
 > All examples verified against **`langgraph==1.2.12`** — October 2026.
