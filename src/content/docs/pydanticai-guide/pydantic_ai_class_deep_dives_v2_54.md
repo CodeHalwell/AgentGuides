@@ -292,7 +292,8 @@ async def main():
         await agent.run("run")
     except UserError as e:
         print(f"Caught expected collision: {e}")
-        # UserError: Renaming tool 'tool_a' to 'tool_b' conflicts with existing tool.
+        # UserError: Tool name conflicts with previously renamed tool: 'tool_b'.
+        # (tool_a was renamed to "tool_b" first; tool_b's original name then collides)
 
 asyncio.run(main())
 ```
@@ -646,7 +647,8 @@ import operator as _op
 _SAFE_OPS = {
     ast.Add: _op.add, ast.Sub: _op.sub,
     ast.Mult: _op.mul, ast.Div: _op.truediv,
-    ast.Pow: _op.pow, ast.USub: _op.neg,
+    ast.USub: _op.neg,
+    # ast.Pow intentionally omitted: model-controlled exponents can exhaust CPU/memory
 }
 
 def _safe_eval(node):
@@ -659,7 +661,7 @@ def _safe_eval(node):
     raise ValueError(f"Unsupported expression: {ast.dump(node)}")
 
 def calculate(expr: str) -> str:
-    """Evaluates a basic arithmetic expression (+, -, *, /, **)."""
+    """Evaluates a basic arithmetic expression (+, -, *, /)."""
     tree = ast.parse(expr, mode="eval")
     return str(_safe_eval(tree.body))
 
@@ -846,6 +848,8 @@ asyncio.run(main())
 ```
 
 ### Example 2 — force DuckDuckGo local search (no native dependency)
+
+> **Extra required:** `pip install "pydantic-ai[duckduckgo]"` (installs `ddgs`).
 
 ```python
 import asyncio
