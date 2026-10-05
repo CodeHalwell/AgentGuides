@@ -76,7 +76,7 @@ CallbackContext = Context
 ToolContext = Context
 ```
 
-This means every callback — whether agent-level, model-level, or tool-level — receives the same `Context` object with access to the full surface: `state`, `agent_name`, `invocation_id`, `session`, `function_call_id`, artifact helpers, `request_credential`, `request_confirmation`, and workflow APIs (`route`, `interrupt`, `run_node`).
+This means every callback — whether agent-level, model-level, or tool-level — receives the same `Context` object with access to the full surface: `state`, `agent_name`, `invocation_id`, `session`, `function_call_id`, artifact helpers, and workflow APIs (`route`, `interrupt`, `run_node`). **Note:** `request_credential()` and `request_confirmation()` are tool-only operations — calling them from an agent-level or model-level callback (where `function_call_id` is `None`) raises `ValueError`.
 
 ```python
 from google.adk.agents import LlmAgent

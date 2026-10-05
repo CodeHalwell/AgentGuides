@@ -142,7 +142,7 @@ cfg = RunConfig(
 )
 ```
 
-### `ServiceTier.DEFERRED` — off-peak execution
+### `ServiceTier.DEFERRED` — off-peak execution (2.10.0+)
 
 `ServiceTier.DEFERRED` queues each model call to run on off-peak capacity instead of returning results immediately. ADK waits for the queued result before yielding, so each tool-calling agent that calls the LLM multiple times queues once per LLM call rather than once per full run.
 

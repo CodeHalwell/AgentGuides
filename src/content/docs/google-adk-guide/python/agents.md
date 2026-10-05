@@ -449,10 +449,10 @@ _summariser_agent = LlmAgent(
     model="gemini-2.5-flash",
     mode="single_turn",
     instruction="Summarise the given text in one sentence.",
-    parallel_worker=True,
 )
-# To cap per-item concurrency, wrap explicitly with _ParallelWorker.
-# max_parallel_workers is a _ParallelWorker param, not an LlmAgent param.
+# Wrap explicitly with _ParallelWorker to cap per-item concurrency.
+# Do not also set parallel_worker=True on the LlmAgent — that wraps it a
+# second time and results in double-nesting.
 summariser = _ParallelWorker(node=_summariser_agent, max_parallel_workers=3)
 
 # ── Upstream node produces a list for the fan-out ────────────────────────────

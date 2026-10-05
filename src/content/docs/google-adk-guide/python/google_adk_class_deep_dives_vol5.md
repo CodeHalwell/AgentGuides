@@ -30,7 +30,7 @@ All examples and field tables on this page are source-verified against **google-
 
 `Event` is the central data unit in ADK. Every LLM reply, function call, function response, and user message is an `Event`. The runner collects events from agents and appends them to the session history. Application code iterates over events returned by `runner.run_async()` to find the final response.
 
-`Event` extends `LlmResponse` (from `google.genai`) and adds ADK-specific fields.
+`Event` extends `LlmResponse` (from `google.adk.models.llm_response`) and adds ADK-specific fields.
 
 ### Field reference
 
@@ -74,7 +74,7 @@ Computed properties: `node_info.run_id`, `node_info.parent_run_id`, `node_info.n
 ```python
 event.is_final_response() -> bool
 ```
-Returns `True` when the event is a complete, user-facing reply: no function calls, no function responses, not partial, no trailing code-execution result.  
+Returns `True` when the event is a complete, user-facing reply: no function calls, no function responses, not partial, no trailing code-execution result. Two exceptions also return `True` even when function calls are present: when `actions.skip_summarization` is set, or when `long_running_tool_ids` is non-empty — in both cases the client receives the event immediately so it can show a progress indicator.  
 Application code typically filters with this to find the text to show users.
 
 ```python
@@ -88,6 +88,7 @@ Returns `True` if the last `Part` in `content.parts` is a `code_execution_result
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 async def main():
     agent = LlmAgent(name="bot", model="gemini-2.5-flash",
@@ -97,7 +98,8 @@ async def main():
         app_name="app", user_id="u1", session_id="s1"
     )
     async for event in runner.run_async(
-        user_id="u1", session_id="s1", new_message="What is 2+2?"
+        user_id="u1", session_id="s1",
+        new_message=types.Content(role="user", parts=[types.Part(text="What is 2+2?")]),
     ):
         if event.is_final_response() and event.content:
             print("Author:", event.author)
@@ -127,6 +129,7 @@ print(ev.content.parts[0].text) # "Here is the result."
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 async def inspect_events():
     agent = LlmAgent(
@@ -140,7 +143,8 @@ async def inspect_events():
         app_name="demo", user_id="u1", session_id="s1"
     )
     async for ev in runner.run_async(
-        user_id="u1", session_id="s1", new_message="3 times 7?"
+        user_id="u1", session_id="s1",
+        new_message=types.Content(role="user", parts=[types.Part(text="3 times 7?")]),
     ):
         fc_calls = ev.get_function_calls()
         fc_resps = ev.get_function_responses()
@@ -364,7 +368,7 @@ async def delegate_task(task: str, tool_context: ToolContext) -> str:
         model="gemini-2.5-flash",
         instruction="You are an expert coder.",
     )
-    output = await tool_context.run_node(specialist, message=task)
+    output = await tool_context.run_node(specialist, node_input=task)
     return str(output)
 ```
 
@@ -377,13 +381,12 @@ from google.adk.agents.context import Context
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 def before_model(ctx: Context, req: LlmRequest) -> LlmResponse | None:
     """Injects a system prefix if the user has a VIP flag."""
     if ctx.state.get("vip_user"):
-        # Prepend an extra system instruction
-        req.config = req.config or {}  # type: ignore[assignment]
-        return None  # continue normally — just mutated the request
+        req.append_instructions(["VIP: Always respond with extra care and attention."])
     return None
 
 async def after_model(ctx: Context, resp: LlmResponse) -> LlmResponse | None:
@@ -407,7 +410,8 @@ async def main():
         state={"vip_user": True},
     )
     async for ev in runner.run_async(
-        user_id="u1", session_id="s1", new_message="Hello!"
+        user_id="u1", session_id="s1",
+        new_message=types.Content(role="user", parts=[types.Part(text="Hello!")]),
     ):
         if ev.is_final_response():
             print(ev.content.parts[0].text)
@@ -501,9 +505,9 @@ When the `FUNCTION_TOOL_ARG_VALIDATION` feature flag is enabled, `FunctionTool` 
 
 ```python
 from google.adk.features import FeatureName
-from google.adk.features import enable_feature
+from google.adk.features import override_feature_enabled
 
-enable_feature(FeatureName.FUNCTION_TOOL_ARG_VALIDATION)  # opt-in
+override_feature_enabled(FeatureName.FUNCTION_TOOL_ARG_VALIDATION, True)  # opt-in
 
 from google.adk.tools import FunctionTool
 
@@ -528,7 +532,7 @@ def transfer_funds(
     """Transfers funds to another account."""
     return f"Transferred ${amount:.2f} to {to_account}"
 
-def needs_approval(amount: float, to_account: str) -> bool:
+def needs_approval(amount: float, to_account: str, **_) -> bool:
     return amount > 1000.0  # require confirmation for large transfers
 
 tool = FunctionTool(transfer_funds, require_confirmation=needs_approval)
@@ -615,40 +619,32 @@ async def process_large_file(
 tool = LongRunningFunctionTool(process_large_file)
 ```
 
-### Returning intermediate status
+### Returning status when complete
 
-A long-running tool can return a `dict` with a `"status"` field to signal that work is still in progress. The LLM description appended by ADK tells the model not to re-call the tool while a pending status is outstanding:
+Unlike a polling pattern, `LongRunningFunctionTool` does **not** support re-calling the tool to check progress. ADK appends a note to the tool description instructing the model not to call the tool again while it is in flight. The function runs to completion and returns its final result in a single call:
 
 ```python
 import asyncio
 from google.adk.tools.long_running_tool import LongRunningFunctionTool
 from google.adk.tools.tool_context import ToolContext
 
-_JOBS: dict[str, str] = {}
-
-async def start_export(job_id: str, tool_context: ToolContext) -> dict:
-    """Starts a background export job and returns its status.
+async def run_export(job_id: str, tool_context: ToolContext) -> dict:
+    """Runs an export job and returns the result when complete.
 
     Args:
         job_id: A unique identifier for the export job.
     """
-    if job_id not in _JOBS:
-        _JOBS[job_id] = "running"
-        asyncio.create_task(_do_export(job_id))
-        return {"status": "pending", "job_id": job_id,
-                "message": "Export started. Check back shortly."}
+    # Perform the long-running work inline — the framework signals
+    # is_final_response() to the client immediately so it can show a spinner.
+    await asyncio.sleep(5)   # replace with real I/O
+    tool_context.state["last_export"] = job_id
+    return {
+        "status": "complete",
+        "job_id": job_id,
+        "download_url": f"https://example.com/exports/{job_id}.csv",
+    }
 
-    status = _JOBS[job_id]
-    if status == "done":
-        return {"status": "complete", "job_id": job_id,
-                "download_url": f"https://example.com/exports/{job_id}.csv"}
-    return {"status": "pending", "job_id": job_id}
-
-async def _do_export(job_id: str) -> None:
-    await asyncio.sleep(5)   # background work
-    _JOBS[job_id] = "done"
-
-export_tool = LongRunningFunctionTool(start_export)
+export_tool = LongRunningFunctionTool(run_export)
 ```
 
 ### Wiring into an agent
@@ -698,18 +694,25 @@ Source-verified from `google/adk/auth/auth_tool.py`:
 ### OAuth2 tool example
 
 ```python
-from google.adk.auth.auth_schemes import OAuthGrantType, OAuthScheme
+from fastapi.openapi.models import OAuthFlows, OAuthFlowAuthorizationCode
+from google.adk.auth.auth_schemes import ExtendedOAuth2
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
 from google.adk.auth.auth_tool import AuthConfig
 from google.adk.tools import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 
 OAUTH_CONFIG = AuthConfig(
-    auth_scheme=OAuthScheme(
-        type_=AuthCredentialTypes.OAUTH2,
-        authorization_endpoint="https://accounts.google.com/o/oauth2/auth",
-        token_endpoint="https://oauth2.googleapis.com/token",
-        scopes=["https://www.googleapis.com/auth/calendar.readonly"],
+    auth_scheme=ExtendedOAuth2(
+        flows=OAuthFlows(
+            authorizationCode=OAuthFlowAuthorizationCode(
+                authorizationUrl="https://accounts.google.com/o/oauth2/auth",
+                tokenUrl="https://oauth2.googleapis.com/token",
+                scopes={
+                    "https://www.googleapis.com/auth/calendar.readonly":
+                        "Read calendar events",
+                },
+            )
+        )
     ),
     raw_auth_credential=AuthCredential(
         auth_type=AuthCredentialTypes.OAUTH2,
@@ -741,18 +744,15 @@ calendar_tool = FunctionTool(list_calendar_events)
 ### API key example
 
 ```python
-from google.adk.auth.auth_schemes import APIKeyScheme, APIKeyLocation
+from google.adk.auth.auth_schemes import CustomAuthScheme
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, APIKeyAuth
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 from google.adk.tools.tool_context import ToolContext
 from google.adk.tools import FunctionTool
 
 NEWS_AUTH = AuthConfig(
-    auth_scheme=APIKeyScheme(
-        type_=AuthCredentialTypes.API_KEY,
-        name="x-api-key",
-        in_=APIKeyLocation.HEADER,
-    ),
+    auth_scheme=CustomAuthScheme(type_="apiKey"),
+    raw_auth_credential=AuthCredential(auth_type=AuthCredentialTypes.API_KEY),
 )
 
 def get_news_headlines(topic: str, tool_context: ToolContext) -> list[dict]:
@@ -766,7 +766,7 @@ def get_news_headlines(topic: str, tool_context: ToolContext) -> list[dict]:
         tool_context.request_credential(NEWS_AUTH)
         return []
 
-    api_key = cred.api_key.key
+    api_key = cred.api_key  # AuthCredential.api_key is str | None
     # Use api_key to call the news API
     return [{"title": f"Latest on {topic}", "url": "https://example.com"}]
 
@@ -775,14 +775,25 @@ news_tool = FunctionTool(get_news_headlines)
 
 ### Persisting credentials across sessions
 
+Credential saving must happen inside the tool itself (via `tool_context`), not in an after-tool callback. Call `await tool_context.save_credential(auth_config)` immediately after `get_auth_response` returns a valid credential. On the next session, call `await tool_context.load_credential(auth_config)` to restore it.
+
+The `AfterToolCallback` type signature (for reference when registering a callback on an agent):
+
 ```python
-async def after_tool_callback(ctx, tool_response):
-    """Persist credentials so they're reused in the next session."""
-    if ctx.actions.requested_auth_configs:
-        for fc_id, auth_cfg in ctx.actions.requested_auth_configs.items():
-            if auth_cfg.exchanged_auth_credential:
-                await ctx.save_credential(auth_cfg)
-    return None
+from typing import Any, Optional
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
+
+async def after_tool_callback(
+    tool: BaseTool,
+    args: dict[str, Any],
+    tool_context: ToolContext,
+    tool_response: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Intercepts the tool response. Return None to keep it unchanged."""
+    # Example: log every tool call with its result
+    print(f"[{tool.name}] args={args!r} → {tool_response!r}")
+    return None  # return a dict to override the response the LLM sees
 ```
 
 ---
@@ -836,7 +847,7 @@ agent = LlmAgent(
 )
 
 async def main():
-    await session_service.create_tables()  # idempotent schema creation
+    await session_service.prepare_tables()  # idempotent schema creation
     runner = Runner(
         agent=agent,
         app_name="my_app",
@@ -846,10 +857,11 @@ async def main():
         app_name="my_app", user_id="alice", session_id="session-1"
     )
 
+    from google.genai import types as genai_types
     async for ev in runner.run_async(
         user_id="alice",
         session_id=session.id,
-        new_message="Hello!",
+        new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="Hello!")]),
     ):
         if ev.is_final_response():
             print(ev.content.parts[0].text)
@@ -874,15 +886,16 @@ agent = LlmAgent(
 )
 
 async def main():
-    await session_service.create_tables()
+    await session_service.prepare_tables()
     runner = Runner(agent=agent, app_name="app", session_service=session_service)
     session = await session_service.create_session(
         app_name="app", user_id="bob",
         state={"language": "Spanish"}
     )
+    from google.genai import types as genai_types
     async for ev in runner.run_async(
         user_id="bob", session_id=session.id,
-        new_message="What language do I prefer?",
+        new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="What language do I prefer?")]),
     ):
         if ev.is_final_response():
             print(ev.content.parts[0].text)  # "You prefer Spanish."
@@ -916,7 +929,7 @@ from google.adk.sessions.database_session_service import DatabaseSessionService
 svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
 
 async def demo():
-    await svc.create_tables()
+    await svc.prepare_tables()
 
     # Create
     session = await svc.create_session(
@@ -994,10 +1007,11 @@ async def main():
         app_name="my_app", user_id="alice"
     )
 
+    from google.genai import types as genai_types
     async for ev in runner.run_async(
         user_id="alice",
         session_id=session.id,
-        new_message="What is the capital of France?",
+        new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="What is the capital of France?")]),
     ):
         if ev.is_final_response():
             print(ev.content.parts[0].text)
@@ -1054,9 +1068,11 @@ async def chat():
     runner = Runner(agent=agent, app_name="chat", session_service=svc)
     session = await svc.create_session(app_name="chat", user_id="u1")
 
+    from google.genai import types as genai_types
     for msg in ["My name is Alice.", "What is my name?"]:
         async for ev in runner.run_async(
-            user_id="u1", session_id=session.id, new_message=msg
+            user_id="u1", session_id=session.id,
+            new_message=genai_types.Content(role="user", parts=[genai_types.Part(text=msg)]),
         ):
             if ev.is_final_response():
                 print(f"Bot: {ev.content.parts[0].text}")
@@ -1140,10 +1156,11 @@ async def main():
         user_id="alice",
         state={"plan": "premium"},
     )
+    from google.genai import types as genai_types
     async for ev in runner.run_async(
         user_id="alice",
         session_id=session.id,
-        new_message="What plan am I on?",
+        new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="What plan am I on?")]),
     ):
         if ev.is_final_response():
             print(ev.content.parts[0].text)
@@ -1232,7 +1249,7 @@ VertexAiSearchTool(
 | `search_engine_id` | Full resource path of a search engine (mutually exclusive with `data_store_id`) |
 | `filter` | CEL expression to filter results (e.g. `"lang = 'en'"`) |
 | `max_results` | Cap on returned documents |
-| `bypass_multi_tools_limit` | Allow combining with other tools (disabled by default for Gemini's single-retrieval-tool constraint) |
+| `bypass_multi_tools_limit` | When `True` with multiple tools in the same agent, ADK automatically replaces `VertexAiSearchTool` with `DiscoveryEngineSearchTool` (requires `pip install google-adk[gcp]`). Set only when you need to combine grounding with function-call tools. |
 
 ### Data store example
 
@@ -1294,14 +1311,17 @@ search_tool = VertexAiSearchTool(
 
 ### Dynamic filtering by session state
 
-Subclass `VertexAiSearchTool` and override `_build_vertex_ai_search_config` to apply per-request filters from session state:
+Subclass `VertexAiSearchTool` and override `_build_vertex_ai_search_config` to apply per-request filters from session state. **Always validate session-state values before interpolating them into CEL filter strings** — untrusted input can break or inject filter expressions.
 
 ```python
+import re
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.vertex_ai_search_tool import VertexAiSearchTool
 from google.genai import types
 
 DATA_STORE = "projects/my-proj/locations/global/collections/default_collection/dataStores/kb"
+
+_SAFE_ID = re.compile(r'^[A-Za-z0-9_-]+$')
 
 class UserScopedSearchTool(VertexAiSearchTool):
     """Restricts search to documents belonging to the user's organisation."""
@@ -1310,6 +1330,9 @@ class UserScopedSearchTool(VertexAiSearchTool):
         self, ctx: ReadonlyContext
     ) -> types.VertexAISearch:
         org_id = ctx.state.get("org_id", "")
+        # Validate before interpolating into a CEL filter to prevent injection
+        if org_id and not _SAFE_ID.match(org_id):
+            raise ValueError(f"Invalid org_id format: {org_id!r}")
         return types.VertexAISearch(
             datastore=self.data_store_id,
             filter=f"org_id = '{org_id}'" if org_id else None,
@@ -1321,7 +1344,7 @@ search_tool = UserScopedSearchTool(data_store_id=DATA_STORE, max_results=10)
 
 ### Combining with function tools
 
-By default, `VertexAiSearchTool` cannot be combined with other retrieval tools in one agent. Pass `bypass_multi_tools_limit=True` to override — use with caution, as Gemini may produce unexpected results with multiple retrieval tools:
+By default, Gemini does not allow built-in retrieval tools (like `VertexAiSearchTool`) alongside regular function-call tools. Pass `bypass_multi_tools_limit=True` to lift this restriction: ADK automatically substitutes `VertexAiSearchTool` with `DiscoveryEngineSearchTool` — a function-call–based implementation that uses the `google-cloud-discoveryengine` package (included in `google-adk[gcp]`).
 
 ```python
 from google.adk.agents import LlmAgent
@@ -1366,4 +1389,4 @@ agent = LlmAgent(
 
 ## Version note
 
-Verified against **google-adk==2.11.0**. `Context` as a unified alias for both `CallbackContext` and `ToolContext` was introduced in **2.10.0**; in earlier releases, use `CallbackContext` in callbacks and `ToolContext` in tools (both still exist as aliases in 2.11.0 for backwards compatibility). `DatabaseSessionService` and `SqliteSessionService` were introduced in **2.8.0**. `LongRunningFunctionTool.is_long_running` was present from the first `2.x` release.
+Verified against **google-adk==2.11.0**. `Context`, `CallbackContext`, and `ToolContext` are all aliases for the same class in 2.11.0 — use whichever name is most readable in context. `DatabaseSessionService`, `SqliteSessionService`, `VertexAiSessionService`, `LongRunningFunctionTool`, and `AuthConfig` are all available in 2.11.0.
