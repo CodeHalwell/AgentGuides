@@ -149,6 +149,7 @@ cfg = RunConfig(
 **Key constraints (source-verified in `run_config.py`):**
 - Cannot be combined with `StreamingMode.SSE` — a deferred request returns an interaction ID, not a result, so there is nothing to stream. ADK raises `ValueError` at `RunConfig` construction time.
 - `ManagedAgent` ignores `service_tier` — it calls `interactions.create` from its own execution loop and never reads this field.
+- Only honoured by models that use the **Interactions API** transport (e.g., Gemini via Vertex AI). Models on the `generate_content` path — including `LiteLlm`-backed models and any model that calls `generate_content` directly — silently ignore `service_tier`; the field is passed through but never read by those code paths.
 
 ```python
 from google.adk.agents.run_config import RunConfig, StreamingMode

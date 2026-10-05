@@ -584,13 +584,18 @@ Identical to `FunctionTool` but sets `self.is_long_running = True` and appends a
 
 ```
 1. LLM issues a function_call for the tool.
-2. Framework stores the function_call_id in event.long_running_tool_ids.
-3. event.is_final_response() returns True immediately (skip_summarization=True)
-   → the client layer receives the event and can show a progress indicator.
-4. Your function runs (possibly yielding intermediate updates).
-5. When the function finally returns, the framework delivers the result as a
-   function_response event and resumes the LLM turn.
+2. Framework sets long_running_tool_ids on the function-call event and yields
+   it before starting the tool.  event.is_final_response() → True here,
+   so the client receives the event and can display a progress indicator.
+3. Your async function runs to completion (no intermediate yields).
+4a. If the function returns a non-empty dict the framework builds a
+    function_response event with that result immediately and resumes the LLM.
+4b. If the function returns None the framework emits no function_response.
+    The response must arrive later via session injection (an external process
+    calls the session service to append the FunctionResponse directly).
 ```
+
+`LongRunningFunctionTool` is designed for pattern 4b: kick off a background job and return `None` quickly, then have the background process inject the final result. Pattern 4a (blocking inline) works too but ties up the runner for the full duration of the job.
 
 ### File-processing example
 
@@ -619,23 +624,47 @@ async def process_large_file(
 tool = LongRunningFunctionTool(process_large_file)
 ```
 
-### Returning status when complete
+### Returning a deferred result (the intended pattern)
 
-Unlike a polling pattern, `LongRunningFunctionTool` does **not** support re-calling the tool to check progress. ADK appends a note to the tool description instructing the model not to call the tool again while it is in flight. The function runs to completion and returns its final result in a single call:
+The function returns `None` immediately after kicking off the work. An external process (a Cloud Task, Pub/Sub consumer, etc.) later injects the final `FunctionResponse` into the session. ADK never re-calls the tool:
 
 ```python
 import asyncio
 from google.adk.tools.long_running_tool import LongRunningFunctionTool
 from google.adk.tools.tool_context import ToolContext
 
-async def run_export(job_id: str, tool_context: ToolContext) -> dict:
-    """Runs an export job and returns the result when complete.
+async def submit_export(job_id: str, tool_context: ToolContext) -> None:
+    """Submits an export job and returns immediately; result comes later.
 
     Args:
         job_id: A unique identifier for the export job.
     """
-    # Perform the long-running work inline — the framework signals
-    # is_final_response() to the client immediately so it can show a spinner.
+    tool_context.state["pending_export"] = job_id
+    # Kick off the job asynchronously — do NOT await it here.
+    # The final FunctionResponse is injected into the session by an
+    # external worker once the job completes.
+    asyncio.create_task(_fire_and_forget_export(job_id))
+    return None  # None → no FunctionResponse built; awaits session injection.
+
+async def _fire_and_forget_export(job_id: str) -> None:
+    await asyncio.sleep(0)  # hand off to the event loop; real work is elsewhere
+
+export_tool = LongRunningFunctionTool(submit_export)
+```
+
+### Inline blocking pattern (simpler, ties up the runner)
+
+The function blocks until the work is done and returns a result dict. The framework builds the `FunctionResponse` immediately when the function returns:
+
+```python
+async def run_export_blocking(job_id: str, tool_context: ToolContext) -> dict:
+    """Runs an export job inline and returns when complete.
+
+    Args:
+        job_id: A unique identifier for the export job.
+    """
+    # The function-call event is already yielded to the client before this
+    # runs, so the client can show a spinner while this blocks.
     await asyncio.sleep(5)   # replace with real I/O
     tool_context.state["last_export"] = job_id
     return {
@@ -644,7 +673,7 @@ async def run_export(job_id: str, tool_context: ToolContext) -> dict:
         "download_url": f"https://example.com/exports/{job_id}.csv",
     }
 
-export_tool = LongRunningFunctionTool(run_export)
+export_tool_blocking = LongRunningFunctionTool(run_export_blocking)
 ```
 
 ### Wiring into an agent
@@ -744,14 +773,17 @@ calendar_tool = FunctionTool(list_calendar_events)
 ### API key example
 
 ```python
-from google.adk.auth.auth_schemes import CustomAuthScheme
+from fastapi.openapi.models import APIKey, APIKeyIn
 from google.adk.auth.auth_tool import AuthConfig
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
 from google.adk.tools.tool_context import ToolContext
 from google.adk.tools import FunctionTool
 
+# APIKey is a proper OpenAPI 3.0 security scheme (from fastapi.openapi.models,
+# a google-adk dependency). Specify where the key is sent (header/query/cookie)
+# and what the header/param name is.
 NEWS_AUTH = AuthConfig(
-    auth_scheme=CustomAuthScheme(type_="apiKey"),
+    auth_scheme=APIKey(name="X-API-Key", in_=APIKeyIn.header),
     raw_auth_credential=AuthCredential(auth_type=AuthCredentialTypes.API_KEY),
 )
 

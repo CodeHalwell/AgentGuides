@@ -437,23 +437,22 @@ The field is declared on `LlmAgent` itself (`agents/llm_agent.py`) and is wired 
 import asyncio
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow, node, START
-from google.adk.workflow._parallel_worker import _ParallelWorker
 from google.adk.apps import App
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 # ── Fan-out agent ─────────────────────────────────────────────────────────────
-# LlmAgent declares parallel_worker=True so build_node() knows to wrap it.
 _summariser_agent = LlmAgent(
     name="summariser",
     model="gemini-2.5-flash",
     mode="single_turn",
     instruction="Summarise the given text in one sentence.",
 )
-# Wrap explicitly with _ParallelWorker to cap per-item concurrency.
-# Do not also set parallel_worker=True on the LlmAgent — that wraps it a
-# second time and results in double-nesting.
-summariser = _ParallelWorker(node=_summariser_agent, max_parallel_workers=3)
+# Use the public node() API to wrap the agent as a parallel worker.
+# node() with parallel_worker=True internally creates a _ParallelWorker;
+# do not pass parallel_worker=True on the LlmAgent itself when calling node()
+# — that would double-wrap the agent and cause unexpected behaviour.
+summariser = node(_summariser_agent, parallel_worker=True, max_parallel_workers=3)
 
 # ── Upstream node produces a list for the fan-out ────────────────────────────
 @node
