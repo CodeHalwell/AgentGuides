@@ -321,12 +321,21 @@ cred = await ctx.load_credential(auth_config)
 ### Memory methods
 
 ```python
+from google.adk.memory.memory_entry import MemoryEntry
+from google.genai import types
+
 # Add the current session transcript to long-term memory
 await ctx.add_session_to_memory()
 
-# Store a custom memory entry
+# Store a custom memory entry — add_memory() takes memories: Sequence[MemoryEntry]
 await ctx.add_memory(
-    content=types.Content(parts=[types.Part(text="User prefers metric units.")])
+    memories=[
+        MemoryEntry(
+            content=types.Content(
+                parts=[types.Part(text="User prefers metric units.")]
+            )
+        )
+    ]
 )
 
 # Semantic search over memory
@@ -588,14 +597,16 @@ Identical to `FunctionTool` but sets `self.is_long_running = True` and appends a
    it before starting the tool.  event.is_final_response() → True here,
    so the client receives the event and can display a progress indicator.
 3. Your async function runs to completion (no intermediate yields).
-4a. If the function returns a non-empty dict the framework builds a
-    function_response event with that result immediately and resumes the LLM.
-4b. If the function returns None the framework emits no function_response.
-    The response must arrive later via session injection (an external process
-    calls the session service to append the FunctionResponse directly).
+4a. If the function returns a truthy result (non-empty dict, non-zero, etc.)
+    the framework builds a function_response event with that result immediately
+    and resumes the LLM.
+4b. If the function returns a falsy value (None, {}, False, 0, …) the framework
+    emits no function_response.  The response must arrive later via session
+    injection (an external process calls the session service to append the
+    FunctionResponse directly).
 ```
 
-`LongRunningFunctionTool` is designed for pattern 4b: kick off a background job and return `None` quickly, then have the background process inject the final result. Pattern 4a (blocking inline) works too but ties up the runner for the full duration of the job.
+`LongRunningFunctionTool` is designed for pattern 4b: kick off a background job and return a falsy value quickly, then have the background process inject the final result. Pattern 4a (blocking inline) works too but ties up the runner for the full duration of the job.
 
 ### File-processing example
 
@@ -1238,7 +1249,7 @@ async def list_all():
     )
     page = await svc.list_sessions(app_name="my_app", user_id="alice")
     for session in page.sessions:
-        print(session.id, session.update_time)
+        print(session.id, session.last_update_time)
 
 asyncio.run(list_all())
 ```
@@ -1279,7 +1290,7 @@ VertexAiSearchTool(
 | `data_store_id` | Full resource path of a single data store (mutually exclusive with `search_engine_id`) |
 | `data_store_specs` | Per-data-store specs when using an engine with multiple stores |
 | `search_engine_id` | Full resource path of a search engine (mutually exclusive with `data_store_id`) |
-| `filter` | CEL expression to filter results (e.g. `"lang = 'en'"`) |
+| `filter` | Discovery Engine filter expression (e.g. `'lang: ANY("en")'`) — uses `field: ANY("value")` syntax, not CEL equality |
 | `max_results` | Cap on returned documents |
 | `bypass_multi_tools_limit` | When `True` with multiple tools in the same agent, ADK automatically replaces `VertexAiSearchTool` with `DiscoveryEngineSearchTool` (requires `pip install google-adk[gcp]`). Set only when you need to combine grounding with function-call tools. |
 
@@ -1365,9 +1376,10 @@ class UserScopedSearchTool(VertexAiSearchTool):
         # Validate before interpolating into a CEL filter to prevent injection
         if org_id and not _SAFE_ID.match(org_id):
             raise ValueError(f"Invalid org_id format: {org_id!r}")
+        # Discovery Engine filter syntax: field: ANY("value"), not CEL equality.
         return types.VertexAISearch(
             datastore=self.data_store_id,
-            filter=f"org_id = '{org_id}'" if org_id else None,
+            filter=f'org_id: ANY("{org_id}")' if org_id else None,
             max_results=self.max_results,
         )
 
