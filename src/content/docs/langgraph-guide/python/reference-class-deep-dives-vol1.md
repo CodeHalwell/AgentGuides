@@ -117,11 +117,12 @@ out = asyncio.run(graph.ainvoke({"urls": ["https://a.example", "https://b.exampl
 print(out["results"])
 ```
 
-### Example 1c — Nested fan-out (two-level parallelism via conditional edges)
+### Example 1c — Nested fan-out (two-level parallelism via Command)
 
-A `Send` branch can itself fan out further using a **conditional edge** that
-returns another list of `Send` objects. Only conditional edge functions may
-return `list[Send]` — regular state nodes cannot.
+A `Send` branch can itself fan out further by returning a `Command` with a
+`goto` list of inner `Send` objects. Conditional edge functions receive the
+**root graph state**, not the branch-local `Send` payload, so the secondary
+fan-out logic must live inside the node itself.
 
 ```python
 import operator
@@ -129,7 +130,7 @@ from typing import Annotated
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, END, StateGraph
-from langgraph.types import Send
+from langgraph.types import Command, Send
 
 class RootState(TypedDict):
     sections: list[str]
@@ -146,16 +147,14 @@ class ChunkState(TypedDict):
 def expand_sections(state: RootState) -> list[Send]:
     return [Send("section_entry", {"section": s, "chunks": []}) for s in state["sections"]]
 
-# Level-1 node: exists to give the second conditional edge somewhere to hang
-def section_entry(state: SectionState) -> dict:
-    return {}
-
-# Level-2 conditional edge: fan out chunks from each section branch
-def split_section(state: SectionState) -> list[Send]:
+# Level-1 node: receives the section-local payload and fans out chunks via Command.
+# The node (not a conditional edge) performs the inner fan-out so it can access
+# the branch-local `section` value from the Send payload.
+def section_entry(state: SectionState) -> Command:
     words = state["section"].split()
     mid = max(1, len(words) // 2)
     parts = [" ".join(words[:mid]), " ".join(words[mid:])]
-    return [Send("process_chunk", {"chunk": p}) for p in parts if p]
+    return Command(goto=[Send("process_chunk", {"chunk": p}) for p in parts if p])
 
 # Level-2 node: process each chunk independently
 def process_chunk(state: ChunkState) -> dict:
@@ -165,7 +164,6 @@ builder = StateGraph(RootState)
 builder.add_node("section_entry", section_entry)
 builder.add_node("process_chunk", process_chunk)
 builder.add_conditional_edges(START, expand_sections)
-builder.add_conditional_edges("section_entry", split_section)
 builder.add_edge("process_chunk", END)
 
 graph = builder.compile()
@@ -512,32 +510,43 @@ the interrupt in the snapshot's `.interrupts` tuple. Resume with
 
 ### Example 4a — Typed interrupt with `response_schema`
 
-`response_schema` annotates the interrupt with the shape of the expected answer.
-This does **not** validate the resume value at runtime — it is metadata for UIs
-and tooling that consume the interrupt.
+`response_schema` accepts either a **JSON Schema dict** (pure metadata — no
+validation) or a **Python type** such as a Pydantic model, `TypedDict`, or
+dataclass (LangGraph validates the resume value and raises
+`pydantic.ValidationError` on mismatch, then returns the constructed model
+instance). Pass a JSON Schema dict when you want the schema surfaced to callers
+without enforcing it, or when using a persistent checkpointer that cannot
+serialize Python class objects.
+
+The `Interrupt` stored in the snapshot always carries `response_schema` as a
+**JSON Schema dict** — even when you passed a Python type, it is converted
+before storage.
 
 ```python
-from typing import Literal
 from typing_extensions import TypedDict
-from pydantic import BaseModel
-
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import interrupt, Command
 
-class Decision(BaseModel):
-    action: Literal["approve", "reject", "escalate"]
-    reason: str
+# A plain JSON Schema dict — metadata-only, no validation at resume time.
+DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string", "enum": ["approve", "reject", "escalate"]},
+        "reason": {"type": "string"},
+    },
+    "required": ["action", "reason"],
+}
 
 class State(TypedDict):
     proposal: str
     decision: dict | None
 
 def review(state: State) -> dict:
-    # Interrupt with a typed response schema — callers know the expected shape.
+    # Interrupt with a schema hint — callers know what shape to resume with.
     decision = interrupt(
         {"proposal": state["proposal"], "message": "Please review and decide."},
-        response_schema=Decision,
+        response_schema=DECISION_SCHEMA,
     )
     return {"decision": decision}
 
@@ -553,13 +562,13 @@ config = {"configurable": {"thread_id": "typed-interrupt"}}
 result = list(graph.stream({"proposal": "Deploy to prod", "decision": None}, config))
 snap = graph.get_state(config)
 
-# Inspect the interrupt
+# Inspect the interrupt — response_schema is always stored as a JSON Schema dict
 intr = snap.interrupts[0]
 print("interrupt id:     ", intr.id)
 print("interrupt value:  ", intr.value)
-print("response_schema:  ", intr.response_schema)  # <class 'Decision'>
+print("response_schema:  ", intr.response_schema)  # {'type': 'object', ...}
 
-# Resume with the structured decision
+# Resume with the structured decision — returned as-is (no validation with dict schema)
 answer = {"action": "approve", "reason": "All checks passed."}
 result = graph.invoke(Command(resume=answer), config=config)
 print(result["decision"])  # {'action': 'approve', 'reason': 'All checks passed.'}
@@ -612,12 +621,19 @@ result = graph.invoke(Command(resume={finance_id: "yes"}), config)
 print(result)  # {'legal_ok': True, 'finance_ok': True}
 ```
 
-### Example 4c — Collecting interrupt history across snapshots
+### Example 4c — Collecting retained interrupts across snapshots
+
+> **Note:** Checkpoint history is **not** a complete interrupt audit log.
+> Multiple `interrupt()` calls in the same node reuse the same task/checkpoint
+> slot, so earlier interrupt writes are overwritten by later ones in the
+> snapshot. This helper yields only the **interrupts retained** in each
+> snapshot — not every interrupt that ever fired. Capture streamed interrupt
+> events during execution when a complete audit trail is required.
 
 ```python
-# After a graph has run with interrupts, inspect the full interrupt history:
+# After a graph has run with interrupts, inspect the retained interrupt snapshots:
 def collect_interrupts(graph, config):
-    """Yield every Interrupt object from the full checkpoint history."""
+    """Yield Interrupt objects retained in checkpoint history (not a complete log)."""
     for snapshot in graph.get_state_history(config):
         for intr in snapshot.interrupts:
             yield intr
@@ -643,8 +659,8 @@ class TracePolicy:
 
 `TracePolicy` transforms what a **node's own trace run** records in LangSmith (or
 any tracer). It does **not** affect the value passed to or returned by the node —
-only the recorded span. Attach it via `add_node(..., trace_policy=...)` or
-`set_node_defaults(trace_policy=...)`.
+only the recorded span. Attach it per node via `add_node(..., trace_policy=...)`.
+(`set_node_defaults` does **not** accept `trace_policy` — use `add_node` for each node.)
 
 > **Scope:** only the node's own run span is filtered. The root graph trace span
 > still records the original, unredacted inputs/outputs. Child runs created by
@@ -754,7 +770,7 @@ builder.add_edge("summarise", END)
 graph = builder.compile()
 ```
 
-### Example 5c — Graph-wide default via `set_node_defaults`
+### Example 5c — Suppressing node outputs from traces
 
 ```python
 from langgraph.graph import START, END, StateGraph
@@ -800,7 +816,7 @@ Key methods:
 | `search(ns, *, query=…, filter=…, limit=…, offset=…)` | Search items |
 | `list_namespaces(*, prefix=…, suffix=…, max_depth=…)` | List namespaces |
 | `delete(ns, key)` | Remove an item |
-| `batch(ops)` | Execute mixed operations atomically |
+| `batch(ops)` | Execute mixed operations in one call (no transactional guarantees) |
 
 ### Example 6a — CRUD operations and batch
 
@@ -889,6 +905,7 @@ Use the user ID (or tenant ID) as a namespace segment to isolate data naturally.
 ```python
 import uuid
 from langgraph.store.memory import InMemoryStore
+from langgraph.store.base import BaseStore
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 from langgraph.graph import START, END, StateGraph
@@ -901,14 +918,14 @@ class State(TypedDict):
     message: str
     recall: str | None
 
-def remember(state: State, *, store: InMemoryStore) -> dict:
+def remember(state: State, *, store: BaseStore) -> dict:
     """Write the current message to the user's memory namespace."""
     ns = ("memories", state["user_id"])
     key = uuid.uuid4().hex  # unique key avoids collisions on concurrent saves
     store.put(ns, key, {"text": state["message"]})
     return {}
 
-def recall_node(state: State, *, store: InMemoryStore) -> dict:
+def recall_node(state: State, *, store: BaseStore) -> dict:
     """Retrieve all stored memories for this user."""
     ns = ("memories", state["user_id"])
     items = store.search(ns, limit=50)
@@ -1310,8 +1327,12 @@ class RetryPolicy(NamedTuple):
               | Callable[[Exception], bool] = <built-in predicate>
 ```
 
-By default LangGraph retries on common transient errors (network timeouts,
-rate limits). Customise with any of the fields above.
+The built-in `retry_on` predicate retries on `ConnectionError`, on `httpx` /
+`requests` 5xx HTTP errors, and on most other exceptions — but **not** on
+`OSError` subclasses (including the built-in `TimeoutError`), not on 4xx
+errors (including HTTP 429 rate limits), and not on `ValueError`, `TypeError`,
+`RuntimeError`, or other programmer errors. Override `retry_on` with a custom
+predicate whenever the default coverage doesn't match your use case.
 
 ### Example 9a — Custom `retry_on` predicate
 
@@ -1324,9 +1345,11 @@ from langgraph.types import RetryPolicy
 attempt_count = 0
 
 def is_transient(exc: Exception) -> bool:
-    """Retry only on transient errors, not on permanent failures."""
-    transient = (ConnectionError, TimeoutError, OSError)
-    return isinstance(exc, transient)
+    """Retry only on transient network errors, not on permanent failures."""
+    # ConnectionError covers refused/reset connections.
+    # TimeoutError covers timed-out socket operations.
+    # OSError is excluded: it includes FileNotFoundError, PermissionError, etc.
+    return isinstance(exc, (ConnectionError, TimeoutError))
 
 class State(TypedDict):
     result: str
