@@ -84,6 +84,7 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Channels" href="/langgraph-guide/python/reference-channels/" />
   <LinkCard title="RemoteGraph" href="/langgraph-guide/python/reference-remote-graph/" />
   <LinkCard title="Class & API reference (all symbols)" href="/langgraph-guide/python/langgraph_comprehensive_guide/#class--api-reference" />
+  <LinkCard title="Class Deep Dives Vol. 1" href="/langgraph-guide/python/reference-class-deep-dives-vol1/" />
 </CardGrid>
 
 ## Reference
@@ -108,6 +109,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="Graceful shutdown reference" href="/langgraph-guide/python/reference-graceful-shutdown/" description="RunControl, request_drain(), GraphDrained — cooperative superstep-boundary draining for SIGTERM, pre-stop hooks, and timeout-with-checkpoint patterns." />
   <LinkCard title="TracePolicy reference" href="/langgraph-guide/python/reference-trace-policy/" description="Per-node LangSmith tracing control — process_inputs, process_outputs, omit_payload; selectively redact, truncate, or silence individual node spans." />
   <LinkCard title="Cache backends reference" href="/langgraph-guide/python/reference-cache-backends/" description="BaseCache abstract interface and InMemoryCache thread-safe implementation — TTL eviction, custom Redis backends, CachePolicy wiring, and serializer protocol." />
+  <LinkCard title="Class Deep Dives Vol. 1" href="/langgraph-guide/python/reference-class-deep-dives-vol1/" description="Send, Command, StateSnapshot, Interrupt, TracePolicy, InMemoryStore, InjectedState, InjectedStore, RetryPolicy, CachePolicy — multiple runnable examples per class." />
 </CardGrid>
 
 <CardGrid>
@@ -207,3 +209,4 @@ distinct versions only, oldest to newest.
 | 2026-08-01 | 1.2.10 | Patch release; all core symbols re-verified against the installed source. |
 | 2026-08-17 | 1.2.11 | **Consolidated the 46 "class deep dive" volumes into one source-verified [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph==1.2.11`. |
 | 2026-09-28 | 1.2.12 | Version bump to 1.2.12; added `set_node_defaults()` section to ch1 and Pattern 15 to ch9; Functional API section expanded with async tasks, `context_schema`/`Runtime` injection, `entrypoint.final` accumulator, named `@task` with `CachePolicy`; fixed `ToolRuntime` canonical import; Recipes 22–23 added (`set_node_defaults` + `ToolRuntime` all-in-one injection). |
+| 2026-10-05 | 1.2.12 | Added **Class Deep Dives Vol. 1** reference page — 10 source-verified class deep dives (`Send`, `Command`, `StateSnapshot`, `Interrupt`, `TracePolicy`, `InMemoryStore`, `InjectedState`, `InjectedStore`, `RetryPolicy`, `CachePolicy`) with 25+ runnable code examples covering the full range of each API. |
