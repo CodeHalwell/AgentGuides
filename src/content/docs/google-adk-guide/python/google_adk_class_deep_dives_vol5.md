@@ -137,12 +137,16 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 async def inspect_events():
+    def multiply(a: int, b: int) -> int:
+        """Returns the product of two integers."""
+        return a * b
+
     agent = LlmAgent(
         name="calc",
         model="gemini-2.5-flash",
         instruction="When asked maths, call the multiply tool.",
-        tools=[lambda a, b: a * b],  # auto-wrapped as FunctionTool
-    )
+        tools=[multiply],  # auto-wrapped as FunctionTool; lambdas not allowed
+    )  # (lambdas have __name__='<lambda>' which is invalid in Gemini declarations)
     runner = InMemoryRunner(agent=agent, app_name="demo")
     await runner.session_service.create_session(
         app_name="demo", user_id="u1", session_id="s1"
@@ -157,7 +161,7 @@ async def inspect_events():
             print(f"[{ev.author}] tool call: {fc_calls[0].name}({fc_calls[0].args})")
         elif fc_resps:
             print(f"[{ev.author}] tool response: {fc_resps[0].response}")
-        elif ev.is_final_response():
+        elif ev.is_final_response() and ev.content and ev.content.parts:
             print(f"[{ev.author}] final: {ev.content.parts[0].text}")
 
 asyncio.run(inspect_events())
@@ -191,7 +195,7 @@ Source-verified from `google/adk/events/event_actions.py`:
 | `route` | `RouteValue \| list[RouteValue] \| None` | `None` | Workflow graph edge(s) to take next |
 | `render_ui_widgets` | `list[UiWidget] \| None` | `None` | UI widgets for the client to render |
 | `set_model_response` | `Any \| None` | `None` | Override structured output for the model response |
-| `rewind_before_invocation_id` | `str \| None` | `None` | When set, signals a rewind event; history before the named invocation is discarded |
+| `rewind_before_invocation_id` | `str \| None` | `None` | When set, signals a rewind event; the target invocation and all subsequent events are discarded, while events **before** the target are preserved |
 
 ### `EventCompaction`
 
@@ -435,7 +439,7 @@ async def main():
         user_id="u1", session_id="s1",
         new_message=types.Content(role="user", parts=[types.Part(text="Hello!")]),
     ):
-        if ev.is_final_response():
+        if ev.is_final_response() and ev.content and ev.content.parts:
             print(ev.content.parts[0].text)
 
 asyncio.run(main())
@@ -938,7 +942,7 @@ async def main():
         session_id=session.id,
         new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="Hello!")]),
     ):
-        if ev.is_final_response():
+        if ev.is_final_response() and ev.content and ev.content.parts:
             print(ev.content.parts[0].text)
 
 asyncio.run(main())
@@ -972,7 +976,7 @@ async def main():
         user_id="bob", session_id=session.id,
         new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="What language do I prefer?")]),
     ):
-        if ev.is_final_response():
+        if ev.is_final_response() and ev.content and ev.content.parts:
             print(ev.content.parts[0].text)  # "You prefer Spanish."
 
 asyncio.run(main())
@@ -1088,7 +1092,7 @@ async def main():
         session_id=session.id,
         new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="What is the capital of France?")]),
     ):
-        if ev.is_final_response():
+        if ev.is_final_response() and ev.content and ev.content.parts:
             print(ev.content.parts[0].text)
 
 asyncio.run(main())
@@ -1149,7 +1153,7 @@ async def chat():
             user_id="u1", session_id=session.id,
             new_message=genai_types.Content(role="user", parts=[genai_types.Part(text=msg)]),
         ):
-            if ev.is_final_response():
+            if ev.is_final_response() and ev.content and ev.content.parts:
                 print(f"Bot: {ev.content.parts[0].text}")
 
 asyncio.run(chat())
@@ -1237,7 +1241,7 @@ async def main():
         session_id=session.id,
         new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="What plan am I on?")]),
     ):
-        if ev.is_final_response():
+        if ev.is_final_response() and ev.content and ev.content.parts:
             print(ev.content.parts[0].text)
 
 asyncio.run(main())
