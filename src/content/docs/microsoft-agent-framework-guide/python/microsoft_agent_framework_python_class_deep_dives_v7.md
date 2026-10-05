@@ -54,7 +54,7 @@ class AgentExecutorRequest:
 import asyncio
 from agent_framework import (
     Agent, AgentExecutorRequest, WorkflowBuilder,
-    AgentExecutor, WorkflowRunResult,
+    AgentExecutor, WorkflowRunResult, Message,
 )
 from agent_framework_openai import AzureOpenAIChatClient
 
@@ -63,26 +63,25 @@ client = AzureOpenAIChatClient.from_env()
 support_agent = Agent(client, instructions="You are a helpful support agent.")
 
 async def main() -> None:
-    executor = AgentExecutor(support_agent, id="support")
+    support_exec = AgentExecutor(support_agent, id="support")
 
-    wb = WorkflowBuilder()
-    wb.add_executor(executor, output_from="support")
-    workflow = wb.build("support-wf")
+    wb = WorkflowBuilder(name="support-wf", start_executor=support_exec, output_from=[support_exec])
+    workflow = wb.build()
 
     # Prime the executor with account context — agent does not reply yet
     prime = AgentExecutorRequest(
-        messages=[{"role": "user", "content": "Account: acct-123"}],
+        messages=[Message("user", ["Account: acct-123"])],
         should_respond=False,
     )
     # Now the user's real question triggers the run
     question = AgentExecutorRequest(
-        messages=[{"role": "user", "content": "What is my account balance?"}],
+        messages=[Message("user", ["What is my account balance?"])],
         should_respond=True,
     )
 
     result: WorkflowRunResult = await workflow.run(prime)
     result = await workflow.run(question)
-    print(result.get_outputs(str))
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
@@ -159,11 +158,10 @@ async def log_and_pass(
     # Re-emit unchanged so the next executor receives AgentExecutorResponse
     await ctx.send_message(response)
 
-wb = WorkflowBuilder()
-wb.add_executor(AgentExecutor(summariser, id="summariser"), output_from="summariser")
-wb.add_executor(log_and_pass, output_from="log_response")
-wb.connect("summariser", "log_response")
-workflow = wb.build("log-wf")
+summariser_exec = AgentExecutor(summariser, id="summariser")
+wb = WorkflowBuilder(name="log-wf", start_executor=summariser_exec, output_from=[log_and_pass])
+wb.add_edge(summariser_exec, log_and_pass)
+workflow = wb.build()
 ```
 
 ### Example 2 — Preserve context via `with_text()`
@@ -171,7 +169,7 @@ workflow = wb.build("log-wf")
 ```python
 from agent_framework import AgentExecutorResponse, WorkflowContext, executor
 
-@executor(id="upper", input=AgentExecutorResponse, output=AgentExecutorResponse)
+@executor(id="upper", input=AgentExecutorResponse, output=AgentExecutorResponse, workflow_output=str)
 async def upper_case(
     response: AgentExecutorResponse,
     ctx: WorkflowContext[AgentExecutorResponse, str],
@@ -229,13 +227,18 @@ agent = Agent(client, instructions="You are helpful.")
 
 storage = InMemoryCheckpointStorage()
 
-wb = WorkflowBuilder()
-wb.add_executor(AgentExecutor(agent, id="helper"), output_from="helper")
-workflow = wb.build("ckpt-demo", checkpoint_storage=storage)
+helper_exec = AgentExecutor(agent, id="helper")
+wb = WorkflowBuilder(
+    name="ckpt-demo",
+    start_executor=helper_exec,
+    output_from=[helper_exec],
+    checkpoint_storage=storage,
+)
+workflow = wb.build()
 
 async def main() -> None:
     result: WorkflowRunResult = await workflow.run("Hello")
-    checkpoint = await storage.get_latest(workflow.name)
+    checkpoint = await storage.get_latest(workflow_name=workflow.name)
     if checkpoint:
         executor_states = checkpoint.state.get("_executor_state", {})
         helper_state = executor_states.get("helper", {})
@@ -248,7 +251,8 @@ asyncio.run(main())
 ### Example 2 — Custom executor extending AgentExecutor with extra state
 
 ```python
-from agent_framework import AgentExecutorCheckpointState, AgentSession, WorkflowCheckpointException
+from typing import Any
+from agent_framework import AgentExecutorCheckpointState, AgentSession
 from agent_framework._workflows._agent_executor import AgentExecutor  # type: ignore[reportPrivateUsage]
 
 class TaggedAgentExecutor(AgentExecutor):
@@ -258,9 +262,10 @@ class TaggedAgentExecutor(AgentExecutor):
         super().__init__(agent, **kwargs)
         self._tag = tag
 
-    async def on_checkpoint_save(self, state: dict) -> None:
-        await super().on_checkpoint_save(state)
-        state["tag"] = self._tag  # extend checkpoint
+    async def on_checkpoint_save(self) -> dict[str, Any]:
+        state = await super().on_checkpoint_save()
+        state["tag"] = self._tag
+        return state
 
     async def on_checkpoint_restore(self, state: dict) -> None:
         await super().on_checkpoint_restore(state)
@@ -328,7 +333,7 @@ AgentExecutor(
 
 | Hook | Description |
 |---|---|
-| `on_checkpoint_save(state)` | Writes `AgentExecutorCheckpointState` fields into `state` |
+| `on_checkpoint_save()` | Returns `dict[str, Any]` containing `AgentExecutorCheckpointState` fields; override via `state = await super().on_checkpoint_save(); state["key"] = val; return state` |
 | `on_checkpoint_restore(state)` | Reads and validates `AgentExecutorCheckpointState` from `state` |
 
 ### Example 1 — Basic two-agent chain
@@ -349,14 +354,12 @@ async def main() -> None:
     researcher_exec = AgentExecutor(researcher)
     writer_exec = AgentExecutor(writer, context_mode="last_agent")
 
-    wb = WorkflowBuilder()
-    wb.add_executor(researcher_exec, output_from="researcher")
-    wb.add_executor(writer_exec, output_from="writer")
-    wb.connect("researcher", "writer")
-    workflow = wb.build("research-write")
+    wb = WorkflowBuilder(name="research-write", start_executor=researcher_exec, output_from=[writer_exec])
+    wb.add_edge(researcher_exec, writer_exec)
+    workflow = wb.build()
 
     result: WorkflowRunResult = await workflow.run("Write a report on quantum computing.")
-    print(result.get_outputs(str)[-1])
+    print(result.get_outputs()[-1])
 
 asyncio.run(main())
 ```
@@ -390,12 +393,13 @@ from agent_framework_openai import AzureOpenAIChatClient
 client = AzureOpenAIChatClient.from_env()
 agent = Agent(client, name="streamer")
 
-wb = WorkflowBuilder()
-wb.add_executor(AgentExecutor(agent), output_from="streamer")
-workflow = wb.build("stream-wf")
+streamer_exec = AgentExecutor(agent)
+wb = WorkflowBuilder(name="stream-wf", start_executor=streamer_exec, output_from=[streamer_exec])
+workflow = wb.build()
 
 async def main() -> None:
-    async for event in workflow.run_stream("Tell me a joke."):
+    stream = await workflow.run("Tell me a joke.", stream=True)
+    async for event in stream:
         if event.type == "output" and isinstance(event.data, AgentResponseUpdate):
             print(event.data.text, end="", flush=True)
     print()
@@ -409,33 +413,30 @@ asyncio.run(main())
 import asyncio
 from agent_framework import (
     Agent, AgentExecutor, WorkflowBuilder, WorkflowRunResult,
-    ToolApprovalMiddleware, ToolApprovalRule, Content,
+    ToolApprovalMiddleware, WorkflowRunState,
 )
 from agent_framework_openai import AzureOpenAIChatClient
 
 client = AzureOpenAIChatClient.from_env()
 
-approval_mw = ToolApprovalMiddleware(rules=[ToolApprovalRule(tool_name="run_sql")])
+# ToolApprovalMiddleware with no auto-approval rules requires manual approval for all tools
+approval_mw = ToolApprovalMiddleware(source_id="db")
 db_agent = Agent(client, name="db", tools=[...], middleware=[approval_mw])
 
-wb = WorkflowBuilder()
-wb.add_executor(AgentExecutor(db_agent), output_from="db")
-workflow = wb.build("db-wf")
+db_exec = AgentExecutor(db_agent)
+wb = WorkflowBuilder(name="db-wf", start_executor=db_exec, output_from=[db_exec])
+workflow = wb.build()
 
 async def main() -> None:
     result: WorkflowRunResult = await workflow.run("Show me all orders from last week.")
 
     # Approve pending tool calls
-    while result.state.is_idle_with_pending_requests:
-        for req in result.get_pending_requests():
-            approval = Content(
-                type="function_result",
-                call_id=req.id,
-                output="APPROVED",
-            )
-            result = await workflow.resume(result, responses={req.id: approval})
+    while result.get_final_state() == WorkflowRunState.IDLE_WITH_PENDING_REQUESTS:
+        events = result.get_request_info_events()
+        responses = {e.request_id: "APPROVED" for e in events}
+        result = await workflow.run(responses=responses)
 
-    print(result.get_outputs(str))
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
@@ -495,26 +496,23 @@ client = AzureOpenAIChatClient.from_env()
 
 # ---- sub-workflow: summarise ----
 summariser = Agent(client, name="summariser", instructions="Summarise the input text.")
-sub_wb = WorkflowBuilder()
-sub_wb.add_executor(AgentExecutor(summariser), output_from="summariser")
-sub_workflow = sub_wb.build("summarise-wf")
+summariser_exec = AgentExecutor(summariser)
+sub_wb = WorkflowBuilder(name="summarise-wf", start_executor=summariser_exec, output_from=[summariser_exec])
+sub_workflow = sub_wb.build()
 
 # ---- parent workflow: fetch → summarise → format ----
 formatter = Agent(client, name="formatter", instructions="Format the summary as bullet points.")
 
-parent_wb = WorkflowBuilder()
-parent_wb.add_executor(
-    WorkflowExecutor(sub_workflow, id="summarise", allow_direct_output=False),
-    output_from="summarise",
-)
-parent_wb.add_executor(AgentExecutor(formatter), output_from="formatter")
-parent_wb.connect("summarise", "formatter")
-parent_workflow = parent_wb.build("pipeline-wf")
+sub_exec = WorkflowExecutor(sub_workflow, id="summarise", allow_direct_output=False)
+formatter_exec = AgentExecutor(formatter)
+parent_wb = WorkflowBuilder(name="pipeline-wf", start_executor=sub_exec, output_from=[formatter_exec])
+parent_wb.add_edge(sub_exec, formatter_exec)
+parent_workflow = parent_wb.build()
 
 async def main() -> None:
     long_text = "The quick brown fox..." * 20
     result: WorkflowRunResult = await parent_workflow.run(long_text)
-    print(result.get_outputs(str)[-1])
+    print(result.get_outputs()[-1])
 
 asyncio.run(main())
 ```
@@ -531,21 +529,18 @@ from agent_framework_openai import AzureOpenAIChatClient
 client = AzureOpenAIChatClient.from_env()
 
 inner_agent = Agent(client, name="inner")
-inner_wb = WorkflowBuilder()
-inner_wb.add_executor(AgentExecutor(inner_agent), output_from="inner")
-inner_wf = inner_wb.build("inner-wf")
+inner_exec = AgentExecutor(inner_agent)
+inner_wb = WorkflowBuilder(name="inner-wf", start_executor=inner_exec, output_from=[inner_exec])
+inner_wf = inner_wb.build()
 
 # allow_direct_output=True: sub-workflow outputs become parent workflow outputs
-outer_wb = WorkflowBuilder()
-outer_wb.add_executor(
-    WorkflowExecutor(inner_wf, id="inner_exec", allow_direct_output=True),
-    output_from="inner_exec",
-)
-outer_wf = outer_wb.build("outer-wf")
+wf_exec = WorkflowExecutor(inner_wf, id="inner_exec", allow_direct_output=True)
+outer_wb = WorkflowBuilder(name="outer-wf", start_executor=wf_exec, output_from=[wf_exec])
+outer_wf = outer_wb.build()
 
 async def main() -> None:
     result = await outer_wf.run("What is 2 + 2?")
-    print(result.get_outputs(str))
+    print(result.get_outputs())
 
 asyncio.run(main())
 ```
@@ -579,7 +574,7 @@ class WorkflowMessage:
 | `data` | `Any` | The payload dispatched to an executor's `@handler` |
 | `source_id` | `str` | Executor ID that emitted this message |
 | `target_id` | `str \| None` | Explicit routing target; `None` means broadcast-to-capable |
-| `type` | `MessageType` | `STANDARD`, `RESPONSE`, or `BROADCAST` |
+| `type` | `MessageType` | `STANDARD` or `RESPONSE` |
 | `trace_contexts` | `list[dict]` | W3C Trace Context headers from all contributing sources (fan-in) |
 | `source_span_ids` | `list[str]` | OpenTelemetry span IDs for linking |
 | `original_request_info_event` | `WorkflowEvent \| None` | Non-`None` when this is a response to a `request_info` event |
@@ -603,7 +598,7 @@ class WorkflowMessage:
 ```python
 from agent_framework import WorkflowContext, WorkflowMessage, executor, handler
 
-@executor(id="debug_sink", input=object, output=str)
+@executor(id="debug_sink", input=object, workflow_output=str)
 async def debug_sink(
     message: object,
     ctx: WorkflowContext[str, str],
@@ -658,7 +653,7 @@ print(fan_in_msg.source_span_id)  # 'span-a'
 
 **Module:** `agent_framework._workflows._checkpoint` (re-exported via `agent_framework`)
 
-`WorkflowCheckpoint` is the immutable snapshot of a complete workflow execution state at a superstep boundary. It is the unit of persistence stored by `CheckpointStorage` implementations and the structure exchanged between workflow runs to support pause/resume and fault-tolerance patterns.
+`WorkflowCheckpoint` is a mutable dataclass snapshot of a complete workflow execution state at a superstep boundary. It is the unit of persistence stored by `CheckpointStorage` implementations and the structure exchanged between workflow runs to support pause/resume and fault-tolerance patterns.
 
 ### Constructor (dataclass)
 
@@ -724,15 +719,20 @@ client = AzureOpenAIChatClient.from_env()
 agent = Agent(client, name="a")
 storage = InMemoryCheckpointStorage()
 
-wb = WorkflowBuilder()
-wb.add_executor(AgentExecutor(agent), output_from="a")
-workflow = wb.build("ckpt-chain", checkpoint_storage=storage)
+a_exec = AgentExecutor(agent)
+wb = WorkflowBuilder(
+    name="ckpt-chain",
+    start_executor=a_exec,
+    output_from=[a_exec],
+    checkpoint_storage=storage,
+)
+workflow = wb.build()
 
 async def main() -> None:
     await workflow.run("Step 1")
     await workflow.run("Step 2")
 
-    latest = await storage.get_latest(workflow.name)
+    latest = await storage.get_latest(workflow_name=workflow.name)
     assert latest is not None
     print(f"Latest: {latest.checkpoint_id}  iteration={latest.iteration_count}")
     print(f"Parent: {latest.previous_checkpoint_id}")
@@ -752,7 +752,7 @@ async def safe_restore(
     workflow_name: str,
     expected_hash: str,
 ) -> WorkflowCheckpoint | None:
-    checkpoint = await storage.get_latest(workflow_name)
+    checkpoint = await storage.get_latest(workflow_name=workflow_name)
     if checkpoint is None:
         return None
     if checkpoint.graph_signature_hash != expected_hash:
@@ -806,7 +806,7 @@ store = TodoSessionStore()
 
 ### Use with `TodoProvider`
 
-`TodoSessionStore` is passed to `TodoProvider` via the `store=` keyword argument (added in 1.19.0+). When omitted, `TodoProvider` defaults to `TodoFileStore`.
+`TodoSessionStore` is passed to `TodoProvider` via the `store=` keyword argument (added in 1.19.0+). When omitted, `TodoProvider` defaults to `TodoSessionStore`.
 
 ```python
 TodoProvider(store=TodoSessionStore())
@@ -888,16 +888,13 @@ task_agent = Agent(
     context_providers=[TodoProvider(store=store)],
 )
 
-wb = WorkflowBuilder()
-wb.add_executor(
-    AgentExecutor(task_agent, session=AgentSession(session_id="wf-session")),
-    output_from="task_agent",
-)
-workflow = wb.build("todo-wf")
+task_exec = AgentExecutor(task_agent, session=AgentSession(session_id="wf-session"))
+wb = WorkflowBuilder(name="todo-wf", start_executor=task_exec, output_from=[task_exec])
+workflow = wb.build()
 
 async def main() -> None:
     result = await workflow.run("Add buy groceries to my todo list.")
-    print(result.get_outputs(str)[-1])
+    print(result.get_outputs()[-1])
 
 asyncio.run(main())
 ```
@@ -1002,7 +999,7 @@ client = AzureOpenAIChatClient.from_env()
 agent = Agent(
     client,
     context_providers=[
-        SkillsProvider(skills=[UnitConverterSkill()]),
+        SkillsProvider(source=[UnitConverterSkill()]),
     ],
 )
 ```
@@ -1128,10 +1125,10 @@ docs_skill = InlineSkill(
 )
 
 # Aggregate multiple sources — could include FileSkillsSource, MCPSkillsSource, etc.
-from agent_framework._skills import InlineSkillsSource  # type: ignore[reportPrivateUsage]
+from agent_framework._skills import InMemorySkillsSource  # type: ignore[reportPrivateUsage]
 
-source_a = InlineSkillsSource([code_skill])
-source_b = InlineSkillsSource([docs_skill])
+source_a = InMemorySkillsSource([code_skill])
+source_b = InMemorySkillsSource([docs_skill])
 combined_source = AggregatingSkillsSource([source_a, source_b])
 
 agent = Agent(
@@ -1224,11 +1221,11 @@ skill_b = InlineSkill(
     instructions="# Skill B",
 )
 
-from agent_framework._skills import InlineSkillsSource  # type: ignore[reportPrivateUsage]
+from agent_framework._skills import InMemorySkillsSource  # type: ignore[reportPrivateUsage]
 
 combined = AggregatingSkillsSource([
-    InlineSkillsSource([skill_a]),
-    InlineSkillsSource([skill_b]),
+    InMemorySkillsSource([skill_a]),
+    InMemorySkillsSource([skill_b]),
 ])
 
 # Cache the combined source, per agent, refreshing every 10 minutes
