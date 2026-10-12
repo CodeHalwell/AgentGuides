@@ -129,7 +129,7 @@ async def run_with_checkpointing() -> None:
     print(outputs[0].text)
 
     # Verify a checkpoint was created
-    checkpoint_ids = await storage.list()
+    checkpoint_ids = await storage.list_checkpoint_ids(workflow_name="chat-wf")
     print(f"Checkpoints stored: {len(checkpoint_ids)}")
 
 asyncio.run(run_with_checkpointing())
@@ -140,21 +140,31 @@ asyncio.run(run_with_checkpointing())
 ```python
 import asyncio
 from agent_framework import (
-    Agent, AgentExecutor, WorkflowBuilder, WorkflowContext, executor,
+    Agent, AgentExecutor, WorkflowBuilder, WorkflowContext, executor, response_handler,
 )
 from agent_framework_openai import OpenAIChatClient
-from typing_extensions import Never
 
 client = OpenAIChatClient()
-approval_agent = Agent(client, instructions="You need human approval before proceeding.")
+agent = Agent(client, instructions="You are a helpful assistant.")
+exec_node = AgentExecutor(agent, id="main")
 
 @executor(id="approval-step")
 async def approval_executor(
-    msg: str, ctx: WorkflowContext[Never, str]
+    msg: str, ctx: WorkflowContext[str, str]
 ) -> None:
-    # Pause and ask the human for confirmation
-    approval = await ctx.request_info(str, "Proceed with this action? (yes/no)")
-    if approval.lower() == "yes":
+    # request_info(request_data, response_type) — returns None; workflow pauses
+    await ctx.request_info(
+        "Proceed with this action? (yes/no)",  # request_data
+        str,                                    # response_type
+    )
+
+@response_handler
+async def handle_approval(
+    original_request: str,
+    response: str,
+    ctx: WorkflowContext[str, str],
+) -> None:
+    if response.lower() == "yes":
         await ctx.yield_output("Action approved and completed.")
     else:
         await ctx.yield_output("Action cancelled by user.")
@@ -166,19 +176,20 @@ wf = WorkflowBuilder(
 ).build()
 
 async def main() -> None:
-    # Use streaming to intercept the request_info event
-    events_stream = wf.run("Proceed with the deployment.", stream=True)
-    async for event in events_stream:
+    # Phase 1: run until the workflow emits a request_info event
+    stream = wf.run("Proceed with the deployment.", stream=True)
+    pending_id: str | None = None
+    async for event in stream:
         if event.type == "request_info":
-            print(f"Workflow is paused — question: {event.data}")
-            # Resolve the request programmatically (or from user input)
-            await wf._runner_ctx.send_request_info_response(  # type: ignore[attr-defined]
-                event.request_id,
-                "yes",
-            )
-        elif event.type == "output":
-            print(f"Result: {event.data}")
+            print(f"Workflow paused — question: {event.data}")
+            pending_id = event.request_id
             break
+
+    # Phase 2: resume by supplying the operator's answer
+    if pending_id:
+        result = await wf.run(responses={pending_id: "yes"})
+        for out in result.get_outputs():
+            print(f"Result: {out.text}")
 
 asyncio.run(main())
 ```
@@ -268,7 +279,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Example 2 — Sync function executor with explicit types
+### Example 2 — Async function executor with explicit types
 
 ```python
 import asyncio
@@ -276,24 +287,19 @@ from agent_framework import executor, WorkflowBuilder, WorkflowContext
 from typing import Never
 import json
 
-# Sync function — runs in thread pool automatically
 @executor(id="json-parse", input=str, workflow_output=dict)
-def parse_json(raw: str, ctx: WorkflowContext[Never, dict]) -> None:
+async def parse_json(raw: str, ctx: WorkflowContext[Never, dict]) -> None:
     data = json.loads(raw)
-    # WorkflowContext.yield_output must still be called from a coroutine,
-    # but for sync executors returning a value is not supported directly —
-    # use an async wrapper or convert to async:
-    import asyncio
-    asyncio.get_event_loop().run_until_complete(ctx.yield_output(data))
+    await ctx.yield_output(data)
 ```
 
-> **Note:** Prefer `async def` executors to avoid `asyncio` gymnastics inside sync functions. Use sync only for pure CPU-bound transforms.
+> **Note:** Use `async def` executors so you can call `await ctx.yield_output()` directly. Sync functions run in a thread pool via `asyncio.to_thread()`, where the event loop is inaccessible, so they cannot call async context methods.
 
 ### Example 3 — Fan-out with multiple typed outputs
 
 ```python
 import asyncio
-from agent_framework import executor, WorkflowBuilder, WorkflowContext, FanOutEdgeGroup
+from agent_framework import executor, WorkflowBuilder, WorkflowContext
 from agent_framework import Agent, AgentExecutor
 from agent_framework_openai import OpenAIChatClient
 
@@ -303,8 +309,7 @@ french_agent = Agent(client, instructions="Answer only in French.")
 
 @executor(id="broadcast")
 async def broadcast(query: str, ctx: WorkflowContext[str]) -> None:
-    # Send the same message to both downstream agents
-    await ctx.send_message(query)
+    # One send_message is broadcast to all downstream agents in the fan-out group
     await ctx.send_message(query)
 
 eng_exec = AgentExecutor(english_agent, id="english")
@@ -312,7 +317,7 @@ fr_exec = AgentExecutor(french_agent, id="french")
 
 workflow = (
     WorkflowBuilder(name="multilingual", start_executor=broadcast)
-    .add_edge(FanOutEdgeGroup(broadcast, [eng_exec, fr_exec]))
+    .add_fan_out_edges(broadcast, [eng_exec, fr_exec])
     .build(output_from=[eng_exec, fr_exec])
 )
 
@@ -710,7 +715,7 @@ client = OpenAIChatClient()
 
 async def main() -> None:
     messages = [Message("user", ["What is 2 + 2?"])]
-    response: ChatResponse = await client.get_chat_response(messages)
+    response: ChatResponse = await client.get_response(messages)
 
     print(f"Text        : {response.text}")
     print(f"Model       : {response.model}")
@@ -738,7 +743,7 @@ async def main() -> None:
     messages = [Message("user", ["Tell me a haiku about the ocean."])]
 
     updates: list[ChatResponseUpdate] = []
-    async for update in client.get_streaming_chat_response(messages):
+    async for update in client.get_response(messages, stream=True):
         updates.append(update)
         # Print incremental text
         if update.text:
@@ -851,9 +856,10 @@ class TokenBudgetGuard(ChatMiddleware):
     def __init__(self, max_output_tokens: int) -> None:
         self._budget = max_output_tokens
 
-    async def on_response(self, context: ChatContext) -> None:
+    async def process(self, context: ChatContext, call_next) -> None:
+        await call_next()
         usage: UsageDetails | None = (
-            context.response.usage_details if context.response else None
+            context.result.usage_details if context.result else None
         )
         if usage:
             output_count = usage.get("output_token_count") or 0
