@@ -193,7 +193,7 @@ async def main() -> None:
     if pending_id:
         result = await wf.run(responses={pending_id: "yes"})
         for out in result.get_outputs():
-            print(f"Result: {out.text}")
+            print(f"Result: {out}")
 
 asyncio.run(main())
 ```
@@ -436,7 +436,7 @@ asyncio.run(main())
 ### Example 2 — Custom split strategy
 
 ```python
-from agent_framework import EvalItem, Message
+from agent_framework import EvalItem, Message, Content, ConversationSplit
 
 def split_before_tool_call(conversation: list[Message]) -> tuple[list[Message], list[Message]]:
     """Split just before the first tool-call message."""
@@ -444,14 +444,18 @@ def split_before_tool_call(conversation: list[Message]) -> tuple[list[Message], 
         for content in msg.contents or []:
             if content.type == "function_call":
                 return conversation[:i], conversation[i:]
-    # Fallback to LAST_TURN
-    from agent_framework import ConversationSplit
     return ConversationSplit.LAST_TURN(conversation)
 
 item = EvalItem(
     conversation=[
         Message("user", ["Find the price of AAPL."]),
-        Message("assistant", []),  # tool call happens here
+        Message("assistant", [
+            Content.from_function_call(
+                call_id="fc_1",
+                name="get_price",
+                arguments={"ticker": "AAPL"},
+            ),
+        ]),
     ],
     split_strategy=split_before_tool_call,
 )
