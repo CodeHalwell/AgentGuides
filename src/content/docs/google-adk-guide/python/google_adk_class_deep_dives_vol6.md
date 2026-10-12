@@ -360,7 +360,7 @@ Source-verified from `google/adk/workflow/_retry_config.py`:
 | `initial_delay` | `float \| None` | `1.0` s | Delay before the first retry |
 | `max_delay` | `float \| None` | `60.0` s | Ceiling on the delay between retries |
 | `backoff_factor` | `float \| None` | `2.0` | Delay multiplier applied after each failure |
-| `jitter` | `float \| None` | `1.0` | Random fraction of the delay added; `0.0` removes randomness |
+| `jitter` | `float \| None` | `1.0` | Symmetric signed offset applied to the delay, drawn from `[-jitter * delay, +jitter * delay]`; `0.0` removes randomness |
 | `exceptions` | `list[str \| type[BaseException]] \| None` | retry on all | Exception names or classes that trigger a retry |
 
 The `exceptions` field accepts both class references and string names — the validator converts classes to names so the config remains JSON-serialisable.
@@ -891,6 +891,8 @@ card = AgentCard(
     version="1.0.0",
     capabilities=AgentCapabilities(streaming=True),
     skills=[AgentSkill(id="summarise", name="Summarise", description="Summarise a document")],
+    default_input_modes=["text/plain"],
+    default_output_modes=["text/plain"],
 )
 
 remote_agent = RemoteA2aAgent(name="summariser", agent_card=card)
@@ -933,7 +935,7 @@ from google.adk.auth.auth_credential import (
 )
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 
-scheme = HTTPBearer()  # fastapi.openapi.models.HTTPBearer; ADK accepts SecurityScheme types
+scheme = HTTPBearer(scheme="bearer")  # fastapi.openapi.models.HTTPBearer; scheme field required
 credential = AuthCredential(
     auth_type=AuthCredentialTypes.HTTP,  # "http"
     http=HttpAuth(
