@@ -29,12 +29,14 @@ python -c "import pydantic_ai; print(pydantic_ai.__version__)"
 **Module:** `pydantic_ai.models.fallback`
 
 `FallbackModel` chains models so that when one fails (or its response is rejected) the next model
-in the list is tried. In 2.55.0 the `FallbackOn` type accepts three distinct shapes:
+in the list is tried. In 2.55.0 the `FallbackOn` type accepts four distinct standalone forms plus a
+Sequence that mixes them:
 
 | `fallback_on` top-level form | Element / what it matches |
 |---|---|
 | `type[Exception]` (e.g. `ModelAPIError`) | Single exception class — any instance triggers fallback |
 | `tuple[type[Exception], ...]` | Any of the listed exception classes |
+| `ExceptionHandler` callable `(exc: Exception) → bool` | Single predicate — return `True` to trigger fallback |
 | `ResponseHandler` callable `(ModelResponse) → bool` | Reject a successful response by content |
 | `Sequence[...]` (list) | Mixed list of exception types, `ExceptionHandler`, or `ResponseHandler` |
 
@@ -60,6 +62,7 @@ class FallbackModel(Model):
 FallbackOn = (
     type[Exception]                                      # single exception class
     | tuple[type[Exception], ...]                        # tuple of exception classes
+    | ExceptionHandler                                   # single predicate callable (exc) → bool
     | ResponseHandler                                    # single response-rejector callable
     | Sequence[type[Exception] | ExceptionHandler | ResponseHandler]  # mixed list
 )
