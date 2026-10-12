@@ -384,13 +384,13 @@ query_msgs, response_msgs = item.split_messages(split=my_custom_splitter)
 | `ConversationSplit.LAST_TURN` (default) | Everything up to and including the last user message is the query; everything after is the response. Evaluates whether the agent answered the *latest* question. |
 | `ConversationSplit.FULL` | First user message (+ preceding system messages) is the query; the entire remainder is the response. Evaluates whether the *whole conversation* served the original request. |
 
-### Example 1 — Build an eval dataset and run LocalEvaluator
+### Example 1 — Run LocalEvaluator via evaluate_agent
 
 ```python
 import asyncio
 from agent_framework import (
-    Agent, EvalItem, EvalResults, Message, LocalEvaluator,
-    keyword_check, tool_called_check, ExpectedToolCall, ConversationSplit,
+    Agent, EvalResults, LocalEvaluator, evaluate_agent,
+    keyword_check, tool_called_check, ExpectedToolCall,
 )
 from agent_framework_openai import OpenAIChatClient
 from agent_framework import tool
@@ -409,36 +409,26 @@ weather_agent = Agent(
     tools=[get_weather],
 )
 
-# Build eval items from expected conversations
-items = [
-    EvalItem(
-        conversation=[
-            Message("user", ["What is the weather in London?"]),
-            Message("assistant", []),  # Will be filled by evaluate_agent
-        ],
-        expected_output="London",
-        expected_tool_calls=[ExpectedToolCall(name="get_weather", arguments={"city": "London"})],
-    ),
-    EvalItem(
-        conversation=[
-            Message("user", ["What is the weather in Tokyo?"]),
-            Message("assistant", []),
-        ],
-        expected_tool_calls=[ExpectedToolCall(name="get_weather")],
-        split_strategy=ConversationSplit.FULL,  # evaluate entire trajectory
-    ),
-]
-
 local_eval = LocalEvaluator(
     keyword_check("Sunny"),
     tool_called_check("get_weather"),
 )
 
 async def main() -> None:
-    # LocalEvaluator.evaluate() takes EvalItem objects directly
-    results_list: list[EvalResults] = await local_eval.evaluate(items)
+    # evaluate_agent runs the agent against each query, then scores with each evaluator.
+    # Returns list[EvalResults] — one EvalResults per evaluator.
+    results_list: list[EvalResults] = await evaluate_agent(
+        agent=weather_agent,
+        queries=["What is the weather in London?", "What is the weather in Tokyo?"],
+        expected_tool_calls=[
+            [ExpectedToolCall(name="get_weather", arguments={"city": "London"})],
+            [ExpectedToolCall(name="get_weather")],
+        ],
+        evaluators=local_eval,
+    )
     for r in results_list:
-        print(f"{r.provider}: {r.passed} passed, {r.failed} failed")
+        pass_rate = r.passed / r.total if r.total else 0.0
+        print(f"{r.passed}/{r.total} passed ({pass_rate:.0%})")
 
 asyncio.run(main())
 ```
@@ -1092,7 +1082,7 @@ async def inspect_mcp_skills() -> None:
             # get_resource() fetches supporting files on demand
             resource = await skill.get_resource("guidelines.md")
             if resource:
-                print(f"  Resource: {(await resource.get_content())[:80]}...")
+                print(f"  Resource: {(await resource.read())[:80]}...")
 
 asyncio.run(inspect_mcp_skills())
 ```
