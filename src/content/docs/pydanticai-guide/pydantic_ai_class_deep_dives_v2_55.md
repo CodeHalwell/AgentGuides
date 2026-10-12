@@ -657,7 +657,7 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def expensive_lookup(query: str) -> str:
     return f"result for {query}"
 
@@ -688,11 +688,11 @@ from pydantic_ai.models.test import TestModel
 free_toolset = FunctionToolset()
 paid_toolset = FunctionToolset()
 
-@free_toolset.tool
+@free_toolset.tool_plain
 def free_tool(query: str) -> str:
     return f"free: {query}"
 
-@paid_toolset.tool
+@paid_toolset.tool_plain
 def paid_tool(query: str) -> str:
     return f"paid: {query}"
 
@@ -772,7 +772,7 @@ class AuditToolset(WrapperToolset):
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def add(a: int, b: int) -> int:
     return a + b
 
@@ -819,7 +819,7 @@ class TimestampedToolset(WrapperToolset):
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def greet(name: str) -> str:
     return f"Hello, {name}!"
 
@@ -1003,10 +1003,12 @@ asyncio.run(main())
 ### Example 2 — explicit fallback image model
 
 ```python
-# Requires OPENAI_API_KEY. Primary model handles chat; dall-e-3 handles image gen.
+# Requires OPENAI_API_KEY. Primary model handles chat; gpt-image-1 handles image gen.
 import asyncio
+from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
+from pydantic_ai.messages import ModelRequest, ToolReturnPart, BinaryImage
 
 agent = Agent(
     "openai:gpt-4o",
@@ -1020,7 +1022,16 @@ agent = Agent(
 
 async def main():
     result = await agent.run("A photo-realistic cat.")
-    print(result.output)
+    print(result.output)  # text companion from primary model
+    # For fallback paths the image lands in ToolReturnPart.files, not ModelResponse.images.
+    for msg in result.all_messages():
+        if isinstance(msg, ModelRequest):
+            for part in msg.parts:
+                if isinstance(part, ToolReturnPart):
+                    for f in part.files:
+                        if isinstance(f, BinaryImage):
+                            Path("cat.png").write_bytes(f.data)
+                            print(f"saved {f.media_type}, {len(f.data)} bytes")
 
 asyncio.run(main())
 ```
@@ -1030,8 +1041,10 @@ asyncio.run(main())
 ```python
 # Requires OPENAI_API_KEY. Primary model orchestrates; subagent handles image gen.
 import asyncio
+from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
+from pydantic_ai.messages import ModelRequest, ToolReturnPart, BinaryImage
 
 agent = Agent(
     "openai:gpt-4o-mini",
@@ -1045,7 +1058,17 @@ agent = Agent(
 
 async def main():
     result = await agent.run("A wide landscape painting.")
-    print(result.output)
+    print(result.output)  # text companion from primary model
+    # The subagent runs natively but returns its image through the tool-call mechanism;
+    # BinaryImage surfaces in ToolReturnPart.files on the outer agent's message history.
+    for msg in result.all_messages():
+        if isinstance(msg, ModelRequest):
+            for part in msg.parts:
+                if isinstance(part, ToolReturnPart):
+                    for f in part.files:
+                        if isinstance(f, BinaryImage):
+                            Path("landscape.png").write_bytes(f.data)
+                            print(f"saved {f.media_type}, {len(f.data)} bytes")
 
 asyncio.run(main())
 ```
@@ -1178,7 +1201,7 @@ agent = Agent(
     capabilities=[hooks],
 )
 
-@agent.tool
+@agent.tool_plain
 def double(n: int) -> int:
     return n * 2
 
