@@ -180,14 +180,15 @@ wf = WorkflowBuilder(
 ).build()
 
 async def main() -> None:
-    # Phase 1: run until the workflow emits a request_info event
+    # Phase 1: run until the workflow emits a request_info event.
+    # Do NOT break early — drain all events so the workflow reaches idle status
+    # before the next run() call, otherwise it raises RuntimeError.
     stream = wf.run("Proceed with the deployment.", stream=True)
     pending_id: str | None = None
     async for event in stream:
         if event.type == "request_info":
             print(f"Workflow paused — question: {event.data}")
             pending_id = event.request_id
-            break
 
     # Phase 2: resume by supplying the operator's answer
     if pending_id:
@@ -1336,8 +1337,14 @@ client = OpenAIChatClient()
 
 # Root directory is created lazily on first write
 store = FileSystemAgentFileStore(root_directory=Path("/var/app/agent-files"))
-# Use create_harness_agent() or ToolApprovalMiddleware in production for approval handling
-file_provider = FileAccessProvider(store=store)
+# disable_write_tool_approval=True lets writes run unattended in this demo.
+# In production, remove these flags and wire ToolApprovalMiddleware or
+# use create_harness_agent() to handle the approval handshake instead.
+file_provider = FileAccessProvider(
+    store=store,
+    disable_readonly_tool_approval=True,
+    disable_write_tool_approval=True,
+)
 
 agent = Agent(
     client,
