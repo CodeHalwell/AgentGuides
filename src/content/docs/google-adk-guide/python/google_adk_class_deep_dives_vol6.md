@@ -318,6 +318,7 @@ async def stream_chunks(text: str):
 
 ```python
 from google.adk.auth.auth_config import AuthConfig
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
 from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 from google.adk.workflow import FunctionNode
 
@@ -333,7 +334,17 @@ def call_protected_api(ctx) -> str:
     # Use creds.oauth2.access_token to call the API …
     return "api_result"
 
-auth_config = AuthConfig(auth_scheme=oidc_scheme)
+# raw_auth_credential must carry client_id and client_secret for OIDC flows
+auth_config = AuthConfig(
+    auth_scheme=oidc_scheme,
+    raw_auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.OPEN_ID_CONNECT,
+        oauth2=OAuth2Auth(
+            client_id="YOUR_CLIENT_ID",
+            client_secret="YOUR_CLIENT_SECRET",
+        ),
+    ),
+)
 protected_node = FunctionNode(
     func=call_protected_api,
     name="protected_api",
@@ -816,11 +827,11 @@ toolset = OpenAPIToolset(
 toolset = OpenAPIToolset(
     spec_dict=large_spec,
     tool_filter=["list_pets", "create_pet"],
-    tool_name_prefix="petstore_",  # → "petstore_list_pets", "petstore_create_pet"
+    tool_name_prefix="petstore",  # → "petstore_list_pets", "petstore_create_pet"
 )
 
-# Retrieve a single tool by name.
-create_tool = toolset.get_tool("petstore_create_pet")
+# get_tool() searches by the UNPREFIXED internal name; prefix is applied only via get_tools_with_prefix().
+create_tool = toolset.get_tool("create_pet")
 ```
 
 ---
@@ -851,6 +862,8 @@ Source-verified from `_remote_a2a_agent.py`:
 | `mode` | `"task" \| None` | `None` | `"task"` for sub-agent delegation (peer must call `finish_task`) |
 
 ### Basic usage — URL-based card
+
+`RemoteA2aAgent` requires the optional A2A SDK: `pip install google-adk[a2a]`.
 
 ```python
 from google.adk.agents import LlmAgent
