@@ -36,11 +36,11 @@ Sequence that mixes them:
 |---|---|
 | `type[Exception]` (e.g. `ModelAPIError`) | Single exception class — any instance triggers fallback |
 | `tuple[type[Exception], ...]` | Any of the listed exception classes |
-| `ExceptionHandler` callable `(exc: Exception) → bool` | Single predicate — return `True` to trigger fallback |
-| `ResponseHandler` callable `(ModelResponse) → bool` | Reject a successful response by content |
+| `ExceptionHandler` callable `(exc: Exception) → bool \| Awaitable[bool]` | Single predicate — return `True` to trigger fallback |
+| `ResponseHandler` callable `(ModelResponse) → bool \| Awaitable[bool]` | Reject a successful response by content |
 | `Sequence[...]` (list) | Mixed list of exception types, `ExceptionHandler`, or `ResponseHandler` |
 
-`ExceptionHandler` is `(exc: Exception) → bool`; return `True` to trigger fallback.
+`ExceptionHandler` is `(exc: Exception) → bool | Awaitable[bool]`; return `True` to trigger fallback.
 `ResponseHandler` lets you reject a successful response by inspecting its content — the next
 model's answer is substituted transparently, so callers never see the rejected response.
 
@@ -526,7 +526,7 @@ class ResolveModelId(AbstractCapability[AgentDepsT]):
     resolver: ModelIdResolver[AgentDepsT]
 ```
 
-### Example 1 — route by model-name prefix
+### Example 1 — exact name lookup via a lookup table
 
 ```python
 import asyncio
@@ -786,7 +786,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 2 — per-run context injection into tools
+### Example 2 — wrap every tool result with a timestamp
 
 ```python
 import asyncio
@@ -943,7 +943,7 @@ asyncio.run(main())
 **Module:** `pydantic_ai.capabilities.image_generation`
 
 `ImageGeneration` is the capability form of image generation. It automatically uses the model's
-**native** image generation when the model supports it (e.g., GPT-Image-1, Gemini Imagen),
+**native** image generation when the model supports it (e.g., `openai-responses:gpt-5.2`, Gemini Imagen),
 and falls back to a separate image model or a subagent when the primary model doesn't support it.
 
 ### Key fields (from source)
@@ -963,9 +963,12 @@ class ImageGeneration(NativeOrLocalTool[AgentDepsT]):
     dimensions: ImageDimensions | None = None
     aspect_ratio: ImageGenerationAspectRatio | None = None
 
-    # Passed to the native ImageGenerationTool:
-    quality: str | None = None
-    style: str | None = None
+    # Native ImageGenerationTool settings:
+    action: Literal['generate', 'edit', 'auto'] | None = None
+    background: Literal['transparent', 'opaque', 'auto'] | None = None
+    input_fidelity: Literal['high', 'low'] | None = None
+    moderation: Literal['auto', 'low'] | None = None
+    quality: Literal['low', 'medium', 'high', 'auto'] | None = None
 ```
 
 ### Example 1 — enable native image generation (model that supports it)
