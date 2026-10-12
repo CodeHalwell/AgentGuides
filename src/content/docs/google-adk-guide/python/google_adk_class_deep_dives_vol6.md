@@ -317,7 +317,7 @@ async def stream_chunks(text: str):
 ### Node with auth requirement
 
 ```python
-from google.adk.auth.auth_config import AuthConfig
+from google.adk.auth.auth_tool import AuthConfig  # auth_config module does not exist; AuthConfig lives in auth_tool
 from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, OAuth2Auth
 from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 from google.adk.workflow import FunctionNode
@@ -574,9 +574,9 @@ Source: `LlmAgent.mode: Literal['chat', 'task', 'single_turn'] | None = None`
 
 | Mode | Behaviour |
 |---|---|
-| `None` (default) | Multi-turn chat; agent decides when to call tools and when to finish |
-| `'chat'` | Explicit multi-turn; same as `None` but the intent is declared |
-| `'single_turn'` | Runs exactly one LLM call; no multi-turn loop; used in workflow nodes |
+| `None` (default) | Context-dependent: resolves to `'single_turn'` when the agent runs as a workflow node, `'chat'` otherwise |
+| `'chat'` | Explicit multi-turn loop; agent decides when to stop |
+| `'single_turn'` | Single-turn mode — runs one agentic loop until a final response (may make multiple model/tool round-trips); used in workflow nodes |
 | `'task'` | Task-oriented; agent must call `finish_task(result=...)` to signal completion; used as a sub-agent of another `LlmAgent` that delegates |
 
 ```python
@@ -1181,13 +1181,17 @@ app = App(name="pubsub_processor", root_agent=processor)
 runner = InMemoryRunner(app=app)
 
 async def process_subscription(subscription: str):
+    from google.genai import types as genai_types
     session = await runner.session_service.create_session(
         app_name="pubsub_processor", user_id="worker"
     )
     async for event in runner.run_async(
         user_id="worker",
         session_id=session.id,
-        new_message=f"Process messages from {subscription}",
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text=f"Process messages from {subscription}")],
+        ),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
