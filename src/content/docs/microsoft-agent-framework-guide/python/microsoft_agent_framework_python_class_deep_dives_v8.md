@@ -140,34 +140,38 @@ asyncio.run(run_with_checkpointing())
 ```python
 import asyncio
 from agent_framework import (
-    Agent, AgentExecutor, WorkflowBuilder, WorkflowContext, executor, response_handler,
+    Executor, WorkflowBuilder, WorkflowContext, handler, response_handler,
 )
-from agent_framework_openai import OpenAIChatClient
+from typing_extensions import Never
 
-client = OpenAIChatClient()
-agent = Agent(client, instructions="You are a helpful assistant.")
-exec_node = AgentExecutor(agent, id="main")
+# Use an Executor subclass so @response_handler can be a registered method.
+# (The @executor decorator creates a standalone FunctionExecutor and cannot
+# carry @response_handler methods; use a class for any HITL step.)
+class ApprovalExecutor(Executor):
+    def __init__(self) -> None:
+        super().__init__(id="approval-step")
 
-@executor(id="approval-step")
-async def approval_executor(
-    msg: str, ctx: WorkflowContext[str, str]
-) -> None:
-    # request_info(request_data, response_type) — returns None; workflow pauses
-    await ctx.request_info(
-        "Proceed with this action? (yes/no)",  # request_data
-        str,                                    # response_type
-    )
+    @handler
+    async def run(self, msg: str, ctx: WorkflowContext[Never, str]) -> None:
+        # request_info(request_data, response_type) — returns None; workflow pauses
+        await ctx.request_info(
+            "Proceed with this action? (yes/no)",  # request_data
+            str,                                    # response_type
+        )
 
-@response_handler
-async def handle_approval(
-    original_request: str,
-    response: str,
-    ctx: WorkflowContext[str, str],
-) -> None:
-    if response.lower() == "yes":
-        await ctx.yield_output("Action approved and completed.")
-    else:
-        await ctx.yield_output("Action cancelled by user.")
+    @response_handler
+    async def handle_approval(
+        self,
+        original_request: str,
+        response: str,
+        ctx: WorkflowContext[Never, str],
+    ) -> None:
+        if response.lower() == "yes":
+            await ctx.yield_output("Action approved and completed.")
+        else:
+            await ctx.yield_output("Action cancelled by user.")
+
+approval_executor = ApprovalExecutor()
 
 wf = WorkflowBuilder(
     name="approval-wf",
@@ -1283,6 +1287,8 @@ The root directory is **not** created at construction — it is created lazily o
 
 ### Example 1 — Test an agent with InMemoryAgentFileStore
 
+> **Approval note:** `FileAccessProvider` tools require user approval by default. In production use `ToolApprovalMiddleware` to handle the approval handshake. For unattended tests, pass `disable_readonly_tool_approval=True` (read-only tools) or `disable_write_tool_approval=True` (write tools) to `FileAccessProvider`.
+
 ```python
 import asyncio
 from agent_framework import (
@@ -1293,7 +1299,8 @@ from agent_framework_openai import OpenAIChatClient
 client = OpenAIChatClient()
 
 store = InMemoryAgentFileStore()
-file_provider = FileAccessProvider(store=store)
+# Disable read-only approval for this automated test
+file_provider = FileAccessProvider(store=store, disable_readonly_tool_approval=True)
 
 agent = Agent(
     client,
@@ -1321,6 +1328,8 @@ asyncio.run(main())
 
 ### Example 2 — Production setup with FileSystemAgentFileStore
 
+> **Approval note:** In production, wire `ToolApprovalMiddleware` or use `create_harness_agent()` — both handle the approval handshake that `FileAccessProvider` requires before tools execute.
+
 ```python
 import asyncio
 from pathlib import Path
@@ -1333,6 +1342,7 @@ client = OpenAIChatClient()
 
 # Root directory is created lazily on first write
 store = FileSystemAgentFileStore(root_directory=Path("/var/app/agent-files"))
+# Use create_harness_agent() or ToolApprovalMiddleware in production for approval handling
 file_provider = FileAccessProvider(store=store)
 
 agent = Agent(
