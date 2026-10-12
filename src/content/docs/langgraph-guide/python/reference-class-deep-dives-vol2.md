@@ -112,7 +112,9 @@ cfg = {"configurable": {"thread_id": "delta-demo"}}
 result = graph.invoke({"log": [], "step": 0}, cfg)
 print(result["log"])   # ['step-0-ran']
 
-result = graph.invoke(None, cfg)
+# Pass explicit input to re-run the graph on the same thread.
+# invoke(None, cfg) resumes an interrupted graph; for a completed graph, pass actual input.
+result = graph.invoke({"step": result["step"]}, cfg)
 print(result["log"])   # ['step-0-ran', 'step-1-ran']
 ```
 
@@ -219,9 +221,10 @@ class EncryptedSerializer(SerializerProtocol):
 
 `EncryptedSerializer` wraps any `SerializerProtocol` and a `CipherProtocol`
 implementation. On `dumps_typed` it serializes then encrypts; on `loads_typed` it
-decrypts first. The encoded type string carries the cipher name as a suffix
-(`"json+aes"`) so unencrypted blobs written before encryption was added can still
-be read transparently.
+decrypts first. The encoded type string carries the cipher name as a suffix appended to the inner
+serializer's type tag (e.g., `"msgpack+aes"` for Python dicts, since
+`JsonPlusSerializer` uses msgpack encoding for most Python objects) so unencrypted
+blobs written before encryption was added can still be read transparently.
 
 The built-in `from_pycryptodome_aes` factory uses **AES-EAX** (authenticated
 encryption) from the `pycryptodome` package. EAX mode provides both confidentiality
@@ -246,7 +249,7 @@ def handler(state: S) -> dict:
 
 
 # AES key must be exactly 16, 24, or 32 bytes.
-key = b"my-secret-key-32bytes-padding!!"  # 32 bytes
+key = b"my-secret-key-padded-to-32bytes!"  # 32 bytes
 
 encrypted_serde = EncryptedSerializer.from_pycryptodome_aes(key=key)
 
@@ -302,7 +305,7 @@ import base64
 import os
 
 
-class Rot13Cipher(CipherProtocol):
+class XorCipher(CipherProtocol):
     """Toy XOR cipher — NOT for production. Illustrates the interface."""
 
     def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
@@ -316,11 +319,12 @@ class Rot13Cipher(CipherProtocol):
         return bytes(b ^ key for b in ciphertext)
 
 
-custom_serde = EncryptedSerializer(cipher=Rot13Cipher())
+custom_serde = EncryptedSerializer(cipher=XorCipher())
 
-# The type string on encrypted data will be "json+xor"
+# The type string on encrypted data will be "msgpack+xor" because
+# JsonPlusSerializer uses msgpack encoding for Python dicts.
 enc_typ, enc_data = custom_serde.dumps_typed({"hello": "world"})
-print(enc_typ)           # 'json+xor'
+print(enc_typ)           # 'msgpack+xor'
 recovered = custom_serde.loads_typed((enc_typ, enc_data))
 print(recovered)         # {'hello': 'world'}
 ```
@@ -397,7 +401,7 @@ import asyncio
 try:
     asyncio.run(graph.ainvoke({"result": ""}))
 except Exception as e:
-    print(type(e).__name__, e)   # NodeTimeoutError (or asyncio.CancelledError)
+    print(type(e).__name__, e)   # NodeTimeoutError
 ```
 
 ### Example 3b — Idle timeout with LLM token refreshes
@@ -522,98 +526,61 @@ Phase 1 (collecting): each named writer sends its token via `update()`.
 Phase 2 (gating): something calls `finish()`. Only then does `is_available()` → `True`.  
 After downstream reads the channel, `consume()` resets it for the next cycle.
 
-### Example 4a — Two-phase fan-out synchronisation
+### Example 4a — Direct two-phase behaviour (unit test style)
+
+`NamedBarrierValueAfterFinish` is most naturally exercised by calling its methods
+directly. The two-phase contract requires explicit `finish()` before `is_available()`
+returns `True` — wiring this into graph nodes requires custom runtime integration
+(e.g., a coordinator node that marks the channel finished via a dedicated signal).
+For graph-level fan-in without the extra phase, use `NamedBarrierValue` instead.
 
 ```python
-from typing import Annotated
-from typing_extensions import TypedDict
 from langgraph.channels.named_barrier_value import NamedBarrierValueAfterFinish
-from langgraph.graph import StateGraph, START, END
 
-WORKERS = {"worker_a", "worker_b", "worker_c"}
+bv = NamedBarrierValueAfterFinish(str, {"worker_a", "worker_b", "worker_c"})
 
+# Phase 1 — workers register
+bv.update(["worker_a"])
+print(bv.is_available())   # False — not all names seen yet
 
-class PipelineState(TypedDict):
-    # barrier collects tokens from all three workers; it does not fire
-    # until a separate "close_barrier" node calls finish() on the channel.
-    barrier: Annotated[
-        None,
-        NamedBarrierValueAfterFinish(str, WORKERS),
-    ]
-    report: str
+bv.update(["worker_b"])
+bv.update(["worker_c"])
+print(bv.is_available())   # False — all names seen but finish() not called yet
 
+# Phase 2 — coordinator closes the barrier
+finished = bv.finish()
+print(finished)            # True  — all names seen AND first finish() call
+print(bv.is_available())   # True  — now available for downstream consumption
 
-def worker_a(state: PipelineState) -> dict:
-    return {"barrier": "worker_a"}
-
-
-def worker_b(state: PipelineState) -> dict:
-    return {"barrier": "worker_b"}
-
-
-def worker_c(state: PipelineState) -> dict:
-    return {"barrier": "worker_c"}
-
-
-def close_barrier(state: PipelineState) -> dict:
-    # After all workers report, a coordinator node calls finish().
-    # The barrier channel becomes available on the *next* step.
-    # NOTE: in practice the channel's finish() is called internally
-    # by the graph runtime when all names are collected and this node
-    # writes to the barrier key with a finish signal.
-    # Use NamedBarrierValue for simpler same-step synchronisation.
-    return {}
-
-
-def aggregator(state: PipelineState) -> dict:
-    return {"report": "all workers done"}
-
-
-builder = StateGraph(PipelineState)
-builder.add_node("worker_a", worker_a)
-builder.add_node("worker_b", worker_b)
-builder.add_node("worker_c", worker_c)
-builder.add_node("aggregator", aggregator)
-
-# All three workers run in parallel from START
-builder.add_edge(START, "worker_a")
-builder.add_edge(START, "worker_b")
-builder.add_edge(START, "worker_c")
-# aggregator depends on barrier — only runs when all three have reported
-builder.add_edge(["worker_a", "worker_b", "worker_c"], "aggregator")
-builder.add_edge("aggregator", END)
-
-graph = builder.compile()
-result = graph.invoke({"barrier": None, "report": ""})
-print(result["report"])   # 'all workers done'
+# Downstream reads the channel, then consume() resets it for the next cycle
+consumed = bv.consume()
+print(consumed)            # True
+print(bv.is_available())   # False — back to initial state for next round
 ```
 
-### Example 4b — Comparing `NamedBarrierValue` vs `NamedBarrierValueAfterFinish`
+### Example 4b — When to use each barrier variant
 
 ```python
-# NamedBarrierValue — becomes available in the SAME super-step once all names seen
+# NamedBarrierValue — use for standard fan-in: becomes available in the SAME
+# super-step once all named writers have reported. Simple and graph-native.
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 
-# NamedBarrierValueAfterFinish — needs an extra finish() call; safer for
-# workflows where a coordinator must explicitly close the phase before
-# downstream nodes are triggered.
+nv = NamedBarrierValue(str, {"a", "b"})
+nv.update(["a"])
+nv.update(["b"])
+print(nv.is_available())   # True — ready as soon as all names seen
+
+# NamedBarrierValueAfterFinish — use when a coordinator must explicitly close
+# the collection phase before downstream nodes are triggered. The extra
+# finish() call provides an additional synchronisation gate.
 from langgraph.channels.named_barrier_value import NamedBarrierValueAfterFinish
 
-# Direct unit-level behaviour check:
 bv = NamedBarrierValueAfterFinish(str, {"a", "b"})
 bv.update(["a"])
-print(bv.is_available())   # False — only one writer so far
-
 bv.update(["b"])
-print(bv.is_available())   # False — all seen but finish() not called
-
-result = bv.finish()
-print(result)              # True — all names seen AND first finish call
-print(bv.is_available())   # True  — now available
-
-consumed = bv.consume()
-print(consumed)            # True — resets seen and finished
-print(bv.is_available())   # False — back to initial state
+print(bv.is_available())   # False — all seen but finish() not called yet
+bv.finish()
+print(bv.is_available())   # True  — available only after finish()
 ```
 
 ---
@@ -790,9 +757,9 @@ via `invoke(..., durability=...)` or `stream(..., durability=...)`.
 | `"async"` | While the next step runs | May lose the latest checkpoint | Lower (overlaps with execution) |
 | `"exit"` | Only when the graph exits normally | Entire run may be lost | Lowest |
 
-`"sync"` is the default for in-memory saves. `"async"` is common for fast Postgres
-deployments where a brief double-execution on restart is acceptable. `"exit"` is
-appropriate for fire-and-forget batch jobs where persistence on crash is not required.
+`"async"` is the default. `"sync"` is the safest option — no checkpoint can be lost on
+crash — but it adds latency between steps. `"exit"` is appropriate for fire-and-forget
+batch jobs where persistence on crash is not required.
 
 ### Example 6a — Sync vs async durability
 
@@ -829,11 +796,12 @@ r1 = graph.invoke({"count": 0}, cfg, durability="sync")
 print(r1["count"])   # 1
 
 # "async": checkpoint overlaps next step. Faster, tiny risk window.
-r2 = graph.invoke(None, cfg, durability="async")
+# Pass explicit input (not None) to start a new run on the completed thread.
+r2 = graph.invoke({"count": 0}, cfg, durability="async")
 print(r2["count"])   # 2
 
 # "exit": checkpoint only after full run. Fastest, no mid-run recovery.
-r3 = graph.invoke(None, cfg, durability="exit")
+r3 = graph.invoke({"count": 0}, cfg, durability="exit")
 print(r3["count"])   # 3
 ```
 
@@ -982,10 +950,9 @@ graph = (
 )
 
 for event in graph.stream({"x": 0, "y": 0}, stream_mode="tasks"):
-    data = event["data"] if isinstance(event, dict) and "data" in event else event
-    # v1 format: (mode, data) tuple
-    # v2 format (version="v2"): TasksStreamPart TypedDict
-    print(data)
+    # v1 with a single stream_mode yields payload dicts directly (no wrapper).
+    # For typed StreamPart envelopes, use version="v2" (see Example 7b).
+    print(event)
 
 # Typical output (v1):
 # {'id': '...', 'name': 'a', 'input': {'x': 0, 'y': 0}, 'triggers': ['__start__']}
@@ -1122,7 +1089,7 @@ def inc(state: S) -> dict:
 
 
 def double(state: S) -> dict:
-    return {"n": state["n"]}   # doesn't change n but triggers a checkpoint
+    return {}   # no state update — just exists to trigger another checkpoint
 
 
 checkpointer = InMemorySaver()
@@ -1316,17 +1283,26 @@ tool_node = ToolNode(tools)
 
 
 # NOTE: requires a real LLM; shown here with a mock for illustration.
+# The mock requests tools on the first call, then returns a terminal message
+# so the graph reaches END instead of looping.
 class MockLLM:
+    def __init__(self):
+        self._calls = 0
+
     def bind_tools(self, _tools): return self
+
     def invoke(self, messages):
         from langchain_core.messages import AIMessage
-        return AIMessage(
-            content="",
-            tool_calls=[
-                {"name": "add", "args": {"a": 3, "b": 4}, "id": "call-1", "type": "tool_call"},
-                {"name": "multiply", "args": {"a": 3, "b": 4}, "id": "call-2", "type": "tool_call"},
-            ]
-        )
+        self._calls += 1
+        if self._calls == 1:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "add", "args": {"a": 3, "b": 4}, "id": "call-1", "type": "tool_call"},
+                ]
+            )
+        # Second call: respond with final answer — no more tool calls
+        return AIMessage(content="The answer is 7.")
 
 
 llm = MockLLM().bind_tools(tools)
@@ -1353,15 +1329,15 @@ graph = builder.compile(
 
 cfg = {"configurable": {"thread_id": "tool-stream"}}
 
-# run.tool_calls gives a StreamChannel of ToolCallStream handles
+# graph.stream(stream_mode="tools") yields raw tool protocol event dicts.
+# For typed ToolCallStream handles via run.tool_calls, use stream_events(version="v3")
+# instead — ToolCallTransformer projects the tools channel into that API.
 for chunk in graph.stream(
-    {"messages": [("user", "Add 3+4 and multiply 3*4")]},
+    {"messages": [("user", "Add 3+4")]},
     cfg,
     stream_mode="tools",
 ):
-    # chunk is a raw tool protocol event dict
-    # Use run.tool_calls for typed per-handle access instead
-    print(chunk)
+    print(chunk)   # raw protocol dict
 ```
 
 ### Example 9b — Async per-tool streaming with delta iteration
@@ -1411,10 +1387,12 @@ print(stream.output)      # 'final search result'
 print(list(stream))       # ['partial result 1', 'partial result 2']
 ```
 
-> **Note:** `ToolCallTransformer` requires `stream_mode="tools"` to be active
-> (`required_stream_modes = ("tools",)`). Including it in `transformers=[...]` without
-> also using `stream_mode="tools"` means no events reach the transformer. The `tools`
-> channel is opt-in and does not appear by default.
+> **Note:** When using `stream_events(..., version="v3")`, registering
+> `ToolCallTransformer` via `transformers=[ToolCallTransformer]` is sufficient —
+> its `required_stream_modes = ("tools",)` declaration causes the runtime to subscribe
+> automatically. Callers do **not** also pass `stream_mode="tools"` to `stream_events`.
+> `stream_mode="tools"` is only relevant for plain `graph.stream(stream_mode="tools")`,
+> which yields raw protocol dicts without the transformer projection.
 
 ---
 
@@ -1535,25 +1513,27 @@ When a graph step involved parallel tasks, you can target a specific task's outp
 by providing `task_id`. This is an advanced use case for patching individual
 branch outputs during human-in-the-loop review.
 
+Use plain (non-reduce) fields so the `StateUpdate` replaces the value rather
+than appending to an accumulator.
+
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import StateUpdate
-import operator
-from typing import Annotated
 
 
 class S(TypedDict):
-    results: Annotated[list[str], operator.add]
+    result_a: str   # plain last-value field — patch replaces the value
+    result_b: str
 
 
 def branch_a(state: S) -> dict:
-    return {"results": ["branch_a_output"]}
+    return {"result_a": "branch_a_output"}
 
 
 def branch_b(state: S) -> dict:
-    return {"results": ["branch_b_output"]}
+    return {"result_b": "branch_b_output"}
 
 
 checkpointer = InMemorySaver()
@@ -1567,8 +1547,8 @@ builder.add_edge(["branch_a", "branch_b"], END)
 graph = builder.compile(checkpointer=checkpointer)
 
 cfg = {"configurable": {"thread_id": "parallel-update"}}
-result = graph.invoke({"results": []}, cfg)
-print(result["results"])   # ['branch_a_output', 'branch_b_output']
+result = graph.invoke({"result_a": "", "result_b": ""}, cfg)
+print(result["result_a"], result["result_b"])   # branch_a_output  branch_b_output
 
 # Patch branch_a's output without re-running any node
 state = graph.get_state(cfg)
@@ -1578,12 +1558,15 @@ graph.bulk_update_state(
     cfg,
     supersteps=[
         [StateUpdate(
-            values={"results": ["branch_a_corrected"]},
+            values={"result_a": "branch_a_corrected"},
             as_node="branch_a",
             task_id=task_a.id,
         )]
     ],
 )
+state = graph.get_state(cfg)
+print(state.values["result_a"])   # 'branch_a_corrected'
+print(state.values["result_b"])   # 'branch_b_output'  — unchanged
 ```
 
 ---
