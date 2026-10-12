@@ -580,7 +580,7 @@ Source: `LlmAgent.mode: Literal['chat', 'task', 'single_turn'] | None = None`
 | `'task'` | Task-oriented; agent must call `finish_task(result=...)` to signal completion; used as a sub-agent of another `LlmAgent` that delegates |
 
 ```python
-# Single-turn: one LLM call, ideal as a workflow node.
+# Single-turn: one agentic loop until a final response (may make multiple model/tool round-trips).
 summariser = LlmAgent(
     name="summariser",
     model="gemini-2.5-flash",
@@ -903,7 +903,7 @@ card = AgentCard(
     url="https://summariser.example.com/",
     version="1.0.0",
     capabilities=AgentCapabilities(streaming=True),
-    skills=[AgentSkill(id="summarise", name="Summarise", description="Summarise a document")],
+    skills=[AgentSkill(id="summarise", name="Summarise", description="Summarise a document", tags=["summarization"])],
     default_input_modes=["text/plain"],
     default_output_modes=["text/plain"],
 )
@@ -1102,7 +1102,7 @@ Note: `tool_filter=None` (the default) selects **all** tools. `tool_filter=[]` s
 |---|---|---|
 | `publish_message` | `topic_name`, `message`, `attributes?`, `ordering_key?` | `{"message_id": "..."}` or `{"status": "ERROR", ...}` |
 | `pull_messages` | `subscription_name`, `max_messages?` | `{"messages": [{"message_id": ..., "data": ..., "ack_id": ...}]}` |
-| `acknowledge_messages` | `subscription_name`, `ack_ids` | `{"status": "OK"}` or `{"status": "ERROR", ...}` |
+| `acknowledge_messages` | `subscription_name`, `ack_ids` | `{"status": "SUCCESS"}` or `{"status": "ERROR", ...}` |
 
 ### Basic setup
 
