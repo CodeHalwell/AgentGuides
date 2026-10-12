@@ -243,11 +243,11 @@ The decorator creates a `FunctionExecutor` instance from the decorated function.
 ```python
 import asyncio
 from agent_framework import (
-    Agent, AgentExecutor, FunctionExecutor,
+    Agent, AgentExecutor, AgentExecutorResponse, FunctionExecutor,
     WorkflowBuilder, WorkflowContext, executor,
 )
 from agent_framework_openai import OpenAIChatClient
-from typing import Never
+from typing_extensions import Never
 
 client = OpenAIChatClient()
 summariser = Agent(client, instructions="Summarise the user's text in one sentence.")
@@ -262,14 +262,15 @@ summarise_exec = AgentExecutor(summariser, id="summarise")
 
 # Step 3: post-process output (function executor — yields final workflow output)
 @executor(id="format-output")
-async def format_output(summary: str, ctx: WorkflowContext[Never, str]) -> None:
-    await ctx.yield_output(f"Summary: {summary}")
+async def format_output(summary: AgentExecutorResponse, ctx: WorkflowContext[Never, str]) -> None:
+    await ctx.yield_output(f"Summary: {summary.agent_response.text}")
 
 workflow = (
-    WorkflowBuilder(name="summarise-pipeline", start_executor=normalise)
+    WorkflowBuilder(name="summarise-pipeline", start_executor=normalise,
+                    output_from=[format_output])
     .add_edge(normalise, summarise_exec)
     .add_edge(summarise_exec, format_output)
-    .build(output_from=[format_output])
+    .build()
 )
 
 async def main() -> None:
@@ -284,7 +285,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import executor, WorkflowBuilder, WorkflowContext
-from typing import Never
+from typing_extensions import Never
 import json
 
 @executor(id="json-parse", input=str, workflow_output=dict)
@@ -316,9 +317,10 @@ eng_exec = AgentExecutor(english_agent, id="english")
 fr_exec = AgentExecutor(french_agent, id="french")
 
 workflow = (
-    WorkflowBuilder(name="multilingual", start_executor=broadcast)
+    WorkflowBuilder(name="multilingual", start_executor=broadcast,
+                    output_from=[eng_exec, fr_exec])
     .add_fan_out_edges(broadcast, [eng_exec, fr_exec])
-    .build(output_from=[eng_exec, fr_exec])
+    .build()
 )
 
 async def main() -> None:
@@ -383,7 +385,7 @@ query_msgs, response_msgs = item.split_messages(split=my_custom_splitter)
 ```python
 import asyncio
 from agent_framework import (
-    Agent, EvalItem, Message, evaluate_agent, LocalEvaluator,
+    Agent, EvalItem, EvalResults, Message, LocalEvaluator,
     keyword_check, tool_called_check, ExpectedToolCall, ConversationSplit,
 )
 from agent_framework_openai import OpenAIChatClient
@@ -429,12 +431,8 @@ local_eval = LocalEvaluator(
 )
 
 async def main() -> None:
-    # evaluate_agent accepts either EvalItem list or plain string queries
-    results_list = await evaluate_agent(
-        agent=weather_agent,
-        queries=items,
-        evaluators=local_eval,
-    )
+    # LocalEvaluator.evaluate() takes EvalItem objects directly
+    results_list: list[EvalResults] = await local_eval.evaluate(items)
     for r in results_list:
         print(f"{r.provider}: {r.passed} passed, {r.failed} failed")
 
@@ -499,9 +497,7 @@ EvalResults(
 r.passed          # int — count of passing items
 r.failed          # int — count of failing items
 r.total           # int — passed + failed
-r.pass_rate       # float — passed / total (0.0 when total == 0)
-r.is_completed    # bool — status == "completed"
-r.is_failed       # bool — status == "failed"
+r.all_passed      # bool — True when failed == 0
 
 r.raise_for_status()   # raises EvalNotPassedError if any items failed
 ```
@@ -551,7 +547,8 @@ async def main() -> None:
 
     for r in results_list:
         print(f"Provider : {r.provider}")
-        print(f"Pass rate: {r.pass_rate:.0%}  ({r.passed}/{r.total})")
+        pass_rate = r.passed / r.total if r.total else 0.0
+        print(f"Pass rate: {pass_rate:.0%}  ({r.passed}/{r.total})")
         print(f"Report   : {r.report_url or 'N/A'}")
 
         for item in r.items:
@@ -612,9 +609,10 @@ research_exec = AgentExecutor(research, id="research")
 writer_exec = AgentExecutor(writer, id="writer")
 
 wf = (
-    WorkflowBuilder(name="research-wf", start_executor=research_exec)
+    WorkflowBuilder(name="research-wf", start_executor=research_exec,
+                    output_from=[writer_exec])
     .add_edge(research_exec, writer_exec)
-    .build(output_from=[writer_exec])
+    .build()
 )
 
 local = LocalEvaluator(keyword_check("summary"))
@@ -626,7 +624,8 @@ async def main() -> None:
         evaluators=local,
     )
     for r in results_list:
-        print(f"{r.provider}: {r.pass_rate:.0%}")
+        pass_rate = r.passed / r.total if r.total else 0.0
+        print(f"Pass rate: {pass_rate:.0%}  ({r.passed}/{r.total})")
         for agent_name, sub in r.sub_results.items():
             print(f"  {agent_name}: {sub.passed}/{sub.total}")
 
@@ -656,6 +655,7 @@ ChatResponse(
     finish_reason: FinishReasonLiteral | FinishReason | None = None,
     usage_details: UsageDetails | None = None,
     value: ResponseModelT | None = None,       # structured output
+    response_format: StructuredResponseFormat = None,
     continuation_token: ContinuationToken | None = None,
     additional_properties: dict[str, Any] | None = None,
     raw_representation: Any | None = None,
@@ -1017,10 +1017,11 @@ MCPSkillsSource(
     *,
     session_provider: Callable[[], ClientSession] | None = None,
     # archive options
-    archive_max_size_bytes: int = 10 * 1024 * 1024,     # 10 MB default
-    archive_max_member_count: int = 1000,
-    archive_max_skill_md_size_bytes: int = 256 * 1024,  # 256 KB
-    archive_max_resource_size_bytes: int = 1024 * 1024, # 1 MB
+    archive_resource_extensions: tuple[str, ...] | None = None,
+    archive_resource_search_depth: int = 2,
+    archive_max_file_count: int = 20,
+    archive_max_size_bytes: int = 1024 * 1024,           # 1 MB default
+    archive_max_uncompressed_size_bytes: int = 1024 * 1024,  # 1 MB default
 )
 ```
 
@@ -1038,7 +1039,7 @@ from agent_framework_openai import OpenAIChatClient
 client = OpenAIChatClient()
 
 async def main() -> None:
-    async with MCPStdioTool(command=["python3", "my_skill_server.py"]) as mcp:
+    async with MCPStdioTool(name="skill-server", command="python3", args=["my_skill_server.py"]) as mcp:
         # Use the live MCP session for skill discovery
         source = MCPSkillsSource(session_provider=lambda: mcp.session)
 
@@ -1055,36 +1056,41 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Example 2 — Archive-based skills with digest verification
+### Example 2 — Archive-based skills with custom limits
 
 ```python
 import asyncio
-from agent_framework import MCPSkillsSource, SkillsSourceContext, Agent
+from agent_framework import (
+    Agent, MCPStdioTool, MCPSkillsSource, SkillsSourceContext, SkillsProvider,
+)
 from agent_framework_openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 agent = Agent(client, instructions="Assistant")
 
-# Configure archive limits for large skill bundles
-source = MCPSkillsSource(
-    session_provider=lambda: mcp.session,   # type: ignore[name-defined]
-    archive_max_size_bytes=50 * 1024 * 1024,  # 50 MB
-    archive_max_member_count=500,
-    archive_max_skill_md_size_bytes=512 * 1024,
-)
-
 async def inspect_mcp_skills() -> None:
-    ctx = SkillsSourceContext(agent=agent)
-    skills = await source.get_skills(ctx)
-    for skill in skills:
-        print(f"Skill: {skill.frontmatter.name}")
-        # get_content() fetches SKILL.md via resources/read on demand
-        content = await skill.get_content()
-        print(f"  Length: {len(content)} chars")
-        # get_resource() fetches supporting files on demand
-        resource = await skill.get_resource("guidelines.md")
-        if resource:
-            print(f"  Resource: {(await resource.get_content())[:80]}...")
+    async with MCPStdioTool(name="skill-server", command="python3", args=["skill_server.py"]) as mcp:
+        # Configure archive limits for large skill bundles
+        source = MCPSkillsSource(
+            session_provider=lambda: mcp.session,
+            archive_max_file_count=50,
+            archive_max_size_bytes=5 * 1024 * 1024,       # 5 MB
+            archive_max_uncompressed_size_bytes=10 * 1024 * 1024,  # 10 MB
+        )
+
+        ctx = SkillsSourceContext(agent=agent)
+        skills = await source.get_skills(ctx)
+        for skill in skills:
+            print(f"Skill: {skill.frontmatter.name}")
+            # get_content() fetches SKILL.md via resources/read on demand
+            content = await skill.get_content()
+            print(f"  Length: {len(content)} chars")
+            # get_resource() fetches supporting files on demand
+            resource = await skill.get_resource("guidelines.md")
+            if resource:
+                print(f"  Resource: {(await resource.get_content())[:80]}...")
+
+asyncio.run(inspect_mcp_skills())
 ```
 
 ---
@@ -1119,7 +1125,7 @@ FilteringSkillsSource(
 ```python
 import asyncio
 from agent_framework import (
-    Agent, FileSkillsSource, InMemorySkillsSource, InlineSkill,
+    Agent, FileSkillsSource, InMemorySkillsSource, InlineSkill, SkillFrontmatter,
     AggregatingSkillsSource, DeduplicatingSkillsSource,
     FilteringSkillsSource, CachingSkillsSource, SkillsProvider,
     Skill, SkillsSourceContext,
@@ -1134,8 +1140,10 @@ file_source = FileSkillsSource("./skills/production")
 shared_source = FileSkillsSource("./skills/shared")
 
 emergency_skill = InlineSkill(
-    name="emergency-protocol",
-    description="Emergency response procedures",
+    frontmatter=SkillFrontmatter(
+        name="emergency-protocol",
+        description="Emergency response procedures",
+    ),
     instructions="Follow these steps for emergency situations: ...",
 )
 inline_source = InMemorySkillsSource([emergency_skill])
@@ -1167,7 +1175,7 @@ agent = Agent(
 ```python
 from agent_framework import (
     FilteringSkillsSource, Skill, SkillsSourceContext, FileSkillsSource,
-    Agent,
+    SkillsProvider, Agent,
 )
 from agent_framework_openai import OpenAIChatClient
 
@@ -1186,6 +1194,7 @@ finance_agent = Agent(
     client,
     name="finance",
     instructions="You are a financial assistant.",
+    context_providers=[SkillsProvider(scoped)],
     # Only skills starting with "finance" will be injected for this agent
 )
 ```
@@ -1195,7 +1204,7 @@ finance_agent = Agent(
 ```python
 import asyncio
 from agent_framework import (
-    InlineSkill, InMemorySkillsSource, DeduplicatingSkillsSource,
+    InlineSkill, SkillFrontmatter, InMemorySkillsSource, DeduplicatingSkillsSource,
     FilteringSkillsSource, SkillsSourceContext, Agent,
 )
 from agent_framework_openai import OpenAIChatClient
@@ -1203,9 +1212,9 @@ from agent_framework_openai import OpenAIChatClient
 client = OpenAIChatClient()
 agent = Agent(client, instructions="Assistant")
 
-skill_a = InlineSkill(name="weather", description="Weather skill", instructions="...")
-skill_b = InlineSkill(name="WEATHER", description="Duplicate weather skill", instructions="...")
-skill_c = InlineSkill(name="internal-admin", description="Internal only", instructions="...")
+skill_a = InlineSkill(frontmatter=SkillFrontmatter(name="weather", description="Weather skill"), instructions="...")
+skill_b = InlineSkill(frontmatter=SkillFrontmatter(name="WEATHER", description="Duplicate weather skill"), instructions="...")
+skill_c = InlineSkill(frontmatter=SkillFrontmatter(name="internal-admin", description="Internal only"), instructions="...")
 
 source = InMemorySkillsSource([skill_a, skill_b, skill_c])
 deduped = DeduplicatingSkillsSource(source)
@@ -1232,7 +1241,7 @@ asyncio.run(main())
 
 `AgentFileStore` is the abstract base for persistent file storage exposed to agents via `FileAccessProvider`. Two concrete implementations ship with the framework: `InMemoryAgentFileStore` (dict-backed, suitable for tests) and `FileSystemAgentFileStore` (disk-backed, with traversal and symlink protections). All three are `@experimental(ExperimentalFeature.HARNESS)`.
 
-> **Relationship to `FileAccessProvider`:** `FileAccessProvider` registers CRUD and search tools (`file_access_write`, `file_access_read`, `file_access_delete`, `file_access_ls`, `file_access_grep`, `file_access_replace`) on the session context. It delegates every operation to its configured `AgentFileStore`. Unlike `MemoryContextProvider` (session-scoped), the file store is shared and persistent across sessions.
+> **Relationship to `FileAccessProvider`:** `FileAccessProvider` registers CRUD and search tools (`file_access_write`, `file_access_read`, `file_access_read_lines`, `file_access_delete`, `file_access_ls`, `file_access_grep`, `file_access_replace`, `file_access_replace_lines`) on the session context. It delegates every operation to its configured `AgentFileStore`. Unlike `MemoryContextProvider` (session-scoped), the file store is shared and persistent across sessions.
 
 ### `AgentFileStore` abstract interface
 
@@ -1245,15 +1254,15 @@ class AgentFileStore(ABC):
     async def read(self, path: str) -> str | None: ...
     async def delete(self, path: str) -> bool: ...
     async def list_children(self, directory: str = "") -> list[FileStoreEntry]: ...
-    async def exists(self, path: str) -> bool: ...
+    async def file_exists(self, path: str) -> bool: ...
     async def search(
         self,
-        pattern: str,
+        directory: str,
+        regex_pattern: str,
+        glob_pattern: str | None = None,
         *,
-        directory: str = "",
-        case_sensitive: bool = False,
-        max_results: int = 50,
-    ) -> list[FileSearchMatch]: ...
+        recursive: bool = False,
+    ) -> list[FileSearchResult]: ...
 ```
 
 ### `InMemoryAgentFileStore` constructor
@@ -1305,7 +1314,7 @@ async def main() -> None:
     # Inspect the store after the run
     children = await store.list_children("project")
     for entry in children:
-        print(f"  {entry.path} ({entry.size} bytes)")
+        print(f"  {entry.name} ({entry.type})")
 
 asyncio.run(main())
 ```
@@ -1350,7 +1359,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from agent_framework import InMemoryAgentFileStore, FileSearchMatch
+from agent_framework import InMemoryAgentFileStore, FileSearchResult
 
 async def main() -> None:
     store = InMemoryAgentFileStore()
@@ -1366,17 +1375,17 @@ async def main() -> None:
 
     # List directory
     entries = await store.list_children("docs")
-    print(f"Files in docs/: {[e.path for e in entries]}")
+    print(f"Files in docs/: {[e.name for e in entries]}")
 
-    # Search with regex
-    matches: list[FileSearchMatch] = await store.search(
-        r"version",
+    # Search with regex across all files (recursive)
+    results: list[FileSearchResult] = await store.search(
         directory="",
-        case_sensitive=False,
-        max_results=10,
+        regex_pattern=r"version",
+        recursive=True,
     )
-    for match in matches:
-        print(f"Match in {match.path}: line {match.line_number} — {match.line.strip()}")
+    for result in results:
+        for match in result.matching_lines:
+            print(f"Match in {result.file_name}: line {match.line_number} — {match.line.strip()}")
 
     # Overwrite guard
     try:
@@ -1389,8 +1398,8 @@ async def main() -> None:
     print(f"Deleted settings.json: {deleted}")
 
     # Existence check
-    print(f"docs/intro.md exists: {await store.exists('docs/intro.md')}")
-    print(f"config/settings.json exists: {await store.exists('config/settings.json')}")
+    print(f"docs/intro.md exists: {await store.file_exists('docs/intro.md')}")
+    print(f"config/settings.json exists: {await store.file_exists('config/settings.json')}")
 
 asyncio.run(main())
 ```
