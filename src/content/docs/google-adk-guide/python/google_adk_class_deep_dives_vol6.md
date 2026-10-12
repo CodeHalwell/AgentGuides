@@ -104,10 +104,14 @@ async def main():
     session = await runner.session_service.create_session(
         app_name="summariser", user_id="u1"
     )
+    from google.genai import types as genai_types
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message="  Large language models are transformer-based neural networks.  ",
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="  Large language models are transformer-based neural networks.  ")],
+        ),
     ):
         if event.is_final_response():
             print(event.content.parts[0].text)
@@ -263,10 +267,11 @@ class MyState(BaseModel):
     result: str = ""
 
 @node  # parameter_binding="state" by default
-def search(query: str) -> dict:
+def search(ctx, query: str) -> str:
     # 'query' is pulled from ctx.state["query"]
     hits = [f"Result for {query!r}"]
-    return {"result": hits[0]}  # written to ctx.state["result"] via output_key
+    ctx.state["result"] = hits[0]  # must be written to ctx.state explicitly
+    return hits[0]
 
 workflow = Workflow(
     name="search_flow",
@@ -330,6 +335,7 @@ protected_node = FunctionNode(
     func=call_protected_api,
     name="protected_api",
     auth_config=auth_config,
+    rerun_on_resume=True,  # required when auth_config is set
 )
 ```
 
@@ -421,7 +427,7 @@ Source-verified from `google/adk/apps/app.py`:
 
 Source-verified from `google/adk/apps/_configs.py`:
 
-`EventsCompactionConfig` trims the session event history to keep context windows from growing unboundedly.  **Exactly one** of the two trigger pairs must be set:
+`EventsCompactionConfig` trims the session event history to keep context windows from growing unboundedly.  **At least one** complete trigger pair must be set (both pairs together are also valid):
 
 | Trigger pair | Fields | Behaviour |
 |---|---|---|
@@ -429,8 +435,7 @@ Source-verified from `google/adk/apps/_configs.py`:
 | Sliding-window | `compaction_interval` (int, >0) + `overlap_size` (int, ≥0) | Compacts every N user-initiated invocations; overlaps by M invocations for continuity |
 
 ```python
-from google.adk.apps import App, EventsCompactionConfig
-from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
+from google.adk.apps.app import App, EventsCompactionConfig
 from google.adk.agents import LlmAgent
 
 agent = LlmAgent(name="agent", model="gemini-2.5-flash", instruction="Help the user.")
@@ -441,7 +446,6 @@ app = App(
     name="my_app",
     root_agent=agent,
     events_compaction_config=EventsCompactionConfig(
-        summarizer=LlmEventSummarizer(model="gemini-2.5-flash"),
         token_threshold=50_000,
         event_retention_size=20,
     ),
@@ -454,7 +458,6 @@ app = App(
     name="chat_app",
     root_agent=agent,
     events_compaction_config=EventsCompactionConfig(
-        summarizer=LlmEventSummarizer(model="gemini-2.5-flash"),
         compaction_interval=10,
         overlap_size=2,
     ),
@@ -485,10 +488,8 @@ When `is_resumable=True`:
 
 ```python
 from google.adk.agents import LlmAgent
-from google.adk.apps import App
-from google.adk.apps._configs import ResumabilityConfig, EventsCompactionConfig
-from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
-from google.adk.plugins.base_plugin import BasePlugin
+from google.adk.apps.app import App, EventsCompactionConfig
+from google.adk.apps._configs import ResumabilityConfig
 from google.adk.runners import InMemoryRunner
 
 root = LlmAgent(
@@ -502,7 +503,6 @@ app = App(
     root_agent=root,
     plugins=[],  # add SaveFilesAsArtifactsPlugin, ReflectAndRetryToolPlugin, etc.
     events_compaction_config=EventsCompactionConfig(
-        summarizer=LlmEventSummarizer(model="gemini-2.5-flash"),
         token_threshold=40_000,
         event_retention_size=15,
     ),
@@ -594,18 +594,18 @@ parent = LlmAgent(
 
 Source: `LlmAgent.parallel_worker: bool | None = None`
 
-When `True`, the agent is allowed to run in a separate worker context (e.g. inside a `Workflow` fan-out).  Setting this to `True` on an agent that writes to session state that other parallel branches also write creates race conditions — use namespaced state keys (`"agent_name.key"`) to avoid collisions.
+When `True`, the agent is wrapped in `_ParallelWorker` to process **list inputs** in parallel — each item in the list is processed by a separate worker. This is NOT for enabling concurrent static graph fan-out edges (those already run concurrently by default). Setting this to `True` on an agent that writes to session state that other parallel branches also write creates race conditions — use namespaced state keys (`"agent_name.key"`) to avoid collisions.
 
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.workflow import Workflow, START
 
+# Static fan-out: no parallel_worker needed — Workflow runs branches concurrently.
 reviewer_a = LlmAgent(
     name="reviewer_a",
     model="gemini-2.5-flash",
     instruction="Review the code for correctness.",
     mode="single_turn",
-    parallel_worker=True,
     output_key="review_a",  # writes to state["review_a"]
 )
 reviewer_b = LlmAgent(
@@ -613,13 +613,12 @@ reviewer_b = LlmAgent(
     model="gemini-2.5-flash",
     instruction="Review the code for performance.",
     mode="single_turn",
-    parallel_worker=True,
     output_key="review_b",  # writes to state["review_b"]
 )
 
 workflow = Workflow(
     name="dual_review",
-    edges=[(START, (reviewer_a, reviewer_b))],  # fan-out
+    edges=[(START, (reviewer_a, reviewer_b))],  # fan-out — runs concurrently
 )
 ```
 
@@ -714,11 +713,12 @@ petstore_spec = json.loads(open("petstore.json").read())
 
 toolset = OpenAPIToolset(spec_dict=petstore_spec)
 
+# Pass the toolset directly; LlmAgent resolves tools at invocation time.
 agent = LlmAgent(
     name="petstore_agent",
     model="gemini-2.5-flash",
     instruction="Help the user manage pets in the store.",
-    tools=list(await toolset.get_tools()),
+    tools=[toolset],
 )
 ```
 
@@ -903,11 +903,13 @@ class ResearchOutput(BaseModel):
     summary: str
     sources: list[str]
 
-# The remote agent must call finish_task(result=ResearchOutput(...)) to complete.
+# In task mode, output_schema must be on the RemoteA2aAgent so ADK can
+# unwrap the finish_task arguments into the typed result.
 remote_researcher = RemoteA2aAgent(
     name="researcher",
     agent_card="https://research.example.com/.well-known/agent.json",
     mode="task",
+    output_schema=ResearchOutput,
 )
 
 parent = LlmAgent(
@@ -915,7 +917,6 @@ parent = LlmAgent(
     model="gemini-2.5-flash",
     instruction="Delegate research to the researcher sub-agent.",
     sub_agents=[remote_researcher],
-    output_schema=ResearchOutput,
 )
 ```
 
@@ -956,7 +957,9 @@ remote_agent = RemoteA2aAgent(
 {app_name}/{user_id}/{session_id}/{filename}/{version}
 
 # User-scoped file (filename starts with "user:")
-{app_name}/{user_id}/user/{filename_without_prefix}/{version}
+# NOTE: the "user:" prefix is preserved in the stored blob path — it is NOT stripped.
+{app_name}/{user_id}/user/{filename}/{version}
+# e.g. save_artifact("user:profile.json", ...) → my_app/u1/user/user:profile.json/0
 ```
 
 Versions are integers starting from `0`.  Up to `_MAX_SAVE_VERSION_ATTEMPTS = 10` concurrent save attempts are retried to resolve version conflicts.
@@ -1095,7 +1098,7 @@ agent = LlmAgent(
         "You can publish and pull Pub/Sub messages. "
         "Always acknowledge messages after processing them."
     ),
-    tools=list(await toolset.get_tools()),
+    tools=[toolset],  # pass toolset directly; tools resolved at invocation time
 )
 ```
 
@@ -1147,7 +1150,7 @@ processor = LlmAgent(
     2. For each message, extract the JSON payload and summarise it.
     3. Acknowledge all processed messages using their ack_ids.
     """,
-    tools=list(await toolset.get_tools()),
+    tools=[toolset],
 )
 
 app = App(name="pubsub_processor", root_agent=processor)
@@ -1203,11 +1206,12 @@ from google.adk.runners import InMemoryRunner
 
 toolset = ToolboxToolset(server_url="http://127.0.0.1:5000")
 
+# Pass the toolset directly; LlmAgent resolves tools at invocation time.
 agent = LlmAgent(
     name="db_agent",
     model="gemini-2.5-flash",
     instruction="Help the user query and modify the database.",
-    tools=list(await toolset.get_tools()),
+    tools=[toolset],
 )
 
 app = App(name="db_app", root_agent=agent)
@@ -1250,17 +1254,18 @@ toolset = ToolboxToolset(
 
 ### Dynamic bound parameters from session state
 
-Callables in `bound_params` are evaluated on each invocation:
+Callables in `bound_params` must be **zero-argument** — they are called with no arguments each time a tool is invoked:
 
 ```python
-from google.adk.tools.tool_context import ToolContext
+def get_current_user_id() -> str:
+    """Returns the current user ID from your application context."""
+    return current_user.id  # e.g. from a thread-local or context variable
 
-# The context object provides the current user_id at call time.
 toolset = ToolboxToolset(
     server_url="http://127.0.0.1:5000",
     toolset_name="user_data",
     bound_params={
-        "user_id": lambda ctx: ctx.user_id,  # ToolContext passed at call time
+        "user_id": get_current_user_id,  # called with no args at invocation time
     },
 )
 ```
@@ -1297,7 +1302,7 @@ async def main():
             name="agent",
             model="gemini-2.5-flash",
             instruction="Query the database.",
-            tools=list(await toolset.get_tools()),
+            tools=[toolset],  # toolset is a BaseToolset; resolved at invocation time
         )
         # ... run the agent ...
     finally:
