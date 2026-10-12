@@ -77,7 +77,7 @@ from pydantic_ai.models.function import FunctionModel
 
 # A model function that always raises — simulates an overloaded primary model.
 def always_fail(messages, info):
-    raise ModelAPIError("primary is down")
+    raise ModelAPIError("test-primary", "primary is down")
 
 fallback = FallbackModel(
     FunctionModel(always_fail),                       # primary — always raises
@@ -123,7 +123,7 @@ async def main():
     result = await agent.run("What is the capital of France?")
     # The uncertain_model's response is rejected, so confident_model responds.
     print(result.output)
-    # Inspect which model actually answered via model_name on the usage
+    # result.usage is aggregate RunUsage (token counts); it has no model_name field.
     print(result.usage)
 
 asyncio.run(main())
@@ -998,7 +998,7 @@ agent = Agent(
     "openai:gpt-4o",
     capabilities=[
         ImageGeneration(
-            fallback_image_model="openai:dall-e-3",
+            fallback_image_model="openai:gpt-image-1",  # dall-e-3 is rejected by 2.55.0 adapter
             dimensions=(1024, 1024),
         )
     ],
@@ -1024,7 +1024,7 @@ agent = Agent(
     capabilities=[
         ImageGeneration(
             fallback_subagent_model="openai:gpt-4o",
-            aspect_ratio="16:9",
+            aspect_ratio="3:2",  # OpenAI maps to nearest supported size; 16:9 is not in its vocab
         )
     ],
 )
@@ -1051,14 +1051,14 @@ around any lifecycle point (e.g. timing, retries, context injection).
 
 | Hook | Signature shape | When it fires |
 |---|---|---|
-| `before_run` | `(ctx, prompt) → None` | Before the first node in a run |
-| `after_run` | `(ctx, result) → None` | After the last node succeeds |
+| `before_run` | `(ctx, /) → None` | Before the first node in a run |
+| `after_run` | `(ctx, /, *, result) → result` | After the last node succeeds (must return result) |
 | `run` | middleware: `(ctx, /, *, handler) → await handler()` | Surrounds the entire run |
-| `before_model_request` | `(ctx, request_ctx) → request_ctx` | Before each model API call |
-| `after_model_request` | `(ctx, response) → response` | After each model response |
+| `before_model_request` | `(ctx, request_context, /) → request_context` | Before each model API call |
+| `after_model_request` | `(ctx, /, *, request_context, response) → response` | After each model response |
 | `before_tool_execute` | `(ctx, /, *, call, tool_def, args) → args` | Before a tool function executes |
 | `after_tool_execute` | `(ctx, /, *, call, tool_def, args, result) → result` | After a tool function returns |
-| `run_error` | `(ctx, exc) → None` | When the run raises an unhandled exception |
+| `run_error` | `(ctx, /, *, error) → AgentRunResult \| None` | When the run raises an unhandled exception |
 
 ### Example 1 — decorator registration: log every model request
 
@@ -1160,7 +1160,7 @@ hooks = Hooks(
 )
 
 agent = Agent(
-    TestModel(custom_output_text="done"),
+    TestModel(custom_output_text="done", seed=5),  # seed=5 → integer args generated as 5
     capabilities=[hooks],
 )
 
@@ -1171,10 +1171,7 @@ def double(n: int) -> int:
 async def main():
     result = await agent.run("double 5")
     print(result.output)
-    # TestModel generates tool args from the schema; the exact value depends on what it generates.
-    # In production with a real model and prompt "double 5", you'd see:
-    # ['before:double', 'after:double=10']
-    print(call_log)
+    print(call_log)   # ['before:double', 'after:double=10']  (seed=5 → n=5 → 5*2=10)
 
 asyncio.run(main())
 ```
