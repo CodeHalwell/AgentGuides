@@ -913,7 +913,7 @@ FileSkillsSource(
 | `script_runner` | `SkillScriptRunner \| None` | Strategy for executing scripts discovered inside skills. Required only if skills expose runnable scripts. |
 | `resource_extensions` | `tuple[str, ...] \| None` | Extensions that qualify as resources. Pass an empty tuple to skip resource discovery. |
 | `script_extensions` | `tuple[str, ...] \| None` | Extensions that qualify as executable scripts. |
-| `search_depth` | `int` | Levels to scan below each root. Default `2` = root + one level of subdirectories. |
+| `search_depth` | `int` | Depth limit for resource and script traversal **within each discovered skill directory** (not for finding `SKILL.md` files). Default `2`. |
 | `script_filter` | `Callable[[name, path], bool] \| None` | Return `False` to exclude a script from discovery. |
 | `resource_filter` | `Callable[[name, path], bool] \| None` | Return `False` to exclude a resource from discovery. |
 
@@ -934,10 +934,12 @@ client = OpenAIChatClient()
 
 source = FileSkillsSource(skill_paths=Path("./skills"))
 
+# disable_load_skill_approval=True lets the agent call load_skill without
+# an approval handshake. In production, omit this and wire ToolApprovalMiddleware.
 agent = Agent(
     client,
     instructions="You are a code review assistant.",
-    context_providers=[SkillsProvider(source)],
+    context_providers=[SkillsProvider(source, disable_load_skill_approval=True)],
 )
 
 async def main() -> None:
@@ -956,12 +958,15 @@ from agent_framework_openai import OpenAIChatClient
 
 client = OpenAIChatClient()
 
-# Exclude test fixtures and hidden scripts from discovery
+import os
+
+# Callbacks receive (skill_name, relative_file_path); inspect path's basename
+# to filter by file name rather than the containing skill's name.
 def not_test_script(name: str, path: str) -> bool:
-    return not name.startswith("test_")
+    return not os.path.basename(path).startswith("test_")
 
 def not_hidden_resource(name: str, path: str) -> bool:
-    return not name.startswith(".")
+    return not os.path.basename(path).startswith(".")
 
 source = FileSkillsSource(
     skill_paths=[Path("./skills/production"), Path("./skills/shared")],
@@ -973,7 +978,7 @@ source = FileSkillsSource(
 agent = Agent(
     client,
     instructions="Use available skills to answer user queries.",
-    context_providers=[SkillsProvider(source)],
+    context_providers=[SkillsProvider(source, disable_load_skill_approval=True)],
 )
 ```
 
@@ -1046,7 +1051,7 @@ async def main() -> None:
             client,
             instructions="Use available skills to help users.",
             tools=[mcp],
-            context_providers=[SkillsProvider(source)],
+            context_providers=[SkillsProvider(source, disable_load_skill_approval=True)],
         )
 
         response = await agent.run("What skills do you have available?")
@@ -1165,7 +1170,7 @@ cached = CachingSkillsSource(filtered, refresh_interval=timedelta(minutes=5))
 agent = Agent(
     client,
     instructions="Use the available skills to help users.",
-    context_providers=[SkillsProvider(cached)],
+    context_providers=[SkillsProvider(cached, disable_load_skill_approval=True)],
 )
 ```
 
@@ -1193,7 +1198,7 @@ finance_agent = Agent(
     client,
     name="finance",
     instructions="You are a financial assistant.",
-    context_providers=[SkillsProvider(scoped)],
+    context_providers=[SkillsProvider(scoped, disable_load_skill_approval=True)],
     # Only skills starting with "finance" will be injected for this agent
 )
 ```
@@ -1212,7 +1217,7 @@ client = OpenAIChatClient()
 agent = Agent(client, instructions="Assistant")
 
 skill_a = InlineSkill(frontmatter=SkillFrontmatter(name="weather", description="Weather skill"), instructions="...")
-skill_b = InlineSkill(frontmatter=SkillFrontmatter(name="WEATHER", description="Duplicate weather skill"), instructions="...")
+skill_b = InlineSkill(frontmatter=SkillFrontmatter(name="weather", description="Duplicate weather skill"), instructions="...")
 skill_c = InlineSkill(frontmatter=SkillFrontmatter(name="internal-admin", description="Internal only"), instructions="...")
 
 source = InMemorySkillsSource([skill_a, skill_b, skill_c])
