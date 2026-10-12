@@ -968,21 +968,28 @@ class ImageGeneration(NativeOrLocalTool[AgentDepsT]):
 ### Example 1 — enable native image generation (model that supports it)
 
 ```python
-# Requires OPENAI_API_KEY. Use an image-capable conversational model —
-# gpt-image-1 is a direct image API model, not a chat-capable one.
+# Requires OPENAI_API_KEY. gpt-5.2+ supports the native ImageGenerationTool;
+# gpt-4o does not expose this tool in the Responses API.
 import asyncio
+from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
+from pydantic_ai.messages import ModelResponse
 
 agent = Agent(
-    "openai-responses:gpt-4o",   # conversational model with native image tool support
+    "openai-responses:gpt-5.2",  # must be a model with native image generation support
     capabilities=[ImageGeneration()],
 )
 
 async def main():
     result = await agent.run("Generate an image of a sunset over the ocean.")
-    # result.output contains the generated image data or URL.
-    print(result.output)
+    print(result.output)  # text companion (may be empty)
+    # The generated image lives in the ModelResponse's FilePart items:
+    for msg in result.all_messages():
+        if isinstance(msg, ModelResponse) and msg.images:
+            image = msg.images[0]          # BinaryImage
+            Path("sunset.png").write_bytes(image.data)
+            print(f"saved {image.media_type}, {len(image.data)} bytes")
 
 asyncio.run(main())
 ```
@@ -1024,7 +1031,7 @@ agent = Agent(
     "openai:gpt-4o-mini",
     capabilities=[
         ImageGeneration(
-            fallback_subagent_model="openai:gpt-4o",
+            fallback_subagent_model="openai-responses:gpt-5.4",  # subagent must natively support ImageGenerationTool
             aspect_ratio="3:2",  # OpenAI maps to nearest supported size; 16:9 is not in its vocab
         )
     ],
