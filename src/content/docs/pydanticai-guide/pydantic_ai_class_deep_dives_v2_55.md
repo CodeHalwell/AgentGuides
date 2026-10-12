@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: 10 Source-Verified Class Deep Dives (2.55.0)"
-description: "Runnable, source-verified code examples for FallbackModel (rewind/ResponseHandler), InstrumentedModel/InstrumentationSettings, Caching, LocalWorkspace, ResolveModelId, SetMetadataToolset, WrapperToolset, OpenAIEmbeddingModel, ImageGeneration, and Hooks (wrap-style) — verified against pydantic-ai 2.55.0."
+description: "Runnable, source-verified code examples for FallbackModel (ResponseHandler/FallbackOn), InstrumentedModel/InstrumentationSettings, Caching, LocalWorkspace, ResolveModelId, SetMetadataToolset, WrapperToolset, OpenAIEmbeddingModel, ImageGeneration, and Hooks (wrap-style middleware) — verified against pydantic-ai 2.55.0."
 framework: pydanticai
 language: python
 sidebar:
@@ -24,21 +24,23 @@ python -c "import pydantic_ai; print(pydantic_ai.__version__)"
 
 ---
 
-## 1. `FallbackModel` — rewind, `ResponseHandler`, and `FallbackOn`
+## 1. `FallbackModel` — `ResponseHandler` and `FallbackOn`
 
 **Module:** `pydantic_ai.models.fallback`
 
 `FallbackModel` chains models so that when one fails (or its response is rejected) the next model
 in the list is tried. In 2.55.0 the `FallbackOn` type accepts three distinct shapes:
 
-| `fallback_on` element | What it matches |
+| `fallback_on` top-level form | Element / what it matches |
 |---|---|
-| `type[Exception]` (e.g. `ModelAPIError`) | Any instance of that exception class |
-| `ExceptionHandler` callable `(exc) → bool` | Arbitrary predicate on the exception |
+| `type[Exception]` (e.g. `ModelAPIError`) | Single exception class — any instance triggers fallback |
+| `tuple[type[Exception], ...]` | Any of the listed exception classes |
 | `ResponseHandler` callable `(ModelResponse) → bool` | Reject a successful response by content |
+| `Sequence[...]` (list) | Mixed list of exception types, `ExceptionHandler`, or `ResponseHandler` |
 
-`ResponseHandler` is the new capability added in 2.x — the rewind mechanism replaces the previous
-response with the next model's answer transparently, so callers never see the intermediate failure.
+`ExceptionHandler` is `(exc: Exception) → bool`; return `True` to trigger fallback.
+`ResponseHandler` lets you reject a successful response by inspecting its content — the next
+model's answer is substituted transparently, so callers never see the rejected response.
 
 ### Constructor (from source)
 
@@ -56,7 +58,9 @@ class FallbackModel(Model):
 
 ```python
 FallbackOn = (
-    ResponseHandler                                      # single callable
+    type[Exception]                                      # single exception class
+    | tuple[type[Exception], ...]                        # tuple of exception classes
+    | ResponseHandler                                    # single response-rejector callable
     | Sequence[type[Exception] | ExceptionHandler | ResponseHandler]  # mixed list
 )
 ```
@@ -69,21 +73,22 @@ from pydantic_ai import Agent
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.exceptions import ModelAPIError
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.models.function import FunctionModel
 
-# Primary always raises; fallback returns cleanly.
-def always_fail(*args, **kwargs):
+# A model function that always raises — simulates an overloaded primary model.
+def always_fail(messages, info):
     raise ModelAPIError("primary is down")
 
 fallback = FallbackModel(
-    TestModel(custom_result_text="primary answer"),   # primary
-    TestModel(custom_result_text="fallback answer"),  # fallback
+    FunctionModel(always_fail),                       # primary — always raises
+    TestModel(custom_output_text="fallback answer"),  # fallback — returns cleanly
     fallback_on=(ModelAPIError,),
 )
 agent = Agent(fallback)
 
 async def main():
     result = await agent.run("ping")
-    print(result.data)  # "primary answer" (TestModel never raises)
+    print(result.output)  # "fallback answer" — primary raised, fallback kicked in
 
 asyncio.run(main())
 ```
@@ -104,8 +109,8 @@ def reject_uncertain(response: ModelResponse) -> bool:
             return True
     return False
 
-uncertain_model = TestModel(custom_result_text="I don't know the answer")
-confident_model = TestModel(custom_result_text="The capital is Paris.")
+uncertain_model = TestModel(custom_output_text="I don't know the answer")
+confident_model = TestModel(custom_output_text="The capital is Paris.")
 
 fallback = FallbackModel(
     uncertain_model,
@@ -117,9 +122,9 @@ agent = Agent(fallback)
 async def main():
     result = await agent.run("What is the capital of France?")
     # The uncertain_model's response is rejected, so confident_model responds.
-    print(result.data)
+    print(result.output)
     # Inspect which model actually answered via model_name on the usage
-    print(result.usage())
+    print(result.usage)
 
 asyncio.run(main())
 ```
@@ -141,9 +146,9 @@ def is_empty_response(response: ModelResponse) -> bool:
     return all(not getattr(p, "content", None) for p in response.parts)
 
 fallback = FallbackModel(
-    TestModel(custom_result_text="primary"),
-    TestModel(custom_result_text="secondary"),
-    TestModel(custom_result_text="tertiary"),
+    TestModel(custom_output_text="primary"),
+    TestModel(custom_output_text="secondary"),
+    TestModel(custom_output_text="tertiary"),
     fallback_on=[
         ModelAPIError,        # exception type
         is_rate_limit,        # exception handler callable
@@ -155,7 +160,7 @@ agent = Agent(fallback)
 
 async def main():
     result = await agent.run("hello")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -211,13 +216,13 @@ settings = InstrumentationSettings(
     include_content=True,
     include_binary_content=False,  # skip large binary payloads in spans
 )
-model = InstrumentedModel(TestModel(custom_result_text="hello"), settings)
+model = InstrumentedModel(TestModel(custom_output_text="hello"), settings)
 
 agent = Agent(model)
 
 async def main():
     result = await agent.run("say hi")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -236,12 +241,12 @@ from pydantic_ai.models.test import TestModel
 
 logfire.configure()
 
-model = instrument_model(TestModel(custom_result_text="traced!"), instrument=True)
+model = instrument_model(TestModel(custom_output_text="traced!"), instrument=True)
 agent = Agent(model)
 
 async def main():
     result = await agent.run("trace me")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -260,11 +265,11 @@ settings = InstrumentationSettings(
     include_binary_content=False,
     include_model_request_parameters=False,
 )
-agent = Agent(InstrumentedModel(TestModel(custom_result_text="private"), settings))
+agent = Agent(InstrumentedModel(TestModel(custom_output_text="private"), settings))
 
 async def main():
     result = await agent.run("confidential question")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -306,14 +311,14 @@ from pydantic_ai.capabilities.caching import Caching
 from pydantic_ai.models.test import TestModel
 
 agent = Agent(
-    TestModel(custom_result_text="cached answer"),
+    TestModel(custom_output_text="cached answer"),
     capabilities=[Caching()],           # enable with provider defaults
 )
 
 async def main():
     r1 = await agent.run("What is 2+2?")
     r2 = await agent.run("What is 2+2?", message_history=r1.new_messages())
-    print(r1.data, r2.data)
+    print(r1.output, r2.output)
 
 asyncio.run(main())
 ```
@@ -329,7 +334,7 @@ from pydantic_ai.models.test import TestModel
 # Long-lived instructions (system prompt + tools) cached for 1 hour.
 # Message history NOT cached — suitable for many short one-off sessions.
 agent = Agent(
-    TestModel(custom_result_text="ok"),
+    TestModel(custom_output_text="ok"),
     system_prompt="You are a helpful assistant with 10 000 words of context...",
     capabilities=[Caching(retention='1h', messages=False)],
 )
@@ -338,7 +343,7 @@ async def main():
     # Each run gets a fresh conversation but the stable prefix is cached.
     for prompt in ["ping", "pong", "hello"]:
         r = await agent.run(prompt)
-        print(r.data)
+        print(r.output)
 
 asyncio.run(main())
 ```
@@ -353,7 +358,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.models.test import TestModel
 
 agent = Agent(
-    TestModel(custom_result_text="result"),
+    TestModel(custom_output_text="result"),
     capabilities=[Caching(retention='30m')],
 )
 
@@ -366,7 +371,7 @@ async def main():
         "query B",
         model_settings=ModelSettings(cache=False),
     )
-    print(cached.data, uncached.data)
+    print(cached.output, uncached.output)
 
 asyncio.run(main())
 ```
@@ -417,7 +422,7 @@ async def main():
         Path(tmpdir, "readme.txt").write_text("Hello from the workspace!")
 
         agent = Agent(
-            TestModel(custom_result_text="done"),
+            TestModel(custom_output_text="done"),
             capabilities=[LocalWorkspace(tmpdir)],
         )
 
@@ -428,7 +433,7 @@ async def main():
             return content
 
         result = await agent.run("read readme")
-        print(result.data)
+        print(result.output)
 
 asyncio.run(main())
 ```
@@ -446,7 +451,7 @@ from pydantic_ai.models.test import TestModel
 async def main():
     with tempfile.TemporaryDirectory() as tmpdir:
         agent = Agent(
-            TestModel(custom_result_text="wrote"),
+            TestModel(custom_output_text="wrote"),
             capabilities=[LocalWorkspace(tmpdir)],
         )
 
@@ -474,7 +479,7 @@ from pydantic_ai.workspaces import WorkspaceError
 async def main():
     with tempfile.TemporaryDirectory() as tmpdir:
         agent = Agent(
-            TestModel(custom_result_text="blocked"),
+            TestModel(custom_output_text="blocked"),
             capabilities=[LocalWorkspace(tmpdir, read_only=True)],
         )
 
@@ -487,7 +492,7 @@ async def main():
                 return f"blocked: {type(e).__name__}"
 
         result = await agent.run("try to write")
-        print(result.data)
+        print(result.output)
 
 asyncio.run(main())
 ```
@@ -527,8 +532,8 @@ from pydantic_ai.models import ModelResolutionContext
 def route_model(ctx: ModelResolutionContext, model_id: str):
     """Map custom short-names to concrete models."""
     table = {
-        "fast": TestModel(custom_result_text="fast answer"),
-        "smart": TestModel(custom_result_text="smart answer"),
+        "fast": TestModel(custom_output_text="fast answer"),
+        "smart": TestModel(custom_output_text="smart answer"),
     }
     return table.get(model_id)  # None → fall through to infer_model
 
@@ -539,7 +544,7 @@ agent = Agent(
 
 async def main():
     result = await agent.run("hello")
-    print(result.data)   # "fast answer"
+    print(result.output)   # "fast answer"
 
 asyncio.run(main())
 ```
@@ -562,16 +567,16 @@ _REGISTRY: dict[str, str] = {
 async def async_resolver(ctx: ModelResolutionContext, model_id: str):
     canonical = _REGISTRY.get(model_id)
     if canonical == "smart":
-        return TestModel(custom_result_text="smart")
+        return TestModel(custom_output_text="smart")
     if canonical == "fast":
-        return TestModel(custom_result_text="fast")
+        return TestModel(custom_output_text="fast")
     return None   # pass through
 
 agent = Agent("prod-agent", capabilities=[ResolveModelId(async_resolver)])
 
 async def main():
     result = await agent.run("query")
-    print(result.data)   # "smart"
+    print(result.output)   # "smart"
 
 asyncio.run(main())
 ```
@@ -594,15 +599,15 @@ def deps_driven_resolver(ctx: ModelResolutionContext[Deps], model_id: str):
     if model_id != "auto":
         return None
     if ctx.deps and ctx.deps.prefer_fast:
-        return TestModel(custom_result_text="fast model chosen")
-    return TestModel(custom_result_text="smart model chosen")
+        return TestModel(custom_output_text="fast model chosen")
+    return TestModel(custom_output_text="smart model chosen")
 
 agent = Agent("auto", deps_type=Deps, capabilities=[ResolveModelId(deps_driven_resolver)])
 
 async def main():
     r1 = await agent.run("hi", deps=Deps(prefer_fast=True))
     r2 = await agent.run("hi", deps=Deps(prefer_fast=False))
-    print(r1.data, "|", r2.data)
+    print(r1.output, "|", r2.output)
 
 asyncio.run(main())
 ```
@@ -653,11 +658,11 @@ def expensive_lookup(query: str) -> str:
 # Tag all tools in the toolset as "expensive".
 tagged = SetMetadataToolset(toolset, {"cost_tier": "expensive", "owner": "search-team"})
 
-agent = Agent(TestModel(custom_result_text="done"), toolsets=[tagged])
+agent = Agent(TestModel(custom_output_text="done"), toolsets=[tagged])
 
 async def main():
     result = await agent.run("look up something")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -667,36 +672,40 @@ asyncio.run(main())
 ```python
 import asyncio
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets import FunctionToolset, CombinedToolset
 from pydantic_ai.toolsets.set_metadata import SetMetadataToolset
 from pydantic_ai.toolsets.filtered import FilteredToolset
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.models.test import TestModel
 
-toolset = FunctionToolset()
+# Two separate toolsets — one free-tier, one paid-tier.
+free_toolset = FunctionToolset()
+paid_toolset = FunctionToolset()
 
-@toolset.tool
+@free_toolset.tool
 def free_tool(query: str) -> str:
     return f"free: {query}"
 
-@toolset.tool
+@paid_toolset.tool
 def paid_tool(query: str) -> str:
     return f"paid: {query}"
 
-# Tag all tools as "free" first, then override paid_tool.
-free_tagged = SetMetadataToolset(toolset, {"tier": "free"})
+# Tag each toolset with the correct tier.
+free_tagged = SetMetadataToolset(free_toolset, {"tier": "free"})
+paid_tagged = SetMetadataToolset(paid_toolset, {"tier": "paid"})
+combined = CombinedToolset([free_tagged, paid_tagged])
 
-# FilteredToolset downstream can now inspect metadata.
+# FilteredToolset admits only free-tier tools — paid_tool is excluded.
 def allow_free_only(ctx: RunContext, tool_def: ToolDefinition) -> bool:
     return (tool_def.metadata or {}).get("tier") == "free"
 
-gated = FilteredToolset(free_tagged, allow_free_only)
+gated = FilteredToolset(combined, allow_free_only)
 
-agent = Agent(TestModel(custom_result_text="ok"), toolsets=[gated])
+agent = Agent(TestModel(custom_output_text="ok"), toolsets=[gated])
 
 async def main():
     result = await agent.run("use tools")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -762,11 +771,11 @@ def add(a: int, b: int) -> int:
     return a + b
 
 audited = AuditToolset(wrapped=toolset)
-agent = Agent(TestModel(custom_result_text="computed"), toolsets=[audited])
+agent = Agent(TestModel(custom_output_text="computed"), toolsets=[audited])
 
 async def main():
     result = await agent.run("add 2 and 3")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -809,11 +818,11 @@ def greet(name: str) -> str:
     return f"Hello, {name}!"
 
 timestamped = TimestampedToolset(wrapped=toolset)
-agent = Agent(TestModel(custom_result_text="greeted"), toolsets=[timestamped])
+agent = Agent(TestModel(custom_output_text="greeted"), toolsets=[timestamped])
 
 async def main():
     result = await agent.run("greet Alice")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -956,21 +965,21 @@ class ImageGeneration(NativeOrLocalTool[AgentDepsT]):
 ### Example 1 — enable native image generation (model that supports it)
 
 ```python
+# Requires OPENAI_API_KEY. TestModel does not support ImageGeneration (it rejects
+# built-in tools), so a real image-capable model is required.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
-from pydantic_ai.models.test import TestModel
 
-# On a real model (e.g. 'openai:gpt-image-1') this triggers native gen.
-# TestModel here just shows the wiring.
 agent = Agent(
-    TestModel(custom_result_text="image generated"),
+    "openai:gpt-image-1",        # native image generation
     capabilities=[ImageGeneration()],
 )
 
 async def main():
     result = await agent.run("Generate an image of a sunset over the ocean.")
-    print(result.data)
+    # result.output contains the generated image URL or base64 data.
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -978,15 +987,13 @@ asyncio.run(main())
 ### Example 2 — explicit fallback image model
 
 ```python
+# Requires OPENAI_API_KEY. Primary model handles chat; dall-e-3 handles image gen.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
-from pydantic_ai.models.test import TestModel
 
-# When the primary model can't generate images, use dall-e-3 directly.
-# Requires OPENAI_API_KEY in real usage.
 agent = Agent(
-    TestModel(custom_result_text="via fallback"),
+    "openai:gpt-4o",
     capabilities=[
         ImageGeneration(
             fallback_image_model="openai:dall-e-3",
@@ -997,7 +1004,7 @@ agent = Agent(
 
 async def main():
     result = await agent.run("A photo-realistic cat.")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -1005,15 +1012,13 @@ asyncio.run(main())
 ### Example 3 — subagent fallback for chat models without native image gen
 
 ```python
+# Requires OPENAI_API_KEY. Primary model orchestrates; subagent handles image gen.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
-from pydantic_ai.models.test import TestModel
 
-# The subagent runs on gpt-4o which calls ImageGenerationTool natively.
-# Requires OPENAI_API_KEY in real usage.
 agent = Agent(
-    TestModel(custom_result_text="subagent result"),
+    "openai:gpt-4o-mini",
     capabilities=[
         ImageGeneration(
             fallback_subagent_model="openai:gpt-4o",
@@ -1024,7 +1029,7 @@ agent = Agent(
 
 async def main():
     result = await agent.run("A wide landscape painting.")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -1036,8 +1041,9 @@ asyncio.run(main())
 **Module:** `pydantic_ai.capabilities.hooks`
 
 `Hooks` provides a decorator-based API for hooking into any step of an agent run. In addition
-to simple before/after hooks, 2.55.0 offers **wrap-style** hooks that are async generators:
-they `yield` to let the normal execution happen, then run cleanup on the other side.
+to simple before/after hooks, 2.55.0 offers **wrap-style** hooks that act as middleware: they
+call `await handler()` to run the wrapped step and return its result, allowing setup/teardown
+around any lifecycle point (e.g. timing, retries, context injection).
 
 ### Key hook types (from source)
 
@@ -1045,11 +1051,11 @@ they `yield` to let the normal execution happen, then run cleanup on the other s
 |---|---|---|
 | `before_run` | `(ctx, prompt) → None` | Before the first node in a run |
 | `after_run` | `(ctx, result) → None` | After the last node succeeds |
-| `run` | async generator wrapping the whole run | Surrounds the entire run |
+| `run` | middleware: `(ctx, /, *, handler) → await handler()` | Surrounds the entire run |
 | `before_model_request` | `(ctx, request_ctx) → request_ctx` | Before each model API call |
-| `after_model_response` | `(ctx, response) → response` | After each model response |
-| `before_tool_execute` | `(ctx, name, args) → args` | Before a tool function executes |
-| `after_tool_execute` | `(ctx, name, result) → result` | After a tool function returns |
+| `after_model_request` | `(ctx, response) → response` | After each model response |
+| `before_tool_execute` | `(ctx, /, *, call, tool_def, args) → args` | Before a tool function executes |
+| `after_tool_execute` | `(ctx, /, *, call, tool_def, args, result) → result` | After a tool function returns |
 | `run_error` | `(ctx, exc) → None` | When the run raises an unhandled exception |
 
 ### Example 1 — decorator registration: log every model request
@@ -1067,11 +1073,11 @@ async def log_request(ctx, request_context):
     print(f"[HOOK] model request: usage so far = {ctx.usage}")
     return request_context  # must return (possibly modified) request_context
 
-agent = Agent(TestModel(custom_result_text="hi"), capabilities=[hooks])
+agent = Agent(TestModel(custom_output_text="hi"), capabilities=[hooks])
 
 async def main():
     result = await agent.run("hello")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -1081,27 +1087,28 @@ asyncio.run(main())
 ```python
 import asyncio
 import time
-from collections.abc import AsyncIterator
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.hooks import Hooks
+from pydantic_ai.capabilities import WrapRunHandler
 from pydantic_ai.models.test import TestModel
 
 hooks = Hooks()
 
 @hooks.on.run
-async def timer(ctx, handler) -> AsyncIterator[None]:
+async def timer(ctx, /, *, handler: WrapRunHandler):
+    # Wrap-style hooks are middleware: call handler() and return its result.
     start = time.perf_counter()
     try:
-        yield   # execution happens here
+        return await handler()
     finally:
         elapsed = time.perf_counter() - start
         print(f"[TIMER] run took {elapsed:.3f}s")
 
-agent = Agent(TestModel(custom_result_text="timed"), capabilities=[hooks])
+agent = Agent(TestModel(custom_output_text="timed"), capabilities=[hooks])
 
 async def main():
     result = await agent.run("time me")
-    print(result.data)
+    print(result.output)
 
 asyncio.run(main())
 ```
@@ -1110,19 +1117,40 @@ asyncio.run(main())
 
 ```python
 import asyncio
+from typing import Any
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities.hooks import Hooks
+from pydantic_ai.capabilities import ValidatedToolArgs
+from pydantic_ai.messages import ToolCallPart
+from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.models.test import TestModel
 
 call_log: list[str] = []
 
-async def before_tool(ctx: RunContext, tool_name: str, tool_args: dict) -> dict:
-    call_log.append(f"before:{tool_name}")
-    return tool_args   # must return args (possibly modified)
+# before_tool_execute receives keyword-only: call, tool_def, args
+async def before_tool(
+    ctx: RunContext,
+    /,
+    *,
+    call: ToolCallPart,
+    tool_def: ToolDefinition,
+    args: ValidatedToolArgs,
+) -> ValidatedToolArgs:
+    call_log.append(f"before:{tool_def.name}")
+    return args   # return args (possibly modified)
 
-async def after_tool(ctx: RunContext, tool_name: str, result) -> object:
-    call_log.append(f"after:{tool_name}={result!r}")
-    return result   # must return result (possibly modified)
+# after_tool_execute also receives keyword-only: result
+async def after_tool(
+    ctx: RunContext,
+    /,
+    *,
+    call: ToolCallPart,
+    tool_def: ToolDefinition,
+    args: ValidatedToolArgs,
+    result: Any,
+) -> Any:
+    call_log.append(f"after:{tool_def.name}={result!r}")
+    return result   # return result (possibly modified)
 
 hooks = Hooks(
     before_tool_execute=before_tool,
@@ -1130,7 +1158,7 @@ hooks = Hooks(
 )
 
 agent = Agent(
-    TestModel(custom_result_text="done"),
+    TestModel(custom_output_text="done"),
     capabilities=[hooks],
 )
 
@@ -1140,7 +1168,7 @@ def double(n: int) -> int:
 
 async def main():
     result = await agent.run("double 5")
-    print(result.data)
+    print(result.output)
     print(call_log)   # ['before:double', 'after:double=10']
 
 asyncio.run(main())
