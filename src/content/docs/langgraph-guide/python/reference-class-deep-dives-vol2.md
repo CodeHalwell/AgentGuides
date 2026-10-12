@@ -109,7 +109,7 @@ graph = (
 )
 
 cfg = {"configurable": {"thread_id": "delta-demo"}}
-result = graph.invoke({"log": [], "step": 0}, cfg)
+result = graph.invoke({"step": 0}, cfg)
 print(result["log"])   # ['step-0-ran']
 
 # Pass explicit input to re-run the graph on the same thread.
@@ -507,8 +507,8 @@ class NamedBarrierValueAfterFinish(Generic[Value], BaseChannel[Value, Value, set
     def __init__(self, typ: type[Value], names: set[Value]) -> None: ...
     def finish(self) -> bool:
         """Mark the barrier as finished. Returns True if all names are seen AND
-        this is the first finish() call. The channel becomes available on the
-        NEXT super-step."""
+        this is the first finish() call. Once this returns True, is_available()
+        returns True immediately (same super-step)."""
     def consume(self) -> bool:
         """Reset seen and finished after the channel is read. Returns True if consumed."""
 ```
@@ -755,7 +755,7 @@ via `invoke(..., durability=...)` or `stream(..., durability=...)`.
 |---|---|---|---|
 | `"sync"` | Before the next step starts | None — always recoverable | Highest (blocks next step) |
 | `"async"` | While the next step runs | May lose the latest checkpoint | Lower (overlaps with execution) |
-| `"exit"` | Only when the graph exits normally | Entire run may be lost | Lowest |
+| `"exit"` | When the graph exits (normally or at an interrupt) | Entire run may be lost if crashed mid-run | Lowest |
 
 `"async"` is the default. `"sync"` is the safest option — no checkpoint can be lost on
 crash — but it adds latency between steps. `"exit"` is appropriate for fire-and-forget
@@ -996,7 +996,7 @@ for part in graph.stream({"x": 3}, stream_mode="tasks", version="v2"):
         # TaskResultPayload — task just finished
         print(f"Finished: {data['name']} → result={data['result']}")
 
-# Started: step triggered by ['__start__:step']
+# Started: step triggered by ['__start__']
 # Finished: step → result={'x': 6}
 ```
 
