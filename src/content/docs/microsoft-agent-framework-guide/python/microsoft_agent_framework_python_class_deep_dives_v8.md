@@ -496,9 +496,11 @@ EvalResults(
 r.passed          # int — count of passing items
 r.failed          # int — count of failing items
 r.total           # int — passed + failed
-r.all_passed      # bool — True when failed == 0
+r.all_passed      # bool — True only when status=="completed", failed==0,
+                  #         errored==0, total>0, and all sub-results also pass
 
-r.raise_for_status()   # raises EvalNotPassedError if any items failed
+r.raise_for_status()   # raises EvalNotPassedError when all_passed is False
+                       # (non-completed run, any failures, any errors, or empty batch)
 ```
 
 ### `EvalItemResult` dataclass
@@ -1259,6 +1261,7 @@ class AgentFileStore(ABC):
     async def delete(self, path: str) -> bool: ...
     async def list_children(self, directory: str = "") -> list[FileStoreEntry]: ...
     async def file_exists(self, path: str) -> bool: ...
+    async def create_directory(self, path: str) -> None: ...
     async def search(
         self,
         directory: str,
