@@ -1,13 +1,13 @@
 ---
 title: "Class Deep Dives Vol. 6 — v2.11.0"
-description: "Source-verified deep dives for 10 classes in google-adk 2.11.0: Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App, LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, and ToolboxToolset."
+description: "Source-verified deep dives for 10 entries in google-adk 2.11.0: Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App, LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, and ToolboxToolset."
 framework: google-adk
 language: python
 sidebar:
   order: 136
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.11.0**. The ten entries span the **workflow engine** (the DAG orchestrator that replaces LoopAgent and ParallelAgent), the **application container** (`App` with compaction and resumability), **advanced LlmAgent fields**, and four **toolsets** covering REST APIs, A2A peers, GCS artifacts, Pub/Sub, and the MCP Toolbox.
+All examples and field tables on this page are source-verified against **google-adk==2.11.0**. The ten entries span the **workflow engine** (the DAG orchestrator that replaces LoopAgent and ParallelAgent), the **application container** (`App` with compaction and resumability), **advanced LlmAgent fields**, and toolsets/services covering REST APIs (`OpenAPIToolset`), A2A peers (`RemoteA2aAgent`), GCS artifacts (`GcsArtifactService`), Pub/Sub (`PubSubToolset`), and the MCP Toolbox (`ToolboxToolset`).
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|
@@ -121,20 +121,22 @@ asyncio.run(main())
 
 ### Conditional routing with `RoutingMap`
 
-A node returns a route value and the `RoutingMap` selects the next branch:
+A node sets `ctx.route` to a string value and the `RoutingMap` selects the next branch based on that value:
 
 ```python
 from google.adk.workflow import Workflow, node, START
 
 @node
-def classify(node_input: str) -> str:
-    """Returns 'positive', 'negative', or 'neutral'."""
+def classify(ctx, node_input: str) -> str:
+    """Sets ctx.route to 'positive', 'negative', or 'neutral'."""
     low = node_input.lower()
     if any(w in low for w in ("good", "great", "excellent")):
-        return "positive"
-    if any(w in low for w in ("bad", "terrible", "awful")):
-        return "negative"
-    return "neutral"
+        ctx.route = "positive"
+    elif any(w in low for w in ("bad", "terrible", "awful")):
+        ctx.route = "negative"
+    else:
+        ctx.route = "neutral"
+    return node_input  # pass original text to the selected handler
 
 @node
 def handle_positive(node_input: str) -> str:
@@ -315,19 +317,20 @@ async def stream_chunks(text: str):
 ### Node with auth requirement
 
 ```python
-from google.adk.auth.auth_tool import AuthConfig
+from google.adk.auth.auth_config import AuthConfig
 from google.adk.auth.auth_schemes import OpenIdConnectWithConfig
 from google.adk.workflow import FunctionNode
 
 oidc_scheme = OpenIdConnectWithConfig(
-    openid_connect_url="https://accounts.google.com/.well-known/openid-configuration",
+    authorization_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
     scopes=["openid", "email"],
 )
 
 def call_protected_api(ctx) -> str:
-    from google.adk.auth.auth_tool import AuthHandler
+    from google.adk.auth.auth_handler import AuthHandler
     creds = AuthHandler(auth_config).get_auth_response(ctx.state)
-    # Use creds.token to call the API …
+    # Use creds.oauth2.access_token to call the API …
     return "api_result"
 
 auth_config = AuthConfig(auth_scheme=oidc_scheme)
@@ -367,7 +370,7 @@ The `exceptions` field accepts both class references and string names — the va
 ```python
 from google.adk.workflow import RetryConfig, node, Workflow, START
 
-# Retry up to 3 times on any exception, with 2s → 4s → 8s back-off.
+# Retry up to 3 times on any exception (3 total attempts = 2 retries), with 2s → 4s back-off.
 @node(retry_config=RetryConfig(max_attempts=3, initial_delay=2.0, backoff_factor=2.0))
 def flaky_api_call(query: str) -> str:
     import random
@@ -624,7 +627,7 @@ workflow = Workflow(
 
 ### `output_schema` + `output_key`
 
-`output_schema` constrains the LLM to return structured JSON, which ADK validates and exposes as the event's output.  `output_key` writes the final text response to `ctx.state[output_key]` after each successful turn.
+`output_schema` constrains the LLM to return structured JSON, which ADK validates and exposes as the event's output.  `output_key` writes the validated output value to `ctx.state[output_key]` after each successful turn — when `output_schema` is set, this is the validated structured value (a dict); otherwise it is the final text response.
 
 ```python
 from pydantic import BaseModel
@@ -755,16 +758,17 @@ toolset = OpenAPIToolset(spec_str=yaml_spec, spec_str_type="yaml")
 ### With OAuth2 authentication
 
 ```python
-from google.adk.auth.auth_credential import AuthCredential, OAuth2Auth
+from google.adk.auth.auth_credential import AuthCredential, OAuth2Auth, AuthCredentialTypes
 from google.adk.auth.auth_schemes import OAuthGrantType, OpenIdConnectWithConfig
 from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
 
 scheme = OpenIdConnectWithConfig(
-    openid_connect_url="https://accounts.google.com/.well-known/openid-configuration",
+    authorization_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
     scopes=["https://www.googleapis.com/auth/drive.readonly"],
 )
 credential = AuthCredential(
-    auth_type="OPEN_ID_CONNECT",
+    auth_type=AuthCredentialTypes.OPEN_ID_CONNECT,  # "openIdConnect"
     oauth2=OAuth2Auth(
         client_id="YOUR_CLIENT_ID",
         client_secret="YOUR_CLIENT_SECRET",
@@ -792,9 +796,9 @@ def get_headers(ctx: ReadonlyContext) -> dict[str, str]:
     return {"X-Correlation-Id": correlation_id}
 
 def client_factory() -> httpx.AsyncClient:
-    """Custom client with a corporate proxy."""
+    """Custom client with a corporate proxy (httpx 0.28+ uses proxy=)."""
     return httpx.AsyncClient(
-        proxies={"https://": "https://proxy.corp.example.com:8080"},
+        proxy="https://proxy.corp.example.com:8080",
         verify="/etc/ssl/certs/corp-ca.pem",
     )
 
@@ -923,14 +927,19 @@ parent = LlmAgent(
 ### With API key authentication
 
 ```python
-from google.adk.auth.auth_credential import AuthCredential, HttpAuth, HttpCredentials
-from google.adk.auth.auth_schemes import HttpAuthScheme
+from fastapi.openapi.models import HTTPBearer
+from google.adk.auth.auth_credential import (
+    AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials,
+)
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 
-scheme = HttpAuthScheme(scheme="bearer")
+scheme = HTTPBearer()  # fastapi.openapi.models.HTTPBearer; ADK accepts SecurityScheme types
 credential = AuthCredential(
-    auth_type="HTTP",
-    http=HttpAuth(credentials=HttpCredentials(token="MY_API_KEY")),
+    auth_type=AuthCredentialTypes.HTTP,  # "http"
+    http=HttpAuth(
+        scheme="bearer",  # required: the HTTP auth scheme name
+        credentials=HttpCredentials(token="MY_API_KEY"),
+    ),
 )
 
 remote_agent = RemoteA2aAgent(
@@ -1029,7 +1038,7 @@ await tool_context.save_artifact(filename="user:profile.json", artifact=part)
 
 ```python
 async def list_my_artifacts(tool_context: ToolContext) -> list[str]:
-    return await tool_context.list_artifact_keys()
+    return await tool_context.list_artifacts()  # ToolContext method (not list_artifact_keys)
 ```
 
 ### Custom GCS credentials
@@ -1070,7 +1079,7 @@ Source-verified from `pubsub_toolset.py`:
 | `credentials_config` | `PubSubCredentialsConfig \| None` | `None` | GCP credentials; uses Application Default Credentials if `None` |
 | `pubsub_tool_config` | `PubSubToolConfig \| None` | `PubSubToolConfig()` | Project ID, timeouts, max messages, etc. |
 
-Note: unlike `BaseToolset`, an empty `tool_filter` (`None`) selects **all** tools (not zero).
+Note: `tool_filter=None` (the default) selects **all** tools. `tool_filter=[]` selects **no** tools — an empty list is not the same as `None`.
 
 ### The three tools
 
@@ -1273,15 +1282,14 @@ toolset = ToolboxToolset(
 ### With authentication token getter
 
 ```python
-import google.auth
 import google.auth.transport.requests
+import google.oauth2.id_token
 
 def get_id_token() -> str:
-    """Fetches a Google ID token for service-to-service auth."""
-    credentials, _ = google.auth.default()
+    """Fetches a Google-signed ID token for service-to-service auth."""
     request = google.auth.transport.requests.Request()
-    credentials.refresh(request)
-    return credentials.token
+    # fetch_id_token uses Application Default Credentials and the metadata server.
+    return google.oauth2.id_token.fetch_id_token(request, audience="https://toolbox.internal.example.com")
 
 toolset = ToolboxToolset(
     server_url="https://toolbox.internal.example.com",
