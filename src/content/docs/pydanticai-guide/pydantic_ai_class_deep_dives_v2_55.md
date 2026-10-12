@@ -461,7 +461,9 @@ async def main():
             return "written"
 
         result = await agent.run("write the report")
-        print(Path(tmpdir, "report.md").read_text())
+        # TestModel returns custom_output_text directly without calling tools.
+        # With a real model, write_report would be invoked and the file would exist.
+        print(result.output)   # "wrote"
 
 asyncio.run(main())
 ```
@@ -965,20 +967,20 @@ class ImageGeneration(NativeOrLocalTool[AgentDepsT]):
 ### Example 1 — enable native image generation (model that supports it)
 
 ```python
-# Requires OPENAI_API_KEY. TestModel does not support ImageGeneration (it rejects
-# built-in tools), so a real image-capable model is required.
+# Requires OPENAI_API_KEY. Use an image-capable conversational model —
+# gpt-image-1 is a direct image API model, not a chat-capable one.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.image_generation import ImageGeneration
 
 agent = Agent(
-    "openai:gpt-image-1",        # native image generation
+    "openai-responses:gpt-4o",   # conversational model with native image tool support
     capabilities=[ImageGeneration()],
 )
 
 async def main():
     result = await agent.run("Generate an image of a sunset over the ocean.")
-    # result.output contains the generated image URL or base64 data.
+    # result.output contains the generated image data or URL.
     print(result.output)
 
 asyncio.run(main())
@@ -1169,7 +1171,10 @@ def double(n: int) -> int:
 async def main():
     result = await agent.run("double 5")
     print(result.output)
-    print(call_log)   # ['before:double', 'after:double=10']
+    # TestModel generates tool args from the schema; the exact value depends on what it generates.
+    # In production with a real model and prompt "double 5", you'd see:
+    # ['before:double', 'after:double=10']
+    print(call_log)
 
 asyncio.run(main())
 ```
