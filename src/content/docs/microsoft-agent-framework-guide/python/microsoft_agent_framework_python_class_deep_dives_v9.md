@@ -95,7 +95,8 @@ async def main():
 
     # Full aggregated response available after iteration
     response = await stream.get_final_response()
-    print(f"\nTotal tokens: {response.usage.total_tokens}")
+    tokens = (response.usage_details or {}).get("total_token_count")
+    print(f"\nTotal tokens: {tokens}")
 
 asyncio.run(main())
 ```
@@ -332,9 +333,10 @@ class RAGContextProvider(ContextProvider):
         )
         chunks = await self._retriever.search(query, top_k=4)
         preamble = "\n\n".join(chunks)
+        from agent_framework import Message
         context.extend_messages(
             "rag",
-            [{"role": "system", "content": f"Relevant context:\n{preamble}"}],
+            [Message("system", [f"Relevant context:\n{preamble}"])],
         )
 
 agent = Agent(client=my_client, context_providers=[RAGContextProvider(retriever)])
@@ -358,7 +360,7 @@ class AuditLogProvider(ContextProvider):
             return
         record = {
             "session_id": context.session_id,
-            "tokens": context.response.usage.total_tokens if context.response.usage else None,
+            "tokens": (context.response.usage_details or {}).get("total_token_count"),
             "messages": len(context.response.messages),
         }
         with self._log_path.open("a") as f:
@@ -423,7 +425,7 @@ FileSessionStore(
 | `get` | `async (session_id: str) → AgentSession \| None` | Load a session snapshot. Returns `None` if not found. |
 | `set` | `async (session_id: str, session: AgentSession) → None` | Atomically write the session snapshot. |
 | `delete` | `async (session_id: str) → None` | Remove the session file. No-op if absent. |
-| `validate_session_id` | `(session_id: str) → None` | Raises `ValueError` for IDs longer than 128 characters or containing path-traversal sequences. |
+| `validate_session_id` | `(session_id: str) → None` | Raises `ValueError` for empty IDs or IDs longer than 128 characters. Path-traversal safety is enforced separately at the file-path level by the store. |
 
 ### Example 1 — persist a session across process restarts
 
@@ -618,7 +620,7 @@ async def should_continue(
     return True, f"Step {iteration} incomplete — continue."
 
 async def build_next_message(*, feedback: str | None, **kwargs) -> Message:
-    return Message(role="user", content=feedback or "Please continue.")
+    return Message("user", [feedback or "Please continue."])
 
 agent = Agent(
     client=my_client,
@@ -669,13 +671,9 @@ validate = Agent(client=my_client, name="validate")
 report = Agent(client=my_client, name="report")
 
 workflow = (
-    WorkflowBuilder()
-    .add_agent("ingest", ingest)
-    .add_agent("validate", validate)
-    .add_agent("report", report)
+    WorkflowBuilder(start_executor=ingest)
     .add_edge(ingest, validate)
     .add_edge(validate, report)
-    .set_entry("ingest")
     .build()
 )
 ```
@@ -689,13 +687,10 @@ def skip_for_short_input(data: WorkflowMessage) -> bool:
     return len(data.text or "") > 200
 
 workflow = (
-    WorkflowBuilder()
-    .add_agent("ingest", ingest)
-    .add_agent("validate", validate)
+    WorkflowBuilder(start_executor=ingest)
     .add_edge(ingest, validate, condition=skip_for_short_input)
     .add_edge(ingest, report)   # always runs
     .add_edge(validate, report)
-    .set_entry("ingest")
     .build()
 )
 ```
@@ -739,7 +734,8 @@ async def run_invoice_workflow(workflow: Workflow, session: AgentSession) -> str
         },
     )
     result = await workflow.run("Process the attached invoice.", function_invocation_kwargs=kwargs)
-    return result.output.text
+    outputs = result.get_outputs()
+    return outputs[0].text if outputs else ""
 
 asyncio.run(run_invoice_workflow(my_workflow, my_session))
 ```
@@ -930,10 +926,11 @@ logger = logging.getLogger(__name__)
 class LoggingSkillsSource(DelegatingSkillsSource):
     async def get_skills(self, context: SkillsSourceContext) -> list[Skill]:
         skills = await super().get_skills(context)
+        session_id = context.session.session_id if context.session else None
         logger.info(
             "Loaded %d skills for session %s",
             len(skills),
-            context.session_id,
+            session_id,
         )
         return skills
 ```
@@ -967,6 +964,7 @@ from agent_framework import (
     FileSkillsSource,
     DeduplicatingSkillsSource,
     FilteringSkillsSource,
+    SkillsProvider,
 )
 
 base = FileSkillsSource("./skills")
@@ -979,7 +977,8 @@ source = LoggingSkillsSource(
     )
 )
 
-agent = Agent(client=my_client, skills_sources=[source])
+# Wrap in SkillsProvider and pass via context_providers
+agent = Agent(client=my_client, context_providers=[SkillsProvider(source)])
 ```
 
 ---
@@ -1039,29 +1038,23 @@ finaliser = Agent(client=my_client, name="finaliser")
 planner = Agent(client=my_client, name="planner")
 
 inner_workflow = (
-    WorkflowBuilder()
-    .add_function("approval-gate", approval_executor)
-    .add_agent("finalise", finaliser)
+    WorkflowBuilder(start_executor=approval_executor)
     .add_edge(approval_executor, finaliser)
-    .set_entry("approval-gate")
     .build()
 )
 
 # Outer workflow embeds the inner one via WorkflowExecutor
 sub_executor = WorkflowExecutor(inner_workflow)
 outer_workflow = (
-    WorkflowBuilder()
-    .add_agent("planner", planner)
-    .add_executor("sub", sub_executor)
+    WorkflowBuilder(start_executor=planner)
     .add_edge(planner, sub_executor)
-    .set_entry("planner")
     .build()
 )
 
 async def run_with_hitl(question: str) -> str:
-    # Run the outer workflow — HITL approval is handled inside approval_executor
-    response = await outer_workflow.run(question)
-    return response.output.text
+    result = await outer_workflow.run(question)
+    outputs = result.get_outputs()
+    return outputs[0].text if outputs else ""
 
 asyncio.run(run_with_hitl("Draft a deployment plan for the new service."))
 ```
