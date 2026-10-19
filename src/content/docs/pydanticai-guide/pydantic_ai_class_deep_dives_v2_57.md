@@ -1217,19 +1217,18 @@ asyncio.run(main())
 ### Example 3 — `ImageGeneration` (a NativeOrLocalTool subclass)
 
 ```python
-# NOTE: requires an OpenAI model that supports native image generation (e.g. gpt-image-1).
-# Replace the TestModel with OpenAIModel("gpt-image-1") and set OPENAI_API_KEY.
-# TestModel does not support provider-native image tools and will raise UserError.
+# NOTE: requires OPENAI_API_KEY and a conversational model with native image generation
+# support (e.g. openai-responses:gpt-5.2). gpt-image-1 is an image-only model and
+# cannot drive agent conversations — it belongs in fallback_image_model instead.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
-from pydantic_ai.models.openai import OpenAIModel
 
-# ImageGeneration extends NativeOrLocalTool with a fallback_image_model option
-# native=True uses the provider's built-in image generation (e.g. gpt-image-1)
-# native=False falls back to a separate image model specified via fallback_image_model
+# ImageGeneration extends NativeOrLocalTool with a fallback_image_model option.
+# native=True (default) uses the conversational model's built-in image-generation tool.
+# native=False falls back to a separate model specified via fallback_image_model.
 agent = Agent(
-    OpenAIModel("gpt-image-1"),  # requires OPENAI_API_KEY
+    "openai-responses:gpt-5.2",  # conversational model with native image generation
     capabilities=[ImageGeneration()],  # native=True by default
 )
 
