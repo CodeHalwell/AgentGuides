@@ -1170,7 +1170,7 @@ from pydantic_ai.models.test import TestModel
 
 # WebSearch extends NativeOrLocalTool; local='duckduckgo' is a named strategy
 agent = Agent(
-    TestModel(custom_result_text="search result"),
+    TestModel(call_tools=["duckduckgo_search"]),  # actually invokes the DuckDuckGo fallback
     capabilities=[WebSearch(local="duckduckgo")],
 )
 
@@ -1198,7 +1198,7 @@ def my_local_search(query: str) -> str:
 # native=False → always use the local fallback (no native tool advertised)
 cap = NativeOrLocalTool(native=False, local=my_local_search)
 
-model = TestModel(custom_result_text="answer from search")
+model = TestModel(call_tools=["my_local_search"])  # actually invokes the local fallback
 agent = Agent(model, capabilities=[cap])
 
 async def main():
@@ -1229,7 +1229,15 @@ agent = Agent(
 
 async def main():
     result = await agent.run("Generate a sunset over mountains")
-    print(result.output)
+    print(result.output)  # text companion (may be empty)
+    # The generated image lives in ModelResponse.images, not result.output
+    from pydantic_ai.messages import ModelResponse
+    from pathlib import Path
+    for msg in result.all_messages():
+        if isinstance(msg, ModelResponse) and msg.images:
+            image = msg.images[0]  # BinaryImage
+            Path("sunset.png").write_bytes(image.data)
+            print(f"Saved: {image.media_type}, {len(image.data)} bytes")
 
 asyncio.run(main())
 ```
@@ -1248,7 +1256,7 @@ def my_fetcher(url: str) -> str:
 
 # Force local always — useful when you must control all outbound HTTP
 agent = Agent(
-    TestModel(custom_result_text="fetched"),
+    TestModel(call_tools=["my_fetcher"]),  # actually invokes my_fetcher
     capabilities=[WebFetch(native=False, local=my_fetcher)],
 )
 
