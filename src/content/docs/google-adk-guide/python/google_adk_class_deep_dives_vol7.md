@@ -430,34 +430,44 @@ def safety_gate(callback_context: CallbackContext) -> types.Content | None:
 `InvocationContext` tracks every call to the model via `_InvocationCostManager`. When `RunConfig.max_llm_calls > 0` and the limit is exceeded, it raises `LlmCallsLimitExceededError`:
 
 ```python
+import asyncio
 from google.adk.agents import LlmAgent, RunConfig
 from google.adk.runners import InMemoryRunner
-from google.adk.sessions import InMemorySessionService
-import asyncio
+from google.adk.tools import FunctionTool
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+from google.genai import types
 
+def count_up() -> dict:
+    """Returns a number; the agent will keep calling this tool."""
+    return {"value": 1}
+
+# Each tool call costs ≥2 LLM calls (decide → process result).
+# max_llm_calls=1 means the second call raises LlmCallsLimitExceededError.
 async def run_with_limit():
     runner = InMemoryRunner(
         agent=LlmAgent(
             model="gemini-2.0-flash",
             name="limited_agent",
-            instruction="Loop and call tools often.",
+            instruction="Call count_up three times and report the total.",
+            tools=[FunctionTool(func=count_up)],
         ),
-        session_service=InMemorySessionService(),
+        app_name="demo",
     )
     session = await runner.session_service.create_session(
         app_name="demo", user_id="u1"
     )
-    from google.genai import types as gt
     try:
         async for event in runner.run_async(
             user_id="u1",
             session_id=session.id,
-            new_message=gt.Content(role="user", parts=[gt.Part(text="Go")]),
-            run_config=RunConfig(max_llm_calls=3),
+            new_message=types.Content(role="user", parts=[types.Part(text="Go")]),
+            run_config=RunConfig(max_llm_calls=1),
         ):
             pass
-    except Exception as e:
-        print(type(e).__name__, e)
+    except LlmCallsLimitExceededError as e:
+        print("LLM call budget exceeded:", e)
+
+asyncio.run(run_with_limit())
 ```
 
 ---
@@ -878,9 +888,9 @@ Source-verified from `google/adk/plugins/plugin_manager.py`:
 | `on_user_message_callback` | A new user message arrives | Yes (return a `Content`) |
 | `before_run_callback` | Before `runner.run_async` starts | Yes (return a `Content`) |
 | `after_run_callback` | After `runner.run_async` finishes | No |
-| `on_event_callback` | Every event emitted | No |
+| `on_event_callback` | Every event emitted | Yes (return a replacement `Event`) |
 | `before_agent_callback` | Before each agent call | Yes (return a `Content`) |
-| `after_agent_callback` | After each agent call | No |
+| `after_agent_callback` | After each agent call | Yes (return a `Content`) |
 | `before_tool_callback` | Before each tool call | Yes (return a result dict) |
 | `after_tool_callback` | After each tool call | Yes (return a replacement result) |
 | `before_model_callback` | Before each LLM call | Yes (return an `LlmResponse`) |
