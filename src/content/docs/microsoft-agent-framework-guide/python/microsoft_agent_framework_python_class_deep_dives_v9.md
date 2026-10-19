@@ -70,12 +70,12 @@ ResponseStream(
 | Member | Description |
 |---|---|
 | `async for update in stream` | Iterate updates as they arrive. |
-| `stream.result` | `FinalT` — available only after the stream is fully consumed. Raises if called before. |
-| `map(fn)` | Return a new `ResponseStream` that applies `fn` to every update. |
-| `flat_map(fn)` | Return a new stream where each update is replaced by zero-or-more updates from `fn`. |
+| `await stream.get_final_response()` | `FinalT` — obtain the aggregated final result after fully consuming the stream. |
+| `map(fn, finalizer)` | Return a new `ResponseStream` that applies `fn` to every update; `finalizer` builds the final value from the transformed updates. |
+| `flat_map(fn, finalizer)` | Return a new stream where each update is replaced by zero-or-more updates from `fn`; `finalizer` is required as the second positional argument. |
 | `with_finalizer(fn)` | Return a new stream with a different finalizer, preserving all hooks. |
-| `from_awaitable(aw, *, finalizer)` | Class method — wrap an awaitable-of-stream. |
-| `buffered_and_gated(gates, *, ...)` | Class method — create a buffered stream that only releases after all gates pass. |
+| `from_awaitable(aw)` | Class method — wrap an awaitable-of-stream; inherits the inner stream's finalizer (no `finalizer` keyword). |
+| `buffered_and_gated(consume, gate, rederive)` | Class method — create a buffered stream that only releases after all gates pass. |
 
 ### Example 1 — iterate streaming agent response
 
@@ -101,7 +101,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 2 — async context manager (auto-drain on exit)
+### Example 2 — async context manager (auto-close on exit)
 
 ```python
 async def stream_with_timeout(agent: Agent, message: str) -> str:
@@ -992,7 +992,7 @@ base = FileSkillsSource("./skills")
 source = LoggingSkillsSource(
     FilteringSkillsSource(
         DeduplicatingSkillsSource(base),
-        predicate=lambda skill, _ctx: skill.metadata.get("category") == "approved",
+        predicate=lambda skill, _ctx: (skill.frontmatter.metadata or {}).get("category") == "approved",
     )
 )
 
