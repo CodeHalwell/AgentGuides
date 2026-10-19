@@ -513,8 +513,10 @@ AgentLoopMiddleware(
     max_iterations: int | None = 10,
     next_message: NextMessageCallable | None = None,
     return_final_only: bool = False,
+    inject_progress: bool = True,
     fresh_context: bool = False,
     record_feedback: Callable[..., str | None] | None = None,
+    additional_instructions: str | None = None,
 )
 ```
 
@@ -522,10 +524,12 @@ AgentLoopMiddleware(
 |---|---|
 | `should_continue` | `async (*, iteration, last_result, ..., **kwargs) -> bool \| tuple[bool, str \| None]`. Return `(False, reason)` to stop and attach a rationale. |
 | `max_iterations` | Hard cap. `None` for unbounded — ensure `should_continue` will eventually stop. |
-| `next_message` | Builds the user message for the next iteration. Defaults to `last_result.text`. |
+| `next_message` | Builds the user message for the next iteration. When `None` (default), uses the framework continuation nudge: `"Continue working on the task. If it is complete, say so."` |
 | `return_final_only` | When `True`, only the last iteration's `AgentResponse` is returned instead of the aggregate. |
-| `fresh_context` | When `True`, session context providers re-run for each iteration. |
-| `record_feedback` | Called after each iteration to append to the `progress` log. |
+| `inject_progress` | When `True` (default), the accumulated progress log (from `record_feedback`) is injected into each iteration's context. |
+| `fresh_context` | When `True`, each iteration restarts from the original request messages (plus the progress log and nudge), and any attached session is restored to its pre-loop snapshot, discarding in-loop history. |
+| `record_feedback` | Called after each iteration to append a string to the `progress` log. |
+| `additional_instructions` | Optional `system` message injected on every iteration; preserved across `fresh_context` resets. |
 
 ### Class method — `with_judge`
 
@@ -678,26 +682,27 @@ workflow = (
 )
 ```
 
-### Example 2 — conditional edge (skip validate for short inputs)
+### Example 2 — conditional edge (skip validate when ingest output is short)
 
 ```python
 from agent_framework import SingleEdgeGroup, WorkflowMessage
 
 from agent_framework._workflows._agent_executor import AgentExecutorResponse
 
-def is_long_input(data: AgentExecutorResponse) -> bool:
-    # Agents are wrapped in AgentExecutor; edge condition receives AgentExecutorResponse
+# Note: the condition receives the INGEST agent's output (AgentExecutorResponse),
+# not the original user input.  These predicates route on output length.
+def is_long_ingest_output(data: AgentExecutorResponse) -> bool:
     return len(data.agent_response.text or "") > 200
 
-def is_short_input(data: AgentExecutorResponse) -> bool:
+def is_short_ingest_output(data: AgentExecutorResponse) -> bool:
     return len(data.agent_response.text or "") <= 200
 
-# Mutually exclusive routing: long inputs go through validate → report;
-# short inputs skip validation and route directly to report.
+# Mutually exclusive routing: long ingest outputs go through validate → report;
+# short ingest outputs skip validation and route directly to report.
 workflow = (
     WorkflowBuilder(start_executor=ingest)
-    .add_edge(ingest, validate, condition=is_long_input)
-    .add_edge(ingest, report, condition=is_short_input)
+    .add_edge(ingest, validate, condition=is_long_ingest_output)
+    .add_edge(ingest, report, condition=is_short_ingest_output)
     .add_edge(validate, report)
     .build()
 )
