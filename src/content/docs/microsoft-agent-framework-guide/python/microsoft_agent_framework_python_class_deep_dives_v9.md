@@ -34,7 +34,7 @@ See [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_p
 
 **Module:** `agent_framework._types` (re-exported via `agent_framework`)
 
-`ResponseStream` is the generic async-iterable wrapper that backs every streaming call in the framework. `Agent.run(stream=True)` returns `ResponseStream[AgentResponseUpdate, AgentResponse]`; `Workflow.run(stream=True)` returns `ResponseStream[WorkflowEvent, WorkflowRunResult]`; a chat client's `get_streaming_response()` returns `ResponseStream[ChatResponseUpdate, ChatResponse]`. Consuming the stream yields individual update chunks; after full consumption call `await stream.get_final_response()` to obtain the aggregated final value.
+`ResponseStream` is the generic async-iterable wrapper that backs every streaming call in the framework. `Agent.run(stream=True)` returns `ResponseStream[AgentResponseUpdate, AgentResponse]`; `Workflow.run(stream=True)` returns `ResponseStream[WorkflowEvent, WorkflowRunResult]`; a chat client's `get_response(stream=True)` returns `ResponseStream[ChatResponseUpdate, ChatResponse]`. Consuming the stream yields individual update chunks; after full consumption call `await stream.get_final_response()` to obtain the aggregated final value.
 
 > **When you need it directly:** most code simply `async for`-iterates the stream or wraps it with `async with`. Reach for the factory methods (`map`, `flat_map`, `with_finalizer`, `buffered_and_gated`) when you need to transform or gate a stream without losing its type safety.
 
@@ -60,7 +60,7 @@ ResponseStream(
 | `stream` | The raw async-iterable source, or an awaitable that resolves to one. |
 | `finalizer` | Combines all collected updates into the single `FinalT`. When `None` the result is `None`. |
 | `update_transforms` | Called in order for each yielded update; return `None` to suppress the update. Alias for the older `transform_hooks`. |
-| `result_transforms` | Called in order on the finalized result before it is published to `.result`. Alias for `result_hooks`. |
+| `result_transforms` | Called in order on the finalized result before it is returned via `get_final_response()`. Alias for `result_hooks`. |
 | `cleanup_hooks` | Run after the stream is exhausted (before the finalizer). |
 | `stream_updates` | When `False`, updates are buffered and only released after the finalizer and all gates pass. |
 | `result_to_updates` | Required when `stream_updates=False` and a `result_transforms` replaces the final value. |
@@ -105,9 +105,9 @@ asyncio.run(main())
 
 ```python
 async def stream_with_timeout(agent: Agent, message: str) -> str:
-    stream = agent.run(message, stream=True)
-    async for update in stream:
-        print(update.text, end="")
+    async with agent.run(message, stream=True) as stream:
+        async for update in stream:
+            print(update.text, end="")
     return (await stream.get_final_response()).text
 ```
 
@@ -716,7 +716,7 @@ workflow = (
 
 `WorkflowInvocationKwargs` is a frozen dataclass for passing keyword arguments to a workflow run with optional per-executor overrides. Pass it as the `function_invocation_kwargs` argument to `Workflow.run()` when you need to provide shared defaults AND override them for specific executors in the same call.
 
-> **Plain dict vs. `WorkflowInvocationKwargs`:** passing a plain `dict` distributes the same kwargs to every executor. `WorkflowInvocationKwargs` lets you set global defaults and selectively override them per executor without duplicating keys.
+> **Plain dict vs. `WorkflowInvocationKwargs`:** a plain `dict` is interpreted in two ways depending on its keys. If any top-level key matches a known executor ID in the workflow, the dict is treated as a per-executor mapping (only matching executors receive their slice). If no key matches an executor ID, the entire dict is applied as global kwargs to every executor — equivalent to `WorkflowInvocationKwargs(global_kwargs=your_dict)`. Use `WorkflowInvocationKwargs` explicitly when you need both global defaults and per-executor overrides in a single call.
 
 ### Constructor
 
