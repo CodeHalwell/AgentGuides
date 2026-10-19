@@ -46,12 +46,17 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 The default predicate (`lambda ... True`) means every call requires approval. Override it
 to be selective.
 
-### Example 1 — gate a single dangerous tool
+### Example 1 — gate a single dangerous tool (full approval flow)
+
+When `output_type` includes `DeferredToolRequests`, the framework intercepts
+`ApprovalRequired` and packages the pending call into `result.output.approvals` rather
+than raising an exception. Resume the run by calling the agent again with
+`deferred_tool_results=requests.build_results(approve_all=True)` (or per-call approvals).
 
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ApprovalRequired
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai.models.test import TestModel
@@ -75,15 +80,23 @@ approval_toolset = ApprovalRequiredToolset(
 )
 
 model = TestModel(call_tools=["delete_file"])
-agent = Agent(model, toolsets=[approval_toolset])
+agent = Agent(
+    model,
+    toolsets=[approval_toolset],
+    output_type=[str, DeferredToolRequests],
+)
 
 async def main():
-    try:
-        result = await agent.run("Delete /tmp/test.txt")
-    except ApprovalRequired as exc:
-        print(f"Approval required: {exc}")
-        # In production, present the pending call to a human then retry
-        # with an approved context
+    result1 = await agent.run("Delete /tmp/test.txt")
+    if isinstance(result1.output, DeferredToolRequests):
+        print("Pending approvals:", [tc.tool_name for tc in result1.output.approvals])
+        # Present to human; here we approve everything automatically
+        approved = result1.output.build_results(approve_all=True)
+        result2 = await agent.run(
+            message_history=result1.all_messages(),
+            deferred_tool_results=approved,
+        )
+        print(result2.output)
 
 asyncio.run(main())
 ```
@@ -567,13 +580,22 @@ external = ExternalToolset(
 )
 
 model = TestModel(call_tools=["send_slack_message"])
-agent = Agent(model, toolsets=[external])
+# Include DeferredToolRequests in output_type so the agent can surface pending calls
+agent = Agent(model, toolsets=[external], output_type=[str, DeferredToolRequests])
 
 async def main():
-    # The run will pause with DeferredToolRequests
+    # The run pauses with DeferredToolRequests when a tool is called
     result = await agent.run("Notify #ops that the deploy succeeded")
-    print(type(result.output).__name__)  # DeferredToolRequests or final answer
-    print(result.output)
+    if isinstance(result.output, DeferredToolRequests):
+        print("External calls to execute:", [tc.tool_name for tc in result.output.calls])
+        # Execute externally, then feed results back:
+        # results = {tc.tool_call_id: "ok" for tc in result.output.calls}
+        # result2 = await agent.run(
+        #     message_history=result.all_messages(),
+        #     deferred_tool_results=result.output.build_results(calls=results),
+        # )
+    else:
+        print(result.output)
 
 asyncio.run(main())
 ```
@@ -582,9 +604,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-import json
 from pydantic_ai import Agent, ExternalToolset, ToolDefinition
-from pydantic_ai.tools import DeferredToolResults
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults
 from pydantic_ai.models.test import TestModel
 
 external = ExternalToolset(
@@ -601,20 +622,27 @@ external = ExternalToolset(
     ]
 )
 
-async def execute_externally(requests) -> DeferredToolResults:
+async def execute_externally(requests: DeferredToolRequests) -> DeferredToolResults:
     """Simulate forwarding calls to a remote service."""
-    results = []
-    for req in requests.tool_calls:
-        # In production, POST to your microservice here
-        results.append({"tool_call_id": req.tool_call_id, "result": '{"rows": 42}'})
-    return requests.build_results(results=results)
+    # requests.calls holds the ToolCallPart items for external execution
+    results = {
+        tc.tool_call_id: '{"rows": 42}'
+        for tc in requests.calls  # .calls not .tool_calls
+    }
+    return requests.build_results(calls=results)  # calls=, not results=
 
 model = TestModel(call_tools=["run_sql"])
-agent = Agent(model, toolsets=[external])
+agent = Agent(model, toolsets=[external], output_type=[str, DeferredToolRequests])
 
 async def main():
     result = await agent.run("How many orders were placed today?")
-    print(result.output)
+    if isinstance(result.output, DeferredToolRequests):
+        resolved = await execute_externally(result.output)
+        result2 = await agent.run(
+            message_history=result.all_messages(),
+            deferred_tool_results=resolved,
+        )
+        print(result2.output)
 
 asyncio.run(main())
 ```
@@ -784,11 +812,12 @@ async def auto_approve(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults:
     """Resolve every deferred call automatically."""
+    # requests.calls holds ToolCallPart items; build_results takes calls={id: result}
     return requests.build_results(
-        results=[
-            {"tool_call_id": tc.tool_call_id, "result": "Top search result: Python docs"}
-            for tc in requests.tool_calls
-        ]
+        calls={
+            tc.tool_call_id: "Top search result: Python docs"
+            for tc in requests.calls
+        }
     )
 
 model = TestModel(call_tools=["web_search"])
@@ -832,11 +861,12 @@ external = ExternalToolset(
 async def selective_handler(
     ctx: RunContext, requests: DeferredToolRequests
 ) -> DeferredToolResults | None:
-    safe_calls = [tc for tc in requests.tool_calls if tc.tool_name == "safe_action"]
+    # requests.calls holds ToolCallPart items for external execution
+    safe_calls = [tc for tc in requests.calls if tc.tool_name == "safe_action"]
     if not safe_calls:
         return None  # decline — let it bubble up
     return requests.build_results(
-        results=[{"tool_call_id": tc.tool_call_id, "result": "done"} for tc in safe_calls]
+        calls={tc.tool_call_id: "done" for tc in safe_calls}
     )
 
 model = TestModel(call_tools=["safe_action"])
@@ -1036,30 +1066,33 @@ import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.select_model import SelectModel
-from pydantic_ai.models import ModelSelectionContext
+from pydantic_ai.models import Model, ModelSelectionContext
 from pydantic_ai.models.test import TestModel
 
 @dataclass
 class UserDeps:
-    preferred_model: str  # e.g. "openai:gpt-4o" or "anthropic:claude-opus-4-5"
+    # Pass a Model instance (not a string ID, which would require live provider credentials)
+    preferred_model: Model
 
-def user_model_selector(ctx: ModelSelectionContext[UserDeps]) -> str:
+def user_model_selector(ctx: ModelSelectionContext[UserDeps]) -> Model:
     return ctx.deps.preferred_model
 
-fast_model = TestModel(custom_result_text="fast answer")
+default_model = TestModel(custom_result_text="default answer")
+premium_model = TestModel(custom_result_text="premium detailed answer")
+
 agent = Agent(
-    fast_model,
+    default_model,
     deps_type=UserDeps,
     capabilities=[SelectModel(selector=user_model_selector)],
 )
 
 async def main():
-    # In practice the returned model ID would resolve to a real provider model
+    # Premium user gets the premium model; swap TestModel for a real provider in production
     result = await agent.run(
         "Summarise this document",
-        deps=UserDeps(preferred_model="openai:gpt-4o-mini"),
+        deps=UserDeps(preferred_model=premium_model),
     )
-    print(result.output)
+    print(result.output)  # premium detailed answer
 
 asyncio.run(main())
 ```
