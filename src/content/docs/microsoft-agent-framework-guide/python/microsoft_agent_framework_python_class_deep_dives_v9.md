@@ -685,14 +685,19 @@ from agent_framework import SingleEdgeGroup, WorkflowMessage
 
 from agent_framework._workflows._agent_executor import AgentExecutorResponse
 
-def skip_for_short_input(data: AgentExecutorResponse) -> bool:
+def is_long_input(data: AgentExecutorResponse) -> bool:
     # Agents are wrapped in AgentExecutor; edge condition receives AgentExecutorResponse
     return len(data.agent_response.text or "") > 200
 
+def is_short_input(data: AgentExecutorResponse) -> bool:
+    return len(data.agent_response.text or "") <= 200
+
+# Mutually exclusive routing: long inputs go through validate → report;
+# short inputs skip validation and route directly to report.
 workflow = (
     WorkflowBuilder(start_executor=ingest)
-    .add_edge(ingest, validate, condition=skip_for_short_input)
-    .add_edge(ingest, report)   # always runs
+    .add_edge(ingest, validate, condition=is_long_input)
+    .add_edge(ingest, report, condition=is_short_input)
     .add_edge(validate, report)
     .build()
 )
@@ -832,8 +837,9 @@ async def fetch_data(url: str) -> str:
 
 @step
 async def summarise(text: str, *, ctx: RunContext | None = None) -> str:
-    agent = ctx.get_agent("summariser") if ctx else my_agent
-    response = await agent.run(f"Summarise:\n{text}")
+    # RunContext is injected automatically; it exposes get_state/set_state/is_streaming.
+    # The agent is captured from the enclosing scope — RunContext has no get_agent().
+    response = await my_agent.run(f"Summarise:\n{text}")
     return response.text
 
 @workflow
@@ -953,13 +959,15 @@ class RateLimitedSkillsSource(DelegatingSkillsSource):
         super().__init__(inner_source)
         self._min_interval = 60 / calls_per_minute
         self._last_call = 0.0
+        self._lock = asyncio.Lock()
 
     async def get_skills(self, context: SkillsSourceContext) -> list[Skill]:
-        now = time.monotonic()
-        wait = self._min_interval - (now - self._last_call)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_call = time.monotonic()
+        async with self._lock:
+            now = time.monotonic()
+            wait = self._min_interval - (now - self._last_call)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_call = time.monotonic()
         return await super().get_skills(context)
 ```
 
