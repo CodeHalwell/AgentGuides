@@ -917,13 +917,19 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities.content_filter import RaiseContentFilterError
 from pydantic_ai.exceptions import ContentFilterError
-from pydantic_ai.models.test import TestModel
+from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelResponse, TextPart
 
-# TestModel is used here; in production swap for openai:gpt-4o etc.
-model = TestModel()
+# FunctionModel lets us simulate a content-filtered response offline
+def filtered_response(messages: list, info: AgentInfo) -> ModelResponse:
+    return ModelResponse(
+        parts=[TextPart(content="")],
+        finish_reason="content_filter",
+        model_name="test",
+    )
+
 agent = Agent(
-    model,
+    FunctionModel(filtered_response),
     capabilities=[RaiseContentFilterError()],
 )
 
