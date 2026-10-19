@@ -739,17 +739,16 @@ import asyncio
 from agent_framework import Workflow, WorkflowInvocationKwargs
 
 async def run_invoice_workflow(workflow: Workflow) -> str:
-    # executor_kwargs keys are executor IDs; values become client-level overrides
-    # for that executor's agent run (e.g. temperature, max_tokens).
-    # global_kwargs forwards to function executors or as default client kwargs;
-    # it does not inject a shared AgentSession into AgentExecutors.
+    # Chat parameters such as temperature belong in client_kwargs, NOT
+    # function_invocation_kwargs (which forwards kwargs to tool/function calls).
+    # executor_kwargs keys are executor IDs; values are per-executor overrides.
     kwargs = WorkflowInvocationKwargs(
         executor_kwargs={
             "invoice-parser": {"temperature": 0.1},
             "summariser": {"temperature": 0.7},
         },
     )
-    result = await workflow.run("Process the attached invoice.", function_invocation_kwargs=kwargs)
+    result = await workflow.run("Process the attached invoice.", client_kwargs=kwargs)
     outputs = result.get_outputs()
     return outputs[0].text if outputs else ""
 
@@ -857,7 +856,8 @@ async def research_pipeline(url: str) -> str:
 
 async def main():
     result = await research_pipeline.build().run("https://example.com/article")
-    print(result)
+    # run() returns WorkflowRunResult; extract the pipeline's return value via get_outputs()
+    print(result.get_outputs()[0])
 
 asyncio.run(main())
 ```
