@@ -1050,8 +1050,8 @@ from pydantic_ai.capabilities.select_model import SelectModel
 from pydantic_ai.models import ModelSelectionContext
 from pydantic_ai.models.test import TestModel
 
-cheap_model = TestModel(custom_result_text="cheap answer")
-expensive_model = TestModel(custom_result_text="detailed answer")
+cheap_model = TestModel(custom_output_text="cheap answer")
+expensive_model = TestModel(custom_output_text="detailed answer")
 
 def route_by_length(ctx: ModelSelectionContext) -> object:
     last_user = next(
@@ -1098,8 +1098,8 @@ class UserDeps:
 def user_model_selector(ctx: ModelSelectionContext[UserDeps]) -> Model:
     return ctx.deps.preferred_model
 
-default_model = TestModel(custom_result_text="default answer")
-premium_model = TestModel(custom_result_text="premium detailed answer")
+default_model = TestModel(custom_output_text="default answer")
+premium_model = TestModel(custom_output_text="premium detailed answer")
 
 agent = Agent(
     default_model,
@@ -1127,8 +1127,8 @@ from pydantic_ai.capabilities.select_model import SelectModel
 from pydantic_ai.models import ModelSelectionContext
 from pydantic_ai.models.test import TestModel
 
-cheap_model = TestModel(custom_result_text="cheap")
-expensive_model = TestModel(custom_result_text="expensive")
+cheap_model = TestModel(custom_output_text="cheap")
+expensive_model = TestModel(custom_output_text="expensive")
 BUDGET_TOKEN_LIMIT = 10_000
 
 async def budget_selector(ctx: ModelSelectionContext) -> object:
@@ -1186,15 +1186,15 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
 from pydantic_ai.models.test import TestModel
 
-# WebSearch extends NativeOrLocalTool; local='duckduckgo' is a named strategy
+# native=False forces the local DuckDuckGo fallback regardless of model capabilities.
+# Without it, TestModel.supported_native_tools() advertises all native tools, causing
+# WebSearch to select its native path and remove duckduckgo_search from the tool list.
 agent = Agent(
     TestModel(call_tools=["duckduckgo_search"]),  # actually invokes the DuckDuckGo fallback
-    capabilities=[WebSearch(local="duckduckgo")],
+    capabilities=[WebSearch(native=False, local="duckduckgo")],
 )
 
 async def main():
-    # If the model supports OpenAI's built-in search, it uses that.
-    # Otherwise DuckDuckGo local fallback kicks in transparently.
     result = await agent.run("What happened in tech news today?")
     print(result.output)
 
