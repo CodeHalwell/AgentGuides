@@ -352,8 +352,8 @@ builder.add_edge("handler", END)
 graph = builder.compile()
 
 result = graph.invoke({"data": "raw", "trigger": None})
-print(result["data"])    # processed:raw
-print(result["trigger"]) # None  — cleared automatically
+print(result["data"])            # processed:raw
+print(result.get("trigger"))    # None  — channel absent from result when cleared
 ```
 
 ### Example 3b — Passing per-step context without polluting state
@@ -478,7 +478,7 @@ graph = builder.compile(checkpointer=MemorySaver())
 
 config = {"configurable": {"thread_id": "lv-demo"}}
 graph.invoke({"counter": 0, "message": ""}, config)
-graph.invoke(None, config)
+graph.invoke({"counter": 1, "message": ""}, config)
 
 snap = graph.get_state(config)
 print(snap.values["counter"])  # 2
@@ -533,7 +533,7 @@ class GraphResumeEvent:         # frozen dataclass
 from typing import Any
 from langgraph.callbacks import GraphCallbackHandler, GraphInterruptEvent, GraphResumeEvent
 from langgraph.graph import START, END, StateGraph
-from langgraph.types import interrupt
+from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import MemorySaver
 
 class AuditHandler(GraphCallbackHandler):
@@ -1173,7 +1173,7 @@ def flaky_node(state: State, runtime: Runtime[Ctx]) -> dict:
     )
     print(f"Attempt #{attempt}, {elapsed:.2f}s since first try")
     if attempt < 3:
-        raise ValueError("Simulated transient failure")
+        raise ConnectionError("Simulated transient failure")  # ValueError is excluded by default retry_on
     return {"result": "success after retries"}
 
 graph = (
@@ -1181,7 +1181,7 @@ graph = (
     .add_node(
         "flaky",
         flaky_node,
-        retry=RetryPolicy(max_attempts=5, initial_interval=0.05),
+        retry_policy=RetryPolicy(max_attempts=5, initial_interval=0.05),
     )
     .set_entry_point("flaky")
     .set_finish_point("flaky")
@@ -1315,8 +1315,8 @@ def review_node(state: State) -> Any:
     elif response["type"] == "ignore":
         return {"skipped": True, "final": ""}
     elif response["type"] == "response":
-        # Human provided textual feedback — re-run with the feedback
-        return {"draft": f"{state['draft']} [revised: {response['args']}]"}
+        # Human provided textual feedback — store it in draft (wire a loop back to "review" to re-process)
+        return {"draft": f"{state['draft']} [feedback: {response['args']}]", "final": ""}
     elif response["type"] == "edit":
         # Human directly edited the content
         return {"final": response["args"]["args"].get("content", state["draft"])}
