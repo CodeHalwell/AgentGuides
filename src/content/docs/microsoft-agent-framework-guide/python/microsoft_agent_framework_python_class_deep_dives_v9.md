@@ -86,7 +86,7 @@ from agent_framework import Agent, Content
 async def main():
     agent = Agent(client=my_client)
 
-    stream = await agent.run_stream("Summarise this article in three bullet points.")
+    stream = agent.run("Summarise this article in three bullet points.", stream=True)
 
     # Consume updates as they arrive
     async for update in stream:
@@ -94,7 +94,7 @@ async def main():
         print(update.text, end="", flush=True)
 
     # Full aggregated response available after iteration
-    response = stream.result
+    response = await stream.get_final_response()
     print(f"\nTotal tokens: {response.usage.total_tokens}")
 
 asyncio.run(main())
@@ -104,10 +104,10 @@ asyncio.run(main())
 
 ```python
 async def stream_with_timeout(agent: Agent, message: str) -> str:
-    async with await agent.run_stream(message) as stream:
-        async for update in stream:
-            print(update.text, end="")
-    return stream.result.text
+    stream = agent.run(message, stream=True)
+    async for update in stream:
+        print(update.text, end="")
+    return (await stream.get_final_response()).text
 ```
 
 ### Example 3 — transform every update with `map`
@@ -123,30 +123,37 @@ def uppercase_update(u: AgentResponseUpdate) -> AgentResponseUpdate:
         response_id=u.response_id,
     )
 
-# Wrap a stream produced elsewhere
-transformed: ResponseStream[AgentResponseUpdate, ...] = original_stream.map(uppercase_update)
+# Wrap a stream produced elsewhere — map requires both an update transformer and a finalizer
+from agent_framework import AgentResponse
+transformed = original_stream.map(
+    uppercase_update,
+    lambda updates: AgentResponse.from_updates(updates),
+)
 async for update in transformed:
     print(update.text)
 ```
 
-### Example 4 — buffered-and-gated stream
+### Example 4 — manually buffer and gate a stream
 
 ```python
-from agent_framework import ResponseStream, AgentResponseUpdate
+from agent_framework import AgentResponseUpdate, AgentResponse
 
 def safety_gate(update: AgentResponseUpdate) -> None:
     # Raise to block the entire stream
     if "BLOCKED" in update.text:
         raise ValueError("Blocked content detected")
 
-# Stream is held until all updates pass the gate
-gated = ResponseStream.buffered_and_gated(
-    [safety_gate],
-    stream=raw_stream,
-    finalizer=lambda updates: AgentResponse.from_updates(updates),
-)
-async for update in gated:
-    print(update.text)
+async def buffered_and_gated(raw_stream, gate_fn) -> AgentResponse:
+    """Collect all updates, apply the gate function, then return the full response."""
+    updates: list[AgentResponseUpdate] = []
+    async for update in raw_stream:
+        updates.append(update)
+    for update in updates:
+        gate_fn(update)  # raises ValueError if blocked
+    return AgentResponse.from_updates(updates)
+
+response = await buffered_and_gated(raw_stream, safety_gate)
+print(response.text)
 ```
 
 ---
@@ -155,7 +162,7 @@ async for update in gated:
 
 **Module:** `agent_framework._types` (re-exported via `agent_framework`)
 
-`AgentResponseUpdate` is a single streaming response chunk yielded by `Agent.run_stream()`. Many chunks combine to form the final `AgentResponse`. Each chunk carries an optional role, author identification (useful in multi-agent scenarios), content items, and merge mode semantics.
+`AgentResponseUpdate` is a single streaming response chunk yielded by `Agent.run(..., stream=True)`. Many chunks combine to form the final `AgentResponse`. Each chunk carries an optional role, author identification (useful in multi-agent scenarios), content items, and merge mode semantics.
 
 > **Relation to `ChatResponseUpdate`:** `ChatResponseUpdate` (Vol. 8) is the lower-level chat-client chunk. `AgentResponseUpdate` is the higher-level agent wrapper — it adds `author_name`, `agent_id`, and `merge_mode` and is what application code normally sees.
 
@@ -204,7 +211,7 @@ import asyncio
 from agent_framework import Agent
 
 async def multi_agent_stream(orchestrator: Agent, question: str) -> None:
-    stream = await orchestrator.run_stream(question)
+    stream = orchestrator.run(question, stream=True)
     current_author = None
 
     async for update in stream:
@@ -213,7 +220,7 @@ async def multi_agent_stream(orchestrator: Agent, question: str) -> None:
             print(f"\n[{current_author or 'unknown'}]: ", end="")
         print(update.text, end="", flush=True)
 
-    final = stream.result
+    final = await stream.get_final_response()
     print(f"\n\nTotal messages: {len(final.messages)}")
 
 asyncio.run(multi_agent_stream(agent, "Compare the Q3 and Q4 revenue numbers."))
@@ -227,7 +234,7 @@ from agent_framework import Agent, AgentResponseUpdate
 
 async def collect_and_replay(agent: Agent, question: str) -> list[AgentResponseUpdate]:
     updates: list[AgentResponseUpdate] = []
-    async for update in await agent.run_stream(question):
+    async for update in agent.run(question, stream=True):
         updates.append(update)
     return updates
 
@@ -264,7 +271,7 @@ assert restored.author_name == "research-agent"
 
 `SessionContext` is the mutable state bag that flows through the context-provider pipeline on every `Agent.run()` call. Providers registered with `Agent(context_providers=[...])` receive a freshly created `SessionContext` and may add messages, instructions, tools, and middleware before the underlying chat call is made. After the call, `context.response` holds the complete `AgentResponse`.
 
-> **When you need it:** implement `ContextProvider.update_context(ctx: SessionContext) -> None` and use the mutator methods. Reading `ctx.response` in an `after_invocation` hook gives you the final response for post-processing (logging, caching, guardrails).
+> **When you need it:** implement `ContextProvider.before_run(*, agent, session, context, state)` to mutate the context before each call. Reading `context.response` in an `after_run` hook gives you the final response for post-processing (logging, caching, guardrails).
 
 ### Constructor
 
@@ -311,20 +318,21 @@ from agent_framework._sessions import ContextProvider  # protocol
 
 class RAGContextProvider(ContextProvider):
     def __init__(self, retriever):
+        super().__init__("rag-provider")
         self._retriever = retriever
 
-    async def update_context(self, ctx: SessionContext) -> None:
+    async def before_run(self, *, agent, session, context: SessionContext, state) -> None:
         # Pull relevant chunks from the last user message
         query = " ".join(
             c.text
-            for msg in ctx.input_messages
+            for msg in context.input_messages
             if msg.role == "user"
             for c in msg.contents
             if hasattr(c, "text")
         )
         chunks = await self._retriever.search(query, top_k=4)
         preamble = "\n\n".join(chunks)
-        ctx.extend_messages(
+        context.extend_messages(
             "rag",
             [{"role": "system", "content": f"Relevant context:\n{preamble}"}],
         )
@@ -342,15 +350,16 @@ from agent_framework import SessionContext
 
 class AuditLogProvider(ContextProvider):
     def __init__(self, log_path: Path):
+        super().__init__("audit-log")
         self._log_path = log_path
 
-    async def after_invocation(self, ctx: SessionContext) -> None:
-        if ctx.response is None:
+    async def after_run(self, *, agent, session, context: SessionContext, state) -> None:
+        if context.response is None:
             return
         record = {
-            "session_id": ctx.session_id,
-            "tokens": ctx.response.usage.total_tokens if ctx.response.usage else None,
-            "messages": len(ctx.response.messages),
+            "session_id": context.session_id,
+            "tokens": context.response.usage.total_tokens if context.response.usage else None,
+            "messages": len(context.response.messages),
         }
         with self._log_path.open("a") as f:
             f.write(json.dumps(record) + "\n")
@@ -360,14 +369,20 @@ class AuditLogProvider(ContextProvider):
 
 ```python
 class TimerStartProvider(ContextProvider):
-    async def update_context(self, ctx: SessionContext) -> None:
+    def __init__(self):
+        super().__init__("timer-start")
+
+    async def before_run(self, *, agent, session, context: SessionContext, state) -> None:
         import time
-        ctx.metadata["start_time"] = time.monotonic()
+        context.metadata["start_time"] = time.monotonic()
 
 class TimerEndProvider(ContextProvider):
-    async def after_invocation(self, ctx: SessionContext) -> None:
+    def __init__(self):
+        super().__init__("timer-end")
+
+    async def after_run(self, *, agent, session, context: SessionContext, state) -> None:
         import time
-        elapsed = time.monotonic() - ctx.metadata.get("start_time", 0)
+        elapsed = time.monotonic() - context.metadata.get("start_time", 0)
         print(f"Agent call took {elapsed:.3f}s")
 
 agent = Agent(
@@ -427,7 +442,7 @@ async def chat(user_id: str, message: str) -> str:
     session = await STORE.get(user_id) or AgentSession()
     agent = Agent(client=my_client)
     response = await agent.run(message, session=session)
-    await STORE.set(user_id, response.session)
+    await STORE.set(user_id, session)
     return response.text
 
 asyncio.run(chat("user-42", "What were we talking about last time?"))
@@ -623,7 +638,7 @@ agent = Agent(
 
 **Module:** `agent_framework._workflows._edge` (re-exported via `agent_framework`)
 
-`SingleEdgeGroup` is a convenience wrapper for the common case of a single unconditional (or conditionally gated) directed edge between two executors. All workflow graph APIs accept `EdgeGroup` objects; `SingleEdgeGroup` satisfies that contract with less boilerplate than constructing an `EdgeGroup` with a one-element list.
+`SingleEdgeGroup` is the internal representation for a single directed edge between two executors. `WorkflowBuilder.add_edge(source_executor, target_executor, condition=None)` accepts executor objects directly and creates a `SingleEdgeGroup` internally. The `SingleEdgeGroup` class is useful for inspection, serialization, and for lower-level workflow graph APIs that accept `EdgeGroup` objects explicitly.
 
 ### Constructor
 
@@ -658,8 +673,8 @@ workflow = (
     .add_agent("ingest", ingest)
     .add_agent("validate", validate)
     .add_agent("report", report)
-    .add_edge(SingleEdgeGroup("ingest", "validate"))
-    .add_edge(SingleEdgeGroup("validate", "report"))
+    .add_edge(ingest, validate)
+    .add_edge(validate, report)
     .set_entry("ingest")
     .build()
 )
@@ -677,9 +692,9 @@ workflow = (
     WorkflowBuilder()
     .add_agent("ingest", ingest)
     .add_agent("validate", validate)
-    .add_edge(SingleEdgeGroup("ingest", "validate", condition=skip_for_short_input))
-    .add_edge(SingleEdgeGroup("ingest", "report"))   # always runs
-    .add_edge(SingleEdgeGroup("validate", "report"))
+    .add_edge(ingest, validate, condition=skip_for_short_input)
+    .add_edge(ingest, report)   # always runs
+    .add_edge(validate, report)
     .set_entry("ingest")
     .build()
 )
@@ -691,9 +706,9 @@ workflow = (
 
 **Module:** `agent_framework._workflows._workflow` (re-exported via `agent_framework`)
 
-`WorkflowInvocationKwargs` is a frozen dataclass for passing keyword arguments to a workflow run with optional per-executor overrides. Pass it as the `kwargs` argument to `Workflow.run()` or `Workflow.run_stream()` when you need to provide shared defaults AND override them for specific executors in the same call.
+`WorkflowInvocationKwargs` is a frozen dataclass for passing keyword arguments to a workflow run with optional per-executor overrides. Pass it as the `function_invocation_kwargs` argument to `Workflow.run()` when you need to provide shared defaults AND override them for specific executors in the same call.
 
-> **Plain dict vs. `WorkflowInvocationKwargs`:** passing a plain `dict` to `Workflow.run(kwargs={...})` distributes the same kwargs to every executor. `WorkflowInvocationKwargs` lets you set global defaults and selectively override them per executor without duplicating keys.
+> **Plain dict vs. `WorkflowInvocationKwargs`:** passing a plain `dict` distributes the same kwargs to every executor. `WorkflowInvocationKwargs` lets you set global defaults and selectively override them per executor without duplicating keys.
 
 ### Constructor
 
@@ -723,7 +738,7 @@ async def run_invoice_workflow(workflow: Workflow, session: AgentSession) -> str
             "summariser": {"temperature": 0.7},
         },
     )
-    result = await workflow.run("Process the attached invoice.", kwargs=kwargs)
+    result = await workflow.run("Process the attached invoice.", function_invocation_kwargs=kwargs)
     return result.output.text
 
 asyncio.run(run_invoice_workflow(my_workflow, my_session))
@@ -742,7 +757,7 @@ multi_lingual_kwargs = WorkflowInvocationKwargs(
     },
 )
 
-result = await workflow.run(input_text, kwargs=multi_lingual_kwargs)
+result = await workflow.run(input_text, function_invocation_kwargs=multi_lingual_kwargs)
 ```
 
 ---
@@ -827,8 +842,11 @@ async def research_pipeline(url: str) -> str:
     raw = await fetch_data(url)
     return await summarise(raw)
 
-result = asyncio.run(research_pipeline("https://example.com/article"))
-print(result)
+async def main():
+    result = await research_pipeline.build().run("https://example.com/article")
+    print(result)
+
+asyncio.run(main())
 ```
 
 ### Example 2 — replay key for concurrent calls with identical arguments
@@ -852,6 +870,12 @@ async def compare_pages(url_a: str, url_b: str) -> tuple[str, str]:
     # Both calls are concurrent; distinct replay keys prevent cache collision
     page_a, page_b = await asyncio.gather(fetch_page(url_a), fetch_page(url_b))
     return page_a, page_b
+
+# Invoke via .build().run()
+async def main():
+    a, b = await compare_pages.build().run("https://example.com/a", "https://example.com/b")
+
+asyncio.run(main())
 ```
 
 ### Example 3 — unit-testing a step in isolation
@@ -1011,36 +1035,33 @@ async def approval_executor(ctx, message):
         raise ValueError("Plan rejected by user.")
     return message
 
+finaliser = Agent(client=my_client, name="finaliser")
+planner = Agent(client=my_client, name="planner")
+
 inner_workflow = (
     WorkflowBuilder()
     .add_function("approval-gate", approval_executor)
-    .add_agent("finalise", Agent(client=my_client, name="finaliser"))
-    .add_edge(SingleEdgeGroup("approval-gate", "finalise"))
+    .add_agent("finalise", finaliser)
+    .add_edge(approval_executor, finaliser)
     .set_entry("approval-gate")
     .build()
 )
 
 # Outer workflow embeds the inner one via WorkflowExecutor
+sub_executor = WorkflowExecutor(inner_workflow)
 outer_workflow = (
     WorkflowBuilder()
-    .add_agent("planner", Agent(client=my_client, name="planner"))
-    .add_executor("sub", WorkflowExecutor(inner_workflow))
-    .add_edge(SingleEdgeGroup("planner", "sub"))
+    .add_agent("planner", planner)
+    .add_executor("sub", sub_executor)
+    .add_edge(planner, sub_executor)
     .set_entry("planner")
     .build()
 )
 
 async def run_with_hitl(question: str) -> str:
-    stream = await outer_workflow.run_stream(question)
-    async for event in stream:
-        # Intercept sub-workflow HITL requests
-        if isinstance(event.data, SubWorkflowRequestMessage):
-            request: SubWorkflowRequestMessage = event.data
-            # Gather real user input here; using True for the example
-            user_decision = True
-            response = request.create_response(user_decision)
-            await stream.send(response)  # resume the sub-workflow
-    return stream.result.output.text
+    # Run the outer workflow — HITL approval is handled inside approval_executor
+    response = await outer_workflow.run(question)
+    return response.output.text
 
 asyncio.run(run_with_hitl("Draft a deployment plan for the new service."))
 ```
