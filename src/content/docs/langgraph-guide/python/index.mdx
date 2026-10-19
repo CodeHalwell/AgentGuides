@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.2.14** · October 2026 · Python 3.10 – 3.14
+    **v1.2.16** · October 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -85,6 +85,8 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="RemoteGraph" href="/langgraph-guide/python/reference-remote-graph/" />
   <LinkCard title="Class & API reference (all symbols)" href="/langgraph-guide/python/langgraph_comprehensive_guide/#class--api-reference" />
   <LinkCard title="Class Deep Dives Vol. 1" href="/langgraph-guide/python/reference-class-deep-dives-vol1/" />
+  <LinkCard title="Class Deep Dives Vol. 2" href="/langgraph-guide/python/reference-class-deep-dives-vol2/" />
+  <LinkCard title="Class Deep Dives Vol. 3" href="/langgraph-guide/python/reference-class-deep-dives-vol3/" />
 </CardGrid>
 
 ## Reference
@@ -111,6 +113,7 @@ older blog post or docs page, the source wins.
   <LinkCard title="Cache backends reference" href="/langgraph-guide/python/reference-cache-backends/" description="BaseCache abstract interface and InMemoryCache thread-safe implementation — TTL eviction, custom Redis backends, CachePolicy wiring, and serializer protocol." />
   <LinkCard title="Class Deep Dives Vol. 1" href="/langgraph-guide/python/reference-class-deep-dives-vol1/" description="Send, Command, StateSnapshot, Interrupt, TracePolicy, InMemoryStore, InjectedState, InjectedStore, RetryPolicy, CachePolicy — multiple runnable examples per class." />
   <LinkCard title="Class Deep Dives Vol. 2" href="/langgraph-guide/python/reference-class-deep-dives-vol2/" description="DeltaChannel, EncryptedSerializer, TimeoutPolicy, NamedBarrierValueAfterFinish, GraphOutput, Durability, TaskPayload, CheckpointPayload, ToolCallTransformer/ToolCallStream, StateUpdate — source-verified v1.2.14." />
+  <LinkCard title="Class Deep Dives Vol. 3" href="/langgraph-guide/python/reference-class-deep-dives-vol3/" description="BinaryOperatorAggregate, Topic, EphemeralValue, LastValue/LastValueAfterFinish, GraphCallbackHandler/events, ToolNode, MessagesState/add_messages, UIMessage/RemoveUIMessage, Runtime/ExecutionInfo/RunControl, HumanResponse — source-verified v1.2.16." />
 </CardGrid>
 
 <CardGrid>
@@ -212,3 +215,4 @@ distinct versions only, oldest to newest.
 | 2026-09-28 | 1.2.12 | Version bump to 1.2.12; added `set_node_defaults()` section to ch1 and Pattern 15 to ch9; Functional API section expanded with async tasks, `context_schema`/`Runtime` injection, `entrypoint.final` accumulator, named `@task` with `CachePolicy`; fixed `ToolRuntime` canonical import; Recipes 22–23 added (`set_node_defaults` + `ToolRuntime` all-in-one injection). |
 | 2026-10-05 | 1.2.12 | Added **Class Deep Dives Vol. 1** reference page — 10 source-verified class deep dives (`Send`, `Command`, `StateSnapshot`, `Interrupt`, `TracePolicy`, `InMemoryStore`, `InjectedState`, `InjectedStore`, `RetryPolicy`, `CachePolicy`) with 25+ runnable code examples covering the full range of each API. |
 | 2026-10-12 | 1.2.14 | Version bump to 1.2.14; all reference pages updated. Added **Class Deep Dives Vol. 2** — 10 source-verified deep dives (`DeltaChannel`, `EncryptedSerializer`, `TimeoutPolicy`, `NamedBarrierValueAfterFinish`, `GraphOutput`, `Durability`, `TaskPayload`/`TaskResultPayload`, `CheckpointPayload`, `ToolCallTransformer`/`ToolCallStream`, `StateUpdate`) with 30+ runnable code examples. `DeltaChannel` cross-reference added to channels reference. `langgraph-checkpoint` bumped to 4.2.0. |
+| 2026-10-19 | 1.2.16 | Version bump to 1.2.16. Added **Class Deep Dives Vol. 3** — 10 source-verified deep dives (`BinaryOperatorAggregate`, `Topic`, `EphemeralValue`, `LastValue`/`LastValueAfterFinish`, `GraphCallbackHandler`/`GraphInterruptEvent`/`GraphResumeEvent`, `ToolNode`, `MessagesState`/`add_messages`, `UIMessage`/`RemoveUIMessage`/`push_ui_message`, `Runtime`/`ExecutionInfo`/`RunControl`, `HumanResponse`) with 25+ runnable code examples. |
