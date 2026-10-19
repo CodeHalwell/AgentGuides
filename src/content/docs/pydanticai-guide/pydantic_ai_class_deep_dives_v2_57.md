@@ -704,7 +704,9 @@ def transcribe_audio(url: str) -> str:
     """Transcribe audio (expensive)."""
     return "Transcription result"
 
-# specialised tools start hidden; the model can request them if needed
+# specialised tools start hidden to save prompt tokens.
+# They are only revealed to the model when a tool-search step queries the toolset.
+# Without a ToolSearch capability the deferred tools remain hidden for the whole run.
 deferred = DeferredLoadingToolset(wrapped=specialised)
 
 model = TestModel()
@@ -1157,6 +1159,9 @@ if the provider doesn't support it).
 
 ### Example 1 — WebSearch with DuckDuckGo fallback
 
+> **Prerequisite:** `pip install "pydantic-ai[duckduckgo]"` — the `local='duckduckgo'`
+> strategy requires the optional `ddgs` integration.
+
 ```python
 import asyncio
 from pydantic_ai import Agent
@@ -1271,6 +1276,11 @@ asyncio.run(main())
 | `SelectModel` | `capabilities.select_model` | Per-step dynamic model selection via a callable |
 | `NativeOrLocalTool` | `capabilities.native_or_local` | Provider-native tool + Python fallback, auto-resolved |
 
-All examples above are runnable against **pydantic-ai 2.57.0** using `TestModel` for
+Most examples above are runnable against **pydantic-ai 2.57.0** using `TestModel` for
 offline verification. Replace `TestModel` with your provider model (e.g. `openai:gpt-4o`)
-for live usage.
+for live usage. **Exceptions:**
+
+- *NativeOrLocalTool Example 3* (`ImageGeneration`) — requires `OpenAIModel("gpt-image-1")`
+  and `OPENAI_API_KEY`.
+- *NativeOrLocalTool Example 1* (`WebSearch` with DuckDuckGo) — requires
+  `pip install "pydantic-ai[duckduckgo]"` for the local fallback.
