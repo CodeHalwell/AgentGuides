@@ -312,9 +312,10 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
 ### What it does
 
 `EphemeralValue` stores the last value written to it in a superstep, then **clears it
-automatically** at the start of the next superstep. It is the right channel when you
-need to pass a signal between two adjacent nodes that should not persist into the
-checkpoint as permanent state.
+automatically** after any subsequent superstep that produces no new write to this channel.
+It IS checkpointed while populated — unlike `UntrackedValue`, which opts out of checkpoint
+persistence entirely. Use it for transient signals between adjacent nodes when you want
+the value absent from state after it has been consumed.
 
 - `guard=True` *(default)*: raises `InvalidUpdateError` if more than one write arrives
   in the same superstep. Use this for strict single-writer invariants.
@@ -331,7 +332,7 @@ from langgraph.graph import START, END, StateGraph
 
 class State(TypedDict):
     data: str
-    # trigger is only visible in the superstep it was written; gone from checkpoint
+    # trigger is checkpointed while populated; clears after a superstep with no new write
     trigger: Annotated[str | None, EphemeralValue(str)]
 
 def emitter(state: State) -> dict:
@@ -450,11 +451,14 @@ class LastValueAfterFinish(Generic[Value], BaseChannel[Value, Value, tuple[Value
 ```
 
 `LastValueAfterFinish` acts as a barrier: it accepts writes during a superstep but
-**does not expose the value to readers until `finish()` is called** on the channel
-at the end of the step. Once read via `get()`, it clears itself (one-shot).
+**does not expose the value to readers until `finish()` is called** on the channel.
+`get()` is **non-destructive** — the value stays available after being read. Call
+`consume()` to clear both the value and the `finished` flag, making the channel
+unavailable again.
 
-This is the channel behind `NamedBarrierValue` and similar synchronisation primitives
-where a value should only flow to downstream nodes after a specific checkpoint event.
+`NamedBarrierValue` is a separate, independent class that tracks required writer names
+in its own `seen` set; it is not backed by `LastValueAfterFinish` and has no
+relationship to a checkpoint event.
 
 ### Example 4c — Inspecting `LastValue` from a checkpoint snapshot
 
@@ -803,15 +807,21 @@ tool_node = ToolNode([slow_api], wrap_tool_call=audit_wrapper)
 from typing import Annotated
 from typing_extensions import TypedDict
 from langchain_core.messages import AnyMessage
+from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+
+@tool
+def lookup(query: str) -> str:
+    """Look up information."""
+    return f"result:{query}"
 
 class MyState(TypedDict):
     chat_history: Annotated[list[AnyMessage], add_messages]
     metadata: dict
 
 # Tell ToolNode to look for tool calls in "chat_history" instead of "messages"
-tool_node = ToolNode([...], messages_key="chat_history")
+tool_node = ToolNode([lookup], messages_key="chat_history")
 ```
 
 ---
@@ -844,7 +854,9 @@ LangGraph's message layer.
 - A message in `right` that does not exist in `left` is appended.
 - A message in `right` whose `id` matches one already in `left` **replaces** it.
 - A `RemoveMessage(id=…)` in `right` removes the matching message from `left`.
-- A `RemoveMessage(id=REMOVE_ALL_MESSAGES)` drops all messages before it in `right`.
+- A `RemoveMessage(id=REMOVE_ALL_MESSAGES)` resets the entire history: **all** messages
+  in `left` are discarded, along with every message in `right` up to and including the
+  sentinel. Only messages that appear **after** the sentinel in `right` survive.
 
 The `format="langchain-openai"` keyword converts the merged list to OpenAI-compatible
 blocks (text + image_url, separate ToolMessage objects).
