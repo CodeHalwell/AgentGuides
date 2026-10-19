@@ -225,12 +225,13 @@ async def stream_example():
         ),
         run_config=RunConfig(streaming_mode=StreamingMode.SSE),
     ):
-        # partial=True events are streaming fragments; partial=False/None is complete
-        if hasattr(event, "content") and event.content:
+        # SSE emits partial=True fragments THEN a final partial=False aggregate.
+        # Print only the fragments to avoid printing the same text twice.
+        if event.partial and event.content:
             for part in event.content.parts:
                 if getattr(part, "text", None):
                     print(part.text, end="", flush=True)
-    print()
+    print()  # newline after the last fragment
 
 asyncio.run(stream_example())
 ```
