@@ -487,10 +487,22 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
+import ast, operator as op
+
+# Safe arithmetic evaluator — no builtins, no imports, no arbitrary execution
+_OPS = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv}
+
+def _safe_eval(node: ast.expr) -> float:
+    if isinstance(node, ast.Constant):
+        return float(node.n)
+    if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+        return _OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+    raise ValueError(f"Unsupported expression node: {type(node).__name__}")
+
 @toolset.tool_plain
 def calculate(expr: str) -> float:
-    """Evaluate a math expression."""
-    return float(eval(expr))  # noqa: S307
+    """Evaluate a simple arithmetic expression (+, -, *, /)."""
+    return _safe_eval(ast.parse(expr, mode="eval").body)
 
 @toolset.tool_plain
 def format_number(n: float, decimals: int = 2) -> str:
@@ -1293,7 +1305,7 @@ Most examples above are runnable against **pydantic-ai 2.57.0** using `TestModel
 offline verification. Replace `TestModel` with your provider model (e.g. `openai:gpt-4o`)
 for live usage. **Exceptions:**
 
-- *NativeOrLocalTool Example 3* (`ImageGeneration`) — requires `OpenAIModel("gpt-image-1")`
-  and `OPENAI_API_KEY`.
+- *NativeOrLocalTool Example 3* (`ImageGeneration`) — requires a conversational model
+  with native image generation support (e.g. `"openai-responses:gpt-5.2"`) and `OPENAI_API_KEY`.
 - *NativeOrLocalTool Example 1* (`WebSearch` with DuckDuckGo) — requires
   `pip install "pydantic-ai[duckduckgo]"` for the local fallback.
