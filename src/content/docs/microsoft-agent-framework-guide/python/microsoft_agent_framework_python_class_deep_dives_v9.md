@@ -329,7 +329,7 @@ class RAGContextProvider(ContextProvider):
             for msg in context.input_messages
             if msg.role == "user"
             for c in msg.contents
-            if hasattr(c, "text")
+            if c.text is not None
         )
         chunks = await self._retriever.search(query, top_k=4)
         preamble = "\n\n".join(chunks)
