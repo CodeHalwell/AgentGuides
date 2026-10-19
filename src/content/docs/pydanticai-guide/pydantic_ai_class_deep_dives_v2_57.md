@@ -63,12 +63,12 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def delete_file(path: str) -> str:
     """Delete a file from disk."""
     return f"Deleted {path}"
 
-@toolset.tool
+@toolset.tool_plain
 def read_file(path: str) -> str:
     """Read a file from disk."""
     return f"Contents of {path}"
@@ -112,7 +112,7 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def send_email(to: str, subject: str) -> str:
     """Send an email."""
     return f"Email sent to {to}"
@@ -149,7 +149,7 @@ class UserDeps:
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def drop_table(table: str) -> str:
     """Drop a database table."""
     return f"Dropped {table}"
@@ -209,12 +209,12 @@ class UserDeps:
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def query_db(sql: str) -> str:
     """Run a SELECT query."""
     return "rows..."
 
-@toolset.tool
+@toolset.tool_plain
 def write_db(sql: str) -> str:
     """Run an INSERT/UPDATE/DELETE query."""
     return "1 row affected"
@@ -249,12 +249,12 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def expensive_tool(param: str) -> str:
     """A computationally expensive tool."""
     return f"Result for {param}"
 
-@toolset.tool
+@toolset.tool_plain
 def cheap_tool(param: str) -> str:
     """A lightweight lookup tool."""
     return f"Lookup for {param}"
@@ -296,12 +296,12 @@ class SessionDeps:
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def legacy_search(query: str) -> str:
     """Original search implementation."""
     return "legacy results"
 
-@toolset.tool
+@toolset.tool_plain
 def new_search(query: str) -> str:
     """Experimental search implementation."""
     return "new results"
@@ -360,12 +360,12 @@ from pydantic_ai.models.test import TestModel
 postgres_toolset = FunctionToolset()
 redis_toolset = FunctionToolset()
 
-@postgres_toolset.tool
+@postgres_toolset.tool_plain
 def query(sql: str) -> str:
     """Query PostgreSQL."""
     return "pg rows"
 
-@redis_toolset.tool
+@redis_toolset.tool_plain
 def query(key: str) -> str:  # type: ignore[no-redef]  # same name, different toolset
     """Query Redis."""
     return "redis value"
@@ -396,12 +396,12 @@ from pydantic_ai.models.test import TestModel
 # Simulate a toolset loaded from an MCP server
 mcp_toolset = FunctionToolset()
 
-@mcp_toolset.tool
+@mcp_toolset.tool_plain
 def search(query: str) -> str:
     """Full-text search."""
     return "search results"
 
-@mcp_toolset.tool
+@mcp_toolset.tool_plain
 def fetch(url: str) -> str:
     """Fetch a URL."""
     return "page content"
@@ -449,12 +449,12 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def get(url: str) -> str:
     """HTTP GET request."""
     return f"Response from {url}"
 
-@toolset.tool
+@toolset.tool_plain
 def post(url: str, body: str) -> str:
     """HTTP POST request."""
     return f"Posted to {url}"
@@ -487,12 +487,12 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def calculate(expr: str) -> float:
     """Evaluate a math expression."""
     return float(eval(expr))  # noqa: S307
 
-@toolset.tool
+@toolset.tool_plain
 def format_number(n: float, decimals: int = 2) -> str:
     """Format a number for display."""
     return f"{n:.{decimals}f}"
@@ -689,17 +689,17 @@ from pydantic_ai.models.test import TestModel
 always_available = FunctionToolset()
 specialised = FunctionToolset()
 
-@always_available.tool
+@always_available.tool_plain
 def greet(name: str) -> str:
     """Greet a user."""
     return f"Hello, {name}!"
 
-@specialised.tool
+@specialised.tool_plain
 def analyse_image(url: str) -> str:
     """Run image analysis (expensive)."""
     return "Image analysis result"
 
-@specialised.tool
+@specialised.tool_plain
 def transcribe_audio(url: str) -> str:
     """Transcribe audio (expensive)."""
     return "Transcription result"
@@ -729,17 +729,17 @@ from pydantic_ai.models.test import TestModel
 
 toolset = FunctionToolset()
 
-@toolset.tool
+@toolset.tool_plain
 def fast_lookup(key: str) -> str:
     """Quick in-memory lookup."""
     return "cached value"
 
-@toolset.tool
+@toolset.tool_plain
 def vector_search(query: str) -> str:
     """Semantic vector search (slow)."""
     return "semantic results"
 
-@toolset.tool
+@toolset.tool_plain
 def llm_rerank(items: list) -> list:
     """Re-rank with a second LLM call (very slow)."""
     return items
@@ -874,6 +874,7 @@ agent = Agent(
     model,
     toolsets=[external],
     capabilities=[HandleDeferredToolCalls(handler=selective_handler)],
+    output_type=[str, DeferredToolRequests],  # needed when handler returns None
 )
 
 async def main():
@@ -1205,16 +1206,19 @@ asyncio.run(main())
 ### Example 3 — `ImageGeneration` (a NativeOrLocalTool subclass)
 
 ```python
+# NOTE: requires an OpenAI model that supports native image generation (e.g. gpt-image-1).
+# Replace the TestModel with OpenAIModel("gpt-image-1") and set OPENAI_API_KEY.
+# TestModel does not support provider-native image tools and will raise UserError.
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
-from pydantic_ai.models.test import TestModel
+from pydantic_ai.models.openai import OpenAIModel
 
 # ImageGeneration extends NativeOrLocalTool with a fallback_image_model option
 # native=True uses the provider's built-in image generation (e.g. gpt-image-1)
 # native=False falls back to a separate image model specified via fallback_image_model
 agent = Agent(
-    TestModel(custom_result_text="Here is your image: [url]"),
+    OpenAIModel("gpt-image-1"),  # requires OPENAI_API_KEY
     capabilities=[ImageGeneration()],  # native=True by default
 )
 
