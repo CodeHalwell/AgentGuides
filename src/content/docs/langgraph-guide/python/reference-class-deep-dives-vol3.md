@@ -668,10 +668,32 @@ def get_weather(city: str) -> str:
     """Return current weather for a city."""
     return f"Sunny and 22°C in {city}"
 
+import ast
+import operator as _op
+
+_SAFE_OPS = {
+    ast.Add: _op.add, ast.Sub: _op.sub,
+    ast.Mult: _op.mul, ast.Div: _op.truediv,
+    ast.USub: _op.neg,
+}
+
+def _safe_eval(node: ast.expr) -> float:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
+        return _SAFE_OPS[type(node.op)](_safe_eval(node.operand))
+    raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
 @tool
 def calculator(expression: str) -> str:
-    """Evaluate a simple math expression."""
-    return str(eval(expression, {"__builtins__": {}}))
+    """Evaluate a simple arithmetic expression (+-*/ and parentheses only)."""
+    try:
+        tree = ast.parse(expression, mode="eval")
+        return str(_safe_eval(tree.body))
+    except (ValueError, ZeroDivisionError) as exc:
+        return f"Error: {exc}"
 
 tools = [get_weather, calculator]
 tool_node = ToolNode(tools)
@@ -1010,12 +1032,14 @@ def streaming_node(state: dict) -> dict:
         name="StreamingText",
         props={"content": "Hello"},
     )
-    # Append to props without replacing the whole message
+    # Shallow-merge props: pass the FULL accumulated value for each key.
+    # merge=True replaces keys in the stored props dict — it does NOT
+    # concatenate strings, so pass the complete desired content here.
     push_ui_message(
         name="StreamingText",
         id=msg["id"],
-        props={"content": " world"},
-        merge=True,  # props are merged: {"content": " world"} merged into existing
+        props={"content": "Hello world"},  # full text, not just the delta
+        merge=True,
     )
     return {}
 ```
