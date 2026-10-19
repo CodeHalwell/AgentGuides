@@ -51,7 +51,7 @@ Source-verified from `google/adk/models/llm_request.py`:
 | Method | What it does |
 |---|---|
 | `append_instructions(instructions)` | Appends strings to the system instruction |
-| `append_tools(tools, *, wrap_native_tools)` | Injects `BaseTool` instances into `tools_dict` and `config.tools` |
+| `append_tools(tools)` | Injects `BaseTool` instances into `tools_dict` and `config.tools` |
 | `set_output_schema(schema)` | Sets `config.response_schema` and adjusts `response_mime_type` |
 
 ### Inspecting the request in a callback
@@ -145,11 +145,11 @@ Source-verified from `google/adk/models/llm_response.py`:
 | `turn_complete` | `bool \| None` | `None` | `True` when the model signals end-of-turn (streaming only) |
 | `turn_complete_reason` | `types.TurnCompleteReason \| None` | `None` | Why the turn ended (e.g. `STOP`, `MAX_TOKENS`) |
 | `interaction_status` | `types.InteractionStatus \| None` | `None` | `IN_PROGRESS` / `IDLE` for multi-turn live sessions |
-| `error_code` | `int \| None` | `None` | Backend error code |
+| `error_code` | `str \| None` | `None` | Backend error code (e.g. `finish_reason` or `block_reason`) |
 | `error_message` | `str \| None` | `None` | Human-readable error description |
 | `interrupted` | `bool \| None` | `None` | `True` when generation was interrupted (e.g. barge-in) |
-| `input_transcription` | `str \| None` | `None` | STT transcript of user audio input |
-| `output_transcription` | `str \| None` | `None` | TTS transcript of model audio output |
+| `input_transcription` | `types.Transcription \| None` | `None` | STT transcript of user audio input |
+| `output_transcription` | `types.Transcription \| None` | `None` | TTS transcript of model audio output |
 | `avg_logprobs` | `float \| None` | `None` | Average log-probability of generated tokens |
 
 ### Reading a response in `after_model_callback`
@@ -200,17 +200,19 @@ def add_disclaimer(
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
+from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import InMemoryRunner
-from google.adk.sessions import InMemorySessionService
+from google.genai import types
 
 async def stream_example():
+    # InMemoryRunner creates its own session service; no session_service arg.
     runner = InMemoryRunner(
         agent=LlmAgent(
             model="gemini-2.0-flash",
             name="streamer",
             instruction="Explain async generators in Python.",
         ),
-        session_service=InMemorySessionService(),
+        app_name="demo",
     )
     session = await runner.session_service.create_session(
         app_name="demo", user_id="u1"
@@ -218,8 +220,12 @@ async def stream_example():
     async for event in runner.run_async(
         user_id="u1",
         session_id=session.id,
-        new_message={"role": "user", "parts": [{"text": "Go"}]},
+        new_message=types.Content(
+            role="user", parts=[types.Part(text="Go")]
+        ),
+        run_config=RunConfig(streaming_mode=StreamingMode.SSE),
     ):
+        # partial=True events are streaming fragments; partial=False/None is complete
         if hasattr(event, "content") and event.content:
             for part in event.content.parts:
                 if getattr(part, "text", None):
@@ -340,7 +346,7 @@ asyncio.run(run_echo())
 
 ```python
 # "litellm:gpt-4o" resolves to LiteLlm(model="gpt-4o")
-# "openai:gpt-4o"  also resolves to LiteLlm (if litellm is installed and knows "openai")
+# "openai:gpt-4o"  resolves to OpenAILlm (prefix matches class name "OpenAI", minus trailing "Llm")
 agent = LlmAgent(model="litellm:claude-3-5-haiku-20241022", ...)
 ```
 
@@ -720,12 +726,8 @@ router = LlmAgent(
         "Technical questions → tech_agent."
     ),
     sub_agents=[billing_agent, tech_agent],
-    tools=[
-        TransferToAgentTool(
-            agent_names=["billing_agent", "tech_agent"],
-            include_transfer_reason=True,
-        )
-    ],
+    # ADK auto-generates a transfer_to_agent tool from sub_agents;
+    # do NOT also pass TransferToAgentTool here or the tool is duplicated.
 )
 ```
 
@@ -818,7 +820,9 @@ from google.adk.code_executors import UnsafeLocalCodeExecutor
 executor = UnsafeLocalCodeExecutor(
     timeout_seconds=10,        # kill after 10 s
     error_retry_attempts=1,    # retry once before giving up
-    stateful=True,             # share interpreter state across blocks
+    # stateful=True is NOT supported: UnsafeLocalCodeExecutor spawns a fresh
+    # subprocess for every block, so interpreter state is never preserved.
+    # Use a persistent-process executor if stateful execution is required.
 )
 ```
 
@@ -852,7 +856,7 @@ class DockerCodeExecutor(BaseCodeExecutor):
         stdout = result.stdout.decode()
         stderr = result.stderr.decode()
         return CodeExecutionResult(
-            output=stdout or stderr,
+            stdout=stdout,
             stderr=stderr,
         )
 ```
@@ -916,25 +920,26 @@ from google.adk.tools import BaseTool, ToolContext
 class AuditPlugin(BasePlugin):
     """Logs every tool call and its result."""
 
-    name = "audit_plugin"
+    def __init__(self):
+        super().__init__(name="audit_plugin")
 
     async def before_tool_callback(
         self,
         tool: BaseTool,
-        args: dict[str, Any],
+        tool_args: dict[str, Any],
         tool_context: ToolContext,
     ) -> Optional[dict]:
-        print(f"[AUDIT] Calling {tool.name}({args})")
+        print(f"[AUDIT] Calling {tool.name}({tool_args})")
         return None  # let the real tool run
 
     async def after_tool_callback(
         self,
         tool: BaseTool,
-        args: dict[str, Any],
+        tool_args: dict[str, Any],
         tool_context: ToolContext,
-        tool_response: dict,
+        result: dict,
     ) -> Optional[dict]:
-        print(f"[AUDIT] {tool.name} returned {tool_response}")
+        print(f"[AUDIT] {tool.name} returned {result}")
         return None  # return unmodified response
 ```
 
@@ -946,6 +951,7 @@ from google.adk.sessions import InMemorySessionService
 
 runner = Runner(
     agent=my_agent,
+    app_name="demo",
     session_service=InMemorySessionService(),
     plugins=[AuditPlugin()],
 )
@@ -1071,7 +1077,7 @@ class WhisperSTT(LiveIngress):
 
         from google.adk.live._cascade_live_events import PartialTranscript
         yield PartialTranscript(text=transcript)
-        yield UserTurnFinished(transcript=transcript)
+        yield UserTurnFinished(text=transcript)
 ```
 
 ### Implementing a custom `LiveEgress` (TTS)
@@ -1079,6 +1085,7 @@ class WhisperSTT(LiveIngress):
 ```python
 import asyncio
 from typing import AsyncGenerator, AsyncIterator
+from google.genai import types
 from google.adk.live import LiveEgress
 from google.adk.live._cascade_live_events import EgressEvent, AudioChunk
 
@@ -1107,7 +1114,7 @@ class PollyTTS(LiveEgress):
         full_text = "".join(buffer)
         # In a real implementation call the Polly API here
         audio_bytes = b"\x00" * 1024  # placeholder PCM
-        yield AudioChunk(data=audio_bytes, sample_rate=24000)
+        yield AudioChunk(blob=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=24000"))
 ```
 
-> **Experimental flag:** `CascadeLive` requires `FeatureName.CASCADE_LIVE`. Enable it with the `GOOGLE_ADK_FEATURES=cascade_live` environment variable or via `google.adk.features.enable_feature(FeatureName.CASCADE_LIVE)`.
+> **Experimental flag:** `CascadeLive` requires `FeatureName.CASCADE_LIVE`. Enable it with the `ADK_ENABLE_CASCADE_LIVE=1` environment variable or in code via `from google.adk.features._feature_registry import FeatureName, override_feature_enabled; override_feature_enabled(FeatureName.CASCADE_LIVE, True)`.
