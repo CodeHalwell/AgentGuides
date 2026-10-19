@@ -34,7 +34,7 @@ See [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_p
 
 **Module:** `agent_framework._types` (re-exported via `agent_framework`)
 
-`ResponseStream` is the generic async-iterable wrapper that backs every streaming call in the framework. An `Agent.run()` or `Workflow.run()` in streaming mode returns a `ResponseStream[AgentResponseUpdate, AgentResponse]`; a chat client's `get_streaming_response()` returns `ResponseStream[ChatResponseUpdate, ChatResponse]`. Consuming the stream yields individual update chunks; after full consumption you call `.result` (or use it as an async context manager) to get the aggregated final value.
+`ResponseStream` is the generic async-iterable wrapper that backs every streaming call in the framework. `Agent.run(stream=True)` returns `ResponseStream[AgentResponseUpdate, AgentResponse]`; `Workflow.run(stream=True)` returns `ResponseStream[WorkflowEvent, WorkflowRunResult]`; a chat client's `get_streaming_response()` returns `ResponseStream[ChatResponseUpdate, ChatResponse]`. Consuming the stream yields individual update chunks; after full consumption call `await stream.get_final_response()` to obtain the aggregated final value.
 
 > **When you need it directly:** most code simply `async for`-iterates the stream or wraps it with `async with`. Reach for the factory methods (`map`, `flat_map`, `with_finalizer`, `buffered_and_gated`) when you need to transform or gate a stream without losing its type safety.
 
@@ -732,15 +732,18 @@ WorkflowInvocationKwargs(
 | `global_kwargs` | Kwargs passed to every executor in the workflow. |
 | `executor_kwargs` | Dict `executor_id → {kwarg: value}` — overrides `global_kwargs` for that executor. |
 
-### Example 1 — shared session with per-executor tool override
+### Example 1 — per-executor client kwargs overrides
 
 ```python
 import asyncio
-from agent_framework import Workflow, WorkflowInvocationKwargs, AgentSession
+from agent_framework import Workflow, WorkflowInvocationKwargs
 
-async def run_invoice_workflow(workflow: Workflow, session: AgentSession) -> str:
+async def run_invoice_workflow(workflow: Workflow) -> str:
+    # executor_kwargs keys are executor IDs; values become client-level overrides
+    # for that executor's agent run (e.g. temperature, max_tokens).
+    # global_kwargs forwards to function executors or as default client kwargs;
+    # it does not inject a shared AgentSession into AgentExecutors.
     kwargs = WorkflowInvocationKwargs(
-        global_kwargs={"session": session},
         executor_kwargs={
             "invoice-parser": {"temperature": 0.1},
             "summariser": {"temperature": 0.7},
@@ -750,7 +753,7 @@ async def run_invoice_workflow(workflow: Workflow, session: AgentSession) -> str
     outputs = result.get_outputs()
     return outputs[0].text if outputs else ""
 
-asyncio.run(run_invoice_workflow(my_workflow, my_session))
+asyncio.run(run_invoice_workflow(my_workflow))
 ```
 
 ### Example 2 — different language hints per executor
@@ -882,11 +885,12 @@ async def compare_pages(urls: tuple[str, str]) -> tuple[str, str]:
     page_a, page_b = await asyncio.gather(fetch_page(url_a), fetch_page(url_b))
     return page_a, page_b
 
-# FunctionalWorkflow.run() accepts one positional workflow input
+# FunctionalWorkflow.run() accepts one positional workflow input and returns WorkflowRunResult
 async def main():
-    a, b = await compare_pages.build().run(
+    result = await compare_pages.build().run(
         ("https://example.com/a", "https://example.com/b")
     )
+    a, b = result.get_outputs()[0]  # get_outputs()[0] is the workflow's tuple return value
 
 asyncio.run(main())
 ```
