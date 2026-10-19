@@ -683,8 +683,11 @@ workflow = (
 ```python
 from agent_framework import SingleEdgeGroup, WorkflowMessage
 
-def skip_for_short_input(data: WorkflowMessage) -> bool:
-    return len(data.text or "") > 200
+from agent_framework._workflows._agent_executor import AgentExecutorResponse
+
+def skip_for_short_input(data: AgentExecutorResponse) -> bool:
+    # Agents are wrapped in AgentExecutor; edge condition receives AgentExecutorResponse
+    return len(data.agent_response.text or "") > 200
 
 workflow = (
     WorkflowBuilder(start_executor=ingest)
@@ -862,14 +865,17 @@ async def fetch_page(url: str) -> str:
         return (await client.get(url)).text
 
 @workflow
-async def compare_pages(url_a: str, url_b: str) -> tuple[str, str]:
+async def compare_pages(urls: tuple[str, str]) -> tuple[str, str]:
     # Both calls are concurrent; distinct replay keys prevent cache collision
+    url_a, url_b = urls
     page_a, page_b = await asyncio.gather(fetch_page(url_a), fetch_page(url_b))
     return page_a, page_b
 
-# Invoke via .build().run()
+# FunctionalWorkflow.run() accepts one positional workflow input
 async def main():
-    a, b = await compare_pages.build().run("https://example.com/a", "https://example.com/b")
+    a, b = await compare_pages.build().run(
+        ("https://example.com/a", "https://example.com/b")
+    )
 
 asyncio.run(main())
 ```
@@ -1022,41 +1028,39 @@ class SubWorkflowResponseMessage:
 ```python
 import asyncio
 from agent_framework import (
-    WorkflowBuilder, WorkflowEvent, WorkflowExecutor, Agent,
-    SubWorkflowRequestMessage, SubWorkflowResponseMessage,
+    WorkflowEvent, SubWorkflowRequestMessage, SubWorkflowResponseMessage,
 )
 
-# Inner sub-workflow: asks for human approval before proceeding
-async def approval_executor(ctx, message):
-    # Emit a request-info event asking the parent for approval
-    approved = await ctx.request_info(bool, prompt="Approve the generated plan?")
-    if not approved:
-        raise ValueError("Plan rejected by user.")
-    return message
+# --- HITL message-passing protocol demonstration ---
+# In a real workflow, a WorkflowExecutor(inner_workflow, id="sub") wraps an inner
+# Workflow whose Executor calls ctx.request_info(request_data, bool) from a
+# @handler method. The outer workflow receives the resulting SubWorkflowRequestMessage
+# and resumes by supplying a SubWorkflowResponseMessage via create_response().
 
-finaliser = Agent(client=my_client, name="finaliser")
-planner = Agent(client=my_client, name="planner")
+def handle_approval_request(request: SubWorkflowRequestMessage) -> SubWorkflowResponseMessage:
+    """Simulate routing a HITL request to a user and returning their decision."""
+    # In production: send to UI and await user input
+    user_approved = True  # simulated approval
+    return request.create_response(user_approved)
 
-inner_workflow = (
-    WorkflowBuilder(start_executor=approval_executor)
-    .add_edge(approval_executor, finaliser)
-    .build()
-)
+async def demonstrate_hitl_protocol():
+    # Build a mock request_info event (response_type=bool means caller expects a bool)
+    event = WorkflowEvent(
+        type="request_info",
+        response_type=bool,
+        request_id="approval-001",
+    )
+    request = SubWorkflowRequestMessage(
+        source_event=event,
+        executor_id="approval-subworkflow",
+    )
 
-# Outer workflow embeds the inner one via WorkflowExecutor
-sub_executor = WorkflowExecutor(inner_workflow)
-outer_workflow = (
-    WorkflowBuilder(start_executor=planner)
-    .add_edge(planner, sub_executor)
-    .build()
-)
+    response = handle_approval_request(request)
+    assert response.data is True
+    assert isinstance(response, SubWorkflowResponseMessage)
+    print("HITL protocol: approval granted, sub-workflow can continue")
 
-async def run_with_hitl(question: str) -> str:
-    result = await outer_workflow.run(question)
-    outputs = result.get_outputs()
-    return outputs[0].text if outputs else ""
-
-asyncio.run(run_with_hitl("Draft a deployment plan for the new service."))
+asyncio.run(demonstrate_hitl_protocol())
 ```
 
 ### Example 2 — type-safe `create_response` validation
