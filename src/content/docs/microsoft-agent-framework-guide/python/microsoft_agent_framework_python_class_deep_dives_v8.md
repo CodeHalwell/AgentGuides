@@ -26,6 +26,8 @@ See [Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_p
 
 See [Vol. 7](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v7/) for `AgentExecutorRequest`, `AgentExecutorResponse`, `AgentExecutorCheckpointState`, `AgentExecutor`, `WorkflowExecutor`, `WorkflowMessage`, `WorkflowCheckpoint`, `TodoSessionStore`, `ClassSkill`, and `AggregatingSkillsSource`/`CachingSkillsSource`.
 
+> **Vol. 9 available:** See [10-API Deep Dives Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) for `ResponseStream`, `AgentResponseUpdate`, `SessionContext`, `FileSessionStore`, `AgentLoopMiddleware`, `SingleEdgeGroup`, `WorkflowInvocationKwargs`, `StepWrapper`, `DelegatingSkillsSource`, and `SubWorkflowRequestMessage`/`SubWorkflowResponseMessage` — verified against `agent-framework==1.22.0`.
+
 ---
 
 ## 1. `InProcRunnerContext`

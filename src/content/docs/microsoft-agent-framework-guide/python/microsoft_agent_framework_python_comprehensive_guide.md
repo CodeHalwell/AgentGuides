@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.19.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For class examples verified against 1.15.0–1.19.0, see the Class Deep Dives Vol. 1–5 guides."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.22.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For class examples verified against 1.15.0–1.22.0, see the Class Deep Dives Vol. 1–9 guides."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -14,7 +14,7 @@ Latest: agent-framework 1.19.0 | Guide verified against: 1.14.0 | Python 3.10+
 
 ---
 
-> **API reference (verified against `agent-framework==1.14.0`; 52 APIs (50 classes and 2 functions) verified on 1.15.0–1.19.0 — see [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/), [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/), [Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/) and [Vol. 5](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v5/)).**
+> **API reference (verified against `agent-framework==1.14.0`; 90 APIs verified on 1.15.0–1.22.0 — see [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/), [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/), [Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/), [Vol. 5](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v5/), [Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v6/), [Vol. 7](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v7/), [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v8/), and [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/)).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
