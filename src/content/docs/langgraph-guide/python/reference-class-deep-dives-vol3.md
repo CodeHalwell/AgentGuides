@@ -1411,8 +1411,12 @@ def batch_review_node(state: dict) -> dict:
         response: HumanResponse = interrupt({"item": item, "action": "approve_or_reject"})
         if response["type"] == "accept":
             approved.append(item)
+        elif response["type"] == "edit":
+            # Human edited the item; approve the modified version
+            approved.append(response.get("args", item))
         elif response["type"] in ("ignore", "response"):
             rejected.append(item)
+        # all four HumanResponse types are now handled
 
     return {"approved": approved, "rejected": rejected}
 ```
