@@ -12,6 +12,11 @@
       "version": "1.25.0",
       "guide": "microsoft-agent-framework-guide"
     },
+    "github.com/microsoft/agent-framework-go": {
+      "registry": "go",
+      "version": "0.2.0",
+      "guide": "microsoft-agent-framework-guide"
+    },
     "pydantic-ai": {
       "registry": "pypi",
       "version": "2.59.0",
@@ -74,7 +79,7 @@
     },
     "langchain-core": {
       "registry": "pypi",
-      "version": "1.6.12",
+      "version": "1.6.13",
       "guide": "langgraph-guide"
     },
     "langchainjs": {
@@ -183,6 +188,11 @@
       "version": "3.3.0",
       "guide": "mistral-agents-api-guide"
     },
+    "@mistralai/mistralai": {
+      "registry": "npm",
+      "version": "3.1.0",
+      "guide": "mistral-agents-api-guide"
+    },
     "boto3": {
       "registry": "pypi",
       "version": "1.43.117",
@@ -196,6 +206,17 @@
     "strands-agents": {
       "registry": "pypi",
       "version": "1.62.0",
+      "guide": "amazon-bedrock-agents-guide"
+    },
+    "@strands-agents/sdk": {
+      "registry": "npm",
+      "version": "1.21.0",
+      "guide": "amazon-bedrock-agents-guide"
+    },
+    "bedrock-agentcore-ts": {
+      "registry": "npm",
+      "name": "bedrock-agentcore",
+      "version": "0.4.6",
       "guide": "amazon-bedrock-agents-guide"
     }
   }
