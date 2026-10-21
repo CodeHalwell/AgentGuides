@@ -3,6 +3,7 @@ title: "OpenAI Agents SDK: Practical Recipes and Use Cases"
 description: "Worked Python examples for the OpenAI Agents SDK: customer service, research, financial analysis, code review, translation, moderation and document processing."
 sidebar:
   label: "Recipes"
+  order: 4
 framework: "openai-agents-sdk"
 language: "python"
 ---

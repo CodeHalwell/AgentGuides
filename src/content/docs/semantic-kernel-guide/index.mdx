@@ -24,7 +24,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="caution" title="Semantic Kernel and Microsoft Agent Framework">
-  [Microsoft Agent Framework](/microsoft-agent-framework-guide/) is the successor to Semantic Kernel (and AutoGen), built by the same team, and has been generally available since April 2026. Microsoft continues to support Semantic Kernel 1.x — critical bug and security fixes, for at least a year after Agent Framework's GA — but most new features go to Agent Framework. **New agent projects: start on Agent Framework. Existing SK code: keep it updated and migrate gradually** — SK functions convert to Agent Framework tools (Python) and SK agents wrap as Agent Framework agents (.NET).
+  [Microsoft Agent Framework](/microsoft-agent-framework-guide/) is the successor to Semantic Kernel (and AutoGen), built by the same team, and has been generally available since April 2026. Microsoft continues to support Semantic Kernel 1.x — critical bug and security fixes, for at least a year after Agent Framework's GA — but most new features go to Agent Framework. **New agent projects: start on Agent Framework. Existing SK code: keep it updated and migrate gradually.** In .NET, SK agents wrap as Agent Framework agents with `AsAIAgent()`. In Python, SK's `as_agent_framework_tool()` bridge is broken against every released Agent Framework version; a [short wrapper](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework) does the same job.
 </Aside>
 
 ## Choose your language
@@ -47,22 +47,22 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <LinkCard
     title="Concepts"
-    href="./semantic_kernel_comprehensive_guide/"
+    href="/semantic-kernel-guide/semantic_kernel_comprehensive_guide/"
     description="Architecture and concepts, Python and C# side by side."
   />
   <LinkCard
     title="Production"
-    href="./semantic_kernel_production_guide/"
-    description="Deployment, resilience, observability, security, cost."
+    href="/semantic-kernel-guide/semantic_kernel_production_guide/"
+    description="Deployment, resilience, observability, security, cost. Code: Python and .NET production pages."
   />
   <LinkCard
     title="Diagrams"
-    href="./semantic_kernel_diagrams/"
-    description="Architecture and flow diagrams."
+    href="/semantic-kernel-guide/semantic_kernel_diagrams/"
+    description="Filter pipeline, function calling, orchestrations, RAG, MCP, A2A, hosting."
   />
   <LinkCard
     title="Recipes"
-    href="./semantic_kernel_recipes/"
+    href="/semantic-kernel-guide/semantic_kernel_recipes/"
     description="Common patterns in both languages."
   />
 </CardGrid>
@@ -80,6 +80,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
+| 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Python Agent Framework bridge flagged as broken. Language diagram pages merged into the shared diagrams page; Python production page rewritten; links made root-absolute. |
 | 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Versions now read from the site's version registry (were Py 1.43.0 / .NET 1.74.0). Agent Framework relationship restated per Microsoft's published support policy (MAF GA April 2026). "What's new" replaced with verified changes. All guides under this folder re-verified; the language-neutral pages rewritten. | Claude |
 | 2026-09-08 | Py 1.43.0 / .NET 1.74.0 | Consistency sweep (no verification). | |
 | 2026-04-28 | semantic-kernel 1.41.3 | Version bump. | Claude routine |

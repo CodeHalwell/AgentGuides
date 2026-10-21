@@ -419,7 +419,7 @@ spec:
                   name: openai-secrets
                   key: apiKey
             - name: MODEL
-              value: openai:gpt-4o
+              value: openai:%%model=openai%%
           resources:
             requests:
               memory: "256Mi"

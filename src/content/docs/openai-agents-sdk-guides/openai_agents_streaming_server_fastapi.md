@@ -1,6 +1,9 @@
 ---
 title: "OpenAI Agents Streaming Server (FastAPI)"
-description: "Stream model output using FastAPI and OpenAI Python SDK."
+description: "Streaming an Agents SDK run to a browser over Server-Sent Events with FastAPI, plus Docker and Kubernetes manifests."
+sidebar:
+  label: "Streaming server (FastAPI)"
+  order: 6
 framework: "openai-agents-sdk"
 language: "python"
 ---

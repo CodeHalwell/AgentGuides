@@ -2,6 +2,9 @@
 title: "Semantic Kernel: Practical Recipes and Code Examples"
 description: "Cross-language Semantic Kernel recipes — Q&A, structured summaries, translation, plugins, RAG, multi-agent debate and tool-using agents, in Python and C#."
 framework: "semantic-kernel"
+sidebar:
+  label: "Recipes"
+  order: 2
 ---
 
 > Targets `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. Each recipe shows both languages briefly; fuller versions are in the [Python recipes](/semantic-kernel-guide/python/semantic_kernel_recipes_python/) and [.NET recipes](/semantic-kernel-guide/dotnet/semantic_kernel_recipes_dotnet/). Model names are examples.
@@ -20,7 +23,9 @@ kernel.add_service(OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"))  
 All C# snippets assume:
 
 ```csharp
+using System.ComponentModel;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Agents;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 var builder = Kernel.CreateBuilder();
@@ -120,6 +125,10 @@ class Calculator:
     def add(self, a: float, b: float) -> float:
         return a + b
 
+    @kernel_function(description="Multiply two numbers.")
+    def multiply(self, a: float, b: float) -> float:
+        return a * b
+
     @kernel_function(description="Raise a number to a power.")
     def power(self, base: float, exponent: Annotated[float, "The exponent"]) -> float:
         return base ** exponent
@@ -135,6 +144,9 @@ public sealed class Calculator
     [KernelFunction, Description("Add two numbers.")]
     public double Add(double a, double b) => a + b;
 
+    [KernelFunction, Description("Multiply two numbers.")]
+    public double Multiply(double a, double b) => a * b;
+
     [KernelFunction, Description("Raise a number to a power.")]
     public double Power(double @base, [Description("The exponent")] double exponent) => Math.Pow(@base, exponent);
 }
@@ -144,7 +156,7 @@ var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = Func
 Console.WriteLine(await kernel.InvokePromptAsync("What is (2^10) + 24?", new(settings)));
 ```
 
-Arithmetic is a good first tool precisely because models are unreliable at it — the result shows clearly whether the tool was used.
+Arithmetic is a good first tool precisely because models are unreliable at it — the result shows clearly whether the tool was used. Recipe 7 reuses the plugin for a compound-interest question (1000 × 1.05¹⁰), which needs both `power` and `multiply`.
 
 ---
 
@@ -202,7 +214,7 @@ await result.GetValueAsync(TimeSpan.FromMinutes(5));
 await runtime.RunUntilIdleAsync();
 ```
 
-(.NET orchestrations are in preview packages and need `SKEXP0110` suppressed.)
+(.NET orchestrations are in the `-preview` packages `Microsoft.SemanticKernel.Agents.Orchestration` and `.Agents.Runtime.InProcess`, and need `SKEXP0110` suppressed.)
 
 ---
 
@@ -252,4 +264,5 @@ await foreach (var reply in agent.InvokeAsync("If I invest 1000 at 5% for 10 yea
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | `multiply` added to the calculator so recipe 7 can be answered with tools; missing C# usings added. |
 | 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Rewritten. Previous recipes used pre-1.0 Python APIs (`invoke_async`, `create_function_from_prompt`, `model_id=`), the legacy memory-store API (`VolatileMemoryStore`, `ISemanticTextMemory`, `WithMemoryStore`) and placeholder API keys in code. All snippets now use current APIs; versions read from the site's version registry. |

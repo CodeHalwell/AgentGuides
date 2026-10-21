@@ -357,21 +357,19 @@ if __name__ == '__main__':
 ```python
 """
 RAG pattern combining semantic search with LLM generation.
-Requires: pgvector, asyncpg, openai (for embeddings)
+Requires: pgvector, asyncpg
 """
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, Embedder, RunContext
 from dataclasses import dataclass
 import asyncpg
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 @dataclass
 class RAGDependencies:
     """RAG system dependencies."""
     db_pool: asyncpg.Pool
-    openai_client: AsyncOpenAI
-    embedding_model: str = 'text-embedding-3-small'
+    embedder: Embedder
 
 class RAGResponse(BaseModel):
     answer: str
@@ -393,13 +391,9 @@ async def retrieve_documents(
 ) -> str:
     """Retrieve relevant documents using vector search."""
     
-    # Create embedding for query
-    embedding_response = await ctx.deps.openai_client.embeddings.create(
-        input=query,
-        model=ctx.deps.embedding_model
-    )
-    
-    query_embedding = embedding_response.data[0].embedding
+    # Embed the query with the same model that embedded the documents
+    result = await ctx.deps.embedder.embed_query(query)
+    query_embedding = result.embeddings[0]
     
     # Search for similar documents using pgvector
     async with ctx.deps.db_pool.acquire() as conn:
@@ -422,14 +416,11 @@ async def retrieve_documents(
 async def rag_query(
     query: str,
     db_pool: asyncpg.Pool,
-    openai_client: AsyncOpenAI
+    embedder: Embedder
 ) -> RAGResponse:
     """Execute RAG query."""
     
-    deps = RAGDependencies(
-        db_pool=db_pool,
-        openai_client=openai_client
-    )
+    deps = RAGDependencies(db_pool=db_pool, embedder=embedder)
     
     result = await rag_agent.run(query, deps=deps)
     return result.output
@@ -438,13 +429,13 @@ async def rag_query(
 async def main():
     # Initialize database pool
     pool = await asyncpg.create_pool('postgresql://localhost/documents')
-    openai_client = AsyncOpenAI()
+    embedder = Embedder('openai:text-embedding-3-small')   # see the Embeddings page for other providers
     
     try:
         response = await rag_query(
             "How do I implement type safety in Python?",
             pool,
-            openai_client
+            embedder
         )
         
         print(f"Answer: {response.answer}")

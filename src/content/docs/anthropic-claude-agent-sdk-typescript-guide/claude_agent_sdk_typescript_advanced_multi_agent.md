@@ -18,44 +18,76 @@ Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude
 
 ```typescript
 import { z } from 'zod';
-import { query, type Options, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  query, tool, createSdkMcpServer, type Options, type SDKResultMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 
+// Returns the final result, including a failed one: the iterator throws after an error result.
 async function run(prompt: string, options: Options): Promise<SDKResultMessage> {
   let result: SDKResultMessage | undefined;
-  for await (const m of query({ prompt, options })) if (m.type === 'result') result = m;
+  try {
+    for await (const m of query({ prompt, options })) if (m.type === 'result') result = m;
+  } catch (err) {
+    if (!result?.is_error) throw err;
+  }
   if (!result) throw new Error('no result');
   return result;
 }
+
+const ok = (r: SDKResultMessage) => r.subtype === 'success' && !r.is_error;
+
+const INVOICES: Record<string, { amount: string; status: string }> = {
+  'INV-1001': { amount: '£120.00', status: 'paid' },
+  'INV-1002': { amount: '£80.00', status: 'overdue' },
+};
+
+const billing = createSdkMcpServer({
+  name: 'billing',
+  tools: [
+    tool('get_invoice', 'Look up an invoice by its ID', { id: z.string().describe('Invoice ID, e.g. INV-1001') },
+      async ({ id }) => {
+        const invoice = INVOICES[id];
+        return invoice
+          ? { content: [{ type: 'text', text: JSON.stringify(invoice) }] }
+          : { content: [{ type: 'text', text: `No invoice ${id}` }], isError: true };
+      },
+      { annotations: { readOnlyHint: true } }),
+  ],
+});
 
 const Route = z.object({ route: z.enum(['billing', 'code', 'general']) });
 
 const SPECIALISTS: Record<z.infer<typeof Route>['route'], Options> = {
   billing: {
-    model: 'claude-sonnet-5-5',
-    systemPrompt: 'You answer billing questions using only the billing tools.',
+    model: '%%model=anthropic%%',
+    systemPrompt: 'You answer billing questions. Look invoices up with the billing tools; never guess amounts.',
     tools: [],
+    mcpServers: { billing },
+    allowedTools: ['mcp__billing__get_invoice'],
   },
   code: {
-    model: 'claude-opus-5-5',
+    model: '%%model=anthropic-flagship%%',
     systemPrompt: { type: 'preset', preset: 'claude_code' },
     allowedTools: ['Read', 'Glob', 'Grep'],
     cwd: '/srv/repos/app',
   },
-  general: { model: 'claude-haiku-5-5', tools: [] },
+  general: { model: '%%model=anthropic-small%%', tools: [] },
 };
 
 export async function handle(input: string): Promise<string> {
   const routed = await run(input, {
-    model: 'claude-haiku-5-5',
+    model: '%%model=anthropic-small%%',
     systemPrompt: 'Classify the request: billing, code (about our source code) or general.',
     tools: [],
     effort: 'low',
     outputFormat: { type: 'json_schema', schema: z.toJSONSchema(Route) },
   });
-  const route = routed.subtype === 'success' ? Route.parse(routed.structured_output).route : 'general';
+  // A failed or unparseable classification falls back to the general agent.
+  const parsed = ok(routed) && routed.subtype === 'success' ? Route.safeParse(routed.structured_output) : undefined;
+  const route = parsed?.success ? parsed.data.route : 'general';
 
   const answer = await run(input, SPECIALISTS[route]);
-  return answer.subtype === 'success' ? answer.result : `Sorry, that failed (${answer.subtype}).`;
+  return ok(answer) && answer.subtype === 'success' ? answer.result : `Sorry, that failed (${answer.subtype}).`;
 }
 ```
 
@@ -84,7 +116,7 @@ let sessionId: string | undefined;
 for await (const message of query({
   prompt: 'Document the public API of src/payments/ in docs/payments.md.',
   options: {
-    model: 'claude-opus-5-5',
+    model: '%%model=anthropic-flagship%%',
     cwd: '/srv/repos/app',
     allowedTools: ['Read', 'Glob', 'Grep', 'Agent'],   // Write/Edit deliberately go through policy
     canUseTool: policy,
@@ -109,11 +141,13 @@ for await (const message of query({
     console.log('started:', message.description);
   }
   if (message.type === 'result') {
-    console.log(message.subtype, `$${message.total_cost_usd.toFixed(3)}`, 'session', sessionId);
+    console.log(message.is_error ? 'failed' : 'done', message.subtype, `$${message.total_cost_usd.toFixed(3)}`, 'session', sessionId);
   }
 }
 rl.close();
 ```
+
+If the run fails, the loop logs the error result and then throws; wrap it in `try`/`catch` as in [Errors and cancellation](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#errors-and-cancellation) when the caller must keep going.
 
 ## Persisting state for review
 

@@ -24,7 +24,7 @@ gpt = LLM(model="openai/%%model=openai-small%%", temperature=0.2)
 gpt = LLM(model="%%model=openai-small%%")
 
 # Non-native → LiteLLM fallback (requires litellm installed)
-mistral = LLM(model="mistral/mistral-large-latest")
+mistral = LLM(model="mistral/%%model=mistral-flagship%%")
 ```
 
 The first argument **must** include a recognised provider prefix if the model name is ambiguous; otherwise `LLM._infer_provider_from_model` tries to guess.
@@ -100,7 +100,7 @@ The default `LLM` class extends `BaseLLM` with LiteLLM-specific knobs:
 | `presence_penalty`, `frequency_penalty`, `logit_bias` | `float` / `dict` | OpenAI-style knobs. |
 | `base_url` | `str \| None` | Inherited from `BaseLLM`. Used by native OpenAI-compatible paths (`ollama/...`, `hosted_vllm/...`). |
 | `api_base`, `api_version`, `api_key` | `str` | `LLM`-specific. `api_base` is the LiteLLM-style endpoint override; both `base_url` and `api_base` are passed through, so either name works for the fallback path. |
-| `reasoning_effort` | `"none" \| "low" \| "medium" \| "high"` | For o1/o3/o4 and compatible reasoning models. |
+| `reasoning_effort` | `"none" \| "low" \| "medium" \| "high"` | For OpenAI reasoning models (GPT-5 and later, the o-series) and compatible providers. |
 | `thinking` | `Any` | Anthropic extended thinking config. |
 | `stream` | `bool` | Global default — `Crew(stream=True)` overrides per run. |
 | `callbacks` | `list[Any]` | Passed to LiteLLM. |
@@ -112,7 +112,7 @@ The default `LLM` class extends `BaseLLM` with LiteLLM-specific knobs:
 ```python
 from crewai import LLM
 
-o3 = LLM(model="openai/o3", reasoning_effort="medium")
+gpt = LLM(model="openai/%%model=openai-flagship%%", reasoning_effort="medium")
 
 claude = LLM(
     model="anthropic/%%model=anthropic%%",
@@ -147,7 +147,7 @@ writer = Agent(
 )
 ```
 
-`function_calling_llm` is used **only** to format tool-call JSON arguments. Most models don't need it; leave it unset unless your primary model struggles with JSON schemas.
+`function_calling_llm` is used **only** to format tool-call JSON arguments. It is marked deprecated in the 1.15 line (on `Agent` and `Crew`); current models handle tool calls themselves, so leave it unset in new code.
 
 ## Chat / manager / planner LLMs
 
@@ -221,14 +221,14 @@ agent = Agent(role="...", goal="...", backstory="...", llm=default_llm())
 ```python
 Agent(
     role="Tool User",
-    goal="...",
-    backstory="...",
+    goal="Call the billing API correctly",
+    backstory="Integration engineer.",
     llm=LLM(model="openai/%%model=openai-small%%"),
     function_calling_llm=LLM(model="openai/%%model=openai%%"),
 )
 ```
 
-Only the tool-calling round uses the expensive model.
+Only the tool-calling round uses the expensive model. `function_calling_llm` is deprecated in 1.15, so treat this as a pattern for existing code rather than new designs.
 
 ### 3. Observed latency/cost with callbacks
 
@@ -259,7 +259,7 @@ Works for OpenAI, Gemini, and Claude's structured-tool mode. For other providers
 ### 5. LiteLLM routing config
 
 ```python
-LLM(model="groq/llama3-70b", is_litellm=True, api_base=os.environ["LITELLM_PROXY"])
+LLM(model="groq/llama-3.3-70b-versatile", is_litellm=True, api_base=os.environ["LITELLM_PROXY"])
 ```
 
 Forces LiteLLM so you benefit from its router, rate-limiting, and fallbacks.

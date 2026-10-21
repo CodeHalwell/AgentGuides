@@ -360,6 +360,14 @@ kbd {
 .chip[data-group='permanganate'] { background: var(--pm); color: var(--onpm); }
 
 /* ---------- Home: the periodic table of frameworks ---------- */
+/* The home page renders its own h1, so Starlight's title panel is empty there. */
+.content-panel:has(> .sl-container:empty) {
+  display: none;
+}
+.content-panel:has(.pt) {
+  border-top: 0;
+}
+
 .pt-hero {
   display: grid;
   grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);

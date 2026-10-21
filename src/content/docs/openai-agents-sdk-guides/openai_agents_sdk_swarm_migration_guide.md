@@ -5,6 +5,7 @@ framework: "openai-agents-sdk"
 language: "python"
 sidebar:
   label: "Migrating from Swarm"
+  order: 7
 ---
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). The Swarm snippets are checked against the final state of the [openai/swarm](https://github.com/openai/swarm) repository, an educational project that is no longer developed. Swarm was Python-only.

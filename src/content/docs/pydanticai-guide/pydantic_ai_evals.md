@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Evals"
-description: "Systematic evaluation of Pydantic AI agents with pydantic_evals: datasets and cases, built-in, custom, LLM-judge and agentic evaluators, YAML datasets, reports, Logfire, and online evaluation."
+description: "Systematic evaluation of PydanticAI agents with pydantic_evals: datasets and cases, built-in, custom, LLM-judge and agentic evaluators, YAML datasets, reports, Logfire, and online evaluation."
 framework: "pydanticai"
 language: "python"
 sidebar:

@@ -183,8 +183,8 @@ from crewai.knowledge.knowledge_config import KnowledgeConfig
 
 agent = Agent(
     role="Researcher",
-    goal="...",
-    backstory="...",
+    goal="Answer from the indexed reports",
+    backstory="Research librarian.",
     knowledge_sources=[pdfs],
     knowledge_config=KnowledgeConfig(results_limit=8, score_threshold=0.5),
 )
@@ -228,8 +228,10 @@ New quarter → new file, rebuild the collection (call `Knowledge.reset()` then 
 ### 2. Per-agent specialised sources
 
 ```python
-legal  = Agent(role="Legal", ..., knowledge_sources=[legal_pdfs])
-finops = Agent(role="FinOps", ..., knowledge_sources=[sql_schema_txt, runbooks_md])
+legal  = Agent(role="Legal", goal="Answer contract questions", backstory="In-house counsel.",
+               knowledge_sources=[legal_pdfs])
+finops = Agent(role="FinOps", goal="Explain cloud spend", backstory="FinOps analyst.",
+               knowledge_sources=[sql_schema_txt, runbooks_md])
 ```
 
 Collections don't collide — they're isolated by `role`.

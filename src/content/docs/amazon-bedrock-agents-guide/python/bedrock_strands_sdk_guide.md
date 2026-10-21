@@ -3,6 +3,9 @@ title: "AWS Strands Agents SDK: Comprehensive Technical Guide"
 description: "Technical reference for Strands Agents, the open-source, model-driven agent SDK from AWS: agents, tools, multi-agent patterns (agents as tools, swarms, graphs, workflows), sessions, memory and deployment to AgentCore."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "Strands Agents SDK"
+  order: 1
 ---
 
 > TypeScript version of this: [Strands Agents TypeScript SDK](/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/).
@@ -23,7 +26,7 @@ Strands Agents is an open-source (Apache 2.0) SDK from AWS for building agents w
 
 1. [Introduction to Strands](#introduction-to-strands)
 2. [Installation and Setup](#installation-and-setup)
-3. [Core Concepts](#core-concepts)
+3. [Core Concepts](#core-concepts): agents, tools, context, structured output, providers, interrupts, plugins and skills, sandboxes
 4. [Collaboration Pattern 1: Agents as Tools](#collaboration-pattern-1-agents-as-tools)
 5. [Collaboration Pattern 2: Swarms](#collaboration-pattern-2-swarms)
 6. [Collaboration Pattern 3: Agent Graphs](#collaboration-pattern-3-agent-graphs)
@@ -115,7 +118,7 @@ print(result)  # AgentResult; str() gives the final text
 
 If you omit `model`, Strands uses its default Bedrock model. Pin the model explicitly in anything you deploy so behaviour doesn't change when that default moves.
 
-**Bedrock model IDs.** Current Claude models on Bedrock use IDs such as `anthropic.claude-sonnet-5-5`, `anthropic.claude-opus-5-5` and `anthropic.claude-haiku-5-5`; prefix them with `us.`, `eu.`, `jp.`, `au.` or `global.` to use a cross-Region inference profile. Check the [Bedrock model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for the profiles available in your Region.
+**Bedrock model IDs.** Current Claude models on Bedrock use IDs such as `anthropic.claude-sonnet-5-5`, `anthropic.claude-opus-5-5` and `anthropic.claude-haiku-5-5`; add a geography prefix such as `us.`, `eu.` or `global.` to use a cross-Region inference profile. Which prefixes exist varies by model, so check the [Bedrock model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for the profiles available in your Region.
 
 ---
 
@@ -215,6 +218,155 @@ agent("Check my account status", invocation_state={"customer_id": "C-456"})
 ```
 
 `invocation_state` is not shown to the model, so it is the right place for user IDs, credentials handles and request metadata.
+
+### Structured Output
+
+Pass a Pydantic model as `structured_output_model` (per call, or on the `Agent`) and read the validated instance from `result.structured_output`:
+
+```python
+from pydantic import BaseModel, Field
+from strands import Agent
+
+
+class Invoice(BaseModel):
+    """Fields extracted from an invoice."""
+
+    invoice_id: str
+    total: float = Field(description="Total amount including tax")
+    currency: str = Field(description="ISO 4217 code, e.g. GBP")
+
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%")
+result = agent("Extract: Invoice INV-77, total £1,200.00 inc. VAT", structured_output_model=Invoice)
+invoice = result.structured_output   # an Invoice instance
+print(invoice.total, invoice.currency)
+```
+
+The model fills the schema through a tool call, so it works alongside ordinary tools. If the model does not return valid structured output, Strands raises `StructuredOutputException`.
+
+### Model Providers
+
+Bedrock is the default. Other providers are installed as extras (`strands-agents[anthropic]`, `[openai]`, `[litellm]`, `[gemini]`, `[ollama]` and others) and passed as a model object:
+
+```python
+import os
+
+from strands import Agent
+from strands.models.anthropic import AnthropicModel
+from strands.models.openai import OpenAIModel
+
+claude = AnthropicModel(model_id="%%model=anthropic%%", max_tokens=4096, params={"temperature": 0.2})  # reads ANTHROPIC_API_KEY
+gpt = OpenAIModel(model_id="%%model=openai%%", client_args={"api_key": os.environ["OPENAI_API_KEY"]})
+
+agent = Agent(model=claude)
+```
+
+`LiteLLMModel` (`strands.models.litellm`) reaches any provider LiteLLM supports. On AgentCore Runtime, keep API keys in AgentCore Identity (`@requires_api_key`) rather than in environment variables.
+
+### Interrupts (human in the loop)
+
+A tool (or a hook) can pause the agent to ask a person. `tool_context.interrupt()` stops the agent loop. The agent returns with `stop_reason == "interrupt"`, and you resume it by calling the agent with the responses:
+
+```python
+from strands import Agent, ToolContext, tool
+
+
+@tool(context=True)
+def refund(order_id: str, amount: float, tool_context: ToolContext) -> str:
+    """Refund an order.
+
+    Args:
+        order_id: Order to refund.
+        amount: Amount in GBP.
+    """
+    if amount > 100:
+        approval = tool_context.interrupt("refund-approval", reason={"order_id": order_id, "amount": amount})
+        if approval != "approve":
+            return f"Refund of £{amount} for {order_id} was not approved"
+    return f"Refunded £{amount} for {order_id}"
+
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[refund])
+result = agent("Refund £250 on ORD-7")
+
+while result.stop_reason == "interrupt":
+    responses = []
+    for interrupt in result.interrupts:
+        decision = input(f"{interrupt.name} {interrupt.reason}: approve? ")  # or a ticket, UI, queue...
+        responses.append({"interruptResponse": {"interruptId": interrupt.id,
+                                                "response": "approve" if decision == "y" else "deny"}})
+    result = agent(responses)
+```
+
+On the second run, the tool executes again and `interrupt()` returns the response. Hooks raise interrupts the same way with `event.interrupt(...)`, for example from a `BeforeToolCallEvent` approval hook. Pending interrupts are saved by the session manager, so the response can arrive in a later process.
+
+### Plugins and Skills
+
+A **plugin** bundles hooks and tools so they can be added to any agent in one line:
+
+```python
+from strands import Agent, tool
+from strands.hooks import BeforeToolCallEvent
+from strands.plugins import Plugin, hook
+
+
+class AuditPlugin(Plugin):
+    name = "audit"
+
+    def __init__(self):
+        super().__init__()
+        self.calls: list[str] = []
+
+    @hook
+    def record(self, event: BeforeToolCallEvent) -> None:
+        self.calls.append(event.tool_use["name"])
+
+    @tool
+    def audit_log(self) -> list:
+        """Return the tools called so far."""
+        return self.calls
+
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", plugins=[AuditPlugin()])
+```
+
+**Agent Skills** are folders with a `SKILL.md` (YAML front matter with `name` and `description`, then instructions). The `AgentSkills` plugin lists each skill's name and description in the system prompt and gives the model a `skills` tool that loads the full instructions on demand:
+
+```python
+from strands import Agent, AgentSkills
+
+# ./skills/refund-policy/SKILL.md:
+# ---
+# name: refund-policy
+# description: Rules for approving refunds. Use before issuing any refund.
+# ---
+# Refunds over £100 need approval...
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", plugins=[AgentSkills(skills=["./skills"])])
+```
+
+Skills can also be `Skill` objects or `https://` URLs to a `SKILL.md`.
+
+### Sandboxes
+
+By default, file and shell tools run on the host. Pass a `sandbox` to route them elsewhere. `DockerSandbox` runs commands with `docker exec` in a container you started, and it vends `sandbox_shell` and `sandbox_file_editor` tools to the agent:
+
+```python
+from strands import Agent
+from strands.sandbox.docker import DockerSandbox
+
+agent = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    sandbox=DockerSandbox("agent-sandbox", working_dir="/workspace"),  # docker run -d --name agent-sandbox ...
+)
+print(agent.tool_names)  # ['sandbox_file_editor', 'sandbox_shell']
+```
+
+An SSH sandbox (`strands.sandbox.ssh`) is also available, and `PosixShellSandbox` is the base class for your own. For model-generated code on AWS, the managed alternative is the AgentCore Code Interpreter (the `code_interpreter` tool in `strands-agents-tools`, or the [AgentCore client](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#code-interpretation)).
+
+### Bidirectional streaming
+
+`strands.bidi.BidiAgent` is a separate agent class for real-time voice and text conversations over a persistent connection, with barge-in and concurrent tool calls (`start`, `send`, `receive`, `stop`). It works with bidirectional-streaming models from Bedrock, Google and OpenAI. The API is newer than `Agent` and changes more often, so check the [Strands documentation](https://strandsagents.com) before relying on it.
 
 ---
 
@@ -484,7 +636,7 @@ builder.set_execution_timeout(900)
 graph = builder.build()
 
 result = graph("Trend analysis of Q4 sales from s3://sales-bucket/q4.csv")
-print(result.status, result.execution_order)
+print(result.status, [node.node_id for node in result.execution_order])
 print(result.results["report"].result)
 ```
 
@@ -555,7 +707,7 @@ print(coordinator.tool.workflow(action="status", workflow_id="document_processin
 
 `agent.tool.<name>(...)` calls a tool directly, without going through the model — useful for deterministic set-up steps like these.
 
-Durable, long-running business processes with human approval steps and S3/EventBridge triggers belong in AWS Step Functions, with each step invoking an agent (for example one hosted on AgentCore Runtime — see [AgentCore integration patterns](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#integration-patterns)). For pauses for human input inside an agent, Strands supports interrupts raised from hooks and tools.
+Durable, long-running business processes with human approval steps and S3/EventBridge triggers belong in AWS Step Functions, with each step invoking an agent (for example one hosted on AgentCore Runtime — see [AgentCore integration patterns](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#integration-patterns)). For pauses for human input inside an agent, use [interrupts](#interrupts-human-in-the-loop).
 
 ### Error Handling in Workflows
 
@@ -566,9 +718,13 @@ from strands.multiagent.base import Status
 
 result = graph("...")
 if result.status != Status.COMPLETED:
-    for node_id in result.failed_nodes:
-        print("failed:", node_id)
+    print(f"{result.failed_nodes} of {result.total_nodes} nodes failed")
+    for node_id, node_result in result.results.items():
+        if node_result.status == Status.FAILED:
+            print("failed:", node_id, node_result.result)  # result holds the exception
 ```
+
+`GraphResult.failed_nodes` and `completed_nodes` are counts; the per-node detail is in `result.results`.
 
 Bound every multi-agent run with timeouts and execution limits (shown above) so a misbehaving loop fails fast.
 
@@ -618,7 +774,7 @@ agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[docs_server])  # cl
 agent("How do I configure VPC networking for AgentCore Runtime?")
 ```
 
-For HTTP MCP servers (including AgentCore Gateway), pass `url=` (and `headers=` or `auth=`) to `MCPClient` instead of a transport callable.
+For streamable-HTTP MCP servers, pass `url=` (and `headers=`, `auth=` for OAuth client credentials, or `auth_provider=` for any `httpx.Auth`) instead of a transport callable. [Gateway](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#pattern-1-gateway--expose-existing-apis-as-mcp-tools) shows this against AgentCore Gateway.
 
 ### AWS Service Integration Tools
 
@@ -940,7 +1096,8 @@ Strands keeps the agent itself small — model, prompt, tools — and provides t
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.62.0 | 21 October 2026 | Guide rewritten against the real SDK: removed APIs that never existed in Strands (`as_tool` function, `aggregator`, `AgentGraph`, `Workflow`, `Context`, `ConversationMemory`, `PersistentState`, `S3Integration`, `deploy_to_lambda`, `CloudWatchLogger`, `Agent(instructions=…)`, `agent.run`); replaced with `Agent.as_tool`, `Swarm`, `GraphBuilder`, the `workflow` tool, `ToolContext`/`invocation_state`, session managers, `AgentCoreMemorySessionManager`, hooks and OTEL. Model IDs moved from Claude 3/3.5 to current Claude Bedrock IDs. |
+| 1.62.0 | 21 October 2026 | Added structured output, model providers, interrupts, plugins and skills, sandboxes and bidirectional streaming. Fixed `GraphResult.failed_nodes` (a count, not a list). |
+| 1.62.0 | 21 October 2026 | Guide rewritten against the real SDK. Removed APIs that never existed in Strands (`as_tool` function, `aggregator`, `AgentGraph`, `Workflow`, `Context`, `ConversationMemory`, `PersistentState`, `S3Integration`, `deploy_to_lambda`, `CloudWatchLogger`, `Agent(instructions=…)`, `agent.run`), and replaced them with `Agent.as_tool`, `Swarm`, `GraphBuilder`, the `workflow` tool, `ToolContext`/`invocation_state`, session managers, `AgentCoreMemorySessionManager`, hooks and OTEL. |
 | 1.42.0 | 7 June 2026 | Version bump from 1.36.0; `__version__` replaced with `importlib.metadata.version`. |
 | 1.36.0 | 17 April 2026 | Multi-agent graph workflows; interrupt propagation through nested nodes; `AgentCoreMemorySessionManager` integration; steering hooks. |
-| 1.0 | March 2025 | Initial guide created. |
+| 1.0 | July 2025 | Strands 1.0; initial guide. |

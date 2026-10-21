@@ -181,7 +181,7 @@ def resilient_node(state: State, runtime: Runtime) -> dict:
 
 ---
 
-## `get_runtime()` — context-manager alternative
+## `get_runtime()` — function alternative
 
 `get_runtime()` retrieves the current `Runtime` from a context variable set by the executor. It is an alternative to parameter injection for cases where you cannot add parameters to the function signature (e.g. when wrapping third-party code).
 
@@ -291,9 +291,9 @@ tool_node = ToolNode([fetch_user_data])
 
 ---
 
-## `ServerInfo` — LangGraph Cloud metadata (source-verified, %%version=langgraph%%)
+## `ServerInfo` — Agent Server metadata
 
-`ServerInfo` is a frozen dataclass injected into `Runtime.server_info` and `ToolRuntime.server_info` when the graph runs inside a **LangGraph Cloud** (LangSmith Platform) deployment. It is always `None` when running open-source LangGraph locally.
+`ServerInfo` is a frozen dataclass injected into `Runtime.server_info` and `ToolRuntime.server_info` when the graph runs inside the LangGraph Agent Server (LangSmith Deployment, a standalone server, or `langgraph dev`). It is `None` when you call the graph directly in your own process.
 
 ```python
 # langgraph.runtime
@@ -319,13 +319,13 @@ class ServerInfo:
 
 | Field | Type | Available | Description |
 |---|---|---|---|
-| `assistant_id` | `str` | Cloud only | LangGraph Cloud assistant identifier |
-| `graph_id` | `str` | Cloud only | LangGraph Cloud graph identifier |
-| `user` | `BaseUser \| None` | Cloud + auth | Authenticated user from LangGraph Cloud auth middleware; `None` if no auth is configured |
+| `assistant_id` | `str` | Agent Server only | Assistant identifier |
+| `graph_id` | `str` | Agent Server only | Graph ID from `langgraph.json` |
+| `user` | `BaseUser \| None` | Agent Server + auth | Authenticated user from the server's auth handler; `None` if no auth is configured |
 
-### Guard pattern — OSS vs Cloud
+### Guard pattern — in-process vs server
 
-`server_info` is `None` in OSS deployments. Always guard:
+`server_info` is `None` outside the Agent Server. Always guard:
 
 ```python
 from langgraph.runtime import Runtime
@@ -335,15 +335,15 @@ def my_node(state: dict, runtime: Runtime) -> dict:
     if runtime.server_info is not None:
         assistant_id = runtime.server_info.assistant_id
         graph_id = runtime.server_info.graph_id
-        print(f"Running on Cloud: assistant={assistant_id}, graph={graph_id}")
+        print(f"Running in Agent Server: assistant={assistant_id}, graph={graph_id}")
     else:
-        print("Running in OSS LangGraph")
+        print("Running in-process")
     return state
 ```
 
 ### Accessing the authenticated user
 
-When LangGraph Cloud is configured with an auth handler, `server_info.user` is populated:
+When the server has an auth handler (`auth.path` in `langgraph.json`), `server_info.user` is populated:
 
 ```python
 from langgraph.runtime import Runtime
@@ -365,7 +365,7 @@ def personalized_node(state: dict, runtime: Runtime) -> dict:
 
 ### Routing by graph identity (multi-graph deployments)
 
-In a Cloud deployment that hosts multiple graphs, `graph_id` lets a shared node adjust behaviour per-graph:
+In a deployment that hosts multiple graphs, `graph_id` lets a shared node adjust behaviour per-graph:
 
 ```python
 GRAPH_CONFIGS = {
@@ -460,7 +460,8 @@ builder.add_edge(START, "my_node")
 builder.add_conditional_edges("my_node", lambda s: END if s["is_last_step"] else "my_node")
 
 graph = builder.compile()
-graph.invoke({"messages": [HumanMessage("Start")]})
+# Set the limit explicitly: with the default (10007) this loop would run ~10,000 times.
+graph.invoke({"messages": [HumanMessage("Start")]}, {"recursion_limit": 5})
 ```
 
 ### `IsLastStep`
@@ -489,9 +490,9 @@ def agent(state: AgentState) -> dict:
 
 Step-count details:
 
-- Default recursion limit: **25** steps.
+- Default recursion limit: **10007** steps (set by `LANGGRAPH_DEFAULT_RECURSION_LIMIT`; older releases used 25). That default is too high to act as a loop guard, so set it per call.
 - Override per-call: `graph.invoke(input, {"recursion_limit": 50})`.
-- `IsLastStep` becomes `True` at step **24** (default) or step **49** (`recursion_limit=50`).
+- With `recursion_limit=50`, `IsLastStep` becomes `True` on the 50th step.
 
 ### `RemainingSteps`
 
@@ -755,23 +756,11 @@ class RemainingStepsManager(ManagedValue[int]):
   # or with a dataclass / Pydantic model:
   class State(BaseModel):
       is_last_step: IsLastStep = False
-      remaining: RemainingSteps = 25
+      remaining: RemainingSteps = 10
   ```
 
 - **`recursion_limit` is per-invoke, not per-graph.** Different calls to `graph.invoke` can use different limits. `IsLastStep` and `RemainingSteps` track whichever limit was active when the run started.
 
-- **Step counter resets on each `invoke`.** Checkpointers save channel values but not the step counter. A new `invoke` on an existing thread always starts the step counter at 0.
+- **The limit applies per `invoke`.** A new `invoke` on an existing thread gets the full `recursion_limit` again, even though the thread's step number keeps increasing.
 
 - **`get_runtime()` raises outside a task context.** Do not call it from module-level code, background threads, or any code path that runs outside the Pregel executor.
-
----
-
-## Version history
-
-| Version | Change |
-|---|---|
-| 1.2.1 | `ExecutionInfo.node_first_attempt_time` field added. |
-| 1.2 | `RemainingSteps` added alongside the existing `IsLastStep`. Both re-exported from `langgraph.managed`. |
-| 0.6.0 | `Runtime`, `ToolRuntime`, and `get_runtime()` introduced. |
-| 1.0 | `IsLastStep` moved to `langgraph.managed.is_last_step`; old import path re-exported. (`RemainingSteps` did not yet exist.) |
-| 0.3 | `IsLastStep` introduced as the first managed value. |

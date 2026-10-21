@@ -1,1291 +1,712 @@
 ---
 title: "LlamaIndex Production Guide"
-description: "Deploying LlamaIndex Applications to Production: Best Practices, Deployment Strategies, and Optimization Techniques"
+description: "Running LlamaIndex in production: ingestion jobs, index persistence, vector store choice, serving agents and workflows, observability, evaluation gates and testing."
 framework: "llamaindex"
 language: "python"
+sidebar:
+  label: "Production"
 ---
 
-Deploying LlamaIndex applications to production: deployment, performance, observability, security and cost.
+> Verified against `llama-index-core` %%version=llama-index%%, `llama-agents-server` 0.8.0 and `llamactl` 0.10.4 (checked %%versions-checked%%). Every Python block on this page was run, with mock models standing in for OpenAI; the tests shown pass.
 
-> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). The web-service scaffolding (FastAPI, Prometheus, Kubernetes) is ordinary Python infrastructure; the LlamaIndex-specific parts are index loading, query/agent calls, instrumentation and token accounting.
+This page is about the parts of a production deployment that are specific to LlamaIndex: keeping ingestion out of the request path, where the index lives, how to serve agents and workflows, and how to observe, evaluate and test them. Generic web-service concerns (TLS, autoscaling, secrets management, load balancers) are the same as for any Python service and are left to your platform's documentation.
 
----
-
-## Table of Contents
-
-1. [Production Architecture](#production-architecture)
-2. [Deployment Strategies](#deployment-strategies)
-3. [Performance Optimization](#performance-optimization)
-4. [Monitoring and Observability](#monitoring-and-observability)
-5. [Security and Access Control](#security-and-access-control)
-6. [Error Handling and Recovery](#error-handling-and-recovery)
-7. [Scaling Strategies](#scaling-strategies)
-8. [Cost Optimization](#cost-optimization)
-9. [Testing and Quality Assurance](#testing-and-quality-assurance)
-10. [DevOps and CI/CD](#devops-and-cicd)
+The running example is a staff-handbook assistant: documents are ingested into Qdrant by a scheduled job, and an API answers questions over them, scoped to the caller's tenant.
 
 ---
 
-## Production Architecture
+## 1. Ingestion is a job, not a request
 
-### Production-Ready LlamaIndex Stack
+Building an index means reading files, chunking and embedding them, which is slow and costs money. Do it in a separate job (a cron job, a queue worker, a CI step), and have the API only connect to an index that already exists.
 
-```text
-# requirements-prod.txt
-llama-index-core==%%version=llama-index%%
-# Integrations version independently of core; let pip resolve them against the
-# core pin above, then freeze the result in a lock file (pip-compile / uv lock).
-llama-index-llms-openai
-llama-index-embeddings-openai
-llama-index-vector-stores-pinecone
-llama-index-observability-otel
+`IngestionPipeline` with a docstore and `DocstoreStrategy.UPSERTS` makes the job incremental. It hashes each document, skips the ones that have not changed, and for a changed document deletes its old chunks from the vector store before writing the new ones. This only works if document IDs are stable, which is what `filename_as_id=True` gives you.
 
-# Web framework
-fastapi
-uvicorn[standard]
-
-# Monitoring and logging
-prometheus-client
-structlog
-python-json-logger
-opentelemetry-exporter-otlp
-
-# Storage, caching and security
-pinecone
-redis
-sqlalchemy
-psycopg[binary]
-python-jose
-slowapi
-cryptography
-
-# Testing
-pytest
-pytest-asyncio
-
-# Utilities
-tenacity
-python-dotenv
+```bash
+pip install "llama-index-core==%%version=llama-index%%" llama-index-llms-openai llama-index-embeddings-openai \
+    llama-index-vector-stores-qdrant llama-index-readers-file
 ```
 
-### Multi-Tier Architecture
+```python
+# config.py
+import os
+
+COLLECTION = os.environ.get("QDRANT_COLLECTION", "handbook")
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
+LLM_MODEL = os.environ.get("LLM_MODEL", "%%model=openai-small%%")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "text-embedding-3-small")
+```
 
 ```python
-from fastapi import FastAPI, HTTPException
-from contextlib import asynccontextmanager
+# ingest.py
+"""Ingestion job: run on a schedule or on document change, never inside the API process."""
+import sys
+import uuid
+
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core.ingestion import DocstoreStrategy, IngestionPipeline
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.storage.docstore import SimpleDocumentStore
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+
+from config import COLLECTION, EMBED_MODEL, QDRANT_API_KEY, QDRANT_URL
+
+DOCSTORE_PATH = "./pipeline_storage"
+
+
+def stable_node_id(i: int, doc) -> str:
+    # same file + same chunk position -> same ID, so evaluation sets keep matching
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc.doc_id}#{i}"))
+
+
+def build_pipeline(client: QdrantClient) -> IngestionPipeline:
+    pipeline = IngestionPipeline(
+        transformations=[
+            SentenceSplitter(chunk_size=512, chunk_overlap=64, id_func=stable_node_id),
+            OpenAIEmbedding(model=EMBED_MODEL),
+        ],
+        vector_store=QdrantVectorStore(collection_name=COLLECTION, client=client),
+        docstore=SimpleDocumentStore(),
+        docstore_strategy=DocstoreStrategy.UPSERTS,
+    )
+    try:
+        pipeline.load(DOCSTORE_PATH)        # document hashes and transformation cache
+    except FileNotFoundError:
+        pass                                # first run
+    return pipeline
+
+
+def ingest(source_dir: str, tenant: str, client: QdrantClient) -> int:
+    documents = SimpleDirectoryReader(source_dir, recursive=True, filename_as_id=True).load_data()
+    for doc in documents:
+        doc.metadata["tenant"] = tenant
+        doc.excluded_embed_metadata_keys.append("tenant")
+        doc.excluded_llm_metadata_keys.append("tenant")
+    pipeline = build_pipeline(client)
+    nodes = pipeline.run(documents=documents)
+    pipeline.persist(DOCSTORE_PATH)
+    return len(nodes)
+
+
+if __name__ == "__main__":
+    client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    print(ingest(sys.argv[1], tenant=sys.argv[2], client=client), "nodes written")
+```
+
+Notes:
+
+- **Stable node IDs.** By default each chunk gets a random UUID on every run. The `id_func` above derives the ID from the document ID and chunk position, so the evaluation set in [section 6](#6-evaluation-as-a-release-gate) keeps matching after re-ingestion. Qdrant requires point IDs to be UUIDs or integers, hence `uuid5`.
+- **Where the docstore lives.** `SimpleDocumentStore` persisted to a local folder is fine for a single job host. If the job runs on ephemeral machines, use a shared docstore (`llama-index-storage-docstore-redis`, `-postgres` or `-mongodb`) so the hashes survive between runs.
+- **Tenant metadata.** The `tenant` key is stored with every chunk so the API can filter on it, and it is excluded from the embedding and the LLM prompt.
+- **Hard documents.** For scanned PDFs, complex tables and slides, parse with LlamaParse before chunking (see [data connectors](/llamaindex-guide/python/llamaindex_comprehensive_guide/#18-data-connectors)).
+
+## 2. Index persistence and vector store choice
+
+There are two ways to keep an index between processes:
+
+- **Local persistence**: `index.storage_context.persist("./storage")` writes the docstore, index metadata and (with the default `SimpleVectorStore`) the vectors as JSON files; `load_index_from_storage` reads them back. Everything is loaded into memory. This suits small, read-only corpora that ship with the container, and tests.
+- **External vector store**: the vectors and the chunk text live in a database, and the API reconnects with `VectorStoreIndex.from_vector_store(store)` without re-embedding anything. Use this when several replicas share one index or the corpus changes while the service runs.
+
+What to check when picking a store, from LlamaIndex's point of view:
+
+| Need | What to look for in the integration |
+|---|---|
+| Async serving | An async client (`aquery`/`async_add`). Qdrant needs `aclient=AsyncQdrantClient(...)` or `url=`; without it `aquery` raises. |
+| Incremental ingestion | `delete_ref_doc` support, which `DocstoreStrategy.UPSERTS` relies on. |
+| Tenant or permission filtering | `MetadataFilters` support, ideally with payload indexes on the filtered keys. |
+| Hybrid (dense + sparse) search | Built-in hybrid mode (Qdrant `enable_hybrid=True`, pgvector `hybrid_search=True`), or fuse a BM25 retriever yourself ([advanced retrieval](/llamaindex-guide/python/llamaindex_comprehensive_guide/#19-advanced-retrieval)). |
+| Fewer moving parts | pgvector (`llama-index-vector-stores-postgres`) if you already run Postgres. |
+
+Pick the embedding model once per collection: vectors from different models cannot be mixed, so changing the model means re-ingesting into a new collection.
+
+## 3. Serving a query engine with FastAPI
+
+When the service is mostly retrieval and synthesis (no long-running agent loops or human approval steps), a small FastAPI app is the simplest option. The app below has one `/query` route that requires an API key, is rate-limited per key, filters retrieval to the caller's tenant and enforces a timeout. It also defines `/health` (liveness) and `/ready` (index loaded and vector store reachable) for container probes.
+
+```bash
+pip install fastapi "uvicorn[standard]" slowapi
+```
+
+```python
+# app.py
+import asyncio
+import hashlib
 import logging
+import os
+import secrets
+from contextlib import asynccontextmanager
 
-# Configure structured logging
-import structlog
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
+from pydantic import BaseModel, Field
+from qdrant_client import AsyncQdrantClient, QdrantClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.processors.JSONRenderer()
-    ],
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
+from llama_index.core import Settings, VectorStoreIndex
+from llama_index.core.vector_stores import FilterOperator, MetadataFilter, MetadataFilters
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.llms.openai import OpenAI
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+
+from config import COLLECTION, EMBED_MODEL, LLM_MODEL, QDRANT_API_KEY, QDRANT_URL
+
+log = logging.getLogger("rag-api")
+QUERY_TIMEOUT_S = float(os.environ.get("QUERY_TIMEOUT_S", "30"))
+RATE_LIMIT = os.environ.get("RATE_LIMIT", "30/minute")
+
+# "key1:acme,key2:globex" -> {"key1": "acme", ...}; use a secret store in practice
+API_KEYS = dict(
+    pair.split(":", 1) for pair in os.environ.get("API_KEYS", "").split(",") if pair
 )
 
-logger = structlog.get_logger()
 
-# Global state for lifespan management
-class AppState:
-    llm = None
-    embed_model = None
-    indexes = {}
-    vector_store = None
-    query_engines = {}
-    memory_store = None
+def make_clients() -> tuple[QdrantClient, AsyncQdrantClient]:
+    return (
+        QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY),
+        AsyncQdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY),
+    )
 
-app_state = AppState()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize resources on startup, cleanup on shutdown."""
-    logger.info("application_startup")
-    
-    # Initialize expensive resources
-    from llama_index.llms.openai import OpenAI
-    from llama_index.embeddings.openai import OpenAIEmbedding
-    from llama_index.core import VectorStoreIndex
-    from llama_index.vector_stores.pinecone import PineconeVectorStore
-    from pinecone import Pinecone
-    import os
-    
-    # Vector store (Pinecone SDK v3+; the old pinecone.init() API is gone)
-    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-    app_state.vector_store = PineconeVectorStore(
-        pinecone_index=pc.Index("llamaindex-prod"),
-        namespace="production",
-    )
-    
-    # Models — reuse one client per process
-    app_state.llm = OpenAI(model="%%model=openai-small%%", max_retries=3, timeout=60)
-    app_state.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
-    
-    # Reconnect to the existing index; ingestion runs as a separate job
-    index = VectorStoreIndex.from_vector_store(
-        app_state.vector_store, embed_model=app_state.embed_model
-    )
-    app_state.indexes["default"] = index
-    app_state.query_engines["default"] = index.as_query_engine(llm=app_state.llm)
-    
-    logger.info("resources_initialized")
-    
+    Settings.llm = OpenAI(model=LLM_MODEL, timeout=60, max_retries=3)
+    Settings.embed_model = OpenAIEmbedding(model=EMBED_MODEL)
+    client, aclient = make_clients()
+    store = QdrantVectorStore(collection_name=COLLECTION, client=client, aclient=aclient)
+    app.state.qdrant = aclient
+    app.state.index = VectorStoreIndex.from_vector_store(store)   # no re-embedding at start-up
     yield
-    
-    logger.info("application_shutdown")
+    await aclient.close()
+    client.close()
 
-app = FastAPI(lifespan=lifespan, title="LlamaIndex Production API")
 
-# Middleware for request tracking
-@app.middleware("http")
-async def add_request_id(request, call_next):
-    import uuid
-    request.state.request_id = str(uuid.uuid4())
-    
-    logger.info(
-        "request_start",
-        request_id=request.state.request_id,
-        method=request.method,
-        path=request.url.path,
-    )
-    
-    response = await call_next(request)
-    
-    logger.info(
-        "request_end",
-        request_id=request.state.request_id,
-        status_code=response.status_code,
-    )
-    
-    return response
-```
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
----
 
-## Deployment Strategies
+def tenant_for_key(api_key: str | None = Security(api_key_header)) -> str:
+    for known, tenant in API_KEYS.items():
+        if api_key and secrets.compare_digest(api_key, known):
+            return tenant
+    raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
-### Docker Deployment
 
-```dockerfile
-# Dockerfile for LlamaIndex application
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements
-COPY requirements-prod.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements-prod.txt
-
-# Copy application code
-COPY . .
-
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
-
-# Run application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Docker Compose for Local Development
-
-
-```yaml
-# docker-compose.yml
-services:
-  # Main API
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - PINECONE_API_KEY=${PINECONE_API_KEY}
-      - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://user:password@postgres:5432/llamaindex
-    depends_on:
-      - redis
-      - postgres
-      - vector_store
-    volumes:
-      - ./:/app
-    command: uvicorn main:app --host 0.0.0.0 --reload
-
-  # Redis for caching
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-  # PostgreSQL for persistence
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=llamaindex
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  # Chroma vector store
-  vector_store:
-    image: ghcr.io/chroma-core/chroma:latest
-    ports:
-      - "8001:8000"
-    environment:
-      - CHROMA_DB_IMPL=duckdb
-    volumes:
-      - chroma_data:/chroma/chroma
-
-volumes:
-  redis_data:
-  postgres_data:
-  chroma_data:
-```
-
-### Kubernetes Deployment
-
-```yaml
-# kubernetes-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: llamaindex-api
-  labels:
-    app: llamaindex
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: llamaindex
-  template:
-    metadata:
-      labels:
-        app: llamaindex
-    spec:
-      containers:
-      - name: api
-        image: llamaindex-api:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8000
-        env:
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: llamaindex-secrets
-              key: openai-key
-        - name: REDIS_URL
-          value: redis://redis-service:6379
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: llamaindex-secrets
-              key: database-url
-        
-        # Resource limits
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"
-        
-        # Liveness probe
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        
-        # Readiness probe
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        
-        # Volume mounts
-        volumeMounts:
-        - name: config
-          mountPath: /app/config
-      
-      volumes:
-      - name: config
-        configMap:
-          name: llamaindex-config
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: llamaindex-service
-spec:
-  selector:
-    app: llamaindex
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8000
-  type: LoadBalancer
-
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: llamaindex-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: llamaindex-api
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-```
-
----
-
-## Performance Optimization
-
-### Query Optimization
-
-```python
-import time
-from functools import wraps
-
-# Performance monitoring decorator
-def track_performance(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        start = time.time()
-        try:
-            result = await func(*args, **kwargs)
-            duration = time.time() - start
-            logger.info(
-                "operation_complete",
-                operation=func.__name__,
-                duration_ms=duration * 1000,
-                status="success"
-            )
-            return result
-        except Exception as e:
-            duration = time.time() - start
-            logger.error(
-                "operation_failed",
-                operation=func.__name__,
-                duration_ms=duration * 1000,
-                error=str(e),
-            )
-            raise
-    return wrapper
-
-# Query engine with a simple exact-match cache
-import hashlib
-
-class OptimizedQueryEngine:
-    def __init__(self, index, llm):
-        self.index = index
-        self.llm = llm
-        self.cache = {}
-        self.query_engine = index.as_query_engine(
-            similarity_top_k=5,
-            response_mode="compact",
-        )
-    
-    def _get_cache_key(self, query: str) -> str:
-        """Generate cache key for query."""
-        return hashlib.sha256(query.encode()).hexdigest()
-    
-    @track_performance
-    async def query(self, query: str, use_cache: bool = True):
-        """Query with optional caching."""
-        cache_key = self._get_cache_key(query)
-        
-        # Check cache
-        if use_cache and cache_key in self.cache:
-            logger.info("cache_hit", query=query)
-            return self.cache[cache_key]
-        
-        # Execute query
-        response = await self.query_engine.aquery(query)
-        
-        # Cache result (with TTL in production)
-        self.cache[cache_key] = response
-        
-        logger.info("cache_miss", query=query)
-        return response
-    
-    def clear_cache(self):
-        """Clear query cache."""
-        self.cache.clear()
-        logger.info("cache_cleared")
-```
-
-### Batch Processing
-
-```python
-from typing import List
-from llama_index.core import Document
-
-class BatchProcessor:
-    """Process multiple queries in batches for efficiency."""
-    
-    def __init__(self, query_engine, batch_size: int = 10):
-        self.query_engine = query_engine
-        self.batch_size = batch_size
-    
-    async def process_batch(self, queries: List[str]) -> List[str]:
-        """Process multiple queries efficiently."""
-        results = []
-        
-        for i in range(0, len(queries), self.batch_size):
-            batch = queries[i:i + self.batch_size]
-            
-            logger.info(
-                "processing_batch",
-                batch_num=i // self.batch_size + 1,
-                batch_size=len(batch)
-            )
-            
-            # Process queries in parallel
-            import asyncio
-            batch_results = await asyncio.gather(
-                *[self.query_engine.aquery(q) for q in batch]
-            )
-            
-            results.extend(batch_results)
-        
-        return results
-    
-    async def stream_batch(self, queries: List[str]):
-        """Stream results as they complete."""
-        import asyncio
-        
-        for i in range(0, len(queries), self.batch_size):
-            batch = queries[i:i + self.batch_size]
-            
-            batch_results = await asyncio.gather(
-                *[self.query_engine.aquery(q) for q in batch]
-            )
-            
-            for result in batch_results:
-                yield result
-```
-
----
-
-## Monitoring and Observability
-
-### Metrics Collection
-
-```python
-from prometheus_client import Counter, Histogram, Gauge
-import time
-
-# Define metrics
-query_counter = Counter(
-    'llamaindex_queries_total',
-    'Total number of queries',
-    ['status', 'query_type']
-)
-
-query_duration = Histogram(
-    'llamaindex_query_duration_seconds',
-    'Query duration in seconds',
-    ['query_type'],
-    buckets=(0.1, 0.5, 1, 2, 5, 10)
-)
-
-active_queries = Gauge(
-    'llamaindex_active_queries',
-    'Number of active queries'
-)
-
-token_usage = Counter(
-    'llamaindex_tokens_used',
-    'Total tokens used',
-    ['model', 'type']  # type: input, output
-)
-
-cache_hits = Counter(
-    'llamaindex_cache_hits_total',
-    'Total cache hits',
-    ['cache_type']
-)
-
-# Middleware to track metrics
-from fastapi import Request
-
-@app.middleware("http")
-async def track_metrics(request: Request, call_next):
-    active_queries.inc()
-    
-    start_time = time.time()
-    try:
-        response = await call_next(request)
-        status = "success"
-    except Exception as e:
-        status = "error"
-        raise
-    finally:
-        duration = time.time() - start_time
-        query_type = request.url.path.split('/')[-1]
-        
-        query_counter.labels(
-            status=status,
-            query_type=query_type
-        ).inc()
-        
-        query_duration.labels(
-            query_type=query_type
-        ).observe(duration)
-        
-        active_queries.dec()
-    
-    return response
-```
-
-### Distributed Tracing
-
-```python
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from llama_index.observability.otel import LlamaIndexOpenTelemetry
-
-# Export LlamaIndex's own spans (retrieval, LLM calls, agent steps) over OTLP.
-# Jaeger, Tempo and most vendors accept OTLP directly; the old Jaeger Thrift
-# exporter is no longer published.
-LlamaIndexOpenTelemetry(
-    service_name_or_resource="llamaindex-api",
-    span_exporter=OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces"),
-).start_registering()
-
-tracer = trace.get_tracer(__name__)   # for your own application spans
-
-# Use in operations
-@app.post("/query")
-async def query_endpoint(query: str):
-    with tracer.start_as_current_span("process_query") as span:
-        span.set_attribute("query", query)
-        
-        with tracer.start_as_current_span("retrieve_documents"):
-            # Retrieval operation
-            pass
-        
-        with tracer.start_as_current_span("generate_response"):
-            # Generation operation
-            pass
-        
-        return {"result": "response"}
-```
-
-### Log Aggregation
-
-```python
-import structlog
-from pythonjsonlogger import jsonlogger
-import logging
-
-# Configure JSON logging for ELK stack
-handler = logging.StreamHandler()
-formatter = jsonlogger.JsonFormatter()
-handler.setFormatter(formatter)
-
-root_logger = logging.getLogger()
-root_logger.addHandler(handler)
-root_logger.setLevel(logging.INFO)
-
-# Structured logging
-logger = structlog.get_logger()
-
-# Usage
-logger.info(
-    "query_processed",
-    query_id="q123",
-    duration_ms=150,
-    tokens_used=245,
-    cache_hit=False,
-    user_id="user456",
-)
-```
-
----
-
-## Security and Access Control
-
-### Authentication and Authorization
-
-```python
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-from datetime import datetime, timedelta, timezone
-import os
-
-security = HTTPBearer()
-
-SECRET_KEY = os.environ["SECRET_KEY"]   # fail fast rather than fall back to a default
-ALGORITHM = "HS256"
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    """Create JWT token."""
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=1))
-    
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate token and extract user."""
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
-            )
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-    return user_id
-
-# Protected endpoint
-@app.post("/query")
-async def protected_query(query: str, user_id: str = Depends(get_current_user)):
-    """Query endpoint protected by authentication."""
-    logger.info("user_query", user_id=user_id, query=query)
-    # Process query
-    return {"result": "response"}
-```
-
-### Rate Limiting
-
-```python
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=lambda request: request.headers.get("X-API-Key", "anonymous"))
+app = FastAPI(title="Handbook RAG API", lifespan=lifespan)
 app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-@app.exception_handler(RateLimitExceeded)
-async def rate_limit_handler(request, exc):
-    logger.warning("rate_limit_exceeded", client=get_remote_address(request))
-    return JSONResponse(
-        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        content={"detail": "Too many requests"},
-    )
-
-# Apply rate limits
-@app.post("/query")
-@limiter.limit("10/minute")
-async def query_with_rate_limit(request: Request, query: str):
-    """Query endpoint with rate limiting."""
-    return await query_endpoint(query)
-```
-
-### Data Encryption
-
-```python
-from cryptography.fernet import Fernet
-import os
-
-# Encryption key management
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-cipher_suite = Fernet(ENCRYPTION_KEY)
-
-class EncryptedStorage:
-    """Store sensitive data encrypted."""
-    
-    def __init__(self, db_connection):
-        self.db = db_connection
-    
-    def store_query(self, user_id: str, query: str):
-        """Store query encrypted."""
-        encrypted_query = cipher_suite.encrypt(query.encode())
-        self.db.execute(
-            "INSERT INTO queries (user_id, encrypted_query) VALUES (?, ?)",
-            (user_id, encrypted_query)
-        )
-    
-    def retrieve_query(self, query_id: int) -> str:
-        """Retrieve and decrypt query."""
-        result = self.db.execute(
-            "SELECT encrypted_query FROM queries WHERE id = ?",
-            (query_id,)
-        ).fetchone()
-        
-        if result:
-            encrypted_query = result[0]
-            decrypted_query = cipher_suite.decrypt(encrypted_query).decode()
-            return decrypted_query
-        
-        return None
-```
-
----
-
-## Error Handling and Recovery
-
-### Comprehensive Error Handling
-
-```python
-from typing import Optional
-from pydantic import BaseModel
-
-class ErrorResponse(BaseModel):
-    error_id: str
-    message: str
-    status_code: int
-    timestamp: str
-    request_id: Optional[str] = None
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler."""
-    import uuid
-    from datetime import datetime, timezone
-    
-    error_id = str(uuid.uuid4())
-    
-    logger.error(
-        "unhandled_exception",
-        error_id=error_id,
-        error_type=type(exc).__name__,
-        error_message=str(exc),
-        request_path=request.url.path,
-        request_id=getattr(request.state, "request_id", None),
-    )
-    
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            error_id=error_id,
-            message="Internal server error",
-            status_code=500,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            request_id=getattr(request.state, "request_id", None),
-        ).model_dump(),
-    )
+async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    log.exception("unhandled error on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal error"})
 
-# Specific exception handlers
-class LLMException(Exception):
-    pass
 
-@app.exception_handler(LLMException)
-async def llm_exception_handler(request: Request, exc: LLMException):
-    logger.error("llm_error", error=str(exc))
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": "LLM service unavailable"},
-    )
+class QueryRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    top_k: int = Field(default=4, ge=1, le=20)
 
-# Retry logic
-from tenacity import retry, stop_after_attempt, wait_exponential
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-)
-async def query_with_retry(query: str):
-    """Query with automatic retry on failure."""
+class Source(BaseModel):
+    file_name: str | None
+    score: float | None
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    sources: list[Source]
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok"}                     # liveness: the process is serving
+
+
+@app.get("/ready")
+async def ready(request: Request) -> dict:
+    # readiness: index object built and the vector store reachable
+    if getattr(request.app.state, "index", None) is None:
+        raise HTTPException(status_code=503, detail="index not loaded")
     try:
-        return await query_engine.aquery(query)
-    except Exception as e:
-        logger.error("query_failed", attempt=query_with_retry.retry.statistics)
-        raise
+        exists = await request.app.state.qdrant.collection_exists(COLLECTION)
+    except Exception:
+        exists = False
+    if not exists:
+        raise HTTPException(status_code=503, detail="vector store unavailable")
+    return {"status": "ready"}
+
+
+@app.post("/query", response_model=QueryResponse)
+@limiter.limit(RATE_LIMIT)
+async def query(
+    request: Request, body: QueryRequest, tenant: str = Depends(tenant_for_key)
+) -> QueryResponse:
+    engine = request.app.state.index.as_query_engine(
+        similarity_top_k=body.top_k,
+        filters=MetadataFilters(
+            filters=[MetadataFilter(key="tenant", value=tenant, operator=FilterOperator.EQ)]
+        ),
+    )
+    try:
+        response = await asyncio.wait_for(engine.aquery(body.question), QUERY_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Query timed out")
+
+    log.info(
+        "query tenant=%s q=%s sources=%s",
+        tenant,
+        hashlib.sha256(body.question.encode()).hexdigest()[:12],   # no raw user text in logs
+        [n.node_id for n in response.source_nodes],
+    )
+    return QueryResponse(
+        answer=str(response),
+        sources=[Source(file_name=n.metadata.get("file_name"), score=n.score) for n in response.source_nodes],
+    )
 ```
 
-### Graceful Degradation
+Run it with `uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2`. Each worker loads its own `VectorStoreIndex` object, which is cheap with an external store because nothing is embedded at start-up.
+
+Design points:
+
+- **One query engine per request** is fine: `as_query_engine()` only wires objects together. It is the cleanest way to apply per-request settings such as `filters` and `similarity_top_k`.
+- **Enforce tenancy in the retriever** (`MetadataFilters`), not by asking the model to ignore other tenants' text.
+- **Timeouts.** The `OpenAI` client's `timeout` and `max_retries` cover single calls; `asyncio.wait_for` bounds the whole query, including retries and multiple LLM calls in `refine` mode.
+- **Streaming** answers over Server-Sent Events are covered on the [streaming server page](/llamaindex-guide/python/llamaindex_streaming_server_fastapi/).
+
+The tests use LlamaIndex's mock models and an in-memory Qdrant, so they run in CI without network access or API keys:
 
 ```python
-class ResilientQueryEngine:
-    """Query engine with fallback strategies."""
-    
-    def __init__(self, primary_engine, fallback_engines):
-        self.primary_engine = primary_engine
-        self.fallback_engines = fallback_engines
-    
-    async def query(self, query: str):
-        """Query with fallback."""
-        engines = [self.primary_engine] + self.fallback_engines
-        
-        for i, engine in enumerate(engines):
-            try:
-                logger.info("trying_engine", engine_num=i)
-                result = await engine.aquery(query)
-                
-                if i > 0:
-                    logger.warning("fallback_used", fallback_num=i)
-                
-                return result
-            
-            except Exception as e:
-                logger.warning(
-                    "engine_failed",
-                    engine_num=i,
-                    error=str(e),
-                )
-                
-                if i == len(engines) - 1:
-                    raise
-        
-        raise Exception("All query engines failed")
-```
-
----
-
-## Scaling Strategies
-
-### Horizontal Scaling
-
-```nginx
-# Load balancer configuration (nginx)
-upstream llamaindex_backend {
-    least_conn;
-    server api1.internal:8000 weight=1;
-    server api2.internal:8000 weight=1;
-    server api3.internal:8000 weight=1;
-}
-
-server {
-    listen 80;
-    server_name api.llamaindex.com;
-    
-    location / {
-        proxy_pass http://llamaindex_backend;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Request-ID $request_id;
-    }
-}
-```
-
-### Database Sharding
-
-```python
-from sqlalchemy import create_engine, text
-
-import hashlib
-
-class ShardedRepository:
-    """Database repository with sharding."""
-    
-    def __init__(self, num_shards: int = 4):
-        self.num_shards = num_shards
-        self.engines = [
-            create_engine(f"postgresql+psycopg://user:pwd@shard{i}.db/llamaindex")
-            for i in range(num_shards)
-        ]
-    
-    def get_shard(self, user_id: str) -> int:
-        """Determine shard for user."""
-        # hash() is salted per process; use a stable hash for routing
-        return int(hashlib.sha256(user_id.encode()).hexdigest(), 16) % self.num_shards
-    
-    def store_query(self, user_id: str, query: str):
-        """Store query in appropriate shard."""
-        shard_idx = self.get_shard(user_id)
-        engine = self.engines[shard_idx]
-        
-        with engine.begin() as conn:
-            conn.execute(
-                text("INSERT INTO queries (user_id, query) VALUES (:user_id, :query)"),
-                {"user_id": user_id, "query": query},
-            )
-```
-
-### Caching Strategy
-
-```python
-import redis
-import json
-from datetime import timedelta
-
-class DistributedCache:
-    """Redis-based distributed cache."""
-    
-    def __init__(self, redis_url: str):
-        self.redis = redis.from_url(redis_url, decode_responses=True)
-    
-    def get_cache_key(self, prefix: str, identifier: str) -> str:
-        """Generate cache key."""
-        return f"{prefix}:{identifier}"
-    
-    async def get(self, key: str):
-        """Get from cache."""
-        value = self.redis.get(key)
-        if value:
-            logger.info("cache_hit", key=key)
-            return json.loads(value)
-        logger.info("cache_miss", key=key)
-        return None
-    
-    async def set(
-        self,
-        key: str,
-        value: dict,
-        ttl: timedelta = timedelta(hours=1)
-    ):
-        """Set cache with TTL."""
-        self.redis.setex(
-            key,
-            int(ttl.total_seconds()),
-            json.dumps(value)
-        )
-    
-    async def delete(self, key: str):
-        """Delete from cache."""
-        self.redis.delete(key)
-    
-    async def clear_prefix(self, prefix: str):
-        """Clear all keys with prefix."""
-        pattern = f"{prefix}:*"
-        for key in self.redis.scan_iter(match=pattern):
-            self.redis.delete(key)
-```
-
----
-
-## Cost Optimization
-
-### Token Usage Tracking
-
-`TokenCountingHandler` (see the [observability page](/llamaindex-guide/python/llamaindex_observability_python/#4-token-counting)) gives per-request counts; the tracker below aggregates them against budgets.
-
-```python
-class TokenUsageTracker:
-    """Track and optimize token usage."""
-    
-    def __init__(self):
-        self.usage = {}
-        # Daily token budgets per model — set from your own limits
-        self.limits = {
-            "%%model=openai-small%%": 2_000_000,
-            "%%model=openai-small%%": 10_000_000,
-        }
-    
-    def log_usage(self, model: str, input_tokens: int, output_tokens: int):
-        """Log token usage."""
-        if model not in self.usage:
-            self.usage[model] = {"input": 0, "output": 0}
-        
-        self.usage[model]["input"] += input_tokens
-        self.usage[model]["output"] += output_tokens
-        
-        # Alert if approaching limit
-        total = self.usage[model]["input"] + self.usage[model]["output"]
-        if total > self.limits.get(model, float('inf')) * 0.8:
-            logger.warning(
-                "token_limit_warning",
-                model=model,
-                total_tokens=total,
-                limit=self.limits.get(model)
-            )
-    
-    def get_cost_estimate(self) -> dict:
-        """Estimate API costs."""
-        # USD per 1K tokens. Prices change: load them from config, filled in from
-        # your provider's current price list, rather than hard-coding them.
-        pricing = PRICING_PER_1K_TOKENS   # e.g. {"%%model=openai-small%%": {"input": ..., "output": ...}}
-        
-        total_cost = 0
-        for model, tokens in self.usage.items():
-            if model in pricing:
-                input_cost = (tokens["input"] / 1000) * pricing[model]["input"]
-                output_cost = (tokens["output"] / 1000) * pricing[model]["output"]
-                total_cost += input_cost + output_cost
-        
-        return {
-            "total_cost": total_cost,
-            "usage": self.usage,
-        }
-
-# Global tracker
-token_tracker = TokenUsageTracker()
-```
-
-### Query Optimization for Cost
-
-```python
-class CostOptimizedQueryEngine:
-    """Query engine that optimizes for cost."""
-    
-    def __init__(self, index, llm):
-        self.index = index
-        self.llm = llm
-        self.cost_tracker = TokenUsageTracker()
-    
-    async def query(self, query: str, max_budget: float = 0.10):
-        """Query within cost budget."""
-        # Use cheaper model for simple queries
-        if len(query) < 50 and not any(c in query for c in "[]{}()"):
-            cheap_llm = OpenAI(model="%%model=openai-small%%")
-            engine = self.index.as_query_engine(llm=cheap_llm)
-        else:
-            engine = self.index.as_query_engine(llm=self.llm)
-        
-        response = await engine.aquery(query)
-        
-        # Track cost
-        cost_estimate = self.cost_tracker.get_cost_estimate()
-        if cost_estimate["total_cost"] > max_budget:
-            logger.warning(
-                "cost_exceeded",
-                cost=cost_estimate["total_cost"],
-                budget=max_budget
-            )
-        
-        return response
-```
-
----
-
-## Testing and Quality Assurance
-
-### Unit Tests
-
-```python
+# test_app.py
 import pytest
+from fastapi.testclient import TestClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 
+from llama_index.core import Document, Settings, VectorStoreIndex
 from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.llms import MockLLM
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 
-# unittest.mock objects do not satisfy LlamaIndex's model interfaces;
-# use the built-in mock models instead.
+import app as app_module
+from config import COLLECTION
+
+
 @pytest.fixture
-def mock_llm():
-    return MockLLM(max_tokens=16)
+def client(monkeypatch):
+    aclient = AsyncQdrantClient(location=":memory:")
+    monkeypatch.setattr(app_module, "make_clients", lambda: (QdrantClient(location=":memory:"), aclient))
+    monkeypatch.setattr(app_module, "API_KEYS", {"test-key": "acme"})
+    # Mock models instead of OpenAI: no network, no cost
+    monkeypatch.setattr(app_module, "OpenAI", lambda **kw: MockLLM(max_tokens=16))
+    monkeypatch.setattr(app_module, "OpenAIEmbedding", lambda **kw: MockEmbedding(embed_dim=8))
 
-@pytest.fixture
-def mock_embed():
-    return MockEmbedding(embed_dim=1536)
+    with TestClient(app_module.app) as c:
+        # seed through the same async client the app queries
+        store = QdrantVectorStore(collection_name=COLLECTION, aclient=aclient)
+        index = VectorStoreIndex.from_vector_store(store, embed_model=Settings.embed_model)
+        docs = [
+            Document(text="Holiday allowance is 25 days.", metadata={"tenant": "acme", "file_name": "leave.md"}),
+            Document(text="Globex staff get 20 days.", metadata={"tenant": "globex", "file_name": "globex.md"}),
+        ]
+        c.portal.call(index.ainsert_nodes, docs)
+        yield c
 
-@pytest.mark.asyncio
-async def test_query_engine(mock_llm, mock_embed):
-    """The pipeline runs end to end without network calls."""
-    from llama_index.core import VectorStoreIndex, Document
-    
-    index = VectorStoreIndex.from_documents(
-        [Document(text="Test content")], embed_model=mock_embed
-    )
-    query_engine = index.as_query_engine(llm=mock_llm)
-    response = await query_engine.aquery("Test question")
-    
-    assert response.response
-    assert response.source_nodes
 
-def test_authentication():
-    """Test authentication."""
-    token = create_access_token({"sub": "user123"})
-    assert token is not None
-    
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    assert payload["sub"] == "user123"
+def test_health_and_ready(client):
+    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/ready").status_code == 200
+
+
+def test_query_requires_key(client):
+    assert client.post("/query", json={"question": "Holiday?"}).status_code == 401
+
+
+def test_query_is_tenant_scoped(client):
+    r = client.post("/query", json={"question": "How much holiday?"}, headers={"X-API-Key": "test-key"})
+    assert r.status_code == 200
+    assert {s["file_name"] for s in r.json()["sources"]} == {"leave.md"}
+
+
+def test_validation(client):
+    r = client.post("/query", json={"question": ""}, headers={"X-API-Key": "test-key"})
+    assert r.status_code == 422
 ```
-
-### Integration Tests
 
 ```python
-@pytest.mark.asyncio
-async def test_end_to_end_query():
-    """Test complete query flow."""
-    from fastapi.testclient import TestClient
-    
-    client = TestClient(app)
-    
-    # Setup
-    response = client.post(
-        "/documents",
-        json={"text": "Test document"}
-    )
-    assert response.status_code == 200
-    
-    # Query
-    query_response = client.post(
-        "/query",
-        json={"query": "What is this about?"}
-    )
-    assert query_response.status_code == 200
-    assert "response" in query_response.json()
+# test_ingest.py
+import os, shutil
+from qdrant_client import QdrantClient
+from llama_index.core.embeddings import MockEmbedding
+import ingest
+
+def test_upserts(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(ingest, "OpenAIEmbedding", lambda **kw: MockEmbedding(embed_dim=8))
+    os.makedirs("docs"); open("docs/leave.md", "w").write("Holiday allowance is 25 days.")
+    client = QdrantClient(location=":memory:")
+    assert ingest.ingest("docs", "acme", client) == 1
+    assert ingest.ingest("docs", "acme", client) == 0          # unchanged: skipped
+    open("docs/leave.md", "w").write("Holiday allowance is 27 days.")
+    assert ingest.ingest("docs", "acme", client) == 1          # changed: replaced
+    assert client.count("handbook").count == 1
+    ids1 = [p.id for p in client.scroll("handbook")[0]]
+    open("docs/leave.md", "w").write("Holiday allowance is 28 days.")
+    ingest.ingest("docs", "acme", client)
+    assert [p.id for p in client.scroll("handbook")[0]] == ids1
 ```
 
-### Performance Tests
+## 4. Serving agents and workflows with WorkflowServer
+
+For agents and custom workflows, LlamaIndex ships its own server. `WorkflowServer` (package `llama-agents-server`, imported from `llama_agents.server`) exposes each registered workflow over REST: start a run and wait (`POST /workflows/{name}/run`), start one in the background (`/run-nowait`), stream its events (`GET /events/{handler_id}`), send events into it, for example a human approval (`POST /events/{handler_id}`), fetch results and cancel. It also serves `/health`. Runs are recorded in a workflow store, and with a durable store such as `SqliteWorkflowStore`, unfinished runs are resumed when the server restarts. The comprehensive guide has a [minimal example](/llamaindex-guide/python/llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents); this is the production shape.
+
+```bash
+pip install llama-agents-server llama-agents-client
+```
 
 ```python
-import time
-import statistics
+# wfserver.py
+import os
+import secrets
 
-def test_query_performance():
-    """Test query performance."""
-    times = []
-    
-    for _ in range(10):
-        start = time.time()
-        query_engine.query("Test query")
-        duration = time.time() - start
-        times.append(duration)
-    
-    avg_time = statistics.mean(times)
-    worst = max(times)   # with 10 samples, the maximum is the only honest "tail" figure
-    
-    assert avg_time < 0.5, f"Average query time {avg_time}s exceeds 0.5s"
-    assert worst < 1.0, f"Slowest query {worst}s exceeds 1.0s"
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+from llama_index.core import Settings, VectorStoreIndex
+from llama_index.core.agent.workflow import FunctionAgent
+from llama_index.core.tools import QueryEngineTool
+from llama_index.llms.openai import OpenAI
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+from llama_agents.server import SqliteWorkflowStore, WorkflowServer
+from workflows.context.serializers import JsonSerializer
+
+from config import COLLECTION, LLM_MODEL, QDRANT_API_KEY, QDRANT_URL
+
+API_KEY = os.environ["WORKFLOW_API_KEY"]
+
+
+class RequireApiKey(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path != "/health" and not secrets.compare_digest(
+            request.headers.get("X-API-Key", ""), API_KEY
+        ):
+            return JSONResponse({"detail": "unauthorised"}, status_code=401)
+        return await call_next(request)
+
+
+Settings.llm = OpenAI(model=LLM_MODEL)
+index = VectorStoreIndex.from_vector_store(
+    QdrantVectorStore(collection_name=COLLECTION, url=QDRANT_URL, api_key=QDRANT_API_KEY)
+)
+agent = FunctionAgent(
+    name="handbook",
+    tools=[
+        QueryEngineTool.from_defaults(
+            query_engine=index.as_query_engine(similarity_top_k=4),
+            name="handbook",
+            description="Search the staff handbook.",
+        )
+    ],
+    system_prompt="Answer from the handbook. Say so when it has no answer.",
+    timeout=120,
+)
+
+server = WorkflowServer(
+    middleware=[Middleware(RequireApiKey)],
+    workflow_store=SqliteWorkflowStore(os.environ.get("WORKFLOW_DB", "workflows.db")),
+    serializer=JsonSerializer(),    # restores agent memory/state from the store; see note
+)
+server.add_workflow("handbook", agent)
 ```
 
----
+Serve it with `python -c "import asyncio, wfserver; asyncio.run(wfserver.server.serve(host='0.0.0.0', port=8080))"`, or mount `server.app` (a Starlette app) in a larger ASGI application.
 
-## DevOps and CI/CD
+Two things that are easy to get wrong with the current releases:
 
-### GitHub Actions Pipeline
+- **Agent start events.** When you start an agent (`FunctionAgent`, `ReActAgent`, `AgentWorkflow`) over HTTP, send `user_msg`, `chat_history` and `max_iterations`. With only `user_msg`, the agent's start event fails to serialise and the run never completes.
+- **The serializer.** With a durable store, agent state (memory, the scratchpad of chat messages) is written to the store and read back between steps. The default serializer refuses to rebuild those classes, and the run fails with `... is not in the serializer's allowed types`. `JsonSerializer()` resolves classes by import path, which is safe as long as only your server writes to the store. To be stricter, list the classes instead: `JsonSerializer(allowed_types=[...])` with the classes named in the error messages.
+
+Call the server from Python with `WorkflowClient`:
+
+```python
+import httpx
+from llama_agents.client import WorkflowClient
+
+async def ask(question: str) -> dict:
+    async with httpx.AsyncClient(
+        base_url="https://agents.internal.example.com",
+        headers={"X-API-Key": "..."},
+        timeout=60,
+    ) as http:
+        client = WorkflowClient(httpx_client=http)
+        handler = await client.run_workflow_nowait(
+            "handbook",
+            start_event={"user_msg": question, "chat_history": [], "max_iterations": 20},
+        )
+        done = await client.wait_for_handler(handler.handler_id, timeout=120)
+        return done.result.value["result"]   # the serialised AgentOutput
+```
+
+### Deploying with llamactl
+
+`llamactl` (the LlamaAgents CLI) runs the same `WorkflowServer` for you. Point it at the server object in `pyproject.toml`:
+
+```toml
+[tool.llamaagents]
+app = "handbook_agent.wfserver:server"
+required_env_vars = ["OPENAI_API_KEY", "WORKFLOW_API_KEY", "QDRANT_URL"]
+```
+
+```bash
+llamactl serve --persistence local      # local development, runs stored in SQLite
+llamactl pkg container                  # writes a Dockerfile that runs `llamactl serve`
+llamactl auth login                     # then `llamactl deployments create` to deploy to LlamaCloud
+```
+
+`llamactl pkg container` expects a `uv` project with a lock file (`uv lock`). Use it when you want to self-host the LlamaAgents runtime; use your own Dockerfile (section 9) when the workflow server is one part of a larger app.
+
+## 5. Observability and cost
+
+Turn on LlamaIndex's OpenTelemetry integration once at start-up, before any index or agent is built. Every retrieval, LLM call, tool call and workflow step then becomes a span:
+
+```python
+# pip install llama-index-observability-otel opentelemetry-exporter-otlp-proto-http
+from llama_index.observability.otel import LlamaIndexOpenTelemetry
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+LlamaIndexOpenTelemetry(
+    service_name_or_resource="handbook-api",
+    span_exporter=OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces"),
+).start_registering()
+```
+
+Spans can carry prompt and retrieved text, so treat the trace store as holding user data, or filter attributes in the collector. Hosted tools (Phoenix, Langfuse and others), custom event handlers and the metrics worth exporting are on the [observability page](/llamaindex-guide/python/llamaindex_observability_python/).
+
+For cost, count tokens with `TokenCountingHandler` and price them from configuration rather than constants in code, since prices change:
+
+```python
+import json
+import os
+
+import tiktoken
+from llama_index.core import Settings
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+
+token_counter = TokenCountingHandler(tokenizer=tiktoken.get_encoding("o200k_base").encode)
+Settings.callback_manager = CallbackManager([token_counter])
+
+# USD per million tokens for the model you deploy, from your provider's price list
+PRICES = json.loads(os.environ["LLM_PRICES_PER_MTOK"])        # {"input": ..., "output": ...}
+
+
+def spend_usd() -> float:
+    return (
+        token_counter.prompt_llm_token_count * PRICES["input"]
+        + token_counter.completion_llm_token_count * PRICES["output"]
+    ) / 1_000_000
+```
+
+The counter is process-wide and counts every call since the last `token_counter.reset_counts()`. Export the totals as metrics, or read the provider's own usage block from `LLMChatEndEvent.response.raw` in an [event handler](/llamaindex-guide/python/llamaindex_observability_python/#3-custom-event-handlers) for billing-grade numbers.
+
+## 6. Evaluation as a release gate
+
+Changes to chunking, embedding model, `top_k` or prompts can quietly make answers worse. Keep a retrieval evaluation set in the repository and fail the release when hit rate or MRR drops. The comprehensive guide shows how to [generate the set from your own chunks](/llamaindex-guide/python/llamaindex_comprehensive_guide/#212-evaluation-datasets); the gate is a test that runs against the staging index after ingestion:
+
+```python
+# test_retrieval_quality.py
+import json
+import os
+
+import pytest
+from llama_index.core import VectorStoreIndex
+from llama_index.core.evaluation import RetrieverEvaluator
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+
+from config import COLLECTION, QDRANT_API_KEY, QDRANT_URL
+
+MIN_HIT_RATE = float(os.environ.get("MIN_HIT_RATE", "0.85"))
+MIN_MRR = float(os.environ.get("MIN_MRR", "0.6"))
+
+
+@pytest.mark.asyncio
+async def test_retrieval_quality():
+    store = QdrantVectorStore(collection_name=COLLECTION, url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    retriever = VectorStoreIndex.from_vector_store(store).as_retriever(similarity_top_k=4)
+    evaluator = RetrieverEvaluator.from_metric_names(["hit_rate", "mrr"], retriever=retriever)
+
+    with open("eval/retrieval_eval.json") as f:
+        pairs = json.load(f)                    # [{"query": ..., "expected_ids": [...]}, ...]
+    results = [await evaluator.aevaluate(**pair) for pair in pairs]
+
+    hit_rate = sum(r.metric_vals_dict["hit_rate"] for r in results) / len(results)
+    mrr = sum(r.metric_vals_dict["mrr"] for r in results) / len(results)
+    assert hit_rate >= MIN_HIT_RATE, f"hit rate {hit_rate:.2f}"
+    assert mrr >= MIN_MRR, f"MRR {mrr:.2f}"
+```
+
+Run the cheap retrieval gate on every change. Response-level evaluators (`FaithfulnessEvaluator`, `RelevancyEvaluator`) call an LLM judge per question, so run them on a sample, nightly or before a release.
+
+## 7. Testing without a model
+
+- `MockLLM` and `MockEmbedding` (`llama_index.core.llms`, `llama_index.core.embeddings`) make query engines run offline, as in `test_app.py` above.
+- `MockFunctionCallingLLM` (`llama_index.core.llms.mock`) can be scripted with `response_generator` to return tool calls, so agent logic is testable without an API key.
+- `WorkflowTestRunner` (`workflows.testing`) runs a workflow or agent and collects every event it emitted.
+
+```python
+# test_agent.py
+import pytest
+from llama_index.core.agent.workflow import FunctionAgent, ToolCallResult
+from llama_index.core.llms import ChatMessage, MessageRole
+from llama_index.core.llms.mock import MockFunctionCallingLLM
+from llama_index.core.tools import ToolSelection
+from workflows.testing import WorkflowTestRunner
+
+
+def lookup_policy(topic: str) -> str:
+    """Look up an HR policy by topic."""
+    return "25 days" if topic == "holiday" else "unknown"
+
+
+@pytest.mark.asyncio
+async def test_agent_calls_tool():
+    calls = iter([
+        ChatMessage(role=MessageRole.ASSISTANT, content="",
+                    additional_kwargs={"tool_calls": [ToolSelection(tool_id="1", tool_name="lookup_policy", tool_kwargs={"topic": "holiday"})]}),
+        ChatMessage(role=MessageRole.ASSISTANT, content="You get 25 days."),
+    ])
+    llm = MockFunctionCallingLLM(response_generator=lambda *a, **k: next(calls))
+    agent = FunctionAgent(tools=[lookup_policy], llm=llm)
+    result = await WorkflowTestRunner(agent).run(
+        start_event=agent.start_event_class(user_msg="How much holiday do I get?")
+    )
+    tool_results = [e for e in result.collected if isinstance(e, ToolCallResult)]
+    assert tool_results and tool_results[0].tool_output.content == "25 days"
+    assert "25 days" in str(result.result)
+```
+
+## 8. Security
+
+- **Retrieved text is untrusted input.** A document can contain instructions aimed at the model (indirect prompt injection). Do not give an agent that reads such documents tools with side effects (sending email, writing records) unless a human approves each call; the [human-in-the-loop](/llamaindex-guide/python/llamaindex_comprehensive_guide/#15-human-in-the-loop) pattern pauses the workflow for that.
+- **Filter by permission in the retriever**, with `MetadataFilters` on keys written at ingestion time (section 3). Never rely on the prompt for access control.
+- **`CodeActAgent` executes model-written code.** Give it a `code_execute_fn` that runs in a sandbox (a separate container or a hosted sandbox), never `exec` in the API process.
+- **Limit what agents can spend**: `max_iterations` on `run()`, `timeout=` on the agent or workflow, and per-key rate limits at the HTTP layer.
+- **Logs**: log a hash of the question and the source node IDs, not raw questions or document text.
+
+## 9. Containers and CI
+
+```dockerfile
+FROM python:3.13-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd --create-home app
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s \
+  CMD python -c "import urllib.request,sys; sys.exit(urllib.request.urlopen('http://localhost:8000/health').status != 200)"
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+```
+
+`urlopen` raises on any 4xx or 5xx status, so the check fails when the endpoint is missing or unhealthy. In Kubernetes, point the liveness probe at `/health` and the readiness probe at `/ready`, so a pod only receives traffic once it can reach the vector store.
+
+Local development with Qdrant and the ingestion job:
 
 ```yaml
-# .github/workflows/deploy.yml
-name: Deploy LlamaIndex
+# compose.yaml
+services:
+  qdrant:
+    image: qdrant/qdrant
+    volumes: ["qdrant_data:/qdrant/storage"]
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      API_KEYS: ${API_KEYS}
+    depends_on: [qdrant]
+  ingest:
+    build: .
+    command: ["python", "ingest.py", "/data", "acme"]
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes: ["./docs:/data:ro", "pipeline_storage:/app/pipeline_storage"]
+    depends_on: [qdrant]
+    profiles: ["jobs"]          # run with: docker compose run --rm ingest
+volumes:
+  qdrant_data:
+  pipeline_storage:
+```
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+A CI pipeline that runs the offline tests on every push, and builds and pushes the image from `main`:
+
+```yaml
+# .github/workflows/ci.yml
+name: ci
+on: [push, pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-    
-    - name: Install dependencies
-      run: |
-        pip install -r requirements-prod.txt
-        pip install -r requirements-test.txt
-    
-    - name: Lint
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        black --check .
-    
-    - name: Type check
-      run: mypy . --ignore-missing-imports
-    
-    - name: Run tests
-      run: pytest --cov=llamaindex_app --cov-report=xml
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost/test
-    
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt pytest pytest-asyncio httpx
+      - run: pytest test_app.py test_ingest.py test_agent.py    # mock models: no secrets needed
 
-  security:
+  image:
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      packages: write
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-    
-    - name: Upload Trivy results
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: 'trivy-results.sarif'
-
-  deploy:
-    needs: [test, security]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        push: true
-        tags: |
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
-    
-    - name: Deploy to K8s
-      run: |
-        kubectl set image deployment/llamaindex-api \
-          api=ghcr.io/${{ github.repository }}:${{ github.sha }}
-        kubectl rollout status deployment/llamaindex-api
-      env:
-        KUBECONFIG: ${{ secrets.KUBE_CONFIG }}
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
 ```
+
+Run `test_retrieval_quality.py` as a separate step after the ingestion job has updated the staging index, with the staging `QDRANT_URL` and an embedding API key supplied as secrets.
+
+`requirements.txt` for the examples on this page:
+
+```text
+llama-index-core==%%version=llama-index%%
+llama-index-llms-openai
+llama-index-embeddings-openai
+llama-index-vector-stores-qdrant
+llama-index-readers-file
+llama-index-observability-otel
+opentelemetry-exporter-otlp-proto-http
+llama-agents-server
+llama-agents-client
+fastapi
+uvicorn[standard]
+slowapi
+```
+
+Integration packages are versioned separately from core. Let pip resolve them against the core pin, then freeze the result in a lock file (`uv lock` or `pip-compile`).
 
 ---
 
-For serving workflows without writing the HTTP layer yourself, see [Deploying workflows (LlamaAgents)](/llamaindex-guide/python/llamaindex_comprehensive_guide/#14-deploying-workflows-llamaagents).
+## Revision history
 
-
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 0.14.25 | Rewritten around one working app. The previous edition registered three `/query` handlers (so authentication and rate limiting never ran), referenced `/health` and `/ready` routes that did not exist, used `JSONResponse` without importing it, had a cost tracker that never recorded usage, and was mostly generic FastAPI, Kubernetes, nginx and sharding material. New: incremental ingestion with stable node IDs, vector store selection, tenant filtering, `WorkflowServer` and `llamactl`, evaluation gate, offline tests (all run), current GitHub Actions. |

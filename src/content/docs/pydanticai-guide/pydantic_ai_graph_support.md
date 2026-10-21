@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Graph Support"
-description: "Typed, multi-step workflows with pydantic_graph: GraphBuilder steps, decisions, parallel map/join, BaseNode classes, iteration and Mermaid rendering — combined with Pydantic AI agents."
+description: "Typed, multi-step workflows with pydantic_graph: GraphBuilder steps, decisions, parallel map/join, BaseNode classes, iteration and Mermaid rendering — combined with PydanticAI agents."
 framework: "pydanticai"
 language: "python"
 sidebar:
@@ -21,7 +21,7 @@ Most applications do not need one. An `Agent` already runs a loop of model calls
 - a diagram of the workflow generated from the code (`graph.render()`);
 - step-by-step control of execution (`graph.iter()`).
 
-Pydantic AI's own agent loop is implemented on `pydantic_graph`; that is what `agent.iter()` exposes as `UserPromptNode` → `ModelRequestNode` → `CallToolsNode` → `End`.
+PydanticAI's own agent loop is implemented on `pydantic_graph`; that is what `agent.iter()` exposes as `UserPromptNode` → `ModelRequestNode` → `CallToolsNode` → `End`.
 
 ## What changed in V2
 

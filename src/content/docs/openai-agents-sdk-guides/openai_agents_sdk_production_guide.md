@@ -5,6 +5,7 @@ framework: "openai-agents-sdk"
 language: "python"
 sidebar:
   label: "Production"
+  order: 5
 ---
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Every Python example on this page was run with `agents.testing.ScriptedModel` standing in for the live model.

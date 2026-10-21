@@ -128,13 +128,16 @@ A decentralised, mesh-or-directed routing pattern. Each agent receives tools tha
 from agent_framework_orchestrations import HandoffBuilder
 
 triage = Agent(client=client, name="triage",
-               instructions="Classify the request and hand off to billing or technical.")
+               instructions="Classify the request and hand off to billing or technical.",
+               require_per_service_call_history_persistence=True)
 billing = Agent(client=client, name="billing",
                 instructions="You resolve billing questions.",
-                description="Handles invoices, refunds, plan changes.")
+                description="Handles invoices, refunds, plan changes.",
+                require_per_service_call_history_persistence=True)
 technical = Agent(client=client, name="technical",
                   instructions="You resolve technical questions.",
-                  description="Handles bugs, API errors, outages.")
+                  description="Handles bugs, API errors, outages.",
+                  require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(participants=[triage, billing, technical])
@@ -149,6 +152,8 @@ result = await workflow.run("My card was charged twice for last month.")
 Notes:
 
 - Participants **must** be `Agent` instances — the builder clones them and injects handoff tools, which isn't possible for the bare `SupportsAgentRun` protocol.
+- Every participant needs `require_per_service_call_history_persistence=True`; `build()` raises `ValueError` otherwise.
+- `.with_start_agent(...)` is required.
 - If you omit `add_handoff(...)`, every agent can hand off to every other (mesh topology).
 - `agent.description` is used as the handoff tool's description — fill this in for each specialist so the triage agent picks correctly.
 - `.with_autonomous_mode(agents=[...], turn_limits={...})` lets certain specialists answer autonomously for N turns before re-querying the user.
@@ -912,7 +917,7 @@ result = asyncio.run(workflow.run({"id": 1, "region": "EU"}))
 print(result.get_outputs())   # ['worker_eu: order 1']
 ```
 
-`add_multi_selection_edge_group(source, targets, selection_func)` builds the `FanOutEdgeGroup` for you; there is no `add_edge_group()` or `add_executors()` on `WorkflowBuilder` (an earlier draft used both). Note the executors take a `WorkflowContext` and call `send_message` / `yield_output` — a `FunctionExecutor` wrapping a context-free function discards its return value, so it cannot pass data downstream.
+`add_multi_selection_edge_group(source, targets, selection_func)` builds the `FanOutEdgeGroup` for you; there is no `add_edge_group()` or `add_executors()` on `WorkflowBuilder`. Note the executors take a `WorkflowContext` and call `send_message` / `yield_output` — a `FunctionExecutor` wrapping a context-free function discards its return value, so it cannot pass data downstream.
 
 If you construct the group yourself (for serialisation tests, say), the constructor takes ids rather than executors:
 
@@ -1138,13 +1143,7 @@ Key constraints surfaced by the constructors (each raises `ValueError` early so 
 - `SwitchCaseEdgeGroup` — minimum 2 cases including the default; **exactly one** `SwitchCaseEdgeGroupDefault`. The framework warns (rather than errors) if `Default` isn't last, but cases evaluate top-to-bottom so an early `Default` short-circuits everything after it.
 - `SwitchCaseEdgeGroupCase` — `target_id` is required and non-empty.
 
-Once built, register the group with `WorkflowBuilder.add_edge_group(...)` (the low-level entry point that all the helpers funnel into):
-
-```python
-builder = WorkflowBuilder(start_executor=dispatcher)
-builder.add_edge_group(broadcast)
-builder.add_edge_group(collector)
-```
+`WorkflowBuilder` has no public method that takes a pre-built edge group: its `add_*` helpers construct these classes for you. Build them directly only for serialisation, inspection and tooling, as above.
 
 #### Round-tripping through serialised form
 
@@ -1197,47 +1196,15 @@ Event types you'll see (the `type` attribute is a `Literal[...]` string):
 
 ## Further `WorkflowBuilder` patterns
 
-### Dynamic fan-out with a selection function
-
-`add_multi_selection_edge_group` evaluates a selector per payload and sends the message to the subset of targets it returns. Good for priority routing or feature-flag gated workers:
-
-```python
-from dataclasses import dataclass
-from agent_framework import WorkflowBuilder
-
-
-@dataclass
-class Task:
-    priority: str
-    data: str
-
-
-def pick_workers(task: Task, available: list[str]) -> list[str]:
-    if task.priority == "high":
-        return available                    # broadcast to all workers
-    return [available[0]]                   # single worker for low-priority
-
-
-workflow = (
-    WorkflowBuilder(start_executor=dispatcher)
-    .add_multi_selection_edge_group(
-        dispatcher,
-        [worker_a, worker_b, worker_c],
-        selection_func=pick_workers,
-    )
-    .build()
-)
-```
-
 ### Collecting outputs from a subset of executors
 
-By default the workflow yields outputs from any executor that calls `ctx.yield_output(...)`. Restrict to specific ones with `output_executors=` — useful when upstream nodes emit debug traces you don't want in the final `get_outputs()`:
+By default the workflow yields outputs from any executor that calls `ctx.yield_output(...)`. Restrict to specific ones with `output_from=` (the older `output_executors=` is deprecated), which is useful when upstream nodes emit debug traces you don't want in the final `get_outputs()`:
 
 ```python
 workflow = (
     WorkflowBuilder(
         start_executor=classifier,
-        output_executors=[billing, refund, fallback],
+        output_from=[billing, refund, fallback],
     )
     .add_switch_case_edge_group(classifier, cases=[...])
     .build()

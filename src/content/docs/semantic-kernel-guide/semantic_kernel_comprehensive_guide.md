@@ -2,11 +2,14 @@
 title: "Semantic Kernel: Concepts and Cross-Language Reference"
 description: "Language-neutral Semantic Kernel reference — architecture, core concepts, agents, orchestrations, vector stores, MCP, filters and the relationship to Microsoft Agent Framework, with Python and C# side by side."
 framework: "semantic-kernel"
+sidebar:
+  label: "Concepts"
+  order: 1
 ---
 
 > Current releases: `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. A Java SDK also exists but is not covered here. For complete, verified code see the [Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) and the [.NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/).
 
-This page explains *what* the pieces of Semantic Kernel are and how they fit together, with short Python and C# snippets so you can map one SDK onto the other. It replaces an earlier, much longer edition whose code targeted pre-1.0 APIs and planners that no longer exist.
+This page explains *what* the pieces of Semantic Kernel are and how they fit together, with short Python and C# snippets so you can map one SDK onto the other. C# snippets assume `using System.ComponentModel;`, `using Microsoft.SemanticKernel;` and, for agents, `using Microsoft.SemanticKernel.Agents;`.
 
 ---
 
@@ -33,7 +36,7 @@ This page explains *what* the pieces of Semantic Kernel are and how they fit tog
 
 - **Microsoft Agent Framework (MAF) is the successor.** It is built by the Semantic Kernel and AutoGen teams, reached 1.0 (general availability) in April 2026, and is where most new features go. Microsoft describes it as, in effect, "Semantic Kernel v2".
 - **Semantic Kernel 1.x is still supported.** Microsoft has committed to critical bug and security fixes, and to taking some existing features to GA, for as long as substantial numbers of developers use it and for at least one year after MAF's GA.
-- **Practical advice.** Keep existing SK applications on SK and keep them updated. Start new agent projects on [Microsoft Agent Framework](/microsoft-agent-framework-guide/). Migration can be gradual: SK functions convert to MAF tools (Python `KernelFunction.as_agent_framework_tool()`), and SK agents wrap as MAF agents (.NET `agent.AsAIAgent()`).
+- **Practical advice.** Keep existing SK applications on SK and keep them updated. Start new agent projects on [Microsoft Agent Framework](/microsoft-agent-framework-guide/). Migration can be gradual. In .NET, SK agents wrap as MAF agents with `agent.AsAIAgent()`. In Python, SK functions can serve as MAF tools, but not through the built-in `KernelFunction.as_agent_framework_tool()`: in 1.45.0 it imports `AIFunction`, a class every released MAF version calls `FunctionTool`, and fails with "agent_framework is not installed". Use the [wrapper in the Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework) instead.
 
 ---
 
@@ -131,6 +134,8 @@ var summarise = kernel.CreateFunctionFromPrompt("Summarise:\n{{$input}}", functi
 
 Other plugin sources: OpenAPI documents, MCP servers, vector-store search functions, and prompt directories/YAML files.
 
+**Template input is encoded.** When a prompt template inserts a variable or a function result, Semantic Kernel HTML-encodes it, so text such as `</message><message role="system">` arrives as content of the current message rather than as a new system message. Opt out per variable or per template only for values you trust: `allow_dangerously_set_content=True` (Python `InputVariable` / `PromptTemplateConfig`) or `AllowDangerouslySetContent = true` (.NET `InputVariable`, `PromptTemplateConfig` or `KernelPromptTemplateFactory`).
+
 ---
 
 ## 5. Function calling
@@ -177,6 +182,8 @@ await foreach (var item in agent.InvokeAsync("Where is order A-1042?", thread))
 
 Agent types beyond `ChatCompletionAgent`: OpenAI Assistants and Responses agents, Azure AI Foundry agents, Amazon Bedrock agents, Copilot Studio agents, and (in .NET) A2A agents. Each has its own thread type, often stored server-side.
 
+**Memory providers (.NET only).** A .NET `AgentThread` holds a list of `AIContextProviders`; before each model call every provider can add instructions or functions, and it sees each new message. `Mem0Provider` (long-term memory in Mem0) and `WhiteboardProvider` (a running summary of requirements and decisions) ship in the main package; you can write your own by subclassing `AIContextProvider`. Python SK has no equivalent.
+
 ---
 
 ## 7. Orchestrations
@@ -203,7 +210,7 @@ A vector store collection is typed by a record class whose fields are marked as 
 |---|---|---|
 | Abstractions | `semantic_kernel.data.vector` | `Microsoft.Extensions.VectorData` |
 | Field markers | `VectorStoreField("key" \| "data" \| "vector")` | `[VectorStoreKey]`, `[VectorStoreData]`, `[VectorStoreVector(n)]` |
-| Connectors | `semantic_kernel.connectors.*` (in-memory, Azure AI Search, Qdrant, Postgres, Redis, ...) | `CommunityToolkit.VectorData.*`, `Microsoft.SemanticKernel.Connectors.PgVector` / `.SqliteVec` |
+| Connectors | `semantic_kernel.connectors.*` (in-memory, Azure AI Search, Qdrant, Postgres, Redis, ...) | `CommunityToolkit.VectorData.*` (`.InMemory`, `.AzureAISearch`, `.Qdrant`, `.Redis`, `.PgVector`, `.SqlServer`, `.SqliteVec`, `.AzureCosmosDB`, `.CosmosMongoDB`, ...) |
 | As a tool | `collection.create_search_function(...)` | `VectorStoreTextSearch<T>` + `CreateWithGetTextSearchResults(...)` |
 
 The Python API was redesigned in 1.34.0; the .NET connectors were renamed to `CommunityToolkit.VectorData.*` in July 2026. The older memory-store API is legacy in both.
@@ -214,7 +221,7 @@ The Python API was redesigned in 1.34.0; the .NET connectors were renamed to `Co
 
 - **Consuming MCP servers.** Python: `MCPStdioPlugin`, `MCPStreamableHttpPlugin` (and SSE/WebSocket variants) are plugins. .NET: use the official `ModelContextProtocol` SDK and convert tools with `tool.AsKernelFunction()`.
 - **Exposing a kernel over MCP.** Python: `kernel.as_mcp_server(...)`. .NET: host kernel functions with the MCP SDK's server package.
-- **A2A.** .NET has a preview `A2AAgent` that calls a remote A2A agent. Python has no built-in A2A connector. Microsoft Agent Framework has fuller A2A support.
+- **A2A.** .NET has an `A2AAgent` (package `Microsoft.SemanticKernel.Agents.A2A`, still `-alpha`) that calls a remote A2A agent. Python has no built-in A2A connector. Microsoft Agent Framework has fuller A2A support.
 
 ---
 
@@ -237,7 +244,14 @@ Typical uses: logging and timing, redaction, prompt-injection checks, approval g
 Pass a type as the response format and the connector requests a strict JSON schema:
 
 ```python
-settings = OpenAIChatPromptExecutionSettings(response_format=MyPydanticModel)
+from pydantic import BaseModel
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatPromptExecutionSettings
+
+class MyRecord(BaseModel):
+    title: str
+    tags: list[str]
+
+settings = OpenAIChatPromptExecutionSettings(response_format=MyRecord)
 ```
 
 ```csharp
@@ -250,7 +264,7 @@ var settings = new OpenAIPromptExecutionSettings { ResponseFormat = typeof(MyRec
 
 ## 12. Observability
 
-Both SDKs emit OpenTelemetry traces, metrics (including token usage per function) and logs. GenAI semantic-convention spans for model calls are switched on with an environment variable (Python: `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true`) or an `AppContext` switch (.NET: `Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics`). The "sensitive" variants also record prompts and completions — development only.
+Both SDKs emit OpenTelemetry traces, metrics and logs. The metrics differ: both record function duration (`semantic_kernel.function.invocation.duration`), but only .NET records token usage per function (`semantic_kernel.function.invocation.token_usage.prompt` / `.completion`). In Python, token counts are on each completion's metadata (`message.metadata["usage"]`) and on GenAI spans, and you record them yourself ([example](/semantic-kernel-guide/python/semantic_kernel_production_python/#3-telemetry-and-token-usage)). GenAI semantic-convention spans for model calls are switched on with an environment variable (Python: `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true`) or an `AppContext` switch (.NET: `Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics`). The "sensitive" variants also record prompts and completions — development only.
 
 ---
 
@@ -283,5 +297,6 @@ Both SDKs emit OpenTelemetry traces, metrics (including token usage per function
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Python Agent Framework bridge documented as broken. Token-usage metrics corrected (.NET only). Vector-store package names and A2A status corrected. Added template input encoding and .NET memory providers. |
 | 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Rewritten as a concise cross-language concepts page. The previous edition mixed pre-1.0 APIs (`invoke_async`, `create_function_from_prompt`, memory stores, planners) with current ones and left sections 4–14 as empty stubs. Versions now read from the site's version registry. |
 | 2026-06-04 | Py 1.43.0 / .NET 1.74.0 | Version bump. |

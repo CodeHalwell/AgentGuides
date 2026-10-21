@@ -389,7 +389,7 @@ with agent.override(deps=fake_db, model=TestModel()):
 
 ## Gotchas
 
-- **`TestModel` randomises tool args**. Pin behaviour with `seed=42` if you assert on them.
+- **`TestModel` generates tool arguments from the schema**, seeded (`seed=0` by default), so a run is repeatable. Change `seed=` for different values, or use `FunctionModel` when a test depends on specific arguments.
 - **`override` leaks if you manually `__enter__` without `__exit__`.** Always use `with`.
 - **Async tests**: prefer `await agent.run(...)` inside `async def test_*` — don't mix `run_sync` and a running event loop.
 - **`include_return_schema`**: `TestModel` does _not_ honour tool return schemas unless the agent is set to include them; see `IncludeReturnSchemasToolset`.

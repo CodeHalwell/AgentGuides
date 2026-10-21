@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Durable Execution"
-description: "Make Pydantic AI agents survive crashes, restarts and long waits with Temporal, DBOS or Prefect, using the TemporalDurability, DBOSDurability and PrefectDurability capabilities."
+description: "Make PydanticAI agents survive crashes, restarts and long waits with Temporal, DBOS or Prefect, using the TemporalDurability, DBOSDurability and PrefectDurability capabilities."
 framework: "pydanticai"
 language: "python"
 sidebar:
@@ -14,7 +14,7 @@ Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-che
 
 An agent run is a loop of model requests and tool calls. If the process dies half-way through, a plain `agent.run()` starts again from scratch — re-paying for every model call and re-running every side effect. A durable execution engine records each step's result in a journal; after a crash, the run is replayed from the journal and continues from the first step that has no recorded result.
 
-Pydantic AI integrates with three engines. In each case the integration routes the agent's I/O — model requests, MCP communication and (depending on the engine) tool calls and event handling — through the engine's durable unit, while your agent code stays an ordinary `Agent`:
+PydanticAI integrates with three engines. In each case the integration routes the agent's I/O — model requests, MCP communication and (depending on the engine) tool calls and event handling — through the engine's durable unit, while your agent code stays an ordinary `Agent`:
 
 | Engine | Durable unit | Container | Capability | Extra |
 |---|---|---|---|---|

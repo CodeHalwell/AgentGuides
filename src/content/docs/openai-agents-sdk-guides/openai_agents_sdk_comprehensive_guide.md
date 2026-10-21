@@ -3,6 +3,7 @@ title: "OpenAI Agents SDK: Comprehensive Technical Guide"
 description: "Single-page reference for the Python OpenAI Agents SDK: agents, runner, handoffs, tools, MCP, structured output, guardrails, sessions, tracing, realtime and voice, sandbox agents and testing."
 sidebar:
   label: "Comprehensive guide"
+  order: 1
 framework: "openai-agents-sdk"
 language: "python"
 ---
@@ -260,7 +261,7 @@ print(result.last_response_id)           # For previous_response_id chaining
 
 ### Handoff
 
-A specialized mechanism for transferring control between agents, essential for multi-agent systems.
+A mechanism for transferring control between agents, essential for multi-agent systems.
 
 **Simple Handoff:**
 
@@ -1000,8 +1001,8 @@ translator = Agent(
     instructions="Translate text to requested language"
 )
 
-summarizer = Agent(
-    name="Summarizer",
+summariser = Agent(
+    name="Summariser",
     instructions="Summarise text concisely"
 )
 
@@ -1018,8 +1019,8 @@ coordinator = Agent(
             tool_name="translate",
             tool_description="Translate content to another language"
         ),
-        summarizer.as_tool(
-            tool_name="summarize",
+        summariser.as_tool(
+            tool_name="summarise",
             tool_description="Summarise content"
         ),
         editor.as_tool(
@@ -1243,7 +1244,7 @@ agent = Agent(
 async def main():
     result = await Runner.run(
         agent,
-        "Analyse this data and create a visualization: [1,2,3,4,5]"
+        "Analyse this data and create a chart: [1,2,3,4,5]"
     )
     print(result.final_output)
 
@@ -2378,7 +2379,7 @@ def create_analysis_prompt(
     Focus on clarity and relevance to the {doc.audience} audience."""
 
 agent = Agent[AnalysisContext](
-    name="Document Analyzer",
+    name="Document Analyser",
     instructions=create_analysis_prompt
 )
 
@@ -2429,7 +2430,7 @@ def get_user_data(ctx: RunContextWrapper[UserContext]) -> dict:
 
 agent = Agent[UserContext](
     name="Personalised Assistant",
-    instructions="Provide personalized responses based on user context",
+    instructions="Provide personalised responses based on user context",
     tools=[get_user_data]
 )
 
@@ -2469,7 +2470,7 @@ EXAMPLES OF SENTIMENT ANALYSIS:
 """
 
 agent = Agent(
-    name="Sentiment Analyzer",
+    name="Sentiment Analyser",
     instructions=f"""Analyse sentiment of text.
 {examples}
 
@@ -2643,7 +2644,7 @@ asyncio.run(main())
 
 ## Tracing and Observability
 
-### Built-in Tracing Visualization
+### Built-in Tracing
 
 Debug and monitor agent runs:
 
@@ -3020,7 +3021,7 @@ test_calculator_uses_tool()
 
 More patterns (retries, streaming, structured output, swapping the model for a whole run) are in the [production guide](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#testing-without-the-api).
 
-### Cost Optimization Strategies
+### Cost Optimisation Strategies
 
 Route simple work to a small model and keep the larger model for queries that need it:
 

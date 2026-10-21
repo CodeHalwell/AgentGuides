@@ -23,7 +23,7 @@ Two parts:
 | Package | `@anthropic-ai/claude-code` | `@anthropic-ai/claude-agent-sdk` |
 | System prompt options | `customSystemPrompt`, `appendSystemPrompt` | one `systemPrompt` (string or preset) |
 | Default system prompt | Claude Code's | minimal; request the `claude_code` preset explicitly |
-| Filesystem settings | always loaded | controlled by `settingSources` |
+| Filesystem settings | always loaded | controlled by `settingSources` (omitted loads all; see Step 4) |
 | Subagents | `.claude/agents/*.md` files only | also inline via `agents` |
 
 `query()`, `tool()`, `createSdkMcpServer()`, `Options`, `canUseTool` and `hooks` kept their names.
@@ -87,7 +87,7 @@ In current releases, omitting `settingSources` loads all sources (the CLI defaul
 
 ### Step 5: message handling
 
-Messages are a discriminated union. Assistant content is in `message.message.content`, not `message.content`, and there are no `tool_call`, `tool_result` or `error` message types: tool calls are `tool_use` blocks inside assistant messages, tool results are `tool_result` blocks inside user messages, and failures arrive as a `result` message with an error subtype.
+Messages are a discriminated union. Assistant content is in `message.message.content`, not `message.content`, and there are no `tool_call`, `tool_result` or `error` message types: tool calls are `tool_use` blocks inside assistant messages, tool results are `tool_result` blocks inside user messages, and a failure arrives as a `result` message with `is_error: true`, after which the iterator throws. See [Errors and cancellation](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#errors-and-cancellation).
 
 ```typescript
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -104,8 +104,8 @@ export function handle(message: SDKMessage): void {
       }
       break;
     case 'result':
-      if (message.subtype === 'success') console.log('done:', message.result);
-      else console.error('failed:', message.subtype, message.errors);
+      if (!message.is_error && message.subtype === 'success') console.log('done:', message.result);
+      else console.error('failed:', message.subtype, message.subtype === 'success' ? message.result : message.errors);
       break;
   }
 }
@@ -141,7 +141,7 @@ Most releases track Claude Code and change nothing in the API. These ones matter
    }
 
    export function chat(inputs: AsyncIterable<string>) {
-     return query({ prompt: turns(inputs), options: { model: 'claude-sonnet-5-5' } });
+     return query({ prompt: turns(inputs), options: { model: '%%model=anthropic%%' } });
    }
    ```
 
@@ -172,7 +172,7 @@ Older drafts of this guide used options that `Options` does not have. TypeScript
 
 ### Model IDs
 
-Replace `claude-3-5-sonnet-*`, `claude-3-7-sonnet-*` and `claude-sonnet-4-5` with the current family — `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1` — or an alias. On these models fixed thinking budgets are rejected (use `thinking: { type: 'adaptive' }` and `effort`), and Claude Opus 5.5 defaults to `medium` effort.
+Replace `claude-3-5-sonnet-*`, `claude-3-7-sonnet-*` and `claude-sonnet-4-5` with a current model such as `%%model=anthropic%%` or `%%model=anthropic-flagship%%`, or an alias. On these models fixed thinking budgets are rejected (use `thinking: { type: 'adaptive' }` and `effort`), and Claude Opus 5.5 defaults to `medium` effort.
 
 ---
 
@@ -186,7 +186,7 @@ Replace `claude-3-5-sonnet-*`, `claude-3-7-sonnet-*` and `claude-sonnet-4-5` wit
 
 **Custom tool parameter descriptions are missing** — upgrade past 0.2.89 and use Zod 4's `.describe()`.
 
-**The agent ignores `CLAUDE.md`** — include `'project'` in `settingSources`.
+**The agent ignores `CLAUDE.md`** — you pass a `settingSources` list without `'project'` (or `[]`). Add `'project'`, or omit the option to load all sources.
 
 **`bypassPermissions` has no effect** — also set `allowDangerouslySkipPermissions: true`.
 
@@ -197,8 +197,8 @@ Replace `claude-3-5-sonnet-*`, `claude-3-7-sonnet-*` and `claude-sonnet-4-5` wit
 - [ ] `@anthropic-ai/claude-code` removed; `@anthropic-ai/claude-agent-sdk` and `zod@^4` installed
 - [ ] Imports updated
 - [ ] `customSystemPrompt` / `appendSystemPrompt` → `systemPrompt`
-- [ ] `settingSources` set explicitly
+- [ ] `settingSources` set explicitly (`[]` for isolation; omitted loads everything)
 - [ ] `unstable_v2_*` replaced with `query()`
-- [ ] Message handling uses `message.message.content` and `result` subtypes
+- [ ] Message handling uses `message.message.content`, checks `is_error` on results, and expects a throw after an error result
 - [ ] Model IDs updated
 - [ ] `tsc --noEmit` passes

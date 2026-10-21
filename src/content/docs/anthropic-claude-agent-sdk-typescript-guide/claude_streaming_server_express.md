@@ -7,7 +7,7 @@ language: "typescript"
 
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).
 
-This server runs an agent per request and forwards text deltas, tool activity and the final result to the browser as Server-Sent Events. If you only need raw token streaming from a single model call, the plain `@anthropic-ai/sdk` client's `messages.stream()` is lighter; the point of the Agent SDK here is that the agent can use tools while it streams.
+This server runs an agent per request and forwards text deltas, tool activity and the final result to the browser as Server-Sent Events. If you only need raw token streaming from a single model call, the plain `@anthropic-ai/sdk` client's `messages.stream()` is lighter; the point of the Agent SDK here is that the agent can use tools while it streams. The Python equivalent, with FastAPI, is [Recipe 15](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_recipes/#recipe-15-streaming-to-a-browser-fastapi-and-sse) of the Python guide.
 
 ```bash
 npm install @anthropic-ai/claude-agent-sdk@%%version=@anthropic-ai/claude-agent-sdk%% express zod@^4
@@ -43,8 +43,9 @@ app.get('/stream', async (req, res) => {
     for await (const message of query({
       prompt,
       options: {
-        model: 'claude-sonnet-5-5',
+        model: '%%model=anthropic%%',
         cwd: '/srv/knowledge-base',
+        settingSources: [],
         allowedTools: ['Read', 'Glob', 'Grep'],
         disallowedTools: ['Bash', 'Write', 'Edit'],
         includePartialMessages: true,
@@ -67,7 +68,7 @@ app.get('/stream', async (req, res) => {
           break;
         case 'result':
           send('done', {
-            ok: message.subtype === 'success',
+            ok: !message.is_error,
             sessionId: message.session_id,
             costUsd: message.total_cost_usd,
           });
@@ -75,6 +76,7 @@ app.get('/stream', async (req, res) => {
       }
     }
   } catch (err) {
+    // Also reached after a failed run: the iterator throws once the error result has been sent as 'done'.
     if (!controller.signal.aborted) send('error', { message: (err as Error).message });
   } finally {
     res.end();
@@ -102,12 +104,19 @@ For follow-up questions, return `sessionId` to the client and pass it back as `o
 ### Dockerfile
 
 ```dockerfile
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package*.json tsconfig.json ./
+RUN npm ci
+COPY server.ts ./
+RUN npx tsc --outDir dist
+
 FROM node:22-slim
 RUN useradd --create-home agent
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY --chown=agent:agent dist ./dist
+COPY --from=build --chown=agent:agent /app/dist ./dist
 USER agent
 ENV HOME=/home/agent
 EXPOSE 8080

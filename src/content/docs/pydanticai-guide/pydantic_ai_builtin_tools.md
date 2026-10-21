@@ -261,7 +261,7 @@ from pydantic_ai import Agent, XSearchTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'xai:grok-3-latest',
+    'xai:grok-4.7',
     capabilities=[NativeTool(XSearchTool(
         allowed_x_handles=['pydantic'],
         from_date=datetime(2026, 1, 1),
@@ -288,7 +288,7 @@ from pydantic_ai.capabilities import NativeTool
 agent = Agent(
     'anthropic:%%model=anthropic-small%%',                      # executor: fast, cheap
     capabilities=[NativeTool(AdvisorTool(
-        model='claude-opus-5',                         # advisor: slower, stronger
+        model='%%model=anthropic-flagship%%',               # advisor: slower, stronger
         max_uses=3,                                    # Anthropic only
         max_tokens=1024,                               # minimum 1024
         caching='5m',                                  # Anthropic only: cache the advisor context

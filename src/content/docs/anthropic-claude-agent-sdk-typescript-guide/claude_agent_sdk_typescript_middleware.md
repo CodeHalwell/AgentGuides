@@ -56,33 +56,34 @@ export const toolPolicy: HookCallback = async (input) => {
 
 ## Redacting tool output
 
-`PostToolUse` can add context for the model. To keep secrets out of the model's view entirely, deny the read in `PreToolUse` instead; redaction after the fact is a second line of defence.
+A `PostToolUse` hook can replace a tool's output before the model sees it: return `hookSpecificOutput.updatedToolOutput`. For built-in tools the replacement must have the same shape as the tool's own output (for `Bash`, `stdout`, `stderr` and `interrupted`); a value of the wrong shape is rejected and the original output is kept. For MCP tools, return an MCP result.
 
 ```typescript
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
 
-export const flagSecrets: HookCallback = async (input) => {
-  if (input.hook_event_name !== 'PostToolUse') return {};
-  const output = JSON.stringify(input.tool_response ?? '');
-  if (/sk-ant-[A-Za-z0-9_-]{10,}/.test(output)) {
-    return {
-      systemMessage: 'A tool result contained an API key.',
-      hookSpecificOutput: {
-        hookEventName: 'PostToolUse',
-        additionalContext: 'The previous tool output contained a secret. Do not repeat or use it.',
-      },
-    };
-  }
-  return {};
+const SECRET = /sk-ant-[A-Za-z0-9_-]{10,}|AKIA[0-9A-Z]{16}/g;
+
+export const redactSecrets: HookCallback = async (input) => {
+  if (input.hook_event_name !== 'PostToolUse' || input.tool_name !== 'Bash') return {};
+  const output = input.tool_response as { stdout?: string; stderr?: string; interrupted?: boolean };
+  const scrub = (text = '') => text.replace(SECRET, '[REDACTED]');
+  const redacted = { ...output, stdout: scrub(output.stdout), stderr: scrub(output.stderr) };
+  if (redacted.stdout === (output.stdout ?? '') && redacted.stderr === (output.stderr ?? '')) return {};
+  return {
+    systemMessage: 'Redacted a credential from Bash output.',
+    hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: redacted },
+  };
 };
 ```
+
+Redaction after the fact is a second line of defence. To keep a file the model must not see out of reach entirely, deny the `Read` in `PreToolUse` (or with `disallowedTools: ['Read(./.env)']`).
 
 ## Wiring it together, with an audit log
 
 ```typescript
 import { appendFile } from 'node:fs/promises';
 import { query, type HookCallback, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { promptPolicy, toolPolicy, flagSecrets } from './policies.js';
+import { promptPolicy, toolPolicy, redactSecrets } from './policies.js';
 
 const audit: HookCallback = async (input, toolUseID) => {
   await appendFile('audit.jsonl', JSON.stringify({
@@ -99,7 +100,7 @@ const options: Options = {
   hooks: {
     UserPromptSubmit: [{ hooks: [promptPolicy] }],
     PreToolUse: [{ hooks: [toolPolicy, audit] }],
-    PostToolUse: [{ hooks: [flagSecrets, audit] }],
+    PostToolUse: [{ hooks: [redactSecrets, audit] }],
     PostToolUseFailure: [{ hooks: [audit] }],
   },
 };
@@ -109,7 +110,7 @@ for await (const message of query({ prompt: 'Summarise the open TODOs in src/.',
 }
 ```
 
-All matchers registered for an event run concurrently, so do not rely on their order.
+All matchers registered for an event run concurrently, so do not rely on their order. Hooks run for pre-approved tools too (they are checked before allow rules), which makes them the right place for policy that must see every call.
 
 ## Stream wrappers
 
@@ -127,7 +128,7 @@ export async function* redactText(source: AsyncIterable<SDKMessage>): AsyncGener
         if (block.type === 'text') block.text = block.text.replace(SSN, '***-**-****');
       }
     }
-    if (message.type === 'result' && message.subtype === 'success') {
+    if (message.type === 'result' && message.subtype === 'success') {   // also redacts API error text
       yield { ...message, result: message.result.replace(SSN, '***-**-****') };
       continue;
     }

@@ -11,7 +11,7 @@ Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude
 npm install @anthropic-ai/claude-agent-sdk@%%version=@anthropic-ai/claude-agent-sdk%% zod@^4
 ```
 
-All recipes are ES modules (`"type": "module"`) and reuse this helper:
+All recipes are ES modules (`"type": "module"`) and reuse this helper. It returns the final `result` message even when the run failed: after an error result the `query()` iterator throws, and the helper turns that back into the result so callers can check `is_error` and `subtype`.
 
 ```typescript
 // run.ts
@@ -19,8 +19,14 @@ import { query, type Options, type SDKResultMessage } from '@anthropic-ai/claude
 
 export async function run(prompt: string, options: Options = {}): Promise<SDKResultMessage> {
   let result: SDKResultMessage | undefined;
-  for await (const message of query({ prompt, options })) {
-    if (message.type === 'result') result = message;
+  try {
+    for await (const message of query({ prompt, options })) {
+      if (message.type === 'result') result = message;
+    }
+  } catch (err) {
+    // The iterator throws after an error result. Rethrow anything else
+    // (failed start, crash, abort).
+    if (!result?.is_error) throw err;
   }
   if (!result) throw new Error('agent finished without a result');
   return result;
@@ -30,9 +36,12 @@ export function text(result: SDKResultMessage): string {
   if (result.subtype !== 'success') {
     throw new Error(`agent failed: ${result.subtype} ${result.errors.join('; ')}`);
   }
+  if (result.is_error) throw new Error(`agent failed: ${result.result}`);
   return result.result;
 }
 ```
+
+For retries, use `runResilient` from the [production guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/#error-handling).
 
 ---
 
@@ -121,7 +130,7 @@ const Briefing = z.object({
 
 export async function research(topic: string) {
   const notes = text(await run(`Research: ${topic}. Use several independent sources and cite URLs.`, {
-    model: 'claude-opus-5-5',
+    model: '%%model=anthropic-flagship%%',
     allowedTools: ['WebSearch', 'WebFetch'],
     disallowedTools: ['Bash', 'Write', 'Edit'],
     maxTurns: 25,
@@ -129,11 +138,11 @@ export async function research(topic: string) {
   }));
 
   const structured = await run(`Turn these notes into a briefing:\n\n${notes}`, {
-    model: 'claude-sonnet-5-5',
+    model: '%%model=anthropic%%',
     tools: [],
     outputFormat: { type: 'json_schema', schema: z.toJSONSchema(Briefing) },
   });
-  if (structured.subtype !== 'success') throw new Error(structured.subtype);
+  if (structured.subtype !== 'success' || structured.is_error) throw new Error(`briefing failed: ${structured.subtype}`);
   return Briefing.parse(structured.structured_output);
 }
 
@@ -231,7 +240,7 @@ import { run, text } from './run.js';
 const result = await run(
   'Audit this repository. Use the subagents, then give one prioritised list with fixes.',
   {
-    model: 'claude-opus-5-5',
+    model: '%%model=anthropic-flagship%%',
     allowedTools: ['Read', 'Glob', 'Grep', 'Agent'],
     agents: {
       'dependency-auditor': {
@@ -289,3 +298,92 @@ console.log(text(await run('The checkout pods keep restarting. Find out why.', {
 })));
 rl.close();
 ```
+
+---
+
+## Recipe 8: Testing agents
+
+Three layers, cheapest first:
+
+1. **Your own functions.** `canUseTool` policies, hooks and `tool()` handlers are plain async functions; call them directly.
+2. **Your message handling, offline.** Point `pathToClaudeCodeExecutable` at a stub that speaks Claude Code's stream-json protocol and replays a canned result. This tests the success and failure paths (including the throw after an error result) without an API key.
+3. **A few end-to-end runs** against the real model, cheap and tolerant of wording.
+
+The stub answers the SDK's control requests and ends every run with the result in `$STUB_RESULT`:
+
+```javascript
+#!/usr/bin/env node
+// stub-claude.mjs — make it executable: chmod +x stub-claude.mjs
+import { createInterface } from 'node:readline';
+
+const send = (obj) => process.stdout.write(JSON.stringify(obj) + '\n');
+const result = {
+  type: 'result', subtype: 'success', is_error: false, result: 'stub answer', session_id: 'stub',
+  num_turns: 1, duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage: {}, modelUsage: {},
+  permission_denials: [], ...JSON.parse(process.env.STUB_RESULT ?? '{}'),
+};
+
+for await (const line of createInterface({ input: process.stdin })) {
+  const message = JSON.parse(line);
+  if (message.type === 'control_request') {          // initialize and other control calls
+    send({ type: 'control_response', response: { subtype: 'success', request_id: message.request_id, response: {} } });
+  } else if (message.type === 'user') {
+    send(result);
+    process.exit(result.is_error ? 1 : 0);           // Claude Code exits non-zero after an error result
+  }
+}
+```
+
+```typescript
+// agent.test.ts — run with: npx tsx --test agent.test.ts
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import { run, text } from './run.js';
+import { canUseTool } from './permissions.js';   // the policy from the comprehensive guide
+import { isTransient } from './resilient.js';    // from the production guide
+
+const STUB = fileURLToPath(new URL('./stub-claude.mjs', import.meta.url));
+
+test('destructive commands are refused', async () => {
+  const decision = await canUseTool('Bash', { command: 'rm -rf /' }, {
+    signal: new AbortController().signal,
+    toolUseID: 'toolu_test',
+  });
+  assert.equal(decision.behavior, 'deny');
+});
+
+test('tool handlers can be called directly', async () => {
+  const lookup = tool('lookup_order', 'Fetch an order', { id: z.string() }, async ({ id }) => ({
+    content: [{ type: 'text', text: id === 'ORD-1' ? 'shipped' : 'not found' }],
+  }));
+  const output = await lookup.handler({ id: 'ORD-1' }, {});
+  assert.deepEqual(output.content[0], { type: 'text', text: 'shipped' });
+});
+
+test('a successful run returns its text', async () => {
+  assert.equal(text(await run('hi', { pathToClaudeCodeExecutable: STUB })), 'stub answer');
+});
+
+test('a turn limit comes back as a non-retryable error result', async (t) => {
+  process.env.STUB_RESULT = JSON.stringify({
+    subtype: 'error_max_turns', is_error: true, errors: ['Reached maximum number of turns'], terminal_reason: 'max_turns',
+  });
+  t.after(() => { delete process.env.STUB_RESULT; });
+  const result = await run('hi', { pathToClaudeCodeExecutable: STUB });
+  assert.equal(result.subtype, 'error_max_turns');
+  assert.equal(isTransient(result), false);
+  assert.throws(() => text(result), /error_max_turns/);
+});
+
+test('end to end', { skip: !process.env.ANTHROPIC_API_KEY }, async () => {
+  const result = await run('What is 17 * 3? Reply with the number only.', {
+    model: '%%model=anthropic-small%%', tools: [], maxTurns: 1,
+  });
+  assert.match(text(result), /51/);
+});
+```
+
+The stub covers the protocol only as far as these tests need. To exercise tool calls or hooks offline, extend it to emit `assistant` messages and `control_request`s of its own.

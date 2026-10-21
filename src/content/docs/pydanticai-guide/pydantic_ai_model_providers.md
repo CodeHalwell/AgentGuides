@@ -20,14 +20,14 @@ from pydantic_ai import Agent
 agent = Agent('openai:%%model=openai%%')
 print(agent.run_sync('Hello!').output)
 
-# Same thing, constructed explicitly:
-from pydantic_ai.models.openai import OpenAIChatModel
+# Same thing, constructed explicitly (`openai:` means the Responses API):
+from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-agent = Agent(OpenAIChatModel('%%model=openai%%', provider=OpenAIProvider(api_key='sk-...')))
+agent = Agent(OpenAIResponsesModel('%%model=openai%%', provider=OpenAIProvider(api_key='sk-...')))
 ```
 
-The string `'openai:gpt-5.2'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
+A string such as `'openai:%%model=openai%%'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
 
 ## Provider prefixes
 
@@ -60,14 +60,14 @@ Verified from `infer_provider_class` in `providers/__init__.py`:
 | `vllm`, `litellm`       | OpenAI-compatible                   | Self-hosted server / LiteLLM proxy.                                     |
 | `github`, `github-copilot` | GitHub Models / Copilot          |                                                                         |
 | `sentence-transformers`, `voyageai` | Embeddings only         | `pydantic_ai.embeddings`.                                               |
-| `gateway/<upstream>`    | Any upstream via Pydantic AI Gateway| e.g. `'gateway/openai:gpt-5.2'`.                                        |
+| `gateway/<upstream>`    | Any upstream via Pydantic AI Gateway| e.g. `'gateway/openai:<model>'`.                                       |
 | `test`                  | `TestModel`                         | No network; `Agent('test')`.                                            |
 
 Removed in 2.0: the `grok:`, `google-gla:`, `google-vertex:` / `vertexai:` prefixes and the Outlines integration. A bare model name with no prefix (`Agent('gpt-5')`) now raises `UserError`.
 
 Since 2.0 a bare `pip install pydantic-ai` installs only the OpenAI, Anthropic and Google providers (plus CLI, MCP, evals, web and Logfire); the `retries` extra is separate. Add the extras you use, e.g. `pip install "pydantic-ai[bedrock,groq]"`.
 
-The full list of `KnownModelName` literals (200+ entries) is in `models/__init__.py`. An unknown string with a known prefix still works — it's passed through to the provider.
+The `KnownModelName` literal in `pydantic_ai.models` lists several hundred model names. An unknown string with a known prefix still works — it's passed through to the provider.
 
 ## Explicit provider construction
 
@@ -106,7 +106,7 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 | `tool_choice` | `None`/`'auto'`, `'none'`, `'required'`, a list of tool names, or `ToolOrOutput(function_tools=[...])`. |
 | `parallel_tool_calls` | `False` asks the model for one tool call per response. |
 | `timeout` | Per-attempt timeout applied by the provider client. |
-| `request_timeout` | One deadline, enforced by Pydantic AI, covering every SDK retry and the whole streamed response. |
+| `request_timeout` | One deadline, enforced by PydanticAI, covering every SDK retry and the whole streamed response. |
 | `max_retries` | Override the provider SDK's retry count for one request (`0` = single attempt). |
 | `extra_headers`, `extra_body` | Escape hatches for provider features without a first-class key. |
 
@@ -123,7 +123,7 @@ Provider-specific extensions (`OpenAIChatModelSettings`, `OpenAIResponsesModelSe
 
 ### `tool_choice` and `ToolOrOutput`
 
-A static `tool_choice=['search']` would also hide the output tools, so the run could never finish (Pydantic AI raises `UserError` for that, and for a static `'required'`). `ToolOrOutput` restricts the *function* tools while keeping output available:
+A static `tool_choice=['search']` would also hide the output tools, so the run could never finish (PydanticAI raises `UserError` for that, and for a static `'required'`). `ToolOrOutput` restricts the *function* tools while keeping output available:
 
 ```python
 from pydantic_ai import Agent
@@ -346,7 +346,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`FallbackExceptionGroup` is an `ExceptionGroup`, so `except* ModelAPIError` also works (Python 3.11+, which Pydantic AI requires) — but a single `try` cannot mix `except` and `except*` clauses; pick one style.
+`FallbackExceptionGroup` is an `ExceptionGroup`, so `except* ModelAPIError` also works (Python 3.11+, which PydanticAI requires) — but a single `try` cannot mix `except` and `except*` clauses; pick one style.
 
 ### `FallbackModel.models` — inspecting the chain
 
@@ -551,10 +551,10 @@ model = InstrumentedModel('openai:%%model=openai%%', options=settings)
 
 ## Gateway routing
 
-Prefix a known provider with `gateway/` to route it through the [Pydantic AI Gateway](https://ai.pydantic.dev/gateway/):
+Prefix a known provider with `gateway/` to route it through the [Pydantic AI Gateway](https://pydantic.dev/docs/ai/overview/gateway/):
 
 ```python
-agent = Agent('gateway/openai:gpt-5.2')
+agent = Agent('gateway/openai:%%model=openai%%')
 # => uses the gateway provider, normalising to the upstream OpenAI profile
 ```
 

@@ -88,7 +88,7 @@ async def validate_bullets(ctx: RunContext[object], out: Summary) -> Summary:
         raise ModelRetry('word_count must be positive.')
     return out
 
-result = agent.run_sync('Summarise the Pydantic AI framework.')
+result = agent.run_sync('Summarise the PydanticAI framework.')
 print(result.output)
 ```
 

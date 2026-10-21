@@ -187,7 +187,7 @@ from pydantic_ai.concurrency import AnyConcurrencyLimit, ConcurrencyLimit, Concu
 Agent('openai:%%model=openai%%', max_concurrency=5)                                          # int shorthand
 Agent('openai:%%model=openai%%', max_concurrency=ConcurrencyLimit(max_running=5, max_queued=20))  # config object
 Agent('openai:%%model=openai%%', max_concurrency=ConcurrencyLimiter(max_running=5))          # shareable instance
-Agent('openai:gpt-4o', max_concurrency=None)                                       # no limiting (default)
+Agent('openai:%%model=openai%%', max_concurrency=None)                                       # no limiting (default)
 ```
 
 ## FastAPI integration — request-level limiting

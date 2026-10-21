@@ -1,11 +1,16 @@
 ---
 title: "OpenAI Agents SDK: Diagrams and Architecture Guide"
-description: "Visual representations and architecture diagrams for the OpenAI Agents SDK, including agent lifecycle, multi-agent patterns, deployment topologies, and system flows."
+description: "Text diagrams of how the Python OpenAI Agents SDK works: the run loop, sessions, handoffs, guardrails, tools, MCP and approvals."
+sidebar:
+  label: "Diagrams"
+  order: 8
 framework: "openai-agents-sdk"
 language: "python"
 ---
 
-Visual representations and architecture diagrams for the OpenAI Agents SDK, including agent lifecycle, multi-agent patterns, deployment topologies, and system flows.
+> Checked against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).
+
+Text diagrams of what happens inside a run. Code for each step is in the [comprehensive guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/).
 
 ## Table of Contents
 
@@ -16,9 +21,8 @@ Visual representations and architecture diagrams for the OpenAI Agents SDK, incl
 5. [Tool Integration Patterns](#tool-integration-patterns)
 6. [Guardrail Integration](#guardrail-integration)
 7. [MCP Integration Architecture](#mcp-integration-architecture)
-8. [Production Deployment Topologies](#production-deployment-topologies)
-9. [Error Handling Flows](#error-handling-flows)
-10. [Scalability Patterns](#scalability-patterns)
+8. [Approvals](#approvals)
+9. [Real-World Patterns](#real-world-patterns)
 
 ---
 
@@ -43,16 +47,12 @@ Visual representations and architecture diagrams for the OpenAI Agents SDK, incl
     └──────────┬───────────┘
                │
                ▼
-    ┌──────────────────────┐
-    │  Input Guardrails    │
-    │  (validation)        │
-    └──────────┬───────────┘
-               │
-               ▼
-    ┌──────────────────────┐
-    │  Call LLM Model      │
-    │  (with tools schema) │
-    └──────────┬───────────┘
+    ┌──────────────────────┐      ┌───────────────────────────┐
+    │  Call LLM Model      │ ◄──► │ Input guardrails (first   │
+    │  (with tools schema) │      │ agent only; in parallel   │
+    └──────────┬───────────┘      │ unless run_in_parallel=   │
+               │                  │ False, which runs first)  │
+               │                  └───────────────────────────┘
                │
                ▼
     ┌──────────────────────────────────────────┐
@@ -300,47 +300,31 @@ User           Agent 1 (Triage)      Agent 2 (Specialist)
 ### Guardrail Validation Flow
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│      Message Flow: Input and Output Guardrails              │
-└────────────────────────────────────────────────────────────┘
-
 User Input
    │
+   ├──────────────────────────────┐
+   ▼                              ▼
+Input guardrails             First model call
+(run_in_parallel=True)       (starts at the same time)
+   │
+   ├─ tripwire? ──► cancel run, raise InputGuardrailTripwireTriggered
+   │
    ▼
-┌─────────────────────┐
-│ Input Guardrails    │ Safe?
-├─────────────────────┤    Yes
-│ - Check injection   │─────────┐
-│ - Validate format   │         │
-│ - Check permissions │         │
-└─────────┬───────────┘         │
-          │ No                  │
-          ▼                     │
-       Block &                  │
-       Return Error             │
-                                ▼
-                        ┌─────────────────────┐
-                        │  Execute Agent      │
-                        └─────────┬───────────┘
-                                  │
-                                  ▼
-                        ┌─────────────────────┐
-                        │ Output Guardrails   │ Valid?
-                        ├─────────────────────┤    Yes
-                        │ - Check toxicity    │─────────┐
-                        │ - Validate response │         │
-                        │ - Verify compliance │         │
-                        └─────────┬───────────┘         │
-                                  │ No                  │
-                                  ▼                     │
-                              Regenerate &             │
-                              Retry                    │
-                                  │                    │
-                                  └────────┬───────────┘
-                                           │
-                                           ▼
-                                   Return to User
+Agent loop continues (tools, handoffs, more model calls)
+   │
+   ▼
+Final output from the last agent
+   │
+   ▼
+Output guardrails
+   │
+   ├─ tripwire? ──► raise OutputGuardrailTripwireTriggered (no automatic retry)
+   │
+   ▼
+Return result
 ```
+
+With `@input_guardrail(run_in_parallel=False)` the guardrail finishes before the first model call starts, so a tripwire costs no model tokens.
 
 ---
 
@@ -374,8 +358,9 @@ User Input
    │   SQLite Database         │
    │   conversations.db        │
    ├───────────────────────────┤
-   │ session_id | message_id   │
-   │ role | content | timestamp│
+   │ agent_sessions            │
+   │ agent_messages            │
+   │ (session_id, message_data)│
    └───────────────────────────┘
         ▲                   │
         │                   └──────────> Persistent Storage
@@ -400,7 +385,7 @@ User Input
     ┌──────┼──────┬──────────┬────────────┐
     │      │      │          │            │
     ▼      ▼      ▼          ▼            ▼
-  SQLite Redis SQLAlchemy  OpenAI    In-Memory
+  SQLite Redis SQLAlchemy  OpenAI    SQLite ":memory:"
   │       │     │          │        │
   │       │     │          │        │
   ├──FS   ├─CPU │          │        └─ RAM
@@ -501,64 +486,43 @@ Hosted Tools
     │  └──> Vector database search
     │       Semantic matching
     │
-    ├─ CodeInterpreterTool()
-    │  └──> Python sandbox execution
+    ├─ CodeInterpreterTool(tool_config=...)
+    │  └──> Python in an OpenAI-hosted container
     │       Results captured
     │
-    ├─ ComputerTool(computer)
-    │  └──> Desktop automation
-    │       Mouse/keyboard control
+    ├─ ImageGenerationTool(tool_config=...)
+    │  └──> Image generation; image returned as base64
     │
-    └─ ImageGenerationTool()
-       └──> DALL-E image generation
-            URLs returned
+    └─ HostedMCPTool(tool_config=...)
+       └──> OpenAI calls a remote MCP server
+
+Run in your process instead: ComputerTool(computer=...) drives a
+screen you implement; ShellTool / ApplyPatchTool act on a machine you control.
 ```
 
 ---
 
 ## Guardrail Integration
 
-### Input/Output Guardrail Pipeline
+### Where Each Guardrail Runs
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│       Guardrail Architecture: Safety Pipeline               │
-└────────────────────────────────────────────────────────────┘
-
-User Input
-    │
-    ▼
-┌──────────────────────────┐
-│ Input Guardrail 1        │
-│ (Injection Detection)    │
-└──────┬───────────────────┘
-       │ Pass
-       ▼
-┌──────────────────────────┐
-│ Input Guardrail 2        │
-│ (Content Filtering)      │
-└──────┬───────────────────┘
-       │ Pass
-       ▼
-┌──────────────────────────┐
-│ Execute Agent            │
-└──────┬───────────────────┘
-       │
-       ▼
-┌──────────────────────────┐
-│ Output Guardrail 1       │
-│ (Toxicity Check)         │
-└──────┬───────────────────┘
-       │ Pass
-       ▼
-┌──────────────────────────┐
-│ Output Guardrail 2       │
-│ (Compliance Check)       │
-└──────┬───────────────────┘
-       │ Pass
-       ▼
-   Return Result
+Runner.run(starting_agent, input)
+   │
+   ├─ input guardrails ............ starting agent only (+ RunConfig.input_guardrails)
+   │
+   ├─ for each function tool call:
+   │     tool input guardrails .... before the tool (allow / reject_content / raise)
+   │     needs_approval ........... pause the run for a person
+   │     tool executes
+   │     tool output guardrails ... before the model sees the result
+   │
+   ├─ handoff input_filter ........ when control moves to another agent
+   │
+   └─ output guardrails ........... final agent only (+ RunConfig.output_guardrails)
 ```
+
+Several guardrails at the same level run concurrently; the first tripwire stops the run.
 
 ---
 
@@ -623,256 +587,32 @@ Remote MCP (HTTP/SSE):
 
 ---
 
-## Production Deployment Topologies
+## Approvals
 
-### Monolithic Deployment
-
-```
-┌────────────────────────────────────────────────────────────┐
-│     Single Service: Monolithic Deployment                   │
-└────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────┐
-│      Load Balancer                   │
-│  (nginx/haproxy)                     │
-└────────────┬─────────────────────────┘
-             │
-    ┌────────┼────────┬────────┐
-    │        │        │        │
-    ▼        ▼        ▼        ▼
-┌────┐  ┌────┐  ┌────┐  ┌────┐
-│App │  │App │  │App │  │App │
-│Pod │  │Pod │  │Pod │  │Pod │
-│    │  │    │  │    │  │    │
-│Agent  │Agent  │Agent  │Agent│
-│Svc  │  │Svc  │  │Svc  │  │Svc │
-└────┘  └────┘  └────┘  └────┘
-│         │         │         │
-└─────────┼─────────┼─────────┘
-          │
-          ▼
-    ┌──────────────┐
-    │  PostgreSQL  │
-    │  (Sessions)  │
-    └──────────────┘
-          │
-          ▼
-    ┌──────────────┐
-    │    Redis     │
-    │   (Cache)    │
-    └──────────────┘
-```
-
-### Microservices Deployment
+### Pausing for a Human
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│    Multiple Services: Microservices Deployment              │
-└────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────┐
-│      API Gateway                     │
-└────────────┬─────────────────────────┘
-             │
-    ┌────────┼────────┬────────┐
-    │        │        │        │
-    ▼        ▼        ▼        ▼
-┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
-│Triage│ │Billing│ │Tech  │ │Account
-│Svc  │ │Svc   │ │Support│ │Svc
-│     │ │      │ │Svc   │ │     
-│Agents│ │Agents│ │Agents│ │Agents
-└──────┘ └──────┘ └──────┘ └──────┘
-    │        │        │        │
-    └────────┼────────┼────────┘
-             │
-    ┌────────┴────────┐
-    │                 │
-    ▼                 ▼
-┌──────────────┐ ┌──────────────┐
-│ PostgreSQL   │ │    Redis     │
-│ (Databases)  │ │   (Cache)    │
-└──────────────┘ └──────────────┘
-```
-
-### Serverless Deployment
-
-```
-┌────────────────────────────────────────────────────────────┐
-│      Event-Driven: Serverless Deployment                    │
-└────────────────────────────────────────────────────────────┘
-
-Events
-  │
-  ├─ API Gateway Request
-  │  └─> Lambda Function (Query Handler)
-  │
-  ├─ SQS Message
-  │  └─> Lambda Function (Background Processor)
-  │
-  └─ CloudWatch Trigger
-     └─> Lambda Function (Scheduled Job)
-
-Each Lambda:
-  ├─ Agent Initialization
-  ├─ Execute Agent
-  └─ Return Result
-
-Storage:
-  ├─ DynamoDB (Sessions)
-  ├─ S3 (File Storage)
-  └─ RDS (Database)
-```
-
----
-
-## Error Handling Flows
-
-### Retry and Fallback Mechanism
-
-```
-┌────────────────────────────────────────────────────────────┐
-│    Error Handling: Retry and Fallback Strategy              │
-└────────────────────────────────────────────────────────────┘
-
-Execute Task
-    │
-    ▼
-   Fail?
-    │ Yes
-    ▼
-┌─────────────────┐
-│ Retry 1 / 3     │
-│ (wait 1s)       │
-└────────┬────────┘
-         │
-        Fail?
-         │ Yes
-         ▼
-    ┌─────────────────┐
-    │ Retry 2 / 3     │
-    │ (wait 2s)       │
-    └────────┬────────┘
-             │
-            Fail?
-             │ Yes
-             ▼
-        ┌─────────────────┐
-        │ Retry 3 / 3     │
-        │ (wait 4s)       │
-        └────────┬────────┘
-                 │
-                Fail?
-                 │ Yes
-                 ▼
-            Use Fallback
-            Agent
-                 │
-                 ▼
-            Return Result
-```
-
-### Circuit Breaker Pattern
-
-```
-┌────────────────────────────────────────────────────────────┐
-│     Resilience: Circuit Breaker States                      │
-└────────────────────────────────────────────────────────────┘
-
-                    ┌──────────┐
-                    │  CLOSED  │ (Normal operation)
-                    │          │
-                    └────┬─────┘
-                         │ Failures exceed
-                         │ threshold (5)
-                         ▼
-                    ┌──────────┐
-                    │   OPEN   │ (Reject requests)
-                    │          │
-                    └────┬─────┘
-                         │ Wait timeout (60s)
-                         ▼
-                    ┌──────────────┐
-                    │  HALF_OPEN   │ (Testing recovery)
-                    │              │
-                    └────┬────┬────┘
-                         │    │
-                    Success Failure
-                         │    │
-                         ▼    ▼
-                    CLOSED  OPEN
-```
-
----
-
-## Scalability Patterns
-
-### Horizontal Scaling Architecture
-
-```
-┌────────────────────────────────────────────────────────────┐
-│       Scaling: Horizontal Expansion                         │
-└────────────────────────────────────────────────────────────┘
-
-                    ┌──────────────────┐
-                    │  Load Balancer   │
-                    │  (Round Robin)   │
-                    └────────┬─────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        ▼                    ▼                    ▼
-    ┌────────┐           ┌────────┐           ┌────────┐
-    │Instance│           │Instance│           │Instance│
-    │  1     │           │  2     │           │  3     │
-    │        │           │        │           │        │
-    │Agents  │           │Agents  │           │Agents  │
-    │Pool    │           │Pool    │           │Pool    │
-    └────────┘           └────────┘           └────────┘
-        │                    │                    │
-        └────────────────────┼────────────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │  Shared Session │
-                    │  Storage        │
-                    │  (PostgreSQL)   │
-                    └─────────────────┘
-```
-
-### Caching Strategy
-
-```
-┌────────────────────────────────────────────────────────────┐
-│      Performance: Multi-Level Caching                       │
-└────────────────────────────────────────────────────────────┘
-
-Request
-    │
-    ▼
-┌─────────────────────┐
-│ L1: In-Memory Cache │
-│ (Same Process)      │ Hit?
-└────────┬────────────┘ Return
-         │ Miss
-         ▼
-┌─────────────────────┐
-│ L2: Redis Cache     │
-│ (Shared across     │ Hit?
-│  processes)        │ Return & Update L1
-└────────┬────────────┘
-         │ Miss
-         ▼
-┌─────────────────────┐
-│ L3: Database Cache  │
-│ (Long-lived)        │ Hit?
-└────────┬────────────┘ Return & Update L1/L2
-         │ Miss
-         ▼
-    Execute Agent
-         │
-         ▼
-    Update all
-    cache layers
+Runner.run(agent, input)
+   │
+   ▼
+Model calls a tool marked needs_approval
+   │
+   ▼
+Run stops; result.interruptions = [ToolApprovalItem, ...]
+   │
+   ▼
+state = result.to_state()  ──► state.to_string() ──► your database
+   │                                                    │
+   │            (minutes or days later, any process)    │
+   ▼                                                    ▼
+state = await RunState.from_string(agent, saved)
+state.approve(item)  or  state.reject(item, rejection_message=...)
+   │
+   ▼
+Runner.run(agent, state)  ──► tool runs (or the model is told it was rejected)
+   │
+   ▼
+Loop continues to the final output
 ```
 
 ---

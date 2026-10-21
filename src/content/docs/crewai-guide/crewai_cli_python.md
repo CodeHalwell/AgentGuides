@@ -46,13 +46,13 @@ uv tool install crewai
 | `crewai install` | Sync dependencies (wraps uv). |
 | `crewai update` | Update the project's `pyproject.toml` to use uv. |
 | `crewai train -n 5 -f trained.pkl` | Kick off `main:train`. |
-| `crewai test -n 3 -m gpt-4o-mini` | Kick off `main:test` (eval). |
+| `crewai test -n 3 -m %%model=openai-small%%` | Kick off `main:test` (eval; OpenAI models only). |
 | `crewai eval` | Grade the last traced run through CrewAI AMP; `--models a,b` compares models on a deployment. |
 | `crewai replay -t <task_id>` | Re-run starting from a specific task. |
 | `crewai log-tasks-outputs` | List logged task outputs. |
 | `crewai reset-memories -m -kn -a` | Reset memory / knowledge / kickoff outputs. |
 | `crewai memory` | Interactive Memory TUI. |
-| `crewai chat` | Chat with the crew (needs `chat_llm`). |
+| `crewai chat` | Chat with the crew (uses `Crew.chat_llm`; see [Gotchas](#gotchas)). |
 | `crewai checkpoint` | TUI browser for saved checkpoints. |
 | `crewai checkpoint list/info/resume/diff/prune` | Scripted checkpoint ops. |
 | `crewai flow kickoff` | Run the flow (equivalent to `crewai run` in a flow project). |
@@ -148,19 +148,23 @@ class MyCrew:
 ### `main.py`
 
 ```python
+import sys
+
 from my_crew.crew import MyCrew
 
+INPUTS = {"topic": "AI agents"}
+
 def run():
-    MyCrew().crew().kickoff(inputs={"topic": "AI agents"})
+    MyCrew().crew().kickoff(inputs=INPUTS)
 
 def train():
-    MyCrew().crew().train(n_iterations=int(sys.argv[1]), filename=sys.argv[2], inputs={...})
+    MyCrew().crew().train(n_iterations=int(sys.argv[1]), filename=sys.argv[2], inputs=INPUTS)
 
 def replay():
     MyCrew().crew().replay(task_id=sys.argv[1])
 
 def test():
-    MyCrew().crew().test(n_iterations=int(sys.argv[1]), eval_llm=sys.argv[2], inputs={...})
+    MyCrew().crew().test(n_iterations=int(sys.argv[1]), eval_llm=sys.argv[2], inputs=INPUTS)
 ```
 
 `pyproject.toml` wires these to console scripts so `crewai run`, `crewai train 5 data.pkl`, etc. work out of the box.
@@ -182,10 +186,10 @@ Under the hood CrewAI persists per-agent suggestions; running the crew after tra
 ## Testing mode
 
 ```bash
-crewai test -n 3 -m gpt-4o-mini
+crewai test -n 3 -m %%model=openai-small%%
 ```
 
-Calls `Crew.test(n_iterations=3, eval_llm="gpt-4o-mini")` — runs the crew `n` times, scores every task with the eval LLM, and prints a consolidated table. Good for regression runs in CI.
+Calls `Crew.test(n_iterations=3, eval_llm=...)` with the model you pass — runs the crew `n` times, scores every task with the eval LLM, and prints a consolidated table. Good for regression runs in CI.
 
 ## Replay
 
@@ -271,10 +275,10 @@ Set `CREWAI_TRACING_ENABLED=true` in `.env` for an always-on setup.
 # .github/workflows/crew.yml
 - run: pip install "crewai[tools]"
 - run: crewai deploy validate
-- run: crewai test -n 2 -m gpt-4o-mini
+- run: crewai test -n 2 -m %%model=openai-small%%
 ```
 
-Both commands exit non-zero on failure — clean CI signal.
+`deploy validate` exits non-zero on blocking issues. `crewai test` calls the real model (it needs the API key as a CI secret and costs tokens) and prints a score table. It does not fail the job on a low score, and in 1.15.28 it also exits 0 when the run itself errors (the CLI catches the error and prints it), so keep offline unit tests with a stub LLM as the gate (see [Production](/crewai-guide/crewai_production_guide/#testing-without-a-model)).
 
 ### 2. Scheduled resume from checkpoint
 
@@ -307,7 +311,7 @@ cd mkt-campaign && uv sync && crewai run
 crewai chat
 ```
 
-Needs `Crew(chat_llm=LLM(...))` set — the CLI opens a REPL that routes inputs through the crew on demand.
+Set `Crew(chat_llm=LLM(...))` for a predictable model; the CLI opens a REPL that routes inputs through the crew on demand.
 
 ## Gotchas
 
@@ -316,5 +320,5 @@ Needs `Crew(chat_llm=LLM(...))` set — the CLI opens a REPL that routes inputs 
 - **`reset-memories` without flags prints a help line and exits.** You must pick at least one type.
 - **`replay -t` needs logged outputs.** `log-tasks-outputs` confirms what's available.
 - **Legacy `--long`/`--short`/`--entities` are shims.** They all map to `--memory` now; don't rely on the distinction.
-- **`crewai chat` picks up `Crew.chat_llm` first** — if unset it falls back to the crew's default LLM, which may be slow.
+- **`crewai chat` model resolution.** It uses `Crew.chat_llm`; if that is unset it falls back to the `MODEL` environment variable, then CrewAI's default model (`gpt-4.1-mini`), not to the agents' own LLMs. If the model cannot be created it prints "Unable to find a Chat LLM" and exits.
 - **`crewai uv` expects a `pyproject.toml`.** Outside a crew project it errors out with a clear message.

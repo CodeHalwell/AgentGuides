@@ -2,9 +2,12 @@
 title: "Semantic Kernel: Production Deployment and Operations Guide"
 description: "Language-neutral production guidance for Semantic Kernel — deployment shape, configuration and secrets, resilience, observability, security, scaling, cost and testing."
 framework: "semantic-kernel"
+sidebar:
+  label: "Production"
+  order: 3
 ---
 
-> Applies to `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. Runnable, language-specific versions of these patterns are in the [Python production guide](/semantic-kernel-guide/python/semantic_kernel_production_python/) and the [.NET production guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/).
+> Applies to `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. This page holds the reasoning and the checklist; the runnable code is in the [Python production guide](/semantic-kernel-guide/python/semantic_kernel_production_python/) (FastAPI service, telemetry, tests) and the [.NET production guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/) (resilience, telemetry, tests).
 
 Semantic Kernel is in long-term support while its successor, [Microsoft Agent Framework](/microsoft-agent-framework-guide/), receives most new features. Everything below applies equally to both, which keeps a later migration cheap.
 
@@ -64,7 +67,7 @@ Never log API keys, and never return raw exception text to clients — connector
 Semantic Kernel emits OpenTelemetry traces, metrics and logs:
 
 - **Traces** for function invocations and, with GenAI diagnostics enabled, model calls using the GenAI semantic conventions (model, token counts, finish reason).
-- **Metrics** such as `semantic_kernel.function.invocation.duration` and `semantic_kernel.function.invocation.token_usage.prompt` / `.completion`.
+- **Metrics**: `semantic_kernel.function.invocation.duration` and `.streaming.duration` in both SDKs. Token usage per function (`semantic_kernel.function.invocation.token_usage.prompt` / `.completion`) is recorded **only by .NET**. In Python, read `usage` from each completion's metadata (or the `gen_ai.usage.*` span attributes) and record it yourself; the [Python production guide](/semantic-kernel-guide/python/semantic_kernel_production_python/#3-telemetry-and-token-usage) does this in a filter.
 - **Logs** through the standard logging frameworks (`logging` / `ILogger`).
 
 Enable GenAI diagnostics with `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true` (Python) or the `Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics` `AppContext` switch (.NET). The *sensitive* variants also capture prompts and completions; use them only in development.
@@ -75,8 +78,9 @@ Export with OTLP to any back end, or with the Azure Monitor distro to Applicatio
 
 ## 5. Security
 
-- **Prompt injection.** Treat retrieved documents, tool output and user input as untrusted. Use a prompt-render filter to apply checks, keep system instructions separate from data, and never let model output choose arbitrary URLs, file paths or SQL.
-- **Least-privilege tools.** Give each agent only the plugins it needs (restrict with function-choice filters), use read-only credentials for read-only tools, and gate destructive tools with an approval filter.
+- **Keep template encoding on.** Prompt templates HTML-encode inserted variables and function results, so user text cannot open a new `<message role="system">`. Do not set `allow_dangerously_set_content` / `AllowDangerouslySetContent` on anything that carries user input, retrieved documents or tool output.
+- **Prompt injection.** Encoding protects message structure, not meaning: treat retrieved documents, tool output and user input as untrusted. Use a prompt-render filter to apply checks, keep system instructions separate from data, and never let model output choose arbitrary URLs, file paths or SQL. For OpenAPI plugins, Python checks request URLs against `server_url_validation_allowed_base_urls` and blocks private network addresses by default; keep it that way.
+- **Least-privilege tools.** Give each agent only the plugins it needs, and narrow what is advertised per call with `FunctionChoiceBehavior.Auto(filters={"included_plugins": [...]})` (Python) or `FunctionChoiceBehavior.Auto(functions: [...])` (.NET). Use read-only credentials for read-only tools, and gate destructive tools with an auto-function-invocation filter.
 - **Data handling.** Redact personal data before it reaches prompts or logs (filters again), and check the data-residency settings of each model provider and vector store.
 - **MCP servers** run code with your credentials — pin their versions, run local ones in containers, and review the tools they expose.
 - **Dependencies.** Pin SK exactly, update deliberately, and watch both SDKs' release notes; several .NET packages are still preview or alpha.
@@ -108,7 +112,7 @@ Scale horizontally on CPU and request concurrency; model latency, not CPU, is us
 
 ## 8. Cost management
 
-- Track token usage per function, tenant and model from SK's metrics, and convert to cost using your provider's *current* price list held in configuration (prices change too often to hard-code).
+- Track token usage per function, tenant and model (from SK's token metrics in .NET; from completion metadata in Python), and convert to cost using your provider's *current* price list held in configuration (prices change too often to hard-code).
 - Set budgets per tenant and refuse or degrade (smaller model, shorter answers) when exceeded.
 - Watch for silent multipliers: retries, multi-agent rounds, large tool schemas, and verbose system prompts repeated on every turn.
 
@@ -145,4 +149,5 @@ Scale horizontally on CPU and request concurrency; model latency, not CPU, is us
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Token-usage metrics corrected (.NET only; Python records usage from metadata). Security: template encoding, OpenAPI URL validation and the actual function-restriction APIs named. |
 | 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Rewritten as language-neutral guidance. The previous edition's code used pre-1.0 Python APIs (`invoke_async`, `create_function_from_prompt`), wrong .NET signatures and hard-coded 2024 model prices; runnable code now lives in the language-specific production guides. |

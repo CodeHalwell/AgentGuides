@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Architecture & Flow Diagrams"
-description: "Visual representations of Pydantic AI patterns, architectures, and workflows."
+description: "Visual representations of PydanticAI patterns, architectures, and workflows."
 framework: "pydanticai"
 language: "python"
 sidebar:
@@ -8,7 +8,7 @@ sidebar:
   order: 22
 ---
 
-Visual representations of Pydantic AI patterns, architectures, and workflows. The diagrams are conceptual; API names in them match **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%).
+Visual representations of PydanticAI patterns, architectures, and workflows. The diagrams are conceptual; API names in them match **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%).
 
 ---
 
@@ -47,7 +47,7 @@ Visual representations of Pydantic AI patterns, architectures, and workflows. Th
               ▼
 ┌─────────────────────────────────────────────────────────┐
 │         LLM API CALL (With Full Context)                │
-│  • Model: gpt-4o, claude-3-5-sonnet, etc.              │
+│  • Model: any provider:model string                    │
 │  • System prompt                                        │
 │  • Message history                                      │
 │  • Available tools                                      │
@@ -604,7 +604,7 @@ CLIENT (Browser/App)
 UNIT TEST            INTEGRATION TEST
 │                        │
 ├─ Mock Model           ├─ Real Model (or Sandbox)
-│  TestModel()          │  gpt-4o-mini
+│  TestModel()          │  a small, cheap model
 │                       │
 ├─ Mock Dependencies    ├─ Real Services
 │  db_connection        │  PostgreSQL, Redis

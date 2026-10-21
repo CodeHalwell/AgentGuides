@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Integrations — MCP, A2A and UI Protocols"
-description: "Connecting Pydantic AI agents to the outside world: MCP clients and servers (MCPToolset, MCP capability, MCPServerTool), Agent-to-Agent via fasta2a, AG-UI and Vercel AI SDK adapters, the built-in web chat UI and the CLI."
+description: "Connecting PydanticAI agents to the outside world: MCP clients and servers (MCPToolset, MCP capability, MCPServerTool), Agent-to-Agent via fasta2a, AG-UI and Vercel AI SDK adapters, the built-in web chat UI and the CLI."
 framework: "pydanticai"
 language: "python"
 sidebar:
@@ -12,7 +12,7 @@ Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-che
 
 ## Model Context Protocol (MCP)
 
-[MCP](https://modelcontextprotocol.io) is an open protocol for exposing tools, resources and prompts to LLM applications. Pydantic AI can be an MCP **client** in three ways, and you can put an agent behind an MCP **server**.
+[MCP](https://modelcontextprotocol.io) is an open protocol for exposing tools, resources and prompts to LLM applications. PydanticAI can be an MCP **client** in three ways, and you can put an agent behind an MCP **server**.
 
 | Option | Where the MCP client runs | Use when |
 |---|---|---|
@@ -128,7 +128,7 @@ app = agent_to_a2a(agent, name='support', description='Answers order questions')
 # uvicorn my_module:app --port 8000
 ```
 
-`agent_to_a2a` returns an ASGI app serving the agent card and the A2A task endpoints. It accepts `storage=` and `broker=` for persistent task storage and distributed workers, plus `url=`, `version=`, `skills=` and the usual Starlette `routes=` / `middleware=` / `lifespan=`. To *call* another A2A agent from Pydantic AI, wrap an A2A client call in an ordinary tool.
+`agent_to_a2a` returns an ASGI app serving the agent card and the A2A task endpoints. It accepts `storage=` and `broker=` for persistent task storage and distributed workers, plus `url=`, `version=`, `skills=` and the usual Starlette `routes=` / `middleware=` / `lifespan=`. To *call* another A2A agent from PydanticAI, wrap an A2A client call in an ordinary tool.
 
 ---
 

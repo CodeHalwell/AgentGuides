@@ -1,6 +1,9 @@
 ---
 title: "OpenAI Agents SDK Advanced Multi‑Agent (Python)"
-description: "Advanced multi-agent coordination, handoffs, and guardrails in Python."
+description: "Choosing between handoffs, agents as tools and code orchestration in the Python OpenAI Agents SDK."
+sidebar:
+  label: "Multi-agent patterns"
+  order: 3
 framework: "openai-agents-sdk"
 language: "python"
 ---
@@ -63,7 +66,12 @@ Since 0.7.0 handoffs no longer nest prior history by default; set `RunConfig(nes
 
 ## Parallel specialists in code
 
+Using the `researcher` and `writer` agents defined above:
+
 ```python
+import asyncio
+from agents import Runner
+
 async def compare(question: str):
     a, b = await asyncio.gather(
         Runner.run(researcher, question),

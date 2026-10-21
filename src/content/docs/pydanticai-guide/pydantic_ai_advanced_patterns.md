@@ -10,7 +10,7 @@ sidebar:
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line; the examples have been updated for the V2 API.
 
-**Focus:** patterns, optimisations and architectural techniques. Several patterns below are plain-Python orchestration around `Agent`; where Pydantic AI has a built-in equivalent (capabilities, `Hooks`, `ConcurrencyLimiter`, toolsets) it is pointed out.
+**Focus:** patterns, optimisations and architectural techniques. Several patterns below are plain-Python orchestration around `Agent`; where PydanticAI has a built-in equivalent (capabilities, `Hooks`, `ConcurrencyLimiter`, toolsets) it is pointed out.
 
 ---
 
@@ -265,7 +265,7 @@ Cache similar queries together to reduce API calls and costs.
 
 from typing import Optional
 import numpy as np
-from openai import AsyncOpenAI
+from pydantic_ai import Embedder
 
 class SemanticCache:
     """Cache based on semantic similarity, not exact matches."""
@@ -273,17 +273,12 @@ class SemanticCache:
     def __init__(self, similarity_threshold: float = 0.95):
         self.cache: list[tuple[str, str, list[float]]] = []
         self.similarity_threshold = similarity_threshold
-        self.embeddings_client = AsyncOpenAI()
+        self.embedder = Embedder('openai:text-embedding-3-small')
     
     async def get_embedding(self, text: str) -> list[float]:
         """Get embedding for text."""
-        
-        response = await self.embeddings_client.embeddings.create(
-            model='text-embedding-3-small',
-            input=text
-        )
-        
-        return response.data[0].embedding
+        result = await self.embedder.embed_query(text)
+        return list(result.embeddings[0])
     
     def cosine_similarity(
         self,
@@ -694,7 +689,7 @@ agent_b = Agent(FunctionModel(call_custom_model), instructions='You are a helpfu
 # result = await agent_b.run('What is type safety?')
 ```
 
-`FunctionModel` gives you message history, instructions and tool definitions (`info.function_tools`, `info.output_tools`), so it can support tool calling too — return a `ToolCallPart` instead of a `TextPart`. `httpx2` is the HTTP client Pydantic AI itself depends on; plain `httpx` works equally well here.
+`FunctionModel` gives you message history, instructions and tool definitions (`info.function_tools`, `info.output_tools`), so it can support tool calling too — return a `ToolCallPart` instead of a `TextPart`. `httpx2` is the HTTP client PydanticAI itself depends on; plain `httpx` works equally well here.
 
 ---
 

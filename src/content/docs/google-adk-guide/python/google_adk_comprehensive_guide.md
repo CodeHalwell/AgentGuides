@@ -490,7 +490,7 @@ writer = LlmAgent(
 ```
 
 - `static_instruction` never changes, so it can be cached; `instruction` changes per turn. Keeping them apart helps both implicit and explicit context caching.
-- An instruction can also be a function `(ReadonlyContext) -> str` when the template language is not enough. Since 2.10.0, `${var}` and `\{var}` are left alone, so you can write literal braces.
+- An instruction can also be a function `(ReadonlyContext) -> str` when the template language is not enough; `inject_session_state(template, ctx, use_jinja2=True)` (from `google.adk.flows.llm_flows.prompt`, 2.7.0) renders Jinja2 templates with conditionals and loops inside such a function. Since 2.10.0, `${var}` and `\{var}` are left alone, so you can write literal braces.
 - `include_contents="none"` sends a sub-agent only its instruction and the current input, not the whole conversation.
 - For long sessions, `App(events_compaction_config=EventsCompactionConfig(...))` summarises old events, and `App(context_cache_config=ContextCacheConfig(...))` caches the stable prefix. Both are covered in [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/#context-caching-contextcacheconfig-experimental) and in the production guide's [cost section](/google-adk-guide/python/google_adk_production_guide/#cost-and-context-controls).
 
@@ -652,7 +652,7 @@ async def converse(runner: InMemoryRunner, user_id: str, session_id: str) -> Non
 - `send_content` sends a text turn, `send_realtime` streams audio or video chunks, `send_activity_start` / `send_activity_end` mark speech when you do your own voice-activity detection, and `close` ends the session.
 - Tools work in live sessions; a tool with a parameter annotated `LiveRequestQueue` receives a stream of its own.
 - `LlmAgent.DEFAULT_LIVE_MODEL` is ADK's built-in default live model (`gemini-live-2.5-flash-native-audio` in this release); live model names change often, so set the one your project has access to.
-- `adk web` has a microphone button that uses this path, and the API server exposes it as the `/run_live` WebSocket.
+- `adk web` and `adk api_server` expose this as the `/run_live` WebSocket endpoint.
 
 `RunConfig` options for live sessions (speech, transcription, session resumption, context window compression) are in [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/#runconfig).
 
@@ -695,4 +695,4 @@ Most classes have a short import (`from google.adk.agents import LlmAgent`, `fro
 | `ModelArmorPlugin`, `ModelArmorConfig` | `google.adk.integrations.model_armor` |
 | `get_fast_api_app` | `google.adk.cli.fast_api` |
 
-Names starting with an underscore, and modules such as `google.adk.flows`, are internal and can change in any release. If a class is not importable from a public path, it is not part of the supported API.
+Modules and names starting with an underscore are internal and can change in any release; if a class is only importable from such a path, it is not part of the supported API.

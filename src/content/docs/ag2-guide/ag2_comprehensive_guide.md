@@ -135,7 +135,7 @@ agent = Agent(
 Tool parameters can be filled by AG2 instead of the model. Annotate them and they disappear from the tool schema:
 
 - `Annotated[T, Inject()]` takes the value from `dependencies=` (on the `Agent` or per `ask`), looked up by parameter name or by `Inject("name")`. Use it for database clients, HTTP sessions and settings.
-- `Annotated[T, Variable()]` takes the value from `variables=`, the per-conversation state that tools may also update.
+- `Annotated[T, Variable()]` takes the value from `variables=`, the per-conversation state (tools can change it through `context.variables`).
 - `Annotated[T, Depends(factory)]` calls `factory()` (FastDepends-style) and passes the result.
 
 ```python
@@ -262,7 +262,7 @@ async def describe() -> None:
     print(reply.body)
 ```
 
-Support depends on the provider and model. `ag2.FilesAPI` uploads files once and reuses them by `file_id`.
+Support depends on the provider and model.
 
 ## Human in the loop
 
@@ -347,7 +347,7 @@ agent = Agent(
 )
 ```
 
-Other built-ins: `TelemetryMiddleware` (OpenTelemetry spans; see [production](/ag2-guide/ag2_production_guide/#observability)) and `MetricsMiddleware` (extra `metrics`). `approval_required` is tool middleware: wrap a tool with it to pause for human approval before the tool runs. Write your own by subclassing `BaseMiddleware` (or `ToolMiddleware`) or `BaseObserver`. A `Plugin(tools=..., middleware=..., observers=..., prompt=...)` bundles all of these so you can attach them with `plugins=[...]`.
+Other built-ins: `TelemetryMiddleware` (OpenTelemetry spans; see [production](/ag2-guide/ag2_production_guide/#observability)) and `MetricsMiddleware` (extra `metrics`). `approval_required()` is tool middleware: `@tool(middleware=[approval_required()])` asks a human (through `hitl_hook`) before the tool runs. Write your own by subclassing `BaseMiddleware` (or `ToolMiddleware`) or `BaseObserver`. A `Plugin(tools=..., middleware=..., observers=..., prompt=...)` bundles all of these so you can attach them with `plugins=[...]`.
 
 ## Knowledge, memory and compaction
 
