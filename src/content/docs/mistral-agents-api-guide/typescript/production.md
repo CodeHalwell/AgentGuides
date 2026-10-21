@@ -186,7 +186,56 @@ httpClient.addHook("requestError", (err, req) => {
 export const client = new Mistral({ apiKey: process.env["MISTRAL_API_KEY"] ?? "", httpClient });
 ```
 
-`new HTTPClient({ fetcher })` also accepts a custom `fetch`, which is how the examples on these pages were exercised against canned responses without calling the API. The SDK has optional OpenTelemetry support as well; see the package README.
+The SDK has optional OpenTelemetry support as well; see the package README.
+
+### Testing
+
+`new HTTPClient({ fetcher })` takes a custom `fetch`, so tests can script the API's replies, for example a `function.call` followed by the final `message.output`, and assert on what your code sent:
+
+```typescript
+import assert from "node:assert/strict";
+import { Mistral } from "@mistralai/mistralai";
+import { HTTPClient } from "@mistralai/mistralai/lib/http.js";
+
+const now = "2026-10-21T00:00:00Z";
+const turns: object[][] = [
+  [{ object: "entry", type: "function.call", id: "f1", created_at: now,
+     tool_call_id: "tc1", name: "get_order_status", arguments: '{"orderId":"ORD-1234"}' }],
+  [{ object: "entry", type: "message.output", id: "m1", created_at: now,
+     role: "assistant", content: "ORD-1234 has shipped." }],
+];
+const sent: unknown[] = [];
+
+// Every request gets the next scripted turn; request bodies are kept for assertions.
+const httpClient = new HTTPClient({
+  fetcher: async (input, init) => {
+    const req = input instanceof Request ? input : new Request(input, init);
+    sent.push(JSON.parse(await req.text()));
+    return Response.json({
+      object: "conversation.response",
+      conversation_id: "conv_test",
+      outputs: turns.shift(),
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    });
+  },
+});
+const client = new Mistral({ apiKey: "test", httpClient });
+
+const first = await client.beta.conversations.start({ agentId: "ag_test", inputs: "Where is ORD-1234?" });
+assert.equal(first.outputs.at(-1)?.type, "function.call");
+
+const second = await client.beta.conversations.append({
+  conversationId: first.conversationId,
+  conversationAppendRequest: {
+    inputs: [{ type: "function.result", toolCallId: "tc1", result: '{"status":"shipped"}' }],
+  },
+});
+assert.equal(second.outputs.at(-1)?.type, "message.output");
+assert.equal(sent.length, 2);
+console.log("ok");
+```
+
+This is how the examples on these pages were exercised without calling the API. The [Python production guide](/mistral-agents-api-guide/mistral_agents_api_production_guide/#4-testing) does the same with `httpx2.MockTransport`.
 
 ---
 

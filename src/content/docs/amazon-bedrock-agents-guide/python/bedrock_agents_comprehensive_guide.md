@@ -7,7 +7,7 @@ language: "python"
 
 > **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%). Service clients and operation names in the examples were checked against that release.
 
-> **Maintenance mode.** Amazon Bedrock Agents — now called *Agents Classic* — stopped accepting new customers on 30 July 2026. Existing customers can keep using it, and this guide remains accurate for them. For new work AWS recommends [Amazon Bedrock AgentCore](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/); see AWS's [migration guidance](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html).
+> **Maintenance mode.** Amazon Bedrock Agents — now called *Agents Classic* — stopped accepting new customers on 30 July 2026. Existing customers can keep using it, and this guide remains accurate for them. For new work AWS recommends [Amazon Bedrock AgentCore](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/); see AWS's [migration guidance](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html).
 
 **Which boto3 client?** Agent, action-group, knowledge-base and flow *management* uses `bedrock-agent`; *invoking* agents and querying knowledge bases uses `bedrock-agent-runtime`; guardrail management and model listing use `bedrock`; direct model calls and `ApplyGuardrail` use `bedrock-runtime`.
 
@@ -30,7 +30,7 @@ A definitive, end-to-end technical reference covering Amazon Bedrock Agents from
    - [Creating Basic Bedrock Agents via Console](#creating-basic-bedrock-agents-via-console)
    - [Creating Basic Bedrock Agents via CloudFormation and Terraform](#creating-basic-bedrock-agents-via-cloudformation-and-terraform)
 
-**Continue elsewhere in this guide:** [AgentCore services](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/) · [Advanced multi-agent & supervisor patterns](/amazon-bedrock-agents-guide/bedrock_agents_advanced_multi_agent_python/) · [A2A protocol](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/) · [Strands SDK](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) · [Security & IAM](/amazon-bedrock-agents-guide/bedrock_security_iam_examples/) · [Error handling](/amazon-bedrock-agents-guide/bedrock_agents_error_handling_python/) · [Observability](/amazon-bedrock-agents-guide/bedrock_agents_observability_python/) · [Production guide](/amazon-bedrock-agents-guide/bedrock_agents_production_guide/) · [Recipes](/amazon-bedrock-agents-guide/bedrock_agents_recipes/).
+**Continue elsewhere in this guide:** [AgentCore services](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/) · [Advanced multi-agent & supervisor patterns](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/) · [A2A protocol](/amazon-bedrock-agents-guide/python/bedrock_a2a_protocol_guide/) · [Strands SDK](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/) · [Security & IAM](/amazon-bedrock-agents-guide/python/bedrock_security_iam_examples/) · [Error handling](/amazon-bedrock-agents-guide/python/bedrock_agents_error_handling_python/) · [Observability](/amazon-bedrock-agents-guide/python/bedrock_agents_observability_python/) · [Production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/) · [Recipes](/amazon-bedrock-agents-guide/python/bedrock_agents_recipes/).
 
 ---
 
@@ -50,7 +50,7 @@ Amazon Bedrock AgentCore (generally available since October 2025) is AWS's platf
 *   **Code Interpreter and Browser:** Managed sandboxes for code execution and web automation.
 *   **Observability:** OpenTelemetry traces and metrics in CloudWatch.
 
-Details and examples are in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/).
+Details and examples are in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/).
 
 ### Best Practices for Building Bedrock Agents
 
@@ -1576,7 +1576,7 @@ class MultiRegionAgentDeployment:
 
 ## Multi-Agent Systems (MAS)
 
-**Note:** Multi-agent collaboration in Bedrock Agents (a supervisor agent with collaborator agents, configured with `agentCollaboration` on the supervisor and `associate_agent_collaborator`) became generally available in March 2025. It does not use the A2A protocol; A2A interoperability is provided by AgentCore Runtime (see the [A2A guide](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/)). Supervisor patterns are covered in [Advanced multi-agent patterns](/amazon-bedrock-agents-guide/bedrock_agents_advanced_multi_agent_python/).
+**Note:** Multi-agent collaboration in Bedrock Agents (a supervisor agent with collaborator agents, configured with `agentCollaboration` on the supervisor and `associate_agent_collaborator`) became generally available in March 2025. It does not use the A2A protocol; A2A interoperability is provided by AgentCore Runtime (see the [A2A guide](/amazon-bedrock-agents-guide/python/bedrock_a2a_protocol_guide/)). Supervisor patterns are covered in [Advanced multi-agent patterns](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/).
 
 ### Creating Basic Bedrock Agents via Console
 

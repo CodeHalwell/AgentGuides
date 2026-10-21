@@ -12,6 +12,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 **Mistral's hosted Agents API.** Stored, versioned agents; server-side conversation state; built-in web search, code interpreter, image generation and document retrieval; MCP connectors; and handoffs between agents.
 
+<Aside type="note" title="Status">
+  The Agents and Conversations APIs are beta (`client.beta` in the SDK) and registered MCP connectors are a public preview, so request and response shapes may still change.
+</Aside>
+
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
@@ -41,24 +45,16 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="6 · Function calling" href="./mistral_agents_api_comprehensive_guide/#8-function-calling" description="Manual loop and RunContext · 15 min" />
   <LinkCard title="7 · Multi-agent orchestration" href="./mistral_agents_api_orchestration_guide/" description="Pipelines, fan-out, handoffs, delegation · 25 min" />
   <LinkCard title="8 · MCP" href="./mistral_agents_api_mcp_guide/" description="Connectors, client-side MCP, approvals · 20 min" />
-  <LinkCard title="9 · Advanced Python" href="./mistral_agents_api_advanced_python/" description="Chat tool calling, structured output, async · 20 min" />
+  <LinkCard title="9 · Chat completions" href="./mistral_agents_api_advanced_python/" description="Chat tool calling, structured output, async · 20 min" />
   <LinkCard title="10 · Streaming (FastAPI)" href="./mistral_streaming_server_fastapi/" description="SSE server · 15 min" />
-  <LinkCard title="11 · Production" href="./mistral_agents_api_production_guide/" description="Retries, observability, security, CI/CD · 25 min" />
+  <LinkCard title="11 · Production" href="./mistral_agents_api_production_guide/" description="Retries, observability, testing, cost, deployment · 25 min" />
 </CardGrid>
 
-## Reference
+## Also in this guide
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./mistral_agents_api_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Connectors guide" href="./mistral_agents_api_connectors_guide/" description="Built-in tools and MCP connectors." />
-  <LinkCard title="Orchestration guide" href="./mistral_agents_api_orchestration_guide/" description="Multi-agent patterns." />
-  <LinkCard title="MCP guide" href="./mistral_agents_api_mcp_guide/" />
-  <LinkCard title="Recipes" href="./mistral_agents_api_recipes/" />
-  <LinkCard title="Advanced Python" href="./mistral_agents_api_advanced_python/" />
-  <LinkCard title="Diagrams" href="./mistral_agents_api_diagrams/" description="Lifecycle, flow and data-structure diagrams." />
-  <LinkCard title="Production guide" href="./mistral_agents_api_production_guide/" />
-  <LinkCard title="Streaming server (FastAPI)" href="./mistral_streaming_server_fastapi/" />
-  <LinkCard title="May 2025 launch and since" href="./may_2025_launch_updates/" description="Historical: what launched and what changed." />
+  <LinkCard title="Recipes" href="./mistral_agents_api_recipes/" description="Copy-and-adapt examples: web search, chat, routing, RAG, a CLI." />
+  <LinkCard title="Diagrams" href="./mistral_agents_api_diagrams/" description="Versions, conversation flow, function calls, approvals, handoffs, streaming events." />
 </CardGrid>
 
 ## TypeScript
@@ -105,7 +101,8 @@ Ready? **[Start Zero → Hero step 1 →](./mistral_agents_api_comprehensive_gui
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | %%version=mistralai%% | Second pass: corrected OpenTelemetry set-up (opt-in via `configure_telemetry`), the MCP server transport and the Kubernetes token advice; replaced deprecated `agents.list()` and `connectors.call_tool()`; added connector approvals (`tool_confirmations`), testing, cost and Mistral's observability APIs; folded the May 2025 history page into the core reference; trimmed the diagrams page and kept one deployment set-up in the production guide. |
 | 2026-10-21 | %%version=mistralai%% | Updated for SDK v3 and re-verified every example against the installed package. Rewrote the comprehensive guide as a code reference (diagrams moved to the diagrams page); corrected tool shapes (no `config` objects, no `document_retrieval` or `mcp` tool types), `conversation_id` usage, and `append()` (which takes no `agent_id`); rebuilt the connectors, MCP (connectors, `RunContext`, `mcp` 2.x `MCPServer`) and orchestration guides; replaced retired `mistral-medium-2505`. |
-| 2026-05-27 | 2.4.7 | `guardrails`, `handoff_execution` and `prompt_cache_key` documented. |
+| 2026-05-27 | 2.4.7 | `guardrails` and `handoff_execution` documented. |
 | 2026-03-12 | 2.0.1 | SDK v2: imports moved to `mistralai.client`. |
 | 2025-05-27 | — | Agents API launched. |

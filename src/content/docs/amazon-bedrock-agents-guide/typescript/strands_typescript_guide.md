@@ -9,7 +9,7 @@ The TypeScript SDK for Strands Agents (`@strands-agents/sdk`) is the Node.js cou
 
 > **Verified against:** `@strands-agents/sdk` %%version=@strands-agents/sdk%% (checked %%versions-checked%%). Every example on this page compiles under `tsc --strict` against that installed package. Node.js 22 or later is required.
 
-The Python version of this material is the [Strands SDK guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/). For hosting a Strands agent on AgentCore Runtime, see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/).
+The Python version of this material is the [Strands SDK guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/). For hosting a Strands agent on AgentCore Runtime, see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/).
 
 ---
 

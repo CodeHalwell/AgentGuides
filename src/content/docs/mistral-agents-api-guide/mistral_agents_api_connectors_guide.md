@@ -309,7 +309,7 @@ print(text_of(response))
 - **Give each agent few tools.** Several narrow agents connected with [handoffs](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/) are easier to test than one agent with everything.
 - **Inspect `outputs`.** `tool.execution` entries show what ran and with which arguments; log them.
 - **Check document processing.** Uploaded documents are not searchable until processing finishes.
-- **Watch usage.** `response.usage.connector_tokens` and `response.usage.connectors` (calls per tool, for example `{"web_search": 1}`) report tool consumption separately from your own prompt and completion tokens; see [cost](/mistral-agents-api-guide/mistral_agents_api_production_guide/#cost).
+- **Watch usage.** `response.usage.connector_tokens` and `response.usage.connectors` (calls per tool, for example `{"web_search": 1}`) report tool consumption separately from your own prompt and completion tokens; see [cost](/mistral-agents-api-guide/mistral_agents_api_production_guide/#5-cost).
 
 ## Security
 

@@ -20,15 +20,16 @@ The TypeScript package has its own guide: [Claude Agent SDK (TypeScript)](/anthr
 5. [Tools & integration](#tools--integration)
 6. [Permissions](#permissions)
 7. [Hooks](#hooks)
-8. [Multi-agent systems](#multi-agent-systems)
-9. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-10. [Structured output](#structured-output)
-11. [Session management](#session-management)
-12. [Thinking and effort](#thinking-and-effort)
-13. [File checkpointing and rewind](#file-checkpointing-and-rewind)
-14. [Context usage, budgets and limits](#context-usage-budgets-and-limits)
-15. [Error handling](#error-handling)
-16. [API reference](#api-reference)
+8. [User input and approvals](#user-input-and-approvals)
+9. [Multi-agent systems](#multi-agent-systems)
+10. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+11. [Structured output](#structured-output)
+12. [Session management](#session-management)
+13. [Thinking and effort](#thinking-and-effort)
+14. [File checkpointing and rewind](#file-checkpointing-and-rewind)
+15. [Context usage, budgets and limits](#context-usage-budgets-and-limits)
+16. [Error handling](#error-handling)
+17. [API reference](#api-reference)
 
 ---
 
@@ -146,7 +147,7 @@ your code ──► query() / ClaudeSDKClient ──► Claude Code CLI subproce
 | `SystemMessage` | `subtype="init"` at the start; also other system events | `subtype`, `data` (a dict; `data["session_id"]` on init) |
 | `AssistantMessage` | each model turn | `content` (list of blocks), `model`, `usage`, `session_id` |
 | `UserMessage` | tool results fed back to the model | `content`, `uuid`, `tool_use_result` |
-| `ResultMessage` | always last | `result`, `is_error`, `subtype`, `total_cost_usd`, `usage`, `num_turns`, `session_id`, `structured_output`, `terminal_reason` |
+| `ResultMessage` | last message of each turn | `result`, `is_error`, `subtype`, `total_cost_usd`, `usage`, `model_usage`, `num_turns`, `session_id`, `structured_output`, `terminal_reason`, `api_error_status` |
 | `StreamEvent` | only with `include_partial_messages=True` | `event` (raw API stream event) |
 | `RateLimitEvent` | when a rate-limit state changes | `rate_limit_info` |
 
@@ -154,7 +155,7 @@ Task-related messages (`TaskStartedMessage`, `TaskProgressMessage`, `TaskNotific
 
 **Content blocks** inside `AssistantMessage.content` and `UserMessage.content`: `TextBlock(text)`, `ThinkingBlock(thinking, signature)`, `ToolUseBlock(id, name, input)`, `ToolResultBlock(tool_use_id, content, is_error)`, plus `ServerToolUseBlock` / `ServerToolResultBlock`.
 
-**Settings isolation.** Since 0.1.0 the SDK does not inject the Claude Code system prompt — you get a minimal prompt unless you ask for the preset (see [System prompts](#system-prompts)). `setting_sources` controls whether `settings.json`, `CLAUDE.md`, project slash commands and file-based subagents are read: `None` (the default) leaves the CLI's defaults in place, `[]` loads nothing, and a list such as `["project"]` loads only what you name. For reproducible services, pass an explicit list.
+**Settings isolation.** Since 0.1.0 the SDK does not inject the Claude Code system prompt — you get a minimal prompt unless you ask for the preset (see [System prompts](#system-prompts)). `setting_sources` controls whether `settings.json`, `CLAUDE.md`, project slash commands and file-based subagents are read: `None` (the default) loads all sources, as the CLI does; `[]` loads nothing; and a list such as `["project"]` loads only what you name (`"project"` is needed for `CLAUDE.md`). For reproducible services, pass an explicit list or `[]`.
 
 ### Models
 
@@ -180,7 +181,7 @@ import asyncio
 from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
 
 async def main() -> None:
-    options = ClaudeAgentOptions(model="claude-opus-5-5")
+    options = ClaudeAgentOptions(model="%%model=anthropic-flagship%%")
     async for message in query(prompt="What is the capital of France?", options=options):
         if isinstance(message, AssistantMessage):
             for block in message.content:
@@ -194,7 +195,7 @@ asyncio.run(main())
 
 Note that `prompt` and `options` are keyword-only: `query("...")` raises a `TypeError`.
 
-If you only want the final answer, `ResultMessage.result` already holds it:
+If you only want the final answer, `ResultMessage.result` already holds it. Check `is_error` first: when the last API call fails, the result has `subtype="success"`, `is_error=True` and the error text in `result` (see [Error handling](#error-handling)):
 
 ```python
 from claude_agent_sdk import query, ResultMessage
@@ -203,7 +204,7 @@ async def ask(prompt: str) -> str:
     async for message in query(prompt=prompt):
         if isinstance(message, ResultMessage):
             if message.is_error:
-                raise RuntimeError(f"{message.subtype}: {message.errors}")
+                raise RuntimeError(f"{message.subtype}: {message.errors or message.result}")
             return message.result or ""
     return ""
 ```
@@ -267,7 +268,7 @@ from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessa
 
 async def main() -> None:
     options = ClaudeAgentOptions(
-        model="claude-sonnet-5-5",
+        model="%%model=anthropic%%",
         system_prompt="You are a concise assistant.",
     )
     async with ClaudeSDKClient(options=options) as client:
@@ -282,11 +283,11 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`receive_response()` stops after the next `ResultMessage`; `receive_messages()` keeps going until you break. Other client methods: `interrupt()`, `set_model()`, `set_permission_mode()`, `get_mcp_status()`, `toggle_mcp_server()`, `reconnect_mcp_server()`, `get_context_usage()`, `rewind_files()`, `stop_task()` and `get_server_info()`.
+`receive_response()` stops after the next `ResultMessage`; `receive_messages()` keeps going until you break. The CLI process stays up between turns, so check `is_error` on each turn's `ResultMessage`: `ResultError` is only raised when the process exits. Other client methods: `interrupt()`, `set_model()`, `set_permission_mode()`, `get_mcp_status()`, `toggle_mcp_server()`, `reconnect_mcp_server()`, `get_context_usage()`, `rewind_files()`, `stop_task()` and `get_server_info()`.
 
 ### Token usage and cost
 
-`ResultMessage` carries the authoritative totals for the run, so there is no need to hard-code prices:
+`ResultMessage` reports what the run cost, so there is no need to hard-code prices. Use `total_cost_usd` and `model_usage` for accounting: they are cumulative and cover every model call (main loop, subagents, compaction). `usage` covers the main loop only, and in a `ClaudeSDKClient` session only the latest turn.
 
 ```python
 from claude_agent_sdk import query, ResultMessage
@@ -294,16 +295,13 @@ from claude_agent_sdk import query, ResultMessage
 async def run_and_report(prompt: str) -> None:
     async for message in query(prompt=prompt):
         if isinstance(message, ResultMessage):
-            usage = message.usage or {}
-            print("input tokens :", usage.get("input_tokens"))
-            print("output tokens:", usage.get("output_tokens"))
-            print("cache reads  :", usage.get("cache_read_input_tokens"))
-            print("cost (USD)   :", message.total_cost_usd)
+            print("cost (USD):", message.total_cost_usd)
             for model, mu in (message.model_usage or {}).items():
-                print(f"  {model}: {mu}")
+                print(f"  {model}: in={mu.get('inputTokens')} out={mu.get('outputTokens')} "
+                      f"cache_read={mu.get('cacheReadInputTokens')} ${mu.get('costUSD', 0):.4f}")
 ```
 
-`model_usage` breaks the totals down per model, which matters once subagents run on a different model from the main loop.
+In a `ClaudeSDKClient` session each `ResultMessage` carries the running total so far: read the latest one rather than adding them up.
 
 ---
 
@@ -318,7 +316,9 @@ async def run_and_report(prompt: str) -> None:
 | `Bash` | Run shell commands (subject to permissions and sandboxing) |
 | `WebSearch`, `WebFetch` | Search the web and fetch pages |
 | `Agent` | Delegate to a subagent |
-| `TodoWrite`, `NotebookEdit`, `Skill` | Task lists, Jupyter notebooks, skills (enable skills with the `skills=` option rather than listing `"Skill"` in `allowed_tools`, which is deprecated) |
+| `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` | Task tracking (in SDK sessions these replaced `TodoWrite`) |
+| `AskUserQuestion` | Ask the user a multiple-choice question (see [User input and approvals](#user-input-and-approvals)) |
+| `NotebookEdit`, `Skill` | Jupyter notebooks, skills (enable skills with the `skills=` option rather than listing `"Skill"` in `allowed_tools`, which is deprecated) |
 
 Three options shape the tool set:
 
@@ -452,7 +452,7 @@ options = ClaudeAgentOptions(permission_mode="default", can_use_tool=can_use_too
 
 Two traps:
 
-- A tool listed in `allowed_tools`, or any tool under `bypassPermissions`, never reaches the callback. Since 0.2.111 the SDK logs a `CanUseToolShadowedWarning` when this happens.
+- A tool listed in `allowed_tools`, or any tool under `bypassPermissions`, never reaches the callback. Since 0.2.111 the SDK emits a `CanUseToolShadowedWarning` when this happens. `PreToolUse` hooks still run for those tools, because hooks come first in the order above; use a hook when every call must be checked.
 - Since 0.2.140 `can_use_tool` works with `query()` and string prompts, not just `ClaudeSDKClient`.
 
 ### Sandboxing
@@ -522,6 +522,57 @@ All matchers registered for an event fire concurrently, so do not rely on orderi
 
 ---
 
+## User input and approvals
+
+Two things reach your code when the agent needs a person: permission prompts for tools that are not pre-approved, and questions the model asks with the built-in `AskUserQuestion` tool. Both arrive through `can_use_tool`.
+
+For `AskUserQuestion`, the tool input holds up to four `questions`, each with a `question`, a short `header`, two to four `options` (`label`, `description`) and `multiSelect`. Collect the answers, put them in the input under `answers` (question text → chosen label; join several labels with `", "` for multi-select), and allow the call. The model sees the answers as the tool result.
+
+For other tools, `context.suggestions` holds the permission rules the CLI proposes for an "always allow" choice. Returning them as `updated_permissions` applies them, so later matching calls no longer reach the callback.
+
+```python
+import asyncio
+from typing import Any
+from claude_agent_sdk import (
+    ClaudeAgentOptions, PermissionResultAllow, PermissionResultDeny, ToolPermissionContext,
+)
+
+async def ask_human(prompt: str) -> str:
+    return (await asyncio.to_thread(input, prompt)).strip()
+
+async def approvals(tool_name: str, tool_input: dict[str, Any],
+                    context: ToolPermissionContext) -> PermissionResultAllow | PermissionResultDeny:
+    if tool_name == "AskUserQuestion":
+        answers: dict[str, str] = {}
+        for q in tool_input["questions"]:
+            labels = [option["label"] for option in q["options"]]
+            print(q["question"])
+            for number, label in enumerate(labels, 1):
+                print(f"  {number}. {label}")
+            reply = await ask_human("> ")
+            # A number picks an option; anything else is passed on as a free-text answer.
+            if reply.isdigit() and 1 <= int(reply) <= len(labels):
+                reply = labels[int(reply) - 1]
+            answers[q["question"]] = reply
+        return PermissionResultAllow(updated_input={**tool_input, "answers": answers})
+
+    reply = await ask_human(f"Allow {tool_name} {tool_input}? [y]es / [a]lways / [n]o ")
+    if reply == "a":
+        return PermissionResultAllow(updated_permissions=context.suggestions)
+    if reply == "y":
+        return PermissionResultAllow()
+    return PermissionResultDeny(message="The user declined this action.")
+
+options = ClaudeAgentOptions(
+    can_use_tool=approvals,
+    allowed_tools=["Read", "Glob", "Grep"],   # never prompt for these
+)
+```
+
+If you set `tools=`, include `"AskUserQuestion"` in it, or the model cannot ask. In a web app, `can_use_tool` is the place to hand the question to the browser and await the reply (keep a timeout, and deny when it expires). For unattended jobs use `permission_mode="dontAsk"` so nothing waits for a person.
+
+---
+
 ## Multi-agent systems
 
 ### Programmatic subagents
@@ -533,7 +584,7 @@ import asyncio
 from claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition, ResultMessage
 
 options = ClaudeAgentOptions(
-    model="claude-opus-5-5",
+    model="%%model=anthropic-flagship%%",
     allowed_tools=["Read", "Glob", "Grep", "Agent"],
     agents={
         "security-reviewer": AgentDefinition(
@@ -546,7 +597,7 @@ options = ClaudeAgentOptions(
             description="Writes pytest tests for a given module.",
             prompt="You write focused, deterministic pytest tests.",
             tools=["Read", "Write", "Bash"],
-            model="claude-sonnet-5-5",
+            model="%%model=anthropic%%",
             maxTurns=20,
         ),
     },
@@ -575,10 +626,12 @@ When the pipeline is fixed, plain Python is clearer than asking a model to orche
 import asyncio
 from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
 
-async def run(prompt: str, system: str, model: str = "claude-sonnet-5-5") -> str:
+async def run(prompt: str, system: str, model: str = "%%model=anthropic%%") -> str:
     options = ClaudeAgentOptions(model=model, system_prompt=system, allowed_tools=["Read", "Grep"])
     async for message in query(prompt=prompt, options=options):
         if isinstance(message, ResultMessage):
+            if message.is_error:   # otherwise an API error's text would be merged as a review
+                raise RuntimeError(f"{message.subtype}: {message.errors or message.result}")
             return message.result or ""
     return ""
 
@@ -590,7 +643,7 @@ async def review(path: str) -> dict[str, str]:
     summary = await run(
         f"Merge these reviews into one prioritised list:\n\n{security}\n\n{performance}",
         "You write short, prioritised engineering summaries.",
-        model="claude-opus-5-5",
+        model="%%model=anthropic-flagship%%",
     )
     return {"security": security, "performance": performance, "summary": summary}
 ```
@@ -739,14 +792,111 @@ There are also `get_session_info`, `fork_session`, `delete_session`, `list_subag
 
 ### Session stores
 
-For multi-host deployments, `session_store=` mirrors every transcript line to an external store, and `resume` can rebuild a session from it when the local file is missing. `InMemorySessionStore` is provided for tests; implement the `SessionStore` protocol for Redis, S3 or a database. The `*_via_store` / `*_from_store` variants of the helpers above (`list_sessions_from_store`, `fork_session_via_store`, and so on) work against a store instead of the local disk.
+For multi-host deployments, `session_store=` mirrors every transcript line to an external store, and `resume` rebuilds a session from it when the local file is missing (on another host, or in a fresh container). The CLI still writes its local copy first; the store receives a second copy in batches, once per turn by default or after every frame with `session_store_flush="eager"`. `InMemorySessionStore` is provided for tests.
+
+A store is any object with async `append(key, entries)` and `load(key)`; `list_sessions`, `list_session_summaries`, `delete` and `list_subkeys` are optional. `key` is a dict with `project_key` (by default derived from `cwd`), `session_id` and, for subagent transcripts, `subpath`. Entries are JSON-safe dicts; treat them as opaque, and use their `uuid` (when present) to ignore duplicates, because failed batches are retried. A SQLite version (the same queries work on Postgres):
 
 ```python
-from claude_agent_sdk import ClaudeAgentOptions, InMemorySessionStore
+# sqlite_store.py
+import asyncio
+import json
+import sqlite3
+import time
+from claude_agent_sdk import (
+    SessionKey, SessionListSubkeysKey, SessionStoreEntry, SessionStoreListEntry,
+)
 
-store = InMemorySessionStore()
-options = ClaudeAgentOptions(session_store=store, session_store_flush="eager")
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS transcript (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_key TEXT NOT NULL,
+    session_id  TEXT NOT NULL,
+    subpath     TEXT NOT NULL,          -- '' for the main transcript
+    uuid        TEXT,                   -- idempotency key; NULL entries are never deduplicated
+    entry       TEXT NOT NULL,
+    written_ms  INTEGER NOT NULL,
+    UNIQUE (project_key, session_id, subpath, uuid)
+)
+"""
+
+class SQLiteSessionStore:
+    """Mirrors Claude Code transcripts into SQLite."""
+
+    def __init__(self, path: str) -> None:
+        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db.execute(SCHEMA)
+        self._lock = asyncio.Lock()
+
+    async def _run(self, sql: str, params: tuple = (), many: list[tuple] | None = None) -> list[tuple]:
+        def work() -> list[tuple]:
+            with self._db:
+                if many is not None:
+                    self._db.executemany(sql, many)
+                    return []
+                return self._db.execute(sql, params).fetchall()
+        async with self._lock:
+            return await asyncio.to_thread(work)
+
+    async def append(self, key: SessionKey, entries: list[SessionStoreEntry]) -> None:
+        now = int(time.time() * 1000)
+        rows = [(key["project_key"], key["session_id"], key.get("subpath", ""),
+                 e.get("uuid"), json.dumps(e), now) for e in entries]
+        await self._run("INSERT OR IGNORE INTO transcript (project_key, session_id, subpath, uuid,"
+                        " entry, written_ms) VALUES (?, ?, ?, ?, ?, ?)", many=rows)
+
+    async def load(self, key: SessionKey) -> list[SessionStoreEntry] | None:
+        rows = await self._run("SELECT entry FROM transcript WHERE project_key = ? AND session_id = ?"
+                               " AND subpath = ? ORDER BY seq",
+                               (key["project_key"], key["session_id"], key.get("subpath", "")))
+        return [json.loads(entry) for (entry,) in rows] or None
+
+    async def list_sessions(self, project_key: str) -> list[SessionStoreListEntry]:
+        rows = await self._run("SELECT session_id, MAX(written_ms) FROM transcript"
+                               " WHERE project_key = ? AND subpath = '' GROUP BY session_id",
+                               (project_key,))
+        return [{"session_id": sid, "mtime": mtime} for sid, mtime in rows]
+
+    async def delete(self, key: SessionKey) -> None:
+        if "subpath" in key:      # one subagent transcript
+            await self._run("DELETE FROM transcript WHERE project_key = ? AND session_id = ? AND subpath = ?",
+                            (key["project_key"], key["session_id"], key["subpath"]))
+        else:                     # the session and everything under it
+            await self._run("DELETE FROM transcript WHERE project_key = ? AND session_id = ?",
+                            (key["project_key"], key["session_id"]))
+
+    async def list_subkeys(self, key: SessionListSubkeysKey) -> list[str]:
+        rows = await self._run("SELECT DISTINCT subpath FROM transcript WHERE project_key = ?"
+                               " AND session_id = ? AND subpath != ''",
+                               (key["project_key"], key["session_id"]))
+        return [subpath for (subpath,) in rows]
 ```
+
+Use it on every host, and resume by ID wherever the next request lands:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
+from sqlite_store import SQLiteSessionStore
+
+store = SQLiteSessionStore("/data/sessions.db")
+
+def options_for(session_id: str | None) -> ClaudeAgentOptions:
+    return ClaudeAgentOptions(cwd="/work", session_store=store, resume=session_id)
+```
+
+The SDK ships the contract tests it relies on; run them against your adapter:
+
+```python
+# test_sqlite_store.py — run with: pytest -q (requires pytest-asyncio)
+import pytest
+from claude_agent_sdk.testing import run_session_store_conformance
+from sqlite_store import SQLiteSessionStore
+
+@pytest.mark.asyncio
+async def test_sqlite_store_conformance():
+    await run_session_store_conformance(lambda: SQLiteSessionStore(":memory:"))
+```
+
+`load_timeout_ms` (default 60 000) bounds each `load()` / `list_subkeys()` call during a store-backed resume, so a slow store fails the query instead of hanging it. The store-aware variants of the session helpers (`list_sessions_from_store`, `get_session_messages_from_store`, `fork_session_via_store`, `delete_session_via_store` and so on) read from a store instead of the local disk. Retention is up to you: the SDK never deletes from a store unless you call `delete_session_via_store()`.
 
 ---
 
@@ -761,13 +911,13 @@ Two options control reasoning:
 from claude_agent_sdk import ClaudeAgentOptions
 
 options = ClaudeAgentOptions(
-    model="claude-opus-5-5",
+    model="%%model=anthropic-flagship%%",
     thinking={"type": "adaptive", "display": "summarized"},
     effort="high",
 )
 ```
 
-On the Claude 5 family thinking is adaptive: the model decides how much to think, and `effort` sets how hard it tries. Fixed budgets (`{"type": "enabled", "budget_tokens": N}`) are rejected by Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5 and Claude Fable 5.1, and Opus 5.5 does not allow thinking to be disabled either; use a lower `effort` to make it cheaper. `display: "summarized"` returns readable summaries in `ThinkingBlock`s; the default on these models leaves the thinking text empty.
+On the Claude 5 family thinking is adaptive: the model decides how much to think, and `effort` sets how hard it tries. Fixed budgets (`{"type": "enabled", "budget_tokens": N}`) are rejected by Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5 and Claude Fable 5.1. Do not rely on disabling thinking either; to make a run cheaper, lower `effort`. `display: "summarized"` returns readable summaries in `ThinkingBlock`s; the default on these models leaves the thinking text empty.
 
 Claude Opus 5.5 defaults to `medium` effort, so set it explicitly when you want more. `xhigh` is a good setting for long coding and agentic tasks; `low` suits simple subagents.
 
@@ -833,7 +983,7 @@ async def report_context(client: ClaudeSDKClient) -> None:
 | `max_budget_usd` | Stop when the run's cost passes the limit (`"error_max_budget_usd"`) |
 | `task_budget={"total": N}` | Tell the model its token budget so it paces itself (advisory, not enforced) |
 
-`ResultMessage.terminal_reason` (0.2.126+) says why the loop ended: `"completed"`, `"max_turns"`, `"aborted_streaming"`, `"aborted_tools"` and so on.
+`ResultMessage.terminal_reason` (0.2.126+) says why the loop ended: `"completed"`, `"max_turns"`, `"budget_exhausted"`, `"api_error"`, `"aborted_streaming"`, `"aborted_tools"` and so on.
 
 ---
 
@@ -845,37 +995,42 @@ Exceptions all derive from `ClaudeSDKError`:
 |---|---|
 | `CLINotFoundError` | The CLI binary cannot be found (no bundled wheel for your platform and nothing on `PATH`) |
 | `CLIConnectionError` | The SDK cannot talk to the CLI process |
-| `ProcessError` | The CLI exited with an error; has `exit_code` and `stderr` |
-| `ResultError` | Subclass of `ProcessError` raised after a terminal error result (0.2.140+); has `subtype`, `errors`, `terminal_reason`, `api_error_status`, `session_id` |
+| `ProcessError` | The CLI exited with an error without reporting a result (a crash); has `exit_code` and `stderr` |
+| `ResultError` | Subclass of `ProcessError` raised after a terminal error result (0.2.140+); has `subtype`, `errors`, `result`, `terminal_reason`, `api_error_status`, `session_id` |
 | `CLIJSONDecodeError` | A line from the CLI could not be parsed |
 
-```python
-import asyncio
-from claude_agent_sdk import (
-    query, ClaudeAgentOptions, ResultMessage,
-    ClaudeSDKError, CLINotFoundError, ResultError,
-)
+### A failed run arrives twice
 
-async def run_with_retry(prompt: str, attempts: int = 3) -> str:
-    options = ClaudeAgentOptions(max_turns=30, max_budget_usd=2.0)
-    for attempt in range(1, attempts + 1):
-        try:
-            async for message in query(prompt=prompt, options=options):
-                if isinstance(message, ResultMessage):
-                    return message.result or ""
-        except CLINotFoundError:
-            raise  # configuration problem: retrying will not help
-        except ResultError as e:
-            retryable = e.terminal_reason == "api_error" or e.api_error_status in (429, 500, 529)
-            if not retryable or attempt == attempts:
-                raise
-            await asyncio.sleep(2 ** attempt)
-        except ClaudeSDKError:
-            if attempt == attempts:
-                raise
-            await asyncio.sleep(2 ** attempt)
-    return ""
+When a `query()` run fails, the SDK first **yields** the error `ResultMessage` and then, once the CLI has exited, **raises** `ResultError` carrying the same details:
+
+| What failed | `ResultMessage` / `ResultError` fields |
+|---|---|
+| The model API, after the CLI's own retries (overload, 5xx, auth) | `subtype="success"`, `is_error=True`, `result="API Error: …"`, `api_error_status` (e.g. 529, 401), `terminal_reason="api_error"` |
+| `max_turns` reached | `subtype="error_max_turns"`, `terminal_reason="max_turns"` |
+| `max_budget_usd` reached | `subtype="error_max_budget_usd"`, `terminal_reason="budget_exhausted"` |
+| Structured output never validated | `subtype="error_max_structured_output_retries"` |
+
+Two consequences:
+
+- Code that `return`s on the first `ResultMessage` closes the generator before the exception can be raised. If it does not check `is_error`, it returns the error text as if it were the answer.
+- Code that wants the exception (for example, to retry) must keep iterating after the `ResultMessage`.
+
+```python
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage, ResultError
+
+async def run_and_explain(prompt: str, options: ClaudeAgentOptions) -> ResultMessage | None:
+    result = None
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, ResultMessage):
+                result = message          # keep going: ResultError follows an error result
+    except ResultError as e:
+        print("failed:", e.subtype, e.terminal_reason, e.api_error_status, e.errors or e.result)
+        return None
+    return result
 ```
+
+Decide whether to retry from those fields: retry API errors with a transient status (429, 5xx, 529), not limits you set yourself and not 4xx errors such as 401. The [production guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_production_guide/#retry-only-what-is-worth-retrying) has a retry wrapper that does this and is tested against each case.
 
 An `AssistantMessage` can also carry an `error` field (for example `"rate_limit"` or `"authentication_failed"`) when a single model call fails but the loop continues.
 

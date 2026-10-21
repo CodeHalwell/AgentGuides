@@ -3,34 +3,24 @@ title: "smolagents: Practical Recipes & Code Patterns"
 description: "Working smolagents recipes — data analysis, web research, reporting, content, code review, multi-agent pipelines, APIs, custom tools, self-correction and error handling."
 framework: "smolagents"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 2
 ---
 
-> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every recipe constructs and runs against the installed package; network-dependent tools are stubbed where noted.
+> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Recipes that need no external service were executed with a stub model; the browser, web-search and API recipes were checked for imports and signatures only.
 
 All recipes assume:
 
 ```python
 from smolagents import CodeAgent, InferenceClientModel, ToolCallingAgent, tool
 
-model = InferenceClientModel()   # or LiteLLMModel(model_id="%%model=openai-small%%"), OpenAIModel(...), ...
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")   # or LiteLLMModel(model_id="%%model=openai-small%%"), OpenAIModel(...), ...
 ```
 
+Pass a `model_id`. The library's default (`Qwen/Qwen3-Next-80B-A3B-Thinking`) had no live Inference Provider when this page was checked on 2026-10-21; `Qwen/Qwen3.8-27B` was served by several. A model's "Inference Providers" panel on the Hub shows who serves it now.
+
 Two rules catch most first-time errors: `@tool` functions need type hints **and** an `Args:` docstring entry for every parameter; and `Tool` subclasses must mark optional inputs with `"nullable": True`.
-
----
-
-## Table of Contents
-
-1. [Data Analysis & Processing](#data-analysis--processing)
-2. [Web Research & Information Gathering](#web-research--information-gathering)
-3. [Business Intelligence & Reporting](#business-intelligence--reporting)
-4. [Content Generation](#content-generation)
-5. [Code & Software Development](#code--software-development)
-6. [Multi-Agent Workflows](#multi-agent-workflows)
-7. [API Integration Patterns](#api-integration-patterns)
-8. [Custom Tool Creation](#custom-tool-creation)
-9. [Advanced Patterns](#advanced-patterns)
-10. [Error Handling & Recovery](#error-handling--recovery)
 
 ---
 
@@ -142,11 +132,90 @@ news_agent = CodeAgent(tools=[WebSearchTool(), headline_sentiment], model=model,
 print(news_agent.run("Find five recent headlines about Rolls-Royce plc and summarise the sentiment."))
 ```
 
+### Recipe 5: Vision Web-Browsing Agent
+
+smolagents ships a browser agent that drives Chrome through [helium](https://github.com/mherrmann/helium) and shows the model a screenshot after every step. Install the `vision` extra (`helium`, `selenium`) and have Chrome available. The quickest way to try it is the `webagent` command:
+
+```bash
+pip install "smolagents[vision,litellm]==%%version=smolagents%%"
+webagent "Find the opening hours of the Science Museum in London" \
+  --model-type LiteLLMModel --model-id %%model=openai%%
+```
+
+The same parts are importable from `smolagents.vision_web_browser` when you want your own agent:
+
+```python
+import helium
+from selenium import webdriver
+from smolagents import CodeAgent, LiteLLMModel, WebSearchTool
+from smolagents.vision_web_browser import (
+    close_popups, go_back, helium_instructions, save_screenshot, search_item_ctrl_f,
+)
+
+options = webdriver.ChromeOptions()
+options.add_argument("--window-size=1000,1350")
+helium.start_chrome(headless=False, options=options)
+
+browser_agent = CodeAgent(
+    tools=[WebSearchTool(), go_back, close_popups, search_item_ctrl_f],
+    model=LiteLLMModel(model_id="%%model=openai%%"),     # must accept images
+    additional_authorized_imports=["helium"],
+    step_callbacks=[save_screenshot],   # attaches a screenshot to each step, drops ones older than two steps
+    max_steps=20,
+)
+browser_agent.python_executor("from helium import *")
+browser_agent.run("Find the opening hours of the Science Museum in London." + helium_instructions)
+```
+
+The model's code drives a real browser on your machine with the local executor, so the pages it visits can try to steer it. Keep it away from logged-in sessions and privileged tools.
+
+### Recipe 6: Agentic RAG
+
+Make retrieval a tool, so the agent can rephrase the query and search again when the first results are poor. The retriever here is a small keyword scorer so the recipe runs as is; swap in BM25 (`langchain_community.retrievers.BM25Retriever`, as in the official example) or a vector store.
+
+```python
+from smolagents import Tool
+
+
+class RetrieverTool(Tool):
+    name = "retriever"
+    description = (
+        "Search the product documentation. Returns the most relevant passages. "
+        "Use statements rather than questions as queries, and search again with other wording if needed."
+    )
+    inputs = {"query": {"type": "string", "description": "Search query in the affirmative form."}}
+    output_type = "string"
+
+    def __init__(self, passages: list[str], k: int = 3):
+        super().__init__()
+        self.passages = passages
+        self.k = k
+
+    def forward(self, query: str) -> str:
+        terms = set(query.lower().split())
+        ranked = sorted(self.passages, key=lambda p: len(terms & set(p.lower().split())), reverse=True)
+        return "\n\n".join(f"[{i}] {p}" for i, p in enumerate(ranked[: self.k]))
+
+
+docs = [
+    "The export button is in the top-right corner of the report view.",
+    "Reports can be exported as CSV or PDF; PDF export needs the Pro plan.",
+    "Scheduled exports are configured under Settings > Automation.",
+]
+rag_agent = CodeAgent(
+    tools=[RetrieverTool(docs)],
+    model=model,
+    max_steps=4,
+    instructions="Answer only from retrieved passages and cite them by number.",
+)
+print(rag_agent.run("Can I export a report as PDF on the free plan?"))
+```
+
 ---
 
 ## Business Intelligence & Reporting
 
-### Recipe 5: Financial Analysis Agent
+### Recipe 7: Financial Analysis Agent
 
 ```python
 @tool
@@ -171,7 +240,7 @@ fin_agent = CodeAgent(
 print(fin_agent.run("Analyse ACME's revenue growth and net margin trend."))
 ```
 
-### Recipe 6: Sales & CRM Agent
+### Recipe 8: Sales & CRM Agent
 
 A `Tool` subclass with an enumerated input. Note that every input needs a `description`.
 
@@ -211,7 +280,7 @@ print(crm_agent.run("Which customers are at risk of churning, and what deals are
 
 ## Content Generation
 
-### Recipe 7: Documentation Generator Agent
+### Recipe 9: Documentation Generator Agent
 
 Pass the source in with `additional_args` and let the agent inspect it with the standard library:
 
@@ -231,7 +300,7 @@ doc_agent = CodeAgent(
 print(doc_agent.run("Document the functions in `code`.", additional_args={"code": source}))
 ```
 
-### Recipe 8: Marketing Content Agent
+### Recipe 10: Marketing Content Agent
 
 Use a final-answer check to enforce constraints the model tends to ignore:
 
@@ -257,7 +326,7 @@ print(social_agent.run("Write three launch posts for a reusable coffee cup made 
 
 ## Code & Software Development
 
-### Recipe 9: Code Review Agent
+### Recipe 11: Code Review Agent
 
 ```python
 import ast
@@ -299,7 +368,7 @@ reviewer = ToolCallingAgent(tools=[check_syntax, find_risky_calls], model=model)
 print(reviewer.run("Review this code:\n\nimport subprocess\ndef run(cmd):\n    return subprocess.run(cmd, shell=True)\n"))
 ```
 
-### Recipe 10: Test Generation Agent
+### Recipe 12: Test Generation Agent
 
 Let the agent write tests and *run* them in the interpreter before answering:
 
@@ -322,7 +391,7 @@ print(test_writer.run("Write tests for slugify.", additional_args={"src": functi
 
 ## Multi-Agent Workflows
 
-### Recipe 11: Research → Analysis → Reporting Pipeline
+### Recipe 13: Research → Analysis → Reporting Pipeline
 
 A manager with managed agents decides when to call each specialist:
 
@@ -361,7 +430,7 @@ notes = web_agent.run("Collect figures on UK public EV charger numbers, 2023-202
 analysis = analyst_agent.run("Compute year-on-year growth from these notes.", additional_args={"notes": notes})
 ```
 
-### Recipe 12: Parallel Processing with Agent Pool
+### Recipe 14: Parallel Processing with Agent Pool
 
 Agents hold run state, so create one per worker:
 
@@ -383,7 +452,7 @@ with ThreadPoolExecutor(max_workers=3) as pool:
 
 ## API Integration Patterns
 
-### Recipe 13: REST API Agent
+### Recipe 15: REST API Agent
 
 Expose specific, safe operations rather than a generic HTTP tool:
 
@@ -412,7 +481,7 @@ api_agent = ToolCallingAgent(tools=[get_order], model=model)
 
 A tool that can make arbitrary requests (any URL, any method) lets a prompt-injected agent reach internal services; avoid it.
 
-### Recipe 14: Database Query Agent
+### Recipe 16: Database Query Agent
 
 ```python
 import sqlite3
@@ -457,7 +526,7 @@ For real databases, connect with a read-only role as well as checking the statem
 
 ## Custom Tool Creation
 
-### Recipe 15: PDF Processing Tool
+### Recipe 17: PDF Processing Tool
 
 ```python
 from smolagents import Tool
@@ -483,7 +552,7 @@ pdf_agent = CodeAgent(tools=[PDFTextTool()], model=model)
 # pdf_agent.run("Summarise the key obligations in contract.pdf")
 ```
 
-### Recipe 16: Email Automation Tool
+### Recipe 18: Email Automation Tool
 
 Side-effecting tools should require explicit confirmation. Here the tool only drafts; sending is a separate human step.
 
@@ -522,7 +591,7 @@ print(drafts.drafts)
 
 ## Advanced Patterns
 
-### Recipe 17: Self-Correcting Agent
+### Recipe 19: Self-Correcting Agent
 
 Built-in self-correction comes from two features: errors are shown to the model on the next step, and `final_answer_checks` reject answers that fail validation. No subclassing is needed.
 
@@ -547,7 +616,7 @@ print(checked_agent.run("What is the current price of one Bitcoin in EUR?"))
 
 For a second opinion, add a reviewer as a managed agent and instruct the manager to have its answer reviewed before finishing.
 
-### Recipe 18: Few-Shot Learning Agent
+### Recipe 20: Few-Shot Learning Agent
 
 Put examples in `instructions` once instead of overriding `run()`:
 
@@ -564,11 +633,49 @@ print(fx_agent.run("Convert 200 JPY to USD at a rate of 0.0067."))
 
 To change the system prompt more deeply, edit `agent.prompt_templates["system_prompt"]` (a Jinja template) after construction, or pass `prompt_templates=` when creating the agent.
 
+### Recipe 21: Human-in-the-Loop Plan Review
+
+With `planning_interval` set, the agent writes a plan before its first action. A step callback for `PlanningStep` runs before the plan is used, so a person can approve it, edit it in place, or stop the run. This follows the official `plan_customization` example.
+
+```python
+from smolagents import PlanningStep
+
+
+class PlanRejected(Exception):
+    pass
+
+
+def review_plan(step: PlanningStep, agent=None):
+    print(f"\nProposed plan:\n{step.plan}\n")
+    choice = input("[a]pprove, [e]dit or [c]ancel? ").strip().lower()
+    if choice == "e":
+        step.plan = input("New plan (one line): ").strip() or step.plan   # the edited plan is what the model sees
+    elif choice == "c":
+        raise PlanRejected("Plan rejected by the reviewer.")              # propagates out of run()
+
+
+planned_agent = CodeAgent(
+    tools=[],
+    model=model,
+    planning_interval=5,                              # plan at step 1, then revise every 5 steps
+    step_callbacks={PlanningStep: review_plan},
+    max_steps=10,
+)
+
+task = "List the three largest moons of Jupiter with their diameters."
+try:
+    print(planned_agent.run(task))
+except PlanRejected as exc:
+    print(exc)
+```
+
+Raising from the callback stops the run at once. `agent.interrupt()`, which the official example uses for "cancel", takes effect only at the start of the next loop iteration, so the step after the plan still runs. Either way, `planned_agent.run(task, reset=False)` resumes with the memory kept so far.
+
 ---
 
 ## Error Handling & Recovery
 
-### Recipe 19: Robust Error Handler
+### Recipe 22: Robust Error Handler
 
 ```python
 import time
@@ -596,7 +703,7 @@ robust_agent = CodeAgent(tools=[], model=model, max_steps=6)
 print(run_robustly(robust_agent, "Compute the 30th triangular number."))
 ```
 
-### Recipe 20: Logging & Debugging Agent
+### Recipe 23: Logging & Debugging Agent
 
 Use step callbacks and memory instead of subclassing (agents already use `self.logger` internally, so do not overwrite it):
 

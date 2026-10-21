@@ -242,7 +242,7 @@ Always:
         return {"agent_response": text, "traces": traces}
 ```
 
-Knowledge bases (and their vector store and S3 data source) are usually created once, separately from the agent; see the [comprehensive guide](/amazon-bedrock-agents-guide/bedrock_agents_comprehensive_guide/#knowledge-bases-contextual-information-integration) for `create_knowledge_base` and `create_data_source`.
+Knowledge bases (and their vector store and S3 data source) are usually created once, separately from the agent; see the [comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/#knowledge-bases-contextual-information-integration) for `create_knowledge_base` and `create_data_source`.
 
 **Action-group Lambda (OpenAPI schema).** Bedrock sends `apiPath`, `httpMethod`, `parameters` and `requestBody`, and expects a specific response envelope:
 
@@ -419,7 +419,7 @@ writer = Agent(
 print(writer("Write a one-page briefing on heat-pump adoption in the UK."))
 ```
 
-Agents on AgentCore Runtime are authenticated (SigV4 or OAuth); configure the A2A client with the matching credentials. The [A2A guide](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/) covers authentication, agent cards and the protocol in more detail.
+Agents on AgentCore Runtime are authenticated (SigV4 or OAuth); configure the A2A client with the matching credentials. The [A2A guide](/amazon-bedrock-agents-guide/python/bedrock_a2a_protocol_guide/) covers authentication, agent cards and the protocol in more detail.
 
 ---
 
@@ -570,7 +570,7 @@ class DataAnalysisAgent:
         return read_completion(response)
 ```
 
-For new work, the same capability on AgentCore is the [Code Interpreter](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#code-interpretation) service, which any framework can call.
+For new work, the same capability on AgentCore is the [Code Interpreter](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#code-interpretation) service, which any framework can call.
 
 ---
 
@@ -625,4 +625,4 @@ class DocumentProcessingAgent:
 
 ---
 
-Each recipe is a starting point: scope the IAM roles to the specific models, Lambdas and knowledge bases used, and add the error handling from the [error handling guide](/amazon-bedrock-agents-guide/bedrock_agents_error_handling_python/).
+Each recipe is a starting point: scope the IAM roles to the specific models, Lambdas and knowledge bases used, and add the error handling from the [error handling guide](/amazon-bedrock-agents-guide/python/bedrock_agents_error_handling_python/).

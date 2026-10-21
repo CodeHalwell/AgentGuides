@@ -3,6 +3,9 @@ title: "Mistral Streaming Server (FastAPI)"
 description: "A FastAPI server that streams Mistral agent conversations to browsers as Server-Sent Events."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "Streaming server (FastAPI)"
+  order: 6
 ---
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).
@@ -73,77 +76,10 @@ For plain chat completions without an agent, stream `client.chat.stream_async(mo
 
 ## Deployment
 
-### Dockerfile
+Package and deploy it like any small web service; the [production guide](/mistral-agents-api-guide/mistral_agents_api_production_guide/#10-deployment-and-cicd) has a Dockerfile, Kubernetes manifest and CI workflow; change the `CMD` module to `app:app` and they fit this app, including its `/healthz` probe. Two things matter for streaming specifically:
 
-```dockerfile
-FROM python:3.12-slim
-RUN useradd --create-home app
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY --chown=app:app . .
-USER app
-EXPOSE 8080
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
-```
-
-### Kubernetes (deployment.yaml)
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mistral-stream
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: mistral-stream
-  template:
-    metadata:
-      labels:
-        app: mistral-stream
-    spec:
-      containers:
-        - name: app
-          image: ghcr.io/yourorg/mistral-stream:1.0.0
-          env:
-            - name: MISTRAL_API_KEY
-              valueFrom: { secretKeyRef: { name: mistral-secrets, key: apiKey } }
-            - name: AGENT_ID
-              valueFrom: { configMapKeyRef: { name: mistral-config, key: agentId } }
-          ports: [{ containerPort: 8080 }]
-          readinessProbe:
-            httpGet: { path: /healthz, port: 8080 }
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mistral-stream
-spec:
-  selector: { app: mistral-stream }
-  ports: [{ port: 80, targetPort: 8080 }]
-```
-
-Disable response buffering on any proxy in front of the service (for NGINX ingress, `nginx.ingress.kubernetes.io/proxy-buffering: "off"`), or events arrive in one burst at the end.
-
-### GitHub Actions (.github/workflows/deploy.yml)
-
-```yaml
-name: deploy
-on:
-  push:
-    branches: [main]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: docker/build-push-action@v5
-        with: { push: true, tags: "ghcr.io/${{ github.repository }}:${{ github.sha }}" }
-```
+- Disable response buffering on any proxy in front of the service (for NGINX ingress, `nginx.ingress.kubernetes.io/proxy-buffering: "off"`), or events arrive in one burst at the end.
+- Set the proxy's read timeout above your longest agent run; tool-heavy runs can be quiet for many seconds between events.
 
 ## Security
 

@@ -3,31 +3,18 @@ title: "smolagents: Comprehensive Technical Guide"
 description: "From first agent to multi-agent systems with Hugging Face smolagents — models, tools, CodeAgent, ToolCallingAgent, sandboxes, memory and managed agents."
 framework: "smolagents"
 language: "python"
+sidebar:
+  label: "Comprehensive guide"
+  order: 1
 ---
 
-> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every example on this page was run against the installed package with a stub model.
+> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Examples that need no external service were executed with a stub model; the Hub, MCP, Docker, Gradio and image examples were checked for imports and signatures.
 
 smolagents is Hugging Face's small agent library. Its distinctive idea is the **CodeAgent**: instead of emitting one JSON tool call per step, the model writes a short Python snippet that can call several tools, loop, branch and keep intermediate results in variables. A conventional **ToolCallingAgent** is included for cases where JSON tool calls suit better. The library is deliberately compact; the agent logic lives in a single `agents.py` you can read in an afternoon.
 
-## Table of Contents
+The sections below follow the learning path on the [guide overview](/smolagents-guide/); production continues in the [production guide](/smolagents-guide/smolagents_production_guide/). **Also on this page:** [Sandboxes, Hub sharing and multimodal input](#sandboxes-hub-sharing-and-multimodal-input) · [Version notes](#version-notes).
 
-Steps 1–10 are the Zero → Hero path from the [guide overview](/smolagents-guide/), in the order they appear below.
-
-1. [Introduction & Philosophy](#introduction--philosophy)
-2. [Installation & Setup](#installation--setup)
-3. [Core Concepts & Architecture](#core-concepts--architecture)
-4. [Model Configuration & Selection](#model-configuration--selection)
-5. [Simple Agents Fundamentals](#simple-agents-fundamentals)
-6. [Tools: Building Blocks of Agents](#tools-building-blocks-of-agents)
-7. [CodeAgent: The Code-Based Paradigm](#codeagent-the-code-based-paradigm)
-8. [ToolCallingAgent: Traditional JSON-Based Workflows](#toolcallingagent-traditional-json-based-workflows)
-9. [Multi-Agent Systems & Orchestration](#multi-agent-systems--orchestration)
-10. [Structured Outputs & Schema](#structured-outputs--schema)
-11. Production — continue in the [production guide](/smolagents-guide/smolagents_production_guide/)
-
-**Also on this page:** [Sandboxes, Hub sharing and multimodal input](#sandboxes-hub-sharing-and-multimodal-input) · [Version notes](#version-notes).
-
-**Elsewhere in this guide:** [Recipes](/smolagents-guide/smolagents_recipes/) for task-shaped patterns and error recovery · [Diagrams](/smolagents-guide/smolagents_diagrams/) for architecture visualisations.
+**Elsewhere in this guide:** [Recipes](/smolagents-guide/smolagents_recipes/) for task-shaped patterns and error recovery · [Diagrams](/smolagents-guide/smolagents_diagrams/) for the agent loop and what runs where.
 
 ---
 
@@ -83,7 +70,19 @@ pip install "smolagents[gradio]"                    # + GradioUI
 pip install "smolagents[toolkit,litellm]==%%version=smolagents%%"
 ```
 
-Other extras: `audio`, `vision`, `vllm`, `mlx-lm`, `bedrock`, `all`.
+Other extras: `audio`, `vision` (helium and selenium for the browser agent), `torch`, `vllm`, `mlx-lm`, `bedrock`, `all`.
+
+### Command-line agents
+
+The package installs two commands. `smolagent` runs a `CodeAgent` (or, with `--action-type tool_calling`, a `ToolCallingAgent`) on one prompt; run it with no prompt for an interactive set-up.
+
+```bash
+smolagent "Plan a three-day walking trip in the Lake District" \
+  --model-type InferenceClientModel --model-id Qwen/Qwen3.8-27B \
+  --tools web_search visit_webpage --imports pandas
+```
+
+Options: `--model-type` (`InferenceClientModel`, `OpenAIModel`, `LiteLLMModel`, `TransformersModel`), `--model-id`, `--provider`, `--api-base`, `--api-key`, `--tools` (built-in tool names or Space IDs such as `user/space`) and `--imports`. With `InferenceClientModel` the token comes from `--api-key`, then `HF_API_KEY`, then the usual `HF_TOKEN` or `hf auth login`. The CLI's own default `--model-id` is the library default, so pass one. `webagent` starts the [vision browser agent](/smolagents-guide/smolagents_recipes/#recipe-5-vision-web-browsing-agent).
 
 ### Verifying Installation
 
@@ -190,11 +189,11 @@ Uses `huggingface_hub.InferenceClient`, so it can reach Hugging Face Inference P
 import os
 from smolagents import InferenceClientModel
 
-model = InferenceClientModel()   # default model_id: Qwen/Qwen3-Next-80B-A3B-Thinking
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")   # provider chosen automatically
 
 model = InferenceClientModel(
-    model_id="Qwen/Qwen2.5-Coder-32B-Instruct",
-    provider="together",           # route through a specific inference provider
+    model_id="Qwen/Qwen3.8-27B",
+    provider="cerebras",           # route through a specific inference provider
     token=os.environ.get("HF_TOKEN"),
     timeout=120,
     temperature=0.2,               # passed through to the provider
@@ -203,6 +202,8 @@ model = InferenceClientModel(
 # A dedicated Inference Endpoint or any TGI/OpenAI-compatible URL
 endpoint_model = InferenceClientModel(base_url="https://my-endpoint.endpoints.huggingface.cloud")
 ```
+
+Always pass a `model_id`. The default, `Qwen/Qwen3-Next-80B-A3B-Thinking`, had no live provider when this page was checked on 2026-10-21, so `InferenceClientModel()` with no arguments is likely to fail. A model's "Inference Providers" panel on the Hub, or `https://router.huggingface.co/v1/models`, shows which providers serve it now and whether they support tool calling; providers come and go, so check before you pin one.
 
 `HfApiModel`, the old name for this class, no longer exists: it was renamed to `InferenceClientModel` in 1.14.0 and the deprecated alias was removed in 1.19.0. Agents saved with the old class name are mapped to `InferenceClientModel` automatically when loaded with `from_folder` or `from_hub` (since 1.24.0).
 
@@ -215,12 +216,12 @@ from smolagents import LiteLLMModel
 openai_model = LiteLLMModel(model_id="%%model=openai-small%%")
 anthropic_model = LiteLLMModel(model_id="anthropic/%%model=anthropic%%", temperature=0.2)
 gemini_model = LiteLLMModel(model_id="gemini/%%model=gemini%%")
-ollama_model = LiteLLMModel(model_id="ollama_chat/qwen2.5-coder:14b", api_base="http://localhost:11434", num_ctx=8192)
+ollama_model = LiteLLMModel(model_id="ollama_chat/qwen3:14b", api_base="http://localhost:11434", num_ctx=8192)
 azure_model = LiteLLMModel(
     model_id="azure/my-deployment",
     api_base="https://my-resource.openai.azure.com/",
     api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-    api_version="2024-10-21",
+    api_version=os.environ["AZURE_OPENAI_API_VERSION"],   # a current GA version from the Azure docs
 )
 ```
 
@@ -234,7 +235,7 @@ Model names change faster than this guide; use whatever your provider currently 
 from smolagents import OpenAIModel, AzureOpenAIModel, AmazonBedrockModel
 
 model = OpenAIModel(model_id="%%model=openai-small%%")
-local = OpenAIModel(model_id="Qwen/Qwen2.5-Coder-14B-Instruct", api_base="http://localhost:8000/v1", api_key="not-needed")
+local = OpenAIModel(model_id="Qwen/Qwen3-14B", api_base="http://localhost:8000/v1", api_key="not-needed")
 ```
 
 `OpenAIServerModel` and `AzureOpenAIServerModel` remain as older aliases.
@@ -243,13 +244,14 @@ local = OpenAIModel(model_id="Qwen/Qwen2.5-Coder-14B-Instruct", api_base="http:/
 
 ```python
 from smolagents import TransformersModel
+from transformers import BitsAndBytesConfig
 
 model = TransformersModel(
-    model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+    model_id="Qwen/Qwen3-8B",
     device_map="auto",
     torch_dtype="bfloat16",
     max_new_tokens=2048,
-    model_kwargs={"load_in_4bit": True},   # forwarded to from_pretrained (needs bitsandbytes)
+    model_kwargs={"quantization_config": BitsAndBytesConfig(load_in_4bit=True)},   # forwarded to from_pretrained (needs bitsandbytes)
 )
 ```
 
@@ -298,7 +300,7 @@ In practice `LiteLLMModel(model_id="ollama_chat/...")` or `OpenAIModel(api_base=
 
 ### Model Selection Decision Tree
 
-- **Exploring, free tier**: `InferenceClientModel()` with an `HF_TOKEN`.
+- **Exploring, free tier**: `InferenceClientModel(model_id=...)` with an `HF_TOKEN` (Hugging Face accounts include a small monthly inference credit).
 - **Hosted frontier models**: `LiteLLMModel` or `OpenAIModel`.
 - **Your own GPU**: `VLLMModel` (throughput) or `TransformersModel` (simplicity).
 - **Offline laptop**: `LiteLLMModel(model_id="ollama_chat/...")` or `MLXModel`.
@@ -310,12 +312,13 @@ In practice `LiteLLMModel(model_id="ollama_chat/...")` or `OpenAIModel(api_base=
 
 ### Creating Your First CodeAgent
 
-`tools` and `model` are both required (pass `tools=[]` for none).
+`tools` and `model` are both required (pass `tools=[]` for none). The examples from here on reuse this `model`.
 
 ```python
 from smolagents import CodeAgent, InferenceClientModel
 
-agent = CodeAgent(tools=[], model=InferenceClientModel())
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")
+agent = CodeAgent(tools=[], model=model)
 result = agent.run("What is the 20th Fibonacci number?")
 print(result)   # 6765
 ```
@@ -323,11 +326,11 @@ print(result)   # 6765
 ### Adding Tools to Agents
 
 ```python
-from smolagents import CodeAgent, InferenceClientModel, VisitWebpageTool, WebSearchTool
+from smolagents import CodeAgent, VisitWebpageTool, WebSearchTool
 
 agent = CodeAgent(
     tools=[WebSearchTool(), VisitWebpageTool()],     # needs smolagents[toolkit]
-    model=InferenceClientModel(),
+    model=model,
 )
 print(agent.run("Find the population of Tokyo and calculate 2% of it."))
 ```
@@ -337,11 +340,11 @@ print(agent.run("Find the population of Tokyo and calculate 2% of it."))
 ### Agent Initialisation Parameters
 
 ```python
-from smolagents import CodeAgent, InferenceClientModel
+from smolagents import CodeAgent
 
 agent = CodeAgent(
     tools=[],                          # required
-    model=InferenceClientModel(),      # required
+    model=model,                       # required
     instructions="Answer in British English. Cite sources.",   # appended to the system prompt
     max_steps=10,                      # default 20
     planning_interval=3,               # write/update a plan every 3 steps
@@ -350,7 +353,7 @@ agent = CodeAgent(
     executor_kwargs={"timeout_seconds": 60},   # passed to the executor
     max_print_outputs_length=10_000,   # truncate long print() output
     stream_outputs=False,              # stream model tokens while generating
-    verbosity_level=1,                 # LogLevel: 0 off, 1 info, 2 debug
+    verbosity_level=1,                 # LogLevel: -1 off, 0 errors only, 1 info (default), 2 debug
     name="research_assistant",         # needed only when used as a managed agent
     description="Finds information on the web.",
     final_answer_checks=[],            # validation functions, see below
@@ -388,7 +391,7 @@ Passing data without pasting it into the prompt:
 import pandas as pd
 
 df = pd.DataFrame({"month": ["Jan", "Feb"], "sales": [100, 150]})
-agent = CodeAgent(tools=[], model=InferenceClientModel(), additional_authorized_imports=["pandas"])
+agent = CodeAgent(tools=[], model=model, additional_authorized_imports=["pandas"])
 agent.run("What is the month-on-month growth in `sales_df`?", additional_args={"sales_df": df})
 ```
 
@@ -410,12 +413,12 @@ agent.replay()                        # pretty-print the last run
 
 ### Streaming Outputs for Real-Time Visibility
 
-`run(..., stream=True)` yields steps and events as they happen. With `stream_outputs=True` on the agent you also receive `ChatMessageStreamDelta` token chunks.
+`run(..., stream=True)` yields steps and events as they happen: `PlanningStep`, `ActionStep` and `FinalAnswerStep`, plus `ToolCall` and `ActionOutput` events within a step (a `ToolCallingAgent` also yields `ToolOutput`). With `stream_outputs=True` on the agent you also receive `ChatMessageStreamDelta` token chunks. Events you do not handle can be ignored, as below.
 
 ```python
 from smolagents import ActionStep, ChatMessageStreamDelta, FinalAnswerStep, PlanningStep
 
-agent = CodeAgent(tools=[], model=InferenceClientModel(), stream_outputs=True)
+agent = CodeAgent(tools=[], model=model, stream_outputs=True)
 
 for event in agent.run("Compute the sum of the first 100 primes.", stream=True):
     if isinstance(event, ChatMessageStreamDelta):
@@ -433,7 +436,19 @@ for event in agent.run("Compute the sum of the first 100 primes.", stream=True):
 Inside a run, errors (bad code, tool exceptions, parsing failures) are recorded in the step's `error` and shown to the model, which usually corrects itself on the next step. They surface to you in two ways:
 
 - `result.state == "max_steps_error"` when the agent ran out of steps (the output is then a best-effort answer).
-- Exceptions from the model call or your own callbacks propagate. The hierarchy is `AgentError` → `AgentExecutionError`, `AgentGenerationError`, `AgentParsingError`, `AgentMaxStepsError`, `AgentToolCallError`, `AgentToolExecutionError`.
+- Exceptions from the model call or your own callbacks propagate.
+
+The hierarchy:
+
+```text
+AgentError
+├── AgentParsingError
+├── AgentExecutionError
+│   ├── AgentToolCallError
+│   └── AgentToolExecutionError
+├── AgentMaxStepsError
+└── AgentGenerationError        (raised from run(); the others are recorded and shown to the model)
+```
 
 ```python
 import time
@@ -469,7 +484,7 @@ Allowed types for inputs and outputs: `string`, `boolean`, `integer`, `number`, 
 The decorator builds the schema from type hints and a Google-style docstring. **Every argument must be documented in an `Args:` section**, or the decorator raises an error.
 
 ```python
-from smolagents import CodeAgent, InferenceClientModel, tool
+from smolagents import CodeAgent, tool
 
 
 @tool
@@ -483,7 +498,7 @@ def get_hotel_price(city: str, nights: int = 1) -> float:
     return {"paris": 140.0, "london": 165.0}.get(city.lower(), 120.0) * nights
 
 
-agent = CodeAgent(tools=[get_hotel_price], model=InferenceClientModel())
+agent = CodeAgent(tools=[get_hotel_price], model=model)
 print(agent.run("Is three nights cheaper in Paris or London?"))
 ```
 
@@ -536,7 +551,7 @@ class SQLQueryTool(Tool):
         return [dict(r) for r in rows]
 
 
-agent = CodeAgent(tools=[SQLQueryTool()], model=InferenceClientModel())
+agent = CodeAgent(tools=[SQLQueryTool()], model=model)
 ```
 
 ### Default Toolbox: Built-in Tools
@@ -546,7 +561,7 @@ agent = CodeAgent(tools=[SQLQueryTool()], model=InferenceClientModel())
 | `WebSearchTool(max_results=10, engine="duckduckgo")` | `web_search` | Engines: `duckduckgo`, `bing`, `exa` (Exa added in 1.26.0) |
 | `DuckDuckGoSearchTool` | `web_search` | Needs `ddgs` (in `[toolkit]`) |
 | `GoogleSearchTool(provider="serpapi")` | `web_search` | SerpAPI or Serper key |
-| `ApiWebSearchTool(endpoint=..., api_key=...)` | `web_search` | Any JSON search API you configure |
+| `ApiWebSearchTool(endpoint=..., api_key=...)` | `web_search` | Brave Search API by default; any JSON search API via `endpoint` |
 | `VisitWebpageTool` | `visit_webpage` | Returns page as Markdown |
 | `WikipediaSearchTool` | `wikipedia_search` | Needs `wikipedia-api` |
 | `PythonInterpreterTool` | `python_interpreter` | For `ToolCallingAgent` |
@@ -583,16 +598,17 @@ MCP servers (`pip install "smolagents[mcp]"`):
 
 ```python
 from mcp import StdioServerParameters
-from smolagents import CodeAgent, InferenceClientModel, MCPClient
+from smolagents import CodeAgent, MCPClient
 
 server = StdioServerParameters(command="uvx", args=["mcp-server-fetch"])
 
-with MCPClient(server) as tools:          # also accepts {"url": ".../mcp", "transport": "streamable-http"}
-    agent = CodeAgent(tools=tools, model=InferenceClientModel())
+# also accepts {"url": ".../mcp", "transport": "streamable-http"}
+with MCPClient(server, structured_output=True) as tools:
+    agent = CodeAgent(tools=tools, model=model)
     agent.run("Fetch https://huggingface.co/blog and list the three newest post titles.")
 ```
 
-`MCPClient(..., structured_output=True)` exposes MCP tools' output schemas to the agent.
+Pass `structured_output=` explicitly: `True` exposes MCP tools' output schemas to the agent, and leaving it unset triggers a `FutureWarning` about a future change of default. `ToolCollection.from_mcp(server, trust_remote_code=True, structured_output=True)` is the older context manager for the same job; it yields a collection whose `.tools` you pass to the agent.
 
 > **Compatibility note (checked %%versions-checked%%):** the `mcpadapt` 0.1.20 dependency imports `streamablehttp_client`, which the `mcp` 2.x SDK renamed. If `MCPClient` fails with `ImportError: cannot import name 'streamablehttp_client'`, install `"mcp<2"` alongside `smolagents[mcp]` until `mcpadapt` catches up.
 
@@ -633,8 +649,8 @@ The default `LocalPythonExecutor` is **not a sandbox**. It interprets the code's
 ```python
 agent = CodeAgent(
     tools=[],
-    model=InferenceClientModel(),
-    additional_authorized_imports=["numpy", "pandas", "requests"],   # "*" allows everything: avoid
+    model=model,
+    additional_authorized_imports=["numpy", "pandas"],   # "*" allows everything: avoid
     executor_kwargs={"timeout_seconds": 30},                        # per-execution time limit (local executor)
     max_print_outputs_length=5_000,
 )
@@ -651,7 +667,7 @@ def must_be_number(final_answer, memory, agent=None) -> bool:
     float(final_answer)       # raises ValueError for non-numbers
     return True
 
-agent = CodeAgent(tools=[], model=InferenceClientModel(), final_answer_checks=[must_be_number])
+agent = CodeAgent(tools=[], model=model, final_answer_checks=[must_be_number])
 ```
 
 **Step callbacks.** Called after each step with `(memory_step, agent=...)`. Pass a list (all step types) or a dict keyed by step class.
@@ -673,14 +689,16 @@ def trim_old_images(step: ActionStep, agent=None):
 
 agent = CodeAgent(
     tools=[],
-    model=InferenceClientModel(),
+    model=model,
     step_callbacks={ActionStep: [log_action, trim_old_images], PlanningStep: lambda s, agent=None: print(s.plan)},
 )
 ```
 
-**Custom prompts.** `agent.prompt_templates["system_prompt"]` holds the Jinja template; override it, or simply use `instructions=` for additions.
+**Custom prompts.** `agent.prompt_templates` is a `PromptTemplates` dict (`system_prompt`, `planning`, `managed_agent`, `final_answer`); `prompt_templates["system_prompt"]` is a Jinja template. Override it, pass `prompt_templates=` at construction, or simply use `instructions=` for additions.
 
-**Interrupting.** `agent.interrupt()` from another thread stops the run after the current step.
+**Interrupting.** `agent.interrupt()` (from a callback or another thread) stops the run before the next step by raising `AgentError("Agent interrupted.")` from `run()`.
+
+**Inspecting structure.** `agent.visualize()` prints a tree of the agent, its tools and its managed agents; `agent.replay()` re-prints the last run.
 
 ### When CodeAgent saves steps
 
@@ -733,7 +751,7 @@ print(agent.run("How much is 250 USD in EUR?"))
 
 ### ToolCallingAgent with Specialized Models
 
-Any model that supports function calling works. For open models via Inference Providers, choose one whose provider supports tools, for example `InferenceClientModel(model_id="Qwen/Qwen2.5-72B-Instruct", provider="together")`. If a model returns tool calls as text rather than structured calls, smolagents attempts to parse them, but a model with native tool calling is far more reliable.
+Any model that supports function calling works. For open models via Inference Providers, choose a provider that lists tool support for the model, for example `InferenceClientModel(model_id="Qwen/Qwen3.8-27B", provider="deepinfra")` (live, with tool support, on 2026-10-21), or `provider="auto"` to let the router choose. If a model returns tool calls as text rather than structured calls, smolagents attempts to parse them, but a model with native tool calling is far more reliable.
 
 ---
 
@@ -746,7 +764,7 @@ Any agent with a `name` and `description` can be given to another agent through 
 ```python
 from smolagents import CodeAgent, InferenceClientModel, ToolCallingAgent, VisitWebpageTool, WebSearchTool
 
-model = InferenceClientModel()
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")
 
 web_agent = ToolCallingAgent(
     tools=[WebSearchTool(), VisitWebpageTool()],
@@ -887,7 +905,7 @@ finally:
     agent.cleanup()      # stops the remote kernel/container
 ```
 
-Remote executors cannot be combined with `managed_agents` (the agent raises an error); run multi-agent systems with the local executor inside a sandboxed container instead. The remote executors run the generated code remotely while tools execute where they are defined; tool objects are sent to the sandbox, so tools must be self-contained (import what they need inside `forward`). Since 1.25.0, pickle-based serialisation between agent and sandbox is off by default. The experimental `"wasm"` executor was removed in 1.26.0.
+Remote executors cannot be combined with `managed_agents` (the agent raises an error); run multi-agent systems with the local executor inside a sandboxed container instead. Tools are rebuilt from their source inside the sandbox and run there, so they must be self-contained: imports inside `forward`, and any credentials they need available in the sandbox. The [diagram](/smolagents-guide/smolagents_diagrams/#where-code-and-tools-run) shows what runs where. Since 1.25.0, pickle-based serialisation between agent and sandbox is off by default. The experimental `"wasm"` executor was removed in 1.26.0.
 
 ### Hub sharing
 
@@ -913,7 +931,7 @@ vision_agent = CodeAgent(tools=[], model=LiteLLMModel(model_id="%%model=openai-s
 vision_agent.run("What does this chart show?", images=[Image.open("chart.png")])
 ```
 
-Tools can return images (`output_type = "image"`); they are attached to the observation so the model can see them on the next step. For audio, `SpeechToTextTool` transcribes files.
+Tools can return images (`output_type = "image"`) or audio (`"audio"`). Results are wrapped in `AgentImage` (a PIL image subclass) or `AgentAudio`; `.to_raw()` returns the PIL image or audio tensor and `.to_string()` a path to a saved file. In a `ToolCallingAgent` they are stored in `agent.state` (as `image.png` or `audio.mp3`) rather than pasted into the prompt. For audio input, `SpeechToTextTool` transcribes files.
 
 ### A UI in one line
 
@@ -944,6 +962,6 @@ Historical changes that affect code you may find elsewhere:
 
 | Date | Version | Changes |
 |------|---------|---------|
-| %%versions-checked%% | %%version=smolagents%% | Rewritten against the installed package. Removed fabricated APIs (`push_to_hub()` function, `load_agent`, `run(image=/audio=/video=)`, `VideoTranscriptionTool`, `TranscriptionTool`, `memory_size`, `timeout`, `AgentRunResult.success/errors/execution_time`, `Model.generate_text`), the `"wasm"` executor, invented efficiency figures and placeholder text. Corrected `HfApiModel` history (removed in 1.19.0, not 1.24.0) and the default-model change (1.23.0). Added `RunResult`, streaming events, final-answer checks, step callbacks, MCP, executors and version notes. |
-| 2026-05-29 | 1.26.0 | Previous revision. |
+| 2026-10-21 | 1.26.0 | Corrected where tools run under remote executors, the `LogLevel` values and the quantisation example; current, served model IDs; added the CLI, `from_mcp`, `visualize()`, `AgentImage`/`AgentAudio` and `PromptTemplates`. |
+| 2026-10-21 | 1.26.0 | Rewritten against the installed package. Removed fabricated APIs (`push_to_hub()` function, `load_agent`, `run(image=/audio=/video=)`, `VideoTranscriptionTool`, `TranscriptionTool`, `memory_size`, `timeout`, `AgentRunResult.success/errors/execution_time`, `Model.generate_text`), the `"wasm"` executor, invented efficiency figures and placeholder text. Corrected `HfApiModel` history (removed in 1.19.0, not 1.24.0) and the default-model change (1.23.0). Added `RunResult`, streaming events, final-answer checks, step callbacks, MCP, executors and version notes. |
 | November 2025 | 1.23.0 | First documented version. |

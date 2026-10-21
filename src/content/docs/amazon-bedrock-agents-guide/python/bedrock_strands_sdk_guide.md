@@ -555,7 +555,7 @@ print(coordinator.tool.workflow(action="status", workflow_id="document_processin
 
 `agent.tool.<name>(...)` calls a tool directly, without going through the model — useful for deterministic set-up steps like these.
 
-Durable, long-running business processes with human approval steps and S3/EventBridge triggers belong in AWS Step Functions, with each step invoking an agent (for example one hosted on AgentCore Runtime — see [AgentCore integration patterns](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#integration-patterns)). For pauses for human input inside an agent, Strands supports interrupts raised from hooks and tools.
+Durable, long-running business processes with human approval steps and S3/EventBridge triggers belong in AWS Step Functions, with each step invoking an agent (for example one hosted on AgentCore Runtime — see [AgentCore integration patterns](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#integration-patterns)). For pauses for human input inside an agent, Strands supports interrupts raised from hooks and tools.
 
 ### Error Handling in Workflows
 
@@ -896,7 +896,7 @@ if __name__ == "__main__":
     app.run()
 ```
 
-Deploy with `agentcore create` / `agentcore deploy` (npm `@aws/agentcore`). Full details are in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#getting-started).
+Deploy with `agentcore create` / `agentcore deploy` (npm `@aws/agentcore`). Full details are in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#getting-started).
 
 ### Deploying to Lambda
 

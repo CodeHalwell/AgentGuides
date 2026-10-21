@@ -239,7 +239,7 @@ WORKFLOW:
 7. Coordinator: Returns final result to user
 ```
 
-In code this is *agent delegation*: the coordinator has one tool per specialist, and each tool calls `await specialist.run(..., usage=ctx.usage)` so token usage rolls up into the parent run. Agents in other processes or written in other frameworks can be reached over the A2A protocol instead — see [Integrations](/pydanticai-guide/pydantic_ai_integrations_2025/#agent-to-agent-a2a).
+In code this is *agent delegation*: the coordinator has one tool per specialist, and each tool calls `await specialist.run(..., usage=ctx.usage)` so token usage rolls up into the parent run. Agents in other processes or written in other frameworks can be reached over the A2A protocol instead — see [Integrations](/pydanticai-guide/pydantic_ai_integrations/#agent-to-agent-a2a).
 
 ---
 

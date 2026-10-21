@@ -460,7 +460,7 @@ async def main():
         app_name="myapp",
         user_id="u1",
         state={
-            "session:last_city": "London",  # session-scoped
+            "last_city": "London",          # no prefix: session-scoped
             "user:lang": "en",              # user-scoped (persists across sessions)
             "app:feature_x": True,          # app-scoped (all users see this)
         },
@@ -482,7 +482,7 @@ async def main():
     # ── list_sessions ─────────────────────────────────────────────────────────
     response = await svc.list_sessions(app_name="myapp", user_id="u1")
     for s in response.sessions:
-        print(s.id, s.update_time)
+        print(s.id, s.last_update_time)
 
     # ── delete_session ────────────────────────────────────────────────────────
     await svc.delete_session(app_name="myapp", user_id="u1", session_id="s1")
@@ -731,7 +731,7 @@ asyncio.run(main())
 
 | State key prefix | Survives `delete_session`? | Scope |
 |---|---|---|
-| (none) / `session:` | No — lost when session is deleted | This session only |
+| (none) | No — lost when session is deleted | This session only |
 | `user:` | Yes — stored in `user_states` table | All sessions of this user in this app |
 | `app:` | Yes — stored in `app_states` table | All sessions, all users in this app |
 | `temp:` | No — never persisted at all | Current invocation only |

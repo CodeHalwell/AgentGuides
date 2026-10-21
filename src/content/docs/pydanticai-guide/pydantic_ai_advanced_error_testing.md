@@ -687,7 +687,7 @@ def parse_structured(ctx: RunContext[object], raw: str) -> dict:
 
 ### Transport-level HTTP retries
 
-`ModelRetry` is about the *model's* mistakes. For flaky networks and 429/5xx responses, retry at the HTTP layer with the `retries` extra (`pip install "pydantic-ai-slim[retries]"`, in the default bundle): wrap the provider's HTTP client in a tenacity transport.
+`ModelRetry` is about the *model's* mistakes. For flaky networks and 429/5xx responses, retry at the HTTP layer with the `retries` extra (`pip install "pydantic-ai-slim[retries]"`, which adds `tenacity`; it is not in the default bundle): wrap the provider's HTTP client in a tenacity transport.
 
 ```python
 import httpx2
@@ -711,7 +711,7 @@ provider = OpenAIProvider(http_client=httpx2.AsyncClient(transport=transport))
 agent = Agent(OpenAIChatModel('%%model=openai%%', provider=provider))
 ```
 
-`RetryConfig` is a `TypedDict` of `tenacity.retry` arguments. `HTTPX2TenacityTransport` is the sync twin, and `AsyncTenacityTransport` / `TenacityTransport` wrap a legacy `httpx` transport. Remember the provider SDK also retries (2 times by default for OpenAI, Anthropic, Groq and Cohere); set `model_settings={'max_retries': 0}` if you want the transport to own retries entirely.
+`RetryConfig` is a `TypedDict` of `tenacity.retry` arguments. `HTTPX2TenacityTransport` is the sync twin, and the older `AsyncTenacityTransport` / `TenacityTransport` (for plain `httpx`) are deprecated. Remember the provider SDK also retries (2 times by default for OpenAI, Anthropic, Groq and Cohere); set `model_settings={'max_retries': 0}` if you want the transport to own retries entirely.
 
 ## Structured error reporting
 

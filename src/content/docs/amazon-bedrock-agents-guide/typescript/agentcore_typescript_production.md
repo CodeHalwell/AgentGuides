@@ -9,7 +9,7 @@ AgentCore Runtime runs Node.js agents in the same session-isolated microVMs as P
 
 > **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore-ts%%, `@strands-agents/sdk` %%version=@strands-agents/sdk%% and the AgentCore CLI (`@aws/agentcore`) %%version=@aws/agentcore%% (checked %%versions-checked%%). TypeScript examples compile under `tsc --strict`; the CLI commands were checked against its `--help` output and generated project.
 
-The server code itself is covered in [Runtime: BedrockAgentCoreApp](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/#runtime-bedrockagentcoreapp). The Python equivalents of the deployment steps are in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#getting-started) and the [production guide](/amazon-bedrock-agents-guide/bedrock_agents_production_guide/).
+The server code itself is covered in [Runtime: BedrockAgentCoreApp](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/#runtime-bedrockagentcoreapp). The Python equivalents of the deployment steps are in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#getting-started) and the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/).
 
 ---
 
@@ -55,7 +55,7 @@ agentcore deploy                                # CDK deploy to your AWS account
 agentcore invoke "Where is order ORD-7?"        # call the deployed runtime
 ```
 
-The generated project's own README suggests `agentcore invoke --dev` for local calls, but `invoke` has no `--dev` option in CLI 0.31.1; `agentcore dev "<prompt>"` is the working form.
+The generated project's own README suggests `agentcore invoke --dev` for local calls, but `invoke` has no `--dev` option in the current CLI; `agentcore dev "<prompt>"` is the working form.
 
 The generated project looks like this:
 
@@ -138,7 +138,7 @@ docker buildx build --platform linux/arm64 \
   -t $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:v1 --push .
 ```
 
-Then create the runtime with the control-plane client. The execution role needs a trust policy for `bedrock-agentcore.amazonaws.com`, ECR pull, CloudWatch Logs, X-Ray and `bedrock:InvokeModel*` permissions (see [Security and IAM](/amazon-bedrock-agents-guide/bedrock_security_iam_examples/)).
+Then create the runtime with the control-plane client. The execution role needs a trust policy for `bedrock-agentcore.amazonaws.com`, ECR pull, CloudWatch Logs, X-Ray and `bedrock:InvokeModel*` permissions (see [Security and IAM](/amazon-bedrock-agents-guide/python/bedrock_security_iam_examples/)).
 
 ```typescript
 import {

@@ -62,7 +62,7 @@ Verified from `infer_provider_class` in `providers/__init__.py`:
 
 Removed in 2.0: the `grok:`, `google-gla:`, `google-vertex:` / `vertexai:` prefixes and the Outlines integration. A bare model name with no prefix (`Agent('gpt-5')`) now raises `UserError`.
 
-Since 2.0 a bare `pip install pydantic-ai` installs only the OpenAI, Anthropic and Google providers (plus CLI, MCP, evals, web, retries and Logfire). Add the extras you use, e.g. `pip install "pydantic-ai[bedrock,groq]"`.
+Since 2.0 a bare `pip install pydantic-ai` installs only the OpenAI, Anthropic and Google providers (plus CLI, MCP, evals, web and Logfire); the `retries` extra is separate. Add the extras you use, e.g. `pip install "pydantic-ai[bedrock,groq]"`.
 
 The full list of `KnownModelName` literals (200+ entries) is in `models/__init__.py`. An unknown string with a known prefix still works — it's passed through to the provider.
 

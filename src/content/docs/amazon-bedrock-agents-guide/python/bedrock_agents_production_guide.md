@@ -9,7 +9,7 @@ A comprehensive guide for deploying, operating, monitoring, and optimising Amazo
 
 > **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%).
 >
-> **Scope.** These patterns target **Bedrock Agents (Agents Classic)**, which stopped accepting new customers on 30 July 2026 and is in maintenance mode. For new production agents AWS recommends **AgentCore Runtime**, whose versions, endpoints, VPC networking and observability are covered in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#production-deployment).
+> **Scope.** These patterns target **Bedrock Agents (Agents Classic)**, which stopped accepting new customers on 30 July 2026 and is in maintenance mode. For new production agents AWS recommends **AgentCore Runtime**, whose versions, endpoints, VPC networking and observability are covered in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#production-deployment).
 >
 > **Clients:** agent management uses `bedrock-agent`, invocation uses `bedrock-agent-runtime`, model listing and guardrails use `bedrock`.
 
@@ -724,7 +724,7 @@ Amazon Bedrock AgentCore provides a dedicated solution for monitoring, analyzing
 
 **Key Features:**
 
-AgentCore Observability applies to agents on AgentCore; Bedrock Agents (Classic) is monitored through CloudWatch metrics in the `AWS/Bedrock/Agents` namespace and invocation traces (see the [observability guide](/amazon-bedrock-agents-guide/bedrock_agents_observability_python/)).
+AgentCore Observability applies to agents on AgentCore; Bedrock Agents (Classic) is monitored through CloudWatch metrics in the `AWS/Bedrock/Agents` namespace and invocation traces (see the [observability guide](/amazon-bedrock-agents-guide/python/bedrock_agents_observability_python/)).
 
 *   **OpenTelemetry (OTEL) Compatibility:** AgentCore Observability emits telemetry data in a standardized OpenTelemetry-compatible format. This enables seamless integration with existing monitoring and observability stacks, promoting a unified approach to monitoring.
 *   **CloudWatch Integration:** Amazon Bedrock Agents provide native support for CloudWatch metrics. This allows developers to track detailed runtime metrics for operations like `InvokeAgent` and `InvokeInlineAgent`.

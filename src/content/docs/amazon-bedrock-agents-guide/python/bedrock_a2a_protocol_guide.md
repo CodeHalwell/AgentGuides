@@ -400,4 +400,4 @@ Check each framework's own documentation for current class names; A2A integratio
 5. **Observe across agents.** Propagate W3C trace context (`traceparent`) so AgentCore Observability can stitch spans from both sides.
 6. **Pin protocol versions.** A2A is still evolving (0.3 and v1 coexist); pin `a2a-sdk` with your framework and test before upgrading.
 
-**Related guides:** [AgentCore](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/) · [Strands SDK](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) · [Advanced multi-agent patterns](/amazon-bedrock-agents-guide/bedrock_agents_advanced_multi_agent_python/)
+**Related guides:** [AgentCore](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/) · [Strands SDK](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/) · [Advanced multi-agent patterns](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/)

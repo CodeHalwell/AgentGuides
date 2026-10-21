@@ -3,6 +3,9 @@ title: "Mistral Agents API: Agent Orchestration Guide"
 description: "Coordinating multiple Mistral agents: code-driven pipelines, parallel fan-out, handoff graphs, manager-worker delegation and state across agents."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "Orchestration"
+  order: 3
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).
@@ -193,7 +196,7 @@ for specialist in (billing, technical):
 response = client.beta.conversations.start(
     agent_id=frontdesk.id,
     inputs="Since yesterday's update the export button returns a 500 error.",
-    handoff_execution="server",
+    handoff_execution="server",   # the default; shown for clarity
 )
 for entry in response.outputs:
     if entry.type == "agent.handoff":
@@ -214,6 +217,9 @@ With `handoff_execution="client"` the response stops at the handoff and returns 
 ```python
 from mistralai.client.models import AgentHandoffEntry
 
+def user_is_verified() -> bool:
+    return False   # replace with your own identity check
+
 response = client.beta.conversations.start(
     agent_id=frontdesk.id,
     inputs="Please refund invoice INV-2207.",
@@ -223,7 +229,7 @@ response = client.beta.conversations.start(
 last = response.outputs[-1]
 if isinstance(last, AgentHandoffEntry):
     print("model wants to route to", last.next_agent_name)
-    if last.next_agent_name == "billing" and not user_is_verified():   # your own check
+    if last.next_agent_name == "billing" and not user_is_verified():
         print("ask the customer to verify before billing acts")
     else:
         # Run the chosen specialist yourself, giving it the context it needs

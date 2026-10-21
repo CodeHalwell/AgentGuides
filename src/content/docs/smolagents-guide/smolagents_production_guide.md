@@ -3,24 +3,12 @@ title: "smolagents: Production Deployment Guide"
 description: "Running smolagents reliably in production — sandboxing, cost and token tracking, telemetry, error handling, deployment, scaling and testing."
 framework: "smolagents"
 language: "python"
+sidebar:
+  label: "Production guide"
+  order: 3
 ---
 
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%).
-
----
-
-## Table of Contents
-
-1. [Production Readiness Checklist](#production-readiness-checklist)
-2. [Performance Optimisation](#performance-optimisation)
-3. [Cost Management](#cost-management)
-4. [Monitoring & Observability](#monitoring--observability)
-5. [Security Best Practices](#security-best-practices)
-6. [Error Handling & Resilience](#error-handling--resilience)
-7. [Deployment Options](#deployment-options)
-8. [Scaling Strategies](#scaling-strategies)
-9. [Testing & Quality Assurance](#testing--quality-assurance)
-10. [Observability Integration (Weights & Biases Weave)](#observability-integration-weights--biases-weave)
 
 ---
 
@@ -45,7 +33,7 @@ A thin production wrapper:
 import logging
 from dataclasses import dataclass
 
-from smolagents import CodeAgent, InferenceClientModel, RunResult
+from smolagents import CodeAgent, InferenceClientModel, LogLevel, RunResult
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +52,11 @@ class AgentOutcome:
 def build_agent() -> CodeAgent:
     return CodeAgent(
         tools=[],
-        model=InferenceClientModel(model_id="Qwen/Qwen2.5-Coder-32B-Instruct", timeout=60),
+        model=InferenceClientModel(model_id="Qwen/Qwen3.8-27B", timeout=60),   # check the Hub for live providers
         max_steps=10,
         executor_type="local",                  # switch to "docker"/"e2b" for untrusted input
         executor_kwargs={"timeout_seconds": 30},
-        verbosity_level=0,
+        verbosity_level=LogLevel.OFF,           # -1: no console output at all (0 still prints errors)
     )
 
 
@@ -215,7 +203,7 @@ cost_logger = StepCostLogger()
 ### Cost Optimisation Strategies
 
 - **Cap steps.** `max_steps` is the main cost ceiling; set it per agent from observed distributions.
-- **Stop early on budget.** A step callback can call `agent.interrupt()` when a token budget is exceeded.
+- **Stop early on budget.** A step callback can call `agent.interrupt()` when a token budget is exceeded; `run()` then raises `AgentError("Agent interrupted.")` before the next step.
 - **Trim memory.** For vision or browsing agents, clear `observations_images` on old steps in a callback.
 - **Right-size models** per role, and re-evaluate when providers release cheaper tiers.
 - **Avoid re-runs.** Validate inputs before starting an agent; a malformed request that fails at step 8 still costs eight steps.
@@ -249,7 +237,7 @@ def budget_guard(limit_tokens: int):
 
 ### Structured Logging
 
-Set `verbosity_level=0` to silence the Rich console output, then log from a step callback:
+Set `verbosity_level=LogLevel.OFF` (-1) to silence the Rich console output (`0` still prints errors), then log from a step callback:
 
 ```python
 import json
@@ -303,9 +291,10 @@ SmolagentsInstrumentor().instrument(tracer_provider=provider)
 ```python
 from smolagents import CodeAgent, InferenceClientModel
 
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")
 agent = CodeAgent(
     tools=[],
-    model=InferenceClientModel(),
+    model=model,
     executor_type="e2b",                         # or "docker", "modal", "blaxel"
     additional_authorized_imports=["pandas"],
 )
@@ -318,8 +307,22 @@ finally:
 Notes:
 
 - Remote executors do not support `managed_agents`; for multi-agent systems, run the whole service inside a locked-down container (no credentials beyond what tools need, egress restricted) instead.
-- Tools are serialised and sent to the sandbox; give them only the credentials they need.
-- With `executor_type="docker"`, the executor builds and starts a Jupyter-kernel container; supply your own image with `executor_kwargs={"image_name": ..., "build_new_image": False}` in production.
+- Tools are rebuilt from their source inside the sandbox and run there, so any credential a tool reads must be present in the sandbox. Give it only the credentials that tool needs.
+- With `executor_type="docker"`, the executor builds and starts a Jupyter-kernel container. Supply your own image with `executor_kwargs={"image_name": ..., "build_new_image": False}` in production.
+- The Docker container gets a port mapping and nothing else: normal network access (it `pip install`s the authorised imports) and no memory, CPU or process limits. Add limits through `container_run_kwargs`, which is passed to docker-py's `containers.run`. Restrict egress at the host or network level; do not rely on the executor for it.
+
+```python
+agent = CodeAgent(
+    tools=[],
+    model=model,
+    executor_type="docker",
+    executor_kwargs={
+        "image_name": "agent-sandbox:1",             # pre-built, with the authorised imports installed
+        "build_new_image": False,
+        "container_run_kwargs": {"mem_limit": "1g", "nano_cpus": 1_000_000_000, "pids_limit": 256},
+    },
+)
+```
 
 ### Rate Limiting & Throttling
 
@@ -402,20 +405,34 @@ CMD ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8000"]
 smolagents[toolkit,litellm,e2b,telemetry]==%%version=smolagents%%
 fastapi
 uvicorn[standard]
+prometheus-client
 ```
 
-A minimal FastAPI service around `run_task` (agents are synchronous, so run them in a thread pool):
+### Async applications
+
+`agent.run()` is synchronous and blocks for the whole run, so an async server must run it in a worker thread: FastAPI's `run_in_threadpool` (below), or `anyio.to_thread.run_sync(agent.run, task)` in Starlette, as in the official `async_agent` example. Both use AnyIO's default thread limiter of 40 threads, which therefore caps concurrent runs per process. Build an agent per request rather than sharing a global one, because an agent keeps its memory between `run()` calls.
+
+### A service with a streaming endpoint
+
+`/run` returns the finished result; `/run/stream` sends each plan, step and the final answer as server-sent events while the run progresses. Starlette iterates a plain generator in its thread pool, so the synchronous `agent.run(..., stream=True)` loop does not block the event loop. The in-flight gauge feeds the autoscaler below.
 
 ```python
+import json
+
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
+from prometheus_client import Gauge, make_asgi_app
 from pydantic import BaseModel
+from smolagents import ActionStep, AgentError, FinalAnswerStep, PlanningStep
 
 app = FastAPI()
+app.mount("/metrics", make_asgi_app())
+RUNS_IN_FLIGHT = Gauge("agent_runs_in_flight", "Agent runs currently executing")
 
 
 class TaskIn(BaseModel):
-    task: str
+    task: str = ""
 
 
 @app.get("/health")
@@ -423,14 +440,51 @@ def health():
     return {"status": "ok"}
 
 
+def tracked_run(task: str) -> AgentOutcome:
+    with RUNS_IN_FLIGHT.track_inprogress():
+        return run_task(task)
+
+
 @app.post("/run")
 async def run(body: TaskIn):
     try:
-        outcome = await run_in_threadpool(run_task, body.task)
+        outcome = await run_in_threadpool(tracked_run, body.task)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return outcome.__dict__
+
+
+def sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+@app.post("/run/stream")
+def run_stream(body: TaskIn):
+    if not body.task or len(body.task) > 10_000:
+        raise HTTPException(status_code=400, detail="Task must be between 1 and 10,000 characters")
+    agent = build_agent()
+
+    def events():
+        with RUNS_IN_FLIGHT.track_inprogress():
+            try:
+                for event in agent.run(body.task, stream=True):
+                    if isinstance(event, PlanningStep):
+                        yield sse("plan", {"plan": event.plan})
+                    elif isinstance(event, ActionStep):
+                        yield sse("step", {
+                            "step": event.step_number,
+                            "observations": (event.observations or "")[:2_000],
+                            "error": str(event.error) if event.error else None,
+                        })
+                    elif isinstance(event, FinalAnswerStep):
+                        yield sse("final", {"output": event.output})
+            except AgentError as exc:            # provider failure or interrupt
+                yield sse("error", {"detail": str(exc)})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
 ```
+
+Set `stream_outputs=True` on the agent and handle `ChatMessageStreamDelta` events as well if you want to forward model tokens as they arrive.
 
 ### Kubernetes Deployment
 
@@ -480,9 +534,13 @@ spec:
   minReplicas: 3
   maxReplicas: 15
   metrics:
-    - type: Resource
-      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+    - type: Pods
+      pods:
+        metric: { name: agent_runs_in_flight }
+        target: { type: AverageValue, averageValue: "4" }   # concurrent runs one pod should carry
 ```
+
+The HPA scales on the `agent_runs_in_flight` gauge from the service above, not CPU: a pod waiting on the model uses little CPU however busy it is. A custom pod metric needs an adapter that serves Prometheus metrics to the Kubernetes metrics API (Prometheus Adapter, or KEDA with its Prometheus scaler). Run one Uvicorn worker per pod so each pod has a single gauge.
 
 Running `executor_type="docker"` from inside Kubernetes needs access to a Docker daemon, which is rarely appropriate; prefer E2B, Modal or Blaxel there.
 
@@ -492,7 +550,7 @@ Running `executor_type="docker"` from inside Kubernetes needs access to a Docker
 
 ### Horizontal Scaling
 
-Agents are cheap to construct and hold per-run memory, so the simplest scalable design is **one agent per request**, with no shared mutable state in the process. Scale pods on concurrent requests or latency rather than CPU, since runs mostly wait on the model. For long tasks, move runs to a job queue (Celery, RQ, Arq, a Kubernetes `Job`) and return a job ID.
+Agents are cheap to construct and hold per-run memory, so the simplest scalable design is **one agent per request**, with no shared mutable state in the process. Scale pods on in-flight runs (as in the HPA above) or latency rather than CPU, since runs mostly wait on the model. For long tasks, move runs to a job queue (Celery, RQ, Arq, a Kubernetes `Job`) and return a job ID.
 
 ### Vertical Scaling
 
@@ -554,7 +612,7 @@ from smolagents import CodeAgent, InferenceClientModel
 
 weave.init("smolagents-production")
 
-agent = CodeAgent(tools=[], model=InferenceClientModel())
+agent = CodeAgent(tools=[], model=InferenceClientModel(model_id="Qwen/Qwen3.8-27B"))
 agent.run("What is 2 ** 32?")      # appears as a trace in the Weave UI
 
 

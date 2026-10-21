@@ -1698,7 +1698,7 @@ The topics below are covered on their own pages rather than in this one:
 | Model Context Protocol (MCP) | [Toolsets](/pydanticai-guide/pydantic_ai_toolsets/) · [Built-in tools](/pydanticai-guide/pydantic_ai_builtin_tools/) |
 | Memory & conversation history | [Message history](/pydanticai-guide/pydantic_ai_message_history/) |
 | Streaming & real-time | [Streaming](/pydanticai-guide/pydantic_ai_streaming/) · [Streaming server (FastAPI)](/pydanticai-guide/pydantic_ai_streaming_server_fastapi/) |
-| Observability & Logfire | [Integrations](/pydanticai-guide/pydantic_ai_integrations_2025/) |
+| Observability & Logfire | [Integrations](/pydanticai-guide/pydantic_ai_integrations/) |
 | Durable execution | [Durable execution](/pydanticai-guide/pydantic_ai_durable_execution/) |
 | Testing & error handling | [Testing](/pydanticai-guide/pydantic_ai_testing/) · [Error handling & testing](/pydanticai-guide/pydantic_ai_advanced_error_testing/) |
 | Deployment, scaling, architecture | [Production guide](/pydanticai-guide/pydantic_ai_production_guide/) |

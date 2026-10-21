@@ -74,7 +74,7 @@ curl -s -X POST http://localhost:8080/invocations \
   -d '{"prompt": "What is the weather in Leeds?"}'
 ```
 
-Deploy it with the AgentCore CLI (`agentcore create --language TypeScript --framework Strands`, then `agentcore deploy`); see the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
+Deploy it with the AgentCore CLI (`agentcore create --name MyAgent --language TypeScript --framework Strands --model-provider Bedrock --memory none`, then `agentcore deploy`); see the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
 
 ## Key concepts
 
@@ -92,7 +92,7 @@ Deploy it with the AgentCore CLI (`agentcore create --language TypeScript --fram
   <LinkCard title="Strands Agents TypeScript SDK" href="/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/" description="Agents, Zod tools, providers, structured output, streaming, hooks, sessions, Graph, Swarm, MCP." />
   <LinkCard title="AgentCore TypeScript SDK" href="/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/" description="Runtime app, Memory, Code Interpreter, Browser, Identity, and what is not covered yet." />
   <LinkCard title="Deploying to AgentCore Runtime" href="/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/" description="AgentCore CLI, container images, NODE_22 code bundles, invoking from Node, checklist." />
-  <LinkCard title="Python overview" href="/amazon-bedrock-agents-guide/" description="The Python guides: AgentCore, Strands, A2A, Agents Classic." />
+  <LinkCard title="Python overview" href="/amazon-bedrock-agents-guide/python/" description="The Python guides: AgentCore, Strands, A2A, Agents Classic." />
 </CardGrid>
 
 ## Coverage compared with the Python guides

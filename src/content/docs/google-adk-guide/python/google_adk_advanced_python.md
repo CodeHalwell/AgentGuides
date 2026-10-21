@@ -25,12 +25,12 @@ from google.genai import types
 # Thinking with a token budget
 agent = LlmAgent(
     name="analyst",
-    model="%%model=gemini-flagship%%",           # thinking is a Gemini 2.5 feature
+    model="%%model=gemini-flagship%%",
     instruction="Analyse the dataset step-by-step and produce a concise summary.",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(
-            include_thoughts=True,      # thoughts appear as Part(thought=True) in events
-            thinking_budget=8192,       # max tokens dedicated to reasoning
+            include_thoughts=True,                  # thoughts appear as Part(thought=True) in events
+            thinking_level=types.ThinkingLevel.HIGH,  # Gemini 3 models; 2.5 models use thinking_budget
         )
     ),
 )
@@ -771,7 +771,7 @@ from google.adk.models.lite_llm import LiteLlm
 from google.adk.agents import LlmAgent
 import os
 
-# ── OpenAI GPT-4o ─────────────────────────────────────────────────────────────
+# ── OpenAI ────────────────────────────────────────────────────────────────────
 os.environ["OPENAI_API_KEY"] = "sk-..."
 
 agent = LlmAgent(
@@ -810,28 +810,49 @@ agent = LlmAgent(
 
 `LiteLlm` constructor args: `model` (LiteLLM model string), `api_base` (custom endpoint), plus any LiteLLM kwarg (`temperature`, `timeout`, `num_retries`, etc.).
 
-### Anthropic Claude via `AnthropicLlm` (direct)
+### Anthropic Claude: `AnthropicLlm` (Anthropic API) and `Claude` (Vertex AI)
 
-`AnthropicLlm` is a direct Anthropic SDK integration (no LiteLLM proxy). Requires `pip install google-adk[extensions]`.
+`google.adk.models.anthropic_llm` has two classes. Both need the `anthropic` package (`pip install "google-adk[extensions]"`).
+
+- `AnthropicLlm` calls the Anthropic API directly and reads `ANTHROPIC_API_KEY`.
+- `Claude` is a subclass that calls Claude **on Vertex AI**. It needs `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` and raises without them.
 
 ```python
-from google.adk.models.anthropic_llm import Claude
 from google.adk.agents import LlmAgent
-import os
+from google.adk.models.anthropic_llm import AnthropicLlm, Claude
 
-os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
-
-agent = LlmAgent(
+# Anthropic API (ANTHROPIC_API_KEY)
+direct = LlmAgent(
     name="claude_direct",
-    model=Claude(model="%%model=anthropic-flagship%%"),   # or "%%model=anthropic%%" / "%%model=anthropic-small%%"
+    model=AnthropicLlm(model="%%model=anthropic%%", max_tokens=4096),
+    instruction="You are a helpful assistant.",
+)
+
+# Claude on Vertex AI (GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION)
+on_vertex = LlmAgent(
+    name="claude_vertex",
+    model=Claude(model="%%model=anthropic%%"),
     instruction="You are a helpful assistant.",
 )
 ```
 
-The `"claude-"` prefix is registered in `LLMRegistry`, so a bare string also works:
+A bare `"claude-…"` model string resolves to `Claude` in `LLMRegistry`, so `model="%%model=anthropic%%"` means the Vertex AI route. Pass an `AnthropicLlm` instance when you want the Anthropic API.
+
+### OpenAI: `OpenAILlm` and `OpenAIResponsesLlm`
+
+Since 2.10.0 ADK has native OpenAI model classes in `google.adk.integrations.openai` (`pip install "google-adk[openai]"`): `OpenAILlm` (Chat Completions), `OpenAIResponsesLlm` (Responses API) and `AzureOpenAIResponsesLlm`. `OpenAILlm` is registered for `gpt-*` and `o<N>-*` names, so a bare model string works. The old `google.adk.labs.openai` path only re-exports these classes.
 
 ```python
-agent = LlmAgent(name="a", model="%%model=anthropic-flagship%%")
+from google.adk.agents import LlmAgent
+from google.adk.integrations.openai import OpenAIResponsesLlm
+
+chat = LlmAgent(name="gpt_chat", model="%%model=openai%%")     # resolves to OpenAILlm; reads OPENAI_API_KEY
+
+responses = LlmAgent(
+    name="gpt_responses",
+    model=OpenAIResponsesLlm(model="%%model=openai%%"),
+    instruction="Answer concisely.",
+)
 ```
 
 ### Mixing models in a multi-agent system
@@ -841,7 +862,7 @@ Each agent can use a different model — route expensive reasoning to a powerful
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
-from google.adk.models.anthropic_llm import Claude
+from google.adk.models.anthropic_llm import AnthropicLlm
 
 triage = LlmAgent(
     name="triage",
@@ -851,7 +872,7 @@ triage = LlmAgent(
 
 technical = LlmAgent(
     name="technical",
-    model=Claude(model="%%model=anthropic-flagship%%"),    # deep reasoning
+    model=AnthropicLlm(model="%%model=anthropic-flagship%%"),  # deep reasoning
     description="Handles complex technical questions.",
     instruction="Provide a detailed technical answer with code examples.",
 )

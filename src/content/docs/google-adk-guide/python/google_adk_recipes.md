@@ -1212,8 +1212,14 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow, node, START, RetryConfig
 from google.genai import types
+from pydantic import BaseModel
 import asyncio
 import httpx
+
+
+class FetchRequest(BaseModel):
+    """Input the LLM supplies when it calls the pipeline as a tool."""
+    url: str
 
 # ---------------------------------------------------------------------------
 # Workflow nodes
@@ -1229,9 +1235,9 @@ import httpx
     ),
     timeout=30.0,
 )
-async def fetch_data(node_input: dict) -> dict:
+async def fetch_data(node_input: FetchRequest) -> dict:
     """Fetch JSON data from a URL with automatic retry on transient errors."""
-    url = node_input.get("url") if isinstance(node_input, dict) else str(node_input)
+    url = node_input.url
     if not url:
         return {"error": "No URL provided", "data": {}}
     async with httpx.AsyncClient(timeout=25.0) as client:
@@ -1249,8 +1255,9 @@ async def fetch_data(node_input: dict) -> dict:
     ),
     timeout=20.0,
 )
-async def enrich_data(raw: dict) -> dict:
+async def enrich_data(node_input: dict) -> dict:
     """Enrich the fetched data with additional metadata."""
+    raw = node_input  # the previous node's output arrives as `node_input`
     data = raw.get("data", {})
     # Guard: jsonplaceholder-style endpoints return a list, not a mapping
     base = data if isinstance(data, dict) else {"items": data}
@@ -1264,8 +1271,9 @@ async def enrich_data(raw: dict) -> dict:
 
 
 @node(timeout=10.0)
-async def summarise(enriched: dict) -> str:
+async def summarise(node_input: dict) -> str:
     """Format the enriched data as a human-readable summary."""
+    enriched = node_input
     count = enriched.get("record_count", "unknown")
     source = enriched.get("source_url", "unknown source")
     return f"Fetched {count} record(s) from {source}. Enrichment applied: {enriched.get('enriched')}."
@@ -1277,6 +1285,8 @@ async def summarise(enriched: dict) -> str:
 
 pipeline = Workflow(
     name="resilient_data_pipeline",
+    description="Fetch JSON from a URL, enrich it and summarise it.",
+    input_schema=FetchRequest,   # required to use a Workflow as a tool
     edges=[(START, fetch_data, enrich_data, summarise)],
 )
 
@@ -1774,21 +1784,21 @@ class ISODateProvider(BaseExampleProvider):
         Example(
             input=types.Content(
                 role="user",
-                parts=[types.Part.from_text("Convert '25th December 2024' to ISO format.")],
+                parts=[types.Part.from_text(text="Convert '25th December 2024' to ISO format.")],
             ),
             output=[types.Content(
                 role="model",
-                parts=[types.Part.from_text("2024-12-25")],
+                parts=[types.Part.from_text(text="2024-12-25")],
             )],
         ),
         Example(
             input=types.Content(
                 role="user",
-                parts=[types.Part.from_text("What is ISO format for March 3rd, 2025?")],
+                parts=[types.Part.from_text(text="What is ISO format for March 3rd, 2025?")],
             ),
             output=[types.Content(
                 role="model",
-                parts=[types.Part.from_text("2025-03-03")],
+                parts=[types.Part.from_text(text="2025-03-03")],
             )],
         ),
     ]
@@ -1797,11 +1807,11 @@ class ISODateProvider(BaseExampleProvider):
         Example(
             input=types.Content(
                 role="user",
-                parts=[types.Part.from_text("What is the ISO currency code for British pounds?")],
+                parts=[types.Part.from_text(text="What is the ISO currency code for British pounds?")],
             ),
             output=[types.Content(
                 role="model",
-                parts=[types.Part.from_text("GBP")],
+                parts=[types.Part.from_text(text="GBP")],
             )],
         ),
     ]

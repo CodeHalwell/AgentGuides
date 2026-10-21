@@ -1,8 +1,11 @@
 ---
-title: "Mistral Agents API Advanced (Python)"
-description: "Advanced Python patterns with the mistralai SDK: tool calling on chat completions, structured outputs, async fan-out, per-call retries, tracing and deployment."
+title: "Mistral Agents API: Chat Completions and Advanced Python"
+description: "Python patterns with the mistralai SDK outside the Agents API: tool calling on chat completions, structured outputs, async fan-out, per-call retries and streaming."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "Chat completions and advanced Python"
+  order: 5
 ---
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Upstream: [client-python](https://github.com/mistralai/client-python) · [PyPI](https://pypi.org/project/mistralai/) · [docs](https://docs.mistral.ai).
@@ -14,7 +17,6 @@ Not every agent needs the stateful Agents API. When you hold the conversation yo
 - Tool reliability: validate arguments, time-box tool execution, return errors to the model as results.
 - Structured outputs validated with Pydantic.
 - Concurrency bounded with semaphores; retries configured per call where it matters.
-- Tracing with OpenTelemetry.
 
 ## Tool calling with chat completions
 
@@ -136,96 +138,9 @@ with client.chat.stream(
             print(delta.content, end="", flush=True)
 ```
 
-## Observability
+## Observability and deployment
 
-The SDK depends on `opentelemetry-api` and records spans for its HTTP calls when your process has a tracer provider configured. Install `mistralai[telemetry]` for the OTLP exporter:
-
-```python
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
-provider = TracerProvider()
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces")))
-trace.set_tracer_provider(provider)
-tracer = trace.get_tracer("weather-agent")
-
-with tracer.start_as_current_span("answer_weather_question") as span:
-    response = client.chat.complete(model="mistral-small-latest", messages=[{"role": "user", "content": "Hi"}])
-    span.set_attribute("llm.tokens.total", response.usage.total_tokens)
-```
-
-Record per request: model, tokens, tool names, tool durations and the final outcome.
-
-## Deployment (Kubernetes)
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mistral-agent
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: mistral-agent
-  template:
-    metadata:
-      labels:
-        app: mistral-agent
-    spec:
-      containers:
-        - name: app
-          image: ghcr.io/yourorg/mistral-agent:1.0.0
-          env:
-            - name: MISTRAL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: mistral-secrets
-                  key: apiKey
-          ports:
-            - containerPort: 8080
-          readinessProbe:
-            httpGet: { path: /healthz, port: 8080 }
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mistral-agent
-spec:
-  selector:
-    app: mistral-agent
-  ports:
-    - port: 80
-      targetPort: 8080
-```
-
-To use a projected service-account token instead of an API key, mount it as a file and set `MISTRAL_SA_TOKEN_PATH` to its path; the SDK re-reads it on every request.
-
-## CI/CD (GitHub Actions)
-
-```yaml
-name: deploy
-on:
-  push:
-    branches: [main]
-jobs:
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
-```
+The SDK's OpenTelemetry spans are opt-in; set-up (`configure_telemetry`, redaction, Mistral's own traces and evaluations) is in the [production guide](/mistral-agents-api-guide/mistral_agents_api_production_guide/#3-observability), together with the [Dockerfile, Kubernetes manifest and CI workflow](/mistral-agents-api-guide/mistral_agents_api_production_guide/#10-deployment-and-cicd). Nothing there is specific to the Agents API, so it applies unchanged to a service built on `chat.complete()`.
 
 ## Security
 

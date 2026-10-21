@@ -652,7 +652,9 @@ async def main():
         app_name="review_app", user_id="u1", session_id="s1"
     )
     events = await runner.run_debug(code, user_id="u1", session_id="s1")
-    print(events[-1].content.parts[0].text)
+    # The last event comes from the `summarize` function node: its result is in
+    # `event.output`, not `event.content`.
+    print(events[-1].output)
 
 asyncio.run(main())
 ```

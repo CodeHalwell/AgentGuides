@@ -12,7 +12,7 @@ Patterns for building multi-agent systems on Amazon Bedrock, with two implementa
 
 > **Verified against:** `boto3` %%version=boto3%% and `strands-agents` %%version=strands-agents%% (checked %%versions-checked%%).
 
-The examples reuse `AGENT_ROLE_ARN`, the model constants and the `prepare_and_alias` / `read_completion` helpers defined at the top of the [Recipes](/amazon-bedrock-agents-guide/bedrock_agents_recipes/) page.
+The examples reuse `AGENT_ROLE_ARN`, the model constants and the `prepare_and_alias` / `read_completion` helpers defined at the top of the [Recipes](/amazon-bedrock-agents-guide/python/bedrock_agents_recipes/) page.
 
 ## 1. Hierarchical Agent Systems
 
@@ -213,7 +213,7 @@ coordinator = Agent(model=SONNET, tools=[summariser])
 coordinator("Summarise the latest news about AI regulation in the EU.")
 ```
 
-The server side, deployment to AgentCore and authentication are covered in the [A2A guide](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/).
+The server side, deployment to AgentCore and authentication are covered in the [A2A guide](/amazon-bedrock-agents-guide/python/bedrock_a2a_protocol_guide/).
 
 ---
 
@@ -385,4 +385,4 @@ def monitor_agent_alias(agent_alias_arn: str, hours: int = 1) -> dict:
 
 For per-collaborator detail, enable traces (as above) or model-invocation logging; for code-defined agents on AgentCore, use AgentCore Observability's OpenTelemetry traces.
 
-See also: the [comprehensive guide](/amazon-bedrock-agents-guide/bedrock_agents_comprehensive_guide/), the [Strands SDK guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) and the [Recipes](/amazon-bedrock-agents-guide/bedrock_agents_recipes/#multi-agent-customer-service-system).
+See also: the [comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/), the [Strands SDK guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/) and the [Recipes](/amazon-bedrock-agents-guide/python/bedrock_agents_recipes/#multi-agent-customer-service-system).

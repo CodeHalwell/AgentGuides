@@ -147,7 +147,7 @@ graph = (
 )
 
 # Diagrams: xray=True expands subgraphs inline
-print(sorted(graph.get_graph(xray=True).nodes))   # ['__end__', '__start__', 'inner:__start__', 'inner:count']
+print(sorted(graph.get_graph(xray=True).nodes))   # ['__end__', '__start__', 'inner:count']
 print(graph.get_graph().draw_mermaid()[:40])
 
 # Subgraphs and JSON schemas

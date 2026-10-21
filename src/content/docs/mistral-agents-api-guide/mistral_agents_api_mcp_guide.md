@@ -316,7 +316,7 @@ if __name__ == "__main__":
     server.run()      # stdio; use transport="streamable-http" to serve it over HTTP as a connector
 ```
 
-Run it locally with `MCPClientSTDIO(stdio_params=StdioServerParameters(command="python", args=["tickets_server.py"]))`. To use it as a registered connector instead, switch to `server.run(transport="streamable-http")` (it serves `/mcp` on port 8000), deploy it behind HTTPS and register that URL. A stdio client cannot talk to the HTTP transport, and the other way round.
+Run it locally with `MCPClientSTDIO(stdio_params=StdioServerParameters(command="python", args=["tickets_server.py"]))`. To use it as a registered connector instead, switch to `server.run(transport="streamable-http")` (by default it serves `/mcp` on 127.0.0.1:8000; pass `host=` and `port=` when deploying), put it behind HTTPS and register that URL. A stdio client cannot talk to the HTTP transport, and the other way round.
 
 Design advice for tools:
 

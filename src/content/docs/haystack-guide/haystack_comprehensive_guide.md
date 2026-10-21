@@ -32,16 +32,17 @@ Haystack 3 is a consolidation release rather than a rewrite. The component and p
    - [Tool Integration and Function Calling](#tool-integration-and-function-calling)
    - [Single-Purpose Agents](#single-purpose-agents)
    - [Conversational Agents with Memory](#conversational-agents-with-memory)
+   - [Context Management](#context-management)
    - [Agent Configuration and Customisation](#agent-configuration-and-customisation)
    - [Error Handling and Resilience](#error-handling-and-resilience)
 3. [Part III: Agentic Workflows and Multi-Agent Systems](#part-iii-agentic-workflows-and-multi-agent-systems)
    - [Agentic AI Workflows: Production-First Design](#agentic-ai-workflows-production-first-design)
    - [Multi-Agent Pipeline Design Patterns](#multi-agent-pipeline-design-patterns)
-   - [SearchableToolset](#searchabletoolset)
+   - [SearchableToolset and SkillToolset](#searchabletoolset-and-skilltoolset)
    - [LLMRanker](#llmranker)
 4. [Migrating from Haystack 2.x](#migrating-from-haystack-2x)
 
-**Continue elsewhere in this guide:** [Multi-agent systems](/haystack-guide/haystack_multi_agent_guide/) for coordination patterns · [Advanced agents](/haystack-guide/haystack_advanced_agents_python/) for hooks, state and custom components · [Observability](/haystack-guide/haystack_observability_python/) for tracing and logging · [Production guide](/haystack-guide/haystack_production_guide/) for deployment, scaling and caching · [Recipes](/haystack-guide/haystack_recipes/) for end-to-end examples.
+**Continue elsewhere in this guide:** [Multi-agent systems](/haystack-guide/haystack_multi_agent_guide/) for coordination patterns · [Advanced agents](/haystack-guide/haystack_advanced_agents_python/) for hooks, budgets, state and custom components · [Observability](/haystack-guide/haystack_observability_python/) for tracing, logging, retries and fallbacks · [Production guide](/haystack-guide/haystack_production_guide/) for deployment, security, testing and evaluation · [Recipes](/haystack-guide/haystack_recipes/) for end-to-end examples.
 
 ---
 
@@ -51,7 +52,7 @@ Haystack 3 is a consolidation release rather than a rewrite. The component and p
 
 #### Basic Installation
 
-The core package is `haystack-ai`. It requires Python 3.10 or later.
+The core package is `haystack-ai`. It requires Python 3.11 or later (3.10 support was dropped in 3.4.0).
 
 ```bash
 # Latest release
@@ -61,7 +62,7 @@ pip install haystack-ai
 pip install haystack-ai==%%version=haystack-ai%%
 ```
 
-The core package ships the OpenAI and Azure OpenAI generators and embedders, the in-memory document store, converters, preprocessors, routers, joiners, builders, evaluators and the `Agent`. Everything else is an **integration package** that installs alongside it and is imported from the `haystack_integrations` namespace:
+The core package ships the OpenAI and Azure OpenAI generators and embedders, the in-memory document store, converters, preprocessors, routers, joiners, builders, [evaluators](/haystack-guide/haystack_production_guide/#testing-and-evaluation) and the `Agent`. Everything else is an **integration package** that installs alongside it and is imported from the `haystack_integrations` namespace:
 
 ```bash
 pip install anthropic-haystack            # AnthropicChatGenerator
@@ -76,6 +77,8 @@ pip install langfuse-haystack             # LangfuseConnector
 ```
 
 There are no `haystack-ai[...]` extras for these; install the integration packages by name.
+
+Haystack sends anonymous usage statistics (component types, and for agents the generator, model and tool names; never prompts, documents or tool descriptions). Set `HAYSTACK_TELEMETRY_ENABLED=False` in the environment to opt out. The variable is read when `haystack` is imported, so set it in the shell or deployment rather than in code that runs after the import.
 
 #### Virtual Environment Setup
 
@@ -427,14 +430,19 @@ Remember that from 3.0 a missing API key is reported when the component warms up
 Pipelines serialise to YAML and back:
 
 ```python
+import tempfile
+from pathlib import Path
+
 from haystack import Pipeline
 
-yaml_text = rag.dumps()                 # or rag.dump(fp)
-with open("rag.yaml", "w") as fp:
-    rag.dump(fp)
+yaml_text = rag.dumps()                 # a string; rag.dump(fp) writes to a file
 
-with open("rag.yaml") as fp:
-    restored = Pipeline.load(fp)        # or Pipeline.loads(yaml_text)
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / "rag.yaml"
+    with open(path, "w") as fp:
+        rag.dump(fp)
+    with open(path) as fp:
+        restored = Pipeline.load(fp)    # or Pipeline.loads(yaml_text)
 ```
 
 From 3.0, loading is gated by a module allowlist. Classes from `haystack`, `haystack_integrations` and `haystack_experimental` load out of the box; your own components and tool functions must be allowed explicitly:
@@ -543,6 +551,22 @@ agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%")
 agent.run(messages=[ChatMessage.from_user("Weather in Tokyo?")], tools=["get_weather"])
 ```
 
+#### Images and files
+
+A user message can carry images alongside text. Build it with `content_parts`, and use a vision-capable model:
+
+```python
+from haystack.dataclasses import ChatMessage, ImageContent
+
+image = ImageContent.from_file_path("receipt.png", detail="low")   # or ImageContent.from_url(...)
+message = ChatMessage.from_user(content_parts=["What is the total on this receipt?", image])
+
+result = agent.run(messages=[message])
+print(result["last_message"].text)
+```
+
+Documents such as PDFs travel as `FileContent.from_file_path(...)`; `OpenAIResponsesChatGenerator` and `AnthropicChatGenerator` accept them, the Chat Completions-based `OpenAIChatGenerator` does not. In pipelines, `ImageFileToImageContent` and `PDFToImageContent` (from `haystack.components.converters.image`) turn files into `ImageContent`, and a string template in `ChatPromptBuilder` can place one in a message with `{{ image | templatize_part }}`.
+
 ### Tool Integration and Function Calling
 
 Haystack has several tool types, all subclasses of `haystack.tools.Tool`:
@@ -556,6 +580,7 @@ Haystack has several tool types, all subclasses of `haystack.tools.Tool`:
 | `AgentTool` | Exposing another `Agent` as a tool (multi-agent delegation) |
 | `MCPTool` / `MCPToolset` | Tools served by an MCP server (`mcp-haystack`) |
 | `Toolset` / `SearchableToolset` | Grouping tools; letting the agent search a large catalogue |
+| `SkillToolset` | Instruction "skills" (`SKILL.md` files) the agent loads on demand |
 
 #### Function tools
 
@@ -794,9 +819,71 @@ chat.chat("Hi, my name is Alice and my favourite colour is blue.")
 print(chat.chat("What is my favourite colour?"))
 ```
 
-Truncating by message count can split a tool call from its result. In production, trim on turn boundaries (start the kept window at a user message) or summarise older turns with a second, cheap model.
+Truncating by message count can split a tool call from its result. In production, trim on turn boundaries (start the kept window at a user message), or let a [compaction hook](#context-management) do it inside the run.
 
 For persistence across processes, serialise messages with `ChatMessage.to_dict()` / `ChatMessage.from_dict()` and store them in Redis, a database or a document store keyed by session ID. The [recipes](/haystack-guide/haystack_recipes/) page has a Redis-backed example.
+
+### Context Management
+
+Long runs fill the context window with tool output and old turns. Haystack ships three hooks for this. `CompactionHook`, its compactors and `TokenBudgetHook` are experimental: they emit an `ExperimentalWarning` and may change without a deprecation cycle.
+
+| Hook | Hook point | What it does |
+|------|------------|--------------|
+| `TokenBudgetHook(max_total_tokens=...)` | `before_llm` | Ends the run with `exit_reason="token_budget_exceeded"` (see [token budgets](/haystack-guide/haystack_advanced_agents_python/#token-budgets)) |
+| `CompactionHook(compactor, context_window=..., compact_at=0.7, compact_to=0.4)` | `before_llm` | Once the conversation reaches `compact_at` of the window, a compactor shrinks it towards `compact_to` |
+| `ToolResultOffloadHook(store, offload_strategies)` | `after_tool` | Writes selected tool results to a store and leaves a pointer with a short preview in the conversation |
+
+The compactors, all in `haystack.hooks.compaction`:
+
+- `SlidingWindowCompactor()` drops the oldest complete turns, then the oldest agent steps of the current task, and leaves an omission note. It keeps the system messages and the latest user message, and never separates a tool call from its result.
+- `SummarizationCompactor(chat_generator=...)` replaces old turns with summaries written by a (usually cheaper) model.
+- `ToolResultPruningCompactor()` replaces the content of older tool results with a placeholder, keeping every call and result pair.
+- `ToolResultOffloadCompactor(store=...)` moves older tool results to a store, like the offload hook but only once compaction is triggered.
+
+Implement the `Compactor` protocol for your own strategy. Compaction is lossy: the agent continues from the shorter record.
+
+```python
+import tempfile
+from typing import Annotated
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.hooks.compaction import CompactionHook, SlidingWindowCompactor
+from haystack.hooks.tool_result_offloading import (
+    FileSystemToolResultStore,
+    OffloadOverChars,
+    ToolResultOffloadHook,
+)
+from haystack.tools import tool
+
+store = FileSystemToolResultStore(root=tempfile.mkdtemp())   # one directory per session in a service
+
+
+@tool
+def fetch_report(name: Annotated[str, "Report name"]) -> str:
+    """Fetch the full text of a report."""
+    return f"{name}: " + "quarterly figures ... " * 1000
+
+
+@tool
+def read_offloaded_result(path: Annotated[str, "Path of an offloaded tool result"]) -> str:
+    """Read the full text of a tool result that was moved to storage."""
+    content = store.read(path)
+    return content if isinstance(content, str) else f"{len(content)} bytes of binary content"
+
+
+agent = Agent(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    tools=[fetch_report, read_offloaded_result],
+    hooks={
+        "after_tool": [ToolResultOffloadHook(store=store, offload_strategies={"fetch_report": OffloadOverChars(4000)})],
+        "before_llm": [CompactionHook(compactor=SlidingWindowCompactor(), context_window=400_000)],
+    },
+    max_agent_steps=50,
+)
+```
+
+Set `context_window` to your model's window in tokens, and leave headroom above `compact_at` for the next reply and its tool results. `offload_strategies` maps a tool name, a tuple of names or `"*"` to `AlwaysOffload()`, `NeverOffload()` or `OffloadOverChars(n)`; only successful text results are offloaded. In a multi-user service, give each run its own store with `agent.run(..., hook_context={RESULT_STORE_CONTEXT_KEY: per_run_store})` (the key is importable from `haystack.hooks.tool_result_offloading`) so users never read each other's offloaded results.
 
 ### Agent Configuration and Customisation
 
@@ -850,7 +937,11 @@ result = agent.run(messages=[ChatMessage.from_user("Note that the launch is on F
 print(result.get("notes", []))
 ```
 
-A tool can also receive the whole `State` by declaring a parameter typed as `haystack.components.agents.State`. The names `step_count`, `token_usage`, `tool_call_counts`, `continue_run`, `tools` and `hook_context` are reserved and cannot appear in `state_schema`.
+A tool can also receive the whole `State` by declaring a parameter typed as `haystack.components.agents.State`. That parameter is left out of the tool's schema and always injected by the Agent.
+
+`inputs_from_state` is a convenience, not a security boundary: if the model supplies an argument with the same name, the model's value wins and the state lookup is skipped. Read privileged values such as tenant or user IDs from a `State`-typed parameter instead (`state.get("tenant_id")`); the [multi-tenant recipe](/haystack-guide/haystack_recipes/#multi-tenant-customer-support-agent) shows the pattern.
+
+The Agent reserves nine state names, which cannot appear in `state_schema`: `step_count`, `token_usage`, `tool_call_counts` and `exit_reason` (run metadata, returned as outputs), and `continue_run`, `stop_run`, `tools`, `hook_context` and `context_tokens` (internal keys that hooks read or set).
 
 #### Exit conditions
 
@@ -934,46 +1025,12 @@ agent = Agent(
 
 ### Error Handling and Resilience
 
-Several layers help:
+Inside the agent loop:
 
-1. **Inside tools** — return error strings the model can act on (see `calculate` above). Tool exceptions are reported to the model unless `raise_on_tool_invocation_failure=True`.
-2. **Chat generator** — `timeout` and `max_retries` on OpenAI-family generators handle transient API errors.
-3. **Provider fallback** — `FallbackChatGenerator` tries generators in order until one succeeds.
-4. **Loop bounds** — `max_agent_steps` caps cost; `exit_reason` in the result tells you why the run stopped, and can drive a `ConditionalRouter` downstream.
-5. **Around the run** — retry with back-off for errors that escape the agent.
+- **Tool errors** are reported back to the model as error results so it can recover; set `raise_on_tool_invocation_failure=True` on the `Agent` to raise instead. For expected failures, return a helpful message from the tool (see `calculate` above).
+- **`exit_reason`** in the result says why the run stopped: `"text"`, `"length"`, `"content_filter"`, `"max_agent_steps"`, the name of an exit-condition tool, or a reason a hook set with `stop_run` (for example `"token_budget_exceeded"`). Log it, and route on it downstream if you need to.
 
-```python
-import logging
-import time
-
-from haystack.components.generators.chat import FallbackChatGenerator, OpenAIChatGenerator
-from haystack_integrations.components.generators.anthropic import AnthropicChatGenerator
-
-logger = logging.getLogger(__name__)
-
-resilient_llm = FallbackChatGenerator(chat_generators=[
-    OpenAIChatGenerator(model="%%model=openai-small%%", timeout=30, max_retries=2),
-    AnthropicChatGenerator(model="%%model=anthropic%%", timeout=30, max_retries=2),
-])
-
-agent = Agent(chat_generator=resilient_llm, tools=[get_weather], max_agent_steps=10)
-
-
-def run_with_retry(agent: Agent, text: str, attempts: int = 3, backoff: float = 2.0) -> dict:
-    for attempt in range(1, attempts + 1):
-        try:
-            result = agent.run(messages=[ChatMessage.from_user(text)])
-            # exit_reason is "text", "length", "content_filter", "max_agent_steps",
-            # the name of an exit-condition tool, or a reason set by a hook
-            if result["exit_reason"] == "max_agent_steps":
-                logger.warning("Agent hit max_agent_steps; the answer may be incomplete")
-            return result
-        except Exception:
-            logger.exception("Agent run failed (attempt %d/%d)", attempt, attempts)
-            if attempt == attempts:
-                raise
-            time.sleep(backoff ** attempt)
-```
+Timeouts and retries, provider fallback with `FallbackChatGenerator`, retrying around a run and dead-letter handling for pipelines are covered in one place: [Retries and fallbacks](/haystack-guide/haystack_observability_python/#retries-and-fallbacks).
 
 ---
 
@@ -1095,13 +1152,16 @@ loop.connect("validator.feedback", "joiner")      # the loop
 print(loop.run({"prompt": {"topic": "vector databases"}})["validator"]["valid"])
 ```
 
+If the validator keeps rejecting, the run does not end gracefully: once a component exceeds `max_runs_per_component`, `Pipeline.run` raises `PipelineMaxComponentRuns` (from `haystack.core.errors`). Catch it, or add a counter to the validator that emits `valid` after the last attempt.
+
 ### Multi-Agent Pipeline Design Patterns
 
-There are two main ways to combine agents. Both are covered in more depth in the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/).
+The [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/) covers these patterns in full; in brief:
 
-#### Pattern 1: coordinator with agents as tools
-
-`AgentTool` turns an agent into a tool that another agent can call. The coordinator decides when to delegate:
+- **Coordinator with agents as tools.** `AgentTool` turns an agent into a tool another agent can call, and the coordinator decides at run time when to delegate (example below).
+- **Agents as pipeline stages.** When the order is fixed, connect one agent's `last_message` to a `user_prompt` variable of the next: [sequential collaboration](/haystack-guide/haystack_multi_agent_guide/#pattern-1-sequential-collaboration).
+- **Routing to specialists.** `ConditionalRouter` (rules) or `LLMMessagesRouter` (a model classifies): [dynamic agent selection](/haystack-guide/haystack_multi_agent_guide/#dynamic-agent-selection).
+- **Parallel fan-out.** `asyncio.gather` over `run_async`, or parallel pipeline branches with `Pipeline.run_async`: [parallel processing](/haystack-guide/haystack_multi_agent_guide/#pattern-2-parallel-processing).
 
 ```python
 from haystack.components.agents import Agent
@@ -1132,54 +1192,7 @@ result = coordinator.run(messages=[ChatMessage.from_user("Write a short briefing
 print(result["last_message"].text)
 ```
 
-#### Pattern 2: agents as pipeline stages
-
-When the order is fixed, wire agents together in a pipeline. Each agent's `last_message` can feed the next agent's `user_prompt` variable:
-
-```python
-from haystack import Pipeline
-
-research_stage = Agent(
-    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
-    tools=[search],
-    system_prompt="Research the topic and list key facts.",
-    user_prompt="Topic: {{ topic }}",
-)
-writing_stage = Agent(
-    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
-    system_prompt="Write a 200-word summary from the research notes.",
-    user_prompt="Research notes:\n{{ notes.text }}",
-)
-
-seq = Pipeline()
-seq.add_component("research", research_stage)
-seq.add_component("write", writing_stage)
-seq.connect("research.last_message", "write.notes")
-
-out = seq.run({"research": {"topic": "solid-state batteries", "messages": []}, "write": {"messages": []}})
-print(out["write"]["last_message"].text)
-```
-
-#### Pattern 3: routing to specialists
-
-`ConditionalRouter` (rule-based) or `LLMMessagesRouter` (model-based classification) can send a request to the right specialist agent; see the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/#coordination--orchestration).
-
-#### Pattern 4: parallel fan-out
-
-Run independent agents concurrently with `asyncio.gather` over `run_async`, or place them on parallel branches of a pipeline and use `await pipeline.run_async(...)`.
-
-```python
-import asyncio
-
-async def fan_out(question: str) -> dict[str, str]:
-    agents = {"optimist": researcher, "sceptic": writer}
-    results = await asyncio.gather(*[
-        a.run_async(messages=[ChatMessage.from_user(question)]) for a in agents.values()
-    ])
-    return {name: r["last_message"].text for name, r in zip(agents, results)}
-```
-
-### SearchableToolset
+### SearchableToolset and SkillToolset
 
 When an agent has dozens or hundreds of tools, sending every schema on every call wastes tokens and confuses the model. `SearchableToolset` wraps a catalogue and exposes a single `search_tools` tool; the agent searches by keyword and the matching tools are loaded for subsequent steps.
 
@@ -1196,6 +1209,28 @@ toolset = SearchableToolset(
 
 agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), tools=toolset)
 ```
+
+`SkillToolset` does the same for instructions rather than tools. A skill is a directory with a `SKILL.md` file (YAML frontmatter with `name` and `description`, then markdown instructions) and optional bundled files. When the toolset warms up, every skill's name and description is written into the description of its `load_skill` tool, so the model knows what exists without a longer system prompt; `load_skill` returns a skill's full instructions and `read_skill_file` returns a bundled file.
+
+```python
+import tempfile
+from pathlib import Path
+
+from haystack.skill_stores.file_system import FileSystemSkillStore
+from haystack.tools import SkillToolset
+
+skills_dir = Path(tempfile.mkdtemp())          # normally a skills/ folder in your project
+(skills_dir / "release-notes").mkdir()
+(skills_dir / "release-notes" / "SKILL.md").write_text(
+    "---\nname: release-notes\ndescription: How to write release notes for this project.\n---\n"
+    "Group changes under Features, Fixes and Breaking changes, one line per change.\n"
+)
+
+skills = SkillToolset(FileSystemSkillStore(skills_dir))
+agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), tools=[skills, search])
+```
+
+The tool names are fixed, so an agent can have only one `SkillToolset`; implement the `SkillStore` protocol to serve skills from a database or several sources. Bundled images and PDFs come back as content parts, which need a multimodal generator such as `OpenAIResponsesChatGenerator`.
 
 ### LLMRanker
 
@@ -1250,6 +1285,9 @@ The upstream [migration guide](https://github.com/deepset-ai/haystack/blob/main/
 | Importing Haystack reconfigured root logging | Scoped to Haystack loggers; `logging.configure_logging(logger_name="")` restores the old behaviour |
 | `Document.id` hash depended on `meta` key order | Canonical JSON; IDs for documents with non-empty `meta` change |
 | Missing API key raised at construction | Raised at `warm_up()` / first run |
+| `GeneratedAnswer` / `ExtractedAnswer` `.to_dict()` wrapped fields in `{"type": ..., "init_parameters": {...}}` | Flat dict of fields; `from_dict()` accepts both formats |
+| Confirmation strategies saw the fully prepared tool arguments | They see only the arguments the model requested; `inputs_from_state` values and `State` parameters are injected at execution |
+| Python 3.10 supported | Python 3.11 or later from 3.4.0 |
 
 ### Before and after
 
@@ -1280,5 +1318,6 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 | Date | Version | Changes |
 |------|---------|---------|
 | %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. |
+| 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
 | June 2026 | 2.30.0 | Last 2.x revision. |
 | November 2025 | 2.20.0 | First documented version. |

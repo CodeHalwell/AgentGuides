@@ -11,7 +11,7 @@ The `bedrock-agentcore` npm package is the TypeScript counterpart of the Python 
 
 > **Pre-1.0 package.** The TypeScript SDK is at 0.x, and its Strands tool integrations for Code Interpreter and Browser are published under `experimental/` import paths. Expect breaking changes between minor versions and pin the version you test against.
 
-For the AgentCore services themselves (what Runtime, Memory, Gateway and Identity are, and the boto3 control-plane calls), see the [AgentCore comprehensive guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/). Deployment from Node is on the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
+For the AgentCore services themselves (what Runtime, Memory, Gateway and Identity are, and the boto3 control-plane calls), see the [AgentCore comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/). Deployment from Node is on the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
 
 ---
 

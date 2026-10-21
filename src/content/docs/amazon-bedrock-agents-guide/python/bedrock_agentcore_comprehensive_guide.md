@@ -122,18 +122,16 @@ AgentCore also includes Policy, Evaluations and Payments services; they are outs
 - An AWS account with access to the Bedrock models you intend to use
 - Python 3.10+ (required by `bedrock-agentcore`, `strands-agents` and `boto3`)
 - AWS credentials configured locally
-- Node.js, if you use the AgentCore CLI
+- Node.js 20+ for the AgentCore CLI, and `uv` for the Python projects it generates
 
 ### Installation
 
 ```bash
 pip install "bedrock-agentcore==%%version=bedrock-agentcore%%" "strands-agents==%%version=strands-agents%%" "boto3==%%version=boto3%%"
 
-# AgentCore CLI (recommended for packaging and deployment; generates CDK under the hood)
+# AgentCore CLI (%%version=@aws/agentcore%%): scaffolds, runs locally, deploys with CDK
 npm install -g @aws/agentcore
 ```
-
-The older Python `bedrock-agentcore-starter-toolkit` (`agentcore configure` / `agentcore launch`) still exists, but the AgentCore SDK README now points to the npm CLI as the recommended route.
 
 ### Quick Start Example
 
@@ -165,20 +163,52 @@ if __name__ == "__main__":
     app.run()  # serves on port 8080 locally, as Runtime expects
 ```
 
-Test it locally, then deploy:
+Test it locally:
 
 ```bash
 python main.py &
 curl -s -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Summarise the main drivers of churn in one paragraph."}'
-
-# Deploy with the AgentCore CLI
-agentcore create --name SalesAnalyst --defaults
-cd SalesAnalyst
-agentcore deploy
-agentcore invoke
 ```
+
+### Deploy with the AgentCore CLI
+
+`agentcore create` makes one of two kinds of project. Passing `--framework` creates a **code project**: an agent runtime with your Python code, built as a zip (`CodeZip`, the default) or a container. Without `--framework` (or with `--defaults`), it creates a **harness project** instead, which has no code to deploy (see [Managed harness](#managed-harness)). In non-interactive mode a code project needs `--framework`, `--model-provider` and `--memory` together:
+
+```bash
+agentcore create --name SalesAnalyst \
+  --framework Strands --model-provider Bedrock --memory none
+cd SalesAnalyst
+```
+
+The project looks like this:
+
+```text
+SalesAnalyst/
+├── agentcore/
+│   ├── agentcore.json      # runtimes, memories, gateways, evaluators...
+│   ├── aws-targets.json    # deployment targets (account + Region)
+│   └── cdk/                # generated CDK app
+└── app/SalesAnalyst/
+    ├── main.py             # BedrockAgentCoreApp entrypoint (a Strands template)
+    ├── model/load.py
+    ├── mcp_client/client.py
+    └── pyproject.toml
+```
+
+Replace the generated `app/SalesAnalyst/main.py` with your own entrypoint (such as the one above), or edit the template. The template already validates the payload and keeps one agent per session. Then run, deploy and invoke:
+
+```bash
+agentcore dev                                           # local server and agent inspector
+agentcore deploy                                        # CDK deploy to the account in aws-targets.json
+agentcore invoke "Analyse monthly sales trends for Q4"  # call the deployed runtime
+agentcore invoke --session-id "$(uuidgen)-q4" "Now compare with Q3"
+```
+
+`--memory shortTerm` or `--memory longAndShortTerm` also adds an AgentCore Memory resource to the project, and `--build Container` builds an ARM64 image with CodeBuild instead of a zip. `agentcore add memory|gateway|gateway-target|credential|runtime-endpoint` adds resources to an existing project, and `agentcore status` shows what is deployed.
+
+The older Python `bedrock-agentcore-starter-toolkit` (`agentcore configure` / `agentcore launch`) still exists. `agentcore import --source .bedrock_agentcore.yaml` brings one of its projects into the npm CLI.
 
 Invoke the deployed runtime from any Python code with boto3:
 
@@ -302,7 +332,7 @@ Runtime does not need framework-specific adapters: any code that can be called f
 
 ### 1. Strands Agents SDK
 
-Covered in detail in the [Strands SDK guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/). Streaming is supported by making the entrypoint an async generator:
+Covered in detail in the [Strands SDK guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/). Streaming is supported by making the entrypoint an async generator:
 
 ```python
 from bedrock_agentcore import BedrockAgentCoreApp
@@ -455,7 +485,7 @@ ci.stop()
 
 ### Workflow Automation Examples
 
-AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
+AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
 
 **Remembering context across sessions with Memory:**
 
@@ -492,7 +522,7 @@ records = memory.retrieve_memories(
 )
 ```
 
-With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/#memory-and-state-management)).
+With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#memory-and-state-management)).
 
 ---
 

@@ -3,6 +3,9 @@ title: "Mistral Agents API: Ready-to-Use Recipes"
 description: "Copy-and-adapt Python recipes for Mistral's Agents API: web search, persistent chat, multi-agent routing, function tools, RAG, streaming, branching, error handling and a small CLI app."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 8
 ---
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Install with `pip install "mistralai[agents]==%%version=mistralai%%"` and set `MISTRAL_API_KEY`.
