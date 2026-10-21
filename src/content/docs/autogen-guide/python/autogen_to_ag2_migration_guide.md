@@ -1,8 +1,8 @@
 ---
 title: "AutoGen to AG2 Migration Guide"
 description: "Which migration path applies to your AutoGen code — AutoGen 0.2 to AG2 Classic, Classic to AG2 1.x, or Microsoft AutoGen 0.4+ to Agent Framework or AG2 — with verified before/after code."
-framework: autogen
-language: python
+framework: "autogen"
+language: "python"
 ---
 
 > Checked %%versions-checked%% against `autogen` %%version=autogen%% (AG2 Classic), `ag2` %%version=ag2%% and `autogen-agentchat` %%version=autogen-agentchat%%.

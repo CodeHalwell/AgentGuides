@@ -1,8 +1,8 @@
 ---
 title: "Chapter 9 — Advanced Patterns"
 description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, add_sequence, Overwrite, GraphOutput v2, set_node_defaults, and the Functional API — source-verified patterns."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "9 · Advanced patterns"
   order: 9

@@ -1,8 +1,8 @@
 ---
 title: "Tools (functions, agents, built-ins)"
 description: "FunctionTool, AgentTool, Google built-ins, long-running tools, and confirmation flows."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 30
 ---

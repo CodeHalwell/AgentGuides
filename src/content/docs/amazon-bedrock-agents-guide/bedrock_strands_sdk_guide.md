@@ -1,7 +1,8 @@
 ---
 title: "AWS Strands Agents SDK: Comprehensive Technical Guide"
 description: "Technical reference for Strands Agents, the open-source, model-driven agent SDK from AWS: agents, tools, multi-agent patterns (agents as tools, swarms, graphs, workflows), sessions, memory and deployment to AgentCore."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 > TypeScript version of this: [Strands Agents TypeScript SDK](/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/).

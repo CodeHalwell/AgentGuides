@@ -1,8 +1,8 @@
 ---
 title: "Chapter 3 — Multi-Agent Systems"
 description: "Supervisor routing, parallel fan-out/fan-in, Command-based hand-off, and subgraph composition for coordinating multiple specialist agents in LangGraph 1.2."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "3 · Multi-agent systems"
   order: 3

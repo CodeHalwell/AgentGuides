@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK - Architecture & Flow Diagrams"
 description: "Architecture, agent loop, permission, session and deployment diagrams for the Python Claude Agent SDK."
-framework: anthropic-claude-agent-sdk
+framework: "claude-agent-sdk"
+language: "python"
 ---
 
 > Architecture and flow diagrams. Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).

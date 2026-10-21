@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex Streaming Server (FastAPI)"
 description: "Stream LlamaIndex query-engine tokens and agent events over Server-Sent Events with FastAPI."
-framework: llamaindex
-language: python
+framework: "llamaindex"
+language: "python"
 ---
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%).

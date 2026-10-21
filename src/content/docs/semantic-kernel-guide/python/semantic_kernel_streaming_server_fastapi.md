@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Streaming Server (FastAPI, Python)"
 description: "Stream Semantic Kernel prompt and agent output token by token over Server-Sent Events with FastAPI."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%).

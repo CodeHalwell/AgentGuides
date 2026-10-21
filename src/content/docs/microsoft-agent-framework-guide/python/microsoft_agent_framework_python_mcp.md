@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — MCP Integration"
 description: "Plug Model Context Protocol servers into agent-framework via MCPStdioTool, MCPStreamableHTTPTool, and MCPWebsocketTool. Approval gates, header injection, and sampling callbacks."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Model Context Protocol (MCP) servers are first-class tool sources in `agent-framework`. Three transports ship in `agent_framework`:

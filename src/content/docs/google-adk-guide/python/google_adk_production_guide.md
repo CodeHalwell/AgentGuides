@@ -1,8 +1,8 @@
 ---
 title: "Google Agent Development Kit (ADK) - Production Guide"
 description: "Deploying, scaling, monitoring, securing and testing Google ADK agents in production."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 ---
 
 **Focus:** Enterprise deployment, reliability, performance, security. Verified against `google-adk` %%version=google-adk%% (checked %%versions-checked%%).

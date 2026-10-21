@@ -1,7 +1,8 @@
 ---
 title: "Pydantic AI: Advanced Patterns"
 description: "Expert-level patterns and architectural techniques for Pydantic AI V2: reflection, hierarchies, dynamic tools, caching, routing, composition, rate limiting, custom models, middleware and AgentRun iteration."
-framework: pydanticai
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line; the examples have been updated for the V2 API.

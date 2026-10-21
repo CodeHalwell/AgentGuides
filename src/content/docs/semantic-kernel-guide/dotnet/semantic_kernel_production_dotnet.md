@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Production Guide (.NET)"
 description: "Production deployment, resilience, monitoring and testing for Semantic Kernel .NET applications."
-framework: semantic-kernel
-language: dotnet
+framework: "semantic-kernel"
+language: "dotnet"
 ---
 
 **Production deployment, resilience, monitoring and testing for .NET**

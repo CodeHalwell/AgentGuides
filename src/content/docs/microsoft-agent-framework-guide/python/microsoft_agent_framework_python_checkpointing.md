@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Checkpointing"
 description: "Persist workflow state with FileCheckpointStorage, InMemoryCheckpointStorage, or a custom CheckpointStorage backend. Resume long-running agents across process restarts."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Checkpointing captures the full execution state of a workflow at every superstep so you can pause, crash, redeploy, or hand off to a different process and pick up exactly where you left off. It's the backbone for long-running agent workflows, human-in-the-loop pauses that last days, and durable multi-agent orchestrations.

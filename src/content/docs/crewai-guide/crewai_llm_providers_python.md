@@ -1,8 +1,8 @@
 ---
 title: "LLM providers and routing"
 description: "How crewai.LLM picks a native SDK vs LiteLLM, the full list of supported providers, reasoning/thinking parameters, and building a custom BaseLLM."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "LLM providers"
   order: 25

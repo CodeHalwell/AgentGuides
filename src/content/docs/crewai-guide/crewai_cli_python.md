@@ -1,8 +1,8 @@
 ---
 title: "CLI and project layout"
 description: "Every crewai CLI command verified against source — create, run, train, test, replay, eval, checkpoint, flow, tool, template, skill, memory TUI, deploy, and traces."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "CLI"
   order: 26

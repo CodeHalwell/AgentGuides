@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (Python) — Comprehensive Guide"
 description: "Reference for building agents with the Python claude-agent-sdk: query(), ClaudeSDKClient, tools, MCP, subagents, hooks, permissions, sessions and thinking."
-framework: anthropic-claude-agent-sdk
+framework: "claude-agent-sdk"
+language: "python"
 ---
 
 **Verified against `claude-agent-sdk` %%version=claude-agent-sdk%%** (checked %%versions-checked%%). Every import, class, option and method signature on this page was checked against an installed copy of that release.

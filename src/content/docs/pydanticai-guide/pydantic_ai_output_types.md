@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Output Types & Validators"
 description: "Typed outputs with ToolOutput, NativeOutput, PromptedOutput, TextOutput, StructuredDict, multi-type unions, and agent.output_validator."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.

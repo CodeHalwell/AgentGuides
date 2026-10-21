@@ -1,8 +1,8 @@
 ---
 title: "agent-framework (Python) — Installation & Quickstart"
 description: "Get started with agent-framework: installation, authentication, your first agent, tools, sessions, and async patterns."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 This guide covers everything you need to get your first agent running in Python using `agent-framework` (version %%version=agent-framework%%, checked %%versions-checked%%).

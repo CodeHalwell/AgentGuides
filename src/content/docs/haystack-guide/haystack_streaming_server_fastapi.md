@@ -1,7 +1,8 @@
 ---
 title: "Haystack Streaming Server (FastAPI)"
 description: "Stream agent tokens and tool events over server-sent events with Haystack 3 and FastAPI."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%).

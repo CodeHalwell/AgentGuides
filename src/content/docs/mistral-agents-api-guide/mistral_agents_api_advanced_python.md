@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API Advanced (Python)"
 description: "Advanced Python patterns with the mistralai SDK: tool calling on chat completions, structured outputs, async fan-out, per-call retries, tracing and deployment."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Upstream: [client-python](https://github.com/mistralai/client-python) · [PyPI](https://pypi.org/project/mistralai/) · [docs](https://docs.mistral.ai).

@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Compaction"
 description: "Keep long agent conversations inside the context window: TruncationStrategy, SlidingWindowStrategy, SummarizationStrategy, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, ContextWindowCompactionStrategy, and CompactionProvider."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Long-running agents blow through the context window. Compaction strategies decide which messages to keep, which to drop, and which to replace with shorter summaries — **per turn**, before the messages reach the model.

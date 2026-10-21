@@ -1,7 +1,8 @@
 ---
 title: "Pydantic AI: Graph Support Guide"
 description: "Typed, multi-step workflows with pydantic_graph: GraphBuilder steps, decisions, parallel map/join, BaseNode classes, iteration and Mermaid rendering — combined with Pydantic AI agents."
-framework: pydanticai
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%**, which pins the matching `pydantic-graph` release (checked %%versions-checked%%). Every example on this page was run against that release.

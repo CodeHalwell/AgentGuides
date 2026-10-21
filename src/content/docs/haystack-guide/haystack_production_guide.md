@@ -1,7 +1,8 @@
 ---
 title: "Haystack Production Deployment and Operations Guide"
 description: "Deploying Haystack 3 in production — readiness checks, serialised pipelines, Docker, Kubernetes, FastAPI services, scaling and caching."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%).

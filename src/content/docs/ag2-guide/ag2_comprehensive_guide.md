@@ -1,7 +1,8 @@
 ---
 title: "AG2 Comprehensive Guide"
 description: "AG2 1.x reference — Agent, model configs, tools, structured output, human-in-the-loop, event streams, the multi-agent Network, MCP and A2A — plus AG2 Classic and migration from 0.x."
-framework: ag2
+framework: "ag2"
+language: "python"
 ---
 
 > **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). Every 1.x example on this page was executed offline against the installed package using `ag2.testing.TestConfig` in place of a real model. The Classic section was checked against the `autogen` distribution (AG2 Classic) %%version=autogen%%.

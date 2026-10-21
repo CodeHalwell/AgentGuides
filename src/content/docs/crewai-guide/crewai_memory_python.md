@@ -1,8 +1,8 @@
 ---
 title: "Unified Memory"
 description: "Standalone Memory class — remember/recall/forget, scope and slice views, LanceDB vs Qdrant Edge storage, and how crew-level memory wires in."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Memory"
   order: 22

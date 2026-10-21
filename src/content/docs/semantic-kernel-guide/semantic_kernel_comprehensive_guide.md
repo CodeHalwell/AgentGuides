@@ -1,7 +1,7 @@
 ---
 title: "Semantic Kernel: Concepts and Cross-Language Reference"
 description: "Language-neutral Semantic Kernel reference — architecture, core concepts, agents, orchestrations, vector stores, MCP, filters and the relationship to Microsoft Agent Framework, with Python and C# side by side."
-framework: semantic-kernel
+framework: "semantic-kernel"
 ---
 
 > Current releases: `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. A Java SDK also exists but is not covered here. For complete, verified code see the [Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) and the [.NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/).

@@ -1,7 +1,7 @@
 ---
 title: "Microsoft Agent Framework - Production & Deployment Guide"
 description: "Deploying Microsoft Agent Framework services — containers, Azure Container Apps and AKS, scaling, monitoring, security and disaster recovery."
-framework: microsoft-agent-framework
+framework: "microsoft-agent-framework"
 ---
 
 **Target Audience:** DevOps, Infrastructure, and Senior Engineers  

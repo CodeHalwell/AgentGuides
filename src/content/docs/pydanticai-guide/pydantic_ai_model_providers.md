@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Model Providers, FallbackModel & InstrumentationSettings"
 description: "Every supported provider, provider prefixes, FallbackModel with exception and response handlers, FallbackExceptionGroup, InstrumentedModel, InstrumentationSettings versions 2-6, OTel token/cost histograms, gateway routing, and local models."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.

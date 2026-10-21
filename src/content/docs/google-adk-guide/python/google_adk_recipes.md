@@ -1,8 +1,8 @@
 ---
 title: "Google ADK - Practical Recipes and Examples"
 description: "Practical, runnable Google ADK recipes: multi-agent support desks, research pipelines, tools, sessions, evaluation and cost control."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 ---
 
 **Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%); first written for 2.2.0.  

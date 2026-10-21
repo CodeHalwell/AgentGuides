@@ -1,8 +1,8 @@
 ---
 title: "Tools, @tool decorator, and MCP"
 description: "Build tools with BaseTool, the @tool decorator, or bridge MCP servers — plus caching, usage caps, result_as_answer, async variants, and from_langchain."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Tools"
   order: 24

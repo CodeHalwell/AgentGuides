@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API: Model Context Protocol (MCP) Guide"
 description: "Using MCP servers with Mistral agents: registered connectors, client-side MCP with RunContext, building servers with the mcp 2.x SDK, and human approval for tool calls."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%), with `mcp` 2.x as installed by `mistralai[agents]`.

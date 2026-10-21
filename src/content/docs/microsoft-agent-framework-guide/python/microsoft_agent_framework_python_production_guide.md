@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework Python - Production Guide"
 description: "This guide provides enterprise-level best practices for deploying, managing, and scaling Python applications built with the Microsoft Agent Framework."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 This guide provides enterprise-level best practices for deploying, managing, and scaling Python applications built with the Microsoft Agent Framework.

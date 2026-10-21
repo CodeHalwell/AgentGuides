@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex Recipes and Practical Examples"
 description: "Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems."
-framework: llamaindex
-language: python
+framework: "llamaindex"
+language: "python"
 ---
 
 Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems.

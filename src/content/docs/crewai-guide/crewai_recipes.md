@@ -1,7 +1,8 @@
 ---
 title: "CrewAI Recipes"
 description: "Ten end-to-end CrewAI crews — research, data analysis, customer service, BI, marketing, finance, legal, science and project management."
-framework: crewai
+framework: "crewai"
+language: "python"
 ---
 
 ## Practical Implementation Examples and Real-World Solutions

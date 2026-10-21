@@ -1,7 +1,8 @@
 ---
 title: "Start Here: Haystack Reading Paths"
 description: "Which Haystack pages to read, in what order, depending on what you are building."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 This section covers Haystack 3 (`haystack-ai` %%version=haystack-ai%%, checked %%versions-checked%%). Each path below lists pages in reading order.

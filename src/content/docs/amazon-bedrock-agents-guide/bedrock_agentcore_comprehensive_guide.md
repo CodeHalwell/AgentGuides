@@ -1,7 +1,8 @@
 ---
 title: "Amazon Bedrock AgentCore: Comprehensive Technical Guide"
 description: "Technical reference for Amazon Bedrock AgentCore: Runtime, Memory, Gateway, Identity, Code Interpreter, Browser and Observability, with examples in the bedrock-agentcore Python SDK and boto3."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 > TypeScript version of this: [Bedrock AgentCore TypeScript SDK](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/).

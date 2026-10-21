@@ -32,5 +32,8 @@
   },
   "overrides": {
     "@astrojs/sitemap": "3.7.0"
+  },
+  "devDependencies": {
+    "js-yaml": "4.1.1"
   }
 }

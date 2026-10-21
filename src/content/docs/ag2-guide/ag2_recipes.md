@@ -1,7 +1,8 @@
 ---
 title: "AG2 Recipes"
 description: "Copy-pasteable AG2 1.x recipes — chatbot loop, tool use, structured extraction, sub-agents, a reviewed pipeline on the Network, and MCP tools."
-framework: ag2
+framework: "ag2"
+language: "python"
 ---
 
 > **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). These recipes use the 1.x API (`import ag2`). For AG2 Classic (`import autogen`) recipes, see [classic.docs.ag2.ai](https://classic.docs.ag2.ai).

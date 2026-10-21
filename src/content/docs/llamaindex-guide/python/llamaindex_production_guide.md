@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex Production Guide"
 description: "Deploying LlamaIndex Applications to Production: Best Practices, Deployment Strategies, and Optimization Techniques"
-framework: llamaindex
-language: python
+framework: "llamaindex"
+language: "python"
 ---
 
 Deploying LlamaIndex applications to production: deployment, performance, observability, security and cost.

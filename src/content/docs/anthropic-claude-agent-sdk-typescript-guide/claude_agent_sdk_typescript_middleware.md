@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK Middleware (TypeScript)"
 description: "Guardrails, redaction, auditing and tracing for the TypeScript Claude Agent SDK, built from hooks, canUseTool and stream wrappers."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).

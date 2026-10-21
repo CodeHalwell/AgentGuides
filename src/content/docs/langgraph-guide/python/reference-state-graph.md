@@ -1,8 +1,8 @@
 ---
 title: "StateGraph — API reference"
 description: "Exhaustive reference for the StateGraph builder and CompiledStateGraph runtime — constructor, add_node, add_edge, add_conditional_edges, add_sequence, compile, plus retry/cache/defer/destinations options."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · StateGraph"
   order: 30

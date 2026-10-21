@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex TypeScript Production Guide"
 description: "Production deployment patterns for LlamaIndex.TS workflows — Docker, Kubernetes, Redis, error handling, observability (project now deprecated upstream)."
-framework: llamaindex
-language: typescript
+framework: "llamaindex"
+language: "typescript"
 ---
 
 **Version:** `@llamaindex/workflow` 1.1.25 (final release) · umbrella `llamaindex` %%version=llamaindex%% · checked %%versions-checked%%  

@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (TypeScript) — Production Guide"
 description: "Running @anthropic-ai/claude-agent-sdk services in production: error handling, rate limits, cost, logging, containers, security and scaling."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).

@@ -1,8 +1,8 @@
 ---
 title: "Callbacks and Plugins"
 description: "Intercept agent, model, and tool execution — per-agent callbacks and runner-wide plugins."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 40
 ---

@@ -1,8 +1,8 @@
 ---
 title: "Runtime, ToolRuntime & Managed Values — API reference"
 description: "Runtime context injection, ToolRuntime for tools, ExecutionInfo, IsLastStep, RemainingSteps — how to access execution metadata and inject immutable context into nodes and tools."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Runtime & Managed Values"
   order: 39

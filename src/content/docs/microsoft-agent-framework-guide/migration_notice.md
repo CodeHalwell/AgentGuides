@@ -1,7 +1,7 @@
 ---
 title: "Guide split notice (November 2025)"
 description: "How the original combined Microsoft Agent Framework guide was split into separate Python and .NET guides in November 2025."
-framework: microsoft-agent-framework
+framework: "microsoft-agent-framework"
 ---
 
 > Historical note. This page records the November 2025 reorganisation of this guide; it is not about migrating your code. For moving from preview to GA, see the caution on the [overview page](/microsoft-agent-framework-guide/); current releases are `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET).

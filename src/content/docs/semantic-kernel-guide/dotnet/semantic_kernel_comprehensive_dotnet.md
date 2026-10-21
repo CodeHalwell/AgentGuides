@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Comprehensive Guide (.NET)"
 description: "C#/.NET reference for Semantic Kernel — kernel and services, functions and plugins, function calling, agents, orchestrations, vector stores, MCP, filters, ASP.NET Core and migration to Microsoft Agent Framework."
-framework: semantic-kernel
-language: dotnet
+framework: "semantic-kernel"
+language: "dotnet"
 ---
 
 > Verified against `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (checked %%versions-checked%%). Type and member names were checked against the published packages' API documentation and the Semantic Kernel source at that release. The package targets .NET 8, .NET 10 and .NET Standard 2.0.

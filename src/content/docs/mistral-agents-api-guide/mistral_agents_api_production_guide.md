@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API: Production Deployment Guide"
 description: "Running services on Mistral's Agents API in production: configuration, concurrency, retries, observability, storage, rate limits, security and CI/CD."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).

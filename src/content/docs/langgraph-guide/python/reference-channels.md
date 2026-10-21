@@ -1,8 +1,8 @@
 ---
 title: "Channels — API reference"
 description: "The six channel types underlying LangGraph state: LastValue, BinaryOperatorAggregate, Topic, EphemeralValue, NamedBarrierValue, and AnyValue — how each is declared with Annotated[], what happens on concurrent writes, and when to pick each."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Channels"
   order: 37

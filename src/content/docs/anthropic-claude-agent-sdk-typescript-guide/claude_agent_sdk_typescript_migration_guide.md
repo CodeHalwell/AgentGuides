@@ -1,7 +1,8 @@
 ---
 title: "Migration Guide: Claude Code SDK → Claude Agent SDK (TypeScript)"
 description: "Moving from the SDK in @anthropic-ai/claude-code to @anthropic-ai/claude-agent-sdk, and upgrading across the 0.1, 0.2 and 0.3 series."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 **Target:** `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).

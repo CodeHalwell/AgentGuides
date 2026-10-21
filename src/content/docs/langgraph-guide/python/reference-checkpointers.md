@@ -1,8 +1,8 @@
 ---
 title: "Checkpointers — API reference"
 description: "Every checkpointer backend LangGraph ships — InMemorySaver, SqliteSaver, AsyncSqliteSaver, PostgresSaver, AsyncPostgresSaver, ShallowPostgresSaver — with a feature matrix, setup calls, connection strings, and gotchas."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Checkpointers"
   order: 31

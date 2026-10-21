@@ -1,7 +1,8 @@
 ---
 title: "smolagents Architecture & Flow Diagrams"
 description: "ASCII diagrams of smolagents' architecture — agents, tools, models, executors, memory, multi-agent patterns and performance trade-offs."
-framework: smolagents
+framework: "smolagents"
+language: "python"
 ---
 
 > Reflects `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Timings and token counts in these diagrams are illustrative, not measurements.

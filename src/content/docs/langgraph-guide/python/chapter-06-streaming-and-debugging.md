@@ -1,8 +1,8 @@
 ---
 title: "Chapter 6 — Streaming & Debugging"
 description: "All 7 stream modes, typed StreamPart v2 API, GraphOutput, token-level message streaming, custom StreamWriter, UI streaming with push_ui_message/UIMessage, experimental v3 stream_events API, graph visualization, and checkpoint inspection."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "6 · Streaming & debugging"
   order: 6

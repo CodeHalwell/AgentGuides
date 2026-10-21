@@ -1,8 +1,8 @@
 ---
 title: "IsLastStep, RemainingSteps — Managed values API reference"
 description: "Built-in managed state values that LangGraph injects automatically: IsLastStep detects when a graph is on its final step, RemainingSteps counts how many steps are left."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Managed values"
   order: 38

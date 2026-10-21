@@ -1,8 +1,8 @@
 ---
 title: "Evaluation"
 description: "Test agents programmatically with AgentEvaluator, EvalCase, EvalSet, and the built-in metric suite."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 75
 ---

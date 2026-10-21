@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Middleware (Python)"
 description: "Guardrails, redaction, approval and telemetry in Semantic Kernel Python using kernel filters."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%).

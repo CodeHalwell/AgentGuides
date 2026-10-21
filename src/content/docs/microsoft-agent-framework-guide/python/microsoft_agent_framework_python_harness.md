@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — HARNESS Providers"
 description: "The agent harness: TodoProvider, AgentModeProvider, MemoryContextProvider, FileMemoryProvider, FileAccessProvider, BackgroundAgentsProvider, ToolApprovalMiddleware and AgentLoopMiddleware — task lists, modes, long-term memory, agent files, background sub-agents, standing approvals and run-until-done loops."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 > **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider` and `AgentLoopMiddleware` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.

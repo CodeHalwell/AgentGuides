@@ -1,8 +1,8 @@
 ---
 title: "AG2 Classic - Comprehensive Technical Guide"
 description: "Beginner-to-expert guide to the AG2 Classic `import autogen` API — ConversableAgent, LLMConfig, GroupChat, nested and sequential chats, tools and code execution. Not Microsoft AutoGen 0.4+."
-framework: autogen
-language: python
+framework: "autogen"
+language: "python"
 ---
 
 > **This page covers AG2 Classic** — the `import autogen` API (`ConversableAgent`, `GroupChat`, `initiate_chat`) maintained by the AG2 community fork and published on PyPI as `autogen` (and as `ag2` up to 0.14). It is **not** Microsoft AutoGen 0.4+ (`autogen_agentchat`), which is covered on the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/). Code here was checked against `autogen` %%version=autogen%%, the Classic line, which is in maintenance mode (security and critical fixes only). AG2's current framework is `ag2` 1.x — see the [AG2 guide](/ag2-guide/).

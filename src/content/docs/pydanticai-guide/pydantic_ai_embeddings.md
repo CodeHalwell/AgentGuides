@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Embeddings"
 description: "Embedder, EmbeddingModel, EmbeddingResult, and EmbeddingSettings — generate text embeddings with every major provider using a single API."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.embeddings`.

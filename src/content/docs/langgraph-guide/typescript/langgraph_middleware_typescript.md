@@ -1,8 +1,8 @@
 ---
 title: "LangGraph Middleware and Guardrails (TypeScript)"
 description: "Implement request/response middlewares, guardrails, and tracing in LangGraph TypeScript."
-framework: langgraph
-language: typescript
+framework: "langgraph"
+language: "typescript"
 ---
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%).

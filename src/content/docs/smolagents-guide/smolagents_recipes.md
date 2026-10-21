@@ -1,7 +1,8 @@
 ---
 title: "smolagents: Practical Recipes & Code Patterns"
 description: "Working smolagents recipes — data analysis, web research, reporting, content, code review, multi-agent pipelines, APIs, custom tools, self-correction and error handling."
-framework: smolagents
+framework: "smolagents"
+language: "python"
 ---
 
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every recipe constructs and runs against the installed package; network-dependent tools are stubbed where noted.

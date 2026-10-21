@@ -1,8 +1,8 @@
 ---
 title: "LangGraph Streaming Server (FastAPI)"
 description: "Server-Sent Events with all LangGraph stream modes, token-level streaming, async patterns, and production FastAPI setup — source-verified."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`**, **`fastapi>=0.111`**, **`uvicorn>=0.29`**.

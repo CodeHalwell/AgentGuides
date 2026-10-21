@@ -1,8 +1,8 @@
 ---
 title: "Chapter 7 — Human-in-the-Loop"
 description: "Pause execution for approval, build multi-stage review workflows, multiple interrupts per node, and resume by interrupt ID."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "7 · Human-in-the-loop"
   order: 7

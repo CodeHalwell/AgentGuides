@@ -1,8 +1,8 @@
 ---
 title: "LangGraph Performance Optimization (Python)"
 description: "Native CachePolicy, RetryPolicy, TimeoutPolicy, async batching, and set_node_defaults — source-verified patterns."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.cache.memory`).

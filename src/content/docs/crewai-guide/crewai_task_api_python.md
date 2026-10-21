@@ -1,8 +1,8 @@
 ---
 title: "Task API and process types"
 description: "Every field on crewai.Task, ConditionalTask, and TaskOutput — structured outputs, guardrails, async, context, file inputs, and the sequential vs hierarchical process."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Task API"
   order: 21

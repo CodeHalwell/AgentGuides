@@ -1,7 +1,8 @@
 ---
 title: "smolagents: Production Deployment Guide"
 description: "Running smolagents reliably in production — sandboxing, cost and token tracking, telemetry, error handling, deployment, scaling and testing."
-framework: smolagents
+framework: "smolagents"
+language: "python"
 ---
 
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%).

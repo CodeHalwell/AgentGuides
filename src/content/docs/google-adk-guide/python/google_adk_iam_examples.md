@@ -1,8 +1,8 @@
 ---
 title: "Google ADK — IAM, Auth & Credentials"
 description: "Least-privilege IAM roles, service account setup, AuthenticatedFunctionTool, Secret Manager integration, and credential patterns for Google ADK agents."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 80
 ---

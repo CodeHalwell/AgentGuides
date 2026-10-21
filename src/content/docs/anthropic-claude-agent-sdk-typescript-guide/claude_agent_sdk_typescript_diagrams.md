@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (TypeScript) - Architecture Diagrams and Flows"
 description: "Architecture, query flow, permissions, sessions and compaction diagrams for the TypeScript Claude Agent SDK."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 > Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%). `query()` runs Claude Code as a child process; the boxes below marked "harness" live in that process, not in your Node.js process.

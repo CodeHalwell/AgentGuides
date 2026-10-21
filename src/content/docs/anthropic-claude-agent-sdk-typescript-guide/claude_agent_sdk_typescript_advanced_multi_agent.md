@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK Advanced Multi-Agent (TypeScript)"
 description: "Routing, specialist subagents, guardrails and human-in-the-loop approval with the TypeScript Claude Agent SDK."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).

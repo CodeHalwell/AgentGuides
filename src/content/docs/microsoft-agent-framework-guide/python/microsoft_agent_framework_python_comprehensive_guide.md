@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
 description: "Comprehensive technical guide for the Microsoft Agent Framework on Python — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability, plus a consolidated class reference."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 **Framework version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep) — checked %%versions-checked%%. Every code example on this page was re-run through an import-and-signature check against that release; the narrative and the Class & API Reference were first written against 1.14.0, and sections that have since changed carry a dated note.

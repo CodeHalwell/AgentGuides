@@ -1,7 +1,7 @@
 ---
 title: "Semantic Kernel: Architecture and Pattern Diagrams"
 description: "Visual diagrams of Semantic Kernel's architecture — kernel, plugins, function calling, agents and orchestrations, vector stores and Azure integration."
-framework: semantic-kernel
+framework: "semantic-kernel"
 ---
 
 Language-neutral diagrams of Semantic Kernel's architecture and patterns, current for `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET). Code for each flow is in the [Python](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) and [.NET](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/) guides. Semantic Kernel's successor is [Microsoft Agent Framework](/microsoft-agent-framework-guide/).

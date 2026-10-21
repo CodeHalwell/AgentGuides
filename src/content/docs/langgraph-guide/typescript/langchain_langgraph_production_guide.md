@@ -1,8 +1,8 @@
 ---
 title: "LangChain.js and LangGraph.js Production Guide"
 description: "Deployment, Operations, Monitoring, and Best Practices"
-framework: langgraph
-language: typescript
+framework: "langgraph"
+language: "typescript"
 ---
 
 **Deployment, Operations, Monitoring, and Best Practices**

@@ -1,8 +1,8 @@
 ---
 title: "LangGraph: Production Deployment & Best Practices"
 description: "Deploying LangGraph in production: containers, Kubernetes, persistence, observability, security, scaling, caching, fan-in, guardrails and cross-thread memory."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 **Verified against `langgraph` %%version=langgraph%%** (checked %%versions-checked%%). First written for 1.0.3.

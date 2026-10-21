@@ -1,8 +1,8 @@
 ---
 title: "RemoteGraph — API reference"
 description: "Call a deployed LangGraph Platform graph as if it were a local CompiledStateGraph — same invoke/stream/get_state surface, works as a subgraph node, supports interrupt/resume and state inspection."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · RemoteGraph"
   order: 39

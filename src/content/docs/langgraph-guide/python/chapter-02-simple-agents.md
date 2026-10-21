@@ -1,8 +1,8 @@
 ---
 title: "Chapter 2 — Your First Agent"
 description: "Build linear pipelines, conditional routers, looping agents, ReAct tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "2 · Your first agent"
   order: 2

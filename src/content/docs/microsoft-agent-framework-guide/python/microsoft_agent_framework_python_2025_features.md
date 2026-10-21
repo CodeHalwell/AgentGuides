@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
 description: "Verified feature set across agent-framework-core and its stable and beta sub-packages: A2A, graph workflows, declarative agents, MCP, Magentic orchestration and custom executors."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 > **Errata (April 2026).** An earlier draft of this page documented `from agent_framework.a2a import A2AProtocolAdapter, A2AClient, A2AMessage` and `from agent_framework.graphs import AgentGraph, GraphNode, CheckpointConfig, HITLConfig` — **none of those classes exist**. This page has been rewritten after direct introspection of the installed packages.

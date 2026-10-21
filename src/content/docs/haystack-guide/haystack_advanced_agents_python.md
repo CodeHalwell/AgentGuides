@@ -1,7 +1,8 @@
 ---
 title: "Haystack Advanced Agent Patterns (Python)"
 description: "Hooks, state handlers, structured output, custom async components and resilient tool design for Haystack 3 agents."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Upstream: [release notes](https://github.com/deepset-ai/haystack/releases)

@@ -1,8 +1,8 @@
 ---
 title: "LangGraph Advanced Implementations"
 description: "This guide explores advanced, production-grade patterns for building sophisticated multi-agent systems with LangGraph. The examples provided are complete, runnable, and designed fo"
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 This guide explores advanced, production-grade patterns for building sophisticated multi-agent systems with LangGraph. The examples provided are complete, runnable, and designed for real-world application.

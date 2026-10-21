@@ -1,8 +1,8 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
 description: "Real-world LangGraph recipes: caching, fan-in, model hooks, long-term memory, map-reduce, ToolRuntime, tracing, streaming and graph-wide node policies."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 **Verified against `langgraph` %%version=langgraph%%** (checked %%versions-checked%%). A version in a recipe title is the release that recipe was first written for.

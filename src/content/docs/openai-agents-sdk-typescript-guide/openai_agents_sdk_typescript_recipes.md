@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Practical Recipes & Code Examples"
 description: "Ready-to-use implementations and real-world patterns for the OpenAI Agents SDK in TypeScript."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).

@@ -1,8 +1,8 @@
 ---
 title: "RunControl & GraphDrained — graceful shutdown API reference"
 description: "Cooperative drain with RunControl.request_drain(), the GraphDrained exception, SIGTERM patterns, and safe checkpoint-based resumption."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Graceful shutdown"
   order: 40

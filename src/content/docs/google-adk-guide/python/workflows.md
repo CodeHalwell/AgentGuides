@@ -1,8 +1,8 @@
 ---
 title: "Workflows (graph orchestration)"
 description: "Compose agents and functions into a DAG with conditional routing, retries, timeouts, HITL, and state schemas."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 25
 ---

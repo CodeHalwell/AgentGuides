@@ -1,8 +1,8 @@
 ---
 title: "Chapter 1 — Setup & Core Concepts"
 description: "Install LangGraph, understand state, nodes, edges, and compilation — the four primitives everything else builds on."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "1 · Setup & core concepts"
   order: 1

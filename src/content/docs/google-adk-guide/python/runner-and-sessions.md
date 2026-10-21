@@ -1,8 +1,8 @@
 ---
 title: "Runner, App, and Sessions"
 description: "Runner / InMemoryRunner, the App container, session services, RunConfig, and state scopes."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 50
 ---

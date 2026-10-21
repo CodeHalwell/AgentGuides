@@ -1,8 +1,8 @@
 ---
 title: "Chapter 4 — Tools"
 description: "ToolNode, InjectedState, InjectedStore, ToolRuntime, Command-returning tools, custom error handling, parallel execution, and state injection patterns."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "4 · Tools"
   order: 4

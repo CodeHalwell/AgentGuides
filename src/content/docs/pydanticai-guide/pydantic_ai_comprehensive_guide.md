@@ -1,7 +1,8 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
 description: "Single-page technical guide to Pydantic AI V2: core concepts, installation, agents, structured output, tools, dependency injection, upgrading from V1, and a consolidated class and API reference."
-framework: pydanticai
+framework: "pydanticai"
+language: "python"
 ---
 
 ## From Beginner to Expert Level

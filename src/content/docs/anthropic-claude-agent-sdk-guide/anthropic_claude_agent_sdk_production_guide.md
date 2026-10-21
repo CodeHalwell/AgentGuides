@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (Python) — Production Guide"
 description: "Running Python Claude Agent SDK services in production: resilience, cost control, observability, containers, security and scaling."
-framework: anthropic-claude-agent-sdk
+framework: "claude-agent-sdk"
+language: "python"
 ---
 
 Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).

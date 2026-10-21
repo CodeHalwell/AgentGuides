@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex Comprehensive Technical Guide"
 description: "Complete LlamaIndex (Python) reference — ingestion, indexing, retrieval, query engines, workflow-based agents, tools, memory, structured output, multi-agent workflows and evaluation."
-framework: llamaindex
-language: python
+framework: "llamaindex"
+language: "python"
 ---
 
 > Verified against `llama-index` / `llama-index-core` %%version=llama-index%% (versions checked %%versions-checked%%). Every import and constructor on this page was checked against an installed copy of that release.

@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework .NET - Recipes and Code Patterns"
 description: "Practical, compiled C# recipes for common agent patterns with the Microsoft Agent Framework for .NET: chat, tools, workflows, routing, RAG, ASP.NET Core hosting, Azure Functions and streaming."
-framework: microsoft-agent-framework
-language: dotnet
+framework: "microsoft-agent-framework"
+language: "dotnet"
 ---
 
 A collection of practical C# recipes for common agent patterns with the Microsoft Agent Framework for .NET.

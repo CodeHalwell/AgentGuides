@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex Advanced Agents (Python)"
 description: "Multi-agent routing, orchestration, human-in-the-loop approval, durable conversations and large tool sets with LlamaIndex workflow agents."
-framework: llamaindex
-language: python
+framework: "llamaindex"
+language: "python"
 ---
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Basics — `FunctionAgent`, tools, `Context` — are covered in the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/#4-agent-classes-and-types).

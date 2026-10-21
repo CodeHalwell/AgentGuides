@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Testing with TestModel, FunctionModel & Overrides"
 description: "Deterministic testing of PydanticAI agents using TestModel, FunctionModel, capture_run_messages, agent.override(), and pytest fixtures."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.

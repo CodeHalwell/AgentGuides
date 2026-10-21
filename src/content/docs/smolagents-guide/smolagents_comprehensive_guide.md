@@ -1,7 +1,8 @@
 ---
 title: "smolagents: Comprehensive Technical Guide"
 description: "From first agent to multi-agent systems with Hugging Face smolagents — models, tools, CodeAgent, ToolCallingAgent, sandboxes, memory and managed agents."
-framework: smolagents
+framework: "smolagents"
+language: "python"
 ---
 
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every example on this page was run against the installed package with a stub model.

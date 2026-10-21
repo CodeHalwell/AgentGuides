@@ -1,8 +1,8 @@
 ---
 title: "Google ADK - Architecture Diagrams"
 description: "These diagrams provide visual representations of key ADK concepts and architectures. Refer to the comprehensive and production guides for detailed explanations."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 ---
 
 ---

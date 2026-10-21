@@ -1,7 +1,8 @@
 ---
 title: "Pydantic AI: Evals Guide"
 description: "Systematic evaluation of Pydantic AI agents with pydantic_evals: datasets and cases, built-in, custom, LLM-judge and agentic evaluators, YAML datasets, reports, Logfire, and online evaluation."
-framework: pydanticai
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%**, which pins the matching `pydantic-evals` release (checked %%versions-checked%%). The examples were run against that release.

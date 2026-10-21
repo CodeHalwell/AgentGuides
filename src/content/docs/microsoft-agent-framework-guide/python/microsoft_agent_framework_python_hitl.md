@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Human in the Loop"
 description: "Pause a workflow for human input with ctx.request_info and @response_handler, or with SequentialBuilder.with_request_info. Plus tool approval gates."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Agent Framework ships three human-in-the-loop (HITL) patterns:

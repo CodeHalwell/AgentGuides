@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK: Comprehensive Technical Guide"
 description: "A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns."
-framework: openai-agents-sdk
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Python 3.10+, `openai` v3.

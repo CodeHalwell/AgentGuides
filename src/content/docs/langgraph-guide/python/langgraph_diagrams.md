@@ -1,7 +1,7 @@
 ---
 title: "LangGraph: Visual Architectures & Diagrams"
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 ## Basic State Machine

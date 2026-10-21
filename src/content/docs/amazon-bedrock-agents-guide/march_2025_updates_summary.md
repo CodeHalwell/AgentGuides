@@ -1,7 +1,8 @@
 ---
 title: "March 2025 Updates Summary (Archived)"
 description: "Archived changelog from the March 2025 documentation update to this guide. Kept for history; several claims in it have since been corrected."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 > **Archived — historical record only.** This page is the changelog written for the guide's March 2025 update. It is not current and several statements in it were wrong at the time or have since been overtaken. Corrections, as of %%versions-checked%%:

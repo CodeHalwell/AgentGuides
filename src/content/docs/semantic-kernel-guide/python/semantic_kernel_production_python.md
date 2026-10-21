@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Production Guide (Python)"
 description: "Production deployment, monitoring, resilience and testing for Semantic Kernel Python applications."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 **Production deployment, monitoring, resilience and testing for Python**

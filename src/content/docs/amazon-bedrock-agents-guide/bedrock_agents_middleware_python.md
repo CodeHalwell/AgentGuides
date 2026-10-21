@@ -1,7 +1,8 @@
 ---
 title: "Implementing Middleware for Amazon Bedrock Agents (Python)"
 description: "This guide explains how to implement middleware for Amazon Bedrock Agents to add custom logic for tasks like authentication, logging, and caching."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 This guide explains how to implement middleware for Amazon Bedrock Agents to add custom logic for tasks like authentication, logging, and caching.

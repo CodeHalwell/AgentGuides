@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK: Production Guide"
 description: "A comprehensive guide to deploying, scaling, and operating agents in production environments. This guide covers deployment architectures, observability, security, performance optim"
-framework: openai-agents-sdk
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
 A comprehensive guide to deploying, scaling, and operating agents in production environments. This guide covers deployment architectures, observability, security, performance optimisation, and operational best practices.

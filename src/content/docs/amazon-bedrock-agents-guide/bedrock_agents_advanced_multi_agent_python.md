@@ -1,7 +1,8 @@
 ---
 title: "Advanced Multi-Agent Patterns for Amazon Bedrock Agents (Python)"
 description: "Hierarchical, dynamic and supervisor-based multi-agent patterns on Amazon Bedrock: Bedrock Agents multi-agent collaboration, Strands, A2A on AgentCore, and monitoring."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 Patterns for building multi-agent systems on Amazon Bedrock, with two implementation routes:

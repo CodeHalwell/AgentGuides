@@ -1,8 +1,8 @@
 ---
 title: "TracePolicy — per-node LangSmith tracing API reference"
 description: "Control how individual graph nodes are traced in LangSmith with TracePolicy, omit_payload, and process_inputs/process_outputs processors — source-verified."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · TracePolicy"
   order: 41

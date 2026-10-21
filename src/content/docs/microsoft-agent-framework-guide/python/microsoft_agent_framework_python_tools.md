@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
 description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Tools are how agents call back into your code. Agent Framework offers two ways to define them — the `@tool` decorator for the common case and the `FunctionTool` class for advanced construction. Both target the same `FunctionTool` object that the agent sees.

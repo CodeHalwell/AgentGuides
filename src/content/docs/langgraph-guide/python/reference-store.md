@@ -1,8 +1,8 @@
 ---
 title: "Store (long-term memory) — API reference"
 description: "BaseStore, InMemoryStore, IndexConfig, TTLConfig — the cross-thread key-value-plus-vector-search layer LangGraph uses for durable memory across conversations."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Store"
   order: 32

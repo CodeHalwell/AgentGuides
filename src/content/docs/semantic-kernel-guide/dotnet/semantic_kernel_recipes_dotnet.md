@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Recipes (.NET)"
 description: "Ready-to-use C# patterns for Semantic Kernel — ASP.NET Core endpoints, agents with dependency injection, orchestrations, RAG and streaming."
-framework: semantic-kernel
-language: dotnet
+framework: "semantic-kernel"
+language: "dotnet"
 ---
 
 > Targets `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (checked %%versions-checked%%). Agents need `Microsoft.SemanticKernel.Agents.Core`; orchestrations need the preview packages `Microsoft.SemanticKernel.Agents.Orchestration` and `.Agents.Runtime.InProcess` and `<NoWarn>$(NoWarn);SKEXP0110</NoWarn>`. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/), Semantic Kernel's successor.

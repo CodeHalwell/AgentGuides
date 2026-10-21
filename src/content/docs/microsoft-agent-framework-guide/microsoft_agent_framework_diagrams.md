@@ -1,7 +1,7 @@
 ---
 title: "Microsoft Agent Framework - Architecture Diagrams & Visualisations"
 description: "Architecture and flow diagrams for the Microsoft Agent Framework — agent lifecycle, orchestration patterns, workflows and Azure deployment topology."
-framework: microsoft-agent-framework
+framework: "microsoft-agent-framework"
 ---
 
 **Purpose:** Visual representation of Agent Framework architecture and system design

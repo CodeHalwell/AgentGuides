@@ -1,7 +1,7 @@
 ---
 title: "Microsoft Agent Framework — A2A Protocol"
 description: "The real A2AAgent in agent-framework-a2a — connect to any A2A-compliant external agent via HTTP/JSON-RPC."
-framework: microsoft-agent-framework
+framework: "microsoft-agent-framework"
 ---
 
 > **Errata (April 2026).** An earlier draft of this page described a sprawling `agent_framework.a2a` submodule with classes like `A2AProtocolAdapter`, `A2AClient`, `A2AMessage`, `OAuth2Authentication`, `EntraIdAuthentication`, `MutualTLSAuthentication`, `ApiKeyAuthentication`, `AccessPolicy`, `SigningConfig`, `RateLimitConfig`, `CircuitBreakerConfig`, and `EncryptionConfig`. **None of those classes exist.** The `agent_framework.a2a` package exports exactly one class: `A2AAgent`. This page was rewritten after direct introspection of `agent-framework-a2a` 1.0.0b260421.

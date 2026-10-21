@@ -1,8 +1,8 @@
 ---
 title: "Command, Send & control flow — API reference"
 description: "The Command and Send primitives let a node update state, jump to another node, and fan out to many parallel node instances in a single return value — plus Command.PARENT for cross-subgraph routing."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Command / Send"
   order: 34

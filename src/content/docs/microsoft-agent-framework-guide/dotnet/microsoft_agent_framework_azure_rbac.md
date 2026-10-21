@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework - Azure RBAC"
 description: "Least-privileged RBAC for Azure AI Agents and Key Vault."
-framework: microsoft-agent-framework
-language: dotnet
+framework: "microsoft-agent-framework"
+language: "dotnet"
 ---
 
 ## Roles

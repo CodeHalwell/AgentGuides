@@ -1,7 +1,8 @@
 ---
 title: "CrewAI Advanced Multi‑Agent Patterns (Python)"
 description: "Complex team orchestration, error recovery, HITL, and performance with CrewAI."
-framework: crewai
+framework: "crewai"
+language: "python"
 ---
 
 > **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%).

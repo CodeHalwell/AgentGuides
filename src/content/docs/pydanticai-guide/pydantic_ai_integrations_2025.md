@@ -1,7 +1,8 @@
 ---
 title: "Pydantic AI: Integrations — MCP, A2A and UI Protocols"
 description: "Connecting Pydantic AI agents to the outside world: MCP clients and servers (MCPToolset, MCP capability, MCPServerTool), Agent-to-Agent via fasta2a, AG-UI and Vercel AI SDK adapters, the built-in web chat UI and the CLI."
-framework: pydanticai
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). The MCP, A2A and web-UI examples were run against that release (fastmcp via the `mcp` extra, fasta2a 2.1).

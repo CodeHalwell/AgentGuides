@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Model Providers"
 description: "Real imports and constructors for every first-party chat client in agent-framework: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Ollama, Bedrock, GitHub Copilot, Copilot Studio."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Every chat client in `agent-framework` implements the same `SupportsChatGetResponse` protocol, so `Agent(client=...)` accepts them interchangeably. The import is always `agent_framework.<provider>.<ClassName>` — **no Azure SDK import is required for any of these**. The Azure SDK only becomes relevant for authentication (`azure-identity`) or for Azure-specific storage providers.

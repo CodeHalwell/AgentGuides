@@ -1,7 +1,8 @@
 ---
 title: "Amazon Bedrock Agents: Architecture Diagrams and Visual References"
 description: "Comprehensive visual representations of Bedrock Agents architecture, data flows, and deployment patterns."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 Comprehensive visual representations of Bedrock Agents architecture, data flows, and deployment patterns.

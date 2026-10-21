@@ -1,8 +1,8 @@
 ---
 title: "Chapter 8 — Middleware & Hooks"
 description: "Intercept model and tool calls in LangGraph using pre_model_hook, post_model_hook, per-node error handlers, retry policies, and set_node_defaults."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "8 · Middleware & Hooks"
   order: 8

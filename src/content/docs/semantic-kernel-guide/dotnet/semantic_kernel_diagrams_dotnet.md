@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Diagrams (.NET)"
 description: "Visual architecture and flow diagrams for Semantic Kernel in .NET — request flow, dependency injection lifetimes and agent orchestration."
-framework: semantic-kernel
-language: dotnet
+framework: "semantic-kernel"
+language: "dotnet"
 ---
 
 Diagrams for `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%%. Code for each flow is in the [comprehensive .NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/).

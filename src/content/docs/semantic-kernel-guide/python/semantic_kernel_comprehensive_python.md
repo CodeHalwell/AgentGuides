@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Comprehensive Guide (Python)"
 description: "Semantic Kernel for Python — kernel and services, prompt and native functions, plugins, function calling, agents, orchestrations, vector stores, MCP, filters, processes and migration to Microsoft Agent Framework."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Imports, constructors and method signatures on this page were checked against an installed copy; the agent, orchestration, filter and vector-store examples were run end to end against a stub chat service.

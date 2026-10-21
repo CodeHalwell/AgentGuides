@@ -1,7 +1,8 @@
 ---
 title: "Pydantic AI: Production Deployment & Architecture Guide"
 description: "Enterprise-grade deployment, scaling, monitoring, and architectural patterns for Pydantic AI agents."
-framework: pydanticai
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line and updated for V2.

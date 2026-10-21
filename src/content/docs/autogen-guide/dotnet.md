@@ -1,8 +1,8 @@
 ---
 title: "Microsoft AutoGen for .NET"
 description: "What exists of Microsoft AutoGen for .NET — the AutoGen.* 0.2 port and the never-stabilised Microsoft.AutoGen.* previews — and why new .NET projects should use Microsoft Agent Framework."
-framework: autogen
-language: dotnet
+framework: "autogen"
+language: "dotnet"
 sidebar:
   label: ".NET (archived)"
 ---

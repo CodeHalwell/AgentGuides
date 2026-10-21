@@ -1,7 +1,7 @@
 ---
 title: "Microsoft Agent Framework - Enterprise Features"
 description: "Enterprise patterns for the Microsoft Agent Framework — OpenTelemetry, Entra ID, Azure AI Content Safety, PII redaction, Purview, governance and audit logging — built from the framework's real middleware, client and observability APIs."
-framework: microsoft-agent-framework
+framework: "microsoft-agent-framework"
 ---
 
 **Target audience:** enterprise architects, security teams, compliance officers

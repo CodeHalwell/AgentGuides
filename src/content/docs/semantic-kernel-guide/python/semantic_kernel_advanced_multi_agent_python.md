@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Advanced Multi‑Agent (Python)"
 description: "Advanced multi-agent patterns in Semantic Kernel (Python) — custom group-chat managers, hand-offs with human input, routing, structured results and resilience."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Orchestrations are experimental in Semantic Kernel; Microsoft Agent Framework's workflows are their supported successor — see the [comprehensive guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework).

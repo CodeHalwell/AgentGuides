@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API: Agent Orchestration Guide"
 description: "Coordinating multiple Mistral agents: code-driven pipelines, parallel fan-out, handoff graphs, manager-worker delegation and state across agents."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).

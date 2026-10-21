@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Features and Updates (2025–2026)"
 description: "Type-safe agents, human-in-the-loop approvals, tracing, guardrails, MCP and provider-agnostic models in the TypeScript SDK, plus what changed in 2026."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). First written in January 2025. TypeScript 5+, Node.js 22+.

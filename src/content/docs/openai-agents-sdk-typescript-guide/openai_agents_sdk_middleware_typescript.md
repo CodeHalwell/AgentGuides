@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK Middleware and Guardrails (TypeScript)"
 description: "Implement middleware, guardrails, and tracing with the OpenAI Agents SDK in TypeScript."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).

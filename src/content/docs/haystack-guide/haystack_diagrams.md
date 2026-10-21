@@ -1,7 +1,8 @@
 ---
 title: "Haystack Architecture and Pattern Diagrams"
 description: "Architecture diagrams for Haystack 3 — components, pipeline execution, the agent loop, multi-agent coordination and memory/retrieval."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Reflects `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Component names follow Haystack 3: ChatGenerators only, tools executed by `Agent`, a single `Pipeline` class with `run`, `run_async` and `stream`.

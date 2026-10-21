@@ -1,8 +1,8 @@
 ---
 title: "MCP and A2A"
 description: "Consume MCP tools, expose agents as A2A servers, and call remote A2A agents from ADK."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 70
 ---

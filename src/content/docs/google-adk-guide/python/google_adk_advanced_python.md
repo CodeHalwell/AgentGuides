@@ -1,8 +1,8 @@
 ---
 title: "Google ADK Advanced (Python)"
 description: "Planners (BuiltInPlanner, PlanReActPlanner), custom BaseTool / BaseToolset, authenticated tools, and deployment."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 80
 ---

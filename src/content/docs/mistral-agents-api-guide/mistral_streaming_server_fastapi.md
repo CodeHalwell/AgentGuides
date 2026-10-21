@@ -1,7 +1,8 @@
 ---
 title: "Mistral Streaming Server (FastAPI)"
 description: "A FastAPI server that streams Mistral agent conversations to browsers as Server-Sent Events."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).

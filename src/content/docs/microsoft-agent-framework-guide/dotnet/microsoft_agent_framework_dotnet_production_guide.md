@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework .NET - Production Guide"
 description: "This guide provides enterprise-level best practices for deploying, managing, and scaling applications built with the Microsoft Agent Framework for .NET."
-framework: microsoft-agent-framework
-language: dotnet
+framework: "microsoft-agent-framework"
+language: "dotnet"
 ---
 
 This guide provides enterprise-level best practices for deploying, managing, and scaling applications built with the Microsoft Agent Framework for .NET.

@@ -1,8 +1,8 @@
 ---
 title: "LangChain.js and LangGraph.js Comprehensive Technical Guide"
 description: "Beginner to Expert Level Production-Ready Patterns"
-framework: langgraph
-language: typescript
+framework: "langgraph"
+language: "typescript"
 ---
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%). First written for 1.0.

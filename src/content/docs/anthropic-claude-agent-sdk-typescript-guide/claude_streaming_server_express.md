@@ -1,7 +1,8 @@
 ---
 title: "Claude Streaming Server (Express)"
 description: "Stream Claude Agent SDK runs to browsers over Server-Sent Events with Express."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).

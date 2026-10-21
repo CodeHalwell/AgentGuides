@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK Advanced Multi‑Agent (Python)"
 description: "Advanced multi-agent coordination, handoffs, and guardrails in Python."
-framework: openai-agents-sdk
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).

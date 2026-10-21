@@ -1,8 +1,8 @@
 ---
 title: "Functional API (`@entrypoint`, `@task`) — API reference"
 description: "Turn ordinary Python functions into LangGraph workflows with @entrypoint and @task — the imperative alternative to StateGraph, with the same checkpointing, streaming, and interrupt semantics."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Functional API"
   order: 33

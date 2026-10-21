@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents Streaming Server (Express)"
 description: "Stream Agents SDK runs (and raw model output) to clients over SSE from Node/Express."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Requires `express`, `zod` and `@openai/agents@%%version=@openai/agents%%`; Node.js 22+.

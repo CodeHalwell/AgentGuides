@@ -1,7 +1,8 @@
 ---
 title: "CrewAI Production Guide"
 description: "Running CrewAI in production — testing, deployment, monitoring, performance and cost optimisation, and error recovery."
-framework: crewai
+framework: "crewai"
+language: "python"
 ---
 
 ## Deploying, Testing, Optimising, and Maintaining Multi-Agent Systems

@@ -1,8 +1,8 @@
 ---
 title: "Google ADK for Go - Production Deployment Guide"
 description: "Deploying ADK for Go agents: containers, Cloud Run, GKE, authentication, rate limiting, telemetry, caching and CI/CD."
-framework: google-adk
-language: go
+framework: "google-adk"
+language: "go"
 ---
 
 **Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). The Go programs on this page compile with `go vet` against that release; the YAML and shell snippets are templates to adapt.

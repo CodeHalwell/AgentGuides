@@ -1,8 +1,8 @@
 ---
 title: "LangChain.js and LangGraph.js Diagrams and Visualisations"
 description: "Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications."
-framework: langgraph
-language: typescript
+framework: "langgraph"
+language: "typescript"
 ---
 
 Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications.

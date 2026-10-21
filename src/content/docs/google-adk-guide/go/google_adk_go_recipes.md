@@ -1,8 +1,8 @@
 ---
 title: "Google ADK for Go - Recipes"
 description: "Task-shaped, compile-checked ADK for Go programs: tools, structured output, multi-agent patterns, persistent sessions, streaming, HTTP serving, workers and Cloud Storage artifacts."
-framework: google-adk
-language: go
+framework: "google-adk"
+language: "go"
 ---
 
 **Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). Each recipe is a complete program that compiles with `go vet` against that release. Recipes that only build an agent take the model as a `model.LLM` parameter; create one with `gemini.NewModel` as in [Hello World](#hello-world).

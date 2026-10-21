@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Diagrams (Python)"
 description: "Visual architecture and flow diagrams for Semantic Kernel in Python — async execution, FastAPI integration and agent flows."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 **Visual architecture and flow diagrams for the Python SDK** (`semantic-kernel` %%version=semantic-kernel%%)

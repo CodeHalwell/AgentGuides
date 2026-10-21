@@ -1,8 +1,8 @@
 ---
 title: "AG2 Classic Production Guide"
 description: "Enterprise-Grade Deployment, Monitoring, and Optimisation"
-framework: autogen
-language: python
+framework: "autogen"
+language: "python"
 ---
 
 > **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.

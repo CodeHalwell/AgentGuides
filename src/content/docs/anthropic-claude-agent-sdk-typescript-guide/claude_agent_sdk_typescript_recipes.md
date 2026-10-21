@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (TypeScript) — Recipes"
 description: "Type-checked TypeScript recipes for the Claude Agent SDK: code review, research, QA, documentation, performance and security agents."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%); every block type-checks with `strict: true`. Install with:

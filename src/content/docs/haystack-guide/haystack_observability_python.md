@@ -1,7 +1,8 @@
 ---
 title: "Haystack Observability & Error Recovery (Python)"
 description: "Tracing pipelines and agents, logging, retries, fallbacks and dead letters in Haystack 3."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Upstream: [release notes](https://github.com/deepset-ai/haystack/releases) · [tracing docs](https://docs.haystack.deepset.ai/docs/tracing)

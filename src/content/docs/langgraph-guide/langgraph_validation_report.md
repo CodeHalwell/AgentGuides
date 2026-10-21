@@ -1,7 +1,7 @@
 ---
 title: "LangGraph Validation Report"
 description: "How the LangGraph guides were checked against the installed Python and TypeScript packages, what was corrected, and what is known to be outstanding."
-framework: langgraph
+framework: "langgraph"
 ---
 
 **Last validated:** %%versions-checked%%

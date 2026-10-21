@@ -1,7 +1,8 @@
 ---
 title: "CrewAI Comprehensive Technical Guide"
 description: "Complete CrewAI reference — agents, tasks, crews, processes, tools, memory, knowledge, structured output and task management."
-framework: crewai
+framework: "crewai"
+language: "python"
 ---
 
 > **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%). First written for the 1.x line in late 2025 and revised through the 1.14 and 1.15 releases.

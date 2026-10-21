@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex Architecture and System Diagrams"
 description: "Comprehensive visual documentation of LlamaIndex components, workflows, and patterns."
-framework: llamaindex
-language: python
+framework: "llamaindex"
+language: "python"
 ---
 
 Visual reference for LlamaIndex components, workflows and patterns. Class names match `llama-index-core` %%version=llama-index%%; see the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/) for code.

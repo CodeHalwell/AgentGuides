@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Toolsets"
 description: "FunctionToolset, CombinedToolset, FilteredToolset, PrefixedToolset, RenamedToolset, PreparedToolset, ApprovalRequiredToolset, DeferredLoadingToolset, ExternalToolset — compose and reshape tool collections."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.toolsets.*`.

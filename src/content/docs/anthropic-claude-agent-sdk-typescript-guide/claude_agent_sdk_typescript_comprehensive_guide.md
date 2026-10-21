@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (TypeScript) — Comprehensive Guide"
 description: "Reference for building agents with @anthropic-ai/claude-agent-sdk: query(), streaming input, tools, MCP, subagents, hooks, permissions, sessions and thinking."
-framework: anthropic-claude-agent-sdk-typescript
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
 **Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%%** (checked %%versions-checked%%). Every code block on this page was type-checked against the installed package with TypeScript and Zod 4.

@@ -1,8 +1,8 @@
 ---
 title: "Semantic Kernel Recipes (Python)"
 description: "Ready-to-use Python recipes for Semantic Kernel — Q&A, structured extraction, plugins, RAG with vector stores, multi-agent teams, resilient agents and MCP tools."
-framework: semantic-kernel
-language: python
+framework: "semantic-kernel"
+language: "python"
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Each recipe uses only APIs checked against an installed copy. Model names are examples. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/), Semantic Kernel's successor.

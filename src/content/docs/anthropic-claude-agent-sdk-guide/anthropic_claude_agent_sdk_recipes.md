@@ -1,7 +1,8 @@
 ---
 title: "Claude Agent SDK (Python) — Recipes"
 description: "Copy-and-adapt Python recipes for the Claude Agent SDK: summarisation, classification, code review, test generation, DevOps, subagents, custom tools and testing."
-framework: anthropic-claude-agent-sdk
+framework: "claude-agent-sdk"
+language: "python"
 ---
 
 Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%). Each recipe is self-contained; install with `pip install claude-agent-sdk==%%version=claude-agent-sdk%%` and set `ANTHROPIC_API_KEY`.

@@ -1,7 +1,8 @@
 ---
 title: "AG2 Production Guide"
 description: "Running AG2 1.x in production — pinning, testing with TestConfig, durable hubs, serving over A2A, observability, security and scaling."
-framework: ag2
+framework: "ag2"
+language: "python"
 ---
 
 > **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%).

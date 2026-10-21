@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide"
 description: "Agents, runner, handoffs, guardrails, sessions, tools and structured output with the OpenAI Agents SDK for TypeScript."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Node.js 22+ (also Deno, Bun and Cloudflare Workers with `nodejs_compat`), Zod 4, `openai` v7.

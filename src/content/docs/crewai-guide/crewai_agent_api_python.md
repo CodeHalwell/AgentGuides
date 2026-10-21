@@ -1,8 +1,8 @@
 ---
 title: "Agent API reference"
 description: "Every field on crewai.Agent, verified against installed source — role/goal/backstory, tools, planning_config, guardrails, knowledge, MCP servers, A2A, and checkpoint."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Agent API"
   order: 20

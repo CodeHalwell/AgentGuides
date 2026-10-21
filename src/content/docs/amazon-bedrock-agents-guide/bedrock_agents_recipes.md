@@ -1,7 +1,8 @@
 ---
 title: "Amazon Bedrock Agents: Recipes and Common Patterns"
 description: "Practical recipes for Amazon Bedrock Agents (Agents Classic) and AgentCore: support agents, supervisor multi-agent systems, A2A, financial analytics, code interpretation and document processing."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 Practical recipes for common Bedrock agent scenarios.

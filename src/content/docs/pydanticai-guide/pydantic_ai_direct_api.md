@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Direct API — Raw Model Calls"
 description: "model_request, model_request_sync, model_request_stream, model_request_stream_sync, StreamedResponseSync — make bare model calls without an Agent when you need minimal abstraction."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.direct`.

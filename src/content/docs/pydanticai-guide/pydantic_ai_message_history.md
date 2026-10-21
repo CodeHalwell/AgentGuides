@@ -1,8 +1,8 @@
 ---
 title: "PydanticAI: Message History & Multi-Turn"
 description: "Model messages, message_history, new_messages vs all_messages, ModelMessagesTypeAdapter (de)serialization, and HistoryProcessor."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.

@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework .NET - Comprehensive Technical Guide"
 description: "Comprehensive .NET reference for Microsoft.Agents.AI — ChatClientAgent, hosting and DI, workflows, tools, structured output, MCP, memory, context providers and Azure integration, with compiled examples."
-framework: microsoft-agent-framework
-language: dotnet
+framework: "microsoft-agent-framework"
+language: "dotnet"
 ---
 
 **Framework version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%; first written for the October 2025 preview). Every C# block on this page was compiled against that release.

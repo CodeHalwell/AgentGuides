@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Production-Ready Patterns & Best Practices Guide"
 description: "Enterprise-grade patterns for scalability, reliability and operations with the OpenAI Agents SDK in TypeScript."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).

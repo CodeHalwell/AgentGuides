@@ -1,7 +1,8 @@
 ---
 title: "CrewAI Flows - Comprehensive Guide"
 description: "Event-driven CrewAI Flows — decorators, state management, conditional routing, loops, and combining flows with crews."
-framework: crewai
+framework: "crewai"
+language: "python"
 ---
 
 > **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%).

@@ -1,8 +1,8 @@
 ---
 title: "LangChain.js and LangGraph.js Recipes"
 description: "Production-Ready Code Examples and Practical Implementations"
-framework: langgraph
-language: typescript
+framework: "langgraph"
+language: "typescript"
 ---
 
 **Production-Ready Code Examples and Practical Implementations**

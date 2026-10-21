@@ -1,7 +1,8 @@
 ---
 title: "Migration Guide: Claude Code SDK → Claude Agent SDK (Python)"
 description: "Moving from claude-code-sdk to claude-agent-sdk, and upgrading across 0.1.x and 0.2.x releases."
-framework: anthropic-claude-agent-sdk
+framework: "claude-agent-sdk"
+language: "python"
 ---
 
 **Target:** `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).

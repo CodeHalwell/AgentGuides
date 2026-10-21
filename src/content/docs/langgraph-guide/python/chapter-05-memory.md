@@ -1,8 +1,8 @@
 ---
 title: "Chapter 5 — Memory & Persistence"
 description: "Short-term state via checkpointers, long-term memory via Store, and cross-thread memory that survives across sessions."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "5 · Memory & persistence"
   order: 5

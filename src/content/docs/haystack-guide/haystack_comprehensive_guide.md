@@ -1,7 +1,8 @@
 ---
 title: "Haystack Comprehensive Technical Guide"
 description: "Components, pipelines, the Agent class, tools, state, hooks and multi-agent patterns in Haystack 3."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). This guide was first written for Haystack 2.x; every example has been reworked for the 3.x API. If you are upgrading existing code, start with [Migrating from Haystack 2.x](#migrating-from-haystack-2x).

@@ -1,7 +1,8 @@
 ---
 title: "Observability and Monitoring for Amazon Bedrock Agents (Python)"
 description: "Monitoring Amazon Bedrock agents: CloudWatch metrics and traces for Bedrock Agents (Classic), and OpenTelemetry-based AgentCore Observability for code-defined agents."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 How to monitor and debug agents on Bedrock. There are two stacks, and they are observed differently:

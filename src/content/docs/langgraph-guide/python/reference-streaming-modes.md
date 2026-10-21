@@ -1,8 +1,8 @@
 ---
 title: "Streaming modes — API reference"
 description: "All seven stream_mode values (values, updates, messages, custom, checkpoints, tasks, debug), the v1 vs v2 API, GraphOutput, StreamPart typed union, StreamWriter injection — what each one yields and when to pick it."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Streaming modes"
   order: 35

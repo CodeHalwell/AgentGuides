@@ -1,7 +1,7 @@
 ---
 title: "Semantic Kernel: Practical Recipes and Code Examples"
 description: "Cross-language Semantic Kernel recipes — Q&A, structured summaries, translation, plugins, RAG, multi-agent debate and tool-using agents, in Python and C#."
-framework: semantic-kernel
+framework: "semantic-kernel"
 ---
 
 > Targets `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. Each recipe shows both languages briefly; fuller versions are in the [Python recipes](/semantic-kernel-guide/python/semantic_kernel_recipes_python/) and [.NET recipes](/semantic-kernel-guide/dotnet/semantic_kernel_recipes_dotnet/). Model names are examples.

@@ -1,8 +1,8 @@
 ---
 title: "Agents (LlmAgent, LangGraphAgent, RemoteA2aAgent, Parallel, Loop, Sequential)"
 description: "All agent primitives shipped by google-adk: LlmAgent, LangGraphAgent, RemoteA2aAgent, and the deprecated shell agents."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 20
 ---

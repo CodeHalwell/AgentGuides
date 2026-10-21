@@ -1,7 +1,8 @@
 ---
 title: "Amazon Bedrock Agents: Comprehensive Technical Guide"
 description: "End-to-end reference for Amazon Bedrock Agents (Agents Classic): IAM, action groups, knowledge bases, guardrails, flows, models, regions and infrastructure as code, with boto3 examples."
-framework: amazon-bedrock-agents
+framework: "amazon-bedrock-agents"
+language: "python"
 ---
 
 > **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%). Service clients and operation names in the examples were checked against that release.

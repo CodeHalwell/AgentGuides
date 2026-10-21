@@ -1,8 +1,8 @@
 ---
 title: "Microsoft AutoGen 0.7 (AgentChat & Core)"
 description: "Reference for Microsoft AutoGen's current API — autogen-agentchat, autogen-core and autogen-ext: AssistantAgent, tools, structured output, teams, GraphFlow, state, MCP and the Core runtime. Includes the project's archived status."
-framework: autogen
-language: python
+framework: "autogen"
+language: "python"
 sidebar:
   order: 1
 ---

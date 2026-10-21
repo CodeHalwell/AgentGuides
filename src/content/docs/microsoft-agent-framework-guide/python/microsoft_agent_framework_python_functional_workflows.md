@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Functional Workflows"
 description: "Build workflows with plain Python functions using the @workflow and @step decorators, RunContext for HITL and state, FunctionalWorkflow checkpointing, and as_agent() for multi-agent composition."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 > **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`. The API is stable enough to build on but may change between minor releases.

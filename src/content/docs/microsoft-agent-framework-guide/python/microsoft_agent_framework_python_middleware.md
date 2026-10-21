@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Middleware"
 description: "Agent, chat, and function middleware in agent-framework — real signatures, short-circuit patterns, telemetry, retries, redaction, message injection, middleware bundles and AGENT-HOOKS enforcement."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Middleware is how you intercept agent runs without subclassing `Agent`. Three levels wrap three different call sites:

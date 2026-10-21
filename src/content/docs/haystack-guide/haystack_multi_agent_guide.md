@@ -1,7 +1,8 @@
 ---
 title: "Haystack Multi-Agent Systems Guide"
 description: "Building collaborative multi-agent applications with Haystack 3 — AgentTool coordinators, agents as pipeline stages, routing, parallel fan-out, refinement loops and shared state."
-framework: haystack
+framework: "haystack"
+language: "python"
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). First written in 2025 for Haystack 2.x; rewritten for the 3.x `Agent` API.

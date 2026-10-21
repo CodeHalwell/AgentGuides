@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API - May 2025 Launch and What Changed Since"
 description: "What Mistral launched with the Agents API on 27 May 2025, and how the API and the Python SDK have moved on since."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 This is a historical page. For current usage see the [comprehensive guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/), which is verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).

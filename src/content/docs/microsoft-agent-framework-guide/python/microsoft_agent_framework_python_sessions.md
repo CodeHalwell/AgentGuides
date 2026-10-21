@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Sessions & history"
 description: "AgentSession, HistoryProvider, InMemoryHistoryProvider, FileHistoryProvider, VectorStoreHistoryProvider, FileSessionStore, register_state_type, multi-provider audit logs, and serializing sessions across processes."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 A **session** is one logical conversation with an agent. The framework splits responsibilities cleanly:

@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Skills"
 description: "Progressive-disclosure domain knowledge for agents. InlineSkill / ClassSkill / FileSkillsSource / SkillsProvider with code-defined and file-based skills, composable sources, script runners, and approval gates."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Skills are a **progressive-disclosure** knowledge pattern. Instead of stuffing every reference doc and procedure into the system prompt, you advertise skill *names and descriptions* (cheap), let the model decide which to load (`load_skill`), and then fetch resources (`read_skill_resource`) or run scripts (`run_skill_script`) on demand. The total context stays small until the agent actually needs deeper knowledge.

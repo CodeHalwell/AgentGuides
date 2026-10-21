@@ -1,7 +1,7 @@
 ---
 title: "Microsoft Agent Framework Comprehensive Guide"
 description: "Language-neutral overview of the Microsoft Agent Framework — architecture, packages, authentication, simple agents, tools, execution models, testing and multi-agent systems — with verified Python and C# side by side."
-framework: microsoft-agent-framework
+framework: "microsoft-agent-framework"
 ---
 
 **Current releases:** `agent-framework` %%version=agent-framework%% (Python) · `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET) — the two version independently. Reviewed %%versions-checked%%: every Python example was import- and signature-checked (and the agent logic run against a stub chat client), and every C# example compiled, against those releases.

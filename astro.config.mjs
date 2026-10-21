@@ -5,6 +5,7 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import remarkBasePath from './src/plugins/remark-base-path.mjs';
 import remarkVersions from './src/plugins/remark-versions.mjs';
+import { guide } from './src/data/sidebar.mjs';
 import { readFileSync } from 'node:fs';
 import { ExpressiveCodeTheme } from '@astrojs/starlight/expressive-code';
 
@@ -141,182 +142,53 @@ export default defineConfig({
           label: 'Multi-Agent Orchestration',
           collapsed: true,
           items: [
-            { label: 'OpenAI Agents SDK (Python)', link: '/openai-agents-sdk-guides/' },
-            { label: 'OpenAI Agents SDK (TypeScript)', link: '/openai-agents-sdk-typescript-guide/' },
-            { label: 'CrewAI', link: '/crewai-guide/' },
-            {
-              label: 'AutoGen & AG2',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/autogen-guide/' },
-                { label: 'Microsoft AutoGen (Python)', link: '/autogen-guide/python/' },
-                { label: 'Microsoft AutoGen (.NET, archived)', link: '/autogen-guide/dotnet/' },
-                { label: 'AG2', link: '/ag2-guide/' },
-              ],
-            },
-            {
-              label: 'LangGraph (Python)',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/langgraph-guide/python/' },
-                {
-                  label: 'Zero → Hero',
-                  collapsed: false,
-                  items: [
-                    { label: '1 · Setup & core concepts', link: '/langgraph-guide/python/chapter-01-setup-and-core-concepts/' },
-                    { label: '2 · Your first agent', link: '/langgraph-guide/python/chapter-02-simple-agents/' },
-                    { label: '3 · Multi-agent systems', link: '/langgraph-guide/python/chapter-03-multi-agent/' },
-                    { label: '4 · Tools', link: '/langgraph-guide/python/chapter-04-tools/' },
-                    { label: '5 · Memory & persistence', link: '/langgraph-guide/python/chapter-05-memory/' },
-                    { label: '6 · Streaming & debugging', link: '/langgraph-guide/python/chapter-06-streaming-and-debugging/' },
-                    { label: '7 · Human-in-the-loop', link: '/langgraph-guide/python/chapter-07-human-in-the-loop/' },
-                    { label: '8 · Middleware', link: '/langgraph-guide/python/chapter-08-middleware-hooks/' },
-                    { label: '9 · Advanced patterns', link: '/langgraph-guide/python/chapter-09-advanced-patterns/' },
-                    { label: '10 · Production & troubleshooting', link: '/langgraph-guide/python/chapter-10-production/' },
-                  ],
-                },
-                {
-                  label: 'Reference',
-                  collapsed: true,
-                  items: [
-                    { label: 'Single-page comprehensive', link: '/langgraph-guide/python/langgraph_comprehensive_guide/' },
-                    { label: 'Recipes', link: '/langgraph-guide/python/langgraph_recipes/' },
-                    { label: 'Diagrams', link: '/langgraph-guide/python/langgraph_diagrams/' },
-                    { label: 'Production guide', link: '/langgraph-guide/python/langgraph_production_guide/' },
-                    { label: 'Advanced error recovery', link: '/langgraph-guide/python/langgraph_advanced_error_recovery/' },
-                    { label: 'Observability', link: '/langgraph-guide/python/langgraph_observability_python/' },
-                    { label: 'Performance optimization', link: '/langgraph-guide/python/langgraph_performance_optimization/' },
-                    { label: 'Streaming server (FastAPI)', link: '/langgraph-guide/python/langgraph_streaming_server_fastapi/' },
-                  ],
-                },
-                {
-                  label: 'API Reference',
-                  collapsed: true,
-                  items: [
-                    { label: 'StateGraph API', link: '/langgraph-guide/python/reference-state-graph/' },
-                    { label: 'Checkpointers', link: '/langgraph-guide/python/reference-checkpointers/' },
-                    { label: 'Store (long-term memory)', link: '/langgraph-guide/python/reference-store/' },
-                    { label: 'Functional API', link: '/langgraph-guide/python/reference-functional-api/' },
-                    { label: 'Command / Send', link: '/langgraph-guide/python/reference-command-and-send/' },
-                    { label: 'Streaming modes', link: '/langgraph-guide/python/reference-streaming-modes/' },
-                    { label: 'Prebuilt nodes', link: '/langgraph-guide/python/reference-prebuilt-nodes/' },
-                    { label: 'Channels', link: '/langgraph-guide/python/reference-channels/' },
-                    { label: 'Managed values', link: '/langgraph-guide/python/reference-managed-values/' },
-                    { label: 'Runtime & ToolRuntime', link: '/langgraph-guide/python/reference-runtime-and-managed-values/' },
-                    { label: 'RemoteGraph', link: '/langgraph-guide/python/reference-remote-graph/' },
-                    { label: 'Graceful shutdown', link: '/langgraph-guide/python/reference-graceful-shutdown/' },
-                    { label: 'TracePolicy', link: '/langgraph-guide/python/reference-trace-policy/' },
-                    { label: 'Cache backends', link: '/langgraph-guide/python/reference-cache-backends/' },
-                  ],
-                },
-              ],
-            },
-            { label: 'LangGraph (TypeScript)', link: '/langgraph-guide/typescript/' },
+            guide('openai-agents-sdk-guides', 'OpenAI Agents SDK (Python)'),
+            guide('openai-agents-sdk-typescript-guide', 'OpenAI Agents SDK (TypeScript)'),
+            guide('crewai-guide', 'CrewAI'),
+            guide('ag2-guide', 'AG2'),
+            guide('autogen-guide', 'Microsoft AutoGen'),
+            guide('langgraph-guide', 'LangGraph'),
           ],
         },
         {
           label: 'Data & Knowledge',
           collapsed: true,
           items: [
-            {
-              label: 'LlamaIndex',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/llamaindex-guide/' },
-                { label: 'Python', link: '/llamaindex-guide/python/' },
-                { label: 'TypeScript', link: '/llamaindex-guide/typescript/' },
-              ],
-            },
-            { label: 'Haystack', link: '/haystack-guide/' },
-            { label: 'PydanticAI', link: '/pydanticai-guide/' },
+            guide('llamaindex-guide', 'LlamaIndex'),
+            guide('haystack-guide', 'Haystack'),
+            guide('pydanticai-guide', 'PydanticAI'),
           ],
         },
         {
           label: 'Cloud-Native',
           collapsed: true,
           items: [
-            {
-              label: 'Amazon Bedrock Agents',
-              collapsed: true,
-              items: [
-                { label: 'Overview (Python)', link: '/amazon-bedrock-agents-guide/' },
-                {
-                  label: 'TypeScript',
-                  collapsed: true,
-                  items: [
-                    { label: 'Overview', link: '/amazon-bedrock-agents-guide/typescript/' },
-                    { label: 'Strands Agents', link: '/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/' },
-                    { label: 'AgentCore SDK', link: '/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/' },
-                    { label: 'Deploying to AgentCore Runtime', link: '/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/' },
-                  ],
-                },
-              ],
-            },
-            {
-              label: 'Microsoft Agent Framework',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/microsoft-agent-framework-guide/' },
-                {
-                  label: 'Python',
-                  collapsed: false,
-                  items: [
-                    { label: 'Overview', link: '/microsoft-agent-framework-guide/python/' },
-                    { label: 'Comprehensive guide', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/' },
-                    { label: '2025 features', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_2025_features/' },
-                    { label: 'Advanced', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/' },
-                    { label: 'Recipes', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/' },
-                    { label: 'Diagrams', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_diagrams/' },
-                    { label: 'Production guide', link: '/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/' },
-                  ],
-                },
-                { label: '.NET', link: '/microsoft-agent-framework-guide/dotnet/' },
-                { label: 'Go (preview)', link: '/microsoft-agent-framework-guide/go/' },
-              ],
-            },
-            {
-              label: 'Google ADK',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/google-adk-guide/' },
-                { label: 'Python', link: '/google-adk-guide/python/' },
-                { label: 'Go', link: '/google-adk-guide/go/' },
-                { label: 'TypeScript', link: '/google-adk-guide/typescript/' },
-              ],
-            },
+            guide('amazon-bedrock-agents-guide', 'Amazon Bedrock Agents'),
+            guide('microsoft-agent-framework-guide', 'Microsoft Agent Framework'),
+            guide('google-adk-guide', 'Google ADK'),
           ],
         },
         {
           label: 'Model-Specific',
           collapsed: true,
           items: [
-            { label: 'Anthropic Claude SDK (Python)', link: '/anthropic-claude-agent-sdk-guide/' },
-            { label: 'Anthropic Claude SDK (TypeScript)', link: '/anthropic-claude-agent-sdk-typescript-guide/' },
-            {
-              label: 'Mistral Agents API',
-              collapsed: true,
-              items: [
-                { label: 'Overview (Python)', link: '/mistral-agents-api-guide/' },
-                { label: 'TypeScript', link: '/mistral-agents-api-guide/typescript/' },
-              ],
-            },
+            guide('anthropic-claude-agent-sdk-guide', 'Claude Agent SDK (Python)'),
+            guide('anthropic-claude-agent-sdk-typescript-guide', 'Claude Agent SDK (TypeScript)'),
+            guide('mistral-agents-api-guide', 'Mistral Agents API'),
           ],
         },
         {
           label: 'Enterprise & Lightweight',
           collapsed: true,
           items: [
-            {
-              label: 'Semantic Kernel',
-              collapsed: true,
-              items: [
-                { label: 'Overview', link: '/semantic-kernel-guide/' },
-                { label: 'Python', link: '/semantic-kernel-guide/python/' },
-                { label: '.NET', link: '/semantic-kernel-guide/dotnet/' },
-              ],
-            },
-            { label: 'SmolAgents', link: '/smolagents-guide/' },
+            guide('semantic-kernel-guide', 'Semantic Kernel'),
+            guide('smolagents-guide', 'SmolAgents'),
           ],
+        },
+        {
+          label: 'Updates',
+          collapsed: true,
+          autogenerate: { directory: 'updates' },
         },
       ],
     }),

@@ -1,8 +1,8 @@
 ---
 title: "Knowledge sources"
 description: "Every built-in BaseKnowledgeSource — PDF, CSV, JSON, Excel, Docling, string, text file — plus custom sources, embedder config, and crew vs agent attachment."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Knowledge"
   order: 23

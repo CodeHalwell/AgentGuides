@@ -1,8 +1,8 @@
 ---
 title: "Memory and Artifacts"
 description: "Long-term memory (InMemory, Vertex Memory Bank, Vertex RAG) and artifact services (file, GCS, in-memory)."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
   order: 60
 ---

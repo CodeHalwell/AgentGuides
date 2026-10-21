@@ -1,8 +1,8 @@
 ---
 title: "Google Agent Development Kit (ADK) - Comprehensive Technical Guide"
 description: "Single-page technical guide to Google ADK for Python: agents, tools, MCP, memory, context engineering, Google Cloud integration, and a consolidated class and API reference."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 ---
 
 **Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%). The Class & API Reference was first built against 2.7.1; its imports and signatures have been re-checked against the current release, and entries note where behaviour changed.

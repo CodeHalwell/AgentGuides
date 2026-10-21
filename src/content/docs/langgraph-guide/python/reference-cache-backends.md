@@ -1,8 +1,8 @@
 ---
 title: "BaseCache & InMemoryCache — cache backend API reference"
 description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Cache backends"
   order: 42

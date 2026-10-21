@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework .NET - Architecture & Workflow Diagrams"
 description: "This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET."
-framework: microsoft-agent-framework
-language: dotnet
+framework: "microsoft-agent-framework"
+language: "dotnet"
 ---
 
 This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET.

@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API: Comprehensive Technical Guide"
 description: "Reference for Mistral's Agents and Conversations APIs with the mistralai Python SDK: agents, versions, conversations, streaming, tools, handoffs, structured output, guardrails and errors."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Every method, parameter and tool shape on this page was checked against an installed copy of the SDK. The architecture diagrams that used to open this page now live on the [diagrams page](/mistral-agents-api-guide/mistral_agents_api_diagrams/).

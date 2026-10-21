@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK: Features and Updates (2025–2026)"
 description: "The SDK's core features plus what changed in 2026 — sandbox agents, WebSocket transport, programmatic tool calling, openai v3. Python."
-framework: openai-agents-sdk
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). First written in January 2025 for v0.2.9. Language: Python.

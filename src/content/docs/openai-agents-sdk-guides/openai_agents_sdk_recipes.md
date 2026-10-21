@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK: Practical Recipes and Use Cases"
 description: "Production-ready implementations for common use cases and patterns with the OpenAI Agents SDK. Copy and adapt these recipes for your specific applications."
-framework: openai-agents-sdk
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
 Production-ready implementations for common use cases and patterns with the OpenAI Agents SDK. Copy and adapt these recipes for your specific applications.

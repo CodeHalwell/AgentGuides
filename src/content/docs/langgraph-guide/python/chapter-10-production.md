@@ -1,8 +1,8 @@
 ---
 title: "Chapter 10 — Production & Troubleshooting"
 description: "RetryPolicy, TimeoutPolicy, CachePolicy, Durability, IsLastStep/RemainingSteps, Topic channels, Send timeouts, Docker, CLI config, remote SDK, and fixes for common errors."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "10 · Production & troubleshooting"
   order: 10

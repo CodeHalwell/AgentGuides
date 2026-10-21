@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK: Diagrams and Architecture Guide"
 description: "Visual representations and architecture diagrams for the OpenAI Agents SDK, including agent lifecycle, multi-agent patterns, deployment topologies, and system flows."
-framework: openai-agents-sdk
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
 Visual representations and architecture diagrams for the OpenAI Agents SDK, including agent lifecycle, multi-agent patterns, deployment topologies, and system flows.

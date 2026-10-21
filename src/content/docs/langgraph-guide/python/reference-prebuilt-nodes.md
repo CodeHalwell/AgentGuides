@@ -1,8 +1,8 @@
 ---
 title: "ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference"
 description: "The prebuilt ToolNode executor, state/store injection annotations, ToolRuntime context, tools_condition router, ToolCallRequest interceptor, and ToolCallTransformer/ToolCallStream for per-tool streaming — with source-verified signatures."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Prebuilt nodes"
   order: 36

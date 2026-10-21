@@ -1,7 +1,8 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Complete Migration Guide from Swarm"
 description: "Moving Swarm-style multi-agent code to the OpenAI Agents SDK for TypeScript — side-by-side code, checklist, testing and deployment."
-framework: openai-agents-sdk-typescript
+framework: "openai-agents-sdk"
+language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). First written in January 2025.

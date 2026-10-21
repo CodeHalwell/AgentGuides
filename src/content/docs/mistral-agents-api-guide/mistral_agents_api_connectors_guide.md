@@ -1,7 +1,8 @@
 ---
 title: "Mistral Agents API: Connectors and Built-in Tools Guide"
 description: "Web search, code interpreter, image generation, document libraries and MCP connectors in Mistral's Agents and Conversations APIs, with mistralai Python examples."
-framework: mistral-agents-api
+framework: "mistral-agents-api"
+language: "python"
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Tool shapes on this page were validated against the SDK's request models.

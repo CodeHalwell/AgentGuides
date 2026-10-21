@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (Python) — Multi-Agent Orchestration"
 description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders, plus WorkflowBuilder graphs — real signatures and runnable examples."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
 Five built-in orchestration patterns ship in `agent-framework-orchestrations`. Each is a fluent builder that produces a `Workflow` — the same object type returned by `WorkflowBuilder`. Once you have a workflow, run it with `workflow.run(...)` or stream events with `workflow.run(..., stream=True)`.

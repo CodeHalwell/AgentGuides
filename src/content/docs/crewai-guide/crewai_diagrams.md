@@ -1,7 +1,8 @@
 ---
 title: "CrewAI Architecture and Workflow Diagrams"
 description: "Architecture and flow diagrams for CrewAI — agent lifecycle, process flows, task execution, collaboration, memory and tools."
-framework: crewai
+framework: "crewai"
+language: "python"
 ---
 
 ## Visual Guide to Multi-Agent Systems

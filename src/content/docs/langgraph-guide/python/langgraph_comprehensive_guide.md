@@ -1,8 +1,8 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
 description: "Single-page LangGraph reference for Python: fundamentals through advanced multi-agent architectures, with practical, production-ready patterns."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 ---
 
 **Verified against**: `langgraph` %%version=langgraph%% (checked %%versions-checked%%)
