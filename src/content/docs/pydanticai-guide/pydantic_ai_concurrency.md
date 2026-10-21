@@ -9,25 +9,29 @@ language: python
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.concurrency`.
 
-`ConcurrencyLimiter` caps the number of simultaneous model API calls without any external dependencies. When the cap is reached, additional callers queue and wait. Optionally set `max_queued` to reject requests once the queue depth exceeds a threshold.
+`ConcurrencyLimiter` caps the number of simultaneous operations without any external dependencies. When the cap is reached, additional callers queue and wait. Optionally set `max_queued` to reject work once the queue depth exceeds a threshold.
+
+There are two places to attach a limit:
+
+| Where | What it limits |
+|---|---|
+| `Agent(..., max_concurrency=...)` | Concurrent **runs** of that agent (each `run` / `run_sync` / `run_stream` / `iter` holds a slot for its whole duration). |
+| `limit_model_concurrency(model, ...)` (returns a `ConcurrencyLimitedModel`) | Concurrent **model requests** through that model, across every agent that uses it. |
+
+Both accept any `AnyConcurrencyLimit`: an `int`, a `ConcurrencyLimit`, a shared `ConcurrencyLimiter` instance, or `None`. There is no `concurrency_limiter` key in `ModelSettings` — passing one there is silently ignored.
 
 ## Minimal runnable example
 
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.concurrency import ConcurrencyLimiter
 
-limiter = ConcurrencyLimiter(max_running=3)
-
-agent = Agent('openai:gpt-4o')
+# At most 3 runs of this agent in flight at once; the rest queue.
+agent = Agent('openai:gpt-4o', max_concurrency=3)
 
 async def main():
-    # Run 10 queries but allow at most 3 in flight at once
     prompts = [f'What is {i} squared?' for i in range(10)]
-    results = await asyncio.gather(
-        *[agent.run(p, model_settings={'concurrency_limiter': limiter}) for p in prompts]
-    )
+    results = await asyncio.gather(*[agent.run(p) for p in prompts])
     for r in results:
         print(r.output)
 
@@ -79,74 +83,61 @@ When a task must wait, `ConcurrencyLimiter.acquire()` creates an OpenTelemetry s
 ## Backpressure with `max_queued`
 
 ```python
-from pydantic_ai.exceptions import ConcurrencyLimitExceeded
+from pydantic_ai import Agent
 from pydantic_ai.concurrency import ConcurrencyLimiter
+from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 strict_limiter = ConcurrencyLimiter(max_running=2, max_queued=5)
+agent = Agent('openai:gpt-4o', max_concurrency=strict_limiter)
 
-try:
-    # If 5 tasks are already waiting, this raises immediately
-    await agent.run('prompt', model_settings={'concurrency_limiter': strict_limiter})
-except ConcurrencyLimitExceeded as e:
-    print(f'Rejected: {e}')
-    # Handle gracefully — e.g. return a 429 to the caller
+async def handle(prompt: str):
+    try:
+        # If 5 tasks are already waiting, this raises immediately
+        return await agent.run(prompt)
+    except ConcurrencyLimitExceeded as e:
+        print(f'Rejected: {e}')
+        # Handle gracefully — e.g. return a 429 to the caller
 ```
 
-## Sharing a limiter across agents
+## Sharing a limit across agents — limit the model, not the agent
 
-A single `ConcurrencyLimiter` can be shared so the *total* concurrent calls across all agents stays bounded:
+Wrap the model once and give the wrapped model to every agent; the *total* concurrent requests stay bounded however many agents use it:
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, limit_model_concurrency
 from pydantic_ai.concurrency import ConcurrencyLimiter
 
-shared = ConcurrencyLimiter(max_running=10, name='shared-pool')
+shared = ConcurrencyLimiter(max_running=10, name='openai-pool')
+model = limit_model_concurrency('openai:gpt-4o', shared)
 
-summariser = Agent('openai:gpt-4o-mini')
-analyst    = Agent('openai:gpt-4o')
+summariser = Agent(model, instructions='Summarise the text.')
+analyst = Agent(model, instructions='Analyse the summary.')
 
-async def process(text: str):
-    summary = await summariser.run(
-        f'Summarise: {text}',
-        model_settings={'concurrency_limiter': shared},
-    )
-    analysis = await analyst.run(
-        f'Analyse: {summary.output}',
-        model_settings={'concurrency_limiter': shared},
-    )
+async def process(text: str) -> str:
+    summary = await summariser.run(text)
+    analysis = await analyst.run(summary.output)
     return analysis.output
 
-# At most 10 model calls run at once across both agents
-results = await asyncio.gather(*[process(doc) for doc in documents])
+async def main(documents: list[str]):
+    # At most 10 model requests run at once across both agents
+    return await asyncio.gather(*[process(doc) for doc in documents])
 ```
+
+Passing the same `ConcurrencyLimiter` instance as `max_concurrency=` to several agents works too, but then the slot is held for the whole run (including tool execution), not just the model call.
 
 ## Per-provider concurrency limiting
 
-Use separate limiters per provider to avoid hitting provider-specific rate limits:
+Use separate limiters per provider to stay inside provider-specific rate limits:
 
 ```python
-from pydantic_ai import Agent
-from pydantic_ai.concurrency import ConcurrencyLimiter
+from pydantic_ai import Agent, limit_model_concurrency
+from pydantic_ai.concurrency import ConcurrencyLimit
 
-openai_limiter   = ConcurrencyLimiter(max_running=20, name='openai')
-anthropic_limiter = ConcurrencyLimiter(max_running=5,  name='anthropic')
-
-openai_agent    = Agent('openai:gpt-4o')
-anthropic_agent = Agent('anthropic:claude-opus-4-5')
-
-# At call sites, pass the appropriate limiter
-async def call_openai(prompt):
-    return await openai_agent.run(
-        prompt,
-        model_settings={'concurrency_limiter': openai_limiter},
-    )
-
-async def call_anthropic(prompt):
-    return await anthropic_agent.run(
-        prompt,
-        model_settings={'concurrency_limiter': anthropic_limiter},
-    )
+openai_agent = Agent(limit_model_concurrency('openai:gpt-4o', 20))
+anthropic_agent = Agent(
+    limit_model_concurrency('anthropic:claude-opus-4-5', ConcurrencyLimit(max_running=5, max_queued=50))
+)
 ```
 
 ## Custom limiter — Redis-backed distributed limiting
@@ -184,24 +175,18 @@ class RedisLimiter(AbstractConcurrencyLimiter):
 
 ## `AnyConcurrencyLimit` type alias
 
-The `model_settings` dict accepts all these forms interchangeably:
+`max_concurrency=` and `limit_model_concurrency()` accept all these forms interchangeably:
 
 ```python
-from pydantic_ai.concurrency import AnyConcurrencyLimit
+from pydantic_ai import Agent
+from pydantic_ai.concurrency import AnyConcurrencyLimit, ConcurrencyLimit, ConcurrencyLimiter
 
 # AnyConcurrencyLimit = int | ConcurrencyLimit | AbstractConcurrencyLimiter | None
 
-# int shorthand — creates a ConcurrencyLimiter(max_running=N) internally
-settings = {'concurrency_limiter': 5}
-
-# ConcurrencyLimit config object
-settings = {'concurrency_limiter': ConcurrencyLimit(max_running=5, max_queued=20)}
-
-# Pre-created limiter instance (for sharing)
-settings = {'concurrency_limiter': shared_limiter}
-
-# None — no limiting (default)
-settings = {'concurrency_limiter': None}
+Agent('openai:gpt-4o', max_concurrency=5)                                          # int shorthand
+Agent('openai:gpt-4o', max_concurrency=ConcurrencyLimit(max_running=5, max_queued=20))  # config object
+Agent('openai:gpt-4o', max_concurrency=ConcurrencyLimiter(max_running=5))          # shareable instance
+Agent('openai:gpt-4o', max_concurrency=None)                                       # no limiting (default)
 ```
 
 ## FastAPI integration — request-level limiting
@@ -216,11 +201,11 @@ from pydantic_ai.concurrency import ConcurrencyLimiter
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 limiter = ConcurrencyLimiter(max_running=10, max_queued=20, name='api')
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:gpt-4o', max_concurrency=limiter)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.limiter = limiter
+    app.state.limiter = limiter   # e.g. for a /health endpoint reporting waiting_count
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -228,10 +213,7 @@ app = FastAPI(lifespan=lifespan)
 @app.post('/ask')
 async def ask(prompt: str):
     try:
-        result = await agent.run(
-            prompt,
-            model_settings={'concurrency_limiter': app.state.limiter},
-        )
+        result = await agent.run(prompt)
         return {'output': result.output}
     except ConcurrencyLimitExceeded:
         raise HTTPException(status_code=429, detail='Too many concurrent requests')
@@ -339,3 +321,5 @@ limiter = ConcurrencyLimiter(max_running=5, name='openai-gpt4o-pool')
 | `normalize_to_limiter` | `pydantic_ai.concurrency` | Normalise any `AnyConcurrencyLimit` → limiter instance or `None` |
 | `get_concurrency_context` | `pydantic_ai.concurrency` | Async context manager wrapping acquire/release |
 | `ConcurrencyLimitExceeded` | `pydantic_ai.exceptions` | Raised when queue depth exceeds `max_queued` |
+| `limit_model_concurrency`, `ConcurrencyLimitedModel` | `pydantic_ai.models.concurrency` (also `pydantic_ai`) | Wrap a model so its requests share a limiter |
+| `Agent(max_concurrency=...)` | `pydantic_ai.agent` | Limit concurrent runs of one agent |

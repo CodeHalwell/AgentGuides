@@ -7,7 +7,7 @@ language: python
 
 # Embeddings
 
-Verified against **pydantic-ai==1.102.0** — source module: `pydantic_ai.embeddings`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.embeddings`.
 
 The `Embedder` class provides a high-level, provider-agnostic API for generating vector embeddings. Specify a model name with `provider:model-name` syntax and call `embed_query()` or `embed_documents()` — the same interface works across OpenAI, Cohere, Google, Bedrock, and SentenceTransformers.
 
@@ -141,10 +141,14 @@ print(max_tokens)   # e.g. 8191 for text-embedding-3-small
 ```python
 result = await embedder.embed_query('test')
 
-result.embeddings        # list[list[float]] — one vector per input text
-result.model             # model name string
-result.usage             # EmbeddingUsage(total_tokens=N, prompt_tokens=N)
-result.provider_details  # raw provider response dict, if available
+result.embeddings        # Sequence[Sequence[float]] — one vector per input text
+result.inputs            # the texts that were embedded
+result.input_type        # 'query' or 'document'
+result.model_name        # e.g. 'text-embedding-3-small'
+result.provider_name     # e.g. 'openai'
+result.usage             # RequestUsage (input_tokens, …)
+result.cost()            # estimated price, via genai-prices
+result.provider_details  # raw provider details, if available
 ```
 
 ## Testing with `TestEmbeddingModel`
@@ -153,7 +157,7 @@ result.provider_details  # raw provider response dict, if available
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import TestEmbeddingModel
 
-test_model = TestEmbeddingModel(embedding_size=128)  # returns deterministic unit vectors
+test_model = TestEmbeddingModel(dimensions=128)  # deterministic vectors, no network (default 8 dims)
 
 embedder = Embedder(test_model)
 result = embedder.embed_query_sync('anything')
@@ -169,7 +173,7 @@ from pydantic_ai.embeddings import TestEmbeddingModel
 embedder = Embedder('openai:text-embedding-3-small')
 
 def test_my_pipeline():
-    with embedder.override(model=TestEmbeddingModel(embedding_size=1536)):
+    with embedder.override(model=TestEmbeddingModel(dimensions=1536)):
         result = embedder.embed_query_sync('test query')
         assert len(result.embeddings[0]) == 1536
 ```
@@ -210,7 +214,13 @@ class LocalFaissModel(EmbeddingModel):
         # Replace with actual embedding call
         import numpy as np
         vecs = [np.random.rand(self._dim).tolist() for _ in texts]
-        return EmbeddingResult(embeddings=vecs, model=self.model_name)
+        return EmbeddingResult(
+            vecs,
+            inputs=texts,
+            input_type=input_type,
+            model_name=self.model_name,
+            provider_name=self.system,
+        )
 
 embedder = Embedder(LocalFaissModel('/path/to/index'))
 ```
@@ -226,9 +236,9 @@ embedder = Embedder('openai:text-embedding-3-small', instrument=True)
 # Enable globally for all embedders created after this call
 Embedder.instrument_all(True)
 
-# Customise the settings
+# Customise the settings (e.g. keep input texts out of spans)
 from pydantic_ai.models.instrumented import InstrumentationSettings
-Embedder.instrument_all(InstrumentationSettings(event_mode='body'))
+Embedder.instrument_all(InstrumentationSettings(include_content=False))
 ```
 
 ## Similarity search pipeline
