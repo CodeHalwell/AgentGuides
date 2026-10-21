@@ -180,7 +180,7 @@ import asyncio
 from agent_framework import CheckResult, evaluator
 from agent_framework.openai import OpenAIChatClient
 
-judge_client = OpenAIChatClient(model="gpt-4o-mini")
+judge_client = OpenAIChatClient(model="%%model=openai-small%%")
 judge_semaphore = asyncio.Semaphore(8)        # cap concurrency to 8 in-flight judges
 
 JUDGE_PROMPT = """\
@@ -594,7 +594,7 @@ Microsoft Foundry ships a richer evaluator with groundedness, relevance, safety,
 ```python
 from agent_framework.foundry import FoundryEvals
 
-foundry_evals = FoundryEvals(project_client=project, model="gpt-4o-mini")
+foundry_evals = FoundryEvals(project_client=project, model="%%model=openai-small%%")
 
 all_results = await evaluate_agent(
     agent=agent,
@@ -936,7 +936,7 @@ for query in test_queries:
     responses.append(AgentEvalConverter.to_eval_item(query=query, response=r, agent=agent))
 
 # Score with Foundry (groundedness, relevance, safety, …)
-foundry = FoundryEvals(project_client=project, model="gpt-4o-mini")
+foundry = FoundryEvals(project_client=project, model="%%model=openai-small%%")
 [foundry_results] = await foundry.evaluate(responses, eval_name="order-agent-v2")
 foundry_results.raise_for_status()
 ```

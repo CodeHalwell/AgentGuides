@@ -14,7 +14,7 @@ Visual representations of Pydantic AI patterns, architectures, and workflows. Th
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    AGENT CREATION                        │
-│  Agent('openai:gpt-4o', instructions='...', deps_type)  │
+│  Agent('openai:%%model=openai%%', instructions='...', deps_type)  │
 └─────────────┬───────────────────────────────────────────┘
               │
               ▼

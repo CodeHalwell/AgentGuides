@@ -241,7 +241,7 @@ client = Swarm()
 swarm_agent = SwarmAgent(
     name="Assistant",
     instructions="You are a helpful assistant",
-    model="gpt-4"
+    model="%%model=openai%%"
 )
 
 result = client.run(
@@ -259,7 +259,7 @@ from agents import Agent, Runner
 agent = Agent(
     name="Assistant",
     instructions="You are a helpful assistant",
-    model="gpt-5.6-sol"
+    model="%%model=openai%%"
 )
 
 result = await Runner.run(agent, "Hello")

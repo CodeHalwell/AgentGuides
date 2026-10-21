@@ -32,7 +32,7 @@ builder.Services.AddSingleton<AIAgent>(_ =>
     new AzureOpenAIClient(
             new Uri(builder.Configuration["AZURE_OPENAI_ENDPOINT"]!),
             new DefaultAzureCredential())
-        .GetChatClient(builder.Configuration["AZURE_OPENAI_DEPLOYMENT"] ?? "gpt-4o-mini")
+        .GetChatClient(builder.Configuration["AZURE_OPENAI_DEPLOYMENT"] ?? "%%model=openai-small%%")
         .AsAIAgent(instructions: "You are a concise assistant."));
 
 var app = builder.Build();

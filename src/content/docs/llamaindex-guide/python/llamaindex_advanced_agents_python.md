@@ -17,7 +17,7 @@ from llama_index.core.agent.workflow import (
 from llama_index.core.workflow import Context, InputRequiredEvent, HumanResponseEvent, JsonSerializer
 from llama_index.llms.openai import OpenAI
 
-llm = OpenAI(model="gpt-5-mini")   # any tool-calling model
+llm = OpenAI(model="%%model=openai-small%%")   # any tool-calling model
 ```
 
 ---

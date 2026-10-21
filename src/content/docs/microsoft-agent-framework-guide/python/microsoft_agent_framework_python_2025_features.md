@@ -150,7 +150,7 @@ async def logging_middleware(context: ChatContext, next):
     print(f"after: {context.result}")
 
 agent = Agent(
-    client=FoundryChatClient(credential=DefaultAzureCredential(), model="gpt-4o"),
+    client=FoundryChatClient(credential=DefaultAzureCredential(), model="%%model=openai%%"),
     instructions="You are a helpful assistant.",
     middleware=[logging_middleware],  # must be a list in 2026 releases
 )

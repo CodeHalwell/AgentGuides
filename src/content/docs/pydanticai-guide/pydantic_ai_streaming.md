@@ -20,7 +20,7 @@ Pick the right one for your use case.
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Tell me a joke.') as stream:
@@ -52,7 +52,7 @@ class City(BaseModel):
     name: str
     population: int
 
-agent = Agent('openai:gpt-5.2', output_type=City)
+agent = Agent('openai:%%model=openai%%', output_type=City)
 
 async def main():
     async with agent.run_stream('Tell me about Paris.') as stream:
@@ -170,7 +170,7 @@ from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
 
 app = FastAPI()
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 @app.get('/stream')
 async def stream_endpoint(q: str):
@@ -255,7 +255,7 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.messages import ThinkingPart, TextPart, ToolCallPart
 
-agent = Agent('anthropic:claude-opus-4-7', model_settings={'thinking': 'low'})
+agent = Agent('anthropic:%%model=anthropic-flagship%%', model_settings={'thinking': 'low'})
 
 async def main():
     async with agent.run_stream('Is 17 a prime number? Show your reasoning.') as stream:
@@ -277,7 +277,7 @@ asyncio.run(main())
 import asyncio
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Count from 1 to 10000, each on a new line.') as stream:
@@ -303,7 +303,7 @@ Properties available after the stream completes (after `get_output()` or after d
 import asyncio
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Tell me something interesting.') as stream:

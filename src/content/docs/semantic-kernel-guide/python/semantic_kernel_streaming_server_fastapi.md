@@ -23,7 +23,7 @@ from semantic_kernel.functions import KernelArguments
 
 app = FastAPI()
 
-service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")    # reads OPENAI_API_KEY
+service = OpenAIChatCompletion(ai_model_id="%%model=openai-small%%")    # reads OPENAI_API_KEY
 kernel = Kernel()
 kernel.add_service(service)
 summarise = kernel.add_function(

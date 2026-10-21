@@ -448,7 +448,7 @@ from agent_framework.openai import OpenAIChatClient
 mcp = MCPStreamableHTTPTool(
     name="planner",
     url="https://planner.example.com/mcp",
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
 )
 
 async with mcp:
@@ -470,7 +470,7 @@ from agent_framework import Agent, SupportsMCPTool
 from agent_framework.openai import OpenAIChatClient
 
 
-client = OpenAIChatClient(model="gpt-5")
+client = OpenAIChatClient(model="%%model=openai%%")
 
 if isinstance(client, SupportsMCPTool):
     mcp_tool = client.get_mcp_tool(

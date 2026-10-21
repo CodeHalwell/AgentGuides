@@ -44,7 +44,7 @@ class BlogArticle(BaseModel):
     seo_keywords: List[str] = Field(..., description="Relevant keywords")
 
 # Initialise LLM
-llm = LLM(model="openai/gpt-4-turbo", temperature=0.7)
+llm = LLM(model="openai/%%model=openai%%", temperature=0.7)
 
 # Create agents
 researcher = Agent(
@@ -207,7 +207,7 @@ strategist = Agent(
 )
 
 # Define workflow
-llm = LLM(model="openai/gpt-4-turbo")
+llm = LLM(model="openai/%%model=openai%%")
 
 data_prep_task = Task(
     description="Prepare data for analysis: clean, validate, and transform dataset",

@@ -19,7 +19,7 @@ import asyncio
 from ag2 import Agent
 from ag2.config import OpenAIConfig
 
-assistant = Agent("assistant", prompt="You are a helpful assistant.", config=OpenAIConfig(model="gpt-4.1-mini"))
+assistant = Agent("assistant", prompt="You are a helpful assistant.", config=OpenAIConfig(model="%%model=openai-small%%"))
 
 
 async def main() -> None:
@@ -53,7 +53,7 @@ def calculator(a: float, b: float, op: str) -> float:
 agent = Agent(
     "maths",
     prompt="Use the calculator for every arithmetic step.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     tools=[calculator],
 )
 
@@ -80,7 +80,7 @@ class Invoice:
 extractor = Agent(
     "extractor",
     prompt="Extract invoice fields exactly as written.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     response_schema=Invoice,
 )
 
@@ -104,7 +104,7 @@ import asyncio
 from ag2 import Agent
 from ag2.config import OpenAIConfig
 
-config = OpenAIConfig(model="gpt-4.1-mini")
+config = OpenAIConfig(model="%%model=openai-small%%")
 
 translator = Agent("translator", prompt="Translate the given text into French. Reply with the translation only.", config=config)
 
@@ -132,7 +132,7 @@ from ag2.network import EV_CHANNEL_CLOSED, EV_PACKET, Hub, TransitionGraph
 
 
 async def main() -> None:
-    config = OpenAIConfig(model="gpt-4.1-mini")
+    config = OpenAIConfig(model="%%model=openai-small%%")
     hub = await Hub.open(MemoryKnowledgeStore(), ttl_sweep_interval=0)
 
     client = await hub.register(Agent("client", prompt="You commission short pieces.", config=config))
@@ -173,7 +173,7 @@ files = MCPToolkit(
     )
 )
 
-agent = Agent("librarian", prompt="Answer questions about files in the current directory.", config=OpenAIConfig(model="gpt-4.1-mini"), tools=[files])
+agent = Agent("librarian", prompt="Answer questions about files in the current directory.", config=OpenAIConfig(model="%%model=openai-small%%"), tools=[files])
 
 print(asyncio.run(agent.ask("Which Markdown files are here, and what is the first heading of each?")).body)
 ```

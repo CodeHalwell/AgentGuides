@@ -20,7 +20,7 @@ from google.adk.runners import InMemoryRunner
 
 root = LlmAgent(
     name="tutor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer concisely. If you do maths, show the steps.",
 )
 
@@ -67,7 +67,7 @@ class Reply(BaseModel):
 
 agent = LlmAgent(
     name="research_assistant",          # required; must be a Python identifier
-    model="gemini-2.5-flash",            # str or BaseLlm; inherits from ancestors when ""
+    model="%%model=gemini%%",            # str or BaseLlm; inherits from ancestors when ""
     description="Answers research questions with web search.",
     instruction="You are a research assistant. Cite the URLs you consulted.",
     tools=[google_search],
@@ -111,7 +111,7 @@ from google.genai import types
 
 agent = LlmAgent(
     name="precise_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Analyse the data carefully.",
     generate_content_config=types.GenerateContentConfig(
         temperature=0.2,          # lower = more deterministic
@@ -129,7 +129,7 @@ agent = LlmAgent(
 # Gemini 2.5 thinking mode
 thinking_agent = LlmAgent(
     name="thoughtful",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     generate_content_config=types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(
             include_thoughts=True,
@@ -147,13 +147,13 @@ A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini
 from google.adk.models import Gemini, LiteLlm
 
 # Gemini with explicit base URL and speech config
-agent = LlmAgent(name="voice", model=Gemini(model="gemini-2.5-pro"))
+agent = LlmAgent(name="voice", model=Gemini(model="%%model=gemini-flagship%%"))
 
 # OpenAI via LiteLlm (requires `pip install google-adk[extensions]`)
-agent = LlmAgent(name="gpt", model=LiteLlm(model="openai/gpt-4o"))
+agent = LlmAgent(name="gpt", model=LiteLlm(model="openai/%%model=openai%%"))
 
 # Change the class-level default for all agents in the process
-LlmAgent.set_default_model("gemini-2.5-pro")
+LlmAgent.set_default_model("%%model=gemini-flagship%%")
 ```
 
 ### Dynamic instructions
@@ -179,7 +179,7 @@ from google.genai import types
 # ── Without static_instruction (no caching benefit) ─────────────────────────
 agent_no_cache = LlmAgent(
     name="legal_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a legal assistant specialising in UK contract law. "
                 "Always cite relevant legislation. User: {user_name}.",
 )
@@ -189,7 +189,7 @@ agent_no_cache = LlmAgent(
 # The dynamic part (personalisation) is injected as user content each turn.
 agent_with_cache = LlmAgent(
     name="legal_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     # This large, fixed block is eligible for Gemini's implicit context cache:
     static_instruction=(
         "You are a legal assistant specialising in UK contract law. "
@@ -207,7 +207,7 @@ agent_with_cache = LlmAgent(
 # static_instruction accepts types.ContentUnion, so you can include file refs:
 agent_with_doc = LlmAgent(
     name="doc_analyst",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     static_instruction=types.Content(
         role="user",
         parts=[
@@ -254,20 +254,20 @@ from google.genai import types
 
 billing = LlmAgent(
     name="billing",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Handles invoice and refund questions.",
     instruction="Answer billing questions concisely.",
 )
 support = LlmAgent(
     name="support",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Handles technical support questions.",
     instruction="Help users fix technical problems.",
 )
 
 coordinator = LlmAgent(
     name="triage",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     # mode='chat' is set automatically by the runner for root agents
     instruction="Route each question to the right specialist.",
     sub_agents=[billing, support],
@@ -306,13 +306,13 @@ from google.adk.apps import App
 
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="single_turn",                         # processes one turn, no history
     instruction="Write a punchy 2-sentence summary of the input topic.",
 )
 editor = LlmAgent(
     name="editor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="single_turn",
     instruction="Polish the summary. Fix grammar, tighten sentences. Return only the final text.",
 )
@@ -368,7 +368,7 @@ class ResearchOutput(BaseModel):
 # ── Task sub-agent — structured I/O, no transfer tools ──────────────────────
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="task",
     instruction=(
         "Research the given topic. Return a structured summary with "
@@ -381,7 +381,7 @@ researcher = LlmAgent(
 # ── Chat coordinator — delegates structured work to researcher ────────────────
 writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You write blog posts. For every topic, first ask the 'researcher' "
         "sub-agent for a structured brief, then write a 3-paragraph post."
@@ -444,7 +444,7 @@ from google.genai import types
 # ── Fan-out agent ─────────────────────────────────────────────────────────────
 _summariser_agent = LlmAgent(
     name="summariser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="single_turn",
     instruction="Summarise the given text in one sentence.",
 )
@@ -534,7 +534,7 @@ from google.adk.code_executors import BuiltInCodeExecutor
 
 agent = LlmAgent(
     name="analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Use Python to compute anything numeric.",
     code_executor=BuiltInCodeExecutor(),
 )
@@ -595,7 +595,7 @@ executor = BuiltInCodeExecutor(
 
 agent = LlmAgent(
     name="quant",
-    model="gemini-2.5-pro",   # MUST be a Gemini model — raises ValueError otherwise
+    model="%%model=gemini-flagship%%",   # MUST be a Gemini model — raises ValueError otherwise
     instruction=(
         "You are a quantitative analyst. Solve numerical problems by "
         "writing and executing Python. Always show intermediate steps."
@@ -635,7 +635,7 @@ shared_executor = VertexAiCodeExecutor(
 
 agent = LlmAgent(
     name="charts",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=(
         "Answer with data analysis. Use pandas + matplotlib. "
         "Save every chart to a PNG file — I will retrieve it as an artifact."
@@ -803,7 +803,7 @@ from google.genai import types
 # ── Minimal — enable thinking, no token budget ────────────────────────────────
 agent = LlmAgent(
     name="thoughtful",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(include_thoughts=True)
     ),
@@ -813,7 +813,7 @@ agent = LlmAgent(
 # ── Cap thinking tokens (reduces latency / cost) ──────────────────────────────
 agent_capped = LlmAgent(
     name="budgeted",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Research and summarise the topic.",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(
@@ -843,7 +843,7 @@ async def capture_thoughts(callback_context, llm_response):
 
 agent = LlmAgent(
     name="transparent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(include_thoughts=True)
     ),
@@ -865,7 +865,7 @@ from google.adk.tools import google_search
 
 agent = LlmAgent(
     name="planner_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer research questions with web search.",
     planner=PlanReActPlanner(),
     tools=[google_search],
@@ -940,7 +940,7 @@ async def get_company_news(company: str) -> dict:
 
 analyst = LlmAgent(
     name="analyst",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You are a financial analyst. Use the available tools to research "
         "companies and produce a concise investment brief."
@@ -1002,7 +1002,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from google.adk.agents.langgraph_agent import LangGraphAgent
 from google.adk.runners import InMemoryRunner
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+llm = ChatGoogleGenerativeAI(model="%%model=gemini%%")
 graph = create_react_agent(llm, tools=[])
 
 agent = LangGraphAgent(
@@ -1035,7 +1035,7 @@ remote = RemoteA2aAgent(
 
 root = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="For specialist tasks, delegate to 'remote_specialist'.",
     sub_agents=[remote],
 )
@@ -1071,7 +1071,7 @@ managed_search = ManagedAgent(
 # Chat coordinator — delegates to the managed agent
 root = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "For questions that need up-to-date information, "
         "ask 'web_researcher'. Handle everything else yourself."

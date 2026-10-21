@@ -68,7 +68,7 @@ asyncio.run(main())
 from pydantic_ai import Agent
 from pydantic_ai.mcp import load_mcp_toolsets
 
-agent = Agent('anthropic:claude-sonnet-4-6', toolsets=load_mcp_toolsets('mcp_config.json'))
+agent = Agent('anthropic:%%model=anthropic%%', toolsets=load_mcp_toolsets('mcp_config.json'))
 ```
 
 ### The `MCP` capability
@@ -78,11 +78,11 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import MCP
 
 # Runs a local MCP client against the URL (the default since 2.0)
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[MCP('https://mcp.example.com/mcp')])
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[MCP('https://mcp.example.com/mcp')])
 
 # Ask the provider to call the server itself (V1's default behaviour)
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[MCP('https://mcp.example.com/mcp', native=True, authorization_token='...')],
 )
 ```
@@ -124,7 +124,7 @@ pip install "fasta2a[pydantic-ai]"
 from fasta2a.pydantic_ai import agent_to_a2a
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2', name='support', instructions='Help with orders.')
+agent = Agent('openai:%%model=openai%%', name='support', instructions='Help with orders.')
 app = agent_to_a2a(agent, name='support', description='Answers order questions')
 # uvicorn my_module:app --port 8000
 ```
@@ -144,7 +144,7 @@ from pydantic_ai import Agent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 
-agent = Agent('openai:gpt-5.2', instructions='Be helpful.')
+agent = Agent('openai:%%model=openai%%', instructions='Be helpful.')
 app = FastAPI()
 
 

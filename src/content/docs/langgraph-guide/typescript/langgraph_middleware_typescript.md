@@ -29,7 +29,7 @@ const policy = createMiddleware({
 });
 
 const agent = createAgent({
-  model: "openai:gpt-4o-mini",
+  model: "openai:%%model=openai-small%%",
   tools: [],
   middleware: [
     policy,

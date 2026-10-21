@@ -180,7 +180,7 @@ def deploy_agent_to_vertex():
         - Maintaining system stability
         - Providing accurate information
         - Handling errors gracefully""",
-        "model": "gemini-2.5-pro",
+        "model": "%%model=gemini-flagship%%",
         "tools": [
             # Tool definitions
         ],
@@ -492,7 +492,7 @@ class LoadTestSuite:
 async def run_benchmarks():
     agent = Agent(
         name="benchmark_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Respond quickly and accurately"
     )
     
@@ -664,7 +664,7 @@ async def call_agent():
     from google.adk import Agent, Runner
     from google.adk.sessions import InMemorySessionService
     
-    agent = Agent(name="test", model="gemini-2.5-flash", instruction="Test")
+    agent = Agent(name="test", model="%%model=gemini%%", instruction="Test")
     runner = Runner(
         app_name="retry_test",
         agent=agent,
@@ -1108,11 +1108,11 @@ class TokenUsageTracker:
 
 # Model pricing configuration
 PRICING = {
-    "gemini-2.5-flash": {
+    "%%model=gemini%%": {
         "input": 0.075 / 1_000_000,
         "output": 0.30 / 1_000_000
     },
-    "gemini-2.5-pro": {
+    "%%model=gemini-flagship%%": {
         "input": 3.0 / 1_000_000,
         "output": 12.0 / 1_000_000
     }
@@ -1160,9 +1160,9 @@ class CostOptimizedModelSelector:
     """Select optimal model based on requirements and cost."""
     
     MODELS = {
-        "gemini-2.5-flash": {"cost": 1, "quality": 8, "speed": 10},
-        "gemini-2.5-pro": {"cost": 40, "quality": 10, "speed": 7},
-        "gemini-2.5-flash-lite": {"cost": 0.5, "quality": 7, "speed": 10}
+        "%%model=gemini%%": {"cost": 1, "quality": 8, "speed": 10},
+        "%%model=gemini-flagship%%": {"cost": 40, "quality": 10, "speed": 7},
+        "%%model=gemini-small%%": {"cost": 0.5, "quality": 7, "speed": 10}
     }
     
     @staticmethod
@@ -1182,7 +1182,7 @@ class CostOptimizedModelSelector:
                 candidates.append((model, metrics["cost"]))
         
         if not candidates:
-            return "gemini-2.5-pro"  # Fallback
+            return "%%model=gemini-flagship%%"  # Fallback
         
         # Return cheapest candidate
         return min(candidates, key=lambda x: x[1])[0]
@@ -1414,14 +1414,14 @@ def test_agent():
     """Create test agent."""
     return Agent(
         name="test_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="You are a helpful test agent"
     )
 
 def test_agent_creation(test_agent):
     """Test agent creation."""
     assert test_agent.name == "test_agent"
-    assert test_agent.model == "gemini-2.5-flash"
+    assert test_agent.model == "%%model=gemini%%"
 
 def test_agent_initialization():
     """Test agent initialization with tools."""
@@ -1430,7 +1430,7 @@ def test_agent_initialization():
     
     agent = Agent(
         name="tool_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         tools=[test_tool],
         instruction="Use the test tool"
     )
@@ -1489,7 +1489,7 @@ async def test_agent_with_firestore(firestore_db):
     
     agent = Agent(
         name="test_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Test agent"
     )
     
@@ -1527,7 +1527,7 @@ async def test_agent_latency():
     
     agent = Agent(
         name="perf_test",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Respond quickly"
     )
     
@@ -1548,7 +1548,7 @@ async def test_concurrent_agent_calls():
     
     agent = Agent(
         name="concurrent_test",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Test agent"
     )
     

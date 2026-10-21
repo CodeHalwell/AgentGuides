@@ -48,7 +48,7 @@ import (
 func main() {
 	// openai.NewClient reads OPENAI_API_KEY from the environment.
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "You are a concise assistant. Answer in one sentence.",
 		Config:       agent.Config{Name: "Helper"},
 	})

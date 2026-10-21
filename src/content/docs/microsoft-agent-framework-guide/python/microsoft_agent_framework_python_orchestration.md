@@ -225,7 +225,7 @@ from agent_framework_orchestrations import MagenticBuilder
 
 # The manager is itself an Agent — give it a capable model.
 manager_agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     name="magentic-manager",
     instructions="You coordinate specialists. Produce a task ledger, assign subtasks, and synthesise results.",
 )
@@ -601,8 +601,8 @@ def route_by_priority(task: AnalysisTask, candidate_ids: list[str]) -> list[str]
     return [cid for cid in candidate_ids if "fast" in cid]
 
 
-fast_agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), "Answer concisely.", id="fast_agent")
-thorough_agent = Agent(OpenAIChatClient(model="gpt-4o"), "Answer thoroughly.", id="thorough_agent")
+fast_agent = Agent(OpenAIChatClient(model="%%model=openai-small%%"), "Answer concisely.", id="fast_agent")
+thorough_agent = Agent(OpenAIChatClient(model="%%model=openai%%"), "Answer thoroughly.", id="thorough_agent")
 
 dispatcher = Dispatcher(id="dispatcher")
 fast_worker = AgentExecutor(id="fast_worker", agent=fast_agent)

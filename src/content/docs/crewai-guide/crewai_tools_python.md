@@ -35,7 +35,7 @@ researcher = Agent(
     role="Research Assistant",
     goal="Answer factual questions with citations",
     backstory="Librarian with encyclopaedic instincts.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     tools=[wiki_summary],
 )
 

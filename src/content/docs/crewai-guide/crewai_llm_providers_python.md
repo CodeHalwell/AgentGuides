@@ -18,10 +18,10 @@ The `LLM` factory is doing more than it looks. It's a `__new__`-time router that
 from crewai import LLM
 
 # Native provider (OpenAI) — uses `openai` SDK directly
-gpt = LLM(model="openai/gpt-4o-mini", temperature=0.2)
+gpt = LLM(model="openai/%%model=openai-small%%", temperature=0.2)
 
 # Provider prefix omitted — LLM infers from model name
-gpt = LLM(model="gpt-4o-mini")
+gpt = LLM(model="%%model=openai-small%%")
 
 # Non-native → LiteLLM fallback (requires litellm installed)
 mistral = LLM(model="mistral/mistral-large-latest")
@@ -42,7 +42,7 @@ The first argument **must** include a recognised provider prefix if the model na
             │ no
             ▼
   ┌─────────────────────────────────────┐
-  │ 2. "/" in model ("openai/gpt-4o")   │
+  │ 2. "/" in model ("openai/%%model=openai%%")   │
   │    → prefix looked up in            │
   │      provider_mapping               │
   │    → if model is in the native      │
@@ -79,7 +79,7 @@ Anything else (`mistral/`, `groq/`, `cohere/`, custom prefixes) falls through to
 ## Force LiteLLM
 
 ```python
-LLM(model="openai/gpt-4o-mini", is_litellm=True)
+LLM(model="openai/%%model=openai-small%%", is_litellm=True)
 ```
 
 Handy when you want LiteLLM's uniform interface even for natively supported models (e.g. to reuse a LiteLLM router config).
@@ -115,7 +115,7 @@ from crewai import LLM
 o3 = LLM(model="openai/o3", reasoning_effort="medium")
 
 claude = LLM(
-    model="anthropic/claude-sonnet-4-6",
+    model="anthropic/%%model=anthropic%%",
     thinking={"type": "enabled", "budget_tokens": 4096},
 )
 ```
@@ -142,8 +142,8 @@ writer = Agent(
     role="Writer",
     goal="...",
     backstory="...",
-    llm=LLM(model="openai/gpt-4o-mini"),
-    function_calling_llm=LLM(model="openai/gpt-4o"),  # tool-call formatting on a smarter model
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    function_calling_llm=LLM(model="openai/%%model=openai%%"),  # tool-call formatting on a smarter model
 )
 ```
 
@@ -166,9 +166,9 @@ Crew(
     agents=[...],
     tasks=[...],
     process=Process.hierarchical,
-    manager_llm=LLM(model="openai/gpt-4o"),
+    manager_llm=LLM(model="openai/%%model=openai%%"),
     planning=True,
-    planning_llm=LLM(model="openai/gpt-4o-mini"),
+    planning_llm=LLM(model="openai/%%model=openai-small%%"),
 )
 ```
 
@@ -211,7 +211,7 @@ from crewai import LLM
 def default_llm():
     if os.getenv("USE_LOCAL"):
         return LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434")
-    return LLM(model="openai/gpt-4o-mini")
+    return LLM(model="openai/%%model=openai-small%%")
 
 agent = Agent(role="...", goal="...", backstory="...", llm=default_llm())
 ```
@@ -223,8 +223,8 @@ Agent(
     role="Tool User",
     goal="...",
     backstory="...",
-    llm=LLM(model="openai/gpt-4o-mini"),
-    function_calling_llm=LLM(model="openai/gpt-4o"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    function_calling_llm=LLM(model="openai/%%model=openai%%"),
 )
 ```
 
@@ -239,7 +239,7 @@ class Timing:
     def log_post_api_call(self, *a, **k):
         print("call took", time.perf_counter() - self.t0, "s")
 
-llm = LLM(model="openai/gpt-4o", callbacks=[Timing()])
+llm = LLM(model="openai/%%model=openai%%", callbacks=[Timing()])
 ```
 
 Callbacks are passed through to LiteLLM — the standard LiteLLM callback API applies.
@@ -251,7 +251,7 @@ from pydantic import BaseModel
 class Plan(BaseModel):
     steps: list[str]
 
-llm = LLM(model="openai/gpt-4o", response_format=Plan)
+llm = LLM(model="openai/%%model=openai%%", response_format=Plan)
 ```
 
 Works for OpenAI, Gemini, and Claude's structured-tool mode. For other providers set `Task.output_pydantic` instead.

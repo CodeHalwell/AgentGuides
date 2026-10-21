@@ -14,7 +14,7 @@ from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion, OpenAICh
 from semantic_kernel.functions import KernelArguments
 
 kernel = Kernel()
-kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-5-mini"))   # OPENAI_API_KEY from env
+kernel.add_service(OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"))   # OPENAI_API_KEY from env
 ```
 
 All C# snippets assume:
@@ -24,7 +24,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 var builder = Kernel.CreateBuilder();
-builder.AddOpenAIChatCompletion("gpt-5-mini", Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
+builder.AddOpenAIChatCompletion("%%model=openai-small%%", Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
 Kernel kernel = builder.Build();
 ```
 
@@ -167,7 +167,7 @@ A group chat between two agents with a round limit:
 from semantic_kernel.agents import ChatCompletionAgent, GroupChatOrchestration, RoundRobinGroupChatManager
 from semantic_kernel.agents.runtime import InProcessRuntime
 
-svc = OpenAIChatCompletion(ai_model_id="gpt-5-mini")
+svc = OpenAIChatCompletion(ai_model_id="%%model=openai-small%%")
 pro = ChatCompletionAgent(name="Pro", description="Argues for", service=svc,
                           instructions="Argue FOR the motion in under 80 words. Rebut the last point.")
 con = ChatCompletionAgent(name="Con", description="Argues against", service=svc,
@@ -214,7 +214,7 @@ There is no special "ReAct agent" class: a `ChatCompletionAgent` with plugins an
 from semantic_kernel.agents import ChatCompletionAgent
 
 agent = ChatCompletionAgent(
-    service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+    service=OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"),
     name="Analyst",
     instructions="Before each tool call, state in one line what you are checking and why.",
     plugins=[Calculator()],

@@ -119,7 +119,7 @@ function validateEnvironmentVariables(): EnvironmentConfig {
     apis: {
       openai: {
         apiKey: process.env.OPENAI_API_KEY!,
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        model: process.env.OPENAI_MODEL || '%%model=openai%%',
         maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '4000'),
         timeout: parseInt(process.env.OPENAI_TIMEOUT || '30000'),
       },
@@ -336,7 +336,7 @@ import { encoding_for_model } from 'js-tiktoken';
 export class TokenCounter {
   private encoding: any;
   
-  constructor(modelName: string = 'gpt-4o') {
+  constructor(modelName: string = '%%model=openai%%') {
     this.encoding = encoding_for_model(modelName);
   }
   
@@ -365,8 +365,8 @@ export class TokenCounter {
   ): number {
     const pricing: Record<string, { input: number; output: number }> = {
       // USD per 1K tokens. Illustrative only: check current provider pricing.
-      'gpt-4o': { input: 0.0025, output: 0.01 },
-      'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
+      '%%model=openai%%': { input: 0.0025, output: 0.01 },
+      '%%model=openai-small%%': { input: 0.00015, output: 0.0006 },
       'claude-sonnet-5-5': { input: 0.002, output: 0.01 },
     };
     
@@ -397,7 +397,7 @@ export async function executeWithTokenTracking(
   
   const outputTokens = counter.countTokens(result);
   const totalTokens = inputTokens + outputTokens;
-  const cost = counter.estimateCost(inputTokens, outputTokens, 'gpt-4o');
+  const cost = counter.estimateCost(inputTokens, outputTokens, '%%model=openai%%');
   
   console.log(`
     Total tokens: ${totalTokens}

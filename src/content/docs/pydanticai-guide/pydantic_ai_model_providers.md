@@ -14,14 +14,14 @@ A PydanticAI `Agent` talks to an `LLM` through a `Model` backed by a `Provider`.
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 print(agent.run_sync('Hello!').output)
 
 # Same thing, constructed explicitly:
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-agent = Agent(OpenAIChatModel('gpt-5.2', provider=OpenAIProvider(api_key='sk-...')))
+agent = Agent(OpenAIChatModel('%%model=openai%%', provider=OpenAIProvider(api_key='sk-...')))
 ```
 
 The string `'openai:gpt-5.2'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
@@ -76,7 +76,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
 model = AnthropicModel(
-    'claude-sonnet-4-6',
+    '%%model=anthropic%%',
     provider=AnthropicProvider(api_key='...'),
 )
 agent = Agent(model)
@@ -111,7 +111,7 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 from pydantic_ai import Agent, ModelSettings
 
 agent = Agent(
-    'anthropic:claude-opus-4-8',
+    'anthropic:%%model=anthropic-flagship%%',
     model_settings=ModelSettings(temperature=0.1, max_tokens=4096, thinking='high', service_tier='priority'),
 )
 ```
@@ -126,7 +126,7 @@ A static `tool_choice=['search']` would also hide the output tools, so the run c
 from pydantic_ai import Agent
 from pydantic_ai.settings import ToolOrOutput
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 
 @agent.tool_plain
@@ -171,12 +171,12 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 
 def route(ctx: ModelSelectionContext) -> str:
     # cheap model for the first step, stronger one once tools have produced results
-    return 'anthropic:claude-haiku-4-5' if ctx.run_step == 1 else 'anthropic:claude-sonnet-4-6'
+    return 'anthropic:%%model=anthropic-small%%' if ctx.run_step == 1 else 'anthropic:%%model=anthropic%%'
 
 
 def resolve(ctx: ModelResolutionContext, model_id: str):
     if model_id == 'tenant-default':
-        return AnthropicModel('claude-sonnet-4-6', provider=AnthropicProvider(api_key='per-tenant-key'))
+        return AnthropicModel('%%model=anthropic%%', provider=AnthropicProvider(api_key='per-tenant-key'))
     return None  # fall through to the standard 'provider:model' lookup
 
 
@@ -204,9 +204,9 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.exceptions import ModelAPIError
 
 model = FallbackModel(
-    'openai:gpt-4o',                    # primary
-    'anthropic:claude-sonnet-4-6',      # first fallback
-    'google:gemini-2.5-flash',      # second fallback
+    'openai:%%model=openai%%',                    # primary
+    'anthropic:%%model=anthropic%%',      # first fallback
+    'google:%%model=gemini%%',      # second fallback
     fallback_on=(ModelAPIError,),
 )
 agent = Agent(model)
@@ -255,8 +255,8 @@ async def async_exc_handler(exc: Exception) -> bool:
     return isinstance(exc, ModelAPIError)
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=async_exc_handler,
 )
 ```
@@ -280,8 +280,8 @@ async def async_quality_check(resp: ModelResponse) -> bool:
     return not any(texts)  # fall back on empty response
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-sonnet-4-6',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic%%',
     fallback_on=[too_short, ModelAPIError],
 )
 ```
@@ -303,9 +303,9 @@ def empty_reply(resp: ModelResponse) -> bool:
     return not any(p.part_kind == 'text' for p in resp.parts)
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-sonnet-4-6',
-    'google:gemini-2.5-flash',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic%%',
+    'google:%%model=gemini%%',
     fallback_on=[
         ModelAPIError,        # exception type
         is_rate_limited,      # exception handler
@@ -326,8 +326,8 @@ from pydantic_ai.models.fallback import FallbackModel, FallbackExceptionGroup
 from pydantic_ai.exceptions import ModelAPIError
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=(ModelAPIError,),
 )
 agent = Agent(model)
@@ -349,12 +349,12 @@ asyncio.run(main())
 
 ```python
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=(ModelAPIError,),
 )
 print([m.model_name for m in model.models])
-# ['gpt-4o', 'claude-haiku-4-5']
+# ['%%model=openai%%', '%%model=anthropic-small%%']
 ```
 
 ### Gotchas
@@ -379,7 +379,7 @@ from pydantic_ai.models.instrumented import InstrumentedModel, InstrumentationSe
 # Wrap a single agent
 agent = Agent(
     InstrumentedModel(
-        'openai:gpt-4o',
+        'openai:%%model=openai%%',
         options=InstrumentationSettings(include_content=True),
     )
 )
@@ -478,7 +478,7 @@ pii_safe = InstrumentationSettings(
     include_binary_content=False,   # no base64-encoded images/files
 )
 
-agent = Agent(InstrumentedModel('openai:gpt-4o', options=pii_safe))
+agent = Agent(InstrumentedModel('openai:%%model=openai%%', options=pii_safe))
 # Spans will contain timing, token counts, and model name — but NO text content.
 ```
 
@@ -503,7 +503,7 @@ print(settings.messages_to_otel_messages(messages))
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.instrumented import instrument_model, InstrumentationSettings
 
-raw_model = OpenAIChatModel('gpt-4o')
+raw_model = OpenAIChatModel('%%model=openai%%')
 model = instrument_model(raw_model, instrument=InstrumentationSettings(version=5))
 # If raw_model were already an InstrumentedModel, it's returned unchanged.
 ```
@@ -524,8 +524,8 @@ Agent.instrument_all(InstrumentationSettings(
 ))
 
 # Every Agent created after this call will have spans emitted
-agent1 = Agent('openai:gpt-4o')
-agent2 = Agent('anthropic:claude-sonnet-4-6')
+agent1 = Agent('openai:%%model=openai%%')
+agent2 = Agent('anthropic:%%model=anthropic%%')
 ```
 
 ### Per-provider tracing with custom TracerProvider
@@ -543,7 +543,7 @@ model_provider.add_span_processor(
 )
 
 settings = InstrumentationSettings(tracer_provider=model_provider, include_content=True)
-model = InstrumentedModel('openai:gpt-4o', options=settings)
+model = InstrumentedModel('openai:%%model=openai%%', options=settings)
 ```
 
 ## Gateway routing
@@ -582,7 +582,7 @@ model = OpenAIChatModel(
 ```python
 from pydantic_ai import limit_model_concurrency
 
-model = limit_model_concurrency(OpenAIChatModel('gpt-5.2'), 8)   # or ConcurrencyLimit(max_running=8, max_queued=100)
+model = limit_model_concurrency(OpenAIChatModel('%%model=openai%%'), 8)   # or ConcurrencyLimit(max_running=8, max_queued=100)
 ```
 
 Enforces a max of 8 concurrent in-flight requests at the model layer.
@@ -591,8 +591,8 @@ Enforces a max of 8 concurrent in-flight requests at the model layer.
 
 ```python
 model = FallbackModel(
-    'bedrock:us.anthropic.claude-sonnet-4-6',
-    'bedrock:eu.anthropic.claude-sonnet-4-6',
+    'bedrock:us.anthropic.%%model=anthropic%%',
+    'bedrock:eu.anthropic.%%model=anthropic%%',
     fallback_on=(ModelAPIError,),
 )
 ```
@@ -606,7 +606,7 @@ def empty_or_short(resp: ModelResponse) -> bool:
             return False
     return True
 
-model = FallbackModel('openai:gpt-5.2', 'anthropic:claude-sonnet-4-6',
+model = FallbackModel('openai:%%model=openai%%', 'anthropic:%%model=anthropic%%',
                      fallback_on=[empty_or_short, ModelAPIError])
 ```
 
@@ -624,9 +624,9 @@ model = OpenAIChatModel('meta-llama/Llama-3.1-8B-Instruct', provider=provider)
 
 ```python
 if env == 'production':
-    ctx = agent.override(model='openai:gpt-5.2')
+    ctx = agent.override(model='openai:%%model=openai%%')
 elif env == 'canary':
-    ctx = agent.override(model=FallbackModel('openai:gpt-5.2', 'anthropic:claude-sonnet-4-6'))
+    ctx = agent.override(model=FallbackModel('openai:%%model=openai%%', 'anthropic:%%model=anthropic%%'))
 else:
     from pydantic_ai.models.test import TestModel
     ctx = agent.override(model=TestModel())
@@ -656,8 +656,8 @@ async def quality_check(resp: ModelResponse) -> bool:
         return False  # don't fall back if scorer is down
 
 model = FallbackModel(
-    'openai:gpt-4o-mini',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai-small%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=[quality_check, ModelAPIError],
 )
 agent = Agent(model)

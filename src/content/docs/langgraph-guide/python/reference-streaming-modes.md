@@ -359,7 +359,7 @@ Wire an LLM normally and let LangGraph's callbacks do the work:
 ```python
 from langchain_openai import ChatOpenAI
 
-llm = ChatOpenAI(model="gpt-4o-mini")
+llm = ChatOpenAI(model="%%model=openai-small%%")
 
 def draft(state: dict) -> dict:
     return {"text": llm.invoke(state["prompt"]).content}
@@ -376,7 +376,7 @@ from typing import TypedDict
 from langgraph.graph import START, StateGraph
 from langchain_openai import ChatOpenAI
 
-model = ChatOpenAI(model="gpt-4o-mini")
+model = ChatOpenAI(model="%%model=openai-small%%")
 
 
 class State(TypedDict):
@@ -747,7 +747,7 @@ def multiply(a: int, b: int) -> int:
 
 
 tools = [multiply]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 
 def agent(state: MessagesState) -> dict:
     return {"messages": [llm.invoke(state["messages"])]}

@@ -23,7 +23,7 @@ from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 from semantic_kernel.contents import AuthorRole, ChatMessageContent
 from semantic_kernel.functions import kernel_function
 
-service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")   # reads OPENAI_API_KEY
+service = OpenAIChatCompletion(ai_model_id="%%model=openai-small%%")   # reads OPENAI_API_KEY
 
 class SearchPlugin:
     @kernel_function(description="Search the web and return result snippets.")

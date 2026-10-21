@@ -63,7 +63,7 @@ def slow_lookup(key: str) -> str:
 timer = StepTimer()
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[slow_lookup],
     hooks={
         "before_llm": [TokenBudget(max_tokens=20_000)],
@@ -94,7 +94,7 @@ def score_source(url: str, score: float) -> dict:
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[score_source],
     state_schema={"scores": {"type": dict, "handler": merge_scores}},
 )
@@ -118,7 +118,7 @@ class Verdict(BaseModel):
 
 agent = Agent(
     chat_generator=OpenAIChatGenerator(
-        model="gpt-5-mini",
+        model="%%model=openai-small%%",
         generation_kwargs={"response_format": Verdict},
     ),
     system_prompt="Answer the question and give your confidence from 0 to 1.",
@@ -218,7 +218,7 @@ def web_search(query: str) -> str:
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[kb_search, web_search],
     system_prompt="Prefer the knowledge base. Say which source each fact came from.",
 )

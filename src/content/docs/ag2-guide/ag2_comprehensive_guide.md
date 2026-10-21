@@ -55,10 +55,10 @@ Each provider has its own config class in `ag2.config`, which reads the provider
 ```python
 from ag2.config import AnthropicConfig, GeminiConfig, OpenAIConfig
 
-openai_cfg = OpenAIConfig(model="gpt-4.1-mini", temperature=0.2, streaming=True)
+openai_cfg = OpenAIConfig(model="%%model=openai-small%%", temperature=0.2, streaming=True)
 local_cfg = OpenAIConfig(model="llama3.1", base_url="http://localhost:11434/v1", api_key="unused")
-claude_cfg = AnthropicConfig(model="claude-sonnet-4-6")
-gemini_cfg = GeminiConfig(model="gemini-2.5-flash", thinking_budget=1024)
+claude_cfg = AnthropicConfig(model="%%model=anthropic%%")
+gemini_cfg = GeminiConfig(model="%%model=gemini%%", thinking_budget=1024)
 ```
 
 A config can be set on the agent and overridden per call (`agent.ask(..., config=...)`).
@@ -74,7 +74,7 @@ from ag2.config import OpenAIConfig
 agent = Agent(
     "assistant",                       # name (positional)
     prompt="You are a helpful assistant.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
 )
 
 
@@ -117,7 +117,7 @@ def add(a: int, b: int) -> int:
 agent = Agent(
     "date_agent",
     prompt="Answer date and arithmetic questions using your tools.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     tools=[get_weekday, add],
 )
 ```
@@ -144,7 +144,7 @@ class TicketTriage(BaseModel):
 triage = Agent(
     "triage",
     prompt="You triage customer support messages. Be conservative with urgency.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     response_schema=TicketTriage,
 )
 
@@ -179,7 +179,7 @@ def hitl_hook(event: HumanInputRequest) -> HumanMessage:
 teacher = Agent(
     "teacher",
     prompt="Draft a short lesson plan, then call publish_plan. Never ask for approval in plain text.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     tools=[publish_plan],
     hitl_hook=hitl_hook,
 )
@@ -234,7 +234,7 @@ from ag2.network import EV_CHANNEL_CLOSED, EV_PACKET, Hub, TransitionGraph
 
 
 async def main() -> None:
-    config = OpenAIConfig(model="gpt-4.1-mini")
+    config = OpenAIConfig(model="%%model=openai-small%%")
     hub = await Hub.open(MemoryKnowledgeStore(), ttl_sweep_interval=0)
 
     researcher = await hub.register(Agent("researcher", prompt="You gather facts.", config=config))
@@ -276,7 +276,7 @@ from ag2.tools import MCPServerConfig, MCPStdioServerConfig, MCPToolkit
 agent = Agent(
     "ops",
     prompt="Use the filesystem and ticketing tools to answer questions.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     tools=[
         # local server launched as a subprocess over stdio
         MCPToolkit(MCPStdioServerConfig(command="npx", args=["-y", "@modelcontextprotocol/server-filesystem", "."])),
@@ -306,7 +306,7 @@ async def calc_add(a: int, b: int) -> str:
 
 
 async def serve() -> None:
-    agent = Agent("calculator", config=AnthropicConfig(model="claude-sonnet-4-6"), tools=[calc_add])
+    agent = Agent("calculator", config=AnthropicConfig(model="%%model=anthropic%%"), tools=[calc_add])
     card = build_card(agent, url="http://127.0.0.1:8000", description="Adds integers.")
     app = A2AServer(agent).build_jsonrpc(url="http://127.0.0.1:8000", card=card)
     await uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=8000)).serve()
@@ -364,7 +364,7 @@ For reference, idiomatic Classic code looks like this (verified against `autogen
 ```python
 from autogen import ConversableAgent, GroupChat, GroupChatManager, LLMConfig, register_function
 
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4.1-mini"})
+llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"})
 
 coder = ConversableAgent("coder", system_message="You write Python.", llm_config=llm_config)
 reviewer = ConversableAgent("reviewer", system_message="You review Python.", llm_config=llm_config)

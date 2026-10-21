@@ -68,8 +68,8 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 
 # Model Configuration
-PRODUCTION_MODEL = os.getenv('PRODUCTION_MODEL', 'openai/gpt-4-turbo')
-FALLBACK_MODEL = os.getenv('FALLBACK_MODEL', 'openai/gpt-3.5-turbo')
+PRODUCTION_MODEL = os.getenv('PRODUCTION_MODEL', 'openai/%%model=openai%%')
+FALLBACK_MODEL = os.getenv('FALLBACK_MODEL', 'openai/%%model=openai-small%%')
 
 # Execution Configuration
 MAX_RPM = int(os.getenv('MAX_RPM', '10'))
@@ -727,10 +727,10 @@ class CostTracker:
     
     # Pricing per 1K tokens (as of 2024)
     PRICING = {
-        'gpt-4-turbo': {'input': 0.01, 'output': 0.03},
-        'gpt-3.5-turbo': {'input': 0.0005, 'output': 0.0015},
-        'claude-3-opus': {'input': 0.015, 'output': 0.075},
-        'claude-3-sonnet': {'input': 0.003, 'output': 0.015}
+        '%%model=openai%%': {'input': 0.01, 'output': 0.03},
+        '%%model=openai-small%%': {'input': 0.0005, 'output': 0.0015},
+        '%%model=anthropic-flagship%%': {'input': 0.015, 'output': 0.075},
+        '%%model=anthropic%%': {'input': 0.003, 'output': 0.015}
     }
     
     def __init__(self):
@@ -786,7 +786,7 @@ class CostTracker:
 tracker = CostTracker()
 
 # After each LLM call
-cost = tracker.calculate_cost('gpt-4-turbo', input_tokens=500, output_tokens=200)
+cost = tracker.calculate_cost('%%model=openai%%', input_tokens=500, output_tokens=200)
 print(f"Cost for this call: ${cost:.4f}")
 
 # Get overall report

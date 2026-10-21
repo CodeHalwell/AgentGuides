@@ -2364,7 +2364,7 @@ def list_notes(runtime: ToolRuntime) -> str:
 
 
 tools = [save_research_note, list_notes]
-model = ChatAnthropic(model="claude-opus-4-8").bind_tools(tools)
+model = ChatAnthropic(model="%%model=anthropic-flagship%%").bind_tools(tools)
 store = InMemoryStore()
 
 
@@ -2489,7 +2489,7 @@ class AgentState(TypedDict):
 
 
 tools = [get_exchange_rate, get_country_info]
-model = ChatAnthropic(model="claude-opus-4-8").bind_tools(tools)
+model = ChatAnthropic(model="%%model=anthropic-flagship%%").bind_tools(tools)
 tool_node = ToolNode(tools, wrap_tool_call=observability_wrapper)
 
 
@@ -3268,7 +3268,7 @@ def summarize_news(ticker: str) -> str:
 # --- Graph ---
 
 tools = [fetch_price, summarize_news]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 
 
 def call_model(state: MessagesState) -> dict:

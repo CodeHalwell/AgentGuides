@@ -328,7 +328,7 @@ from agent_framework import SummarizationStrategy
 from agent_framework.openai import OpenAIChatClient
 
 summariser = SummarizationStrategy(
-    client=OpenAIChatClient(model="gpt-4o-mini"),
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
     target_count=8,     # leave 8 non-system messages untouched
     threshold=4,        # trigger when included > target + threshold
 )
@@ -342,7 +342,7 @@ The default prompt preserves goals, decisions, and unresolved items. Override wi
 
 ```python
 support_summariser = SummarizationStrategy(
-    client=OpenAIChatClient(model="gpt-4o-mini"),
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
     target_count=6,
     threshold=3,
     prompt=(
@@ -401,7 +401,7 @@ from agent_framework import (
 )
 from agent_framework.openai import OpenAIChatClient
 
-summariser_client = OpenAIChatClient(model="gpt-4o-mini")
+summariser_client = OpenAIChatClient(model="%%model=openai-small%%")
 
 strategy = TokenBudgetComposedStrategy(
     token_budget=8_000,
@@ -427,7 +427,7 @@ from agent_framework import TokenizerProtocol
 class TiktokenTokenizer:
     """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
 
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    def __init__(self, model: str = "%%model=openai-small%%") -> None:
         self._enc = tiktoken.encoding_for_model(model)
 
     def count_tokens(self, text: str) -> int:
@@ -476,7 +476,7 @@ strategy = ContextWindowCompactionStrategy(
 )
 
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     instructions="You are a research assistant with tool access.",
     context_providers=[InMemoryHistoryProvider(), CompactionProvider(before_strategy=strategy)],
 )
@@ -793,7 +793,7 @@ from agent_framework.openai import OpenAIChatClient
 class TiktokenTokenizer:
     """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
 
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    def __init__(self, model: str = "%%model=openai-small%%") -> None:
         self._enc = tiktoken.encoding_for_model(model)
 
     def count_tokens(self, text: str) -> int:
@@ -801,7 +801,7 @@ class TiktokenTokenizer:
 
 
 # Cheap model used for summarisation only — separate from the agent's main model.
-summary_client = OpenAIChatClient(model="gpt-4o-mini")
+summary_client = OpenAIChatClient(model="%%model=openai-small%%")
 tokenizer: TokenizerProtocol = TiktokenTokenizer()
 history = InMemoryHistoryProvider()
 ```
@@ -829,7 +829,7 @@ summariser = SummarizationStrategy(
 )
 
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     instructions="You are a research assistant for a multi-week project.",
     context_providers=[
         history,

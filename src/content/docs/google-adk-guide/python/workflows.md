@@ -40,13 +40,13 @@ from google.adk.workflow import Workflow, node, START
 
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write a tight 3-sentence summary of the input.",
     mode="single_turn",
 )
 polisher = LlmAgent(
     name="polisher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Shorten and sharpen the input. Return only the final text.",
     mode="single_turn",
 )
@@ -119,7 +119,7 @@ from google.adk.agents import LlmAgent
 
 writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Summarise the input in one sentence.",
 )
 
@@ -144,7 +144,7 @@ from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
 
 # Explicitly set mode so build_node() preserves it rather than defaulting
-writer = LlmAgent(name="writer", model="gemini-2.5-flash",
+writer = LlmAgent(name="writer", model="%%model=gemini%%",
                   instruction="Summarise the input.", mode="single_turn")
 
 wf = Workflow(name="demo", edges=[(START, writer)])
@@ -414,8 +414,8 @@ Fan-in that waits for **all** declared predecessors. Useful after a `(START, (a,
 from google.adk.agents import LlmAgent
 from google.adk.workflow import JoinNode, Workflow, node, START
 
-a = LlmAgent(name="a", model="gemini-2.5-flash", instruction="Reply 'A'.", mode="single_turn")
-b = LlmAgent(name="b", model="gemini-2.5-flash", instruction="Reply 'B'.", mode="single_turn")
+a = LlmAgent(name="a", model="%%model=gemini%%", instruction="Reply 'A'.", mode="single_turn")
+b = LlmAgent(name="b", model="%%model=gemini%%", instruction="Reply 'B'.", mode="single_turn")
 
 join = JoinNode(name="merge")
 
@@ -542,19 +542,19 @@ from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
 
 billing_agent = LlmAgent(
     name="billing",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Handle billing questions. Be concise.",
     mode="single_turn",
 )
 support_agent = LlmAgent(
     name="support",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Handle technical support questions. Be concise.",
     mode="single_turn",
 )
 general_agent = LlmAgent(
     name="general",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Handle general queries. Be concise.",
     mode="single_turn",
 )
@@ -608,19 +608,19 @@ from google.adk.workflow import JoinNode, Workflow, node, START
 
 security_reviewer = LlmAgent(
     name="security",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Review the code for security issues only. List findings as bullet points.",
     mode="single_turn",
 )
 perf_reviewer = LlmAgent(
     name="performance",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Review the code for performance issues only. List findings as bullet points.",
     mode="single_turn",
 )
 style_reviewer = LlmAgent(
     name="style",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Review the code for style/readability issues only. List findings as bullet points.",
     mode="single_turn",
 )
@@ -681,7 +681,7 @@ def request_input_ids(event) -> list[str]:
 
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write a short marketing email for the product described in the input.",
     mode="single_turn",
 )

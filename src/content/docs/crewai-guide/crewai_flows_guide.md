@@ -273,7 +273,7 @@ class CrewIntegrationFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def prepare_task(self):
@@ -335,7 +335,7 @@ class MultiCrewFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def define_project(self):
@@ -629,7 +629,7 @@ class BatchCrewFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def get_articles_to_review(self):
@@ -993,7 +993,7 @@ class FanOutFanInFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
         self.results = []
 
     @start()
@@ -1265,7 +1265,7 @@ class CustomerSupportFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def receive_ticket(self):
@@ -1352,7 +1352,7 @@ class ContentProductionFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def content_brief(self):

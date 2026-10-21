@@ -1010,8 +1010,8 @@ class CostOptimiser:
     # Model costs (USD per 1M tokens). Placeholder figures — load current
     # prices from configuration rather than hard-coding them.
     MODEL_COSTS = {
-        "gpt-5.6-luna": {"input": 0.0, "output": 0.0},
-        "gpt-5.6-sol": {"input": 0.0, "output": 0.0},
+        "%%model=openai-small%%": {"input": 0.0, "output": 0.0},
+        "%%model=openai%%": {"input": 0.0, "output": 0.0},
     }
     
     @staticmethod
@@ -1020,7 +1020,7 @@ class CostOptimiser:
         if task_complexity in ("simple", "medium"):
             return "gpt-5.6-luna"  # Small, cheap; the SDK default
         else:
-            return "gpt-5.6-sol"   # Frontier model for hard tasks
+            return "%%model=openai%%"   # Frontier model for hard tasks
     
     @staticmethod
     def create_cost_optimised_agent(
@@ -1073,8 +1073,8 @@ class CostMonitor:
     
     # USD per 1M tokens — placeholder figures; keep real prices in config
     PRICES = {
-        "gpt-5.6-luna": {"input": 0.0, "output": 0.0},
-        "gpt-5.6-sol": {"input": 0.0, "output": 0.0},
+        "%%model=openai-small%%": {"input": 0.0, "output": 0.0},
+        "%%model=openai%%": {"input": 0.0, "output": 0.0},
     }
 
     def estimate_cost(self, usage, model: str) -> float:
@@ -1096,7 +1096,7 @@ class CostMonitor:
 cost_monitor = CostMonitor()
 
 async def main():
-    agent = Agent(name="Analyst", model="gpt-5.6-luna")
+    agent = Agent(name="Analyst", model="%%model=openai-small%%")
     
     result = await Runner.run(agent, "Analyse this")
     cost_monitor.track_run(result, agent.model)

@@ -81,7 +81,7 @@ agent = Agent(
         - Provide detailed, well-sourced information
         - Cite sources when available
         - Acknowledge uncertainty appropriately""",
-    model="gpt-5.6-sol",
+    model="%%model=openai%%",
     model_settings=ModelSettings(max_tokens=2048),
 )
 ```
@@ -271,8 +271,8 @@ with trace("Fine-tune Data Collection", metadata={"purpose": "training"}):
 from agents import Agent, Runner, trace
 
 # Use tracing for model distillation
-expensive_model = Agent(name="Teacher", model="gpt-5.6-sol")
-cheap_model = Agent(name="Student", model="gpt-5.6-luna")
+expensive_model = Agent(name="Teacher", model="%%model=openai%%")
+cheap_model = Agent(name="Student", model="%%model=openai-small%%")
 
 with trace("Distillation Comparison"):
     # Generate teacher outputs
@@ -453,7 +453,7 @@ from openai import AsyncOpenAI
 # (or call set_default_openai_api("chat_completions") once at startup)
 agent = Agent(
     name="Assistant",
-    model=OpenAIChatCompletionsModel(model="gpt-5.6-luna", openai_client=AsyncOpenAI()),
+    model=OpenAIChatCompletionsModel(model="%%model=openai-small%%", openai_client=AsyncOpenAI()),
     model_settings=ModelSettings(
         temperature=0.7,
         max_tokens=1000,
@@ -701,7 +701,7 @@ from agents import Agent, Runner, trace
 evaluation_agent = Agent(
     name="Evaluation Agent",
     instructions="Answer questions accurately",
-    model="gpt-5.6-sol"
+    model="%%model=openai%%"
 )
 
 # Collect evaluation data
@@ -788,14 +788,14 @@ from agents import Agent, ModelSettings
 # Use cheaper model for simple queries
 fast_agent = Agent(
     name="Fast Agent",
-    model="gpt-5.6-luna",
+    model="%%model=openai-small%%",
     model_settings=ModelSettings(max_tokens=200, verbosity="low")
 )
 
 # Use premium model for complex queries
 premium_agent = Agent(
     name="Premium Agent",
-    model="gpt-5.6-sol",
+    model="%%model=openai%%",
     model_settings=ModelSettings(max_tokens=2000)
 )
 
@@ -850,7 +850,7 @@ def get_inventory(sku: str) -> InventoryOutput:
 
 agent = Agent(
     name="Inventory planner",
-    model="gpt-5.6",
+    model="%%model=openai%%",
     model_settings=ModelSettings(tool_choice="programmatic_tool_calling"),
     tools=[get_inventory, ProgrammaticToolCallingTool()],
 )

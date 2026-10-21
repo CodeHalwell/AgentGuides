@@ -37,7 +37,7 @@ public static class Agents
         new DefaultAzureCredential());
 
     private static string Deployment =>
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "gpt-4o-mini";
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "%%model=openai-small%%";
 
     /// The IChatClient abstraction, for DI registration and ChatClientAgent.
     public static IChatClient ChatClient() => Client.GetChatClient(Deployment).AsIChatClient();

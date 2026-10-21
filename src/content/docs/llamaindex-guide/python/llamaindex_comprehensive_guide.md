@@ -341,7 +341,7 @@ def add(a: float, b: float) -> float:
 
 agent = FunctionAgent(
     tools=[multiply, add],                 # plain functions are wrapped as FunctionTools
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
     system_prompt="You are a careful calculator. Always use the tools.",
 )
 
@@ -361,7 +361,7 @@ from llama_index.core.agent.workflow import ReActAgent
 
 react_agent = ReActAgent(
     tools=[multiply, add],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
 )
 
 # inside an async function
@@ -382,7 +382,7 @@ async def execute_code(code: str) -> str:
 code_agent = CodeActAgent(
     code_execute_fn=execute_code,
     tools=[multiply, add],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
 )
 ```
 
@@ -395,7 +395,7 @@ from llama_index.core.agent.workflow import AgentWorkflow
 
 workflow = AgentWorkflow.from_tools_or_functions(
     [multiply, add],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
     system_prompt="You are a careful calculator.",
 )
 response = await workflow.run(user_msg="What is 3 * 4?")
@@ -415,9 +415,9 @@ from llama_index.llms.anthropic import Anthropic      # pip install llama-index-
 from llama_index.llms.google_genai import GoogleGenAI  # pip install llama-index-llms-google-genai
 from llama_index.llms.ollama import Ollama            # pip install llama-index-llms-ollama
 
-openai_llm = OpenAI(model="gpt-5-mini")
-claude_llm = Anthropic(model="claude-sonnet-4-5")
-gemini_llm = GoogleGenAI(model="gemini-2.5-flash")
+openai_llm = OpenAI(model="%%model=openai-small%%")
+claude_llm = Anthropic(model="%%model=anthropic%%")
+gemini_llm = GoogleGenAI(model="%%model=gemini%%")
 local_llm = Ollama(model="llama3.1", request_timeout=120.0)
 
 print(openai_llm.complete("Say hello in one word."))
@@ -458,7 +458,7 @@ batch = openai_embed.get_text_embedding_batch(["a", "b", "c"])
 from llama_index.core import Settings
 from llama_index.core.node_parser import SentenceSplitter
 
-Settings.llm = OpenAI(model="gpt-5-mini")
+Settings.llm = OpenAI(model="%%model=openai-small%%")
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 ```
@@ -503,7 +503,7 @@ def add_hours(iso_time: str, hours: int) -> str:
 
 agent = FunctionAgent(
     tools=[get_current_time, add_hours],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
     system_prompt="You answer questions about time. Use the tools; do not guess.",
 )
 
@@ -572,7 +572,7 @@ kb_tool = QueryEngineTool.from_defaults(
 
 agent = FunctionAgent(
     tools=[search_tool, kb_tool, multiply],   # FunctionTool, QueryEngineTool and a bare function
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
 )
 ```
 
@@ -593,7 +593,7 @@ def lookup_company(name: str) -> dict:
 
 agent = FunctionAgent(
     tools=[extract_entities, lookup_company],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
     system_prompt="Extract entities first, then look each one up, then summarise.",
 )
 ```
@@ -628,7 +628,7 @@ kb_tool = QueryEngineTool.from_defaults(
     description="Definitions and background on AI, ML and deep learning.",
 )
 
-agent = FunctionAgent(tools=[kb_tool], llm=OpenAI(model="gpt-5-mini"))
+agent = FunctionAgent(tools=[kb_tool], llm=OpenAI(model="%%model=openai-small%%"))
 response = await agent.run(user_msg="How does deep learning relate to ML?")
 ```
 
@@ -649,7 +649,7 @@ tools = [
         metadata=ToolMetadata(name="engineering_handbook", description="Coding standards, on-call, deployment process."),
     ),
 ]
-agent = FunctionAgent(tools=tools, llm=OpenAI(model="gpt-5-mini"))
+agent = FunctionAgent(tools=tools, llm=OpenAI(model="%%model=openai-small%%"))
 ```
 
 ### 8.3 Retriever tools
@@ -702,7 +702,7 @@ async def view_cart(ctx: Context) -> str:
     cart = await ctx.store.get("cart", default=[])
     return ", ".join(cart) or "Cart is empty."
 
-shop_agent = FunctionAgent(tools=[add_to_cart, view_cart], llm=OpenAI(model="gpt-5-mini"))
+shop_agent = FunctionAgent(tools=[add_to_cart, view_cart], llm=OpenAI(model="%%model=openai-small%%"))
 ctx = Context(shop_agent)
 ```
 
@@ -721,7 +721,7 @@ memory = Memory.from_defaults(
     token_limit=40_000,
     memory_blocks=[
         StaticMemoryBlock(name="profile", static_content="The user is a data engineer in London."),
-        FactExtractionMemoryBlock(name="facts", llm=OpenAI(model="gpt-5-mini"), max_facts=50),
+        FactExtractionMemoryBlock(name="facts", llm=OpenAI(model="%%model=openai-small%%"), max_facts=50),
     ],
 )
 
@@ -755,7 +755,7 @@ class Calculation(BaseModel):
 
 agent = FunctionAgent(
     tools=[multiply, add],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
     output_cls=Calculation,
 )
 
@@ -775,7 +775,7 @@ class Employee(BaseModel):
     title: str
     start_year: int
 
-llm = OpenAI(model="gpt-5-mini")
+llm = OpenAI(model="%%model=openai-small%%")
 
 employee = llm.structured_predict(
     Employee,
@@ -861,7 +861,7 @@ from llama_index.core.agent.workflow import AgentWorkflow, FunctionAgent, AgentO
 from llama_index.core.workflow import Context
 from llama_index.llms.openai import OpenAI
 
-llm = OpenAI(model="gpt-5-mini")
+llm = OpenAI(model="%%model=openai-small%%")
 
 async def search_web(query: str) -> str:
     """Search the web for information on a topic."""
@@ -964,7 +964,7 @@ class RAGWorkflow(Workflow):
     def __init__(self, index: VectorStoreIndex, **kwargs):
         super().__init__(**kwargs)
         self.index = index
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
 
     @step
     async def retrieve(self, ctx: Context, ev: StartEvent) -> RetrievedEvent:
@@ -1087,7 +1087,7 @@ async def send_email(ctx: Context, to: str, body: str) -> str:
     # ... actually send it ...
     return f"Email sent to {to}."
 
-agent = FunctionAgent(tools=[send_email], llm=OpenAI(model="gpt-5-mini"))
+agent = FunctionAgent(tools=[send_email], llm=OpenAI(model="%%model=openai-small%%"))
 
 handler = agent.run(user_msg="Email bob@example.com to say the build is green.")
 async for event in handler.stream_events():
@@ -1180,7 +1180,7 @@ Tool integrations are packages named `llama-index-tools-<name>`; browse them at 
 from llama_index.tools.wikipedia import WikipediaToolSpec
 
 wiki_tools = WikipediaToolSpec().to_tool_list()
-agent = FunctionAgent(tools=wiki_tools, llm=OpenAI(model="gpt-5-mini"))
+agent = FunctionAgent(tools=wiki_tools, llm=OpenAI(model="%%model=openai-small%%"))
 ```
 
 Check each spec's README for the exact tool names and constructor arguments; they vary by package.
@@ -1194,7 +1194,7 @@ from llama_index.tools.mcp import BasicMCPClient, McpToolSpec
 mcp_client = BasicMCPClient("http://127.0.0.1:8000/mcp")       # or a command for stdio servers
 mcp_tools = await McpToolSpec(client=mcp_client).to_tool_list_async()
 
-agent = FunctionAgent(tools=mcp_tools, llm=OpenAI(model="gpt-5-mini"))
+agent = FunctionAgent(tools=mcp_tools, llm=OpenAI(model="%%model=openai-small%%"))
 ```
 
 The same package can expose a LlamaIndex workflow *as* an MCP server (`workflow_as_mcp`).
@@ -1294,7 +1294,7 @@ query_engine = index.as_query_engine(
     similarity_top_k=10,
     node_postprocessors=[
         SimilarityPostprocessor(similarity_cutoff=0.5),
-        LLMRerank(top_n=3, llm=OpenAI(model="gpt-5-mini")),
+        LLMRerank(top_n=3, llm=OpenAI(model="%%model=openai-small%%")),
     ],
 )
 ```
@@ -1374,7 +1374,7 @@ class SimpleRAG(CustomQueryEngine):
         context = "\n\n".join(n.get_content() for n in nodes)
         return str(self.llm.complete(QA_PROMPT.format(context=context, query=query_str)))
 
-engine = SimpleRAG(retriever=index.as_retriever(), llm=OpenAI(model="gpt-5-mini"))
+engine = SimpleRAG(retriever=index.as_retriever(), llm=OpenAI(model="%%model=openai-small%%"))
 ```
 
 ---
@@ -1417,7 +1417,7 @@ Agents take a `system_prompt`; the ReAct prompt itself can be replaced with `rea
 ```python
 from llama_index.core.evaluation import FaithfulnessEvaluator, RelevancyEvaluator
 
-judge = OpenAI(model="gpt-5-mini")
+judge = OpenAI(model="%%model=openai-small%%")
 faithfulness = FaithfulnessEvaluator(llm=judge)
 relevancy = RelevancyEvaluator(llm=judge)
 

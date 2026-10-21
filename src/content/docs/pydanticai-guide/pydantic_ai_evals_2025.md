@@ -129,7 +129,7 @@ from pydantic_evals.evaluators import LLMJudge
 
 polite = LLMJudge(
     rubric='The reply is polite, answers the question, and does not invent order details.',
-    model='anthropic:claude-sonnet-4-6',
+    model='anthropic:%%model=anthropic%%',
     include_input=True,
 )
 ```
@@ -244,7 +244,7 @@ class OutputNotEmpty(Evaluator):
 
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     name='assistant',
     capabilities=[OnlineEvaluation(evaluators=[OutputNotEmpty()])],
 )

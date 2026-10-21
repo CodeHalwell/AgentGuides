@@ -47,7 +47,7 @@ from azure.identity import AzureCliCredential
 async def main():
     client = FoundryChatClient(
         project_endpoint="https://myresource.services.ai.azure.com/api/projects/my-project",
-        model="gpt-4o-mini",
+        model="%%model=openai-small%%",
         credential=AzureCliCredential(),
     )
     agent = Agent(client=client, instructions="You are a helpful assistant.")
@@ -70,7 +70,7 @@ client = AgentsClient(
 )
 
 agent = client.create_agent(
-    model="gpt-4o",
+    model="%%model=openai%%",
     name="my-assistant",
     instructions="You are a helpful assistant.",
 )

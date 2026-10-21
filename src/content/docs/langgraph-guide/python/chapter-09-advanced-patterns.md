@@ -77,7 +77,7 @@ tools = [search_web, calculator]
 # Swap ChatAnthropic / ChatOpenAI / any chat model
 from langchain_anthropic import ChatAnthropic   # pip install langchain-anthropic
 
-llm = ChatAnthropic(model="claude-opus-4-7").bind_tools(tools)
+llm = ChatAnthropic(model="%%model=anthropic-flagship%%").bind_tools(tools)
 
 
 # ── Graph nodes ──────────────────────────────────────────────────────────────

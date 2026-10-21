@@ -235,7 +235,7 @@ weather_tool = AuthenticatedFunctionTool(
 
 agent = LlmAgent(
     name="weather_bot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer weather questions using the call_weather_api tool.",
     tools=[weather_tool],
 )
@@ -453,7 +453,7 @@ def build_agent() -> LlmAgent:
     payment_tool = AuthenticatedFunctionTool(func=charge_card, auth_config=stripe_auth)
     return LlmAgent(
         name="payment_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Process payment requests using charge_card.",
         tools=[payment_tool],
     )

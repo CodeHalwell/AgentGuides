@@ -152,7 +152,7 @@ assert os.getenv('OPENAI_API_KEY'), "OPENAI_API_KEY not set"
 from pydantic_ai import Agent
 
 # Create minimal agent
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Test synchronously
 result = agent.run_sync('What is 2 + 2?')
@@ -179,11 +179,11 @@ from pydantic_ai import Agent
 from typing import Optional
 
 # Minimal agent
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Agent with instructions
 agent_with_instructions = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     instructions='Be concise and professional. Reply with 1-2 sentences.'
 )
 
@@ -196,14 +196,14 @@ class UserContext:
     username: str
 
 agent_with_deps = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=UserContext,
     instructions='Personalise all responses using the user context.'
 )
 
 # Complete agent configuration
 agent_complete = Agent(
-    model='openai:gpt-4o',
+    model='openai:%%model=openai%%',
     system_prompt='You are a helpful assistant specializing in Python.',
     instructions='Provide clear, working code examples.',
     deps_type=UserContext,
@@ -227,7 +227,7 @@ class AppDependencies:
     api_key: str
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=AppDependencies,
 )
 
@@ -269,7 +269,7 @@ class EmailAddress(BaseModel):
     name: str = Field(..., description="User name")
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=EmailAddress
 )
 
@@ -307,7 +307,7 @@ from pydantic_ai import Agent, RunContext
 from typing import Any
 import asyncio
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Tool with context
 @agent.tool
@@ -372,16 +372,16 @@ Pydantic AI supports numerous LLM providers with a unified interface:
 from pydantic_ai import Agent
 
 # OpenAI
-openai_agent = Agent('openai:gpt-4o')
-openai_o3 = Agent('openai:o3-mini')
+openai_agent = Agent('openai:%%model=openai%%')
+openai_o3 = Agent('openai:%%model=openai-small%%')
 
 # Anthropic Claude
-claude_agent = Agent('anthropic:claude-sonnet-4-6')
-claude_opus = Agent('anthropic:claude-opus-4-7')
+claude_agent = Agent('anthropic:%%model=anthropic%%')
+claude_opus = Agent('anthropic:%%model=anthropic-flagship%%')
 
 # Google Gemini
-gemini_agent = Agent('google:gemini-2.5-flash')
-gemini_pro = Agent('google:gemini-2.5-pro')
+gemini_agent = Agent('google:%%model=gemini%%')
+gemini_pro = Agent('google:%%model=gemini-flagship%%')
 
 # Groq (fast inference)
 groq_agent = Agent('groq:llama-3.3-70b-versatile')
@@ -396,7 +396,7 @@ mistral_agent = Agent('mistral:mistral-large-latest')
 grok_agent = Agent('xai:grok-4-latest')
 
 # Amazon Bedrock (needs the `bedrock` extra)
-bedrock_agent = Agent('bedrock:us.anthropic.claude-sonnet-4-6')
+bedrock_agent = Agent('bedrock:us.anthropic.%%model=anthropic%%')
 
 # Perplexity (OpenAI-compatible)
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -417,8 +417,8 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.anthropic import AnthropicModel
 
 fallback_model = FallbackModel(
-    OpenAIChatModel('gpt-4o'),  # Primary
-    AnthropicModel('claude-sonnet-4-6')  # Fallback
+    OpenAIChatModel('%%model=openai%%'),  # Primary
+    AnthropicModel('%%model=anthropic%%')  # Fallback
 )
 fallback_agent = Agent(fallback_model)
 ```
@@ -431,7 +431,7 @@ from pydantic import BaseModel
 
 # Configuration via constructor
 configured_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     instructions='Be concise.',
     retries=3,  # Retry failed calls
     name='MyAgent'
@@ -459,7 +459,7 @@ class Article(BaseModel):
     keywords: list[str]
 
 article_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=Article,
     instructions='Write comprehensive technical articles.'
 )
@@ -488,7 +488,7 @@ result = article_agent.run_sync(
 from pydantic_ai import Agent
 from pydantic_ai.usage import RunUsage
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool_plain
 def get_fact() -> str:
@@ -532,7 +532,7 @@ import asyncio
 
 # 1. Create agent with model
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     instructions='Respond with exactly one sentence.'
 )
 
@@ -565,7 +565,7 @@ from typing import Optional
 from datetime import datetime
 import asyncio
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Tool with complete type annotations
 @agent.tool
@@ -676,7 +676,7 @@ from datetime import datetime
 
 # Static system prompt
 agent_static = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     system_prompt=(
         'You are a professional technical writer. '
         'Write clear, concise, and well-structured documentation. '
@@ -685,7 +685,7 @@ agent_static = Agent(
 )
 
 # Dynamic system prompt (evaluates on each run)
-agent_dynamic = Agent('openai:gpt-4o')
+agent_dynamic = Agent('openai:%%model=openai%%')
 
 @agent_dynamic.system_prompt
 async def dynamic_prompt(ctx: RunContext) -> str:
@@ -700,7 +700,7 @@ async def dynamic_prompt(ctx: RunContext) -> str:
 
 # Combined static + dynamic prompts
 agent_combined = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     system_prompt='You are a Python expert.'
 )
 
@@ -714,7 +714,7 @@ async def add_context(ctx: RunContext) -> str:
 # system_prompt: System-level behaviour configuration
 
 agent_instructions = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     instructions='Provide step-by-step solutions to programming problems.'
 )
 
@@ -730,7 +730,7 @@ async def system_behavior(ctx: RunContext) -> str:
 from pydantic_ai import Agent
 from typing import Optional
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Simple single-turn
 result = agent.run_sync('Explain closures in Python.')
@@ -759,7 +759,7 @@ print(f"Used {usage.input_tokens} input tokens, {usage.output_tokens} output tok
 from pydantic_ai import Agent
 import asyncio
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def stream_text_example():
     """Stream text responses in real-time."""
@@ -778,7 +778,7 @@ async def stream_structured_example():
         content: str
     
     structured_agent = Agent(
-        'openai:gpt-4o',
+        'openai:%%model=openai%%',
         output_type=Article
     )
     
@@ -809,7 +809,7 @@ class CodeReview(BaseModel):
     suggestions: list[str] = Field(...)
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=CodeReview
 )
 
@@ -895,7 +895,7 @@ class ValidatedArticle(BaseModel):
 
 # Using with Agent
 article_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=ValidatedArticle
 )
 
@@ -963,7 +963,7 @@ class ServiceDependencies:
     user_id: int
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ServiceDependencies
 )
 
@@ -1045,7 +1045,7 @@ class ExtractedInfo(BaseModel):
     summary: str = Field(..., description="Brief summary")
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=ExtractedInfo
 )
 
@@ -1087,7 +1087,7 @@ class Company(BaseModel):
     website: Optional[str] = None
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=Company
 )
 
@@ -1126,7 +1126,7 @@ class ProcessingResult(BaseModel):
     output: OutputType
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=ProcessingResult
 )
 
@@ -1157,7 +1157,7 @@ class FlexibleOutput(BaseModel):
     completed: bool = False
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=FlexibleOutput
 )
 
@@ -1181,7 +1181,7 @@ from pydantic_ai import Agent, RunContext
 from typing import Any
 import asyncio
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Basic tool
 @agent.tool
@@ -1281,7 +1281,7 @@ class SearchPreferences:
         self.include_archived = include_archived
         self.max_age_days = max_age_days
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool
 async def advanced_search(
@@ -1339,7 +1339,7 @@ from pydantic_ai import Agent, RunContext
 import asyncio
 import httpx
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Async database operations
 @agent.tool
@@ -1423,7 +1423,7 @@ class Dependencies:
     logger: Any
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=Dependencies
 )
 
@@ -1479,7 +1479,7 @@ async def delete_data(ctx: RunContext[Dependencies], id: int) -> bool:
 from pydantic_ai import Agent, RunContext, ModelRetry
 from typing import Optional
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool
 async def fetch_data_with_errors(
@@ -1588,7 +1588,7 @@ from pydantic_ai.capabilities import NativeTool
 
 # WebSearchTool and CodeExecutionTool require OpenAI Responses models (not plain Chat).
 agent = Agent(
-    'openai-responses:gpt-4o',
+    'openai-responses:%%model=openai%%',
     capabilities=[
         NativeTool(WebSearchTool()),     # model-native web search
         NativeTool(CodeExecutionTool()), # sandboxed code execution
@@ -1597,7 +1597,7 @@ agent = Agent(
 
 # For WebFetchTool (Anthropic/Google only), use a compatible provider:
 # from pydantic_ai import Agent, WebFetchTool
-# agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[NativeTool(WebFetchTool())])
+# agent = Agent('anthropic:%%model=anthropic%%', capabilities=[NativeTool(WebFetchTool())])
 
 result = agent.run_sync('Search for the latest Python release and show a hello-world snippet')
 print(result.output)
@@ -1627,7 +1627,7 @@ class ApplicationState:
     cache: dict[str, Any] = field(default_factory=dict)
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ApplicationState
 )
 
@@ -1789,7 +1789,7 @@ def adaptive_settings(ctx: RunContext[Deps]):
     return ModelSettings(temperature=0.2, max_tokens=1000)
 
 agent: Agent[Deps, str] = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=Deps,
     model_settings=adaptive_settings,   # callable form — AgentModelSettings
     tool_timeout=15.0,
@@ -1825,7 +1825,7 @@ import asyncio
 from pydantic_ai import Agent, AgentRunResultEvent
 from pydantic_ai.messages import PartDeltaEvent, TextPartDelta
 
-agent = Agent('openai:gpt-4o-mini')
+agent = Agent('openai:%%model=openai-small%%')
 
 async def main() -> None:
     async with agent.run_stream_events("Tell me a short joke") as events:
@@ -1863,7 +1863,7 @@ def build_metadata(ctx: RunContext) -> dict:
     return {'run_id': ctx.run_id, 'tenant': getattr(ctx.deps, 'tenant_id', None)}
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     instructions=['Always respond in Markdown.', lambda ctx: f'Conversation: {ctx.run_id}'],
     metadata=build_metadata,
 )
@@ -1882,7 +1882,7 @@ from pydantic_ai import Agent, RunContext, ModelSettings
 def settings_for(ctx: RunContext) -> ModelSettings:
     return ModelSettings(temperature=0.0) if ctx.deps.get('mode') == 'strict' else ModelSettings(temperature=0.8)
 
-agent = Agent('openai:gpt-4o', model_settings=settings_for)
+agent = Agent('openai:%%model=openai%%', model_settings=settings_for)
 ```
 
 #### `AgentCapability` + `AgentToolset` + `ToolsetFunc`
@@ -1909,7 +1909,7 @@ async def premium_toolset(ctx: RunContext) -> FunctionToolset | None:
         return f'7-day forecast for {city}'
     return ts
 
-agent = Agent('openai:gpt-4o', toolsets=[premium_toolset])
+agent = Agent('openai:%%model=openai%%', toolsets=[premium_toolset])
 ```
 
 #### `AgentRun` — node-level iteration
@@ -1932,7 +1932,7 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_graph import End
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.iter('What is the capital of France?') as run:
@@ -1957,7 +1957,7 @@ Fields/methods: output, usage, run_id, conversation_id, timestamp, response,
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o', output_type=str)
+agent = Agent('openai:%%model=openai%%', output_type=str)
 result = agent.run_sync('Explain Python in one sentence.')
 print(result.output, result.usage.total_tokens, result.run_id)
 
@@ -1976,7 +1976,7 @@ exports. `ModelRequestNode.last_request_context` exposes the actual `model`/`mes
 ```python
 from pydantic_ai import Agent, UserPromptNode, ModelRequestNode, CallToolsNode
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def trace():
     async with agent.iter('Count to 3.') as run:
@@ -2014,7 +2014,7 @@ class RateLimitedAgent(WrapperAgent):
         self._run_count += 1
         return await self.wrapped.run(prompt, **kwargs)
 
-rate_limited = RateLimitedAgent(Agent('openai:gpt-4o-mini'), max_per_minute=3)
+rate_limited = RateLimitedAgent(Agent('openai:%%model=openai-small%%'), max_per_minute=3)
 ```
 
 #### Direct API — `model_request`, `model_request_stream`, `StreamedResponseSync`
@@ -2035,7 +2035,7 @@ from pydantic_ai.direct import model_request
 
 async def main() -> None:
     response = await model_request(
-        'openai:gpt-4o-mini',
+        'openai:%%model=openai-small%%',
         [ModelRequest.user_text_prompt('What is the capital of France?')],
     )
     print(response.parts[0].content)
@@ -2047,7 +2047,7 @@ asyncio.run(main())
 from pydantic_ai import ModelRequest
 from pydantic_ai.direct import model_request_stream_sync
 
-with model_request_stream_sync('anthropic:claude-haiku-4-5', [ModelRequest.user_text_prompt('Hi')]) as stream:
+with model_request_stream_sync('anthropic:%%model=anthropic-small%%', [ModelRequest.user_text_prompt('Hi')]) as stream:
     for event in stream:
         print(event)
     print(stream.model_name)
@@ -2071,7 +2071,7 @@ class PendingMessage:
 import asyncio
 from pydantic_ai import Agent, RunContext
 
-agent = Agent('openai:gpt-4o-mini')
+agent = Agent('openai:%%model=openai-small%%')
 
 @agent.tool
 async def fetch_and_maybe_followup(ctx: RunContext[object], query: str) -> str:
@@ -2138,7 +2138,7 @@ from pydantic_ai import Agent, RunContext, ModelRetry
 class Deps:
     api_url: str
 
-agent: Agent[Deps, str] = Agent('openai:gpt-4o', deps_type=Deps)
+agent: Agent[Deps, str] = Agent('openai:%%model=openai%%', deps_type=Deps)
 
 @agent.tool
 async def fetch_data(ctx: RunContext[Deps], query: str) -> str:
@@ -2173,7 +2173,7 @@ spec.to_file(path, fmt=None, schema_path=...)
 from pydantic_ai import Agent, AgentSpec
 
 spec = AgentSpec.from_dict({
-    'model': 'openai:gpt-4o',
+    'model': 'openai:%%model=openai%%',
     'name': 'support-agent',
     'instructions': 'You are a helpful support agent.',
     'model_settings': {'temperature': 0.3},
@@ -2195,7 +2195,7 @@ many `ModelRetry` cycles a tool/output gets before the run raises.
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o', retries=3, end_strategy='graceful')   # end_strategy is set on the agent
+agent = Agent('openai:%%model=openai%%', retries=3, end_strategy='graceful')   # end_strategy is set on the agent
 result = agent.run_sync('Fetch three URLs and summarise.')
 ```
 
@@ -2209,7 +2209,7 @@ Context manager that captures the message history built up to the point of failu
 from pydantic_ai import Agent, capture_run_messages, UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 with capture_run_messages() as messages:
     try:
@@ -2238,7 +2238,7 @@ class ValidatedToolCall(Generic[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_ai.tool_manager import ToolManager
 
-agent = Agent('openai:gpt-4o-mini')
+agent = Agent('openai:%%model=openai-small%%')
 
 @agent.tool_plain
 def step_one() -> str: return 'done'
@@ -2263,7 +2263,7 @@ class ToolFailed(Exception):
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelRetry, ToolFailed
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool_plain
 def fetch_record(record_id: int) -> dict:
@@ -2306,7 +2306,7 @@ async def return_if_cached(ctx, request_context):
         raise SkipModelRequest(_cache[key])
     return request_context
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 #### `SelectModel` + `ModelSelectionContext` / `ResolveModelId`
@@ -2332,7 +2332,7 @@ from pydantic_ai import Agent, ModelSelectionContext
 from pydantic_ai.capabilities import SelectModel
 
 def escalating_selector(ctx: ModelSelectionContext[None]) -> str:
-    return 'anthropic:claude-haiku-4-5' if ctx.run_step == 1 else 'anthropic:claude-opus-4-6'
+    return 'anthropic:%%model=anthropic-small%%' if ctx.run_step == 1 else 'anthropic:%%model=anthropic-flagship%%'
 
 agent = Agent(capabilities=[SelectModel(escalating_selector)])
 ```
@@ -2352,7 +2352,7 @@ import asyncio, threading
 from pydantic_ai import Agent, CancellationToken
 from pydantic_ai.exceptions import RunCancelled
 
-agent = Agent('openai:gpt-5')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     token = CancellationToken()
@@ -2399,7 +2399,7 @@ class SystemPromptRunner(Generic[AgentDepsT]):
 ```python
 from pydantic_ai import Agent, RunContext
 
-agent = Agent('openai:gpt-4o', deps_type=dict)
+agent = Agent('openai:%%model=openai%%', deps_type=dict)
 
 @agent.system_prompt(dynamic=True)
 def budget_aware_prompt(ctx: RunContext[dict]) -> str:
@@ -2417,7 +2417,7 @@ from pydantic_ai import Agent, ModelSettings
 from pydantic_ai.settings import merge_model_settings
 
 base: ModelSettings = {'temperature': 0.0, 'seed': 42, 'parallel_tool_calls': False}
-agent = Agent('openai:gpt-4o', model_settings=base)
+agent = Agent('openai:%%model=openai%%', model_settings=base)
 merged = merge_model_settings(base, {'temperature': 0.9})   # per-run override wins
 ```
 
@@ -2441,7 +2441,7 @@ class UserProfile:
     language: str
 
 agent = Agent(
-    'openai:gpt-4o-mini',
+    'openai:%%model=openai-small%%',
     deps_type=UserProfile,
     instructions=TemplateStr('Hello {{name}}! Always respond in {{language}}.'),
 )
@@ -2460,7 +2460,7 @@ Speech-to-speech models (OpenAI `gpt-realtime`, Gemini Live, xAI voice, ElevenLa
 from pydantic_ai import Agent
 from pydantic_ai.realtime import TurnDetection
 
-agent = Agent('openai:gpt-5.2', instructions='You are a helpful voice assistant.')
+agent = Agent('openai:%%model=openai%%', instructions='You are a helpful voice assistant.')
 
 
 @agent.tool_plain
@@ -2493,7 +2493,7 @@ A *workspace* is a filesystem-and-shell surface that tools reach through `ctx.wo
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import LocalWorkspace
 
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[LocalWorkspace('~/project', read_only=True)])
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[LocalWorkspace('~/project', read_only=True)])
 
 
 @agent.tool
@@ -2545,7 +2545,7 @@ my_override: ModelProfile = {'supports_json_schema_output': True, 'supports_thin
 merged = merge_profile(DEFAULT_PROFILE, my_override)   # dict-spread merge, replaces the old .update()
 print(merged['supports_json_schema_output'])   # True
 
-merged2 = merge_profile(DEFAULT_PROFILE, harmony_model_profile('gpt-4o'))
+merged2 = merge_profile(DEFAULT_PROFILE, harmony_model_profile('%%model=openai%%'))
 print(merged2['ignore_streamed_leading_whitespace'])   # True
 
 # ModelProfileSpec as a callable: receives the resolved default, returns the final profile
@@ -2573,7 +2573,7 @@ from pydantic_ai.profiles.google import GoogleJsonSchemaTransformer
 from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
 
-profile = anthropic_model_profile('claude-opus-4-8')
+profile = anthropic_model_profile('%%model=anthropic-flagship%%')
 print(resolve_anthropic_effort('xhigh', supports_xhigh=profile.get('anthropic_supports_xhigh_effort', False)))
 
 schema = GoogleJsonSchemaTransformer({'const': 'active'}).walk()
@@ -2627,7 +2627,7 @@ def response_too_short(response: ModelResponse) -> bool:
     text = response.text or ''
     return len(text.strip()) < 10
 
-model = FallbackModel('openai:gpt-4o-mini', 'openai:gpt-4o', 'anthropic:claude-opus-4-8', fallback_on=response_too_short)
+model = FallbackModel('openai:%%model=openai-small%%', 'openai:%%model=openai%%', 'anthropic:%%model=anthropic-flagship%%', fallback_on=response_too_short)
 agent = Agent(model)
 
 try:
@@ -2661,7 +2661,7 @@ class LoggingModel(WrapperModel):
         print(f"← {response.parts}")
         return response
 
-agent = Agent(LoggingModel("openai:gpt-4o-mini"))
+agent = Agent(LoggingModel("openai:%%model=openai-small%%"))
 ```
 
 #### `MistralModel` + `MistralModelSettings`
@@ -2724,9 +2724,9 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openrouter import OpenRouterModel, OpenRouterModelSettings
 
 agent = Agent(
-    OpenRouterModel('anthropic/claude-sonnet-4-6'),
+    OpenRouterModel('anthropic/%%model=anthropic%%'),
     model_settings=OpenRouterModelSettings(
-        openrouter_models=['anthropic/claude-sonnet-4-6', 'openai/gpt-5.2'],
+        openrouter_models=['anthropic/%%model=anthropic%%', 'openai/%%model=openai%%'],
     ),
 )
 ```
@@ -2776,7 +2776,7 @@ from pydantic_ai.providers.bedrock import BedrockProvider
 
 provider = BedrockProvider(region_name='us-east-1')
 agent = Agent(
-    BedrockConverseModel('us.anthropic.claude-sonnet-4-6', provider=provider),
+    BedrockConverseModel('us.anthropic.%%model=anthropic%%', provider=provider),
     model_settings=BedrockModelSettings(bedrock_cache_instructions=True, bedrock_cache_messages=True),
 )
 ```
@@ -2807,7 +2807,7 @@ from pydantic_ai import Agent
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.models.google import GoogleModel
 
-agent = Agent(GoogleModel('gemini-2.5-pro', provider=GoogleProvider(api_key='AIza...')))
+agent = Agent(GoogleModel('%%model=gemini-flagship%%', provider=GoogleProvider(api_key='AIza...')))
 result = agent.run_sync('Explain federated learning.')
 ```
 
@@ -2891,7 +2891,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.vercel import VercelProvider
 
-model = OpenAIChatModel('anthropic/claude-opus-4-8', provider=VercelProvider())
+model = OpenAIChatModel('anthropic/%%model=anthropic-flagship%%', provider=VercelProvider())
 agent = Agent(model)
 ```
 
@@ -2934,7 +2934,7 @@ settings: AnthropicModelSettings = {
     'anthropic_cache_tool_definitions': True,
     'anthropic_service_tier': 'standard_only',
 }
-agent = Agent('anthropic:claude-opus-4-5', model_settings=settings)
+agent = Agent('anthropic:%%model=anthropic-flagship%%', model_settings=settings)
 ```
 
 #### `OpenAIResponsesModelSettings` — reasoning context, mode, replay
@@ -2953,7 +2953,7 @@ class OpenAIResponsesModelSettings(ModelSettings, total=False):
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 
-model = OpenAIResponsesModel('gpt-5.6-sol')
+model = OpenAIResponsesModel('%%model=openai%%')
 agent = Agent(model, model_settings=OpenAIResponsesModelSettings(
     openai_reasoning_effort='high', openai_reasoning_context='all_turns',
 ))
@@ -2975,7 +2975,7 @@ from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError
 import asyncio
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 async def run_with_retry(prompt: str) -> str:
     try:
@@ -3002,7 +3002,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import RaiseContentFilterError
 from pydantic_ai.exceptions import ContentFilterError
 
-agent = Agent('openai:gpt-5.2', capabilities=[RaiseContentFilterError()])
+agent = Agent('openai:%%model=openai%%', capabilities=[RaiseContentFilterError()])
 try:
     result = agent.run_sync('...')
 except ContentFilterError as exc:
@@ -3076,7 +3076,7 @@ from pydantic_ai.providers.heroku import HerokuProvider
 from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = HerokuProvider(api_key='...')
-model = OpenAIChatModel('claude-opus-4-5', provider=provider)   # thinking correctly forwarded
+model = OpenAIChatModel('%%model=anthropic-flagship%%', provider=provider)   # thinking correctly forwarded
 agent = Agent(model, model_settings={'thinking': True})
 ```
 
@@ -3095,7 +3095,7 @@ from pydantic_ai.providers.gateway import gateway_provider
 from pydantic_ai.models.openai import OpenAIChatModel
 
 provider = gateway_provider('anthropic', api_key='pylf_v1_us_...')
-agent = Agent(OpenAIChatModel('claude-opus-4-8', provider=provider))
+agent = Agent(OpenAIChatModel('%%model=anthropic-flagship%%', provider=provider))
 ```
 
 #### Provider-family `*_model_profile` functions
@@ -3157,7 +3157,7 @@ def validate_age(ctx: RunContext[object], age: int) -> None:
 def get_birth_year(ctx: RunContext[object], age: int) -> int:
     return 2026 - age
 
-agent = Agent('openai:gpt-4o', tools=[Tool(get_birth_year, args_validator=validate_age)])
+agent = Agent('openai:%%model=openai%%', tools=[Tool(get_birth_year, args_validator=validate_age)])
 ```
 
 `prepare=` mutates or hides the `ToolDefinition` before each step (return `None` to hide);
@@ -3169,7 +3169,7 @@ kwargs and should raise `ModelRetry` on failure.
 ```python
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-agent = Agent("openai:gpt-4o-mini")
+agent = Agent("openai:%%model=openai-small%%")
 
 def validate_url(ctx: RunContext[object], url: str) -> None:
     if not url.startswith("https://"):
@@ -3197,7 +3197,7 @@ async def only_for_admins(ctx: RunContext[dict], tool_def: ToolDefinition) -> To
     return replace(tool_def, description=f'{tool_def.description} (admin only)')
 
 
-agent = Agent('openai:gpt-5.2', deps_type=dict)
+agent = Agent('openai:%%model=openai%%', deps_type=dict)
 
 
 @agent.tool(prepare=only_for_admins)
@@ -3213,7 +3213,7 @@ Return `ToolReturn(return_value, content=..., metadata=...)` from a tool when th
 ```python
 from pydantic_ai import Agent, BinaryContent, ToolReturn
 
-agent = Agent('anthropic:claude-sonnet-4-6')
+agent = Agent('anthropic:%%model=anthropic%%')
 
 
 @agent.tool_plain
@@ -3262,7 +3262,7 @@ def query_users(sql: str) -> list[dict]:
     """Execute a read-only SQL query."""
     return [{'id': 1, 'name': 'Alice'}]
 
-agent = Agent('openai:gpt-4o', toolsets=[db_tools])
+agent = Agent('openai:%%model=openai%%', toolsets=[db_tools])
 ```
 
 #### `AbstractToolset` — custom toolset ABC
@@ -3376,7 +3376,7 @@ def search(query: str) -> str: return f'Web: {query}'   # would collide without 
 def read_only(ctx: RunContext, td) -> bool:
     return not td.name.startswith('delete_')
 
-agent = Agent('openai:gpt-4o', toolsets=[
+agent = Agent('openai:%%model=openai%%', toolsets=[
     FilteredToolset(
         CombinedToolset([PrefixedToolset(db, 'db'), PrefixedToolset(web, 'web')]),
         filter_func=read_only,
@@ -3401,7 +3401,7 @@ from pydantic_ai.toolsets import DeferredLoadingToolset
 from pydantic_ai.capabilities import ToolSearch
 
 big_toolset = FunctionToolset()   # imagine 50+ tools registered here
-agent = Agent('openai:gpt-4o', toolsets=[DeferredLoadingToolset(big_toolset)], capabilities=[ToolSearch()])
+agent = Agent('openai:%%model=openai%%', toolsets=[DeferredLoadingToolset(big_toolset)], capabilities=[ToolSearch()])
 ```
 
 #### `DynamicToolset`
@@ -3423,7 +3423,7 @@ from pydantic_ai.toolsets import FunctionToolset, DynamicToolset
 def role_based_toolset(ctx: RunContext) -> FunctionToolset:
     return admin_tools if ctx.deps.role == 'admin' else user_tools
 
-agent = Agent('openai:gpt-4o-mini', toolsets=[DynamicToolset(role_based_toolset)])
+agent = Agent('openai:%%model=openai-small%%', toolsets=[DynamicToolset(role_based_toolset)])
 ```
 
 #### `IncludeReturnSchemasToolset` (toolset) vs. `IncludeToolReturnSchemas` (capability)
@@ -3444,8 +3444,8 @@ def get_weather(city: str) -> dict:
     """Get current weather."""
     return {'temp_c': 22.5, 'condition': 'sunny'}
 
-agent = Agent('openai:gpt-4o', toolsets=[IncludeReturnSchemasToolset(toolset)])
-# or agent-wide: Agent('openai:gpt-4o', toolsets=[toolset], capabilities=[IncludeToolReturnSchemas()])
+agent = Agent('openai:%%model=openai%%', toolsets=[IncludeReturnSchemasToolset(toolset)])
+# or agent-wide: Agent('openai:%%model=openai%%', toolsets=[toolset], capabilities=[IncludeToolReturnSchemas()])
 ```
 
 #### `ExternalToolset` (formerly `DeferredToolset`)
@@ -3470,7 +3470,7 @@ external = ExternalToolset([
         parameters_json_schema={'type': 'object', 'properties': {'to': {'type': 'string'}, 'body': {'type': 'string'}}, 'required': ['to', 'body']},
     ),
 ])
-agent = Agent('openai:gpt-4o', output_type=[str, DeferredToolRequests], toolsets=[external])
+agent = Agent('openai:%%model=openai%%', output_type=[str, DeferredToolRequests], toolsets=[external])
 
 result1 = agent.run_sync('Email alice@example.com saying hi.')
 if isinstance(result1.output, DeferredToolRequests):
@@ -3509,7 +3509,7 @@ def read_file(path: str) -> str: return f'contents of {path}'
 def needs_approval(ctx, tool_def, args): return tool_def.name.startswith('delete_')
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     toolsets=[ApprovalRequiredToolset(wrapped=tools, approval_required_func=needs_approval)],
     output_type=[str, DeferredToolRequests],
 )
@@ -3585,7 +3585,7 @@ from pydantic_ai.capabilities import PrefixTools, Toolset
 from pydantic_ai.toolsets import FunctionToolset
 
 db_toolset = FunctionToolset()
-agent = Agent('openai:gpt-4o-mini', capabilities=[PrefixTools(wrapped=Toolset(db_toolset), prefix='db')])
+agent = Agent('openai:%%model=openai-small%%', capabilities=[PrefixTools(wrapped=Toolset(db_toolset), prefix='db')])
 # model sees 'db_query', 'db_insert', etc.
 ```
 
@@ -3608,7 +3608,7 @@ from pydantic_ai import Agent, Tool
 from pydantic_ai.capabilities import ToolSearch
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     tools=[Tool(lambda booking_id: 'ok', defer_loading=True)],
     capabilities=[ToolSearch()],
 )
@@ -3638,7 +3638,7 @@ from pydantic_ai.ext.langchain import LangChainToolset
 from langchain_community.tools import DuckDuckGoSearchRun
 
 toolset = LangChainToolset([DuckDuckGoSearchRun()])
-agent = Agent('openai:gpt-4o', toolsets=[toolset])
+agent = Agent('openai:%%model=openai%%', toolsets=[toolset])
 ```
 
 #### `FunctionSignature` + `FunctionParam` + `TypeSignature` + `TypeExpr`
@@ -3695,7 +3695,7 @@ from pydantic_ai import Agent, WebSearchTool, WebSearchUserLocation
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-opus-4-5',
+    'anthropic:%%model=anthropic-flagship%%',
     capabilities=[NativeTool(WebSearchTool(
         user_location=WebSearchUserLocation(city='London', country='GB'),
         search_context_size='high',
@@ -3717,7 +3717,7 @@ from pydantic_ai import Agent, WebFetchTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-5',
+    'anthropic:%%model=anthropic%%',
     capabilities=[NativeTool(WebFetchTool(enable_citations=True, max_content_tokens=4096))],
 )
 ```
@@ -3735,7 +3735,7 @@ CodeExecutionTool(*, files: list[UploadedFile] | None = None, optional=False)
 from pydantic_ai import Agent, CodeExecutionTool
 from pydantic_ai.capabilities import NativeTool
 
-agent = Agent('openai:gpt-4o', capabilities=[NativeTool(CodeExecutionTool())])
+agent = Agent('openai:%%model=openai%%', capabilities=[NativeTool(CodeExecutionTool())])
 result = agent.run_sync('Verify whether 982,451,653 is prime; show your work.')
 ```
 
@@ -3747,7 +3747,7 @@ Native persistent memory (Anthropic only). No parameters beyond the shared `opti
 from pydantic_ai import Agent, MemoryTool
 from pydantic_ai.capabilities import NativeTool
 
-agent = Agent('anthropic:claude-opus-4-5', capabilities=[NativeTool(MemoryTool(optional=True))])
+agent = Agent('anthropic:%%model=anthropic-flagship%%', capabilities=[NativeTool(MemoryTool(optional=True))])
 ```
 
 #### `ImageGenerationTool` + `ImageAspectRatio`
@@ -3766,7 +3766,7 @@ from pydantic_ai import Agent, ImageGenerationTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'openai-responses:gpt-4o',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(ImageGenerationTool(quality='high', output_format='png', aspect_ratio='1:1'))],
 )
 ```
@@ -3786,7 +3786,7 @@ from pydantic_ai import Agent, MCPServerTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'openai-responses:gpt-4o',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(MCPServerTool(
         id='github-mcp', url='https://mcp.github.com/', authorization_token='ghp_...',
         allowed_tools=['list_repos', 'create_issue'],
@@ -3808,7 +3808,7 @@ from pydantic_ai import Agent, FileSearchTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'openai-responses:gpt-4o',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_abc123'], retrieval_mode='hybrid'))],
 )
 ```
@@ -3850,8 +3850,8 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import AdvisorTool
 
 agent = Agent(
-    'anthropic:claude-haiku-4-5',
-    capabilities=[NativeTool(AdvisorTool(model='claude-opus-4-8', max_uses=2, max_tokens=1024))],
+    'anthropic:%%model=anthropic-small%%',
+    capabilities=[NativeTool(AdvisorTool(model='%%model=anthropic-flagship%%', max_uses=2, max_tokens=1024))],
 )
 ```
 
@@ -3914,7 +3914,7 @@ from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
 toolset = MCPToolset('http://localhost:8000/mcp', prefer_tasks=False)
-agent = Agent('openai:gpt-4o', toolsets=[toolset])
+agent = Agent('openai:%%model=openai%%', toolsets=[toolset])
 
 async def main():
     async with agent:
@@ -3956,7 +3956,7 @@ from pydantic_ai.common_tools.tavily import tavily_search_tool
 from pydantic_ai.common_tools.web_fetch import web_fetch_tool
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     tools=[
         duckduckgo_search_tool(max_results=5),
         # search_depth/topic frozen and hidden from the LLM schema; time_range stays LLM-controlled
@@ -3974,8 +3974,8 @@ on an image-capable model so a text-only primary agent can still generate images
 from pydantic_ai.common_tools.image_generation import image_generation_tool
 from pydantic_ai import ImageGenerationTool
 
-agent = Agent('openai:gpt-4o-mini', tools=[
-    image_generation_tool(model='openai-responses:gpt-5.4', native_tool=ImageGenerationTool(quality='high'))
+agent = Agent('openai:%%model=openai-small%%', tools=[
+    image_generation_tool(model='openai-responses:%%model=openai%%', native_tool=ImageGenerationTool(quality='high'))
 ])
 ```
 
@@ -4005,7 +4005,7 @@ class AgentStream(Generic[AgentDepsT, OutputDataT]):
 import asyncio
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Explain recursion in one paragraph.') as stream:
@@ -4065,7 +4065,7 @@ FinalResultEvent(tool_name: str | None, tool_call_id: str | None, event_kind='fi
 
 ```python
 async def main() -> None:
-    async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+    async with model_request_stream('openai:%%model=openai-small%%', messages) as stream:
         async for event in stream:
             if isinstance(event, PartStartEvent):
                 print(f'[start idx={event.index}] {event.part.part_kind}')
@@ -4198,7 +4198,7 @@ async def hide_thinking(ctx, stream):
             continue
         yield event
 
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[ProcessEventStream(hide_thinking)])
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[ProcessEventStream(hide_thinking)])
 ```
 
 #### `EventStreamHandler` + `EventStreamProcessor` (type aliases)
@@ -4215,7 +4215,7 @@ async def my_stream_handler(ctx: RunContext[object], events) -> None:
         if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
             print(event.delta.content_delta, end='', flush=True)
 
-agent = Agent('openai:gpt-4o-mini')
+agent = Agent('openai:%%model=openai-small%%')
 result = await agent.run('Count to five', event_stream_handler=my_stream_handler)
 ```
 
@@ -4261,7 +4261,7 @@ class Fruit(BaseModel):
 person_schema = {'type': 'object', 'properties': {'name': {'type': 'string'}, 'age': {'type': 'integer'}}, 'required': ['name', 'age']}
 PersonDict = StructuredDict(person_schema, name='Person')
 
-agent = Agent('openai:gpt-4o', output_type=[ToolOutput(Fruit), PersonDict])
+agent = Agent('openai:%%model=openai%%', output_type=[ToolOutput(Fruit), PersonDict])
 result = agent.run_sync('Describe a banana.')
 ```
 
@@ -4447,7 +4447,7 @@ ImageUrl(url, *, force_download=False, vendor_metadata=None, media_type=None, id
 from pydantic_ai import Agent, BinaryContent
 from pathlib import Path
 
-agent = Agent('anthropic:claude-sonnet-4-5')
+agent = Agent('anthropic:%%model=anthropic%%')
 result = agent.run_sync([
     "What's wrong in this screenshot?",
     BinaryContent(data=Path('screenshot.png').read_bytes(), media_type='image/png'),
@@ -4467,7 +4467,7 @@ UploadedFile(file_id: str, provider_name: str, *, media_type=None, vendor_metada
 ```python
 from pydantic_ai import Agent, UploadedFile
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 result = agent.run_sync([
     'Summarise the key financials.',
     UploadedFile(file_id='file-abc123', provider_name='openai', media_type='application/pdf'),
@@ -4493,7 +4493,7 @@ CompactionPart(content: str | None, id=None, provider_name=None, provider_detail
 ```python
 from pydantic_ai import Agent, CachePoint
 
-agent = Agent('anthropic:claude-sonnet-4-5')
+agent = Agent('anthropic:%%model=anthropic%%')
 result = agent.run_sync(['Document:\n' + long_doc, CachePoint(ttl='1h'), 'Summarise it.'])
 ```
 
@@ -4586,7 +4586,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import InstructionPart
 
 policy = InstructionPart('You are a support agent for Acme. Be concise.', name='company_policy')
-agent = Agent('openai:gpt-5.2', instructions=[policy])
+agent = Agent('openai:%%model=openai%%', instructions=[policy])
 ```
 
 #### `AgentInstructions` pipeline
@@ -4601,7 +4601,7 @@ Anthropic supports native mid-conversation system messages — instructions inse
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import SystemPromptPart
 
-agent = Agent('anthropic:claude-opus-4-8', system_prompt='You are a senior code reviewer.')
+agent = Agent('anthropic:%%model=anthropic-flagship%%', system_prompt='You are a senior code reviewer.')
 
 @agent.tool
 def require_type_annotations(ctx: RunContext[object]) -> str:
@@ -4726,7 +4726,7 @@ from pydantic_ai import Agent
 from pydantic_ai.usage import UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded
 
-agent = Agent('anthropic:claude-sonnet-4-5')
+agent = Agent('anthropic:%%model=anthropic%%')
 
 try:
     result = agent.run_sync(
@@ -4744,7 +4744,7 @@ into successive `agent.run(usage=...)` calls to keep a running session total:
 ```python
 from pydantic_ai import Agent, RunUsage
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 shared = RunUsage()
 for prompt in ['One', 'Two', 'Three']:
     agent.run_sync(prompt, usage=shared)
@@ -4773,8 +4773,8 @@ from pydantic_ai import Agent, ConcurrencyLimiter, limit_model_concurrency
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 pool = ConcurrencyLimiter(max_running=5, max_queued=20, name='openai-shared-pool')
-agent_a = Agent(limit_model_concurrency('openai:gpt-5', pool))
-agent_b = Agent(limit_model_concurrency('openai:gpt-5.2', pool))
+agent_a = Agent(limit_model_concurrency('openai:%%model=openai%%', pool))
+agent_b = Agent(limit_model_concurrency('openai:%%model=openai%%', pool))
 
 async def safe_run(agent, prompt: str):
     try:
@@ -4802,7 +4802,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import UseThreadExecutor
 
 pool = ThreadPoolExecutor(max_workers=16)
-agent = Agent('openai:gpt-4o', capabilities=[UseThreadExecutor(pool)])
+agent = Agent('openai:%%model=openai%%', capabilities=[UseThreadExecutor(pool)])
 ```
 
 ---
@@ -4842,7 +4842,7 @@ async def time_run(ctx, *, handler):
     finally:
         print(f'run took {time.perf_counter() - start:.3f}s')
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 #### `AbstractCapability` — extended API
@@ -4979,7 +4979,7 @@ from pydantic_ai.capabilities import WebSearch
 def feature_flagged(ctx: RunContext):
     return WebSearch() if getattr(ctx.deps, 'enable_search', False) else None
 
-agent = Agent('openai:gpt-4o', capabilities=[feature_flagged])   # auto-wrapped as DynamicCapability
+agent = Agent('openai:%%model=openai%%', capabilities=[feature_flagged])   # auto-wrapped as DynamicCapability
 ```
 
 #### `ProcessHistory` + `ReinjectSystemPrompt`
@@ -5014,7 +5014,7 @@ def keep_last_n(n):
     return processor
 
 agent = Agent(
-    'openai:gpt-4o', instructions='You are a support agent.',
+    'openai:%%model=openai%%', instructions='You are a support agent.',
     capabilities=[ProcessHistory(keep_last_n(15)), ReinjectSystemPrompt(replace_existing=True)],
 )
 ```
@@ -5038,7 +5038,7 @@ from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai import InstrumentationSettings
 
 logfire.configure()
-agent = Agent('openai:gpt-4o', capabilities=[Instrumentation(InstrumentationSettings(version=5, include_content=False))])
+agent = Agent('openai:%%model=openai%%', capabilities=[Instrumentation(InstrumentationSettings(version=5, include_content=False))])
 ```
 
 `InstrumentedModel` wraps a single `Model` with OTel instrumentation without touching `Agent` — the
@@ -5078,7 +5078,7 @@ async def hide_admin_tools(ctx: RunContext[dict], tool_defs):
         return tool_defs
     return [td for td in tool_defs if not td.name.startswith('admin_')]
 
-agent = Agent('openai:gpt-4o-mini', deps_type=dict, capabilities=[PrepareTools(hide_admin_tools)])
+agent = Agent('openai:%%model=openai-small%%', deps_type=dict, capabilities=[PrepareTools(hide_admin_tools)])
 ```
 
 #### `SetToolMetadata`
@@ -5095,7 +5095,7 @@ class SetToolMetadata(AbstractCapability[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import SetToolMetadata
 
-agent = Agent('openai:gpt-4o-mini', capabilities=[
+agent = Agent('openai:%%model=openai-small%%', capabilities=[
     SetToolMetadata(tools=['run_sql', 'execute_python'], code_mode=True),
 ])
 ```
@@ -5114,7 +5114,7 @@ ModelRetry(message: str)
 from pydantic_ai import Agent, RunContext, ModelRetry
 import re
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool
 async def lookup_user(ctx: RunContext[object], email: str) -> str:
@@ -5159,7 +5159,7 @@ def get_stock_price(ctx: RunContext[object], ticker: str) -> float:
     """Return the latest closing price."""
     return 150.0
 
-agent = Agent('openai:gpt-4o', deps_type=str, capabilities=[support, ToolSearch(), finance_cap])
+agent = Agent('openai:%%model=openai%%', deps_type=str, capabilities=[support, ToolSearch(), finance_cap])
 ```
 
 #### `NativeTool` + `NativeOrLocalTool` capabilities
@@ -5190,7 +5190,7 @@ from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.tools import Tool
 
 cap = NativeOrLocalTool(native=WebSearchTool(), local=Tool(lambda query: f'Results for {query}'))
-agent = Agent('openai:gpt-4o-mini', capabilities=[cap])
+agent = Agent('openai:%%model=openai-small%%', capabilities=[cap])
 ```
 
 #### `WebSearch` capability
@@ -5208,7 +5208,7 @@ class WebSearch(NativeOrLocalTool[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
 
-agent = Agent('openai:gpt-4o-mini', capabilities=[WebSearch(local=True, search_context_size='high')])
+agent = Agent('openai:%%model=openai-small%%', capabilities=[WebSearch(local=True, search_context_size='high')])
 ```
 
 #### `WebFetch` capability
@@ -5226,7 +5226,7 @@ class WebFetch(NativeOrLocalTool[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebFetch
 
-agent = Agent('anthropic:claude-sonnet-4-5', capabilities=[
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[
     WebFetch(local=True, allowed_domains=['docs.python.org', 'docs.pydantic.dev']),
 ])
 ```
@@ -5248,8 +5248,8 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
-    capabilities=[ImageGeneration(fallback_model='openai-responses:gpt-4o', quality='high', output_format='png')],
+    'anthropic:%%model=anthropic%%',
+    capabilities=[ImageGeneration(fallback_model='openai-responses:%%model=openai%%', quality='high', output_format='png')],
 )
 ```
 
@@ -5269,7 +5269,7 @@ class XSearch(NativeOrLocalTool[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import XSearch
 
-agent = Agent('openai:gpt-5.2', capabilities=[
+agent = Agent('openai:%%model=openai%%', capabilities=[
     XSearch(fallback_model='xai:grok-4.3', enable_image_understanding=True),
 ])
 ```
@@ -5288,7 +5288,7 @@ class Thinking(AbstractCapability[Any]):
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Thinking
 
-agent = Agent('anthropic:claude-opus-4-8', capabilities=[Thinking(effort='high')])
+agent = Agent('anthropic:%%model=anthropic-flagship%%', capabilities=[Thinking(effort='high')])
 ```
 
 #### `MCP` capability
@@ -5307,7 +5307,7 @@ class MCP(NativeOrLocalTool[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import MCP
 
-agent = Agent('openai:gpt-5.2', capabilities=[
+agent = Agent('openai:%%model=openai%%', capabilities=[
     MCP(url='https://mcp.example.com/v1', local=True, allowed_tools=['search', 'lookup']),
 ])
 ```
@@ -5333,7 +5333,7 @@ from pydantic_ai import Agent, Tool
 from pydantic_ai.capabilities import ToolSearch
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-5',
+    'anthropic:%%model=anthropic%%',
     tools=[Tool(get_weather), Tool(book_flight, defer_loading=True)],
     capabilities=[ToolSearch(strategy='keywords', max_results=5)],
 )
@@ -5356,7 +5356,7 @@ from pydantic_ai.capabilities import HandleDeferredToolCalls
 def auto_approve(ctx, requests):
     return requests.build_results(approve_all=True)
 
-agent = Agent('openai:gpt-4o', capabilities=[HandleDeferredToolCalls(handler=auto_approve)])
+agent = Agent('openai:%%model=openai%%', capabilities=[HandleDeferredToolCalls(handler=auto_approve)])
 ```
 
 #### `CapabilityOwnedToolset`
@@ -5379,7 +5379,7 @@ billing = Capability(id='billing', description='Billing tools — load when aske
 def get_invoice(invoice_id: str) -> dict:
     return {'id': invoice_id, 'status': 'pending'}
 
-agent = Agent('openai:gpt-4o-mini', capabilities=[billing])
+agent = Agent('openai:%%model=openai-small%%', capabilities=[billing])
 ```
 
 #### `DeferredCapabilityLoader` + `DeferredCapabilityLoaderToolset` + `LoadCapabilityCallPart`/`LoadCapabilityArgs`/`LoadCapabilityReturn`
@@ -5435,7 +5435,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 weather_toolset = FunctionToolset()
 weather_toolset.add_function(lambda city: f'Sunny in {city}', name='get_weather')
-agent = Agent('openai:gpt-5.2', capabilities=[Toolset(toolset=weather_toolset)])
+agent = Agent('openai:%%model=openai%%', capabilities=[Toolset(toolset=weather_toolset)])
 ```
 
 #### `doc_descriptions` + `DocstringStyle` + `_infer_docstring_style` — griffe-backed docstring parser
@@ -5493,7 +5493,7 @@ activity raises `UserError` with a subclassing hint.
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalAgent
 
-base_agent = Agent('openai:gpt-4.1-mini', name='research-agent')   # name= is required
+base_agent = Agent('openai:%%model=openai-small%%', name='research-agent')   # name= is required
 temporal_agent = TemporalAgent(base_agent, name='research-agent')
 # register temporal_agent.temporal_activities (or .activities) with your Temporal Worker
 ```
@@ -5547,7 +5547,7 @@ from pydantic_ai import Agent
 from pydantic_ai.durable_exec.dbos import DBOSDurability
 
 # Capability form (since 2.14.0); DBOSAgent(...) still works but is deprecated
-agent = Agent('openai:gpt-4o', name='researcher', capabilities=[DBOSDurability(model_step_config={'max_attempts': 3})])
+agent = Agent('openai:%%model=openai%%', name='researcher', capabilities=[DBOSDurability(model_step_config={'max_attempts': 3})])
 ```
 
 #### `PrefectAgent` + `TaskConfig` + `PrefectAgentInputs` + `DEFAULT_PYDANTIC_AI_CACHE_POLICY`
@@ -5570,7 +5570,7 @@ class PrefectFunctionToolset(PrefectWrapperToolset[AgentDepsT]):
 from prefect import flow
 from pydantic_ai.durable_exec.prefect import PrefectAgent
 
-durable_agent = PrefectAgent(Agent('openai:gpt-4.1-mini', name='research-agent'), name='research-agent')
+durable_agent = PrefectAgent(Agent('openai:%%model=openai-small%%', name='research-agent'), name='research-agent')
 
 @flow(name='research-flow')
 async def research_flow(topic: str) -> str:
@@ -6013,7 +6013,7 @@ from pydantic_evals.evaluators import GEval
 coherence = GEval(
     criteria='Rate the coherence of the poem to the given topic.',
     evaluation_steps=['Read the poem.', 'Check line-to-line logic.', 'Score 1-5.'],
-    model='openai:gpt-4o-mini',
+    model='openai:%%model=openai-small%%',
 )
 ```
 
@@ -6034,7 +6034,7 @@ judge_input_output_expected(inputs, output, expected_output, rubric) -> GradingO
 ```python
 from pydantic_evals.evaluators.common import LLMJudge
 
-judge = LLMJudge(rubric='The answer mentions 42', model='openai:gpt-4o-mini')
+judge = LLMJudge(rubric='The answer mentions 42', model='openai:%%model=openai-small%%')
 ```
 
 #### `generate_dataset`
@@ -6042,7 +6042,7 @@ judge = LLMJudge(rubric='The answer mentions 42', model='openai:gpt-4o-mini')
 AI-assisted test case generation from a `Dataset` subclass's schema.
 
 ```python
-generate_dataset(*, dataset_type, path=None, custom_evaluator_types=(), model='openai:gpt-5.2', n_examples=3, extra_instructions=None) -> Dataset
+generate_dataset(*, dataset_type, path=None, custom_evaluator_types=(), model='openai:%%model=openai%%', n_examples=3, extra_instructions=None) -> Dataset
 ```
 
 ```python
@@ -6092,7 +6092,7 @@ class OnlineEvaluation(AbstractCapability[AgentDepsT]):
 from pydantic_ai import Agent
 from pydantic_evals.online_capability import OnlineEvaluation
 
-agent = Agent('openai:gpt-4o-mini', capabilities=[OnlineEvaluation(evaluators=[OutputNotEmpty()])])
+agent = Agent('openai:%%model=openai-small%%', capabilities=[OnlineEvaluation(evaluators=[OutputNotEmpty()])])
 ```
 
 The `evaluate` decorator applies the same `Evaluator` classes to live production traffic outside an
@@ -6146,7 +6146,7 @@ with `'when_idle'`-priority `ctx.enqueue()` messages never drained — use `agen
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, ContentFilterError, UsageLimitExceeded
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 try:
     result = agent.run_sync(prompt)
 except ContentFilterError:
@@ -6232,7 +6232,7 @@ class ApprovalRequiredToolset(WrapperToolset[AgentDepsT]):
 from pydantic_ai import Agent, ApprovalRequired, DeferredToolRequests, ToolApproved, ToolDenied, DeferredToolResults
 from pydantic_ai.toolsets import FunctionToolset, ApprovalRequiredToolset
 
-agent = Agent('openai:gpt-4o', output_type=[str, DeferredToolRequests])
+agent = Agent('openai:%%model=openai%%', output_type=[str, DeferredToolRequests])
 
 @agent.tool
 def drop_table(ctx, table_name: str) -> str:
@@ -6250,7 +6250,7 @@ if isinstance(result.output, DeferredToolRequests):
 
 # Or gate an entire toolset at once, without touching individual tool bodies:
 gated = ApprovalRequiredToolset(wrapped=FunctionToolset([send_email]))
-agent2 = Agent('openai:gpt-4.1', toolsets=[gated], output_type=[str, DeferredToolRequests])
+agent2 = Agent('openai:%%model=openai%%', toolsets=[gated], output_type=[str, DeferredToolRequests])
 r1 = agent2.run_sync('Send a welcome email to bob@example.com')
 if isinstance(r1.output, DeferredToolRequests):
     resumed = agent2.run_sync(
@@ -6275,7 +6275,7 @@ CallDeferred(metadata: dict | None = None)     # Exception
 ```python
 from pydantic_ai import Agent, CallDeferred, DeferredToolRequests, DeferredToolResults, ToolReturn
 
-agent = Agent('openai:gpt-4o', output_type=[str, DeferredToolRequests])
+agent = Agent('openai:%%model=openai%%', output_type=[str, DeferredToolRequests])
 
 @agent.tool_plain
 def run_sql_query(sql: str) -> str:
@@ -6336,7 +6336,7 @@ without native `WebFetchTool` support.
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebFetch
 
-internal_agent = Agent('openai:gpt-4o', capabilities=[
+internal_agent = Agent('openai:%%model=openai%%', capabilities=[
     WebFetch(local=True, allowed_domains=['docs.mycompany.com', 'api.mycompany.com']),
 ])
 ```
@@ -6370,7 +6370,7 @@ from starlette.routing import Route
 from pydantic_ai import Agent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
-agent = Agent('anthropic:claude-sonnet-4-6', system_prompt='You are helpful.')
+agent = Agent('anthropic:%%model=anthropic%%', system_prompt='You are helpful.')
 
 async def handle(request):
     return await AGUIAdapter.dispatch_request(request, agent=agent)
@@ -6396,7 +6396,7 @@ from pydantic_ai import Agent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
 app = FastAPI()
-agent = Agent('anthropic:claude-sonnet-4-6')
+agent = Agent('anthropic:%%model=anthropic%%')
 
 @app.post('/agent')
 async def run_agent(request: Request):
@@ -6425,7 +6425,7 @@ toolset = FunctionToolset()
 @toolset.tool_plain
 async def delete_record(record_id: str) -> str: return f'Deleted {record_id}'
 
-agent = Agent('openai:gpt-4o', toolsets=[ApprovalRequiredToolset(toolset)])
+agent = Agent('openai:%%model=openai%%', toolsets=[ApprovalRequiredToolset(toolset)])
 
 async def handle(request):
     return await VercelAIAdapter.dispatch_request(request, agent=agent, sdk_version=6)
@@ -6453,8 +6453,8 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.ui._web.api import create_api_app   # private; prefer agent.to_web(models=...)
 
-agent = Agent(OpenAIChatModel('gpt-4o'), system_prompt='You are a helpful assistant.')
-app = create_api_app(agent, models={'GPT-4o (fast)': 'openai:gpt-4o', 'GPT-4o-mini (cheap)': 'openai:gpt-4o-mini'})
+agent = Agent(OpenAIChatModel('%%model=openai%%'), system_prompt='You are a helpful assistant.')
+app = create_api_app(agent, models={'GPT-4o (fast)': 'openai:%%model=openai%%', 'GPT-4o-mini (cheap)': 'openai:%%model=openai-small%%'})
 ```
 
 #### `agent_to_a2a` / `AgentWorker` — see Durable Execution & Integrations

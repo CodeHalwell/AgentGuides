@@ -617,7 +617,7 @@ from agent_framework.openai import OpenAIChatClient
 
 # Specialist agent — narrow job, narrow toolset
 billing = Agent(
-    client=OpenAIChatClient(model="gpt-4o-mini"),     # cheaper model for the specialist
+    client=OpenAIChatClient(model="%%model=openai-small%%"),     # cheaper model for the specialist
     name="billing_specialist",
     description="Resolves invoice, refund and subscription questions.",
     instructions="Only answer billing questions. Refuse anything else politely.",
@@ -626,7 +626,7 @@ billing = Agent(
 
 # Supervisor agent — broad job, delegates via the wrapped specialist
 supervisor = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     name="customer_support",
     instructions="Triage user questions. Delegate billing topics to the specialist tool.",
     tools=[

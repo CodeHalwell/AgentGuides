@@ -135,7 +135,7 @@ class Answer(BaseModel):
     value: int
     reasoning: str
 
-agent = Agent('openai:gpt-4o', output_type=Answer)
+agent = Agent('openai:%%model=openai%%', output_type=Answer)
 
 result = agent.run_sync("What is 15 + 27?")
 print(result.output)  # Answer(value=42, reasoning='...')

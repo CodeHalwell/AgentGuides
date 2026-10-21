@@ -727,8 +727,8 @@ The consolidation pass summarises and merges topics with an LLM call. Pass `cons
 ```python
 from agent_framework.openai import OpenAIChatClient
 
-main_client   = OpenAIChatClient(model="gpt-4o")
-cheap_client  = OpenAIChatClient(model="gpt-4o-mini")
+main_client   = OpenAIChatClient(model="%%model=openai%%")
+cheap_client  = OpenAIChatClient(model="%%model=openai-small%%")
 
 memory = MemoryContextProvider(
     store=store,

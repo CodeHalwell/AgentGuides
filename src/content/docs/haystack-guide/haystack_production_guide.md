@@ -303,7 +303,7 @@ agent: Agent | None = None
 async def lifespan(app: FastAPI):
     global agent
     agent = Agent(
-        chat_generator=OpenAIChatGenerator(model="gpt-5-mini", timeout=60, max_retries=2),
+        chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%", timeout=60, max_retries=2),
         tools=[get_weather],
         system_prompt="You are a helpful assistant.",
         max_agent_steps=10,
@@ -384,7 +384,7 @@ redis = Redis.from_url("redis://localhost:6379/0", decode_responses=True)
 TTL_SECONDS = 3600
 
 
-def cache_key(text: str, model: str = "gpt-5-mini", prompt_version: str = "v3") -> str:
+def cache_key(text: str, model: str = "%%model=openai-small%%", prompt_version: str = "v3") -> str:
     digest = hashlib.sha256(f"{model}|{prompt_version}|{text.strip().lower()}".encode()).hexdigest()
     return f"answer:{digest}"
 

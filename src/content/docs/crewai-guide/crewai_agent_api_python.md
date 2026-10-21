@@ -21,7 +21,7 @@ analyst = Agent(
     role="Research Analyst",
     goal="Surface the strongest 3 claims about {topic}",
     backstory="Senior analyst at an investigative newsroom.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     verbose=True,
 )
 
@@ -119,13 +119,13 @@ support = Agent(
 ```python
 from crewai import Agent, PlanningConfig, LLM
 
-planner_llm = LLM(model="openai/gpt-4o")  # cheaper than the exec LLM is fine
+planner_llm = LLM(model="openai/%%model=openai%%")  # cheaper than the exec LLM is fine
 
 researcher = Agent(
     role="Researcher",
     goal="Gather the strongest 3 sources on {topic}",
     backstory="Veteran librarian.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     planning=True,
     planning_config=PlanningConfig(max_attempts=3, llm=planner_llm),
 )
@@ -250,9 +250,9 @@ Agent(
     role="Doc Writer",
     goal="...",
     backstory="...",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     planning=True,
-    planning_config=PlanningConfig(llm=LLM(model="openai/gpt-4o")),
+    planning_config=PlanningConfig(llm=LLM(model="openai/%%model=openai%%")),
 )
 ```
 
@@ -264,7 +264,7 @@ manager = Agent(
     goal="Break the problem down and route tasks",
     backstory="Skilled at decomposition.",
     allow_delegation=True,
-    llm=LLM(model="openai/gpt-4o"),
+    llm=LLM(model="openai/%%model=openai%%"),
 )
 crew = Crew(agents=[manager, researcher, writer], tasks=[...], process=Process.hierarchical, manager_agent=manager)
 ```

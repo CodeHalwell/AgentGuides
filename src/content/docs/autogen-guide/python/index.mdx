@@ -46,7 +46,7 @@ from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 
 async def main() -> None:
-    model_client = OpenAIChatCompletionClient(model="gpt-4.1-mini")
+    model_client = OpenAIChatCompletionClient(model="%%model=openai-small%%")
     agent = AssistantAgent("assistant", model_client=model_client)
     result = await agent.run(task="What is 2 + 2?")
     print(result.messages[-1].content)

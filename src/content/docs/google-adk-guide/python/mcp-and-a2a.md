@@ -33,7 +33,7 @@ fs_toolset = McpToolset(
 
 agent = LlmAgent(
     name="fs_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user browse the filesystem.",
     tools=[fs_toolset],
 )
@@ -104,7 +104,7 @@ toolset = McpToolset(
 from google.adk.agents import LlmAgent
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 
-agent = LlmAgent(name="solver", model="gemini-2.5-flash", instruction="Solve math problems.")
+agent = LlmAgent(name="solver", model="%%model=gemini%%", instruction="Solve math problems.")
 app = to_a2a(agent, host="0.0.0.0", port=8000, protocol="http")
 
 # Run with:  uvicorn module_name:app --host 0.0.0.0 --port 8000
@@ -152,7 +152,7 @@ remote_solver = RemoteA2aAgent(
 # Compose into a larger system
 root = LlmAgent(
     name="dispatcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="For maths, transfer_to_agent('remote_solver').",
     sub_agents=[remote_solver],
 )
@@ -236,7 +236,7 @@ Since 2.5.0, `to_mcp_server` (in `google.adk.tools.mcp_tool`) exposes a whole ag
 from google.adk.agents import LlmAgent
 from google.adk.tools.mcp_tool import to_mcp_server
 
-agent = LlmAgent(name="assistant", model="gemini-2.5-flash", instruction="Be helpful.")
+agent = LlmAgent(name="assistant", model="%%model=gemini%%", instruction="Be helpful.")
 
 server = to_mcp_server(agent, instructions="Ask the assistant anything.")
 server.run(transport="stdio")              # local hosts (IDEs, CLI agents)
@@ -296,7 +296,7 @@ async def main():
 
     agent = LlmAgent(
         name="file_assistant",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction=(
             "Help the user navigate and read files. "
             "Use fs_list_directory to explore and fs_read_file to read content."
@@ -348,7 +348,7 @@ async def main():
 
     agent = LlmAgent(
         name="kb_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Search and retrieve documents from the knowledge base.",
         tools=[toolset],
     )
@@ -383,7 +383,7 @@ from google.adk.apps import App
 
 agent = LlmAgent(
     name="weather_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Provides weather information for any city.",
     instruction=(
         "You are a weather specialist. "
@@ -428,7 +428,7 @@ async def main():
     # Orchestrator routes questions to the remote agent via A2A protocol
     orchestrator = LlmAgent(
         name="orchestrator",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction=(
             "Route weather questions to weather_specialist. "
             "Handle other questions yourself."
@@ -488,7 +488,7 @@ async def main():
 
     agent = LlmAgent(
         name="api_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Help users interact with the API.",
         tools=[toolset],
     )
@@ -576,7 +576,7 @@ async def main():
 
     agent = LlmAgent(
         name="secure_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Use the private tools to retrieve company data.",
         tools=[toolset],
     )

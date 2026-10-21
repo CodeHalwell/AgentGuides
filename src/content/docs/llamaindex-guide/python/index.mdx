@@ -106,7 +106,7 @@ tool = QueryEngineTool.from_defaults(
     description="Answer questions about the documents",
 )
 
-agent = FunctionAgent(tools=[tool], llm=OpenAI(model="gpt-5-mini"))
+agent = FunctionAgent(tools=[tool], llm=OpenAI(model="%%model=openai-small%%"))
 
 async def main():
     response = await agent.run(user_msg="What are the key findings?")

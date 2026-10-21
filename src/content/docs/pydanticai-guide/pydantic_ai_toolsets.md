@@ -23,7 +23,7 @@ tools = FunctionToolset[int]()  # generic deps type
 def multiply(ctx: RunContext[int], x: int) -> int:
     return ctx.deps * x
 
-agent = Agent('openai:gpt-5.2', deps_type=int, toolsets=[tools])
+agent = Agent('openai:%%model=openai%%', deps_type=int, toolsets=[tools])
 print(agent.run_sync('Multiply my deps by 3', deps=7).output)
 #> 21
 ```
@@ -97,7 +97,7 @@ from pydantic_ai import CombinedToolset, FunctionToolset
 core = FunctionToolset([...])
 extras = FunctionToolset([...])
 combined = CombinedToolset([core, extras])
-agent = Agent('openai:gpt-5.2', toolsets=[combined])
+agent = Agent('openai:%%model=openai%%', toolsets=[combined])
 ```
 
 Tool-name collisions raise at construction time; `PrefixedToolset` solves that.
@@ -107,7 +107,7 @@ Tool-name collisions raise at construction time; `PrefixedToolset` solves that.
 ```python
 from pydantic_ai import PrefixedToolset
 
-agent = Agent('openai:gpt-5.2', toolsets=[
+agent = Agent('openai:%%model=openai%%', toolsets=[
     PrefixedToolset(db_tools, prefix='db_'),
     PrefixedToolset(kb_tools, prefix='kb_'),
 ])
@@ -131,7 +131,7 @@ def visible(ctx, tool_def):
     # only expose write tools to admins
     return tool_def.metadata.get('scope') != 'write' or ctx.deps.user.is_admin
 
-agent = Agent('openai:gpt-5.2', deps_type=Deps,
+agent = Agent('openai:%%model=openai%%', deps_type=Deps,
               toolsets=[FilteredToolset(tools, filter_func=visible)])
 ```
 
@@ -160,7 +160,7 @@ def needs_approval(ctx, tool_def, args) -> bool:
     return tool_def.name.startswith('delete_')
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     output_type=[str, DeferredToolRequests],
     toolsets=[ApprovalRequiredToolset(write_tools, approval_required_func=needs_approval)],
 )
@@ -184,7 +184,7 @@ from pydantic_ai import DeferredLoadingToolset
 
 big_library = FunctionToolset([...])
 hidden = DeferredLoadingToolset(big_library)   # all tools hidden
-agent = Agent('openai:gpt-5.2', toolsets=[hidden])
+agent = Agent('openai:%%model=openai%%', toolsets=[hidden])
 ```
 
 Combined with the built-in tool search capability (`pydantic_ai.capabilities.ToolSearch`), only tools the model asks for via search get surfaced — saves tokens on large libraries.
@@ -203,7 +203,7 @@ external = ExternalToolset([
     ),
 ])
 
-agent = Agent('openai:gpt-5.2',
+agent = Agent('openai:%%model=openai%%',
               output_type=[str, DeferredToolRequests],
               toolsets=[external])
 
@@ -238,7 +238,7 @@ def get_product(product_id: int) -> Product:
     return Product(id=product_id, name='Widget', price=9.99)
 
 # OpenAI and Google models can use the Product schema as a hint
-agent = Agent('openai:gpt-4o', toolsets=[IncludeReturnSchemasToolset(tools)])
+agent = Agent('openai:%%model=openai%%', toolsets=[IncludeReturnSchemasToolset(tools)])
 ```
 
 ### `SetMetadataToolset` — bulk-tag tools
@@ -278,7 +278,7 @@ def role_filter(ctx, tool_def) -> bool:
     return ctx.deps.role == required
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=UserDeps,
     toolsets=[
         read_tools,
@@ -368,7 +368,7 @@ async def drop_table(ctx: RunContext[UserSession], table: str) -> str:
     return f'Dropped {table}'
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=UserSession,
     toolsets=[FilteredToolset(write_ops, filter_func=scope_check)],
 )
@@ -404,7 +404,7 @@ def query(sql: str) -> str:          # same name — would clash without prefix
     return f'sqlite: {sql}'
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     toolsets=[
         CombinedToolset([
             PrefixedToolset(postgres_tools, prefix='pg'),    # → pg_query
@@ -421,12 +421,12 @@ agent = Agent(
 ```python
 from pydantic_ai import Agent
 
-sub = Agent('openai:gpt-5.4-mini', name='citations')
+sub = Agent('openai:%%model=openai-small%%', name='citations')
 
 @sub.tool_plain
 def lookup_citation(key: str) -> str: ...
 
-parent = Agent('openai:gpt-5.2', toolsets=[sub.toolset])
+parent = Agent('openai:%%model=openai%%', toolsets=[sub.toolset])
 ```
 
 Every `Agent` exposes a `.toolset` (an internal `FunctionToolset`) for reuse.
@@ -476,7 +476,7 @@ def slow_operation(n: int) -> int:
     import time; time.sleep(0.1)
     return n * 2
 
-agent = Agent('openai:gpt-4o', toolsets=[TimedToolset(wrapped=base_tools)])
+agent = Agent('openai:%%model=openai%%', toolsets=[TimedToolset(wrapped=base_tools)])
 ```
 
 ### `AbstractToolset` — build from scratch
@@ -550,7 +550,7 @@ class DatabaseToolset(AbstractToolset):
         # Execute: SELECT * FROM {table} WHERE {where}
         return [{'id': 1, 'name': 'Alice'}]   # placeholder
 
-agent = Agent('openai:gpt-4o', toolsets=[DatabaseToolset(db_url='postgresql://...')])
+agent = Agent('openai:%%model=openai%%', toolsets=[DatabaseToolset(db_url='postgresql://...')])
 async with agent:
     result = await agent.run('List all users')
 ```
@@ -613,7 +613,7 @@ def localise_descriptions(ctx: RunContext[UserDeps], defs: list[ToolDefinition])
     ]
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=UserDeps,
     toolsets=[PreparedToolset(tools, prepare_func=localise_descriptions)],
 )
@@ -666,7 +666,7 @@ def phase_filter(ctx: RunContext[WorkflowDeps], defs: list[ToolDefinition]) -> l
     return [d for d in defs if d.name in allowed]
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=WorkflowDeps,
     toolsets=[PreparedToolset(tools, prepare_func=phase_filter)],
 )
@@ -715,7 +715,7 @@ def ab_test_significance(test_id: str) -> dict:
 
 # Defer ALL analytics tools — the model must search for them
 deferred = DeferredLoadingToolset(analytics_tools)
-agent = Agent('openai:gpt-4o', toolsets=[deferred])
+agent = Agent('openai:%%model=openai%%', toolsets=[deferred])
 
 async def main():
     # Without deferred loading, all 4 tools appear in every prompt.
@@ -759,7 +759,7 @@ def generate_report(report_type: str, parameters: dict) -> str:
     return f'{report_type} report generated'
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     toolsets=[
         quick_tools,                                    # always visible
         DeferredLoadingToolset(heavy_tools),            # discovered on demand
@@ -818,7 +818,7 @@ from pydantic_ai.mcp import MCPToolset
 # MCPToolset replaced V1's MCPServerStdio / MCPServerSSE / MCPServerStreamableHTTP.
 # It accepts a URL, a script path, a FastMCP server or client, or a transport.
 server = MCPToolset(StdioTransport('uv', args=['run', 'mcp-run-python', 'stdio']))
-agent = Agent('openai:gpt-5.2',
+agent = Agent('openai:%%model=openai%%',
               toolsets=[local_tools, PrefixedToolset(server, prefix='mcp_')])
 async with agent:
     result = await agent.run('run this python snippet safely')
@@ -828,7 +828,7 @@ async with agent:
 
 ```python
 deep_library = FunctionToolset([...])  # 120 tools
-agent = Agent('openai:gpt-5.2',
+agent = Agent('openai:%%model=openai%%',
               toolsets=[DeferredLoadingToolset(deep_library)])
 ```
 
@@ -904,7 +904,7 @@ def admin_filter(ctx: RunContext[UserDeps], tool_def) -> bool:
     return True
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=UserDeps,
     output_type=[str, DeferredToolRequests],
     toolsets=[FilteredToolset(combined, filter_func=admin_filter)],
@@ -959,7 +959,7 @@ def count_records(table: str) -> int:
     """Count rows in a database table."""
     return {'users': 2, 'orders': 15}.get(table, 0)
 
-agent = Agent('openai:gpt-4o', toolsets=[db_tools])
+agent = Agent('openai:%%model=openai%%', toolsets=[db_tools])
 result = agent.run_sync('How many users are there and who are they?')
 print(result.output)
 ```
@@ -992,7 +992,7 @@ async def permission_check(ctx: RunContext[RequestDeps], tool_def) -> bool:
     return True
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=RequestDeps,
     toolsets=[FilteredToolset(all_tools, filter_func=permission_check)],
 )
@@ -1040,7 +1040,7 @@ def search(query: str) -> str:  # noqa: F811 — same name, different toolset
 # Without prefixing, CombinedToolset would raise on the name collision.
 # Prefix them:
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=Deps,
     toolsets=[
         CombinedToolset([
@@ -1115,7 +1115,7 @@ def rbac_filter(ctx: RunContext[UserContext], tool_def) -> bool:
         return False
     return True
 
-agent = Agent('openai:gpt-4o', deps_type=UserContext,
+agent = Agent('openai:%%model=openai%%', deps_type=UserContext,
               toolsets=[FilteredToolset(tools, filter_func=rbac_filter)])
 
 viewer = UserContext(role='viewer', subscription='free')
@@ -1171,7 +1171,7 @@ def admin_action() -> str:
     return 'Done'
 
 from pydantic_ai import CombinedToolset
-agent = Agent('openai:gpt-4o', deps_type=AuthDeps,
+agent = Agent('openai:%%model=openai%%', deps_type=AuthDeps,
               toolsets=[FilteredToolset(CombinedToolset([tools, tools2]),
                                         filter_func=permission_filter)])
 ```
@@ -1206,7 +1206,7 @@ def cart_filter(ctx: RunContext[object], tool_def) -> bool:
     )
     return cart_calls > 0
 
-agent = Agent('openai:gpt-4o', toolsets=[FilteredToolset(tools, filter_func=cart_filter)])
+agent = Agent('openai:%%model=openai%%', toolsets=[FilteredToolset(tools, filter_func=cart_filter)])
 ```
 
 ---
@@ -1246,7 +1246,7 @@ def bulk_export(ctx: RunContext[AdminDeps], table: str) -> str:
 gated = ApprovalRequiredToolset(dangerous_tools)
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=AdminDeps,
     output_type=[str, DeferredToolRequests],  # <-- critical: allows DeferredToolRequests output
     toolsets=[gated],
@@ -1363,7 +1363,7 @@ hidden = DeferredLoadingToolset(big_library)
 
 # ToolSearch capability adds a search_tools function tool that discovers deferred tools
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     toolsets=[hidden],
     capabilities=[ToolSearch()],  # enables the search_tools built-in
 )
@@ -1457,7 +1457,7 @@ external = ExternalToolset([
 ])
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[str, DeferredToolRequests],
     toolsets=[external],
 )

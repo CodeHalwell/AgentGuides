@@ -369,8 +369,8 @@ In a Cloud deployment that hosts multiple graphs, `graph_id` lets a shared node 
 
 ```python
 GRAPH_CONFIGS = {
-    "customer-support": {"max_steps": 10, "model": "gpt-4o"},
-    "internal-tools":   {"max_steps": 50, "model": "gpt-4o-mini"},
+    "customer-support": {"max_steps": 10, "model": "%%model=openai%%"},
+    "internal-tools":   {"max_steps": 50, "model": "%%model=openai-small%%"},
 }
 
 from langgraph.runtime import Runtime
@@ -378,7 +378,7 @@ from langgraph.runtime import Runtime
 
 def adaptive_node(state: dict, runtime: Runtime) -> dict:
     graph_id = runtime.server_info.graph_id if runtime.server_info else "default"
-    config = GRAPH_CONFIGS.get(graph_id, {"max_steps": 25, "model": "gpt-4o-mini"})
+    config = GRAPH_CONFIGS.get(graph_id, {"max_steps": 25, "model": "%%model=openai-small%%"})
     # use config["model"] and config["max_steps"] ...
     return state
 ```

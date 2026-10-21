@@ -323,7 +323,7 @@ builder.Services.AddSingleton<AIAgent>(sp =>
     };
 
     return new AzureOpenAIClient(new Uri(builder.Configuration["AzureOpenAI:Endpoint"]!), new DefaultAzureCredential(), options)
-        .GetChatClient("gpt-4o-mini")
+        .GetChatClient("%%model=openai-small%%")
         .AsAIAgent(instructions: "You are a helpful assistant.");
 });
 ```

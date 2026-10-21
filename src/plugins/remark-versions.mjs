@@ -4,6 +4,7 @@
  *
  *   %%version=agent-framework%%   -> 1.22.0
  *   %%versions-checked%%          -> 2026-10-21 (when versions.json was last checked)
+ *   %%model=openai%%              -> the current model ID for that role (versions.json `models`)
  *
  * Applies to prose, inline code, fenced code, raw HTML, link URLs and MDX
  * attribute values. The syntax avoids braces and angle brackets (MDX) and
@@ -16,14 +17,20 @@
  */
 import { readFileSync } from 'node:fs';
 
-const PLACEHOLDER = /%%(?:version=([^%\s]+)|versions-checked)%%/g;
+const PLACEHOLDER = /%%(?:version=([^%\s]+)|model=([^%\s]+)|versions-checked)%%/g;
 
 export default function remarkVersions(options = {}) {
   const path = options.path ?? new URL('../data/versions.json', import.meta.url);
-  const { packages, checked } = JSON.parse(readFileSync(path, 'utf8'));
+  const { packages, models, checked } = JSON.parse(readFileSync(path, 'utf8'));
 
   const fill = (text, file) =>
-    text.replace(PLACEHOLDER, (match, pkg) => {
+    text.replace(PLACEHOLDER, (match, pkg, role) => {
+      if (role) {
+        if (!models[role] || role.startsWith('$')) {
+          throw new Error(`${file.path}: unknown model role "${role}" in ${match} (not in src/data/versions.json models)`);
+        }
+        return models[role];
+      }
       if (!pkg) return checked;
       const entry = packages[pkg];
       if (!entry) {

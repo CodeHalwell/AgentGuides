@@ -30,7 +30,7 @@ None of the three extras is in the default `pydantic-ai` install, so add the one
 Since 2.14.0 durability is a **capability** you attach to a normal agent:
 
 ```python
-agent = Agent('openai:gpt-5.2', name='support', capabilities=[TemporalDurability()])
+agent = Agent('openai:%%model=openai%%', name='support', capabilities=[TemporalDurability()])
 ```
 
 The older wrapper classes — `TemporalAgent`, `DBOSAgent` and `PrefectAgent` — still work but emit `PydanticAIDeprecationWarning` and will be removed in V3. Their deprecation message lists the mapping for every constructor argument; the [migration table](#migrating-from-the-wrapper-classes) below summarises it.
@@ -65,7 +65,7 @@ from pydantic_ai.durable_exec.temporal import (
 )
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     name='geography',                     # stable: it is part of every activity name
     instructions='Answer concisely.',
     capabilities=[
@@ -135,7 +135,7 @@ from pydantic_ai import Agent
 from pydantic_ai.durable_exec.dbos import DBOSDurability
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     name='support',
     instructions='Be concise.',
     capabilities=[DBOSDurability(model_step_config={'max_attempts': 3, 'backoff_rate': 2.0})],
@@ -187,7 +187,7 @@ from pydantic_ai import Agent
 from pydantic_ai.durable_exec.prefect import PrefectDurability, TaskConfig
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     name='research',
     capabilities=[
         PrefectDurability(

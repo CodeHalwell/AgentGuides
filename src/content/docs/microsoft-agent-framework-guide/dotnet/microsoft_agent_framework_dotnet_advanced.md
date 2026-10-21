@@ -34,7 +34,7 @@ var client = new PersistentAgentsClient(endpoint, new DefaultAzureCredential());
 // Create the server-side agent and get an AIAgent wrapper for it in one call.
 // (Use client.GetAIAgentAsync(agentId) to attach to an agent that already exists.)
 AIAgent agent = await client.CreateAIAgentAsync(
-    model: "gpt-4o-mini",
+    model: "%%model=openai-small%%",
     name: "writer",
     instructions: "You are a helpful writing assistant.");
 

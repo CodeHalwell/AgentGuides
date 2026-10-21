@@ -566,7 +566,7 @@ def load_history(user_id: str) -> list[str]:
 def answer(query: str, runtime: Runtime[UserCtx]) -> dict:
     ctx = runtime.context
     history = load_history(ctx.user_id).result()
-    model = "claude-opus-4-7" if ctx.is_premium else "claude-haiku-4-5"
+    model = "%%model=anthropic-flagship%%" if ctx.is_premium else "%%model=anthropic-small%%"
 
     response = f"[{model}] Answering '{query}' (history: {history})"
 

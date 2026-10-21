@@ -227,7 +227,7 @@ from google.genai import types
 # Create a basic agent
 search_agent = Agent(
     name="web_researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Researches topics using web search",
     instruction="You are a helpful research assistant. Use web search to find accurate, current information.",
     tools=[google_search],
@@ -257,7 +257,7 @@ from google.adk.tools import google_search, url_context
 # Create an LLM agent with advanced features
 researcher = LlmAgent(
     name="research_specialist",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Conducts in-depth research with content extraction",
     instruction="""You are a research specialist. Your responsibilities:
     1. Use google_search to find relevant sources
@@ -274,20 +274,20 @@ researcher = LlmAgent(
 # Define sub-agents for hierarchical structure
 summariser = LlmAgent(
     name="summariser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Create concise, accurate summaries of provided text"
 )
 
 fact_checker = LlmAgent(
     name="fact_checker",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Verify claims and identify any factual inaccuracies"
 )
 
 # Create coordinator that uses sub-agents
 coordinator = LlmAgent(
     name="research_coordinator",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Coordinate research, summarisation, and fact-checking",
     sub_agents=[summariser, fact_checker]
 )
@@ -366,7 +366,7 @@ from google.genai import types
 # Configure with Flash model for speed
 fast_agent = Agent(
     name="quick_responder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Provides quick responses",
     instruction="Respond concisely and quickly",
     generate_content_config=types.GenerateContentConfig(
@@ -379,7 +379,7 @@ fast_agent = Agent(
 # Configure with Pro model for complex reasoning
 reasoner = Agent(
     name="complex_reasoner",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Handles complex reasoning tasks",
     instruction="Provide detailed, step-by-step reasoning",
     generate_content_config=types.GenerateContentConfig(
@@ -392,7 +392,7 @@ reasoner = Agent(
 # Configure with safety settings
 safe_agent = Agent(
     name="safe_responder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Provide helpful information safely",
     generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
@@ -445,7 +445,7 @@ client = Client(api_key=os.environ["GOOGLE_API_KEY"])
 # Create agent that uses the client
 api_agent = Agent(
     name="api_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Agent using API key authentication",
     instruction="You are a helpful assistant"
 )
@@ -503,7 +503,7 @@ from google.adk.agents import LlmAgent
 # Minimal agent configuration
 chatbot = LlmAgent(
     name="chatbot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a friendly chatbot. Answer user questions helpfully."
 )
 
@@ -520,7 +520,7 @@ from google.adk.tools import google_search
 # Agent with web search capability
 web_agent = LlmAgent(
     name="web_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Searches the web for current information",
     instruction="""You are a web search assistant. When asked about current events,
     weather, or recent information, use google_search to find accurate, up-to-date information.
@@ -538,7 +538,7 @@ from google.genai import types
 # Fully configured agent
 configured_agent = LlmAgent(
     name="data_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Analyses data and provides insights",
     instruction="""You are a data analyst. When given data:
     1. Identify key patterns and trends
@@ -566,7 +566,7 @@ from google.genai import types
 agent = Agent(
     # Identity
     name="research_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Conducts research and summarises findings",
     
     # Behaviour
@@ -627,7 +627,7 @@ OUTPUT FORMAT:
 
 doc_writer = LlmAgent(
     name="api_doc_writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Writes professional API documentation",
     instruction=instruction
 )
@@ -641,7 +641,7 @@ from google.adk.agents import LlmAgent
 # Customer support agent
 support_agent = LlmAgent(
     name="support_specialist",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="""You are a patient, helpful customer support specialist.
 
 ROLE:
@@ -660,7 +660,7 @@ TONE:
 # Code review agent
 review_agent = LlmAgent(
     name="code_reviewer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""You are an experienced code reviewer focused on quality and maintainability.
 
 REVIEW CRITERIA:
@@ -701,7 +701,7 @@ def calculate_circle_area(radius: float) -> float:
 # Create agent with the tool
 math_agent = LlmAgent(
     name="math_helper",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a helpful math assistant. Use tools to perform calculations.",
     tools=[calculate_circle_area]
 )
@@ -732,7 +732,7 @@ def calculate_statistics(numbers: List[float]) -> dict:
 
 stats_agent = LlmAgent(
     name="stats_calculator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Calculate statistical measures when asked about data",
     tools=[calculate_statistics]
 )
@@ -765,7 +765,7 @@ async def fetch_weather(city: str) -> dict:
 
 weather_agent = LlmAgent(
     name="weather_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Provide weather information for requested locations",
     tools=[fetch_weather]
 )
@@ -787,7 +787,7 @@ from google.genai import types
 # Create agent and runner
 agent = LlmAgent(
     name="sync_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions helpfully"
 )
 
@@ -839,7 +839,7 @@ import asyncio
 
 agent = LlmAgent(
     name="error_safe_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions helpfully"
 )
 
@@ -903,7 +903,7 @@ def divide_numbers(a: float, b: float, tool_context: ToolContext) -> float:
 # Create agent with tool
 calculator = LlmAgent(
     name="calculator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help with mathematical calculations. Handle errors gracefully.",
     tools=[divide_numbers]
 )
@@ -924,7 +924,7 @@ from google.adk.tools import google_search
 # Define leaf agents (no sub-agents)
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Conducts research using web search",
     instruction="Search for and compile information on given topics",
     tools=[google_search]
@@ -932,7 +932,7 @@ researcher = LlmAgent(
 
 summariser = LlmAgent(
     name="summariser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Summarises information",
     instruction="Create concise, clear summaries of provided information"
 )
@@ -940,7 +940,7 @@ summariser = LlmAgent(
 # Define parent agent that coordinates children
 content_creator = LlmAgent(
     name="content_creator",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Creates comprehensive content by coordinating research and summarisation",
     instruction="Coordinate research and summarisation to produce high-quality content",
     sub_agents=[researcher, summariser]
@@ -949,7 +949,7 @@ content_creator = LlmAgent(
 # Can continue nesting - create a higher-level coordinator
 publishing_agent = LlmAgent(
     name="publisher",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Manages content creation for publication",
     instruction="Oversee content creation process",
     sub_agents=[content_creator]
@@ -962,16 +962,16 @@ publishing_agent = LlmAgent(
 from google.adk.agents import LlmAgent
 
 # Layer 1: Specialists
-qa_agent = LlmAgent(name="qa_specialist", model="gemini-2.5-flash", instruction="Ensure quality")
-qa_agent = LlmAgent(name="qa_specialist", model="gemini-2.5-flash", 
+qa_agent = LlmAgent(name="qa_specialist", model="%%model=gemini%%", instruction="Ensure quality")
+qa_agent = LlmAgent(name="qa_specialist", model="%%model=gemini%%", 
     instruction="Ensure quality standards are met")
-writer = LlmAgent(name="writer", model="gemini-2.5-flash", 
+writer = LlmAgent(name="writer", model="%%model=gemini%%", 
     instruction="Create original content")
 
 # Layer 2: Team leads
 content_lead = LlmAgent(
     name="content_lead",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Lead content team",
     sub_agents=[writer, qa_agent]
 )
@@ -979,7 +979,7 @@ content_lead = LlmAgent(
 # Layer 3: Department head
 content_manager = LlmAgent(
     name="content_manager",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Manage content department",
     sub_agents=[content_lead]
 )
@@ -995,7 +995,7 @@ from google.adk.agents import LlmAgent
 # Parent agent that explicitly coordinates children
 coordinator = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Coordinates specialised agents",
     instruction="""You coordinate between research and analysis agents.
     When given a task:
@@ -1014,7 +1014,7 @@ from google.adk.agents import LlmAgent
 # Sequential delegation
 sequencer = LlmAgent(
     name="sequencer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Handle tasks sequentially:
     1. Pass task to planner for strategy
     2. Pass plan to executor for implementation
@@ -1025,7 +1025,7 @@ sequencer = LlmAgent(
 # Parallel delegation
 paralleliser = LlmAgent(
     name="paralleliser",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Distribute work to specialists simultaneously:
     - Data analyst examines data trends
     - Market researcher studies competition
@@ -1046,26 +1046,26 @@ from google.adk.tools import google_search
 # Define workflow steps
 step1_research = LlmAgent(
     name="research",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Research the topic thoroughly",
     tools=[google_search]
 )
 
 step2_organise = LlmAgent(
     name="organise",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Organise research into logical structure"
 )
 
 step3_draft = LlmAgent(
     name="draft_writer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Write comprehensive draft based on research"
 )
 
 step4_edit = LlmAgent(
     name="editor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Edit for clarity, coherence, and accuracy"
 )
 
@@ -1088,19 +1088,19 @@ from google.adk.agents import ParallelAgent, LlmAgent
 # Define agents to run in parallel
 parser = LlmAgent(
     name="parser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Parse and structure the input"
 )
 
 analyser = LlmAgent(
     name="analyser",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Analyse the input for patterns"
 )
 
 classifier = LlmAgent(
     name="classifier",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Classify the input"
 )
 
@@ -1121,7 +1121,7 @@ from google.adk.tools import exit_loop
 # Define iterative agent
 problem_solver = LlmAgent(
     name="problem_solver",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Solve the problem step by step:
     1. State your current understanding
     2. Identify remaining issues
@@ -1151,14 +1151,14 @@ from google.genai import types
 # Define agents that can communicate
 agent_a = Agent(
     name="agent_a",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You handle user requests and delegate to specialist agents",
     tools=[google_search]
 )
 
 agent_b = Agent(
     name="agent_b",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a specialist. Receive requests from other agents"
 )
 
@@ -1222,46 +1222,46 @@ from google.adk.agents import LlmAgent
 # Root coordinator
 root = LlmAgent(
     name="ceo_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Provide executive overview and delegate to departments"
 )
 
 # Department level
 dept_engineering = LlmAgent(
     name="engineering_director",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Manage engineering operations"
 )
 
 dept_marketing = LlmAgent(
     name="marketing_director",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Manage marketing operations"
 )
 
 # Team level (Engineering)
 team_backend = LlmAgent(
     name="backend_lead",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Lead backend development"
 )
 
 team_frontend = LlmAgent(
     name="frontend_lead",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Lead frontend development"
 )
 
 # Team level (Marketing)
 team_content = LlmAgent(
     name="content_lead",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Lead content creation"
 )
 
 team_analytics = LlmAgent(
     name="analytics_lead",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Lead analytics"
 )
 
@@ -1279,21 +1279,21 @@ from google.adk.agents import LlmAgent
 # Multiple independent hierarchies
 
 # Financial System
-cfo = LlmAgent(name="cfo", model="gemini-2.5-pro", instruction="Financial management")
-controller = LlmAgent(name="controller", model="gemini-2.5-flash", instruction="Accounting")
-treasurer = LlmAgent(name="treasurer", model="gemini-2.5-flash", instruction="Cash management")
+cfo = LlmAgent(name="cfo", model="%%model=gemini-flagship%%", instruction="Financial management")
+controller = LlmAgent(name="controller", model="%%model=gemini%%", instruction="Accounting")
+treasurer = LlmAgent(name="treasurer", model="%%model=gemini%%", instruction="Cash management")
 cfo.sub_agents = [controller, treasurer]
 
 # Operations System
-coo = LlmAgent(name="coo", model="gemini-2.5-pro", instruction="Operations management")
-supply_chain = LlmAgent(name="supply_chain", model="gemini-2.5-flash", instruction="Supply chain")
-logistics = LlmAgent(name="logistics", model="gemini-2.5-flash", instruction="Logistics")
+coo = LlmAgent(name="coo", model="%%model=gemini-flagship%%", instruction="Operations management")
+supply_chain = LlmAgent(name="supply_chain", model="%%model=gemini%%", instruction="Supply chain")
+logistics = LlmAgent(name="logistics", model="%%model=gemini%%", instruction="Logistics")
 coo.sub_agents = [supply_chain, logistics]
 
 # Use both systems with coordination
 coordinator = LlmAgent(
     name="enterprise_coordinator",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Coordinate across CFO and COO lines",
     sub_agents=[cfo, coo]
 )
@@ -1322,7 +1322,7 @@ def get_current_time() -> str:
 # Agent with tool
 assistant = LlmAgent(
     name="time_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Provide the current time when asked",
     tools=[get_current_time]
 )
@@ -1361,7 +1361,7 @@ def search_product_database(
 
 product_agent = LlmAgent(
     name="product_finder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help customers find products using the search tool",
     tools=[search_product_database]
 )
@@ -1408,7 +1408,7 @@ def process_data(
 
 data_agent = LlmAgent(
     name="data_processor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Process data using appropriate operations",
     tools=[process_data]
 )
@@ -1443,7 +1443,7 @@ square_tool = FunctionTool(func=square_number)
 # Register with agent
 calculator = Agent(
     name="calculator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Perform mathematical operations",
     tools=[add_tool, multiply_tool, square_tool]
 )
@@ -1489,7 +1489,7 @@ class MathToolset(BaseToolset):
 
 agent = Agent(
     name="math_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help with mathematical calculations",
     tools=[MathToolset()],
 )
@@ -1505,7 +1505,7 @@ from google.adk.tools import google_search
 
 search_agent = Agent(
     name="web_searcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Searches the web for information",
     instruction="""You are a web search assistant. When asked for current information,
     use google_search to find accurate, up-to-date results. Always cite sources.""",
@@ -1535,7 +1535,7 @@ calendar_tools = CalendarToolset(
 
 calendar_agent = Agent(
     name="calendar_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Manages calendar events",
     instruction="""You are a calendar assistant. Help users schedule events,
     check availability, and manage their calendar.""",
@@ -1555,7 +1555,7 @@ bq_tools = BigQueryToolset()
 # Create analytics agent
 analytics_agent = Agent(
     name="data_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Analyses data using BigQuery",
     instruction="""You are a data analyst with access to BigQuery.
     When asked about data:
@@ -1613,7 +1613,7 @@ def calculate_advanced_stats(numbers: List[float]) -> dict:
 # Create agent with custom tool
 stats_agent = Agent(
     name="statistics_expert",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Provide statistical analysis of datasets",
     tools=[calculate_advanced_stats]
 )
@@ -1655,7 +1655,7 @@ def add_to_history(
 
 history_agent = Agent(
     name="history_tracker",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Track items and maintain history",
     tools=[add_to_history]
 )
@@ -1696,7 +1696,7 @@ def execute_query(request: QueryRequest) -> dict:
 
 db_agent = Agent(
     name="database_manager",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Execute database queries safely",
     tools=[execute_query]
 )
@@ -1740,7 +1740,7 @@ def generate_report(
 
 reporting_agent = Agent(
     name="report_generator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Generate reports in requested formats",
     tools=[generate_report]
 )
@@ -1794,7 +1794,7 @@ def safe_divide(
 
 calc_agent = Agent(
     name="safe_calculator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Perform calculations safely",
     tools=[safe_divide]
 )
@@ -1844,7 +1844,7 @@ def validate_and_process(data_dict: dict) -> dict:
 
 validator_agent = Agent(
     name="data_validator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Validate data before processing",
     tools=[validate_and_process]
 )
@@ -1887,7 +1887,7 @@ async def fetch_data_async(url: str, timeout: int = 10) -> dict:
 
 async_agent = Agent(
     name="async_data_fetcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Fetch data asynchronously from sources",
     tools=[fetch_data_async]
 )
@@ -1914,7 +1914,7 @@ async def stream_data(source: str) -> AsyncGenerator[str, None]:
 
 streaming_agent = Agent(
     name="data_streamer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Stream data from sources",
     tools=[stream_data]
 )
@@ -1950,7 +1950,7 @@ class CompanySchema(BaseModel):
 
 structured_agent = Agent(
     name="data_extractor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Extract and structure information as JSON",
     # Response schema would be used in generation settings
 )
@@ -2007,7 +2007,7 @@ class AnalysisResult(BaseModel):
 # output_schema enforces structured JSON output (disables tool use)
 json_agent = Agent(
     name="json_analyst",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Analyse text and return JSON-formatted results",
     output_schema=AnalysisResult,
     generate_content_config=types.GenerateContentConfig(
@@ -2047,7 +2047,7 @@ class Article(BaseModel):
 
 article_agent = Agent(
     name="article_writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write articles that conform to Article schema"
 )
 
@@ -2101,7 +2101,7 @@ def parse_agent_output(
 # Use in agent workflow
 parsing_agent = Agent(
     name="parser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Output structured information as valid JSON"
 )
 ```
@@ -2148,7 +2148,7 @@ def enforce_schema(agent_output: str) -> StrictResponseSchema:
 
 strict_agent = Agent(
     name="strict_responder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Respond with strictly formatted JSON following the defined schema"
 )
 ```
@@ -2195,7 +2195,7 @@ class NestedSchema(BaseModel):
 # Example usage
 complex_agent = Agent(
     name="complex_content_creator",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Generate complex, nested content structures"
 )
 ```
@@ -2229,7 +2229,7 @@ filesystem_tools = McpToolset(
 
 agent = LlmAgent(
     name="file_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user inspect files in the workspace.",
     tools=[filesystem_tools],
 )
@@ -2257,7 +2257,7 @@ Close toolsets you create yourself with `await toolset.close()` on shutdown; whe
 from google.adk.agents import LlmAgent
 from google.adk.tools.mcp_tool import to_mcp_server
 
-agent = LlmAgent(name="assistant", model="gemini-2.5-flash", instruction="Be helpful.")
+agent = LlmAgent(name="assistant", model="%%model=gemini%%", instruction="Be helpful.")
 
 server = to_mcp_server(agent)
 server.run(transport="stdio")  # or transport="streamable-http"
@@ -2283,7 +2283,7 @@ from typing import List, Dict
 # Define ReAct agent
 react_agent = Agent(
     name="react_reasoner",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Reasons and acts to solve problems",
     instruction="""You are a reasoning agent. For each problem:
 
@@ -2314,7 +2314,7 @@ from google.adk import Agent
 
 cot_agent = Agent(
     name="cot_thinker",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Solve problems using chain-of-thought reasoning:
 
 For each problem, think step-by-step:
@@ -2350,7 +2350,7 @@ def process_order(product_id: str, quantity: int) -> dict:
 
 order_agent = Agent(
     name="order_processor",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Process customer orders:
 1. Search for product customer wants
 2. Check if product is in stock
@@ -2385,7 +2385,7 @@ def generate_strategy() -> dict:
 
 strategy_agent = Agent(
     name="strategic_planner",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Develop comprehensive business strategy:
 
 1. Analyze market trends to understand landscape
@@ -2414,7 +2414,7 @@ from google.adk.agents import SequentialAgent, LlmAgent
 # Planner agent
 planner = LlmAgent(
     name="planner",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Create detailed execution plans. For each task:
 1. Identify all subtasks
 2. Order them logically
@@ -2426,7 +2426,7 @@ planner = LlmAgent(
 # Executor agent
 executor = LlmAgent(
     name="executor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="""Execute plans step-by-step:
 1. Receive plan from planner
 2. Execute each step in order
@@ -2438,7 +2438,7 @@ executor = LlmAgent(
 # Manager agent
 manager = LlmAgent(
     name="manager",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Coordinate planning and execution"
 )
 
@@ -2470,7 +2470,7 @@ def refine_answer(answer: str, issues: list) -> str:
 
 reflective_agent = Agent(
     name="self_reflective_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Solve problems with self-reflection:
 
 1. Generate initial answer
@@ -2493,7 +2493,7 @@ from google.adk import Agent
 
 autonomous_agent = Agent(
     name="autonomous_task_completer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Completes tasks fully autonomously",
     instruction="""You are autonomous in completing assigned tasks:
 
@@ -2530,7 +2530,7 @@ async def manage_conversation_history():
     
     agent = Agent(
         name="conversation_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Be a helpful assistant that remembers context"
     )
     
@@ -2624,7 +2624,7 @@ accurate information. Always cite relevant best practices and standards.""" * 20
 
 cache_agent = Agent(
     name="cached_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Provide expert advice on technical topics",
     static_instruction=LARGE_SYSTEM_CONTEXT,
 )
@@ -2963,7 +2963,7 @@ You provide accurate, detailed technical guidance on AWS, Google Cloud, and Azur
 
 expert_agent = Agent(
     name="cloud_expert",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=COMPREHENSIVE_SYSTEM_INSTRUCTION,
     description="Expert cloud computing assistant"
 )
@@ -3035,7 +3035,7 @@ Now review the provided code following these examples:
 
 reviewer = Agent(
     name="code_reviewer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=FEW_SHOT_INSTRUCTION
 )
 ````
@@ -3056,7 +3056,7 @@ LARGE_DOCUMENTATION = """
 
 static_cache_agent = Agent(
     name="doc_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     static_instruction=LARGE_DOCUMENTATION,
     instruction="Answer questions about the API",
 )
@@ -3079,7 +3079,7 @@ You are a code generator.
 
 example_cache_agent = Agent(
     name="code_gen",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     static_instruction=LARGE_CONTEXT_WITH_EXAMPLES,
     instruction="Generate code based on requirements",
 )
@@ -3118,7 +3118,7 @@ OPTIMISED_INSTRUCTION = """You are a conversational AI assistant optimised for G
 
 conversational_agent = Agent(
     name="conversation_specialist",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=OPTIMISED_INSTRUCTION
 )
 ```
@@ -3133,7 +3133,7 @@ from google.genai import types
 
 efficient_agent = Agent(
     name="efficient_agent",
-    model="gemini-2.5-flash",  # Flash for efficiency
+    model="%%model=gemini%%",  # Flash for efficiency
     instruction="Provide concise, direct answers",
     generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
@@ -3157,7 +3157,7 @@ async def inject_runtime_context():
     
     base_agent = Agent(
         name="contextual_agent",
-        model="gemini-2.5-pro",
+        model="%%model=gemini-flagship%%",
         instruction="Respond to user queries"
     )
     
@@ -3201,7 +3201,7 @@ vertexai.init(project="my-gcp-project", location="us-central1")
 # Use Vertex AI's Gemini models
 vertex_agent = Agent(
     name="vertex_agent",
-    model="gemini-2.5-flash",  # Available through Vertex AI
+    model="%%model=gemini%%",  # Available through Vertex AI
     description="Agent using Vertex AI models",
     instruction="Process user requests with Vertex AI",
     generate_content_config=types.GenerateContentConfig(
@@ -3313,7 +3313,7 @@ import json
 
 agent = Agent(
     name="serverless_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Process requests in serverless environment"
 )
 
@@ -3514,7 +3514,7 @@ import base64
 
 vision_agent = Agent(
     name="vision_analyst",
-    model="gemini-2.5-flash",  # Gemini models are natively multimodal,
+    model="%%model=gemini%%",  # Gemini models are natively multimodal,
     description="Analyzes images and multimedia",
     instruction="Analyse images and describe what you see"
 )
@@ -3564,7 +3564,7 @@ from google.genai import types
 
 video_agent = Agent(
     name="video_analyst",
-    model="gemini-2.5-flash",  # Gemini models are natively multimodal,
+    model="%%model=gemini%%",  # Gemini models are natively multimodal,
     instruction="Analyse videos and extract key information"
 )
 
@@ -3597,7 +3597,7 @@ from google.adk.tools import google_search
 
 grounded_agent = Agent(
     name="grounded_responder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Provides grounded responses using web search",
     instruction="""When answering questions about current events, recent information,
     or facts that might change, use google_search to ground your response in
@@ -3619,7 +3619,7 @@ from google.adk.code_executors import BuiltInCodeExecutor
 
 code_agent = Agent(
     name="code_executor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Executes code to solve problems",
     instruction="When needed, write and execute Python code to solve problems",
     code_executor=BuiltInCodeExecutor()
@@ -3659,7 +3659,7 @@ def book_flight(origin: str, destination: str, date: str) -> dict:
 
 function_agent = Agent(
     name="travel_assistant",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Help plan trips by checking weather and booking flights",
     tools=[get_weather, book_flight]
 )
@@ -3683,7 +3683,7 @@ LARGE_KNOWLEDGE_BASE = """
 
 cached_agent = Agent(
     name="knowledge_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     static_instruction=LARGE_KNOWLEDGE_BASE,
     instruction="Answer questions about the knowledge base",
 )
@@ -3708,7 +3708,7 @@ from google.genai import types
 
 safe_agent = Agent(
     name="safe_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Respond helpfully while maintaining safety",
     generate_content_config=types.GenerateContentConfig(
         temperature=0.5,
@@ -3745,14 +3745,14 @@ from google.adk import Agent
 # Fast responses, lower cost
 flash_agent = Agent(
     name="quick_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Provide quick responses",
 )
 
 # Better quality, slightly slower
 pro_agent = Agent(
     name="quality_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Provide high-quality, detailed responses",
 )
 
@@ -3788,7 +3788,7 @@ from google.adk import Agent
 def make_specialist(name: str, specialty: str, instruction: str) -> Agent:
     return Agent(
         name=name,
-        model="gemini-2.5-pro",
+        model="%%model=gemini-flagship%%",
         description=f"{specialty} specialist",
         instruction=instruction,
     )
@@ -3842,11 +3842,11 @@ from google.adk.apps import App
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow, START
 
-research_agent = Agent(name="researcher", model="gemini-2.5-flash",
+research_agent = Agent(name="researcher", model="%%model=gemini%%",
                        instruction="Research the given topic thoroughly.", mode="single_turn")
-analysis_agent = Agent(name="analyser", model="gemini-2.5-flash",
+analysis_agent = Agent(name="analyser", model="%%model=gemini%%",
                        instruction="Analyse the research and extract key insights.", mode="single_turn")
-writer_agent = Agent(name="writer", model="gemini-2.5-flash",
+writer_agent = Agent(name="writer", model="%%model=gemini%%",
                      instruction="Write a clear report based on the analysis.", mode="single_turn")
 
 report_pipeline = Workflow(
@@ -3912,7 +3912,7 @@ class BaseAgent(BaseNode, abc.ABC):
 ```python
 from google.adk.agents import LlmAgent
 
-base = LlmAgent(name="analyst", model="gemini-2.5-flash", instruction="You are a data analyst.")
+base = LlmAgent(name="analyst", model="%%model=gemini%%", instruction="You are a data analyst.")
 variant = base.clone(update={"name": "strict_analyst"})
 print(variant.name, base.name)  # strict_analyst analyst (original untouched)
 ```
@@ -3925,7 +3925,7 @@ from google.adk.agents import LlmAgent  # also exported as Agent
 
 agent = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions using the search tool.",
     tools=[...],
     # workflow-node fields inherited via BaseNode, usable even standalone:
@@ -4007,7 +4007,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from google.adk.agents.langgraph_agent import LangGraphAgent
 
 def call_model(state: MessagesState):
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+    llm = ChatGoogleGenerativeAI(model="%%model=gemini%%")
     return {"messages": [llm.invoke(state["messages"])]}
 
 builder = StateGraph(MessagesState)
@@ -4042,7 +4042,7 @@ Conversation memory across turns relies on `config.save_dir`: a local config wit
 from google.adk.labs.antigravity import AntigravityAgent
 from google.antigravity import LocalAgentConfig
 
-config = LocalAgentConfig(model="gemini-2.5-flash", save_dir="~/.adk_antigravity_trajs")
+config = LocalAgentConfig(model="%%model=gemini%%", save_dir="~/.adk_antigravity_trajs")
 agent = AntigravityAgent(name="my_ag_agent", config=config)   # root agent
 
 # or as a tool of a parent LlmAgent
@@ -4520,7 +4520,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.url_context_tool import url_context
 from google.adk.tools import google_search
 
-agent = LlmAgent(name="researcher", model="gemini-2.5-flash", tools=[google_search, url_context])
+agent = LlmAgent(name="researcher", model="%%model=gemini%%", tools=[google_search, url_context])
 ```
 
 #### `EnterpriseWebSearchTool`
@@ -4532,7 +4532,7 @@ Like `UrlContextTool`, this injects a Gemini built-in (`types.Tool(enterprise_we
 from google.adk.agents import LlmAgent
 from google.adk.tools import enterprise_web_search
 
-agent = LlmAgent(name="search_agent", model="gemini-2.5-flash", tools=[enterprise_web_search])
+agent = LlmAgent(name="search_agent", model="%%model=gemini%%", tools=[enterprise_web_search])
 ```
 
 #### Pre-built singleton tools (google_search, url_context, exit_loop, etc.)
@@ -4540,7 +4540,7 @@ Why it matters: a whole family of built-ins — `google_search`, `url_context`, 
 
 ```python
 from google.adk.tools import google_search, url_context, exit_loop, transfer_to_agent
-agent = LlmAgent(name="a", model="gemini-2.5-flash", tools=[google_search])
+agent = LlmAgent(name="a", model="%%model=gemini%%", tools=[google_search])
 ```
 
 #### `VertexAiLoadProfilesTool`
@@ -4633,7 +4633,7 @@ from google.adk.tools.environment_simulation.environment_simulation_config impor
 )
 
 config = EnvironmentSimulationConfig(
-    simulation_model="gemini-2.5-flash",
+    simulation_model="%%model=gemini%%",
     tool_simulation_configs=[
         ToolSimulationConfig(tool_name="create_ticket", mock_strategy_type=MockStrategy.MOCK_STRATEGY_TOOL_SPEC),
     ],
@@ -4968,7 +4968,7 @@ def build_node(node_like: NodeLike, *, name: str | None = None,
 | `Callable` | wrapped in `FunctionNode` (`rerun_on_resume` defaults `False`) |
 
 ```python
-standalone = build_node(LlmAgent(name="s", model="gemini-2.5-flash"))
+standalone = build_node(LlmAgent(name="s", model="%%model=gemini%%"))
 print(standalone.mode)   # 'single_turn'
 ```
 
@@ -4986,7 +4986,7 @@ The async generator the workflow engine calls whenever an `LlmAgent` sits in a `
 Only these three values are accepted; anything else raises `ValueError` immediately. `prepare_llm_agent_context` shallow-copies the `InvocationContext` for `single_turn` mode (isolating its events under `isolation_scope`, `ic.session.model_copy(deep=False)` for a cheap independent session reference) — `chat`/`task` reuse the original context unchanged. `process_llm_agent_output` skips partial/FC/non-model events, strips `part.thought` parts before concatenating text, validates against `output_schema` if set, and writes `output_key` into `ctx.actions.state_delta`.
 
 ```python
-summariser = LlmAgent(name="summariser", model="gemini-2.5-flash",
+summariser = LlmAgent(name="summariser", model="%%model=gemini%%",
                        instruction="Summarise node_input.", output_key="summary")
 # mode is left unset here; build_node defaults it to 'single_turn' for a standalone node
 wf = Workflow(name="summarise_wf", edges=[(START, summariser)])
@@ -4998,11 +4998,11 @@ wf = Workflow(name="summarise_wf", edges=[(START, summariser)])
 When `agent.mode == 'chat'`, three phases run: **(1)** `_find_unresolved_task_delegations` scans session events authored by the coordinator or `'user'` for `_TaskAgentTool` function calls with no matching function response by ID — deliberately **not** filtered by `isolation_scope`, since a chat coordinator's conversation spans user turns. **(2)** the live loop re-enters `agent.run_async`, and on each task-delegation FC calls `_dispatch_task_fc` (which passes `run_id=fc.id`, making delegation idempotent across resumes) then synthesizes a `FunctionResponse` event and loops. **(3)** if no task FC appears, the LLM is done and the loop returns. Sub-agents passed via `sub_agents=[...]` with `mode="task"` are auto-wrapped as `_TaskAgentTool` by `LlmAgent`'s model validator — this is the only path that triggers the dispatch machinery (plain `tools=[AgentTool(...)]` does not).
 
 ```python
-researcher = LlmAgent(name="researcher", model="gemini-2.5-flash", mode="task",
+researcher = LlmAgent(name="researcher", model="%%model=gemini%%", mode="task",
                        instruction="Research the topic and return key facts.")
-writer = LlmAgent(name="writer", model="gemini-2.5-flash", mode="task",
+writer = LlmAgent(name="writer", model="%%model=gemini%%", mode="task",
                    instruction="Write a report based on research findings.")
-coordinator = LlmAgent(name="coordinator", model="gemini-2.5-pro", mode="chat",
+coordinator = LlmAgent(name="coordinator", model="%%model=gemini-flagship%%", mode="chat",
                         instruction="Call 'researcher' first, then 'writer'.",
                         sub_agents=[researcher, writer])
 ```
@@ -5019,9 +5019,9 @@ from pydantic import BaseModel
 class TravelPlan(BaseModel):
     destination: str; days: int
 
-planner = LlmAgent(name="planner", model="gemini-2.5-pro", mode="task",
+planner = LlmAgent(name="planner", model="%%model=gemini-flagship%%", mode="task",
                     instruction="Create a travel plan.", output_schema=TravelPlan)
-coordinator = LlmAgent(name="coordinator", model="gemini-2.5-flash", mode="chat",
+coordinator = LlmAgent(name="coordinator", model="%%model=gemini%%", mode="chat",
                         instruction="Ask the planner for a plan, then summarise.",
                         sub_agents=[planner])
 ```
@@ -5116,7 +5116,7 @@ Every `LlmAgent` has an `_llm_flow` attribute set at construction, controlling t
 `AutoFlow` is chosen whenever the agent has `sub_agents`, or in any configuration other than `disallow_transfer_to_parent=True` **and** `disallow_transfer_to_peers=True` **and** no `sub_agents` (which gets `SingleFlow`). Transfer directions `AutoFlow` allows: parent→sub-agent, sub-agent→parent, and sub-agent→peer (only when the parent is an `LlmAgent` and `disallow_transfer_to_peers=False`, the default).
 
 ```python
-specialist = LlmAgent(name="tax-specialist", model="gemini-2.5-flash",
+specialist = LlmAgent(name="tax-specialist", model="%%model=gemini%%",
                        instruction="Handle tax questions only.",
                        disallow_transfer_to_peers=True)   # blocks lateral transfer, keeps SingleFlow-like routing
 ```
@@ -5295,7 +5295,7 @@ class GeminiLlmConnection(BaseLlmConnection):
 
 ```python
 class CascadeLive(BaseLlm):
-    model: str            # the inner text model, e.g. "gemini-2.5-flash"
+    model: str            # the inner text model, e.g. "%%model=gemini%%"
     stt: LiveIngress      # __call__(audio: AsyncIterator[types.Blob]) -> AsyncGenerator[IngressEvent, None]
     tts: LiveEgress       # __call__(text: AsyncIterator[str], *, cancel: asyncio.Event) -> AsyncGenerator[EgressEvent, None]
 ```
@@ -5322,7 +5322,7 @@ class MyTTS(LiveEgress):
 
 voice_agent = LlmAgent(
     name="voice_assistant",
-    model=CascadeLive(model="gemini-2.5-flash", stt=MySTT(), tts=MyTTS()),  # MySTT: a LiveIngress yielding PartialTranscript / UserTurnFinished(text=...)
+    model=CascadeLive(model="%%model=gemini%%", stt=MySTT(), tts=MyTTS()),  # MySTT: a LiveIngress yielding PartialTranscript / UserTurnFinished(text=...)
     instruction="You are a helpful voice assistant. Keep answers brief.",
 )
 ```
@@ -5959,7 +5959,7 @@ class EvalStatus(Enum):
     PASSED = 1; FAILED = 2; NOT_EVALUATED = 3
 
 class JudgeModelOptions(EvalBaseModel):
-    judge_model: str = "gemini-2.5-flash"
+    judge_model: str = "%%model=gemini%%"
     judge_model_config: Optional[genai_types.GenerateContentConfig] = None
     num_samples: int = 5
 
@@ -6099,7 +6099,7 @@ Feed generated scenarios into `EvalCase(eval_id=..., conversation_scenario=s)` (
 generator = ScenarioGenerator()
 scenarios = generator.generate_scenarios(
     agent=travel_agent,
-    config=ConversationGenerationConfig(count=5, model_name="gemini-2.5-flash",
+    config=ConversationGenerationConfig(count=5, model_name="%%model=gemini%%",
                                          environment_context="Flights SFO→LAX 08:00 ($129)."),
 )
 eval_set = EvalSet(eval_set_id="generated", eval_cases=[
@@ -6138,7 +6138,7 @@ class UserSimulator(ABC):
 
 ```python
 class LlmBackedUserSimulatorConfig(BaseUserSimulatorConfig):
-    model: str = "gemini-2.5-flash"
+    model: str = "%%model=gemini%%"
     max_allowed_invocations: int = 20     # runaway guard; -1 = unlimited (not recommended)
     custom_instructions: str | None = None
     # field_validator requires {{ stop_signal }}, {{ conversation_plan }}, AND
@@ -6257,7 +6257,7 @@ Gradient-free, LLM-driven iterative prompt improver: sample a mini-batch → sco
 
 ```python
 class SimplePromptOptimizerConfig(BaseModel):
-    optimizer_model: str = "gemini-2.5-flash"
+    optimizer_model: str = "%%model=gemini%%"
     model_configuration: GenerateContentConfig = GenerateContentConfig(
         thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=10240))
     num_iterations: int = 10
@@ -6273,7 +6273,7 @@ Both modules exist in 2.7.1 — `gepa_root_agent_optimizer.py` is the current, b
 
 ```python
 class GEPARootAgentOptimizerConfig(BaseModel):
-    optimizer_model: str = "gemini-3.5-flash"
+    optimizer_model: str = "%%model=gemini%%"
     model_configuration: GenerateContentConfig = GenerateContentConfig(
         thinking_config=ThinkingConfig(include_thoughts=True, thinking_level=ThinkingLevel.HIGH))
     max_metric_calls: int = 100
@@ -6501,7 +6501,7 @@ def _find_previous_interaction_state(
 Branch matching: root branch (`current_branch is None`) includes events with a falsy `event.branch`; a named branch includes events matching that branch **or** with a falsy branch. `InteractionsRequestProcessor.run_async()` activates only when the agent's `canonical_model` is a `Gemini` instance with `use_interactions_api=True`; it sets `llm_request.previous_interaction_id` and yields no events.
 
 ```python
-model = Gemini(model="gemini-2.5-flash", use_interactions_api=True)
+model = Gemini(model="%%model=gemini%%", use_interactions_api=True)
 agent = LlmAgent(name="stateful_agent", model=model, instruction="Remember context across turns.")
 ```
 
@@ -6602,7 +6602,7 @@ provider = McpInstructionProvider(
     connection_params=StdioServerParameters(command="python", args=["-m", "my_mcp_server"]),
     prompt_name="agent_system_prompt",
 )
-agent = LlmAgent(name="dynamic_agent", model="gemini-2.5-pro", instruction=provider)
+agent = LlmAgent(name="dynamic_agent", model="%%model=gemini-flagship%%", instruction=provider)
 ```
 
 #### LoadMcpResourceTool
@@ -7048,7 +7048,7 @@ Behaviour worth knowing:
 ```python
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
 from google.adk.models import Gemini
-summarizer = LlmEventSummarizer(llm=Gemini(model="gemini-2.5-flash"))  # cheaper model for compaction
+summarizer = LlmEventSummarizer(llm=Gemini(model="%%model=gemini%%"))  # cheaper model for compaction
 ```
 
 #### `CompactionRequestProcessor`
@@ -7302,7 +7302,7 @@ from google.adk.models.registry import LLMRegistry
 from google.adk.models.lite_llm import LiteLlm
 
 LLMRegistry.register(LiteLlm)
-llm = LLMRegistry().new_llm("litellm:gpt-4o")
+llm = LLMRegistry().new_llm("litellm:%%model=openai%%")
 print(type(llm).__name__)  # LiteLlm
 ```
 
@@ -7311,7 +7311,7 @@ Why it matters: routes to 100+ non-Gemini providers via the LiteLLM library. Con
 
 ```python
 from google.adk.models.lite_llm import LiteLlm
-model = LiteLlm(model="claude-opus-4-5-20250514")
+model = LiteLlm(model="%%model=anthropic-flagship%%")
 ```
 
 #### AnthropicLlm / Claude
@@ -7343,7 +7343,7 @@ Experimental `BaseLlm` that swaps Gemini for any OpenAI Chat Completions-compati
 
 ```python
 class OpenAILlm(BaseLlm):
-    model: str = "gpt-4o"
+    model: str = "%%model=openai%%"
     max_tokens: int = 4096
 
     @classmethod
@@ -7359,7 +7359,7 @@ from google.adk.labs.openai import OpenAILlm
 from google.adk.models.registry import LLMRegistry
 
 LLMRegistry.register(OpenAILlm)
-agent = LlmAgent(name="gpt-agent", model="gpt-4o", instruction="You are a helpful assistant.")
+agent = LlmAgent(name="gpt-agent", model="%%model=openai%%", instruction="You are a helpful assistant.")
 # requires OPENAI_API_KEY in the environment
 ```
 
@@ -7370,7 +7370,7 @@ The concrete `BaseLlm` for all Gemini models; `LLMRegistry` resolves a bare mode
 
 ```python
 class Gemini(BaseLlm):
-    model: str = 'gemini-2.5-flash'
+    model: str = '%%model=gemini%%'
     client_kwargs: Optional[dict[str, Any]] = None         # forwarded verbatim to google.genai.Client()
     base_url: Optional[str] = None                          # override the AI platform base URL
     speech_config: Optional[types.SpeechConfig] = None       # TTS voice/encoding for Live-mode sessions
@@ -7685,7 +7685,7 @@ A factory producing a fully-configured `LlmAgent` (served as the built-in `"__ad
 ```python
 class AgentBuilderAssistant:
     @staticmethod
-    def create_agent(model: str = "gemini-2.5-pro") -> LlmAgent: ...
+    def create_agent(model: str = "%%model=gemini-flagship%%") -> LlmAgent: ...
 ```
 
 Ships 8 `FunctionTool`s (`read_config_files`, `write_config_files`, `explore_project`, `read_files`, `write_files`, `delete_files`, `cleanup_unused_files`, `search_adk_source`). Up to 2.10 it also had a `search_adk_knowledge` tool and two `AgentTool`-wrapped sub-agents (`google_search_agent`, `url_context_agent`); 2.12.0 dropped those and sources the assistant's ADK knowledge from the installed package instead. `instruction` is a callable that resolves the working directory from `session.state` at runtime and injects a compact schema reference (9 core config definitions, pruned generation-config fields) into the system prompt. The module exposes `root_agent = AgentBuilderAssistant.create_agent()` so `AgentLoader` can discover it without explicit registration.

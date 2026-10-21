@@ -148,7 +148,7 @@ public class WeatherAgentRecipe
         var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not set");
         var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME") 
-            ?? "gpt-4o-mini";
+            ?? "%%model=openai-small%%";
 
         // Create client
         var client = new AzureOpenAIClient(
@@ -753,7 +753,7 @@ public class AgentFunction(ILogger<AgentFunction> logger)
     private static AIAgent CreateAgent()
     {
         var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!;
-        var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME") ?? "gpt-4o-mini";
+        var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME") ?? "%%model=openai-small%%";
 
         return new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
             .GetChatClient(deploymentName)

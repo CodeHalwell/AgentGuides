@@ -83,7 +83,7 @@ from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 
 kernel = Kernel()
-kernel.add_service(OpenAIChatCompletion(service_id="chat", ai_model_id="gpt-5-mini"))
+kernel.add_service(OpenAIChatCompletion(service_id="chat", ai_model_id="%%model=openai-small%%"))
 
 async def main():
     result = await kernel.invoke_prompt("Give me one sentence about Semantic Kernel.")
@@ -107,13 +107,13 @@ from semantic_kernel.connectors.ai.open_ai import (
 )
 
 # OpenAI (reads OPENAI_API_KEY / OPENAI_CHAT_MODEL_ID if arguments are omitted)
-kernel.add_service(OpenAIChatCompletion(service_id="openai", ai_model_id="gpt-5-mini"))
+kernel.add_service(OpenAIChatCompletion(service_id="openai", ai_model_id="%%model=openai-small%%"))
 kernel.add_service(OpenAITextEmbedding(service_id="embed", ai_model_id="text-embedding-3-small"))
 
 # Azure OpenAI with an API key
 kernel.add_service(AzureChatCompletion(
     service_id="azure",
-    deployment_name="gpt-5-mini",
+    deployment_name="%%model=openai-small%%",
     endpoint="https://my-resource.openai.azure.com/",
     api_key="...",
 ))
@@ -126,7 +126,7 @@ from azure.identity import DefaultAzureCredential
 
 kernel.add_service(AzureChatCompletion(
     service_id="azure",
-    deployment_name="gpt-5-mini",
+    deployment_name="%%model=openai-small%%",
     endpoint="https://my-resource.openai.azure.com/",
     credential=DefaultAzureCredential(),
 ))
@@ -139,8 +139,8 @@ Connectors live under `semantic_kernel.connectors.ai.*`: `anthropic.AnthropicCha
 ### 3.4 Several services in one kernel
 
 ```python
-kernel.add_service(OpenAIChatCompletion(service_id="fast", ai_model_id="gpt-5-nano"))
-kernel.add_service(OpenAIChatCompletion(service_id="smart", ai_model_id="gpt-5"))
+kernel.add_service(OpenAIChatCompletion(service_id="fast", ai_model_id="%%model=openai-small%%"))
+kernel.add_service(OpenAIChatCompletion(service_id="smart", ai_model_id="%%model=openai%%"))
 
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatPromptExecutionSettings
 from semantic_kernel.functions import KernelArguments
@@ -327,7 +327,7 @@ from semantic_kernel.agents import ChatCompletionAgent
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 
 agent = ChatCompletionAgent(
-    service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+    service=OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"),
     name="Assistant",
     instructions="You are a helpful assistant. Use the weather tool for weather questions.",
     plugins=[WeatherPlugin()],
@@ -402,7 +402,7 @@ from semantic_kernel.agents import ChatCompletionAgent, SequentialOrchestration
 from semantic_kernel.agents.runtime import InProcessRuntime
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 
-service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")
+service = OpenAIChatCompletion(ai_model_id="%%model=openai-small%%")
 
 analyst = ChatCompletionAgent(name="Analyst", description="Extracts key features",
     instructions="List the product's key features and audience.", service=service)
@@ -586,7 +586,7 @@ async def main():
         args=["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
     ) as github, MCPStreamableHttpPlugin(name="docs", url="http://localhost:8000/mcp") as docs:
         agent = ChatCompletionAgent(
-            service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+            service=OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"),
             name="DevAssistant",
             instructions="Answer questions about the repository.",
             plugins=[github, docs],

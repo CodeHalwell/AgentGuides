@@ -49,7 +49,7 @@ client = AsyncOpenAI()  # reads OPENAI_API_KEY
 @app.get("/raw")
 async def raw(q: str):
     async def gen():
-        stream = await client.responses.create(model="gpt-5.6-luna", input=q, stream=True)
+        stream = await client.responses.create(model="%%model=openai-small%%", input=q, stream=True)
         async for event in stream:
             if event.type == "response.output_text.delta":
                 yield f"data: {event.delta}\n\n"

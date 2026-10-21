@@ -11,6 +11,12 @@ Astro + Starlight documentation site. Guides live in `src/content/docs/<framewor
 - To move to a new release: `node scripts/check-versions.mjs --latest --write`, then read the changelog and fix any examples a breaking change affects.
 - `npm run check:versions` must pass before a PR (fails on hard-coded install pins and unknown placeholders).
 
+## Model IDs
+
+- Current model IDs also live in `src/data/versions.json` (`models`), by role: `openai`, `openai-small`, `openai-flagship`, `anthropic`, `anthropic-small`, `anthropic-flagship`, `gemini`, `gemini-small`, `gemini-flagship`, `mistral`, `mistral-small`, `mistral-flagship`.
+- In code, write `model="%%model=openai%%"`, `Agent('anthropic:%%model=anthropic%%')`, `us.anthropic.%%model=anthropic%%`. When a provider ships a new model, change `versions.json` only.
+- Literal model IDs only for facts about a specific model (a framework's documented default, a changelog entry, a retirement notice). `npm run check:versions` warns on stale IDs in code.
+
 ## Content
 
 - Improve existing pages. Material from studying a class or API goes into the guide section where a reader would look for it (comprehensive guide, topic page, recipes). Do not create "deep dive", "class reference", "Vol. N" or per-release pages.

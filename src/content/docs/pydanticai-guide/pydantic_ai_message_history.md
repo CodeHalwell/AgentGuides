@@ -14,7 +14,7 @@ Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that li
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 result1 = agent.run_sync('My name is Alice.')
 print(result1.output)
@@ -120,7 +120,7 @@ async def async_ctx(
     return msgs[-ctx.deps.window:]
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     capabilities=[ProcessHistory(last_n)],
 )
 ```
@@ -177,7 +177,7 @@ def sliding_window(max_turns: int):
     return processor
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     capabilities=[ProcessHistory(sliding_window(max_turns=5))],
 )
 ```
@@ -210,7 +210,7 @@ def redact_pii(msgs: list[ModelMessage]) -> list[ModelMessage]:
             cleaned.append(msg)
     return cleaned
 
-agent = Agent('openai:gpt-4o', capabilities=[ProcessHistory(redact_pii)])
+agent = Agent('openai:%%model=openai%%', capabilities=[ProcessHistory(redact_pii)])
 ```
 
 ### Pattern 3 — chained processors (window → redact)
@@ -220,7 +220,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     capabilities=[
         ProcessHistory(sliding_window(max_turns=10)),  # trim first …
         ProcessHistory(redact_pii),                    # … then scrub what remains
@@ -248,7 +248,7 @@ async def dynamic_window(
     return msgs[-n * 2:]  # each turn = 1 request + 1 response
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ChatConfig,
     capabilities=[ProcessHistory(dynamic_window)],
 )
@@ -261,7 +261,7 @@ If a run raises (validation error, model error, tool retry exhaustion), you stil
 ```python
 from pydantic_ai import Agent, capture_run_messages
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 with capture_run_messages() as messages:
     try:
@@ -318,7 +318,7 @@ def window(n: int):
         return msgs[:2] + msgs[-n:] if len(msgs) > n + 2 else msgs
     return _proc
 
-agent = Agent('openai:gpt-5.2', capabilities=[ProcessHistory(window(20))])
+agent = Agent('openai:%%model=openai%%', capabilities=[ProcessHistory(window(20))])
 ```
 
 ### 3. Summarise-on-overflow
@@ -385,7 +385,7 @@ try:
 except FileNotFoundError:
     HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
 
-agent = Agent('anthropic:claude-sonnet-4-6')
+agent = Agent('anthropic:%%model=anthropic%%')
 
 question1 = 'How many days of PTO does a new full-timer get?'
 question2 = 'And a part-timer?'

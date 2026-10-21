@@ -44,7 +44,7 @@ async def get_weather(city: str) -> str:
 
 
 async def main() -> None:
-    model_client = OpenAIChatCompletionClient(model="gpt-4.1-mini")  # reads OPENAI_API_KEY
+    model_client = OpenAIChatCompletionClient(model="%%model=openai-small%%")  # reads OPENAI_API_KEY
     agent = AssistantAgent(
         "assistant",
         model_client=model_client,

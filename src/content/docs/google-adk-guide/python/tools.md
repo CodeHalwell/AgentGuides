@@ -23,7 +23,7 @@ def add(a: int, b: int) -> int:
 
 agent = LlmAgent(
     name="math_and_search",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use `add` for arithmetic. Use `google_search` for facts.",
     tools=[
         add,                       # callable → wrapped as FunctionTool
@@ -524,7 +524,7 @@ bash_tool = ExecuteBashTool(
 
 agent = LlmAgent(
     name="code_runner",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You can run shell commands in /tmp/work. "
         "Always confirm before executing anything."
@@ -587,7 +587,7 @@ class ResearchIn(BaseModel):
 
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Research the topic and return a citation-rich paragraph.",
     input_schema=ResearchIn,
     tools=[google_search],
@@ -595,7 +595,7 @@ researcher = LlmAgent(
 
 writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use the `researcher` tool, then write a crisp 150-word brief.",
     tools=[AgentTool(agent=researcher, skip_summarization=False)],
 )
@@ -660,7 +660,7 @@ from google.adk.tools import load_memory, preload_memory, load_artifacts
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Use `load_memory` to recall past facts.",
     tools=[load_memory, preload_memory, load_artifacts],
 )
@@ -731,7 +731,7 @@ toolset = OpenAPIToolset(spec_dict=spec_dict)
 # --- Use all tools from the spec -----------------------------------------------
 agent = LlmAgent(
     name="petstore_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user browse and manage the Petstore catalogue.",
     tools=[toolset],
 )
@@ -740,7 +740,7 @@ agent = LlmAgent(
 list_pets_tool = toolset.get_tool("list_pets")   # by operationId (snake_case)
 agent2 = LlmAgent(
     name="lister",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[list_pets_tool],
 )
 ```
@@ -889,7 +889,7 @@ integration_toolset = ApplicationIntegrationToolset(
 
 agent = LlmAgent(
     name="order_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help users track and process orders.",
     tools=[integration_toolset],
 )
@@ -950,7 +950,7 @@ toolset = ToolboxToolset(
 
 agent = LlmAgent(
     name="db_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer database questions using the available tools.",
     tools=[toolset],
 )
@@ -1121,7 +1121,7 @@ class RoleBasedToolset(BaseToolset):
 
 agent = LlmAgent(
     name="data_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[RoleBasedToolset()],
 )
 ```
@@ -1338,7 +1338,7 @@ async def dynamic_instruction(ctx: ReadonlyContext) -> str:
 
 agent = LlmAgent(
     name="localised",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=dynamic_instruction,
 )
 ```
@@ -1360,7 +1360,7 @@ bq_tools = BigQueryToolset()
 
 analyst = LlmAgent(
     name="data_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=(
         "You are a data analyst with access to BigQuery. "
         "List tables first, inspect schemas before writing queries, "
@@ -1383,7 +1383,7 @@ bq_tools = BigQueryToolset(
 
 agent = LlmAgent(
     name="sales_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Run SQL against the sales dataset only.",
     tools=[bq_tools],
 )
@@ -1427,7 +1427,7 @@ toolset = PubSubToolset(
 
 agent = LlmAgent(
     name="event_router",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Publish and consume messages on Pub/Sub topics as instructed.",
     tools=[toolset],
 )
@@ -1461,7 +1461,7 @@ toolset = SpannerToolset(spanner_tool_settings=settings)
 
 agent = LlmAgent(
     name="sql_assistant",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=(
         "You are a Spanner SQL assistant. List tables first, then inspect schemas "
         "before writing queries. Cap all results at 50 rows."
@@ -1504,7 +1504,7 @@ toolset = SkillToolset(skills=[python_skill])
 
 agent = LlmAgent(
     name="coder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a coding assistant with access to skills.",
     tools=[toolset],
 )
@@ -1621,8 +1621,8 @@ from google.adk.tools.load_memory_tool import LoadMemoryTool, load_memory
 from google.adk.agents import LlmAgent
 
 # These two are equivalent:
-agent_a = LlmAgent(name="a", model="gemini-2.5-flash", tools=[load_memory])
-agent_b = LlmAgent(name="b", model="gemini-2.5-flash", tools=[LoadMemoryTool()])
+agent_a = LlmAgent(name="a", model="%%model=gemini%%", tools=[load_memory])
+agent_b = LlmAgent(name="b", model="%%model=gemini%%", tools=[LoadMemoryTool()])
 ```
 
 **Two things `LoadMemoryTool` does that a bare `FunctionTool(load_memory)` would not:**
@@ -1644,7 +1644,7 @@ from google.adk.sessions import InMemorySessionService
 
 agent = LlmAgent(
     name="recall",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user. Personalise from anything you remember.",
     tools=[load_memory],
 )
@@ -1671,7 +1671,7 @@ To answer `get_user_choice`, capture the pending call's `id` and send a `Functio
 from google.genai import types
 from google.adk.tools.get_user_choice_tool import get_user_choice_tool
 
-agent = LlmAgent(name="booking", model="gemini-2.5-flash",
+agent = LlmAgent(name="booking", model="%%model=gemini%%",
                  instruction="When the user must pick, call get_user_choice with the options.",
                  tools=[get_user_choice_tool])
 

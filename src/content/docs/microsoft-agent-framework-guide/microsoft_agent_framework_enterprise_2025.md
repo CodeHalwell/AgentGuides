@@ -151,7 +151,7 @@ public static class AgentTelemetrySetup
         AIAgent agent = new AzureOpenAIClient(
                 new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
                 new DefaultAzureCredential())
-            .GetChatClient("gpt-4o-mini")
+            .GetChatClient("%%model=openai-small%%")
             .AsAIAgent(instructions: "You are a helpful assistant.", name: "support")
             .AsBuilder()
             .UseOpenTelemetry(sourceName: SourceName, configure: o => o.EnableSensitiveData = false)
@@ -359,7 +359,7 @@ public static class SafeAgentConfiguration
 
         AIAgent inner = new AzureOpenAIClient(
                 new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!), credential)
-            .GetChatClient("gpt-4o-mini")
+            .GetChatClient("%%model=openai-small%%")
             .AsAIAgent(instructions: "You are a helpful assistant.");
 
         return inner.AsBuilder()
@@ -491,7 +491,7 @@ public static class ProductionAgent
 
         AIAgent agent = new AzureOpenAIClient(
                 new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!), credential)
-            .GetChatClient(Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "gpt-4o-mini")
+            .GetChatClient(Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "%%model=openai-small%%")
             .AsAIAgent(instructions: "Production agent");
 
         AgentResponse result = await agent.RunAsync("Query");
@@ -593,7 +593,7 @@ def client_for_tenant(tenant_id: str, endpoint: str) -> OpenAIChatClient:
         client_id=os.environ["MULTITENANT_APP_CLIENT_ID"],
         client_secret=os.environ["MULTITENANT_APP_SECRET"],   # prefer a certificate or federated credential
     )
-    return OpenAIChatClient(model="gpt-4o-mini", azure_endpoint=endpoint, credential=credential)
+    return OpenAIChatClient(model="%%model=openai-small%%", azure_endpoint=endpoint, credential=credential)
 
 
 async def run_for_tenant(tenant_id: str, endpoint: str, question: str) -> str:
@@ -708,7 +708,7 @@ token_provider = get_bearer_token_provider(credential, "https://cognitiveservice
 
 gov_agent = Agent(
     client=OpenAIChatClient(
-        model="gpt-4o",
+        model="%%model=openai%%",
         azure_endpoint="https://contoso-gov.openai.azure.us",
         credential=token_provider,
     ),
@@ -798,8 +798,8 @@ from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import ManagedIdentityCredential
 
 APPROVED_MODELS = {
-    "general": "gpt-4o-mini",
-    "reasoning": "o4-mini",
+    "general": "%%model=openai-small%%",
+    "reasoning": "%%model=openai-small%%",
 }
 
 _credential = ManagedIdentityCredential()
@@ -837,7 +837,7 @@ from openai import AsyncAzureOpenAI
 http_client = httpx.AsyncClient(proxy="http://egress-proxy.internal:3128", timeout=60)
 
 client = OpenAIChatClient(
-    model="gpt-4o-mini",
+    model="%%model=openai-small%%",
     async_client=AsyncAzureOpenAI(
         azure_endpoint="https://contoso-private.openai.azure.com",
         azure_ad_token_provider=get_bearer_token_provider(

@@ -77,7 +77,7 @@ from ag2.config import OpenAIConfig
 agent = Agent(
     "assistant",
     prompt="You are a helpful assistant.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),  # reads OPENAI_API_KEY
+    config=OpenAIConfig(model="%%model=openai-small%%"),  # reads OPENAI_API_KEY
 )
 
 

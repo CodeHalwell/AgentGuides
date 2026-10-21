@@ -116,7 +116,7 @@ const researchAgent = new Agent({
     - Always cite your sources
     - Acknowledge uncertainty when appropriate
     - Break down complex topics into understandable parts`,
-  model: 'gpt-5.6-sol',
+  model: '%%model=openai%%',
   modelSettings: { maxTokens: 2048 },
 });
 ```
@@ -141,7 +141,7 @@ console.log(result.runContext.usage);         // { requests, inputTokens, output
 
 // Shared configuration
 const runner = new Runner({
-  model: 'gpt-5.6-luna',          // overrides every agent's model
+  model: '%%model=openai-small%%',          // overrides every agent's model
   workflowName: 'Research',
   traceIncludeSensitiveData: false,
 });
@@ -338,7 +338,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 const openaiAgent = new Agent({
   name: 'OpenAI Assistant',
   instructions: 'Be concise.',
-  model: 'gpt-5.6-sol',
+  model: '%%model=openai%%',
   modelSettings: { maxTokens: 2048, reasoning: { effort: 'low' } },
 });
 
@@ -346,7 +346,7 @@ const openaiAgent = new Agent({
 const claudeAgent = new Agent({
   name: 'Claude Assistant',
   instructions: 'Be concise.',
-  model: aisdk(anthropic('claude-sonnet-4-5')),
+  model: aisdk(anthropic('%%model=anthropic%%')),
   modelSettings: { temperature: 0.7 },
 });
 ```
@@ -498,7 +498,7 @@ Use TypeScript interfaces to ensure configuration completeness:
 interface StrictAgentConfig {
   name: string;
   instructions: string;
-  model?: 'gpt-5.6-sol' | 'gpt-5.6-luna';
+  model?: '%%model=openai%%' | '%%model=openai-small%%';
   temperature?: number & { __brand: 'temperature' };
   maxTokens?: number;
   tools?: Tool[];
@@ -515,7 +515,7 @@ function createTemperature(value: number): number & { __brand: 'temperature' } {
 const strictConfig: StrictAgentConfig = {
   name: 'Strict Agent',
   instructions: 'Follow instructions precisely.',
-  model: 'gpt-5.6-luna',
+  model: '%%model=openai-small%%',
   temperature: createTemperature(0.7),
   maxTokens: 1024,
 };
@@ -2098,7 +2098,7 @@ const jsonAgent = new Agent({
       "data": {},
       "timestamp": "ISO date string"
     }`,
-  model: 'gpt-5.6-luna',
+  model: '%%model=openai-small%%',
   modelSettings: { temperature: 0 },
 });
 

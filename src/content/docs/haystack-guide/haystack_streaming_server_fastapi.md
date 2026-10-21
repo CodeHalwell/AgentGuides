@@ -29,7 +29,7 @@ def get_weather(city: str) -> str:
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[get_weather],
     system_prompt="You are a helpful assistant.",
 )

@@ -33,7 +33,7 @@ from pydantic_ai import Agent
 app = FastAPI()
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     system_prompt='You are a helpful assistant. Be concise.',
 )
 
@@ -71,7 +71,7 @@ class ResearchReport(BaseModel):
     key_findings: list[str]
     confidence_score: float
 
-agent = Agent('openai:gpt-4o', output_type=ResearchReport)
+agent = Agent('openai:%%model=openai%%', output_type=ResearchReport)
 
 @app.get('/stream/structured')
 async def stream_structured(q: str = Query(...)):
@@ -112,7 +112,7 @@ from pydantic_ai.messages import (
 app = FastAPI()
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     system_prompt='Use the tools available to answer accurately.',
 )
 
@@ -177,7 +177,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 app = FastAPI()
-agent = Agent('openai:gpt-4o', system_prompt='You are a helpful assistant.')
+agent = Agent('openai:%%model=openai%%', system_prompt='You are a helpful assistant.')
 
 # In production use Redis / Postgres — this is an in-memory demo
 _sessions: dict[str, bytes] = {}
@@ -224,7 +224,7 @@ from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded, UnexpectedModelBehavior
 
 app = FastAPI()
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @app.get('/stream/safe')
 async def stream_safe(q: str = Query(...)):
@@ -268,7 +268,7 @@ from pydantic_ai import Agent
 from pydantic_ai.ui.ag_ui import AGUIAdapter
 
 app = FastAPI()
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @app.post('/ai')
 async def run_agent(request: Request) -> Response:
@@ -307,7 +307,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title='PydanticAI Stream API', lifespan=lifespan)
 
 agent = Agent(
-    os.getenv('MODEL', 'openai:gpt-4o'),
+    os.getenv('MODEL', 'openai:%%model=openai%%'),
     system_prompt='You are a concise, helpful assistant.',
 )
 

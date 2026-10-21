@@ -252,7 +252,7 @@ template = [
 rag = Pipeline()
 rag.add_component("retriever", InMemoryBM25Retriever(document_store=store, top_k=3))
 rag.add_component("prompt", ChatPromptBuilder(template=template))
-rag.add_component("llm", OpenAIChatGenerator(model="gpt-5-mini"))
+rag.add_component("llm", OpenAIChatGenerator(model="%%model=openai-small%%"))
 
 rag.connect("retriever.documents", "prompt.documents")
 rag.connect("prompt.prompt", "llm.messages")
@@ -334,9 +334,9 @@ from haystack.dataclasses import ChatMessage
 
 def make_generator(provider: str):
     if provider == "openai":
-        return OpenAIChatGenerator(model="gpt-5-mini")          # reads OPENAI_API_KEY
+        return OpenAIChatGenerator(model="%%model=openai-small%%")          # reads OPENAI_API_KEY
     if provider == "anthropic":
-        return AnthropicChatGenerator(model="claude-sonnet-4-5")  # reads ANTHROPIC_API_KEY
+        return AnthropicChatGenerator(model="%%model=anthropic%%")  # reads ANTHROPIC_API_KEY
     raise ValueError(f"Unknown provider: {provider}")
 
 
@@ -354,7 +354,7 @@ API keys are passed as `Secret` objects, never plain strings. The default is to 
 from haystack.utils import Secret
 
 generator = OpenAIChatGenerator(
-    model="gpt-5-mini",
+    model="%%model=openai-small%%",
     api_key=Secret.from_env_var("OPENAI_API_KEY"),  # this is already the default
     generation_kwargs={"max_completion_tokens": 512},
     timeout=30,
@@ -406,7 +406,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class AppConfig:
-    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "gpt-5-mini"))
+    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "%%model=openai-small%%"))
     max_agent_steps: int = field(default_factory=lambda: int(os.getenv("AGENT_MAX_STEPS", "10")))
     retriever_top_k: int = field(default_factory=lambda: int(os.getenv("RETRIEVER_TOP_K", "5")))
 
@@ -482,7 +482,7 @@ def search(query: Annotated[str, "Search query"]) -> str:
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[get_weather, search],
     system_prompt="You are a concise assistant. Use tools when they help.",
     max_agent_steps=10,
@@ -501,7 +501,7 @@ Instead of building `ChatMessage`s yourself, give the agent a Jinja2 `user_promp
 
 ```python
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     system_prompt="You are a careful analyst.",
     user_prompt="Summarise the following in {{ language }}:\n\n{{ text }}",
 )
@@ -539,7 +539,7 @@ print(asyncio.run(main()))
 `Agent.run()` accepts `tools=` to override the tool set for one run. Pass either tool objects or a list of tool names drawn from the tools given at construction:
 
 ```python
-agent = Agent(chat_generator=OpenAIChatGenerator(model="gpt-5-mini"), tools=[get_weather, search])
+agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), tools=[get_weather, search])
 agent.run(messages=[ChatMessage.from_user("Weather in Tokyo?")], tools=["get_weather"])
 ```
 
@@ -640,7 +640,7 @@ fs_tools = MCPToolset(
 
 remote_tools = MCPToolset(server_info=StreamableHttpServerInfo(url="http://localhost:8000/mcp"))
 
-agent = Agent(chat_generator=OpenAIChatGenerator(model="gpt-5-mini"), tools=fs_tools)
+agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), tools=fs_tools)
 ```
 
 #### Tool errors
@@ -714,7 +714,7 @@ def create_ticket(
 
 
 support_agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[lookup_policy, check_order_status, create_ticket],
     system_prompt=(
         "You are a polite customer support specialist. Resolve issues with the tools available. "
@@ -750,7 +750,7 @@ def make_analysis_agent(df: pd.DataFrame) -> Agent:
         return f"{df[col1].corr(df[col2]):.3f}"
 
     return Agent(
-        chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+        chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
         tools=[describe_data, correlate],
         system_prompt="You are a data analyst. Use the tools, then explain the result plainly.",
     )
@@ -787,7 +787,7 @@ class Conversation:
 
 
 chat = Conversation(Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     system_prompt="You are a friendly assistant. Remember what the user tells you.",
 ))
 chat.chat("Hi, my name is Alice and my favourite colour is blue.")
@@ -841,7 +841,7 @@ def summarise_notes(notes: list[str]) -> str:
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[take_note, summarise_notes],
     state_schema={"notes": {"type": list[str]}},   # lists are merged by default
 )
@@ -862,7 +862,7 @@ def final_answer(answer: Annotated[str, "The final answer"], confidence: Annotat
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[search, final_answer],
     exit_conditions=["final_answer"],   # stop as soon as this tool has run
 )
@@ -894,7 +894,7 @@ def save(content: str) -> str:
 
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[save],
     hooks={"on_exit": [require_save]},
 )
@@ -924,7 +924,7 @@ confirm = ConfirmationHook(
 )
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[create_ticket],
     hooks={"before_tool": [confirm]},
 )
@@ -952,8 +952,8 @@ from haystack_integrations.components.generators.anthropic import AnthropicChatG
 logger = logging.getLogger(__name__)
 
 resilient_llm = FallbackChatGenerator(chat_generators=[
-    OpenAIChatGenerator(model="gpt-5-mini", timeout=30, max_retries=2),
-    AnthropicChatGenerator(model="claude-sonnet-4-5", timeout=30, max_retries=2),
+    OpenAIChatGenerator(model="%%model=openai-small%%", timeout=30, max_retries=2),
+    AnthropicChatGenerator(model="%%model=anthropic%%", timeout=30, max_retries=2),
 ])
 
 agent = Agent(chat_generator=resilient_llm, tools=[get_weather], max_agent_steps=10)
@@ -994,7 +994,7 @@ store = InMemoryDocumentStore()
 store.write_documents([Document(content="Q3 revenue grew 12% year on year.")])
 
 analyst = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[calculate],
     system_prompt="You are a financial analyst. Cite the documents you use.",
     user_prompt=(
@@ -1084,7 +1084,7 @@ class LengthValidator:
 loop = Pipeline(max_runs_per_component=3)
 loop.add_component("prompt", ChatPromptBuilder(template=[ChatMessage.from_user("Explain {{ topic }}.")]))
 loop.add_component("joiner", BranchJoiner(list[ChatMessage]))
-loop.add_component("llm", OpenAIChatGenerator(model="gpt-5-mini"))
+loop.add_component("llm", OpenAIChatGenerator(model="%%model=openai-small%%"))
 loop.add_component("validator", LengthValidator(max_words=50))
 
 loop.connect("prompt.prompt", "joiner")
@@ -1110,17 +1110,17 @@ from haystack.dataclasses import ChatMessage
 from haystack.tools import AgentTool
 
 researcher = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[search],
     system_prompt="You research topics thoroughly and report findings with sources.",
 )
 writer = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     system_prompt="You turn research notes into clear, well-structured prose.",
 )
 
 coordinator = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[
         AgentTool(agent=researcher, name="researcher", description="Researches a topic and returns findings."),
         AgentTool(agent=writer, name="writer", description="Writes polished text from notes."),
@@ -1140,13 +1140,13 @@ When the order is fixed, wire agents together in a pipeline. Each agent's `last_
 from haystack import Pipeline
 
 research_stage = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[search],
     system_prompt="Research the topic and list key facts.",
     user_prompt="Topic: {{ topic }}",
 )
 writing_stage = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     system_prompt="Write a 200-word summary from the research notes.",
     user_prompt="Research notes:\n{{ notes.text }}",
 )
@@ -1194,7 +1194,7 @@ toolset = SearchableToolset(
     search_threshold=8,    # catalogues smaller than this are passed through unchanged
 )
 
-agent = Agent(chat_generator=OpenAIChatGenerator(model="gpt-5-mini"), tools=toolset)
+agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), tools=toolset)
 ```
 
 ### LLMRanker
@@ -1210,7 +1210,7 @@ from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
 pipeline = Pipeline()
 pipeline.add_component("retriever", InMemoryBM25Retriever(document_store=store, top_k=20))
 pipeline.add_component("ranker", LLMRanker(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     top_k=5,
 ))
 pipeline.connect("retriever.documents", "ranker.documents")

@@ -15,7 +15,7 @@ PydanticAI ships two model implementations built for tests: `TestModel` (auto-ge
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-5.2', system_prompt='Be terse.')
+agent = Agent('openai:%%model=openai%%', system_prompt='Be terse.')
 
 def test_greet():
     with agent.override(model=TestModel()):
@@ -51,7 +51,7 @@ After the run, `TestModel.last_model_request_parameters` holds the final `ModelR
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool
 def lookup(ctx: RunContext[object], sku: str) -> dict:

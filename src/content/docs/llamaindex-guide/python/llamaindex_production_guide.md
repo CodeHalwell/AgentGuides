@@ -128,7 +128,7 @@ async def lifespan(app: FastAPI):
     )
     
     # Models — reuse one client per process
-    app_state.llm = OpenAI(model="gpt-5-mini", max_retries=3, timeout=60)
+    app_state.llm = OpenAI(model="%%model=openai-small%%", max_retries=3, timeout=60)
     app_state.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
     
     # Reconnect to the existing index; ingestion runs as a separate job
@@ -1007,8 +1007,8 @@ class TokenUsageTracker:
         self.usage = {}
         # Daily token budgets per model — set from your own limits
         self.limits = {
-            "gpt-5-mini": 2_000_000,
-            "gpt-5-nano": 10_000_000,
+            "%%model=openai-small%%": 2_000_000,
+            "%%model=openai-small%%": 10_000_000,
         }
     
     def log_usage(self, model: str, input_tokens: int, output_tokens: int):
@@ -1033,7 +1033,7 @@ class TokenUsageTracker:
         """Estimate API costs."""
         # USD per 1K tokens. Prices change: load them from config, filled in from
         # your provider's current price list, rather than hard-coding them.
-        pricing = PRICING_PER_1K_TOKENS   # e.g. {"gpt-5-mini": {"input": ..., "output": ...}}
+        pricing = PRICING_PER_1K_TOKENS   # e.g. {"%%model=openai-small%%": {"input": ..., "output": ...}}
         
         total_cost = 0
         for model, tokens in self.usage.items():
@@ -1066,7 +1066,7 @@ class CostOptimizedQueryEngine:
         """Query within cost budget."""
         # Use cheaper model for simple queries
         if len(query) < 50 and not any(c in query for c in "[]{}()"):
-            cheap_llm = OpenAI(model="gpt-5-nano")
+            cheap_llm = OpenAI(model="%%model=openai-small%%")
             engine = self.index.as_query_engine(llm=cheap_llm)
         else:
             engine = self.index.as_query_engine(llm=self.llm)

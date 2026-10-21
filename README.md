@@ -56,6 +56,7 @@ language: "python"               # optional: python | typescript | dotnet | go
 
 The current version of every framework is written in exactly one place: `src/data/versions.json`. Nothing else should hard-code it.
 
+- **Model IDs** work the same way: `%%model=openai%%`, `%%model=anthropic-small%%` and so on, from `models` in `versions.json`.
 - **Docs** write `%%version=<package>%%` (e.g. `pip install agent-framework==%%version=agent-framework%%`) and `%%versions-checked%%` for the date. `src/plugins/remark-versions.mjs` fills these in at build time, in prose, inline code, code blocks and links. An unknown package name fails the build. Placeholders don't work in frontmatter, and shouldn't go in headings (the anchor would change on every bump).
 - **Framework cards** on the home page read `versions.json` directly via `src/data/frameworks.ts`.
 - Literal numbers are only for history: "added in 1.17.0", changelog entries, migration notes.

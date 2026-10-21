@@ -530,7 +530,7 @@ load_dotenv()
 
 def main():
     llm_config = LLMConfig({
-        "model": "gpt-4",
+        "model": "%%model=openai%%",
         "api_key": os.getenv("OPENAI_API_KEY")
     })
     
@@ -669,7 +669,7 @@ def create_optimised_config() -> LLMConfig:
         timeout=httpx.Timeout(60.0),
     )
     return LLMConfig(
-        {"api_type": "openai", "model": "gpt-4.1-mini", "http_client": http_client},
+        {"api_type": "openai", "model": "%%model=openai-small%%", "http_client": http_client},
         timeout=60,
     )
 
@@ -728,7 +728,7 @@ if not api_key:
     raise ValueError("OPENAI_API_KEY not set in environment")
 
 config = LLMConfig({
-    "model": "gpt-4",
+    "model": "%%model=openai%%",
     "api_key": api_key
 })
 ```

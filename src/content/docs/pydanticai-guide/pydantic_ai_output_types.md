@@ -19,7 +19,7 @@ class Answer(BaseModel):
     value: int
     reasoning: str
 
-agent = Agent('openai:gpt-5.2', output_type=Answer)
+agent = Agent('openai:%%model=openai%%', output_type=Answer)
 result = agent.run_sync('What is 15 + 27?')
 print(result.output)
 #> value=42 reasoning='...'
@@ -57,7 +57,7 @@ class Vehicle(BaseModel):
     wheels: int
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     output_type=[
         ToolOutput(Fruit, name='return_fruit'),
         ToolOutput(Vehicle, name='return_vehicle'),
@@ -112,7 +112,7 @@ class DetailedReport(BaseModel):
         return v
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[
         ToolOutput(QuickAnswer,     name='quick',  max_retries=3),   # more forgiving
         ToolOutput(DetailedReport,  name='report', max_retries=1),   # expensive, fail fast
@@ -156,7 +156,7 @@ class AnalysisResult(BaseModel):
 
 # AuditRecord must run alone (barrier); AnalysisResult can overlap with others.
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[
         ToolOutput(AuditRecord, name='audit',    sequential=True),   # barrier
         ToolOutput(AnalysisResult, name='analysis', sequential=False),
@@ -190,14 +190,14 @@ class Vehicle(BaseModel):
     wheels: int
 
 # Single type — returns Fruit directly
-agent_single = Agent('openai:gpt-4o', output_type=NativeOutput(Fruit))
+agent_single = Agent('openai:%%model=openai%%', output_type=NativeOutput(Fruit))
 result = agent_single.run_sync('What is a banana?')
 print(repr(result.output))
 # Fruit(name='banana', color='yellow')
 
 # Multiple types — provider builds a tagged union
 agent_union = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=NativeOutput(
         [Fruit, Vehicle],
         name='fruit_or_vehicle',
@@ -229,7 +229,7 @@ class VehicleResult(BaseModel):
     wheels: int
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=NativeOutput([FruitResult, VehicleResult], strict=True),
 )
 ```
@@ -282,7 +282,7 @@ from pydantic_ai import Agent, TextOutput
 def split_words(text: str) -> list[str]:
     return text.split()
 
-agent = Agent('openai:gpt-5.2', output_type=TextOutput(split_words))
+agent = Agent('openai:%%model=openai%%', output_type=TextOutput(split_words))
 result = agent.run_sync('Who was Albert Einstein?')
 print(result.output)
 #> ['Albert', 'Einstein', 'was', 'a', 'German-born', 'theoretical', 'physicist.']
@@ -306,7 +306,7 @@ schema = {
 
 DynamicForm = StructuredDict(schema, name='form_response', description='Fill this form.')
 
-agent = Agent('openai:gpt-5.2', output_type=DynamicForm)
+agent = Agent('openai:%%model=openai%%', output_type=DynamicForm)
 result = agent.run_sync('Make up a blog post.')
 print(result.output)
 #> {'title': '...', 'tags': [...]}
@@ -321,7 +321,7 @@ Run arbitrary code after the model produces an output, potentially asking the mo
 ```python
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-agent = Agent('openai:gpt-5.2', output_type=str)
+agent = Agent('openai:%%model=openai%%', output_type=str)
 
 @agent.output_validator
 async def no_profanity(ctx: RunContext[object], output: str) -> str:
@@ -366,7 +366,7 @@ class Action(BaseModel):
     kind: Literal['action']
     name: str
 
-agent = Agent('openai:gpt-5.2', output_type=Search | Action)
+agent = Agent('openai:%%model=openai%%', output_type=Search | Action)
 ```
 
 PydanticAI generates a tagged union schema; the `kind` literal gives the model an unambiguous label to produce.
@@ -389,7 +389,7 @@ from datetime import date
 def parse_iso_date(text: str) -> date:
     return date.fromisoformat(text.strip())
 
-agent = Agent('openai:gpt-5.2', output_type=TextOutput(parse_iso_date))
+agent = Agent('openai:%%model=openai%%', output_type=TextOutput(parse_iso_date))
 ```
 
 ### 4. Hybrid: structured output _plus_ a free-text summary
@@ -410,7 +410,7 @@ def build_form_schema(fields: list[dict]) -> type:
     schema = {'type': 'object', 'properties': {f['name']: f['schema'] for f in fields}}
     return StructuredDict(schema, name='form_response')
 
-agent = Agent('openai:gpt-5.2', output_type=build_form_schema(user_fields))
+agent = Agent('openai:%%model=openai%%', output_type=build_form_schema(user_fields))
 ```
 
 ## Advanced `NativeOutput` patterns
@@ -456,7 +456,7 @@ class Report(BaseModel):
     word_count: int
 
 # OpenAI handles the schema natively — no text injection
-agent = Agent('openai:gpt-4o', output_type=NativeOutput(Report, template=False))
+agent = Agent('openai:%%model=openai%%', output_type=NativeOutput(Report, template=False))
 ```
 
 ### Per-call output type override with `NativeOutput`
@@ -476,7 +476,7 @@ class DetailedAnswer(BaseModel):
     reasoning: str
     confidence: float
 
-base_agent = Agent('openai:gpt-4o')
+base_agent = Agent('openai:%%model=openai%%')
 
 async def main():
     # Simple question
@@ -513,7 +513,7 @@ class SummaryResult(BaseModel):
     word_count: int
 
 # Works with ANY text-capable model
-model = os.getenv('MODEL', 'openai:gpt-4o')
+model = os.getenv('MODEL', 'openai:%%model=openai%%')
 agent = Agent(model, output_type=PromptedOutput(SummaryResult))
 result = agent.run_sync('Summarise: Python is a high-level language loved for its readability.')
 print(result.output)
@@ -576,7 +576,7 @@ def parse_price(ctx: RunContext[ParseDeps], text: str) -> float:
     return 0.0
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ParseDeps,
     output_type=TextOutput(parse_price),
     instructions='State prices numerically, e.g. "The cost is 1,499.99".',
@@ -607,7 +607,7 @@ async def translate_to_german(text: str) -> str:
         return resp.json().get('translated', text)
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=TextOutput(translate_to_german),
     instructions='Respond in English.',
 )

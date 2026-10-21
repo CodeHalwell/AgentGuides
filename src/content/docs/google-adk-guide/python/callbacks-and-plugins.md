@@ -26,7 +26,7 @@ async def redact_secrets(tool, tool_args, tool_context):
 
 agent = LlmAgent(
     name="policy_aware",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Be helpful.",
     before_tool_callback=redact_secrets,   # per-agent
 )
@@ -109,7 +109,7 @@ async def audit_tool(
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Be helpful.",
     before_model_callback=inject_user_name,
     before_tool_callback=audit_tool,
@@ -151,7 +151,7 @@ async def personalised_instruction(ctx: ReadonlyContext) -> str:
 
 agent = LlmAgent(
     name="greeter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=personalised_instruction,  # called every turn
 )
 

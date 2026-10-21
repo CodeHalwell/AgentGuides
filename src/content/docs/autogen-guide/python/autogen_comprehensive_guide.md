@@ -107,7 +107,7 @@ import autogen
 
 config_list = [
     {
-        "model": "gpt-4",
+        "model": "%%model=openai%%",
         "api_key": "sk-your-api-key-here",
     }
 ]
@@ -133,11 +133,11 @@ For better security and portability, store configurations in a JSON file. By def
 ```json
 [
     {
-        "model": "gpt-4",
+        "model": "%%model=openai%%",
         "api_key": "sk-your-key-here"
     },
     {
-        "model": "gpt-3.5-turbo",
+        "model": "%%model=openai-small%%",
         "api_key": "sk-your-other-key-here"
     }
 ]
@@ -151,7 +151,7 @@ import autogen
 config_list = autogen.llm_config.config.config_list_from_json(
     "OAI_CONFIG_LIST.json",
     filter_dict={
-        "model": ["gpt-4"] # Optional: filter for specific models
+        "model": ["%%model=openai%%"] # Optional: filter for specific models
     }
 )
 
@@ -170,7 +170,7 @@ export OPENAI_API_KEY="sk-your-api-key"
 ```json
 [
     {
-        "model": "gpt-4"
+        "model": "%%model=openai%%"
     }
 ]
 ```
@@ -195,7 +195,7 @@ config_list_azure = [
 ```python
 config_list_claude = [
     {
-        "model": "claude-3-5-sonnet-20240620",
+        "model": "%%model=anthropic%%",
         "api_key": "your-anthropic-api-key",
         "api_type": "anthropic",
     }
@@ -207,7 +207,7 @@ config_list_claude = [
 ```python
 config_list_gemini = [
     {
-        "model": "gemini-pro",
+        "model": "%%model=gemini-flagship%%",
         "api_key": "your-google-api-key",
         "api_type": "google",
     }
@@ -393,7 +393,7 @@ import autogen
 # 1. Configure LLM
 config_list = [
     {
-        "model": "gpt-4",
+        "model": "%%model=openai%%",
         "api_key": "your-api-key"
     }
 ]
@@ -549,7 +549,7 @@ manual_approval_agent = autogen.ConversableAgent(
 ```python
 config_list_conservative = autogen.llm_config.config.config_list_from_json(
     "OAI_CONFIG_LIST.json",
-    filter_dict={"model": ["gpt-4"]}
+    filter_dict={"model": ["%%model=openai%%"]}
 )
 llm_config_conservative = {
     "config_list": config_list_conservative,
@@ -568,7 +568,7 @@ fact_checker = autogen.ConversableAgent(
 ```python
 config_list_creative = autogen.llm_config.config.config_list_from_json(
     "OAI_CONFIG_LIST.json",
-    filter_dict={"model": ["gpt-4"]}
+    filter_dict={"model": ["%%model=openai%%"]}
 )
 llm_config_creative = {
     "config_list": config_list_creative,
@@ -1520,7 +1520,7 @@ Earlier drafts of this section described "2025 enhancements" such as `context_tr
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4.1-mini"}, temperature=0.2)
+llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"}, temperature=0.2)
 # or: LLMConfig.from_json(path="OAI_CONFIG_LIST.json")
 
 agent = ConversableAgent("assistant", system_message="You are helpful.", llm_config=llm_config)
@@ -1535,7 +1535,7 @@ from autogen import ConversableAgent, LLMConfig
 from autogen.agentchat import run_group_chat
 from autogen.agentchat.group.patterns import AutoPattern
 
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4.1-mini"})
+llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"})
 planner = ConversableAgent("planner", system_message="Plan the work.", llm_config=llm_config)
 writer = ConversableAgent("writer", system_message="Write the result.", llm_config=llm_config)
 user = ConversableAgent("user", human_input_mode="NEVER", llm_config=False)

@@ -61,7 +61,7 @@ def setup_rag_chatbot(documents_dir: str = "./documents"):
     embed_model = OpenAIEmbedding(
         model="text-embedding-3-large"
     )
-    llm = OpenAI(model="gpt-5-mini")
+    llm = OpenAI(model="%%model=openai-small%%")
     
     # Create index
     index = VectorStoreIndex.from_documents(
@@ -154,7 +154,7 @@ class ResearchPaperAnalyzer:
     
     def __init__(self, papers_dir: str):
         self.papers_dir = papers_dir
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.indexes = {}
         self.query_engines = {}
     
@@ -373,7 +373,7 @@ class MultiDocumentComparison:
         self.documents_dict = documents_dict
         self.indexes = {}
         self.query_engines = {}
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
     
     def create_indexes(self):
         """Create indexes for each document group."""
@@ -465,7 +465,7 @@ class NewsAnalysisAgent:
     """Analyse news using agents."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
     
     def fetch_rss_feed(self, feed_url: str, limit: int = 5) -> str:
         """Fetch latest articles from RSS feed."""
@@ -569,7 +569,7 @@ class ExtractionPipeline:
     """Extract structured data from documents."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.parser = PydanticOutputParser(output_cls=Person)
     
     def extract_from_text(self, text: str) -> Person:
@@ -657,7 +657,7 @@ class SQLAgent:
     
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         # Open read-only: the keyword filter below is a convenience, not a security boundary.
         # check_same_thread=False because the agent runs sync tools in a worker thread.
         self.connection = sqlite3.connect(
@@ -796,7 +796,7 @@ class KnowledgeGraphBuilder:
     """Build knowledge graphs from text."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.graph = {
             "entities": {},
             "relationships": []
@@ -902,7 +902,7 @@ class MultiStepReasoningAgent:
     """Agent for multi-step reasoning."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.reasoning_steps = []
     
     # Step 1: Information gathering
@@ -1025,7 +1025,7 @@ class SupportTriageAgent:
     """Triage support tickets using AI."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-5-mini")
+        self.llm = OpenAI(model="%%model=openai-small%%")
     
     def assess_urgency(self, ticket: str) -> str:
         """Assess urgency of ticket."""

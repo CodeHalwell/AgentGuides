@@ -57,7 +57,7 @@ app.get("/raw", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   const stream = await client.responses.create({
-    model: "gpt-5.6-luna",
+    model: "%%model=openai-small%%",
     input: String(req.query.q || ""),
     stream: true,
   });

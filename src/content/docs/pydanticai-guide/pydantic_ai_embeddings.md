@@ -311,7 +311,7 @@ Generate embeddings alongside an agent run to persist semantic representations o
 import asyncio
 from pydantic_ai import Agent, Embedder
 
-agent = Agent('openai:gpt-4o', output_type=str)
+agent = Agent('openai:%%model=openai%%', output_type=str)
 embedder = Embedder('openai:text-embedding-3-small')
 
 async def run_and_embed(prompt: str):
@@ -546,7 +546,7 @@ class KnowledgeBase:
         return [doc for _, doc in scored[:top_k]]
 
 embedder = Embedder('openai:text-embedding-3-small')
-agent = Agent('openai:gpt-4o', deps_type=KnowledgeBase)
+agent = Agent('openai:%%model=openai%%', deps_type=KnowledgeBase)
 
 @agent.system_prompt
 def knowledge_base_prompt(ctx: RunContext[KnowledgeBase]) -> str:

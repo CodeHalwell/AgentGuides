@@ -21,7 +21,7 @@ from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.core.workflow import Workflow, step, Context, StartEvent, StopEvent, Event
 from llama_index.llms.openai import OpenAI
 
-llm = OpenAI(model="gpt-5-mini")
+llm = OpenAI(model="%%model=openai-small%%")
 
 def web_search(query: str) -> str:
     """Search the web."""

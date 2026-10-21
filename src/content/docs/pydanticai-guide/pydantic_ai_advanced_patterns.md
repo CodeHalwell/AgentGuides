@@ -29,7 +29,7 @@ class ReflectionResponse(BaseModel):
     confidence: float
 
 reflection_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=ReflectionResponse,
     name='ReflectiveAgent'
 )
@@ -68,17 +68,17 @@ async def multi_layer_reflection(query: str):
     """Agent that reflects at multiple levels."""
     
     # Layer 1: Generate response
-    agent_1 = Agent('openai:gpt-4o', name='Generator')
+    agent_1 = Agent('openai:%%model=openai%%', name='Generator')
     result_1 = await agent_1.run(f"Generate: {query}")
     
     # Layer 2: Critique response
-    agent_2 = Agent('openai:gpt-4o', name='Critic')
+    agent_2 = Agent('openai:%%model=openai%%', name='Critic')
     result_2 = await agent_2.run(
         f"Critique this: {result_1.output}"
     )
     
     # Layer 3: Synthesise improved response
-    agent_3 = Agent('openai:gpt-4o', name='Synthesizer')
+    agent_3 = Agent('openai:%%model=openai%%', name='Synthesizer')
     result_3 = await agent_3.run(
         f"Original: {result_1.output}\n"
         f"Critique: {result_2.output}\n"
@@ -121,16 +121,16 @@ class HierarchicalCoordinator:
     
     def __init__(self):
         self.coordinator = Agent(
-            'openai:gpt-4o',
+            'openai:%%model=openai%%',
             name='Coordinator',
             instructions='Delegate tasks to specialists'
         )
         
         self.specialists = {
-            TaskType.ANALYSIS: Agent('openai:gpt-4o', name='Analyst'),
-            TaskType.WRITING: Agent('anthropic:claude-sonnet-4-6', name='Writer'),
-            TaskType.CODING: Agent('openai:gpt-4o', name='Coder'),
-            TaskType.RESEARCH: Agent('openai:gpt-4o', name='Researcher'),
+            TaskType.ANALYSIS: Agent('openai:%%model=openai%%', name='Analyst'),
+            TaskType.WRITING: Agent('anthropic:%%model=anthropic%%', name='Writer'),
+            TaskType.CODING: Agent('openai:%%model=openai%%', name='Coder'),
+            TaskType.RESEARCH: Agent('openai:%%model=openai%%', name='Researcher'),
         }
     
     async def process(
@@ -240,7 +240,7 @@ registry.register_tool_function(search_database)
 print(registry.get_tool_schema(calc_tool))
 
 # The toolset is read on every run step, so tools registered later are picked up too.
-agent = Agent('openai:gpt-4o', toolsets=[registry.toolset])
+agent = Agent('openai:%%model=openai%%', toolsets=[registry.toolset])
 
 
 async def use_dynamic_tools(query: str) -> str:
@@ -330,7 +330,7 @@ async def cached_agent_run(query: str):
         return cached
     
     # Run agent
-    agent = Agent('openai:gpt-4o')
+    agent = Agent('openai:%%model=openai%%')
     result = await agent.run(query)
     
     # Cache result
@@ -392,7 +392,7 @@ class AdaptiveAgentOrchestrator:
             instructions = "Use all available tools to thoroughly answer."
         
         agent = Agent(
-            'openai:gpt-4o',
+            'openai:%%model=openai%%',
             end_strategy=strategy,
             instructions=instructions
         )
@@ -477,17 +477,17 @@ async def complex_workflow():
     
     # Define operations
     async def research(query: str) -> str:
-        agent = Agent('openai:gpt-4o', name='Researcher')
+        agent = Agent('openai:%%model=openai%%', name='Researcher')
         result = await agent.run(f"Research: {query}")
         return result.output
     
     async def summarise(content: str) -> str:
-        agent = Agent('openai:gpt-4o', name='Summariser')
+        agent = Agent('openai:%%model=openai%%', name='Summariser')
         result = await agent.run(f"Summarise: {content}")
         return result.output
     
     async def translate(text: str) -> str:
-        agent = Agent('openai:gpt-4o', name='Translator')
+        agent = Agent('openai:%%model=openai%%', name='Translator')
         result = await agent.run(f"Translate to Spanish: {text}")
         return result.output
     
@@ -795,7 +795,7 @@ chain = MiddlewareChain(middlewares)
 async def run_with_middleware(query: str, user_id: str):
     from pydantic_ai import Agent
     
-    agent = Agent('openai:gpt-4o')
+    agent = Agent('openai:%%model=openai%%')
     
     async def agent_func(q):
         result = await agent.run(q)
@@ -823,7 +823,7 @@ import asyncio
 from pydantic_ai import Agent, CallToolsNode, ModelRequestNode, UserPromptNode
 from pydantic_graph import End
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     nodes_visited = []
@@ -847,7 +847,7 @@ import asyncio
 from pydantic_ai import Agent, CallToolsNode
 from pydantic_graph import End
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def run_with_budget(prompt: str, max_steps: int = 10):
     async with agent.iter(prompt) as run:
@@ -878,7 +878,7 @@ import json
 from pydantic_ai import Agent, CallToolsNode, ModelRequestNode
 from pydantic_graph import End
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def stream_to_websocket(ws, prompt: str):
     async with agent.iter(prompt) as run:
@@ -903,7 +903,7 @@ import time
 from pydantic_ai import Agent
 from pydantic_graph import End
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def timed_run(prompt: str):
     timings = []
@@ -929,7 +929,7 @@ import asyncio
 from pydantic_ai import Agent, ModelRequestNode
 from pydantic_graph import End
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def run_with_model_override(prompt: str):
     """Override model parameters on a specific request node before execution."""

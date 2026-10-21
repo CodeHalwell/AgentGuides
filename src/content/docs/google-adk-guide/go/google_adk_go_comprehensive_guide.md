@@ -63,7 +63,7 @@ export GOOGLE_API_KEY=your_api_key_here
 For Vertex AI, authenticate with Application Default Credentials (`gcloud auth application-default login`, or a service account on Cloud Run/GKE) and select the Vertex backend:
 
 ```go
-model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+model, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{
 	Backend:  genai.BackendVertexAI,
 	Project:  "my-gcp-project",
 	Location: "us-central1",
@@ -97,7 +97,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	model, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})
 	if err != nil {
@@ -357,7 +357,7 @@ func redactResult(ctx agent.ToolContext, t tool.Tool, args, result map[string]an
 }
 
 func newSupportAgent(ctx context.Context) (agent.Agent, error) {
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})
 	if err != nil {
@@ -407,7 +407,7 @@ import (
 )
 
 func newClassifier(ctx context.Context) (agent.Agent, error) {
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})
 	if err != nil {
@@ -468,7 +468,7 @@ import (
 )
 
 func newModel(ctx context.Context) (model.LLM, error) {
-	return gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	return gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})
 }

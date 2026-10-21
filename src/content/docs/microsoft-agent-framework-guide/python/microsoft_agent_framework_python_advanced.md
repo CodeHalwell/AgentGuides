@@ -227,7 +227,7 @@ chunk = ChatResponseUpdate(
     role="assistant",
     response_id="resp_1",
     message_id="msg_1",
-    model="gpt-4o-mini",
+    model="%%model=openai-small%%",
 )
 print(chunk.text)        # " Hello" — concatenates every text Content
 print(str(chunk))        # same as chunk.text — __str__ is text
@@ -326,7 +326,7 @@ Wrap any real client:
 ```python
 from agent_framework.openai import OpenAIChatClient
 
-cached = CachingChatClient(OpenAIChatClient(model="gpt-5"))
+cached = CachingChatClient(OpenAIChatClient(model="%%model=openai%%"))
 agent = Agent(client=cached, instructions="…")
 ```
 

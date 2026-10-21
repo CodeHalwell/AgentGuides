@@ -114,7 +114,7 @@ dev_client = FoundryChatClient(credential=AzureCliCredential())   # FOUNDRY_PROJ
 
 # In Azure: the app's managed identity, against an Azure OpenAI resource.
 prod_client = OpenAIChatClient(
-    model="gpt-4o-mini",                                   # the deployment name
+    model="%%model=openai-small%%",                                   # the deployment name
     azure_endpoint="https://your-resource.openai.azure.com",
     credential=ManagedIdentityCredential(),
 )
@@ -151,7 +151,7 @@ OPENAI_MODEL=gpt-4o-mini
 {
   "AzureOpenAI": {
     "Endpoint": "https://your-resource.openai.azure.com",
-    "DeploymentName": "gpt-4o-mini"
+    "DeploymentName": "%%model=openai-small%%"
   }
 }
 ```
@@ -224,7 +224,7 @@ using OpenAI.Chat;
 
 var client = new AzureOpenAIClient(new Uri("https://your-resource.openai.azure.com/"), new DefaultAzureCredential());
 
-AIAgent agent = client.GetChatClient("gpt-4o-mini")
+AIAgent agent = client.GetChatClient("%%model=openai-small%%")
     .AsAIAgent(instructions: "You are a helpful assistant that explains concepts clearly.");
 
 AgentResponse result = await agent.RunAsync("Explain machine learning to a beginner.");
@@ -299,7 +299,7 @@ public static class WeatherExample
     {
         var client = new AzureOpenAIClient(new Uri("https://your-resource.openai.azure.com/"), new DefaultAzureCredential());
 
-        AIAgent agent = client.GetChatClient("gpt-4o-mini").AsAIAgent(
+        AIAgent agent = client.GetChatClient("%%model=openai-small%%").AsAIAgent(
             instructions: "You are a weather assistant.",
             tools: [AIFunctionFactory.Create(GetWeather)]);
 

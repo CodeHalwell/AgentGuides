@@ -40,7 +40,7 @@ Typical code keeps working unchanged:
 from autogen import AssistantAgent, LLMConfig, UserProxyAgent
 from autogen.coding import LocalCommandLineCodeExecutor
 
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4.1-mini"})
+llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"})
 
 assistant = AssistantAgent("assistant", llm_config=llm_config)
 user_proxy = UserProxyAgent(
@@ -67,7 +67,7 @@ AG2 1.0 (July 2026) replaced the Classic API with an async, event-driven framewo
 ```python
 from autogen import ConversableAgent, LLMConfig, register_function
 
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4.1-mini"})
+llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"})
 assistant = ConversableAgent("assistant", system_message="Use tools when helpful.", llm_config=llm_config)
 user = ConversableAgent("user", human_input_mode="NEVER", llm_config=False)
 
@@ -98,7 +98,7 @@ def get_weather(city: str) -> str:
 assistant = Agent(
     "assistant",
     prompt="Use tools when helpful.",
-    config=OpenAIConfig(model="gpt-4.1-mini"),
+    config=OpenAIConfig(model="%%model=openai-small%%"),
     tools=[get_weather],
 )
 

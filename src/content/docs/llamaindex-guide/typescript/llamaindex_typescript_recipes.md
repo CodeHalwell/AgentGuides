@@ -48,7 +48,7 @@ const queryEv     = workflowEvent<{ query: string; topK?: number }>();
 const retrievedEv = workflowEvent<{ query: string; docs: string[]; scores: number[] }>();
 const stopEv      = workflowEvent<{ answer: string; docsUsed: number }>();
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 // Build workflow
 const ragWorkflow = createWorkflow();
@@ -118,7 +118,7 @@ const textEv     = workflowEvent<{ text: string }>();
 const parsedEv   = workflowEvent<{ paper: Paper }>();
 const reportEv   = workflowEvent<{ report: Paper & { analysedAt: string; wordCount: number } }>();
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const analyserWorkflow = createWorkflow();
 
@@ -178,7 +178,7 @@ const sourceEv = workflowEvent<{ filePath: string }>();
 const funcsEv  = workflowEvent<{ functions: FunctionSignature[] }>();
 const docsEv   = workflowEvent<{ markdown: string }>();
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const docGenWorkflow = createWorkflow();
 
@@ -258,7 +258,7 @@ const { withState } = createStatefulMiddleware<{ processed: number; failedIds: s
 
 const base     = createWorkflow();
 const pipeline = withState(base);
-const llm      = new OpenAI({ model: 'gpt-5-mini' });
+const llm      = new OpenAI({ model: '%%model=openai-small%%' });
 
 // Step 1 — clean text
 pipeline.handle([rawEv], async (ctx, ev) => {
@@ -451,7 +451,7 @@ import { OpenAI } from '@llamaindex/openai';
 import { tool } from '@llamaindex/core/tools';
 import { z } from 'zod';
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 // Tool definitions
 const searchTool = tool({
@@ -517,7 +517,7 @@ const turnEv  = workflowEvent<{ history: ChatMessage[]; userMessage: string }>()
 const replyEv = workflowEvent<{ assistant: string; history: ChatMessage[] }>();
 
 const convWf = createWorkflow();
-const llm    = new OpenAI({ model: 'gpt-5-mini' });
+const llm    = new OpenAI({ model: '%%model=openai-small%%' });
 
 convWf.handle([turnEv], async (ctx, ev) => {
   const history: ChatMessage[] = [...ev.data.history, { role: 'user', content: ev.data.userMessage }];
@@ -602,7 +602,7 @@ const technicalEv = workflowEvent<{ id: string; body: string }>();
 const otherEv     = workflowEvent<{ id: string; body: string }>();
 const resolvedEv  = workflowEvent<{ id: string; category: Category; response: string }>();
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const triageWorkflow = createWorkflow();
 

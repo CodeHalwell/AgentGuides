@@ -25,7 +25,7 @@ import asyncio
 from pydantic_ai import Agent
 
 # At most 3 runs of this agent in flight at once; the rest queue.
-agent = Agent('openai:gpt-4o', max_concurrency=3)
+agent = Agent('openai:%%model=openai%%', max_concurrency=3)
 
 async def main():
     prompts = [f'What is {i} squared?' for i in range(10)]
@@ -86,7 +86,7 @@ from pydantic_ai.concurrency import ConcurrencyLimiter
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 strict_limiter = ConcurrencyLimiter(max_running=2, max_queued=5)
-agent = Agent('openai:gpt-4o', max_concurrency=strict_limiter)
+agent = Agent('openai:%%model=openai%%', max_concurrency=strict_limiter)
 
 async def handle(prompt: str):
     try:
@@ -107,7 +107,7 @@ from pydantic_ai import Agent, limit_model_concurrency
 from pydantic_ai.concurrency import ConcurrencyLimiter
 
 shared = ConcurrencyLimiter(max_running=10, name='openai-pool')
-model = limit_model_concurrency('openai:gpt-4o', shared)
+model = limit_model_concurrency('openai:%%model=openai%%', shared)
 
 summariser = Agent(model, instructions='Summarise the text.')
 analyst = Agent(model, instructions='Analyse the summary.')
@@ -132,9 +132,9 @@ Use separate limiters per provider to stay inside provider-specific rate limits:
 from pydantic_ai import Agent, limit_model_concurrency
 from pydantic_ai.concurrency import ConcurrencyLimit
 
-openai_agent = Agent(limit_model_concurrency('openai:gpt-4o', 20))
+openai_agent = Agent(limit_model_concurrency('openai:%%model=openai%%', 20))
 anthropic_agent = Agent(
-    limit_model_concurrency('anthropic:claude-opus-4-5', ConcurrencyLimit(max_running=5, max_queued=50))
+    limit_model_concurrency('anthropic:%%model=anthropic-flagship%%', ConcurrencyLimit(max_running=5, max_queued=50))
 )
 ```
 
@@ -181,9 +181,9 @@ from pydantic_ai.concurrency import AnyConcurrencyLimit, ConcurrencyLimit, Concu
 
 # AnyConcurrencyLimit = int | ConcurrencyLimit | AbstractConcurrencyLimiter | None
 
-Agent('openai:gpt-4o', max_concurrency=5)                                          # int shorthand
-Agent('openai:gpt-4o', max_concurrency=ConcurrencyLimit(max_running=5, max_queued=20))  # config object
-Agent('openai:gpt-4o', max_concurrency=ConcurrencyLimiter(max_running=5))          # shareable instance
+Agent('openai:%%model=openai%%', max_concurrency=5)                                          # int shorthand
+Agent('openai:%%model=openai%%', max_concurrency=ConcurrencyLimit(max_running=5, max_queued=20))  # config object
+Agent('openai:%%model=openai%%', max_concurrency=ConcurrencyLimiter(max_running=5))          # shareable instance
 Agent('openai:gpt-4o', max_concurrency=None)                                       # no limiting (default)
 ```
 
@@ -199,7 +199,7 @@ from pydantic_ai.concurrency import ConcurrencyLimiter
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 limiter = ConcurrencyLimiter(max_running=10, max_queued=20, name='api')
-agent = Agent('openai:gpt-4o', max_concurrency=limiter)
+agent = Agent('openai:%%model=openai%%', max_concurrency=limiter)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

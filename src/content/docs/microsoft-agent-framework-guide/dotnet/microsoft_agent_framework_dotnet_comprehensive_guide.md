@@ -84,7 +84,7 @@ dotnet user-secrets set "AzureOpenAI:Endpoint" "https://your-resource.openai.azu
 ```json
 {
   "AzureOpenAI": {
-    "DeploymentName": "gpt-4o-mini"
+    "DeploymentName": "%%model=openai-small%%"
   }
 }
 ```
@@ -108,7 +108,7 @@ using Microsoft.Extensions.Hosting;
 var builder = Host.CreateApplicationBuilder(args);
 
 var endpoint = builder.Configuration["AzureOpenAI:Endpoint"]!;
-var deployment = builder.Configuration["AzureOpenAI:DeploymentName"] ?? "gpt-4o-mini";
+var deployment = builder.Configuration["AzureOpenAI:DeploymentName"] ?? "%%model=openai-small%%";
 
 // One chat client for the whole application.
 builder.Services.AddChatClient(
@@ -701,7 +701,7 @@ using Microsoft.Extensions.AI;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddChatClient(
     new AzureOpenAIClient(new Uri(builder.Configuration["AzureOpenAI:Endpoint"]!), new DefaultAzureCredential())
-        .GetChatClient("gpt-4o-mini").AsIChatClient());
+        .GetChatClient("%%model=openai-small%%").AsIChatClient());
 builder.Services.AddHttpContextAccessor();
 builder.Services.UseClaimsBasedAgentIsolation();               // isolation key = the user's "oid" claim by default
 builder.AddAIAgent("assistant", "You are a helpful assistant.")

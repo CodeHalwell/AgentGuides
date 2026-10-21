@@ -52,7 +52,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	})
 	if err != nil {
@@ -129,7 +129,7 @@ func currentTime(_ agent.ToolContext, a timeArgs) (timeResult, error) {
 func main() {
 	ctx := context.Background()
 
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -214,7 +214,7 @@ type Recipe struct {
 func main() {
 	ctx := context.Background()
 
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -581,7 +581,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -788,7 +788,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
+	m, err := gemini.NewModel(ctx, "%%model=gemini%%", &genai.ClientConfig{APIKey: os.Getenv("GOOGLE_API_KEY")})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -65,7 +65,7 @@ template = [
 qa = Pipeline()
 qa.add_component("retriever", InMemoryBM25Retriever(document_store=store, top_k=5))
 qa.add_component("prompt", ChatPromptBuilder(template=template, required_variables=["question", "documents"]))
-qa.add_component("llm", OpenAIChatGenerator(model="gpt-5-mini"))
+qa.add_component("llm", OpenAIChatGenerator(model="%%model=openai-small%%"))
 qa.add_component("answer", AnswerBuilder())
 
 qa.connect("retriever.documents", "prompt.documents")
@@ -147,7 +147,7 @@ def create_ticket(summary: Annotated[str, "Issue summary"], tenant_id: str) -> s
 
 
 support_agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[search_kb, lookup_customer, create_ticket],
     system_prompt="You are a support agent for {{ company_name }}. Be concise and polite.",
     state_schema={"tenant_id": {"type": str}},
@@ -195,12 +195,12 @@ preprocess.add_component("split", DocumentSplitter(split_by="word", split_length
 preprocess.connect("convert.documents", "split.documents")
 
 chunk_summariser = LLM(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     system_prompt="You summarise business documents accurately and briefly.",
     user_prompt="Summarise this excerpt in 2-3 bullet points:\n\n{{ text }}",
 )
 final_summariser = LLM(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     system_prompt="You write executive summaries.",
     user_prompt="Combine these partial summaries into one {{ length }} summary:\n\n{{ partials }}",
 )
@@ -257,7 +257,7 @@ def get_stock_price(symbol: Annotated[str, "Ticker symbol, e.g. MSFT"]) -> dict:
 
 
 live_agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[fetch_page, get_stock_price],
     system_prompt="Answer with up-to-date information from your tools and say where it came from.",
     max_agent_steps=6,
@@ -292,7 +292,7 @@ def web_search(query: Annotated[str, "Search query"]) -> str:
 
 def specialist(prompt: str, tools=None) -> Agent:
     return Agent(
-        chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+        chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
         tools=tools,
         system_prompt=prompt,
         max_agent_steps=6,
@@ -311,7 +311,7 @@ team = [
 ]
 
 coordinator = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=team,
     system_prompt=(
         "You lead a small team. Use the researcher, then the analyst, then the writer. "
@@ -369,7 +369,7 @@ def need_three_findings(state: State) -> None:
 
 
 researcher = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[search_papers, record_finding, submit_report],
     system_prompt="Research the question, record each finding, then call submit_report.",
     state_schema={"findings": {"type": list[str]}},
@@ -426,7 +426,7 @@ class CodeAssistant:
         self.store = store
         self.max_messages = max_messages
         self.agent = Agent(
-            chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+            chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
             tools=[check_syntax],
             system_prompt="You are a senior Python reviewer. Check syntax before commenting on code.",
             max_agent_steps=5,

@@ -30,14 +30,14 @@ from pydantic_ai.direct import model_request
 
 async def main():
     response = await model_request(
-        'openai:gpt-4o-mini',
+        'openai:%%model=openai-small%%',
         [ModelRequest.user_text_prompt('What is the capital of France?')],
     )
     print(response)
     # ModelResponse(
     #     parts=[TextPart(content='The capital of France is Paris.')],
     #     usage=RequestUsage(input_tokens=14, output_tokens=8),
-    #     model_name='gpt-4o-mini',
+    #     model_name='%%model=openai-small%%',
     #     timestamp=datetime.datetime(...),
     # )
 
@@ -54,7 +54,7 @@ from pydantic_ai.settings import ModelSettings
 
 async def ask(prompt: str) -> ModelResponse:
     return await model_request(
-        'anthropic:claude-haiku-4-5',
+        'anthropic:%%model=anthropic-small%%',
         [ModelRequest.user_text_prompt(prompt)],
         model_settings=ModelSettings(max_tokens=512, temperature=0.2),
     )
@@ -88,7 +88,7 @@ from pydantic_ai import ModelRequest
 from pydantic_ai.direct import model_request_sync
 
 response = model_request_sync(
-    'google:gemini-2.5-flash',
+    'google:%%model=gemini%%',
     [ModelRequest.user_text_prompt('Explain backpropagation in two sentences.')],
 )
 print(response.parts[0].content)  # TextPart
@@ -110,7 +110,7 @@ from pydantic_ai.messages import PartStartEvent, PartDeltaEvent, TextPartDelta
 async def stream_response(prompt: str) -> str:
     text = ''
     messages = [ModelRequest.user_text_prompt(prompt)]
-    async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+    async with model_request_stream('openai:%%model=openai-small%%', messages) as stream:
         async for event in stream:
             if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
                 text += event.delta.content_delta
@@ -133,7 +133,7 @@ Stream events (`messages.py`):
 After the `async with` exits, `stream.get()` returns the assembled `ModelResponse`.
 
 ```python
-async with model_request_stream('openai:gpt-4o-mini', messages) as stream:
+async with model_request_stream('openai:%%model=openai-small%%', messages) as stream:
     async for _ in stream:
         pass  # drain
     response = stream.get()
@@ -151,7 +151,7 @@ from pydantic_ai.messages import PartDeltaEvent, TextPartDelta
 
 messages = [ModelRequest.user_text_prompt('Count from 1 to 5.')]
 
-with model_request_stream_sync('openai:gpt-4o-mini', messages) as stream:
+with model_request_stream_sync('openai:%%model=openai-small%%', messages) as stream:
     for event in stream:
         if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
             print(event.delta.content_delta, end='', flush=True)
@@ -170,13 +170,13 @@ from pydantic_ai import ModelRequest
 
 messages = [ModelRequest.user_text_prompt('Who invented the telephone?')]
 
-with model_request_stream_sync('openai:gpt-4o-mini', messages) as stream:
+with model_request_stream_sync('openai:%%model=openai-small%%', messages) as stream:
     # Iterate to consume
     chunks = list(stream)
 
     # After consuming the stream, inspect the assembled response
     print(stream.response)          # ModelResponse
-    print(stream.model_name)        # e.g. 'gpt-4o-mini'
+    print(stream.model_name)        # e.g. '%%model=openai-small%%'
     print(stream.timestamp)         # datetime of the response
 ```
 
@@ -242,11 +242,11 @@ from pydantic_ai.direct import model_request
 async def chat():
     history: list[ModelMessage] = [ModelRequest.user_text_prompt('My favourite colour is green.')]
 
-    resp1 = await model_request('openai:gpt-4o-mini', history)
+    resp1 = await model_request('openai:%%model=openai-small%%', history)
     history.append(resp1)  # ModelResponse also is a ModelMessage
 
     history.append(ModelRequest.user_text_prompt('What is my favourite colour?'))
-    resp2 = await model_request('openai:gpt-4o-mini', history)
+    resp2 = await model_request('openai:%%model=openai-small%%', history)
     print(resp2.parts[0].content)   # 'Your favourite colour is green.'
 
 asyncio.run(chat())
@@ -281,7 +281,7 @@ weather_tool = ToolDefinition(
 
 async def main():
     resp = await model_request(
-        'openai:gpt-4o-mini',
+        'openai:%%model=openai-small%%',
         [ModelRequest.user_text_prompt('What is the weather in Paris?')],
         model_request_parameters=ModelRequestParameters(
             function_tools=[weather_tool],
@@ -308,7 +308,7 @@ settings = InstrumentationSettings(include_content=True)  # version 5 is the def
 
 async def main():
     response = await model_request(
-        'anthropic:claude-haiku-4-5',
+        'anthropic:%%model=anthropic-small%%',
         [ModelRequest.user_text_prompt('Hello!')],
         instrument=settings,
     )
@@ -348,9 +348,9 @@ from pydantic_ai import ModelRequest
 from pydantic_ai.direct import model_request
 
 MODELS = [
-    'openai:gpt-4o-mini',
-    'anthropic:claude-haiku-4-5',
-    'google:gemini-2.5-flash',
+    'openai:%%model=openai-small%%',
+    'anthropic:%%model=anthropic-small%%',
+    'google:%%model=gemini%%',
 ]
 
 async def compare(prompt: str) -> None:
@@ -376,7 +376,7 @@ def classify(text: str, categories: list[str]) -> str:
     """Synchronous helper for non-async callers."""
     cats = ', '.join(categories)
     resp = model_request_sync(
-        'openai:gpt-4o-mini',
+        'openai:%%model=openai-small%%',
         [ModelRequest(parts=[
             __import__('pydantic_ai.messages', fromlist=['SystemPromptPart']).SystemPromptPart(
                 content=f'Classify the input into exactly one of: {cats}. Reply with the category name only.'
@@ -399,7 +399,7 @@ from pydantic_ai.messages import PartDeltaEvent, TextPartDelta
 
 async def stream_until_marker(prompt: str, stop_token: str = '[DONE]') -> str:
     collected = ''
-    async with model_request_stream('openai:gpt-4o-mini',
+    async with model_request_stream('openai:%%model=openai-small%%',
                                     [ModelRequest.user_text_prompt(prompt)]) as stream:
         async for event in stream:
             if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):

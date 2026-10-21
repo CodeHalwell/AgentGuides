@@ -80,7 +80,7 @@ from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 
 token_counter = TokenCountingHandler(
-    tokenizer=tiktoken.encoding_for_model("gpt-4o").encode   # pick the tokenizer that matches your model family
+    tokenizer=tiktoken.encoding_for_model("%%model=openai%%").encode   # pick the tokenizer that matches your model family
 )
 Settings.callback_manager = CallbackManager([token_counter])
 

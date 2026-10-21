@@ -52,7 +52,7 @@ import (
 func main() {
 	// openai.NewClient reads OPENAI_API_KEY from the environment.
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "You are a concise assistant. Answer in one sentence.",
 		Config:       agent.Config{Name: "Helper"},
 	})
@@ -103,7 +103,7 @@ import (
 func main() {
 	ctx := context.Background()
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:              "gpt-5.4-mini",
+		Model:              "%%model=openai-small%%",
 		DisableStoreOutput: true, // keep history locally in the session, not in the service
 	})
 
@@ -164,7 +164,7 @@ type Person struct {
 
 func main() {
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "Extract the person described.",
 	})
 
@@ -235,7 +235,7 @@ var deleteFile = functool.MustNew(functool.Config{
 func main() {
 	ctx := context.Background()
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "You are an operations assistant.",
 		Config: agent.Config{
 			Tools: []tool.Tool{
@@ -287,7 +287,7 @@ The OpenAI, Foundry, Anthropic and Gemini providers install the `agent/harness/t
 ```go
 maxRounds := 5
 cfg := openaiprovider.AgentConfig{
-	Model: "gpt-5.4-mini",
+	Model: "%%model=openai-small%%",
 	ToolAutoCall: &toolautocall.Config{
 		MaximumIterationsPerRequest: &maxRounds,
 		AllowConcurrentInvocations:  true,
@@ -363,7 +363,7 @@ var readFile = functool.MustNew(functool.Config{Name: "read_file", Description: 
 
 func main() {
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model: "gpt-5.4-mini",
+		Model: "%%model=openai-small%%",
 		Config: agent.Config{
 			Logger:              slog.New(slog.NewTextHandler(os.Stderr, nil)),
 			Middlewares:         []agent.Middleware{timing},
@@ -411,7 +411,7 @@ var clock = agent.NewContextProvider(agent.ContextProviderConfig{
 
 func main() {
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:  "gpt-5.4-mini",
+		Model:  "%%model=openai-small%%",
 		Config: agent.Config{ContextProviders: []agent.ContextProvider{clock}},
 	})
 	resp, err := a.RunText(context.Background(), "What day is it?").Collect()
@@ -570,7 +570,7 @@ import (
 func main() {
 	// anthropic.NewClient reads ANTHROPIC_API_KEY from the environment.
 	a := anthropicprovider.NewAgent(anthropic.NewClient(), anthropicprovider.AgentConfig{
-		Model:        "claude-sonnet-4-5",
+		Model:        "%%model=anthropic%%",
 		Instructions: "You are a helpful assistant.",
 		Config:       agent.Config{Name: "Claude"},
 	})
@@ -606,7 +606,7 @@ func main() {
 		log.Fatal(err)
 	}
 	a := geminiprovider.NewAgent(client, geminiprovider.AgentConfig{
-		Model:        "gemini-2.5-flash",
+		Model:        "%%model=gemini%%",
 		Instructions: "You are a helpful assistant.",
 		Config:       agent.Config{Name: "Gemini"},
 	})
@@ -674,7 +674,7 @@ func main() {
 	}
 
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "Use the tools to answer questions about Azure and local files.",
 		Config:       agent.Config{Tools: tools},
 	})
@@ -707,7 +707,7 @@ import (
 
 func main() {
 	reviewer := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "You review Go code for correctness and idiom.",
 		Config: agent.Config{
 			Name:        "go_reviewer", // becomes the tool name
@@ -752,7 +752,7 @@ func main() {
 	const url = "http://localhost:5000"
 
 	policy := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:        "gpt-5.4-mini",
+		Model:        "%%model=openai-small%%",
 		Instructions: "You answer questions about the returns policy.",
 		Config:       agent.Config{Name: "PolicyAgent"},
 	})
@@ -859,7 +859,7 @@ func main() {
 	otel.SetTracerProvider(tp) // otelprovider uses the global providers
 
 	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model: "gpt-5.4-mini",
+		Model: "%%model=openai-small%%",
 		Config: agent.Config{
 			Name:        "Traced",
 			Middlewares: []agent.Middleware{otelprovider.NewMiddleware(otelprovider.MiddlewareConfig{SourceName: "my-service"})},

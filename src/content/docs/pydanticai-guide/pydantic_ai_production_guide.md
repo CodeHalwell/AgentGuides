@@ -64,7 +64,7 @@ class AgentProvider:
     def create_support_agent(deps: InfrastructureDependencies) -> Agent:
         """Create support/customer service agent."""
         return Agent(
-            'openai:gpt-4o',
+            'openai:%%model=openai%%',
             deps_type=InfrastructureDependencies,
             instructions='''
             You are a professional customer support agent.
@@ -80,7 +80,7 @@ class AgentProvider:
     def create_data_analyst_agent(deps: InfrastructureDependencies) -> Agent:
         """Create data analysis agent."""
         return Agent(
-            'openai:gpt-4o',
+            'openai:%%model=openai%%',
             deps_type=InfrastructureDependencies,
             instructions='''
             You are a data analysis expert.
@@ -307,7 +307,7 @@ logfire.instrument_sqlalchemy()
 logfire.instrument_asyncpg()
 
 # Create agent
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 # Custom spans for business logic
 @logfire.span('process_customer_request')
@@ -507,7 +507,7 @@ def categorise(exc: BaseException) -> AgentError:
     return AgentError(f"Unexpected error: {exc}", ErrorCategory.INTERNAL)
 
 # Agent with comprehensive error handling
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.output_validator
 async def validate_and_retry(ctx, output):
@@ -621,7 +621,7 @@ tracker = TokenTracker(TokenBudget(
     cost_per_1k_output=0.015
 ))
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def cost_controlled_run(query: str) -> Optional[str]:
     """Run agent with cost controls."""
@@ -714,7 +714,7 @@ class AgentCacheManager:
 
 # Usage with cache
 cache_manager = AgentCacheManager(ttl=3600)
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def run_with_caching(query: str, agent_name: str = 'default') -> str:
     """Run agent with caching."""
@@ -799,7 +799,7 @@ def run_analysis_agent(self, data: str):
     """Long-running agent task with Celery."""
     
     try:
-        agent = Agent('openai:gpt-4o')
+        agent = Agent('openai:%%model=openai%%')
         result = agent.run_sync(data)
         
         # Store result

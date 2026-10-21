@@ -79,7 +79,7 @@ from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 
 kernel = Kernel()
-kernel.add_service(OpenAIChatCompletion(service_id="chat", ai_model_id="gpt-5-mini"))
+kernel.add_service(OpenAIChatCompletion(service_id="chat", ai_model_id="%%model=openai-small%%"))
 result = await kernel.invoke_prompt("Say hello.")
 ```
 
@@ -87,7 +87,7 @@ result = await kernel.invoke_prompt("Say hello.")
 
 ```csharp
 var builder = Kernel.CreateBuilder();
-builder.AddOpenAIChatCompletion("gpt-5-mini", apiKey, serviceId: "chat");
+builder.AddOpenAIChatCompletion("%%model=openai-small%%", apiKey, serviceId: "chat");
 Kernel kernel = builder.Build();
 var result = await kernel.InvokePromptAsync("Say hello.");
 ```
@@ -157,7 +157,7 @@ An **agent** packages instructions, a model and plugins behind a common interfac
 ```python
 from semantic_kernel.agents import ChatCompletionAgent
 
-agent = ChatCompletionAgent(service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+agent = ChatCompletionAgent(service=OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"),
                             name="Support", instructions="Be concise.", plugins=[OrdersPlugin()])
 response = await agent.get_response(messages="Where is order A-1042?")
 follow_up = await agent.get_response(messages="And when will it arrive?", thread=response.thread)

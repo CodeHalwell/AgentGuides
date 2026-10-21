@@ -195,7 +195,7 @@ Represents an autonomous AI entity with specialised capabilities.
 from crewai import Agent, LLM
 
 # Define a language model
-llm = LLM(model="openai/gpt-4-turbo", temperature=0.7)
+llm = LLM(model="openai/%%model=openai%%", temperature=0.7)
 
 # Create an agent
 researcher = Agent(
@@ -301,7 +301,7 @@ crew_hierarchical = Crew(
     agents=[researcher],
     tasks=[analysis_task],
     process=Process.hierarchical,
-    manager_llm=LLM(model="openai/gpt-4-turbo")
+    manager_llm=LLM(model="openai/%%model=openai%%")
 )
 ```
 
@@ -317,7 +317,7 @@ CrewAI supports numerous LLM providers through the LLM class:
 from crewai import LLM
 
 llm = LLM(
-    model="openai/gpt-4-turbo",
+    model="openai/%%model=openai%%",
     api_key="your-api-key",
     temperature=0.7,
     max_tokens=4000
@@ -328,7 +328,7 @@ llm = LLM(
 
 ```python
 llm = LLM(
-    model="anthropic/claude-3-opus",
+    model="anthropic/%%model=anthropic-flagship%%",
     api_key="your-anthropic-api-key",
     temperature=0.5,
     max_tokens=2000
@@ -385,7 +385,7 @@ from crewai import Agent, Task, Crew, Process, LLM
 import os
 
 # Initialise LLM
-llm = LLM(model="openai/gpt-4-turbo", api_key=os.getenv('OPENAI_API_KEY'))
+llm = LLM(model="openai/%%model=openai%%", api_key=os.getenv('OPENAI_API_KEY'))
 
 # Create Agent
 agent = Agent(
@@ -613,10 +613,10 @@ Specify different models for different agents:
 
 ```python
 # Fast, efficient model for routine tasks
-fast_llm = LLM(model="openai/gpt-3.5-turbo", temperature=0.3)
+fast_llm = LLM(model="openai/%%model=openai-small%%", temperature=0.3)
 
 # Powerful model for complex analysis
-powerful_llm = LLM(model="openai/gpt-4-turbo", temperature=0.7)
+powerful_llm = LLM(model="openai/%%model=openai%%", temperature=0.7)
 
 routine_agent = Agent(
     role="Data Clerk",
@@ -640,21 +640,21 @@ Control response randomness:
 agent = Agent(
     role="Data Fact-Checker",
     goal="Verify factual accuracy",
-    llm=LLM(model="openai/gpt-4-turbo", temperature=0.1)
+    llm=LLM(model="openai/%%model=openai%%", temperature=0.1)
 )
 
 # Creative responses (good for brainstorming)
 agent = Agent(
     role="Brainstorm Facilitator",
     goal="Generate creative ideas and novel concepts",
-    llm=LLM(model="openai/gpt-4-turbo", temperature=0.9)
+    llm=LLM(model="openai/%%model=openai%%", temperature=0.9)
 )
 
 # Balanced approach
 agent = Agent(
     role="Content Analyst",
     goal="Analyse and summarise content with balanced insight",
-    llm=LLM(model="openai/gpt-4-turbo", temperature=0.5)
+    llm=LLM(model="openai/%%model=openai%%", temperature=0.5)
 )
 ```
 
@@ -676,7 +676,7 @@ While CrewAI excels with multiple agents, single-agent crews are valuable for st
 from crewai import Agent, Task, Crew, Process, LLM
 
 # Initialise LLM
-llm = LLM(model="openai/gpt-4-turbo")
+llm = LLM(model="openai/%%model=openai%%")
 
 # Create single agent
 data_analyst = Agent(
@@ -863,8 +863,8 @@ Creating effective multi-agent systems requires careful architecture design:
 from crewai import Agent, Task, Crew, Process, LLM
 
 # Initialise different LLMs for different specialisations
-fast_llm = LLM(model="openai/gpt-3.5-turbo", temperature=0.3)
-powerful_llm = LLM(model="openai/gpt-4-turbo", temperature=0.7)
+fast_llm = LLM(model="openai/%%model=openai-small%%", temperature=0.3)
+powerful_llm = LLM(model="openai/%%model=openai%%", temperature=0.7)
 
 # Define specialised agents
 analyst = Agent(
@@ -967,7 +967,7 @@ A manager agent coordinates task distribution and agent collaboration:
 ```python
 from crewai import LLM
 
-manager_llm = LLM(model="openai/gpt-4-turbo")
+manager_llm = LLM(model="openai/%%model=openai%%")
 
 crew = Crew(
     agents=[analyst, writer, designer],
@@ -1076,7 +1076,7 @@ writer = Agent(role="Writer", goal="Document findings")
 manager = Agent(
     role="Project Manager",
     goal="Coordinate team to deliver high-quality results",
-    llm=LLM(model="openai/gpt-4-turbo")
+    llm=LLM(model="openai/%%model=openai%%")
 )
 
 # Create hierarchical crew
@@ -1088,7 +1088,7 @@ crew = Crew(
         Task(description="Document results", agent=writer)
     ],
     process=Process.hierarchical,
-    manager_llm=LLM(model="openai/gpt-4-turbo"),
+    manager_llm=LLM(model="openai/%%model=openai%%"),
     verbose=True
 )
 
@@ -1464,7 +1464,7 @@ crew = Crew(
     agents=[agent1, agent2, agent3],
     tasks=[task1, task2, task3],
     process=Process.hierarchical,
-    manager_llm=LLM(model="openai/gpt-4-turbo")
+    manager_llm=LLM(model="openai/%%model=openai%%")
 )
 
 # Manager decides order and delegation
@@ -1761,7 +1761,7 @@ class ResearchAndWriteFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def define_topic(self):
@@ -2005,7 +2005,7 @@ class ContentPipelineFlow(Flow):
 
     def __init__(self):
         super().__init__()
-        self.llm = LLM(model="openai/gpt-4-turbo")
+        self.llm = LLM(model="openai/%%model=openai%%")
 
     @start()
     def ideation(self):

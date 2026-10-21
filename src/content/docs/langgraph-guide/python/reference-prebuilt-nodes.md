@@ -30,7 +30,7 @@ def multiply(a: int, b: int) -> int:
 
 
 tools = [multiply]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 tool_node = ToolNode(tools)
 
 
@@ -375,7 +375,7 @@ def subtract(a: int, b: int) -> int:
 
 
 tools = [add, subtract]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 
 
 def agent(state: MessagesState) -> dict:
@@ -453,7 +453,7 @@ def greet_field(name: Annotated[str, InjectedState("user_name")]) -> str:
 
 
 tools = [greet_user, greet_field]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 
 
 def agent(state: AppState) -> dict:
@@ -515,7 +515,7 @@ def recall(key: str, store: Annotated[BaseStore, InjectedStore()]) -> str:
 
 
 tools = [remember, recall]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 memory_store = InMemoryStore()
 
 
@@ -566,7 +566,7 @@ def read_state(runtime: ToolRuntime) -> str:
 
 
 tools = [slow_counter, read_state]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 
 
 def agent(state: MessagesState) -> dict:
@@ -934,7 +934,7 @@ def search(query: str) -> str:
 
 
 tools = [search]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 tool_node = ToolNode(tools)
 
 
@@ -993,7 +993,7 @@ async def async_search(query: str) -> str:
 
 
 tools = [async_search]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 tool_node = ToolNode(tools)
 
 
@@ -1172,7 +1172,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
 from langgraph.graph.message import MessagesState
 
-llm = ChatOpenAI(model="gpt-4o-mini")
+llm = ChatOpenAI(model="%%model=openai-small%%")
 
 
 @tool
@@ -1256,7 +1256,7 @@ class UserCtx:
 
 
 def pick_model(state: MessagesState, runtime: Runtime[UserCtx]):
-    model_id = "gpt-4o" if runtime.context.is_premium else "gpt-4o-mini"
+    model_id = "%%model=openai%%" if runtime.context.is_premium else "%%model=openai-small%%"
     return ChatOpenAI(model=model_id).bind_tools([search])
 
 
@@ -1301,7 +1301,7 @@ def add(a: float, b: float) -> float:
 
 
 graph = create_react_agent(
-    ChatOpenAI(model="gpt-4o-mini"),
+    ChatOpenAI(model="%%model=openai-small%%"),
     [add],
     response_format=Answer,
 )

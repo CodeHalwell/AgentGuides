@@ -55,7 +55,7 @@ from haystack.tools import AgentTool, tool
 
 def make_agent(system_prompt: str, tools=None, **kwargs) -> Agent:
     return Agent(
-        chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+        chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
         system_prompt=system_prompt,
         tools=tools,
         **kwargs,
@@ -337,7 +337,7 @@ from haystack.components.joiners import BranchJoiner
 from haystack.components.routers import LLMMessagesRouter
 
 router = LLMMessagesRouter(
-    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     output_names=["billing", "technical"],
     output_patterns=["billing", "technical"],
     system_prompt="Classify the request as 'billing' or 'technical'. Reply with one word.",

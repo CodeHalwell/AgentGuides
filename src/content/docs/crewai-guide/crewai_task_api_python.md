@@ -26,7 +26,7 @@ writer = Agent(
     role="Writer",
     goal="Draft a marketing brief",
     backstory="Senior copywriter.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
 )
 
 draft = Task(
@@ -222,7 +222,7 @@ crew = Crew(
     agents=[researcher, writer, editor],
     tasks=[write_brief, write_article, polish],
     process=Process.hierarchical,
-    manager_llm=LLM(model="openai/gpt-4o"),   # manager built by CrewAI
+    manager_llm=LLM(model="openai/%%model=openai%%"),   # manager built by CrewAI
     # OR:
     # manager_agent=Agent(role="Manager", goal="...", backstory="...", allow_delegation=True),
 )

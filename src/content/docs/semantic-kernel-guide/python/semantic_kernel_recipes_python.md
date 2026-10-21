@@ -33,7 +33,7 @@ from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 from semantic_kernel.functions import KernelArguments
 
 kernel = Kernel()
-kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-5-mini"))   # reads OPENAI_API_KEY
+kernel.add_service(OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"))   # reads OPENAI_API_KEY
 
 qa = kernel.add_function(
     plugin_name="qa",
@@ -106,7 +106,7 @@ class CustomerDB:
         return {"orders": count, "total": total}
 
 agent = ChatCompletionAgent(
-    service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+    service=OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"),
     name="DataAssistant",
     instructions="Answer questions about customers using the database tools. Never invent data.",
     plugins=[CustomerDB("shop.db")],
@@ -178,7 +178,7 @@ Swap `InMemoryCollection` for `AzureAISearchCollection`, `QdrantCollection`, `Po
 from semantic_kernel.agents import SequentialOrchestration
 from semantic_kernel.agents.runtime import InProcessRuntime
 
-service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")
+service = OpenAIChatCompletion(ai_model_id="%%model=openai-small%%")
 
 researcher = ChatCompletionAgent(name="Researcher", description="Finds facts", service=service,
     instructions="List the key facts about the topic, with sources where possible.")
@@ -256,7 +256,7 @@ async def mcp_demo():
         args=["-y", "@modelcontextprotocol/server-filesystem", "./project"],
     ) as fs:
         agent = ChatCompletionAgent(
-            service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+            service=OpenAIChatCompletion(ai_model_id="%%model=openai-small%%"),
             name="CodeReader",
             instructions="Answer questions about the project files.",
             plugins=[fs],

@@ -139,7 +139,7 @@ dotenv.config();
 export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
-    model: process.env.OPENAI_MODEL || 'gpt-4o',
+    model: process.env.OPENAI_MODEL || '%%model=openai%%',
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -318,7 +318,7 @@ import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages
 // OpenAI ChatModel
 const openaiModel = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4o',
+  model: '%%model=openai%%',
   temperature: 0.7,
   maxTokens: 2000,
   topP: 0.9,
@@ -636,10 +636,10 @@ const multiplyTool = tool(({ a, b }) => String(a * b), {
   schema: z.object({ a: z.number(), b: z.number() }),
 });
 
-const model = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+const model = new ChatOpenAI({ model: '%%model=openai-small%%', temperature: 0 });
 
 const agent = createAgent({
-  model,                     // or a string such as 'openai:gpt-4o-mini'
+  model,                     // or a string such as 'openai:%%model=openai-small%%'
   tools: [addTool, multiplyTool],
   systemPrompt: 'Use the tools for arithmetic.',
 });
@@ -3544,7 +3544,7 @@ const logging = createMiddleware({
   },
 });
 
-const agent = createAgent({ model: 'openai:gpt-4o-mini', tools: [], middleware: [logging] });
+const agent = createAgent({ model: 'openai:%%model=openai-small%%', tools: [], middleware: [logging] });
 ```
 
 `langchain` also ships ready-made middleware, including `summarizationMiddleware`, `modelRetryMiddleware`, `modelFallbackMiddleware`, `modelCallLimitMiddleware`, `piiMiddleware`, `humanInTheLoopMiddleware` and `toolRetryMiddleware`.
@@ -3686,7 +3686,7 @@ const result = await invokeModelWithHooks(
   model,
   [new HumanMessage('What is TypeScript?')],
   {
-    modelName: 'gpt-4o',
+    modelName: '%%model=openai%%',
     temperature: 0.7,
     timestamp: Date.now(),
     metadata: {},

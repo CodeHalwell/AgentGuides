@@ -229,7 +229,7 @@ from agents import Agent, ModelSettings
 agent = Agent(
     name="Assistant",
     instructions="You are a helpful assistant that provides accurate information",
-    model="gpt-5.6-sol",
+    model="%%model=openai%%",
     model_settings=ModelSettings(temperature=0.7),
 )
 ```
@@ -256,7 +256,7 @@ agent = Agent(
     instructions="""You manage and execute tasks. 
     When given a task, use the execute_task tool to run it.
     Provide updates on completion status.""",
-    model="gpt-5.6-sol",
+    model="%%model=openai%%",
     tools=[execute_task],
     output_type=TaskResult,
     model_settings=ModelSettings(temperature=0.5, max_tokens=1000),
@@ -3040,7 +3040,7 @@ import asyncio
 fast_agent = Agent(
     name="Budget Agent",
     instructions="Answer quickly",
-    model="gpt-5.6-luna",
+    model="%%model=openai-small%%",
     model_settings=ModelSettings(max_tokens=200, verbosity="low"),
 )
 
@@ -3048,7 +3048,7 @@ fast_agent = Agent(
 premium_agent = Agent(
     name="Premium Agent",
     instructions="Analyse thoroughly",
-    model="gpt-5.6-sol",
+    model="%%model=openai%%",
     model_settings=ModelSettings(max_tokens=2000),
 )
 
@@ -3084,7 +3084,7 @@ from agents.sandbox.sandboxes.unix_local import UnixLocalSandboxClient
 
 agent = SandboxAgent(
     name="Data Analyst",
-    model="gpt-5.6-sol",
+    model="%%model=openai%%",
     instructions=(
         "Analyse the CSV files in data/. Write summaries and charts to output/ "
         "and mention the exact commands you ran."

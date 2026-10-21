@@ -96,7 +96,7 @@ const envSchema = z.object({
   NODE_ENV:          z.enum(['development', 'production', 'test']).default('development'),
   PORT:              z.coerce.number().default(3000),
   OPENAI_API_KEY:    z.string().min(1),
-  LLM_MODEL:         z.string().default('gpt-5-mini'),
+  LLM_MODEL:         z.string().default('%%model=openai-small%%'),
   REDIS_URL:         z.string().default('redis://localhost:6379'),
   CACHE_TTL_SECS:    z.coerce.number().default(3600),
   LOG_LEVEL:         z.enum(['error', 'warn', 'info', 'debug']).default('info'),

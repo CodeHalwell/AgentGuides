@@ -50,7 +50,7 @@ agent = FunctionAgent(
         query_engine=index.as_query_engine(),
         name="docs", description="Answers questions about the product documentation.",
     )],
-    llm=OpenAI(model="gpt-5-mini"),
+    llm=OpenAI(model="%%model=openai-small%%"),
 )
 
 @app.get("/agent")

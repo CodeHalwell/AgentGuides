@@ -129,7 +129,7 @@ Create a `.env` file in your project root.
 # .env
 AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
 AZURE_OPENAI_API_KEY="your-api-key"
-AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o"
+AZURE_OPENAI_DEPLOYMENT_NAME="%%model=openai%%"
 ```
 
 **2. Loading Configuration (1.14.0+ preferred — `load_settings`):**
@@ -323,7 +323,7 @@ from agent_framework.openai import OpenAIChatClient
 from tiktoken import encoding_for_model
 
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     instructions="You are a senior code reviewer.",
     id="code-reviewer-1",
     name="CodeReviewer",
@@ -331,7 +331,7 @@ agent = Agent(
     tools=[search_codebase, run_tests],
     default_options={"temperature": 0.2, "max_tokens": 2048},
     compaction_strategy=SlidingWindowStrategy(keep_last_groups=20),
-    tokenizer=encoding_for_model("gpt-4o"),
+    tokenizer=encoding_for_model("%%model=openai%%"),
     require_per_service_call_history_persistence=True,
     additional_properties={"team": "platform", "tier": "internal"},
 )
@@ -359,7 +359,7 @@ from agent_framework import Agent, TruncationStrategy
 from agent_framework.openai import OpenAIChatClient
 
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     instructions="You are a helpful assistant.",
     tools=[search_docs],
     default_options={"temperature": 0.7},
@@ -369,7 +369,7 @@ async def main():
     # Override model and temperature for a single classification call
     label = await agent.run(
         "Classify the sentiment: 'The product is amazing!'",
-        options={"model": "gpt-4o-mini", "temperature": 0.0},
+        options={"model": "%%model=openai-small%%", "temperature": 0.0},
         tools=[],                          # no tools needed for classification
         compaction_strategy=TruncationStrategy(max_n=20, compact_to=10),
         function_invocation_kwargs={"tenant_id": "acme", "user_id": "u-42"},
@@ -2784,7 +2784,7 @@ For Azure Functions specifically, `AzureFunctionsAgentExecutor(context)` extends
 ```python
 worker = TaskHubGrpcWorker(host_address="localhost:4001")
 agent_worker = DurableAIAgentWorker(worker)
-agent_worker.add_agent(Agent(client=OpenAIChatCompletionClient(model="gpt-4o"), name="assistant"))
+agent_worker.add_agent(Agent(client=OpenAIChatCompletionClient(model="%%model=openai%%"), name="assistant"))
 agent_worker.start()
 
 grpc_client = TaskHubGrpcClient(host_address="localhost:4001")
@@ -2814,7 +2814,7 @@ Agent(client: SupportsChatGetResponse[OptionsCoT], instructions: str | None = No
 `agent.run(messages=None, *, stream=False, session=None, middleware=None, tools=None, options=None, compaction_strategy=None, tokenizer=None, function_invocation_kwargs=None, client_kwargs=None)` has three practical shapes: plain text, structured output (`options={"response_format": Model}` → read via `response.value`), and streaming (`stream=True` → `ResponseStream`; `await stream.get_final_response()` gives the accumulated `AgentResponse`). `RawAgent` accepts a `middleware=` constructor kwarg but never invokes it — use `Agent` for middleware support.
 
 ```python
-agent = RawAgent(client=OpenAIChatClient(model="gpt-4o-mini"), instructions="You are a fast, terse assistant.")
+agent = RawAgent(client=OpenAIChatClient(model="%%model=openai-small%%"), instructions="You are a fast, terse assistant.")
 response = await agent.run("What is 2 + 2?")
 ```
 
@@ -2832,7 +2832,7 @@ Batteries-included factory that assembles a fully-wired `Agent`: function invoca
 
 ```python
 agent = create_harness_agent(
-    OpenAIChatClient(model="gpt-4o"),
+    OpenAIChatClient(model="%%model=openai%%"),
     agent_instructions="You are a thorough task executor.",
     loop_should_continue=todos_remaining(),
     loop_next_message=todos_remaining_message,
@@ -3675,7 +3675,7 @@ toolset = ToolSet()
 toolset.add(FunctionTool(functions={get_weather}))
 client.enable_auto_function_calls(tools=toolset)
 
-agent = client.create_agent(model="gpt-4o", name="weather-agent",
+agent = client.create_agent(model="%%model=openai%%", name="weather-agent",
                              instructions="Use get_weather to answer weather questions.", toolset=toolset)
 thread = client.threads.create()
 client.messages.create(thread_id=thread.id, role=MessageRole.USER, content="Weather in Edinburgh?")

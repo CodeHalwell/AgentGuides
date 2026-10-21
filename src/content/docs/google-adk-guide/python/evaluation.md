@@ -195,7 +195,7 @@ config = EvalConfig(
         PrebuiltMetrics.RESPONSE_EVALUATION_SCORE.value: LlmAsAJudgeCriterion(
             threshold=0.8,
             judge_model_options=JudgeModelOptions(
-                judge_model="gemini-2.5-pro",
+                judge_model="%%model=gemini-flagship%%",
                 num_samples=3,
             ),
         ),
@@ -303,7 +303,7 @@ from google.adk.tools import google_search
 
 root_agent = LlmAgent(
     name="research_bot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions using web search.",
     tools=[google_search],
 )
@@ -866,14 +866,14 @@ os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
 travel_agent = LlmAgent(
     name="travel_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Books flights and checks weather.",
     tools=[],  # your actual tools here
 )
 
 gen_config = ConversationGenerationConfig(
     count=3,                          # number of scenarios to generate
-    model_name="gemini-2.5-flash",
+    model_name="%%model=gemini%%",
     environment_context=(
         "Available flights: LHR→NRT on 2026-08-10 at 09:00 (ANA, £620), 14:00 (BA, £580)."
     ),

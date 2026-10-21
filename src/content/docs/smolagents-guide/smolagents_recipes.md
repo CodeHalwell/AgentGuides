@@ -12,7 +12,7 @@ All recipes assume:
 ```python
 from smolagents import CodeAgent, InferenceClientModel, ToolCallingAgent, tool
 
-model = InferenceClientModel()   # or LiteLLMModel(model_id="gpt-5-mini"), OpenAIModel(...), ...
+model = InferenceClientModel()   # or LiteLLMModel(model_id="%%model=openai-small%%"), OpenAIModel(...), ...
 ```
 
 Two rules catch most first-time errors: `@tool` functions need type hints **and** an `Args:` docstring entry for every parameter; and `Tool` subclasses must mark optional inputs with `"nullable": True`.

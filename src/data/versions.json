@@ -1,5 +1,5 @@
 {
-  "$comment": "The only place a current package version is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs).",
+  "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
   "checked": "2026-10-21",
   "packages": {
     "agent-framework": {
@@ -224,5 +224,20 @@
       "version": "0.31.1",
       "guide": "amazon-bedrock-agents-guide"
     }
+  },
+  "models": {
+    "$comment": "Current model IDs by role, written in docs as %%model=<role>%%. Checked against each provider's model page on 2026-10-21. 'small' is the cost-sensitive tier, 'flagship' the most capable.",
+    "openai": "gpt-6.1-sol",
+    "openai-flagship": "gpt-6-astra",
+    "openai-small": "gpt-6-luna",
+    "anthropic": "claude-sonnet-5-5",
+    "anthropic-flagship": "claude-opus-5-5",
+    "anthropic-small": "claude-haiku-5-5",
+    "gemini": "gemini-3.8-flash",
+    "gemini-flagship": "gemini-4-argon",
+    "gemini-small": "gemini-3.5-flash-lite",
+    "mistral": "mistral-medium-latest",
+    "mistral-flagship": "mistral-large-latest",
+    "mistral-small": "mistral-small-latest"
   }
 }

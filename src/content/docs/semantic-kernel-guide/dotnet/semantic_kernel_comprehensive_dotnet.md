@@ -85,7 +85,7 @@ using Microsoft.SemanticKernel;
 
 var builder = Kernel.CreateBuilder();
 builder.AddOpenAIChatCompletion(
-    modelId: "gpt-5-mini",
+    modelId: "%%model=openai-small%%",
     apiKey: Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
 builder.Plugins.AddFromType<WeatherPlugin>("weather");
 
@@ -105,19 +105,19 @@ The `Kernel` holds an `IServiceProvider` (AI services, loggers, your own service
 
 ```csharp
 // OpenAI
-builder.AddOpenAIChatCompletion("gpt-5-mini", apiKey, serviceId: "openai");
+builder.AddOpenAIChatCompletion("%%model=openai-small%%", apiKey, serviceId: "openai");
 builder.AddOpenAIEmbeddingGenerator("text-embedding-3-small", apiKey);
 
 // Azure OpenAI with an API key
 builder.AddAzureOpenAIChatCompletion(
-    deploymentName: "gpt-5-mini",
+    deploymentName: "%%model=openai-small%%",
     endpoint: "https://my-resource.openai.azure.com/",
     apiKey: azureKey,
     serviceId: "azure");
 
 // Azure OpenAI with Entra ID (managed identity in production)
 builder.AddAzureOpenAIChatCompletion(
-    deploymentName: "gpt-5-mini",
+    deploymentName: "%%model=openai-small%%",
     endpoint: "https://my-resource.openai.azure.com/",
     credentials: new Azure.Identity.DefaultAzureCredential());
 ```
@@ -505,7 +505,7 @@ builder.Services.AddSingleton<IAutoFunctionInvocationFilter, ApprovalFilter>();
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOpenAIChatCompletion("gpt-5-mini", builder.Configuration["OpenAI:ApiKey"]!);
+builder.Services.AddOpenAIChatCompletion("%%model=openai-small%%", builder.Configuration["OpenAI:ApiKey"]!);
 builder.Services.AddSingleton<WeatherPlugin>();
 builder.Services.AddTransient(sp =>
 {

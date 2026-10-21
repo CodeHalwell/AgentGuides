@@ -19,7 +19,7 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-agent = LlmAgent(name="chat", model="gemini-2.5-flash", instruction="Be concise.")
+agent = LlmAgent(name="chat", model="%%model=gemini%%", instruction="Be concise.")
 
 async def main():
     runner = InMemoryRunner(agent=agent, app_name="demo")
@@ -672,7 +672,7 @@ from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.adk.sessions.base_session_service import GetSessionConfig
 from google.genai import types
 
-agent = LlmAgent(name="chat", model="gemini-2.5-flash", instruction="Be helpful.")
+agent = LlmAgent(name="chat", model="%%model=gemini%%", instruction="Be helpful.")
 app = App(name="chatbot", root_agent=agent)
 
 async def main():
@@ -992,7 +992,7 @@ def safety_gate(callback_context: CallbackContext) -> types.Content | None:
         return types.Content(role="model", parts=[types.Part(text="I cannot help with that request.")])
     return None
 
-agent = LlmAgent(name="guarded", model="gemini-2.5-flash", instruction="Answer the user.",
+agent = LlmAgent(name="guarded", model="%%model=gemini%%", instruction="Answer the user.",
                  before_agent_callback=safety_gate)
 ```
 

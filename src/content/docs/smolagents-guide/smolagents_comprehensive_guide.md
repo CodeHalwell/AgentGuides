@@ -212,9 +212,9 @@ endpoint_model = InferenceClientModel(base_url="https://my-endpoint.endpoints.hu
 import os
 from smolagents import LiteLLMModel
 
-openai_model = LiteLLMModel(model_id="gpt-5-mini")
-anthropic_model = LiteLLMModel(model_id="anthropic/claude-sonnet-4-5", temperature=0.2)
-gemini_model = LiteLLMModel(model_id="gemini/gemini-2.5-flash")
+openai_model = LiteLLMModel(model_id="%%model=openai-small%%")
+anthropic_model = LiteLLMModel(model_id="anthropic/%%model=anthropic%%", temperature=0.2)
+gemini_model = LiteLLMModel(model_id="gemini/%%model=gemini%%")
 ollama_model = LiteLLMModel(model_id="ollama_chat/qwen2.5-coder:14b", api_base="http://localhost:11434", num_ctx=8192)
 azure_model = LiteLLMModel(
     model_id="azure/my-deployment",
@@ -233,7 +233,7 @@ Model names change faster than this guide; use whatever your provider currently 
 ```python
 from smolagents import OpenAIModel, AzureOpenAIModel, AmazonBedrockModel
 
-model = OpenAIModel(model_id="gpt-5-mini")
+model = OpenAIModel(model_id="%%model=openai-small%%")
 local = OpenAIModel(model_id="Qwen/Qwen2.5-Coder-14B-Instruct", api_base="http://localhost:8000/v1", api_key="not-needed")
 ```
 
@@ -724,7 +724,7 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> flo
 
 agent = ToolCallingAgent(
     tools=[WebSearchTool(), convert_currency],
-    model=LiteLLMModel(model_id="gpt-5-mini"),
+    model=LiteLLMModel(model_id="%%model=openai-small%%"),
     max_tool_threads=4,        # parallel tool calls within a step
     max_steps=8,
 )
@@ -909,7 +909,7 @@ Pass PIL images to vision-capable models with `images=`:
 from PIL import Image
 from smolagents import CodeAgent, LiteLLMModel
 
-vision_agent = CodeAgent(tools=[], model=LiteLLMModel(model_id="gpt-5-mini"))
+vision_agent = CodeAgent(tools=[], model=LiteLLMModel(model_id="%%model=openai-small%%"))
 vision_agent.run("What does this chart show?", images=[Image.open("chart.png")])
 ```
 

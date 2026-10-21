@@ -68,7 +68,7 @@ class SupportResponse(BaseModel):
 
 # Create agent
 support_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=SupportDependencies,
     output_type=SupportResponse,
     name='CustomerSupportAgent'
@@ -225,7 +225,7 @@ class SharedContext:
 
 # Research Agent
 research_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     name='ResearchAgent',
     instructions='You are a research specialist. Gather comprehensive information on topics.'
 )
@@ -262,7 +262,7 @@ class Article(BaseModel):
     conclusion: str
 
 writer_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=Article,
     name='WriterAgent',
     instructions='You are a technical writer. Structure information into clear, engaging articles.'
@@ -296,7 +296,7 @@ class EditedArticle(BaseModel):
     improvements: str
 
 editor_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=EditedArticle,
     name='EditorAgent',
     instructions='You are a professional editor. Review content for clarity, grammar, and impact.'
@@ -376,7 +376,7 @@ class RAGResponse(BaseModel):
     confidence: float
 
 rag_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=RAGDependencies,
     output_type=RAGResponse,
     name='RAGAgent'
@@ -468,7 +468,7 @@ from pydantic_ai import Agent
 import asyncio
 
 app = FastAPI()
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @app.post('/api/chat/stream')
 async def chat_stream(message: str):
@@ -498,7 +498,7 @@ async def structured_stream(message: str):
         metadata: dict
     
     structured_agent = Agent(
-        'openai:gpt-4o',
+        'openai:%%model=openai%%',
         output_type=Response
     )
     
@@ -564,7 +564,7 @@ class MemoryDependencies:
     session_id: str
 
 memory_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=MemoryDependencies,
     name='MemoryAgent'
 )
@@ -709,7 +709,7 @@ class ResilientAgent:
 
 # Usage
 resilient = ResilientAgent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     max_retries=3,
     strategy=ErrorRecoveryStrategy.EXPONENTIAL_BACKOFF
 )
@@ -742,7 +742,7 @@ class ResearchSummary(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 research_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=ResearchSummary,
     tools=[
         duckduckgo_search_tool(max_results=3),
@@ -792,7 +792,7 @@ class ItemAnalysis(BaseModel):
 
 # Shared limiter: max 5 parallel model calls, queue up to 15 more
 shared_limiter = ConcurrencyLimiter(max_running=5, max_queued=15, name='batch-pool')
-model = limit_model_concurrency('openai:gpt-4o', limiter=shared_limiter)
+model = limit_model_concurrency('openai:%%model=openai%%', limiter=shared_limiter)
 agent = Agent(model, output_type=ItemAnalysis)
 
 async def analyse_item(item_id: str, text: str) -> ItemAnalysis | None:
@@ -840,7 +840,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_graph import End
 from pydantic_ai.run import AgentRun
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool_plain
 def get_temperature(city: str) -> float:
@@ -926,7 +926,7 @@ class Recommendation(BaseModel):
     total_cost: float
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ShoppingContext,
     output_type=Recommendation,
 )
@@ -1083,7 +1083,7 @@ class ResearchSummary(BaseModel):
 
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',   # native web search + web fetch
+    'anthropic:%%model=anthropic%%',   # native web search + web fetch
     output_type=ResearchSummary,
     system_prompt=(
         'You are a research assistant. Use web_search to discover relevant pages, '

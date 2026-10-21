@@ -25,7 +25,7 @@ from google.genai import types
 # Thinking with a token budget
 agent = LlmAgent(
     name="analyst",
-    model="gemini-2.5-pro",           # thinking is a Gemini 2.5 feature
+    model="%%model=gemini-flagship%%",           # thinking is a Gemini 2.5 feature
     instruction="Analyse the dataset step-by-step and produce a concise summary.",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(
@@ -68,7 +68,7 @@ from google.adk.agents import LlmAgent
 
 agent = LlmAgent(
     name="planner_bot",
-    model="gemini-2.5-flash",          # works with any model — no native thinking needed
+    model="%%model=gemini%%",          # works with any model — no native thinking needed
     instruction="You are a research assistant.",
     tools=[my_search_tool, my_db_tool],
     planner=PlanReActPlanner(),
@@ -132,7 +132,7 @@ class BudgetPlanner(BasePlanner):
 
 agent = LlmAgent(
     name="budget_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     planner=BudgetPlanner(max_steps=3),
     tools=[...],
 )
@@ -194,7 +194,7 @@ class DatabaseLookupTool(BaseTool):
 db_tool = DatabaseLookupTool(db_pool=my_pool)
 agent = LlmAgent(
     name="catalog",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use lookup_product to answer product questions.",
     tools=[db_tool],
 )
@@ -298,7 +298,7 @@ class TenantToolset(BaseToolset):
 # Usage — toolset is resolved fresh on every invocation
 agent = LlmAgent(
     name="tenant_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[TenantToolset(permission_service=svc)],
 )
 ```
@@ -436,7 +436,7 @@ class CodeQuery(BaseModel):
 
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Research the query and cite sources.",
     input_schema=ResearchQuery,
     tools=[google_search],
@@ -444,14 +444,14 @@ researcher = LlmAgent(
 
 coder = LlmAgent(
     name="coder",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Answer the coding question with a minimal Python example.",
     input_schema=CodeQuery,
 )
 
 coordinator = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "For factual questions use `researcher`. "
         "For coding questions use `coder`. "
@@ -469,14 +469,14 @@ coordinator = LlmAgent(
 ```python
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write a 3-sentence press release about {topic}.",
     output_key="draft",           # writes the reply to session.state["draft"]
 )
 
 editor = LlmAgent(
     name="editor",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Polish the following draft:\n\n{draft}\n\nReturn only the final text.",
     include_contents="none",      # ignore history; read only from state
 )
@@ -522,7 +522,7 @@ approval_tool = LongRunningFunctionTool(func=request_approval)
 
 agent = LlmAgent(
     name="expense_bot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user submit expense reports.",
     tools=[approval_tool],
 )
@@ -577,7 +577,7 @@ SESSION_DB = os.environ["SESSION_DB_URL"]
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a helpful assistant.",
 )
 
@@ -776,7 +776,7 @@ os.environ["OPENAI_API_KEY"] = "sk-..."
 
 agent = LlmAgent(
     name="gpt_agent",
-    model=LiteLlm(model="openai/gpt-4o"),
+    model=LiteLlm(model="openai/%%model=openai%%"),
     instruction="You are a helpful assistant.",
 )
 
@@ -785,7 +785,7 @@ os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
 
 agent = LlmAgent(
     name="claude_litellm",
-    model=LiteLlm(model="anthropic/claude-opus-4-5"),
+    model=LiteLlm(model="anthropic/%%model=anthropic-flagship%%"),
     instruction="You are a thoughtful assistant.",
 )
 
@@ -796,7 +796,7 @@ os.environ["AZURE_API_VERSION"] = "2024-02-01"
 
 agent = LlmAgent(
     name="azure_agent",
-    model=LiteLlm(model="azure/gpt-4o"),
+    model=LiteLlm(model="azure/%%model=openai%%"),
     instruction="Answer questions concisely.",
 )
 
@@ -823,7 +823,7 @@ os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
 
 agent = LlmAgent(
     name="claude_direct",
-    model=Claude(model="claude-opus-4-5"),   # or "claude-sonnet-4-6" / "claude-haiku-4-5-20251001"
+    model=Claude(model="%%model=anthropic-flagship%%"),   # or "%%model=anthropic%%" / "%%model=anthropic-small%%"
     instruction="You are a helpful assistant.",
 )
 ```
@@ -831,7 +831,7 @@ agent = LlmAgent(
 The `"claude-"` prefix is registered in `LLMRegistry`, so a bare string also works:
 
 ```python
-agent = LlmAgent(name="a", model="claude-opus-4-5")
+agent = LlmAgent(name="a", model="%%model=anthropic-flagship%%")
 ```
 
 ### Mixing models in a multi-agent system
@@ -845,27 +845,27 @@ from google.adk.models.anthropic_llm import Claude
 
 triage = LlmAgent(
     name="triage",
-    model="gemini-2.5-flash",                 # fast and cheap
+    model="%%model=gemini%%",                 # fast and cheap
     instruction="Classify the request as 'technical' or 'billing'.",
 )
 
 technical = LlmAgent(
     name="technical",
-    model=Claude(model="claude-opus-4-5"),    # deep reasoning
+    model=Claude(model="%%model=anthropic-flagship%%"),    # deep reasoning
     description="Handles complex technical questions.",
     instruction="Provide a detailed technical answer with code examples.",
 )
 
 billing = LlmAgent(
     name="billing",
-    model=LiteLlm(model="openai/gpt-4o-mini"),   # cost-optimised
+    model=LiteLlm(model="openai/%%model=openai-small%%"),   # cost-optimised
     description="Handles billing enquiries.",
     instruction="Look up the user's account and answer billing questions.",
 )
 
 root = LlmAgent(
     name="router",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Route requests to the right specialist.",
     sub_agents=[technical, billing],
 )

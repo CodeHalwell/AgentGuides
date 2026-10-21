@@ -95,8 +95,8 @@ class AgentState(TypedDict):
 
 try:
     from langchain_openai import ChatOpenAI
-    research_llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(research_tools)
-    math_llm     = ChatOpenAI(model="gpt-4o-mini").bind_tools(math_tools)
+    research_llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(research_tools)
+    math_llm     = ChatOpenAI(model="%%model=openai-small%%").bind_tools(math_tools)
     _have_llm = True
 except Exception:
     _have_llm = False  # running without API key — demo only

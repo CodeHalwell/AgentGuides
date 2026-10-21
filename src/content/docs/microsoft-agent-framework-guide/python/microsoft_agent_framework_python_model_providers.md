@@ -48,8 +48,8 @@ Responses API vs Chat Completions API: `OpenAIChatClient` uses the **Responses A
 ```python
 from agent_framework.openai import OpenAIChatClient, OpenAIChatCompletionClient
 
-responses_client = OpenAIChatClient(model="gpt-5")            # /responses
-completions_client = OpenAIChatCompletionClient(model="gpt-5")  # /chat/completions
+responses_client = OpenAIChatClient(model="%%model=openai%%")            # /responses
+completions_client = OpenAIChatCompletionClient(model="%%model=openai%%")  # /chat/completions
 ```
 
 Azure OpenAI with Entra ID (passwordless):
@@ -111,7 +111,7 @@ async with AzureCliCredential() as credential:
     agent = Agent(
         client=FoundryChatClient(
             project_endpoint="https://<project>.services.ai.azure.com",
-            model="gpt-4o-mini",
+            model="%%model=openai-small%%",
             credential=credential,
         ),
         instructions="You are a helpful assistant.",
@@ -127,7 +127,7 @@ If you already hold an `AIProjectClient`, pass it directly and skip endpoint/cre
 from azure.ai.projects import AIProjectClient
 
 project = AIProjectClient(endpoint=..., credential=...)
-client = FoundryChatClient(project_client=project, model="gpt-4o-mini")
+client = FoundryChatClient(project_client=project, model="%%model=openai-small%%")
 ```
 
 **Service-managed agents.** Use `FoundryAgent` when you want the agent's identity, threads, and tool definitions to live in Foundry (not in your process):
@@ -171,7 +171,7 @@ from agent_framework.anthropic import (
 )
 
 agent = Agent(
-    client=AnthropicClient(model="claude-sonnet-4-5"),
+    client=AnthropicClient(model="%%model=anthropic%%"),
     instructions="You are a helpful assistant.",
 )
 ```
@@ -182,7 +182,7 @@ Use the Claude Agent SDK instead of a chat client when you want Claude to drive 
 from agent_framework.anthropic import ClaudeAgent, ClaudeAgentOptions
 
 claude = ClaudeAgent(
-    options=ClaudeAgentOptions(model="claude-sonnet-4-5", permission_mode="default"),
+    options=ClaudeAgentOptions(model="%%model=anthropic%%", permission_mode="default"),
 )
 response = await claude.run("Refactor utils.py to use dataclasses.")
 ```
@@ -249,7 +249,7 @@ from agent_framework.github import GitHubCopilotAgent  # agent_framework_github_
 
 agent = GitHubCopilotAgent(
     "Pair-programmer mode.",
-    default_options={"model": "gpt-4o"},
+    default_options={"model": "%%model=openai%%"},
 )
 response = await agent.run("Explain this stack trace.")
 ```
@@ -284,10 +284,10 @@ from agent_framework.ollama import OllamaChatClient
 def build_client():
     provider = os.environ.get("LLM_PROVIDER", "openai")
     if provider == "anthropic":
-        return AnthropicClient(model="claude-sonnet-4-5")
+        return AnthropicClient(model="%%model=anthropic%%")
     if provider == "ollama":
         return OllamaChatClient(model="llama3.1")
-    return OpenAIChatClient(model="gpt-5")
+    return OpenAIChatClient(model="%%model=openai%%")
 
 agent = Agent(client=build_client(), instructions="Helpful assistant.")
 ```
@@ -387,7 +387,7 @@ Every provider-specific options TypedDict (`OpenAIChatOptions`, `AnthropicChatOp
 from agent_framework import ChatOptions
 
 common: ChatOptions = {
-    "model": "gpt-5-mini",
+    "model": "%%model=openai-small%%",
     "temperature": 0.2,
     "top_p": 0.9,
     "max_tokens": 2_000,
@@ -657,7 +657,7 @@ from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-5-mini"),
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
     default_options={"temperature": 0.7},
 )
 
@@ -672,14 +672,14 @@ Every client accepts `model=` at construction and remembers it. But you can also
 ```python
 from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
 
-default_client = OpenAIChatClient(model="gpt-5-mini")
+default_client = OpenAIChatClient(model="%%model=openai-small%%")
 
 agent = Agent(client=default_client, instructions="…")
 
 # Upgrade to a bigger model just for this one tricky question.
 response = await agent.run(
     "Prove Fermat's last theorem in two sentences.",
-    options=OpenAIChatOptions(model="gpt-5", temperature=0.2),
+    options=OpenAIChatOptions(model="%%model=openai%%", temperature=0.2),
 )
 ```
 

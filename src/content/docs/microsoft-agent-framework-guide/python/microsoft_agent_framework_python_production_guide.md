@@ -344,7 +344,7 @@ project = AIProjectClient(
     credential=DefaultAzureCredential(),
 )
 
-client = FoundryChatClient(project_client=project, model="gpt-4o-mini")
+client = FoundryChatClient(project_client=project, model="%%model=openai-small%%")
 agent = Agent(client=client, instructions="...")
 ```
 

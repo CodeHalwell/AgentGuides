@@ -15,12 +15,12 @@ Native tools execute inside the LLM provider's infrastructure, not in your Pytho
 
 ```python
 # V1 (removed in 2.0 — raises TypeError today)
-# agent = Agent('anthropic:claude-sonnet-4-6', builtin_tools=[WebSearchTool(max_uses=3)])
+# agent = Agent('anthropic:%%model=anthropic%%', builtin_tools=[WebSearchTool(max_uses=3)])
 
 # V2
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[WebSearch(max_uses=3)])
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[WebSearch(max_uses=3)])
 ```
 
 Since 2.0 the `WebSearch` and `WebFetch` capabilities are **native-only by default**: on a model without native support they raise `UserError` rather than quietly falling back. Opt into a local fallback explicitly with `WebSearch(local='duckduckgo')` (needs the `duckduckgo` extra) or `WebFetch(local=True)` (needs the `web-fetch` extra). Settings that only a native tool can honour (`max_uses`, `allowed_domains`, …) still raise when the local fallback is used, because dropping them silently would loosen the restriction.
@@ -32,7 +32,7 @@ from pydantic_ai import Agent, WebSearchTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[NativeTool(WebSearchTool(max_uses=3))],
 )
 ```
@@ -44,7 +44,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[WebSearch(max_uses=3)],
 )
 result = agent.run_sync('What happened in AI news this week? Cite sources.')
@@ -79,7 +79,7 @@ from pydantic_ai.capabilities import WebSearch
 from pydantic_ai.native_tools import WebSearchUserLocation
 
 agent = Agent(
-    'openai-responses:gpt-5.2',   # OpenAI Responses API
+    'openai-responses:%%model=openai%%',   # OpenAI Responses API
     capabilities=[WebSearch(
         search_context_size='high',
         max_uses=5,
@@ -97,7 +97,7 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.native_tools import WebSearchUserLocation
 
 agent = Agent(
-    'openai-responses:gpt-5.2',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(WebSearchTool(
         search_context_size='high',
         max_uses=5,
@@ -127,7 +127,7 @@ from pydantic_ai import Agent, WebFetchTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[NativeTool(WebFetchTool(max_uses=3, enable_citations=True))],
 )
 ```
@@ -148,7 +148,7 @@ from pydantic_ai import Agent, CodeExecutionTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[NativeTool(CodeExecutionTool())],
 )
 result = agent.run_sync('Compute the 50th Fibonacci number.')
@@ -163,7 +163,7 @@ from pydantic_ai import Agent, ImageGenerationTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'openai-responses:gpt-5.2',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(ImageGenerationTool(
         size='1024x1024',
         quality='high',
@@ -196,7 +196,7 @@ from pydantic_ai import Agent, FileSearchTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'openai-responses:gpt-5.2',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_abc123', 'vs_xyz789']))],
 )
 ```
@@ -218,7 +218,7 @@ from pydantic_ai import Agent, MemoryTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[NativeTool(MemoryTool())],
 )
 ```
@@ -232,7 +232,7 @@ from pydantic_ai import Agent, MCPServerTool
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'openai-responses:gpt-5.2',
+    'openai-responses:%%model=openai%%',
     capabilities=[NativeTool(MCPServerTool(
         id='docs-mcp',
         url='https://mcp.example.com/docs',
@@ -283,7 +283,7 @@ from pydantic_ai import AdvisorTool, Agent
 from pydantic_ai.capabilities import NativeTool
 
 agent = Agent(
-    'anthropic:claude-haiku-4-5',                      # executor: fast, cheap
+    'anthropic:%%model=anthropic-small%%',                      # executor: fast, cheap
     capabilities=[NativeTool(AdvisorTool(
         model='claude-opus-5',                         # advisor: slower, stronger
         max_uses=3,                                    # Anthropic only
@@ -326,9 +326,9 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import ImageGeneration
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',                     # no native image generation…
+    'anthropic:%%model=anthropic%%',                     # no native image generation…
     capabilities=[ImageGeneration(
-        fallback_subagent_model='openai-responses:gpt-5.2',   # …so a sub-agent draws it
+        fallback_subagent_model='openai-responses:%%model=openai%%',   # …so a sub-agent draws it
         quality='high',
         aspect_ratio='16:9',
     )],
@@ -361,7 +361,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import WebSearch
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     capabilities=[WebSearch(max_uses=2)],
 )
 
@@ -389,7 +389,7 @@ The model sees both flavours. Native tool calls don't consume your function-tool
 from pydantic_ai import Agent, WebFetchTool
 from pydantic_ai.capabilities import WebSearch, NativeTool
 
-agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[
     WebSearch(max_uses=5),
     NativeTool(WebFetchTool(max_uses=10, enable_citations=True)),
 ])
@@ -414,7 +414,7 @@ class CalcResult(BaseModel):
     answer: float
     reasoning: str
 
-agent = Agent('openai-responses:gpt-5.2',
+agent = Agent('openai-responses:%%model=openai%%',
               output_type=CalcResult,
               capabilities=[NativeTool(CodeExecutionTool())])
 ```
@@ -425,7 +425,7 @@ agent = Agent('openai-responses:gpt-5.2',
 from pydantic_ai import Agent, FileSearchTool
 from pydantic_ai.capabilities import NativeTool
 
-agent = Agent('openai-responses:gpt-5.2',
+agent = Agent('openai-responses:%%model=openai%%',
               capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_prod']))])
 
 @agent.tool
@@ -482,7 +482,7 @@ from pydantic_ai import Agent
 from pydantic_ai.common_tools.web_fetch import web_fetch_tool
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     tools=[web_fetch_tool()],
 )
 result = agent.run_sync('Summarise the content of https://docs.pydantic.dev/latest/')
@@ -531,7 +531,7 @@ safe_fetcher = web_fetch_tool(
     timeout=15,
 )
 
-agent = Agent('openai:gpt-4o', tools=[safe_fetcher])
+agent = Agent('openai:%%model=openai%%', tools=[safe_fetcher])
 # Model can only fetch from the listed domains; any other URL raises ModelRetry
 ```
 
@@ -555,7 +555,7 @@ from pydantic_ai.common_tools.web_fetch import web_fetch_tool, WebFetchResult
 from pydantic_ai.messages import BinaryContent
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',   # Supports PDF reading
+    'anthropic:%%model=anthropic%%',   # Supports PDF reading
     tools=[web_fetch_tool(max_content_length=None)],  # no truncation for PDFs
 )
 
@@ -586,7 +586,7 @@ research_fetcher = web_fetch_tool(
 )
 
 research_agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     tools=[research_fetcher],
     system_prompt=(
         'You are a research assistant. When you fetch a URL, extract the most relevant '
@@ -627,7 +627,7 @@ from pydantic_ai import Agent
 from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     tools=[duckduckgo_search_tool(max_results=5)],
 )
 result = agent.run_sync('What are the latest Python 3.13 features?')
@@ -672,7 +672,7 @@ from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 ddgs_client = DDGS()
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     tools=[duckduckgo_search_tool(duckduckgo_client=ddgs_client, max_results=8)],
 )
 ```
@@ -687,7 +687,7 @@ from pydantic_ai.common_tools.duckduckgo import duckduckgo_search_tool
 from pydantic_ai.common_tools.web_fetch import web_fetch_tool
 
 agent = Agent(
-    'anthropic:claude-sonnet-4-6',
+    'anthropic:%%model=anthropic%%',
     tools=[
         duckduckgo_search_tool(max_results=5),
         web_fetch_tool(max_content_length=20_000, timeout=20),

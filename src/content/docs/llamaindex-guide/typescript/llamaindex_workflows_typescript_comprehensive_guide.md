@@ -533,7 +533,7 @@ workflow.handle([queryEv], async (ctx, ev) => {
 // ---
 // Handler 2 — LLM generation
 // ---
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 workflow.handle([retrievedEv], async (ctx, ev) => {
   const context = ev.data.docs
@@ -598,7 +598,7 @@ import { OpenAI } from '@llamaindex/openai';
 import { tool } from '@llamaindex/core/tools';
 import { z } from 'zod';
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 // ---
 // Define tools
@@ -672,7 +672,7 @@ When you only need one agent, use the `agent()` helper:
 import { agent } from '@llamaindex/workflow';
 import { OpenAI } from '@llamaindex/openai';
 
-const llm = new OpenAI({ model: 'gpt-5-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const summaryWorkflow = agent({
   name: 'Summariser',

@@ -187,14 +187,14 @@ import { google } from '@ai-sdk/google';
 // Use Claude via the Vercel AI SDK adapter
 const claudeAgent = new Agent({
   name: 'Claude Assistant',
-  model: aisdk(anthropic('claude-sonnet-4-5')),
+  model: aisdk(anthropic('%%model=anthropic%%')),
   instructions: 'Answer concisely',
 });
 
 // Use Gemini
 const geminiAgent = new Agent({
   name: 'Gemini Assistant',
-  model: aisdk(google('gemini-2.5-flash')),
+  model: aisdk(google('%%model=gemini%%')),
   instructions: 'Answer concisely',
 });
 

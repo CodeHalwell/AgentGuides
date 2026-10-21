@@ -27,7 +27,7 @@ async def log_finish(ctx, *, result):
     print(f'Run finished — output: {result.output!r}')
     return result
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 async def main():
     result = await agent.run('What is 2 + 2?')
@@ -80,7 +80,7 @@ async def on_error(ctx: RunContext, *, error: BaseException) -> AgentRunResult:
     print(f'[run_error] {type(error).__name__}: {error}')
     raise error   # re-raise or return a fallback result
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 ## Model request hooks — observability
@@ -226,7 +226,7 @@ async def record_metric(ctx, *, result):
     metrics.increment('agent.run.completed')
     return result
 
-agent = Agent('openai:gpt-4o', capabilities=[audit_hooks, metrics_hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[audit_hooks, metrics_hooks])
 ```
 
 ## Per-run hooks
@@ -262,7 +262,7 @@ async def forward_events(ctx, event: AgentStreamEvent) -> AgentStreamEvent:
     await ws.send_json({'type': event.__class__.__name__})
     return event
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 ## Complete observability pattern
@@ -319,7 +319,7 @@ def make_observability_hooks() -> tuple[Hooks, RunMetrics]:
     return hooks, m
 
 obs_hooks, metrics = make_observability_hooks()
-agent = Agent('openai:gpt-4o', capabilities=[obs_hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[obs_hooks])
 ```
 
 ## `deferred_tool_calls` — intercept deferred tool batches
@@ -349,7 +349,7 @@ async def log_and_auto_resolve(ctx, *, requests: DeferredToolRequests):
     })
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[str, DeferredToolRequests],
     capabilities=[hooks],
 )
@@ -390,7 +390,7 @@ async def handle_error(ctx: RunContext, *, error: BaseException) -> AgentRunResu
     log.error('Unexpected run failure', exc_info=error)
     raise error  # always re-raise unknown errors
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 ## Bundling tools and instructions — `Capability`
@@ -488,7 +488,7 @@ async def populate_cache(ctx, *, request_context, response):
     _cache[_cache_key(request_context.messages)] = response
     return response
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 async def main():
     r1 = await agent.run('What is 2 + 2?')   # API call
@@ -516,7 +516,7 @@ async def normalise_query(ctx, *, call, tool_def, args):
         raise SkipToolValidation({**args, 'query': args['query'].lower()})
     return args
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 @agent.tool_plain
 def search(query: str) -> list[str]:
@@ -540,7 +540,7 @@ async def dry_run_guard(ctx, *, call, tool_def, args):
         raise SkipToolExecution(f'[DRY RUN] {tool_def.name}({args})')
     return args
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 @agent.tool_plain
 def delete_record(record_id: str) -> bool:

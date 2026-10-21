@@ -796,11 +796,11 @@ credential = DefaultAzureCredential()
 INSTRUCTIONS = "You are a support assistant."
 
 primary = Agent(
-    client=OpenAIChatClient(model="gpt-4o-mini", azure_endpoint="https://contoso-uksouth.openai.azure.com", credential=credential),
+    client=OpenAIChatClient(model="%%model=openai-small%%", azure_endpoint="https://contoso-uksouth.openai.azure.com", credential=credential),
     name="support", instructions=INSTRUCTIONS,
 )
 secondary = Agent(
-    client=OpenAIChatClient(model="gpt-4o-mini", azure_endpoint="https://contoso-swedencentral.openai.azure.com", credential=credential),
+    client=OpenAIChatClient(model="%%model=openai-small%%", azure_endpoint="https://contoso-swedencentral.openai.azure.com", credential=credential),
     name="support", instructions=INSTRUCTIONS,
 )
 
@@ -885,14 +885,14 @@ from azure.identity.aio import ManagedIdentityCredential
 credential = ManagedIdentityCredential()
 
 classifier = Agent(
-    client=FoundryChatClient(model="gpt-4o-mini", credential=credential),
+    client=FoundryChatClient(model="%%model=openai-small%%", credential=credential),
     name="classifier",
     instructions="Classify the request as billing, technical or general. Reply with one word.",
     default_options={"max_tokens": 5, "temperature": 0},
 )
 
 specialist = Agent(
-    client=FoundryChatClient(model="gpt-4o", credential=credential),
+    client=FoundryChatClient(model="%%model=openai%%", credential=credential),
     name="specialist",
     instructions="You resolve complex technical support cases.",
 )
@@ -930,7 +930,7 @@ http_client = httpx.AsyncClient(
 )
 
 shared_client = OpenAIChatClient(
-    model="gpt-4o-mini",
+    model="%%model=openai-small%%",
     async_client=AsyncOpenAI(http_client=http_client, max_retries=3),
 )
 # Every Agent(client=shared_client, ...) reuses the same pool.

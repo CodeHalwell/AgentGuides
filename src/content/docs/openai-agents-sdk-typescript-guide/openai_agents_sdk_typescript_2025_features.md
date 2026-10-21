@@ -488,7 +488,7 @@ const topicGuardrail: InputGuardrail = {
   execute: async ({ input, context }) => {
     const checker = new Agent({
       name: 'Topic checker',
-      model: 'gpt-5.6-luna',
+      model: '%%model=openai-small%%',
       instructions: 'Answer "yes" if the request is about our product, otherwise "no".',
     });
     const verdict = await run(checker, toText(input), { context });
@@ -766,19 +766,19 @@ import { google } from '@ai-sdk/google';
 const providers = {
   openai: new Agent({
     name: 'OpenAI Assistant',
-    model: 'gpt-5.6-sol',
+    model: '%%model=openai%%',
     instructions: 'Answer clearly and concisely.',
   }),
 
   claude: new Agent({
     name: 'Claude Assistant',
-    model: aisdk(anthropic('claude-sonnet-4-5')),
+    model: aisdk(anthropic('%%model=anthropic%%')),
     instructions: 'Answer clearly and concisely.',
   }),
 
   gemini: new Agent({
     name: 'Gemini Assistant',
-    model: aisdk(google('gemini-2.5-flash')),
+    model: aisdk(google('%%model=gemini%%')),
     instructions: 'Answer clearly and concisely.',
   }),
 };
@@ -920,8 +920,8 @@ interface UsageMetrics {
 
 // USD per 1M tokens — placeholder figures; load current prices from config
 const PRICES: Record<string, { input: number; output: number }> = {
-  'gpt-5.6-luna': { input: 0, output: 0 },
-  'gpt-5.6-sol': { input: 0, output: 0 },
+  '%%model=openai-small%%': { input: 0, output: 0 },
+  '%%model=openai%%': { input: 0, output: 0 },
 };
 
 class CostTracker {

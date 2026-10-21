@@ -8,7 +8,8 @@
 //   node scripts/check-versions.mjs --latest --write   ...and bump versions.json (the docs follow automatically)
 //
 // Errors (exit 1): an exact install pin of a tracked package written as a literal number,
-// or a placeholder naming a package that isn't in versions.json.
+// or a placeholder naming a package or model role that isn't in versions.json.
+// Warnings also cover stale chat-model IDs inside code blocks.
 // Warnings: a literal copy of a current version, or a "targets vX" banner with a literal
 // number. These can be legitimate history ("added in 1.17.0"), so they don't fail.
 //
@@ -58,7 +59,9 @@ const BANNER = new RegExp(
   'gi',
 );
 const HISTORY = /added|since|introduced|new in|changelog|before|prior|from v?\d|first (?:written|documented)|deprecated|removed|until|up to/i;
-const PLACEHOLDER = /%%(?:version=([^%\s]+)|versions-checked)%%/g;
+const PLACEHOLDER = /%%(?:version=([^%\s]+)|model=([^%\s]+)|versions-checked)%%/g;
+// Chat-model IDs that have a current replacement in versions.json `models`; flagged inside code.
+const STALE_MODEL = /["'`/:.](gpt-4o(?:-mini)?|gpt-4(?:\.1)?(?:-mini|-nano|-turbo)?|gpt-3\.5-turbo|gpt-5(?:\.\d)?(?:-mini|-nano|-sol|-luna)?|claude-(?:3|3-5|3-7)-(?:opus|sonnet|haiku)[\w-]*|claude-(?:opus|sonnet|haiku)-4(?:-\d)?(?:-\d{8})?|gemini-(?:1\.5|2\.0|2\.5)-(?:pro|flash)(?:-lite)?)["'`]/;
 const HISTORY_ROW = /^\|\s*(?:v?\d+\.\d+(?:\.\d+)?|\d{4}-\d{2}(?:-\d{2})?|[A-Z][a-z]+ \d{1,2},? \d{4}|[A-Z][a-z]+ \d{4})\b/;
 const ARCHIVE = new Set(['updates']);
 
@@ -83,11 +86,18 @@ function scanDocs() {
     if (ARCHIVE.has(guide)) continue;
     const lines = readFileSync(file, 'utf8').split('\n');
     let frontmatter = lines[0] === '---';
+    let inCode = false;
     lines.forEach((line, i) => {
       const at = `${rel}:${i + 1}`;
       if (frontmatter && i > 0 && line === '---') frontmatter = false;
+      if (/^\s*(```|~~~)/.test(line)) inCode = !inCode;
+      if (inCode && !HISTORY.test(line)) {
+        const stale = line.match(STALE_MODEL);
+        if (stale) warnings.push(`${at}  stale model ID ${stale[1]}; use %%model=<role>%%`);
+      }
       for (const m of line.matchAll(PLACEHOLDER)) {
         if (m[1] && !data.packages[m[1]]) errors.push(`${at}  unknown package in ${m[0]}`);
+        if (m[2] && (!data.models?.[m[2]] || m[2].startsWith('$'))) errors.push(`${at}  unknown model role in ${m[0]}`);
         if (frontmatter) errors.push(`${at}  ${m[0]} in frontmatter is not substituted`);
       }
       if (HISTORY_ROW.test(line)) return;

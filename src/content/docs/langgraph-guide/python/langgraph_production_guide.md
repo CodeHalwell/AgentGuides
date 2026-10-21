@@ -1022,7 +1022,7 @@ def track_costs(graph_name, model_name, input_tokens, output_tokens):
             "input": 2.00 / 1_000_000,   # $2 per 1M input tokens
             "output": 10.00 / 1_000_000  # $10 per 1M output tokens
         },
-        "gpt-4o": {
+        "%%model=openai%%": {
             "input": 2.50 / 1_000_000,
             "output": 10.00 / 1_000_000
         }
