@@ -4,6 +4,7 @@ import starlight from '@astrojs/starlight';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import remarkBasePath from './src/plugins/remark-base-path.mjs';
+import remarkVersions from './src/plugins/remark-versions.mjs';
 
 const base = '/AgentGuides';
 
@@ -13,7 +14,7 @@ export default defineConfig({
   base,
   trailingSlash: 'ignore',
   markdown: {
-    remarkPlugins: [[remarkBasePath, { base }]],
+    remarkPlugins: [remarkVersions, [remarkBasePath, { base }]],
   },
   integrations: [
     react(),

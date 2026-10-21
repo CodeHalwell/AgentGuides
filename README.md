@@ -52,15 +52,21 @@ language: "python"               # optional: python | typescript | dotnet | go
 
 ## Keeping versions right
 
-`src/data/versions.json` is the single source of truth for the package version each guide targets. The framework cards on the home page read from it directly.
+The current version of every framework is written in exactly one place: `src/data/versions.json`. Nothing else should hard-code it.
+
+- **Docs** write `%%version=<package>%%` (e.g. `pip install agent-framework==%%version=agent-framework%%`) and `%%versions-checked%%` for the date. `src/plugins/remark-versions.mjs` fills these in at build time, in prose, inline code, code blocks and links. An unknown package name fails the build. Placeholders don't work in frontmatter, and shouldn't go in headings (the anchor would change on every bump).
+- **Framework cards** on the home page read `versions.json` directly via `src/data/frameworks.ts`.
+- Literal numbers are only for history: "added in 1.17.0", changelog entries, migration notes.
+
+When a framework releases:
 
 ```bash
-npm run check:latest              # is versions.json behind PyPI / npm / NuGet / Go?
-node scripts/check-versions.mjs --latest --write   # bump versions.json to the latest releases
-npm run check:versions            # any install pin in the docs that disagrees with versions.json
+npm run check:latest                              # which packages are behind PyPI / npm / NuGet / Go?
+node scripts/check-versions.mjs --latest --write  # bump versions.json; every page follows on the next build
+npm run check:versions                            # fails on hard-coded pins or unknown placeholders
 ```
 
-When a framework releases, bump `versions.json`, update the guide, and make `npm run check:versions` pass. Historical notes such as "added in 1.17.0" are fine; install pins and "this guide targets…" banners should match the current version. The `Check guide versions` workflow runs the pin check on pull requests and the registry check weekly.
+Then read the changelog and fix any examples a breaking change affects. The `Check guide versions` workflow runs `check:versions` on pull requests and `check:latest` weekly.
 
 ## Deploy
 

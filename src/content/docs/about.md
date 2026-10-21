@@ -222,7 +222,7 @@ All guides follow consistent standards:
 
 ## 📅 Versions
 
-Every guide targets the current release of its framework, recorded in one place: [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json). Last checked 21 October 2026. `npm run check:versions` flags any install pin in the docs that disagrees with it.
+Every guide targets the current release of its framework, recorded in one place: [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json). Last checked %%versions-checked%%. Pages read their version numbers from that file at build time, so a version bump is a one-line change.
 
 ---
 

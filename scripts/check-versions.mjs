@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// Keeps the version numbers in the guides honest.
+// The current version of every package lives only in src/data/versions.json.
+// Docs refer to it as %%version=<package>%% and src/plugins/remark-versions.mjs
+// fills it in at build time. This script keeps it that way.
 //
-//   node scripts/check-versions.mjs            scan the docs for pins/banners that disagree with src/data/versions.json
+//   node scripts/check-versions.mjs            scan the docs for hard-coded versions and unknown placeholders
 //   node scripts/check-versions.mjs --latest   compare versions.json with the package registries
-//   node scripts/check-versions.mjs --latest --write   ...and update versions.json in place
+//   node scripts/check-versions.mjs --latest --write   ...and bump versions.json (the docs follow automatically)
 //
-// Exit code is 1 when a stale install pin is found (or, with --latest, when a registry is ahead).
-// "Targets vX" style banners are reported as warnings only, as the heuristic can't tell
-// a stale banner from a legitimate historical note such as "added in 1.17.0".
+// Errors (exit 1): an exact install pin of a tracked package written as a literal number,
+// or a placeholder naming a package that isn't in versions.json.
+// Warnings: a literal copy of a current version, or a "targets vX" banner with a literal
+// number. These can be legitimate history ("added in 1.17.0"), so they don't fail.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -51,6 +54,8 @@ const BANNER = new RegExp(
   String.raw`(?:targets?|tested (?:with|against)|verified against|current(?:ly)?(?: release| version)?|latest(?: release| version)?|version)\s*[:=]?\s*\**\s*v?${SEMVER}`,
   'gi',
 );
+const HISTORY = /added|since|introduced|new in|changelog|before|prior|from v?\d|first (?:written|documented)|deprecated|removed|until|up to/i;
+const PLACEHOLDER = /%%(?:version=([^%\s]+)|versions-checked)%%/g;
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
@@ -63,36 +68,45 @@ function* walk(dir) {
 function scanDocs() {
   const errors = [];
   const warnings = [];
-  const byGuide = {};
+  const current = {};
   for (const [name, pkg] of Object.entries(data.packages)) {
-    (byGuide[pkg.guide] ??= []).push(pkg.version);
+    (current[pkg.guide] ??= new Map()).set(pkg.version, name);
   }
   for (const file of walk(docsDir)) {
     const rel = relative(root, file);
-    const lines = readFileSync(file, 'utf8').split('\n');
     const guide = relative(docsDir, file).split('/')[0];
+    const lines = readFileSync(file, 'utf8').split('\n');
+    let frontmatter = lines[0] === '---';
     lines.forEach((line, i) => {
+      const at = `${rel}:${i + 1}`;
+      if (frontmatter && i > 0 && line === '---') frontmatter = false;
+      for (const m of line.matchAll(PLACEHOLDER)) {
+        if (m[1] && !data.packages[m[1]]) errors.push(`${at}  unknown package in ${m[0]}`);
+        if (frontmatter) errors.push(`${at}  ${m[0]} in frontmatter is not substituted`);
+      }
       for (const [name, pkg] of Object.entries(data.packages)) {
         for (const re of pinPatterns(name, pkg.registry)) {
           for (const m of line.matchAll(re)) {
-            if (m[1] !== pkg.version) {
-              errors.push(`${rel}:${i + 1}  ${name} pinned to ${m[1]} (current ${pkg.version})`);
-            }
+            errors.push(`${at}  ${name} pinned to literal ${m[1]}; use %%version=${name}%%`);
           }
         }
       }
-      const current = byGuide[guide];
-      if (!current) return;
+      const here = current[guide];
+      if (!here || HISTORY.test(line)) return;
       for (const m of line.matchAll(BANNER)) {
-        if (!current.includes(m[1]) && !/added|since|introduced|new in|changelog|before|prior|from v?\d/i.test(line)) {
-          warnings.push(`${rel}:${i + 1}  "${m[0].trim()}" (guide targets ${current.join(', ')})`);
+        warnings.push(`${at}  "${m[0].trim()}" written literally`);
+      }
+      for (const [version, name] of here) {
+        if (new RegExp(String.raw`(?<![\d.])v?${esc(version)}(?![\d.])`).test(line) && !BANNER.test(line)) {
+          warnings.push(`${at}  literal ${version} (current ${name}); use %%version=${name}%%`);
         }
+        BANNER.lastIndex = 0;
       }
     });
   }
   for (const w of warnings) console.log(`warn   ${w}`);
   for (const e of errors) console.log(`error  ${e}`);
-  console.log(`\n${errors.length} stale pin(s), ${warnings.length} banner warning(s).`);
+  console.log(`\n${errors.length} error(s), ${warnings.length} warning(s).`);
   return errors.length === 0;
 }
 
@@ -139,7 +153,7 @@ async function checkLatest() {
   if (args.has('--write') && behind) {
     data.checked = new Date().toISOString().slice(0, 10);
     writeFileSync(versionsPath, JSON.stringify(data, null, 2) + '\n');
-    console.log(`\nUpdated ${relative(root, versionsPath)}. Now update the guides and re-run without --latest.`);
+    console.log(`\nUpdated ${relative(root, versionsPath)}. The docs pick it up on the next build; review the changelogs for breaking changes.`);
   }
   console.log(behind ? `\n${behind} package(s) behind the registries.` : 'All packages current.');
   return behind === 0 || args.has('--write');

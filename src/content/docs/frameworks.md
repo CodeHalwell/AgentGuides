@@ -13,22 +13,22 @@ Detailed comparison of all supported agent frameworks to help you choose the rig
 
 | Framework | Language | Best For | Complexity | Learning Curve | Community | Current version |
 |-----------|----------|----------|-----------|-----------------|-----------|-----------------|
-| **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | 1.26.0 |
-| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | 2.59.0 |
-| **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Py 0.24.0 · TS 0.21.0 |
-| **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | 1.15.28 |
-| **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Py 1.2.16 · TS 1.5.2 |
-| **LlamaIndex** | Python/TS | RAG systems | Medium | 6-8 hours | Active | Py 0.14.25 · TS 0.12.1 |
-| **Haystack** | Python | Search systems | Med-High | 8-10 hours | Active | 3.4.1 |
-| **AG2** | Python | Research | Med-High | 6-8 hours | Large | 1.1.2 |
-| **Microsoft Agent Framework** | Python/.NET | Azure, enterprise | Medium | 6-8 hours | Growing | Py 1.22.0 · .NET 1.25.0 |
-| **Semantic Kernel** | C#/Python | Enterprise | Medium | 6-8 hours | Active | Py 1.45.0 · .NET 1.81.0 |
-| **Amazon Bedrock** | Python | AWS-native | Medium | 6-8 hours | Growing | AgentCore 1.24.2 · Strands 1.62.0 |
-| **Google ADK** | Python/TS/Go | GCP-native | Medium | 6-8 hours | Growing | Py 2.12.0 · TS 2.3.0 · Go 1.9.0 |
-| **Anthropic Claude** | Python/TS | Claude API | Medium | 4-6 hours | Growing | Py 0.2.170 · TS 0.3.306 |
-| **Mistral** | Python | Mistral API | Medium | 4-6 hours | Growing | 3.3.0 |
+| **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | %%version=smolagents%% |
+| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | %%version=pydantic-ai%% |
+| **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Py %%version=openai-agents%% · TS %%version=@openai/agents%% |
+| **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | %%version=crewai%% |
+| **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Py %%version=langgraph%% · TS %%version=@langchain/langgraph%% |
+| **LlamaIndex** | Python/TS | RAG systems | Medium | 6-8 hours | Active | Py %%version=llama-index%% · TS %%version=llamaindex%% |
+| **Haystack** | Python | Search systems | Med-High | 8-10 hours | Active | %%version=haystack-ai%% |
+| **AG2** | Python | Research | Med-High | 6-8 hours | Large | %%version=ag2%% |
+| **Microsoft Agent Framework** | Python/.NET | Azure, enterprise | Medium | 6-8 hours | Growing | Py %%version=agent-framework%% · .NET %%version=Microsoft.Agents.AI%% |
+| **Semantic Kernel** | C#/Python | Enterprise | Medium | 6-8 hours | Active | Py %%version=semantic-kernel%% · .NET %%version=Microsoft.SemanticKernel%% |
+| **Amazon Bedrock** | Python | AWS-native | Medium | 6-8 hours | Growing | AgentCore %%version=bedrock-agentcore%% · Strands %%version=strands-agents%% |
+| **Google ADK** | Python/TS/Go | GCP-native | Medium | 6-8 hours | Growing | Py %%version=google-adk%% · TS %%version=@google/adk%% · Go %%version=google.golang.org/adk%% |
+| **Anthropic Claude** | Python/TS | Claude API | Medium | 4-6 hours | Growing | Py %%version=claude-agent-sdk%% · TS %%version=@anthropic-ai/claude-agent-sdk%% |
+| **Mistral** | Python | Mistral API | Medium | 4-6 hours | Growing | %%version=mistralai%% |
 
-Versions checked against PyPI, npm, NuGet and the Go module proxy on 21 October 2026. The source of truth is [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json).
+Versions checked against PyPI, npm, NuGet and the Go module proxy on %%versions-checked%%. The source of truth is [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json).
 
 ---
 
