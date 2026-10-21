@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Compaction"
-description: "Keep long agent conversations inside the context window: TruncationStrategy, SlidingWindowStrategy, SummarizationStrategy, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, and CompactionProvider."
+description: "Keep long agent conversations inside the context window: TruncationStrategy, SlidingWindowStrategy, SummarizationStrategy, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, ContextWindowCompactionStrategy, and CompactionProvider."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 Long-running agents blow through the context window. Compaction strategies decide which messages to keep, which to drop, and which to replace with shorter summaries — **per turn**, before the messages reach the model.
 
-Six first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.6.0) (`agent_framework._compaction`).
+Seven first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.6.0) (`agent_framework._compaction`).
 
 ## Mental model
 
@@ -25,6 +25,7 @@ Compaction sees your conversation as an ordered list of **message groups** (user
 | `ToolResultCompactionStrategy` | Collapse older tool calls into one-line summaries | Keep a readable trace but cut tokens |
 | `SummarizationStrategy` | LLM-summarise older groups into a single message | Long chats where earlier context still matters |
 | `TokenBudgetComposedStrategy` | Run other strategies until a token budget is met | Hard limit per turn; compose lighter strategies first |
+| `ContextWindowCompactionStrategy` | Two thresholds derived from the model's window: collapse old tool results, then truncate | You know the model's context and output limits and want a sensible default |
 
 All implement `CompactionStrategy`:
 
@@ -454,6 +455,36 @@ est.count_tokens("a" * 4_000)       # 1000
 ```
 
 It's good enough for budget-aware fallbacks during dev/test. For production cost accounting use the real tokenizer that matches your model. Any object with a `count_tokens(text: str) -> int` method satisfies `TokenizerProtocol` — the protocol is structurally typed (`runtime_checkable`), so no inheritance is required.
+
+## Context-window strategy — sized from the model's limits
+
+`ContextWindowCompactionStrategy` is the "just give me sensible defaults" option. You tell it the model's context window and maximum output, and it works out an **input budget** (`max_context_window_tokens - max_output_tokens`) with two thresholds:
+
+1. **Tool eviction**: once included tokens pass `tool_eviction_threshold × budget` (default 50%), older tool-call groups are collapsed into summaries, as `ToolResultCompactionStrategy` does, keeping the newest `keep_last_tool_call_groups` (default 4).
+2. **Truncation**: if tokens still pass `truncation_threshold × budget` (default 80%) after re-measuring, the oldest non-system groups are dropped.
+
+```python
+from agent_framework import Agent, CompactionProvider, ContextWindowCompactionStrategy, InMemoryHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+strategy = ContextWindowCompactionStrategy(
+    max_context_window_tokens=128_000,   # gpt-4o
+    max_output_tokens=16_384,
+    tool_eviction_threshold=0.5,
+    truncation_threshold=0.8,            # must be >= tool_eviction_threshold
+    keep_last_tool_call_groups=4,
+    preserve_first_user_group=True,      # keep the original task statement during truncation
+    # tokenizer=TiktokenTokenizer(),     # defaults to CharacterEstimatorTokenizer
+)
+
+agent = Agent(
+    client=OpenAIChatClient(model="gpt-4o"),
+    instructions="You are a research assistant with tool access.",
+    context_providers=[InMemoryHistoryProvider(), CompactionProvider(before_strategy=strategy)],
+)
+```
+
+Use `TokenBudgetComposedStrategy` instead when you want summarisation in the pipeline or a custom ordering. This strategy never calls a model.
 
 ## Wiring compaction into an agent
 

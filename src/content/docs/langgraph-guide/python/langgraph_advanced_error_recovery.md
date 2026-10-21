@@ -34,10 +34,10 @@ class RetryPolicy(NamedTuple):
     max_interval:     float = 128.0    # cap on the inter-retry wait (seconds)
     max_attempts:     int   = 3        # total attempts including the first
     jitter:           bool  = True     # add random jitter to intervals
-    retry_on = default_retry_on        # default: httpx 5xx, transport errors
+    retry_on = default_retry_on        # default: blocklist predicate (see below)
 ```
 
-The default `retry_on` catches `httpx.HTTPStatusError` (5xx), `httpx.TransportError`, `ConnectionError`, and request timeouts. Anything else propagates immediately.
+The default `retry_on` is a blocklist: it retries `ConnectionError` and 5xx `httpx.HTTPStatusError` / `requests.HTTPError`, never 4xx, and never programmer errors (`ValueError`, `TypeError`, `RuntimeError`, `LookupError`, ...) or any `OSError`, which includes the built-in `TimeoutError`. Any other exception is retried. See [`RetryPolicy`](/langgraph-guide/python/reference-state-graph/#retrypolicy) for the full list.
 
 ### 1.1 Basic retry on transient errors
 

@@ -68,7 +68,7 @@ from langgraph.types import TracePolicy, omit_payload
 
 To redact across all runs and children, use the LangSmith client's `hide_inputs` / `hide_outputs` / `anonymizer` instead.
 
-Plain function nodes are traced with `trace=False` by default (no trace run created for them). `TracePolicy` is most useful on nodes created with `StateGraph.add_node(..., bound=some_runnable)`.
+The filtered record is the node-level run (the run named after the node, which wraps the node callable and its state writers). Plain function nodes get this run too: `add_node` coerces the function with `trace=False`, which only suppresses an extra nested run for the callable itself. So `TracePolicy` works on a plain `def` node; wrapping it in `RunnableLambda` (as some examples below do) is optional. The root graph run still records the original, unredacted invocation input and output.
 
 ---
 
@@ -86,9 +86,7 @@ builder = StateGraph(dict)
 def _my_node(state: dict) -> dict:
     return state
 
-# Wrap in RunnableLambda so LangSmith creates a traced span for this node.
-# Plain Python functions are added with trace=False by default, which means
-# they have no span and TracePolicy processors have nothing to attach to.
+# RunnableLambda is optional here; a plain function node is traced too.
 my_node = RunnableLambda(_my_node)
 
 builder.add_node(
@@ -116,9 +114,7 @@ Drop both inputs and outputs from the trace while keeping the span timing:
 from langchain_core.runnables import RunnableLambda
 from langgraph.types import TracePolicy, omit_payload
 
-# Wrap in RunnableLambda so LangSmith creates a traced span.
-# Plain Python functions are not traced by default; without a span,
-# the TracePolicy processors have nothing to attach to.
+# RunnableLambda is optional here; a plain function node is traced too.
 internal_router = RunnableLambda(router_fn)
 
 builder.add_node(
@@ -148,7 +144,7 @@ def truncate_messages(value: Any) -> Any:
     return value
 
 
-# Wrap in RunnableLambda so LangSmith creates a traced span.
+# RunnableLambda is optional here; a plain function node is traced too.
 call_model = RunnableLambda(call_model_fn)
 builder.add_node(
     "call_model",
@@ -182,7 +178,7 @@ def redact_sensitive(value: Any) -> Any:
     return value
 
 
-# Wrap in RunnableLambda so LangSmith creates a traced span.
+# RunnableLambda is optional here; a plain function node is traced too.
 auth_node = RunnableLambda(auth_fn)
 builder.add_node(
     "auth_node",
@@ -209,7 +205,7 @@ def summarize_embedding_output(value: Any) -> Any:
     return value
 
 
-# Wrap in RunnableLambda so LangSmith creates a traced span.
+# RunnableLambda is optional here; a plain function node is traced too.
 embed_node = RunnableLambda(embed_fn)
 builder.add_node(
     "embed",
@@ -264,7 +260,7 @@ def strip_pii(value):
     return value
 
 
-# Wrap in RunnableLambda so LangSmith creates a traced span.
+# RunnableLambda is optional here; a plain function node is traced too.
 pii_processor = RunnableLambda(pii_fn)
 builder.add_node(
     "pii_processor",
@@ -301,9 +297,7 @@ def _sensitive_fn(state: State) -> dict:
     return {"embedding": [0.1, 0.2, 0.3, 0.4]}
 
 
-# Wrap in RunnableLambda so LangSmith creates a traced span for this node.
-# Plain Python functions are wrapped with trace=False by default, which means
-# TracePolicy processors would have no span to attach to.
+# RunnableLambda is optional here; a plain function node is traced too.
 sensitive_runnable = RunnableLambda(_sensitive_fn)
 
 
@@ -387,7 +381,7 @@ omit_payload(value: Any) -> dict[str, Any]
 - **`process_inputs` does not change what the node receives.** It only changes what is recorded in the trace. The node always gets the real input.
 - **`process_outputs` does not change what the graph writes to state.** It only changes what is recorded in the trace.
 - **`None` processor means "record as-is".** Passing `process_inputs=None` is the same as not setting it — the full value is recorded.
-- **Works only where nodes have trace runs.** Plain function nodes have `trace=False` by default; they have no span to attach to. `TracePolicy` is most useful with `bound=` runnables.
+- **It filters the node-level run only.** Plain function nodes have one (verified: a `process_inputs` redaction shows up on the node run of a plain `def` node), but the root graph run and any child runs created inside the node keep the raw payloads.
 
 ---
 

@@ -117,7 +117,7 @@ def get_user_orders(
     ctx: FunctionInvocationContext,
 ) -> str:
     user_id = ctx.kwargs.get("user_id")
-    session_id = ctx.session.id if ctx.session else "no-session"
+    session_id = ctx.session.session_id if ctx.session else "no-session"
     # …run your query…
     return f"{user_id} has 3 {status} orders"
 

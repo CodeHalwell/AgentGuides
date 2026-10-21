@@ -162,7 +162,22 @@ builder.add_node(
 )
 ```
 
-`retry_on` accepts an exception type, a tuple of types, or a predicate. Default is `langgraph._internal._retry.default_retry_on` (retries on `httpx.HTTPStatusError` 5xx, `httpx.TransportError`, `ConnectionError`, and request timeouts).
+`retry_on` accepts an exception type, a sequence of types, or a `Callable[[Exception], bool]` predicate. `max_attempts` counts the first attempt too. The default, `langgraph._internal._retry.default_retry_on`, retries on `ConnectionError` and on `httpx.HTTPStatusError` / `requests.HTTPError` with a 5xx status, never on 4xx (so not on HTTP 429), and never on `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`/`StopAsyncIteration` or any `OSError` (which includes the built-in `TimeoutError`). Every other exception is retried. Pass your own predicate when that doesn't fit, for example `retry_on=lambda e: isinstance(e, (ConnectionError, TimeoutError))`.
+
+`retry_policy=` also takes a **list** of policies. LangGraph uses the **first policy whose `retry_on` matches** the raised exception; the policies don't combine, so only that one's `max_attempts` and backoff apply:
+
+```python
+builder.add_node(
+    "unreliable",
+    unreliable_fn,
+    retry_policy=[
+        RetryPolicy(initial_interval=0.01, max_attempts=5, retry_on=ConnectionError),  # quick retries
+        RetryPolicy(initial_interval=0.5, max_attempts=2, retry_on=ValueError),        # fewer, slower
+    ],
+)
+```
+
+A per-node `retry_policy` overrides one set with `set_node_defaults(retry_policy=...)`.
 
 ### `CachePolicy`
 

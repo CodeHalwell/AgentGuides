@@ -4241,6 +4241,8 @@ async def delete_record(record_id: str, tool_context: ToolContext) -> dict:
     return {"status": "deleted", "id": record_id}
 ```
 
+`request_confirmation()` does not set `skip_summarization`; set `tool_context.actions.skip_summarization = True` yourself if the "awaiting" response shouldn't go back to the model as a result. The client's reply can carry a `payload` (any JSON value), which is how a user edits arguments before approving. Read it on the resumed call, e.g. `subject = (conf.payload or {}).get("subject", subject)`. A tool whose confirmation never arrives keeps returning its pending response on every call, so cap retries if that matters.
+
 #### BaseTool
 Why it matters: the abstract root every tool ultimately implements. **Correction**: `BaseTool` in 2.7.1 carries a `response_scheduling` field not documented in any of the 25 volumes, controlling whether a tool's result is returned immediately or scheduled asynchronously into the event stream — relevant when building custom long-running tools without using `LongRunningFunctionTool`.
 
@@ -5152,7 +5154,7 @@ from google.adk.workflow import NodeTimeoutError  # this one is public
 ### Streaming & Live Sessions
 
 #### `LiveRequest` + `LiveRequestQueue`
-**Source:** `google.adk.agents.live_request_queue` (verified 2.7.1)
+**Source:** `google.adk.live.live_request_queue` since 2.9 (also exported from `google.adk.live`); the older `google.adk.agents.live_request_queue` path still works as a re-export.
 
 The write side of a bidirectional (`Runner.run_live()`) agent session.
 
@@ -5173,12 +5175,13 @@ class LiveRequestQueue:
     def send_realtime(self, blob: types.Blob) -> None: ...
     def send_activity_start(self) -> None: ...
     def send_activity_end(self) -> None: ...
+    def send_audio_stream_end(self) -> None: ...  # flush trailing audio when a mic stream stops mid-utterance
     def send(self, req: LiveRequest) -> None: ...
     async def get(self) -> LiveRequest: ...
     def close(self) -> None: ...   # enqueues LiveRequest(close=True) as a sentinel
 ```
 
-Priority order when multiple fields are set on one `LiveRequest` (highest first): `activity_start > activity_end > blob > content`; `state_delta` is always applied on top regardless. Prefer separate `send_*` calls over hand-building compound requests. All `send_*` methods call `put_nowait`, so they're safe from sync code or a different async task.
+Priority order when multiple fields are set on one `LiveRequest` (highest first): `activity_start > activity_end > blob > content`; `state_delta` is always applied on top regardless. Prefer separate `send_*` calls over hand-building compound requests. All `send_*` methods call `put_nowait` on an `asyncio.Queue`, so they're safe from sync code or a different async task, but they must run on the same event loop as `run_live()`. `send_content(..., partial=True)` streams an incomplete turn; only the final `partial=False` chunk triggers a model response. Call `close()` once: each call enqueues another sentinel.
 
 ```python
 queue = LiveRequestQueue()
@@ -5286,6 +5289,45 @@ class GeminiLlmConnection(BaseLlmConnection):
 ```
 
 `send_history()` always strips audio parts first (the Live API can't replay audio — only text/FC/FR survive), then either sends the filtered history directly via `send_live_content()`, or — for Gemini 3.1 Flash on Vertex AI, which doesn't support `history_config` in the SDK — collapses all prior turns into one user-role message prefixed `"Previous conversation history:\n"` with `ROLE: text` lines, avoiding a `1007` protocol error from mixed-role turn ordering.
+
+#### `CascadeLive` — speech-to-speech over a text model
+**Source:** `google.adk.live` (`CascadeLive`, `LiveIngress`, `LiveEgress`, and the event types `PartialTranscript`, `UserTurnFinished`, `UserSpeechStarted`, `AudioChunk`, `AgentSpokenOutput`). Experimental (`FeatureName.CASCADE_LIVE`, on by default).
+
+`CascadeLive` is a `BaseLlm` that chains a speech-to-text `LiveIngress`, an ordinary text model, and a text-to-speech `LiveEgress`: `wire audio → stt → text LLM → tts → wire audio`. Because the model in the middle is a normal text model, tools, instructions, transfers and workflows all work unchanged in `run_live()`. Non-live requests skip STT/TTS and go straight to the inner model.
+
+```python
+class CascadeLive(BaseLlm):
+    model: str            # the inner text model, e.g. "gemini-2.5-flash"
+    stt: LiveIngress      # __call__(audio: AsyncIterator[types.Blob]) -> AsyncGenerator[IngressEvent, None]
+    tts: LiveEgress       # __call__(text: AsyncIterator[str], *, cancel: asyncio.Event) -> AsyncGenerator[EgressEvent, None]
+```
+
+ADK ships no STT/TTS implementations; you subclass the two ABCs around your provider. A TTS stage should stop when `cancel` is set (barge-in):
+
+```python
+import asyncio
+from typing import AsyncGenerator, AsyncIterator
+from google.genai import types
+from google.adk.agents import LlmAgent
+from google.adk.live import AudioChunk, CascadeLive, EgressEvent, LiveEgress
+
+class MyTTS(LiveEgress):
+    def __call__(self, text: AsyncIterator[str], *, cancel: asyncio.Event) -> AsyncGenerator[EgressEvent, None]:
+        return self._speak(text, cancel)
+
+    async def _speak(self, text, cancel):
+        async for chunk in text:
+            if cancel.is_set():
+                return                                   # user barged in
+            pcm = synthesize(chunk)                      # your TTS provider call
+            yield AudioChunk(blob=types.Blob(data=pcm, mime_type="audio/pcm;rate=24000"))
+
+voice_agent = LlmAgent(
+    name="voice_assistant",
+    model=CascadeLive(model="gemini-2.5-flash", stt=MySTT(), tts=MyTTS()),  # MySTT: a LiveIngress yielding PartialTranscript / UserTurnFinished(text=...)
+    instruction="You are a helpful voice assistant. Keep answers brief.",
+)
+```
 
 #### `StreamingMode` + `PROGRESSIVE_SSE_STREAMING`
 **Source:** `google.adk.agents.run_config` (`StreamingMode`), `google.adk.utils.streaming_utils` (`StreamingResponseAggregator`)
@@ -5558,6 +5600,8 @@ Why it matters: `State` is the typed, schema-validated session-state container; 
 from google.adk.sessions import State, StateSchemaError
 ```
 
+`State` keeps a pending `_delta` alongside the committed `_value`: reads see the delta first, writes land in both, and only the delta is persisted when the event is committed. It supports `[]`, `in`, `get`, `setdefault`, `update`, `has_delta()` and `to_dict()` (committed value merged with the delta), and exposes the scope prefixes as `State.APP_PREFIX`, `State.USER_PREFIX` and `State.TEMP_PREFIX` (`"app:"`, `"user:"`, `"temp:"`; see [Session state](/google-adk-guide/python/runner-and-sessions/#session-state)). With a `state_schema` on the `Workflow`, writing an undeclared or wrongly typed key raises `StateSchemaError`.
+
 #### `BaseSessionService` + `GetSessionConfig` + `ListSessionsResponse`
 **Source:** `google.adk.sessions.base_session_service`
 
@@ -5677,7 +5721,13 @@ Why it matters: registers plugins and drives early-exit hook chaining (first plu
 
 ```python
 from google.adk.plugins import PluginManager
+
+manager = PluginManager(plugins=[audit, metrics], close_timeout=5.0)  # seconds allowed per plugin.close()
+manager.register_plugin(another)   # ValueError if a plugin with that name is already registered
+manager.get_plugin("audit")        # look up by BasePlugin.name
 ```
+
+The `Runner` builds one from `App.plugins`. `on_agent_error_callback`, `on_run_error_callback` and `after_run_callback` are notification-only; every other hook can short-circuit. When `AgentTool` runs a sub-agent with `include_plugins=True`, the child manager is put in `set_skip_closing_plugins(True)` mode so finishing the sub-run doesn't close the parent's shared plugins.
 
 #### ReflectAndRetryToolPlugin / ReflectAndRetryModelPlugin
 Why it matters: built-in plugins that catch a tool/model error, feed it back to the LLM as a reflection prompt, and retry. **Note**: `google.adk.plugins.__all__` in 2.7.1 lists `ReflectAndRetryModelPlugin` alongside `ReflectAndRetryToolPlugin` — most source docs only describe the tool-retry variant; the model-retry sibling applies the same reflect-and-retry pattern to raw model-call failures.
@@ -6138,6 +6188,30 @@ class OptimizerResult(BaseModel, Generic[AgentWithScoresT]):
 
 `capture_full_eval_data=True` signals the sampler must also return trajectories/tool-calls (needed by reflection-based optimizers like GEPA); with `False` only `scores` is required.
 
+Write your own `Sampler` when the examples live somewhere other than ADK eval-set files (a BigQuery table, a fixture). Keep `batch` optional: `SimplePromptOptimizer` runs its final validation as `sampler.sample_and_score(best_agent, "validation")` with no batch, so `batch=None` must mean "every example in that set".
+
+```python
+from google.adk.optimization.data_types import UnstructuredSamplingResult
+from google.adk.optimization.sampler import Sampler
+
+class FixtureSampler(Sampler[UnstructuredSamplingResult]):
+    def __init__(self, train: dict[str, tuple[str, str]], val: dict[str, tuple[str, str]]):
+        self._sets = {Sampler.TRAIN_SET: train, Sampler.VALIDATION_SET: val}   # id -> (question, expected)
+
+    def get_train_example_ids(self): return list(self._sets[Sampler.TRAIN_SET])
+    def get_validation_example_ids(self): return list(self._sets[Sampler.VALIDATION_SET])
+
+    async def sample_and_score(self, candidate, example_set=Sampler.VALIDATION_SET,
+                               batch=None, capture_full_eval_data=False):
+        examples = self._sets[example_set]
+        scores = {}
+        for ex_id in batch or list(examples):
+            question, expected = examples[ex_id]
+            answer = await run_once(candidate, question)          # e.g. one InMemoryRunner turn
+            scores[ex_id] = float(expected.lower() in answer.lower())
+        return UnstructuredSamplingResult(scores=scores)
+```
+
 #### `LocalEvalSampler` + `LocalEvalSamplerConfig`
 **Source:** `google.adk.optimization.local_eval_sampler`
 
@@ -6153,6 +6227,31 @@ class LocalEvalSamplerConfig(BaseModel):
     validation_eval_case_ids: list[str] | None = None
 ```
 
+`LocalEvalSampler(config, eval_sets_manager)` reads the named sets through an `EvalSetsManager`; with `LocalEvalSetsManager(agents_dir="./agents")` the sets are flat files in the app's folder (`agents/geography_qa/geography_train.evalset.json`, `geography_val.evalset.json`). The split is by named eval set, not derived from one file.
+
+```python
+from google.adk.evaluation.eval_config import EvalConfig
+from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
+from google.adk.optimization.local_eval_sampler import LocalEvalSampler, LocalEvalSamplerConfig
+from google.adk.optimization.simple_prompt_optimizer import SimplePromptOptimizer, SimplePromptOptimizerConfig
+
+sampler = LocalEvalSampler(
+    config=LocalEvalSamplerConfig(
+        eval_config=EvalConfig(criteria={"response_match_score": 0.5}),
+        app_name="geography_qa",
+        train_eval_set="geography_train",
+        validation_eval_set="geography_val",
+    ),
+    eval_sets_manager=LocalEvalSetsManager(agents_dir="./agents"),
+)
+optimizer = SimplePromptOptimizer(config=SimplePromptOptimizerConfig(num_iterations=5, batch_size=3))
+result = await optimizer.optimize(initial_agent=agent, sampler=sampler)
+best = result.optimized_agents[0]          # SimplePromptOptimizer returns exactly one entry
+print(best.optimized_agent.instruction, best.overall_score)
+```
+
+`LocalEvalSampler` needs the eval extras (`pip install "google-adk[eval]"`).
+
 #### `SimplePromptOptimizer`
 **Source:** `google.adk.optimization.simple_prompt_optimizer`
 
@@ -6167,12 +6266,12 @@ class SimplePromptOptimizerConfig(BaseModel):
     batch_size: int = 5
 ```
 
-The optimizer LLM is instructed to output only the improved prompt text — no markdown — so the raw response becomes the new `instruction` directly.
+The optimizer LLM is instructed to output only the improved prompt text — no markdown — so the raw response becomes the new `instruction` directly. Only the root agent's `instruction` is rewritten; sub-agents keep theirs. It's a greedy hill-climb with no checkpointing, so it's cheaper than GEPA but can't resume.
 
 #### `GEPARootAgentOptimizer` (+ `GEPARootAgentPromptOptimizer`)
 **Source:** `google.adk.optimization.gepa_root_agent_optimizer`, `.gepa_root_agent_prompt_optimizer` — requires `pip install gepa` separately (`@experimental`)
 
-Both modules exist in 2.7.1 — `gepa_root_agent_optimizer.py` is the current, broader optimizer (treats both `agent_prompt` and any `SkillToolset` skill instructions as separate optimization targets); `gepa_root_agent_prompt_optimizer.py` is an older, prompt-only variant kept for compatibility. Prefer `GEPARootAgentOptimizer`.
+Both modules exist in 2.7.1 — `gepa_root_agent_optimizer.py` is the current, broader optimizer (treats both `agent_prompt` and any `SkillToolset` skill instructions as separate optimization targets; the root `instruction` must be a plain string, since an `InstructionProvider` callable raises `ValueError`); `gepa_root_agent_prompt_optimizer.py` is an older, prompt-only variant kept for compatibility. Prefer `GEPARootAgentOptimizer`.
 
 ```python
 class GEPARootAgentOptimizerConfig(BaseModel):
@@ -6192,7 +6291,10 @@ An `_AgentGEPAAdapter` is created dynamically inside `_create_agent_gepa_adapter
 ```python
 optimizer = GEPARootAgentOptimizer(config=GEPARootAgentOptimizerConfig(max_metric_calls=30, run_dir="/tmp/gepa-run"))
 result = await optimizer.optimize(agent, MyEvalSampler())
+best = max(result.optimized_agents, key=lambda a: a.overall_score or 0.0)   # Pareto front, unordered
 ```
+
+`max_metric_calls` counts example-level evaluations (a batch of N costs N). Re-running with the same `run_dir` resumes from the last checkpoint. Use disjoint train and validation IDs; overlap logs an aliasing warning.
 
 #### Environment simulation for eval — see Tools & Toolsets
 `EnvironmentSimulationFactory` / `EnvironmentSimulationEngine` / `ToolSpecMockStrategy` (documented under Tools & Toolsets) are most often used from evaluation harnesses to run an agent deterministically against mocked tool responses instead of live services — see that section for the full API.
@@ -6924,7 +7026,7 @@ class BaseEventsSummarizer(abc.ABC):
         appends the returned event to the session — do not persist it yourself."""
 ```
 
-`LlmEventSummarizer` is the built-in implementation ADK auto-creates from the root `LlmAgent.canonical_model` when `EventsCompactionConfig.summarizer` is `None`.
+`LlmEventSummarizer` is the built-in implementation ADK auto-creates from the root `LlmAgent.canonical_model` when `EventsCompactionConfig.summarizer` is `None`. Pass your own (`EventsCompactionConfig(summarizer=LlmEventSummarizer(llm=..., prompt_template=...), ...)`) to use a cheaper model or a different prompt; a custom `prompt_template` must contain `{conversation_history}`, because `str.format()` silently drops unused keywords and the model would summarise nothing.
 
 ```python
 class LlmEventSummarizer(BaseEventsSummarizer):
@@ -6934,6 +7036,14 @@ class LlmEventSummarizer(BaseEventsSummarizer):
 
     def __init__(self, llm: BaseLlm, prompt_template: Optional[str] = None): ...
 ```
+
+Behaviour worth knowing:
+
+- The token trigger reads `usage_metadata.prompt_token_count` from the latest event that has it; with none, ADK estimates `total_chars // 4`.
+- Rewound invocations (`runner.rewind_async`) are dropped before compaction, so rewound content never leaks back into a summary.
+- If the summarizer's LLM call returns no content, `maybe_summarize_events` returns `None` and no compaction is written.
+- The compaction event's `author` is `"user"` while `compacted_content.role` is `"model"`: it is a history anchor, not a model turn.
+- `event_retention_size=0` summarises everything, including the latest turn.
 
 `_format_events_for_prompt` renders: `"{author} (thought): {text}"` for thought parts (skipped if the event is itself a compaction, to avoid summarizing summaries); `"{author}: {text}"` for plain text; `"{author} called tool: {name}({args})"` / `"Tool response from {name}: {response}"` for function calls/responses (args/response truncated at 2000 chars).
 
@@ -7128,9 +7238,13 @@ class LlmRequest(BaseModel):
     model: Optional[str] = None
     contents: list[types.Content] = []
     config: types.GenerateContentConfig
+    live_connect_config: types.LiveConnectConfig        # live-session config (voice, realtime input)
     tools_dict: dict[str, BaseTool] = {}                 # excluded from serialization
     cache_config: Optional[ContextCacheConfig] = None
+    cache_metadata: Optional[CacheMetadata] = None       # reuse info from the previous request
+    cacheable_contents_token_count: Optional[int] = None
     previous_interaction_id: Optional[str] = None        # Interactions API chaining
+    service_tier: Optional[ServiceTier | str] = None     # mirrors RunConfig.service_tier
 
     def append_instructions(self, instructions: list[str] | types.Content) -> list[types.Content]: ...
     def append_tools(self, tools: list[BaseTool]) -> None: ...
@@ -7144,6 +7258,30 @@ Why it matters: the abstract model interface and the registry that resolves a mo
 
 ```python
 from google.adk.models import BaseLlm, LLMRegistry
+```
+
+A backend implements `generate_content_async(llm_request, stream=False)` as an async generator of `LlmResponse` (yield `partial=True` fragments when streaming), declares `supported_models()` as regexes, and may override the `capabilities` property (`LlmCapabilities(output_schema_and_tools=...)`) and `connect()` for live sessions. A deterministic model is handy in tests:
+
+```python
+from typing import AsyncGenerator
+from google.genai import types
+from google.adk.agents import LlmAgent
+from google.adk.models import BaseLlm, LLMRegistry, LlmRequest, LlmResponse
+
+class EchoLlm(BaseLlm):
+    @classmethod
+    def supported_models(cls) -> list[str]:
+        return [r"echo"]                      # full-match regex against the model name
+
+    async def generate_content_async(
+        self, llm_request: LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        last = next((c for c in reversed(llm_request.contents) if c.role == "user"), None)
+        text = last.parts[0].text if last and last.parts else "(no input)"
+        yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text=f"Echo: {text}")]))
+
+LLMRegistry.register(EchoLlm)
+agent = LlmAgent(name="echo_agent", model="echo", instruction="Echo the user.")  # resolves to EchoLlm
 ```
 
 #### `LLMRegistry`

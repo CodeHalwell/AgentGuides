@@ -473,6 +473,22 @@ graph = builder.compile()
 graph.invoke({"messages": [("user", "Greet me!")], "user_name": "Alice"})
 ```
 
+Injected parameters can sit next to ordinary ones. The model sees and fills only the ordinary ones, so the tool call's `args` hold just `action` and `resource` here, and permissions come from state the model can't forge:
+
+```python
+@tool
+def execute_action(
+    action: str,                                                      # from the LLM
+    resource: str,                                                    # from the LLM
+    user: Annotated[str, InjectedState("current_user")],              # injected
+    permissions: Annotated[list[str], InjectedState("permissions")],  # injected
+) -> str:
+    """Execute an action on a resource if the user has permission."""
+    if action not in permissions:
+        return f"User '{user}' lacks permission for action '{action}'."
+    return f"User '{user}' executed '{action}' on '{resource}'."
+```
+
 ### 4. `InjectedStore` — read/write long-term memory from a tool
 
 ```python

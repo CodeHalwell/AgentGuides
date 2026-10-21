@@ -707,6 +707,32 @@ maybe_set_otel_providers([gcp_hooks])
 pip install opentelemetry-exporter-gcp-trace opentelemetry-exporter-gcp-monitoring opentelemetry-exporter-gcp-logging
 ```
 
+### Per-request overrides with `TelemetryConfig`
+
+`RunConfig.telemetry` takes a `TelemetryConfig` (`google.adk.telemetry.context`) so one process can serve tenants with different capture rules. Every field left `None` falls back to its env var, read once when the config is built; the model is frozen, so one instance can be shared across concurrent runs.
+
+| Field | Env-var fallback | Purpose |
+|---|---|---|
+| `capture_message_content` | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | A `ContentCapturingMode`: `NO_CONTENT`, `EVENT_ONLY`, `SPAN_ONLY` or `SPAN_AND_EVENT` |
+| `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | `"experimental"` opts in to the GenAI semconv attributes; `"stable"` keeps the legacy path |
+| `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY` | `StrictBool`: pass `True`/`False`, not `"true"` |
+| `experimental_features_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY_FEATURES` | `frozenset[str]` of experimental telemetry features |
+
+```python
+from google.adk.agents.run_config import RunConfig
+from google.adk.telemetry.context import ContentCapturingMode, TelemetryConfig
+
+TENANT_TELEMETRY = {
+    "tenant_a": TelemetryConfig(capture_message_content=ContentCapturingMode.SPAN_AND_EVENT),
+    "tenant_b": TelemetryConfig(capture_message_content=ContentCapturingMode.NO_CONTENT),  # PII-sensitive
+}
+
+def run_config_for(tenant_id: str) -> RunConfig:
+    return RunConfig(telemetry=TENANT_TELEMETRY.get(tenant_id))
+```
+
+Operators can lock this down: with `ADK_TELEMETRY_IGNORE_RUN_CONFIG=1` the per-request fields are ignored and the env vars always win. If `opentelemetry-instrumentation-google-genai` wraps `generate_content`, that library creates the inference span from its own env vars, so per-request overrides apply only to ADK-owned spans.
+
 ### Wiring telemetry in a FastAPI app
 
 Call `maybe_set_otel_providers` inside `lifespan` so it runs before the first ADK invocation:

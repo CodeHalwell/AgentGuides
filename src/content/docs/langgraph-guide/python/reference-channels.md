@@ -66,8 +66,11 @@ print(result["events"])  # ['node_a ran', 'node_b ran']
 | `NamedBarrierValue` | `langgraph.channels.named_barrier_value` | `Annotated[None, NamedBarrierValue(str, names={...})]` |
 | `AnyValue` | `langgraph.channels.any_value` | `Annotated[T, AnyValue(T)]` |
 | `UntrackedValue` | `langgraph.channels.untracked_value` | `Annotated[T, UntrackedValue(T)]` |
+| `DeltaChannel` (beta) | `langgraph.channels.delta` | `Annotated[T, DeltaChannel(reducer)]` |
+| `LastValueAfterFinish` | `langgraph.channels.last_value` | used internally |
+| `NamedBarrierValueAfterFinish` | `langgraph.channels.named_barrier_value` | used internally |
 
-All seven are also accessible via `langgraph.channels` (top-level re-export).
+All of these are also accessible via `langgraph.channels` (top-level re-export).
 
 ## Channel comparison
 
@@ -80,6 +83,7 @@ All seven are also accessible via `langgraph.channels` (top-level re-export).
 | `NamedBarrierValue` | Required — must see every named write | After consumed | ✅ Yes | N-source fan-in barriers |
 | `AnyValue` | Allowed — takes the last value | No | ✅ Yes | Parallel-safe shared flags |
 | `UntrackedValue` | Error (`guard=True`) or last wins (`guard=False`) | No | ❌ No | Computed values, secrets, large blobs |
+| `DeltaChannel` (beta) | Allowed — the whole batch goes to the reducer | No | Sentinel plus periodic snapshots | Large, append-heavy values (long logs, message lists) |
 
 ---
 
@@ -478,6 +482,92 @@ graph.invoke({"result_a": "", "result_b": "", "done": None})
 
 ---
 
+## `DeltaChannel` (beta)
+
+```python
+class DeltaChannel(BaseChannel):
+    def __init__(
+        self,
+        reducer: Callable[[Any, Sequence[Any]], Any],
+        typ: type | None = None,          # inferred from the Annotated type
+        *,
+        snapshot_frequency: int = 1000,
+    ) -> None: ...
+```
+
+A reducer channel built for values that grow large while each step adds only a little. Instead of writing the full accumulated value into every checkpoint blob, it stores a sentinel and rebuilds the value by replaying ancestor writes through the reducer. This makes checkpoints much smaller for long event logs or message histories. It is beta: the API and on-disk format may change, though existing threads stay readable.
+
+Two things differ from `BinaryOperatorAggregate`:
+
+- The reducer receives the current value and the **whole batch** of writes for the step (`reducer(state, writes)`), not one write at a time.
+- The reducer must be **batching-invariant**, so that replay can fold writes in larger batches: `reducer(reducer(s, xs), ys) == reducer(s, xs + ys)`.
+
+To bound replay depth, a full snapshot blob is written every `snapshot_frequency` updates, or after `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` supersteps (default 5000, env `LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`). Lower `snapshot_frequency` for high-write channels to keep replay short. `Overwrite(...)` works as it does on `BinaryOperatorAggregate`: it becomes the new base, and later writes fold on top of it.
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.channels import DeltaChannel
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+
+
+def append(state: list[str], writes: list[str]) -> list[str]:
+    return state + list(writes)        # batching-invariant
+
+
+class State(TypedDict):
+    log: Annotated[list[str], DeltaChannel(append, snapshot_frequency=50)]
+    step: int
+
+
+def worker(state: State) -> dict:
+    return {"log": f"step-{state['step']}-ran", "step": state["step"] + 1}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("worker", worker)
+    .add_edge(START, "worker")
+    .add_edge("worker", END)
+    .compile(checkpointer=InMemorySaver())
+)
+cfg = {"configurable": {"thread_id": "delta-demo"}}
+
+r = graph.invoke({"step": 0}, cfg)
+r = graph.invoke({"step": r["step"]}, cfg)
+print(r["log"])   # ['step-0-ran', 'step-1-ran'] — rebuilt from the stored writes
+```
+
+For a numeric counter or a short list, `BinaryOperatorAggregate` is lighter. `DeltaChannel.from_checkpoint` also accepts a plain value, so you can switch an existing `BinaryOperatorAggregate` field over without losing thread state.
+
+---
+
+## `LastValueAfterFinish` and `NamedBarrierValueAfterFinish`
+
+Two-phase variants that add an explicit "release" step. The runtime uses them for deferred nodes (`add_node(defer=True)`) and barrier edges into them. You rarely declare them yourself, but they help when reading channel dumps:
+
+- **`LastValueAfterFinish(typ)`** accepts writes like `LastValue`, but `is_available()` stays `False` until `finish()` is called. `get()` doesn't clear the value; `consume()` clears both the value and the finished flag. It checkpoints as a `(value, finished)` tuple.
+- **`NamedBarrierValueAfterFinish(typ, names)`** waits for every name in `names`, like `NamedBarrierValue`, and then additionally waits for `finish()`. `finish()` returns `True` only when all names have been seen. `consume()` resets it for the next round.
+
+```python
+from langgraph.channels import NamedBarrierValue, NamedBarrierValueAfterFinish
+
+nv = NamedBarrierValue(str, {"a", "b"})
+nv.update(["a"]); nv.update(["b"])
+print(nv.is_available())   # True — opens as soon as every name is seen
+
+bv = NamedBarrierValueAfterFinish(str, {"a", "b"})
+bv.update(["a"]); bv.update(["b"])
+print(bv.is_available())   # False — all seen, but not finished
+print(bv.finish())         # True
+print(bv.is_available())   # True
+bv.consume()
+print(bv.is_available())   # False — reset for the next cycle
+```
+
+---
+
 ## `AnyValue`
 
 ```python
@@ -852,5 +942,5 @@ print(snap.values.get("embedding"))   # None — not persisted
 |---|---|
 | 1.2 | `UntrackedValue` added — same semantics as `LastValue` but never written to checkpoints. Use for computed or sensitive fields you don't want persisted. |
 | 1.0 | `Topic`, `EphemeralValue`, `NamedBarrierValue`, `AnyValue` moved from `langgraph.channels` to their own submodules but remain re-exported at `langgraph.channels`. Existing imports unaffected. |
-| 0.6 | `DeltaChannel` added (beta) — a write-efficient channel that stores only deltas and reconstructs state by replaying ancestor writes. See [Class Deep Dives Vol. 2 — `DeltaChannel`](./reference-class-deep-dives-vol2/#1-deltachannel--write-efficient-reducer-with-lazy-snapshots) for a full walkthrough. |
+| 0.6 | `DeltaChannel` added (beta) — a write-efficient channel that stores only deltas and reconstructs state by replaying ancestor writes. See [`DeltaChannel`](#deltachannel-beta) above. |
 | 0.2 | `BinaryOperatorAggregate` introduced; `add_messages` became the canonical reducer for message lists. |

@@ -93,6 +93,30 @@ print(result.output)
 
 ---
 
+## `ToolFailed` — a definitive failure, not a retry
+
+`ModelRetry` tells the model "fix your call and try again" and spends the tool's retry budget. `ToolFailed(message)` reports that the call has *definitively* failed (not found, permanently gone, not permitted): the model sees your message verbatim as the tool result, no retry instructions are added, and no retry budget is used. Bound repeated failures with `UsageLimits(tool_calls_limit=...)`.
+
+| | `ModelRetry` | `ToolFailed` |
+|---|---|---|
+| Model sees | retry prompt + your message | your message only |
+| Uses the retry budget | yes | no |
+| Use for | fixable input (bad ID format, missing field) | definitive outcomes |
+
+## Cancellation and timeouts — `RunCancelled` / `RunTimedOut`
+
+A run can be stopped from outside without losing its history:
+
+- `agent.run(..., timeout=seconds)` raises `RunTimedOut` (a `RunCancelled` subclass).
+- `agent.run(..., cancellation_token=token)`, then `token.cancel()` from anywhere (a request handler, a UI "stop" button).
+- `run.cancel()` on an `AgentRun` from `agent.iter()`, or `ctx.cancel()` inside a tool.
+
+`RunCancelled` carries `all_messages()`, `new_messages()`, `usage`, `run_id` and `conversation_id`; tool calls that never finished are closed with synthetic `outcome='interrupted'` returns, so `all_messages()` can be passed straight back as `message_history` to resume. If the run was killed by an *external* `asyncio.timeout()` or task cancellation instead, `RunCancelled.from_cancellation(exc)` recovers the same state from the `CancelledError` / `TimeoutError`.
+
+```python
+{err}
+```
+
 ## `UnexpectedModelBehavior` — model misbehaved
 
 Raised when:
@@ -650,6 +674,34 @@ def parse_structured(ctx: RunContext[object], raw: str) -> dict:
 ```
 
 ---
+
+### Transport-level HTTP retries
+
+`ModelRetry` is about the *model's* mistakes. For flaky networks and 429/5xx responses, retry at the HTTP layer with the `retries` extra (`pip install "pydantic-ai-slim[retries]"`, in the default bundle): wrap the provider's HTTP client in a tenacity transport.
+
+```python
+import httpx2
+from tenacity import retry_if_exception_type, stop_after_attempt
+
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.retries import AsyncHTTPX2TenacityTransport, RetryConfig, wait_retry_after
+
+transport = AsyncHTTPX2TenacityTransport(
+    config=RetryConfig(
+        retry=retry_if_exception_type(httpx2.HTTPStatusError),
+        wait=wait_retry_after(max_wait=60),      # honours Retry-After, else exponential back-off
+        stop=stop_after_attempt(4),
+        reraise=True,
+    ),
+    validate_response=lambda r: r.raise_for_status(),   # turn 429/5xx into exceptions to retry
+)
+provider = OpenAIProvider(http_client=httpx2.AsyncClient(transport=transport))
+agent = Agent(OpenAIChatModel('gpt-5.2', provider=provider))
+```
+
+`RetryConfig` is a `TypedDict` of `tenacity.retry` arguments. `HTTPX2TenacityTransport` is the sync twin, and `AsyncTenacityTransport` / `TenacityTransport` wrap a legacy `httpx` transport. Remember the provider SDK also retries (2 times by default for OpenAI, Anthropic, Groq and Cohere); set `model_settings={'max_retries': 0}` if you want the transport to own retries entirely.
 
 ## Structured error reporting
 

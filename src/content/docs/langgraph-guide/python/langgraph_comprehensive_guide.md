@@ -35,7 +35,7 @@ language: python
 - Fixed time-travel replays with interrupts and subgraphs
 
 **Deprecated (still importable):**
-- `langgraph.prebuilt.interrupt.HumanInterrupt`, `HumanInterruptConfig`, `ActionRequest`, `HumanResponse` → for agents, `HumanInTheLoopMiddleware` and its `HITLRequest` / `HITLResponse` types in `langchain.agents.middleware.human_in_the_loop` (there is no `langchain.agents.interrupt` module)
+- `langgraph.prebuilt.interrupt.HumanInterrupt`, `HumanInterruptConfig`, `ActionRequest` (`HumanResponse` itself is not deprecated) → for agents, `HumanInTheLoopMiddleware` and its `HITLRequest` / `HITLResponse` types in `langchain.agents.middleware.human_in_the_loop` (there is no `langchain.agents.interrupt` module)
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
 
@@ -2730,7 +2730,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.2.7 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph 1.2.7`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
+| 1.2.7 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph 1.2.7`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. Documented previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
 | 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph 1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `StreamPart`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
 | 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph 1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
 | 1.1.9 | April 22, 2026 | Patch release; six source-verified reference pages added to the guide. |
@@ -3370,8 +3370,10 @@ print(result["total"])  # 0 — Overwrite replaced the accumulated value
 
 `NamedBarrierValueAfterFinish` (same module) adds a second gate on top of
 `NamedBarrierValue`: the channel only opens once every name is seen **and** an explicit
-`finish()` has been called — a "collect, then release" pattern used internally for
-subgraph coordination; direct use is rare.
+`finish()` has been called — a "collect, then release" pattern the runtime uses for
+barrier edges into deferred nodes (`add_node(defer=True)`), as `LastValueAfterFinish`
+backs a deferred node's trigger; direct use is rare. See
+[the channels reference](/langgraph-guide/python/reference-channels/#lastvalueafterfinish-and-namedbarriervalueafterfinish).
 
 Writing a **custom channel**: subclass `BaseChannel[Value, Update, Checkpoint]` and
 implement `ValueType`, `UpdateType`, `get()`, `update()`, `from_checkpoint()`;

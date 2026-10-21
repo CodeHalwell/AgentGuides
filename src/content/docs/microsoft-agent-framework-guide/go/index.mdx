@@ -1,0 +1,117 @@
+---
+title: "Microsoft Agent Framework (Go)"
+description: "Go implementation of Microsoft Agent Framework (public preview) — agents, function tools, OpenAI / Azure OpenAI / Foundry / Anthropic / Gemini providers, MCP, A2A, graph workflows and testing with a fake provider."
+framework: microsoft-agent-framework
+language: go
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**The Go implementation of Microsoft Agent Framework.** It shares the concepts of the Python and .NET SDKs — agents, sessions, tools, middleware, context providers and graph workflows — but expresses them as idiomatic Go: plain structs for configuration, `context.Context` everywhere, and `iter.Seq2` streams instead of async enumerables.
+
+<Aside type="caution" title="Public preview">
+  The Go SDK is a **public preview** (first published 20 October 2026). It lives in its own repository, [microsoft/agent-framework-go](https://github.com/microsoft/agent-framework-go), not in the main `microsoft/agent-framework` repo, and is versioned independently of the Python and .NET packages. Expect breaking changes between 0.x releases. Every example in this guide was compiled with `go vet` and `go build` against v%%version=github.com/microsoft/agent-framework-go%%, and the ones that need no model credentials were run.
+</Aside>
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    go get github.com/microsoft/agent-framework-go@v%%version=github.com/microsoft/agent-framework-go%%
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    `github.com/microsoft/agent-framework-go` **v%%version=github.com/microsoft/agent-framework-go%%** (checked %%versions-checked%%) · requires **Go 1.26+** (the module's `go` directive; with `GOTOOLCHAIN=auto` the toolchain is fetched for you)
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Go services that need agents with tools, Azure / Foundry integration, MCP or A2A interop, and checkpointed multi-step workflows.
+  </Card>
+</CardGrid>
+
+## A minimal agent
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/microsoft/agent-framework-go/agent"
+	"github.com/microsoft/agent-framework-go/provider/openaiprovider"
+	"github.com/openai/openai-go/v3"
+)
+
+func main() {
+	// openai.NewClient reads OPENAI_API_KEY from the environment.
+	a := openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
+		Model:        "gpt-5.4-mini",
+		Instructions: "You are a concise assistant. Answer in one sentence.",
+		Config:       agent.Config{Name: "Helper"},
+	})
+
+	ctx := context.Background()
+
+	// Non-streaming: Collect gathers every update into one *agent.Response.
+	resp, err := a.RunText(ctx, "What is a goroutine?").Collect()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(resp.String())
+
+	// Streaming: range over the ResponseStream.
+	for update, err := range a.RunText(ctx, "Name three Go proverbs.", agent.Stream(true)) {
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print(update.String())
+	}
+	fmt.Println()
+}
+```
+
+The upstream README's quickstart uses Microsoft Foundry instead; see [Providers](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/#providers).
+
+## Key concepts
+
+| Concept | Go API | Notes |
+| --- | --- | --- |
+| Agent | `*agent.Agent` | Built by a provider constructor such as `openaiprovider.NewAgent` or `foundryprovider.NewAgent`; all share one type. |
+| Run | `a.RunText`, `a.RunMessage`, `a.Run` | Each returns an `agent.ResponseStream` (an `iter.Seq2[*agent.ResponseUpdate, error]`). Call `.Collect()` for a single `*agent.Response`. |
+| Run options | `agent.Stream`, `agent.WithSession`, `agent.WithTool`, `agent.WithStructuredOutput`, `agent.WithInstructions` | Passed variadically to every run method. |
+| Session | `*agent.Session` | Holds conversation history and provider state; JSON-serialisable. |
+| Messages | `message.Message`, `message.Contents` | Typed content parts: `TextContent`, `FunctionCallContent`, `FunctionResultContent`, `ToolApprovalRequestContent`, `DataContent` and more. |
+| Function tool | `functool.New` / `functool.MustNew` | Typed Go function; the JSON schema is derived from the input struct. |
+| Middleware | `agent.Middleware`, `agent.FunctionInvocationMiddleware` | Wrap whole runs, or individual tool calls. |
+| Context provider | `agent.NewContextProvider` | Injects instructions, messages or tools before a run and stores state after it (memory, RAG). |
+| Workflow | `workflow.NewBuilder`, `inproc.Default` | Graph of executors with conditional edges, fan-out, request ports (human in the loop) and checkpoints. |
+
+## What the Go SDK does not have yet
+
+Compared with the [Python guide](/microsoft-agent-framework-guide/python/), the following are **not implemented** in v%%version=github.com/microsoft/agent-framework-go%%, according to the upstream README:
+
+- **Handoff orchestration.** Sequential, concurrent and round-robin group chat exist; handoff does not.
+- **Declarative (YAML/JSON) agents and workflows.**
+- **Functional workflows** (the Python `@workflow` / `@step` style). Graph workflows only.
+- **CodeAct, DevUI and AF Labs.**
+- **Foundry hosted-agent deployment.** You can call existing server-side Foundry agents, but not deploy one from Go.
+- There is **no evaluation package** comparable to Python's `evaluate_agent`, and no dedicated Ollama or Amazon Bedrock provider.
+
+What it does have, beyond the basics: Anthropic, Gemini, GitHub Copilot, A2A and AG-UI providers; agent skills; chat-history memory and text-search (RAG) context providers; compaction; an agent "harness" (Todo planning, modes, standing tool approvals, file memory); vector stores with in-memory and Azure AI Search connectors; and OpenTelemetry middleware.
+
+## Pages in this guide
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/" description="Agents, sessions, streaming, structured output, tools and approvals, middleware, context providers, providers, MCP, A2A, observability." />
+  <LinkCard title="Workflows" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_workflows/" description="Executors and edges, conditional routing, sequential / concurrent / group chat agents, human in the loop, checkpointing, workflow as an agent." />
+  <LinkCard title="Testing with a fake provider" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_testing/" description="Script model turns with agent.ProviderConfig, test tool calls, approvals, sessions and workflows with go test — no API key needed." />
+</CardGrid>
+
+## Upstream references
+
+- Repository and examples: [github.com/microsoft/agent-framework-go](https://github.com/microsoft/agent-framework-go) (`examples/01-get-started` is a five-step tutorial)
+- API reference: [pkg.go.dev/github.com/microsoft/agent-framework-go](https://pkg.go.dev/github.com/microsoft/agent-framework-go)
+- Feature parity notes: `docs/dotnet-go-sdk-feature-comparison.md` in the repository

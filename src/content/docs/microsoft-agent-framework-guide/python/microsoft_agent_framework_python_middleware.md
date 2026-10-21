@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Middleware"
-description: "Agent, chat, and function middleware in agent-framework — real signatures, short-circuit patterns, telemetry, retries, and redaction."
+description: "Agent, chat, and function middleware in agent-framework — real signatures, short-circuit patterns, telemetry, retries, redaction, message injection, middleware bundles and AGENT-HOOKS enforcement."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -841,6 +841,105 @@ print(final.value)  # parsed Address instance, lazily validated
 ```
 
 `final.value` triggers parsing on first access — if the response text doesn't match the schema you'll see a `pydantic.ValidationError` (or `ValueError` for non-Pydantic JSON-schema formats), which is exactly the boundary you want for structured-output retries.
+
+## Injecting messages into a running session — `MessageInjectionMiddleware`
+
+Sometimes a tool, a webhook or the host application needs to tell the model something *now*, without waiting for the next user turn: "the user's profile just loaded", "CPU on node-3 crossed 90%". `MessageInjectionMiddleware` is a chat middleware that drains a per-session queue into the next model call. Anything can enqueue with the free function `enqueue_messages(session, messages)`: a tool through `ctx.session`, or application code between turns.
+
+```python
+import asyncio
+from agent_framework import Agent, FunctionInvocationContext, MessageInjectionMiddleware, enqueue_messages, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def fetch_profile(user_id: str, ctx: FunctionInvocationContext) -> str:
+    """Load a user profile."""
+    profile = {"name": "Alice", "plan": "Pro", "credits": 150}
+    if ctx.session is not None:
+        enqueue_messages(ctx.session, f"[enrichment] Profile for {user_id}: {profile}")
+    return f"Profile loaded for {user_id}"
+
+
+async def main() -> None:
+    injector = MessageInjectionMiddleware()
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a billing support agent.",
+        tools=[fetch_profile],
+        middleware=[injector],
+    )
+    session = agent.create_session()
+    print((await agent.run("What plan is user-42 on?", session=session)).text)
+
+    # From the host, between turns:
+    enqueue_messages(session, "Alert: the Pro plan price changes on 1 December.")
+    print(len(injector.get_pending_messages(session)), "message(s) queued")  # snapshot, not drained
+    print((await agent.run("Anything I should tell the customer?", session=session)).text)
+
+
+asyncio.run(main())
+```
+
+The queue lives in `session.state`, so it needs an `AgentSession`. After each model call, if new messages were queued *and* the response has no tool calls pending, the middleware calls the model again by itself. A tool that enqueues mid-loop doesn't need an outer retry.
+
+## Grouping middleware — `MiddlewareBundle`
+
+`MiddlewareBundle([...])` packages agent, chat and function middleware into one unit that installs all-or-nothing. Pass it as a single element of `middleware=[...]` (on the agent or on one `run()`), and the framework splits its members into their layers, keeping their order. Use it when several middleware objects only make sense together, such as an ingress check plus an egress check plus a tool audit. A bundle can't be nested in another bundle (`MiddlewareException`).
+
+```python
+from agent_framework import (
+    Agent, AgentContext, AgentMiddleware, FunctionInvocationContext, FunctionMiddleware, MiddlewareBundle,
+)
+from agent_framework.openai import OpenAIChatClient
+
+
+class Ingress(AgentMiddleware):
+    async def process(self, context: AgentContext, call_next) -> None:
+        print("[ingress]", len(context.messages), "message(s)")
+        await call_next()
+
+
+class ToolAudit(FunctionMiddleware):
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        print("[audit] tool:", context.function.name)
+        await call_next()
+
+
+governance = MiddlewareBundle([Ingress(), ToolAudit()])
+agent = Agent(client=OpenAIChatClient(), middleware=[governance])
+```
+
+## AGENT-HOOKS enforcement — `create_agent_hooks_middleware`
+
+`create_agent_hooks_middleware(interceptors, ...)` returns a `MiddlewareBundle` implementing the [AGENT-HOOKS-0.1](https://github.com/responsibleai/agent-hooks) control contract (experimental, needs `pip install --pre agent-hooks-sdk`). Your interceptors get a verdict at eight points: `agent_startup`, `input`, `pre_model_call`, `post_model_call`, `pre_tool_call`, `post_tool_call`, `output` and `agent_shutdown`. Verdicts are enforced fail-closed. A run-level deny raises `agent_hooks.InterceptionBlocked`, a tool-level deny comes back to the model as a tool error, transforms are written back into the messages, arguments and results, and streaming output is buffered until the `output` verdict allows it.
+
+```python
+from agent_framework import Agent, create_agent_hooks_middleware
+from agent_framework.openai import OpenAIChatClient
+from agent_hooks import ALLOW, Verdict   # pip install --pre agent-hooks-sdk
+
+
+class EgressGuard:
+    def intercept(self, context):
+        if context.get("interception_point") == "output" and "secret" in str(context.get("target", "")).lower():
+            return Verdict.deny(reason="egress_blocked")
+        return ALLOW
+
+
+audit: list = []
+agent = Agent(
+    client=OpenAIChatClient(),
+    middleware=[create_agent_hooks_middleware(
+        {"egress_guard": EgressGuard()},   # a mapping names interceptors in verdict summaries
+        record_sink=audit.append,          # every InterceptionRecord, for audit logging
+        timeout=5.0,                       # per-interceptor timeout
+        # mode="evaluate_only",            # shadow mode: record verdicts, never act
+    )],
+)
+```
+
+Put the bundle **first** (outermost) and install exactly one per agent; stacked bundles are rejected. Middleware listed before it runs outside the enforcement boundary. Each `run()` is one agent-hooks session. To share one session (and its interceptor state) across runs, build the bundle from your own emitter with `create_agent_hooks_middleware_from_emitter(emitter, builder)`. The contract is cooperative and in-process, so treat it as defence in depth, not a security boundary.
 
 ## Context quick reference
 

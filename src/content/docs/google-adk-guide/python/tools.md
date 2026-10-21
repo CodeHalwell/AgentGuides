@@ -143,6 +143,14 @@ async def save_and_return(
 
 **Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py`).
 
+**Argument validation (2.10.0+, opt-in).** With the experimental `FUNCTION_TOOL_ARG_VALIDATION` feature on, `FunctionTool` validates and coerces arguments against the type hints before calling, so `{"base": "3"}` becomes `base=3` for an `int` parameter, and a value that can't be coerced goes back to the model as an error it can correct:
+
+```python
+from google.adk.features import FeatureName, override_feature_enabled
+
+override_feature_enabled(FeatureName.FUNCTION_TOOL_ARG_VALIDATION, True)   # or ADK_ENABLE_FUNCTION_TOOL_ARG_VALIDATION=1
+```
+
 ### `require_confirmation`
 
 ```python
@@ -156,7 +164,7 @@ tool = FunctionTool(
 )
 ```
 
-Bool or predicate. When the callable returns truthy, the tool returns `{"error": "This tool call requires confirmation..."}` and sets `tool_context.actions.skip_summarization = True`. The user then sends back a `FunctionResponse` carrying a `ToolConfirmation` payload on the next turn.
+Bool or predicate. The predicate receives the same prepared arguments as `func` (including `tool_context` if `func` declares one), so give it a `**_` catch-all: `def needs_approval(amount: float, **_) -> bool: return amount > 1000`. When the callable returns truthy, the tool returns `{"error": "This tool call requires confirmation..."}` and sets `tool_context.actions.skip_summarization = True`. The user then sends back a `FunctionResponse` carrying a `ToolConfirmation` payload on the next turn.
 
 ## LongRunningFunctionTool
 
@@ -192,6 +200,8 @@ async def check_report_status(tool_context: ToolContext) -> dict:
 ```
 
 The key contract: the function **returns immediately** with a `{"status": "pending", ...}` dict. ADK delivers that response to the model, which then waits for the user to poll or for the next invocation to arrive. Do not block inside the function — that freezes the event loop.
+
+**What ADK does with the return value.** The function-call event carries `long_running_tool_ids` and is yielded before the tool runs, and `event.is_final_response()` is `True` for it, so a client can show a progress indicator straight away. If the function returns something truthy, ADK builds the `FunctionResponse` and the model continues. If it returns something falsy (`None`, `{}`), ADK builds **no** response: the call stays open until your client or a background worker sends a `FunctionResponse` with the same call `id` (see `get_user_choice` under [HITL tools](#hitl-tools)). ADK never re-calls the tool itself.
 
 ### Distinguishing `FunctionTool` vs `LongRunningFunctionTool`
 
@@ -546,8 +556,8 @@ asyncio.run(main())
 
 Before spawning a subprocess, `ExecuteBashTool` runs `_validate_command`:
 
-1. **Prefix check** — if `allowed_command_prefixes != ("*",)`, the command must start with one of the listed prefixes (case-sensitive). Fails → `{"error": "Command not allowed..."}`.
-2. **Operator check** — if any `blocked_operators` token appears in the command string (simple substring match), fails → `{"error": "Operator ... is not allowed..."}`.
+1. **Prefix check** — if `allowed_command_prefixes != ("*",)`, the command must start with one of the listed prefixes (case-sensitive). Fails → `{"error": "Command blocked. Permitted prefixes are: ..."}`.
+2. **Operator check** — if any `blocked_operators` token appears in the command string (simple substring match), fails → `{"error": "Command contains blocked operator: ..."}`.
 3. **Confirmation** — `tool_context.request_confirmation(...)` is called on every valid command.
 
 After validation, the subprocess is launched with:
@@ -560,6 +570,8 @@ After validation, the subprocess is launched with:
 - `ExecuteBashTool` always requests confirmation (`request_confirmation` called before every run). In headless environments the confirmation callback must be handled by your `App` or a plugin.
 - Prefix matching is a **prefix** check, not a full command parser. `allowed_command_prefixes=("git",)` would permit `git-annex` as well. Use `blocked_operators` to prevent shell injection.
 - Use `workspace=` to confine the working directory; note that the process can still read/write absolute paths outside the workspace unless `RLIMIT_AS` / container isolation is also in place.
+- The policy is not a sandbox. `echo $(rm -rf /workspace)` passes an `echo` prefix check, so add `"$("`, `` "`" ``, `"\n"` and `"\r"` to `blocked_operators`, and even then a command that interprets its own flags can escape: `git -c alias.x='!rm -rf /' x` starts with `git` and contains no blocked token. Run security-sensitive agents inside a real OS-level sandbox (container, gVisor, Firecracker).
+- Other outcomes: a rejected confirmation returns `{"error": "This tool call is rejected."}`, a timeout returns an `error` plus whatever stdout/stderr was captured, and on non-POSIX systems the tool returns `{"error": "ExecuteBashTool is only supported on POSIX systems."}`. The process group is always killed when the call ends.
 
 ## AgentTool
 
@@ -618,6 +630,27 @@ tool = VertexAiSearchTool(
     data_store_id="projects/my-project/locations/global/collections/default_collection/dataStores/my-store",
     bypass_multi_tools_limit=True,   # auto-substitute with DiscoveryEngine if needed
 )
+```
+
+`VertexAiSearchTool(*, data_store_id=None, data_store_specs=None, search_engine_id=None, filter=None, max_results=None, bypass_multi_tools_limit=False)` takes either a single `data_store_id` or a `search_engine_id` (with `data_store_specs=[types.VertexAISearchDataStoreSpec(data_store=...), ...]` for an engine over several stores). `filter` uses Discovery Engine syntax (`'lang: ANY("en")'`), not CEL equality. For a per-request filter, subclass and override `_build_vertex_ai_search_config(self, readonly_context) -> types.VertexAISearch`, validating any state value before you interpolate it:
+
+```python
+import re
+from google.genai import types
+from google.adk.tools import VertexAiSearchTool
+
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+class OrgScopedSearch(VertexAiSearchTool):
+    def _build_vertex_ai_search_config(self, readonly_context) -> types.VertexAISearch:
+        org_id = readonly_context.state.get("org_id", "")
+        if org_id and not _SAFE_ID.match(org_id):
+            raise ValueError(f"Invalid org_id: {org_id!r}")
+        return types.VertexAISearch(
+            datastore=self.data_store_id,
+            filter=f'org_id: ANY("{org_id}")' if org_id else None,
+            max_results=self.max_results,
+        )
 ```
 
 ## Memory and artifact tools

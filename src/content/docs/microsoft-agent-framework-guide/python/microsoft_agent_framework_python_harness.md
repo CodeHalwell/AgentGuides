@@ -1,13 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — HARNESS Providers"
-description: "TodoProvider, AgentModeProvider, MemoryContextProvider — experimental context providers giving agents self-managed task lists, mode-switching, and long-term memory."
+description: "The agent harness: TodoProvider, AgentModeProvider, MemoryContextProvider, FileMemoryProvider, FileAccessProvider, BackgroundAgentsProvider, ToolApprovalMiddleware and AgentLoopMiddleware — task lists, modes, long-term memory, agent files, background sub-agents, standing approvals and run-until-done loops."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # HARNESS Providers — Python
 
-> **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore` and `TodoFileStore` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.
+> **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider` and `AgentLoopMiddleware` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.
 >
 > Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.5.0). The tool names the providers expose were renamed in 1.7.0 (`add_todos` → `todos_add`, `set_mode` → `mode_set`, and so on); this page uses the current names.
 
@@ -18,8 +18,14 @@ HARNESS providers are a family of `ContextProvider` implementations that give ag
 | `TodoProvider` | Five tools (`todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, `todos_get_all`) + instructions for autonomous task tracking |
 | `AgentModeProvider` | Two tools (`mode_get`, `mode_set`) + instructions for operating in distinct modes (plan / execute, or any custom set) |
 | `get_agent_mode` / `set_agent_mode` | External helpers to read and flip the mode from application code without waiting for the agent to call `mode_set` |
+| `MemoryContextProvider` | Cross-session long-term memory: extracts durable facts after each session and injects relevant topics later |
+| `FileMemoryProvider` | Seven `file_memory_*` tools: session-scoped (or user-scoped) scratch files with a `memories.md` index |
+| `FileAccessProvider` | Eight `file_access_*` tools: read/edit a shared `AgentFileStore` workspace, approval-gated by default |
+| `BackgroundAgentsProvider` | Six `background_agents_*` tools: start sub-agents concurrently, wait for and collect their results |
+| `ToolApprovalMiddleware` | Auto-approval rules and "always allow" standing approvals stored in the session |
+| `AgentLoopMiddleware` | Re-runs the agent until a predicate or an LLM judge says the task is done |
 
-Both providers plug in via `context_providers=` and store state inside `AgentSession.state` (or optionally on disk).
+The providers plug in via `context_providers=`, the two middleware classes via `middleware=`, and they keep their state inside `AgentSession.state` (or optionally on disk).
 
 ---
 
@@ -390,7 +396,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-When you call `set_agent_mode` externally, the provider injects a `user`-role message on the next `run()` announcing the switch. This is necessary because system instructions alone may not override a model that has seen its own `mode_set` tool call earlier in the history.
+When you call `set_agent_mode` externally, the provider injects a `user`-role message on the next `run()` announcing the switch. This is necessary because system instructions alone may not override a model that has seen its own `mode_set` tool call earlier in the history. Pass `notify=False` when the agent has already seen the change (for example, you changed the mode from inside a replacement tool whose result the model will read): that skips the announcement and clears any pending one.
 
 ### `AgentModeProvider` constructor reference
 
@@ -1247,3 +1253,11 @@ Two other ways to build the stop condition:
 | `DEFAULT_TODO_SOURCE_ID` | `agent_framework` | `"todo"` — the default `source_id` for `TodoProvider` |
 | `DEFAULT_MODE_SOURCE_ID` | `agent_framework` | `"agent_mode"` — the default `source_id` for `AgentModeProvider` |
 | `DEFAULT_MEMORY_SOURCE_ID` | `agent_framework` | `"memory"` — the default `source_id` for `MemoryContextProvider` |
+| `FileMemoryProvider` | `agent_framework` | `ContextProvider`; 7 `file_memory_*` tools, per-session or `scope=` folder |
+| `FileAccessProvider` | `agent_framework` | `ContextProvider`; 8 `file_access_*` tools over a shared store |
+| `AgentFileStore` / `InMemoryAgentFileStore` / `FileSystemAgentFileStore` | `agent_framework` | Storage behind the two file providers |
+| `BackgroundAgentsProvider` | `agent_framework` | `ContextProvider`; 6 `background_agents_*` tools; call `release_session()` when done |
+| `ToolApprovalMiddleware` | `agent_framework` | Auto-approval rules + standing approvals; needs an `AgentSession` |
+| `create_always_approve_tool_response` / `..._with_arguments_response` | `agent_framework` | Answer an approval request with a standing rule |
+| `AgentLoopMiddleware` | `agent_framework` | Loop until `should_continue` is false; `.with_judge()` for an LLM judge |
+| `todos_remaining` / `background_tasks_running` | `agent_framework` | Ready-made `should_continue` predicates for the loop |

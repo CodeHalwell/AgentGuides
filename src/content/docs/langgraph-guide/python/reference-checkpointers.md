@@ -276,22 +276,25 @@ for intr in snapshot.interrupts:
 
 ## `Interrupt` — struct reference (source-verified, %%version=langgraph%%)
 
-`Interrupt` is a frozen dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
+`Interrupt` is the dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
 
 ```python
 # langgraph.types
-from dataclasses import dataclass
-from typing import Any
-
-@dataclass(frozen=True, slots=True)
-class Interrupt:
+@final
+@dataclass(init=False, slots=True)
+class Interrupt(Generic[ResponseT]):
     value: Any
     """The value passed to interrupt() — the question or payload for the human reviewer."""
 
     id: str
     """Unique ID for this interrupt. Used to resume a specific interrupt:
     Command(resume={intr.id: answer})"""
+
+    response_schema: type[ResponseT] | dict[str, Any] | None = None
+    """JSON Schema for the expected resume value, if interrupt() was given one."""
 ```
+
+See [typed resume values](/langgraph-guide/python/reference-command-and-send/#typed-resume-values-response_schema) for how `response_schema` validates resume values.
 
 **Key usage patterns:**
 
@@ -498,6 +501,25 @@ graph.update_state(
 # Returns a RunnableConfig pointing at the newly created checkpoint.
 ```
 
+Writes go through the channel reducers, so on an `Annotated[int, operator.add]` field `update_state(cfg, {"total": 100})` adds 100 rather than replacing the value (wrap it in `Overwrite(...)` to replace).
+
+`update_state()` is a one-step wrapper around `bulk_update_state(config, supersteps)`, which applies several supersteps in one call. Each superstep is a sequence of `StateUpdate(values, as_node=None, task_id=None)` named tuples (from `langgraph.types`), applied in order, each one creating a checkpoint:
+
+```python
+from langgraph.types import StateUpdate
+
+graph.bulk_update_state(
+    config,
+    [
+        [StateUpdate({"items": ["corrected-item"], "phase": "revised"}, as_node="process")],
+        [StateUpdate({"phase": "final"}, as_node="process")],
+    ],
+)
+graph.get_state(config).values["phase"]   # 'final'
+```
+
+Use it to replay a corrected sequence of writes after manual intervention without re-running nodes. The async twins are `aupdate_state` / `abulk_update_state`.
+
 ## `Durability` setting
 
 `Durability` controls *when* each checkpoint is flushed to the backend. Import the type or pass the literal string directly:
@@ -649,6 +671,32 @@ encrypted_serde = EncryptedSerializer.from_pycryptodome_aes()
 ```
 
 All savers accept `serde=...` in their constructor. `InMemorySaver` accepts it too, via kwarg only.
+
+`EncryptedSerializer` appends the cipher name to the inner serializer's type tag (`"msgpack+aes"`), and blobs whose type has no `+` suffix are passed straight to the inner `serde`. So you can turn encryption on for an existing deployment and still read the unencrypted checkpoints written before. AES-EAX is authenticated: tampered ciphertext fails to decrypt with a `ValueError`.
+
+For KMS-backed keys or another cipher, implement `CipherProtocol` (from `langgraph.checkpoint.serde.base`) and pass it to the constructor:
+
+```python
+from langgraph.checkpoint.serde.base import CipherProtocol
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+
+
+class XorCipher(CipherProtocol):
+    """Toy cipher that shows the interface. Not for production."""
+
+    def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+        return "xor", bytes(b ^ 0x42 for b in plaintext)   # (cipher name, ciphertext)
+
+    def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+        assert ciphername == "xor"
+        return bytes(b ^ 0x42 for b in ciphertext)
+
+
+serde = EncryptedSerializer(cipher=XorCipher())   # serde= defaults to JsonPlusSerializer()
+typ, data = serde.dumps_typed({"hello": "world"})
+print(typ)                              # 'msgpack+xor'
+print(serde.loads_typed((typ, data)))   # {'hello': 'world'}
+```
 
 ## Patterns
 

@@ -276,6 +276,73 @@ Fields (with validation in `__post_init__`):
 - `enable_image_understanding`, `enable_video_understanding`
 - `include_output` — emit raw search results as `NativeToolReturnPart` (otherwise the model only uses them internally).
 
+## `AdvisorTool` — let a cheap model consult a strong one
+
+A native Anthropic tool (OpenRouter supports a compatible subset): a fast executor model decides on its own when to consult a stronger advisor model, and the round trip happens at the provider, not in your code.
+
+```python
+from pydantic_ai import AdvisorTool, Agent
+from pydantic_ai.capabilities import NativeTool
+
+agent = Agent(
+    'anthropic:claude-haiku-4-5',                      # executor: fast, cheap
+    capabilities=[NativeTool(AdvisorTool(
+        model='claude-opus-5',                         # advisor: slower, stronger
+        max_uses=3,                                    # Anthropic only
+        max_tokens=1024,                               # minimum 1024
+        caching='5m',                                  # Anthropic only: cache the advisor context
+    ))],
+)
+```
+
+## `NativeOrLocalTool` — native when possible, Python otherwise
+
+`WebSearch`, `WebFetch` and `ImageGeneration` are subclasses of `NativeOrLocalTool`, which pairs a provider-native tool with a local fallback and makes sure the model only ever sees one of them. `native=False` forces the local path; `local=False` forces native with no fallback. Use the base class directly to give any native tool a fallback of your own:
+
+```python
+from pydantic_ai import Agent, WebSearchTool
+from pydantic_ai.capabilities import NativeOrLocalTool
+
+
+def intranet_search(query: str) -> str:
+    """Search the company intranet."""
+    return f'Intranet results for: {query}'
+
+
+agent = Agent(
+    'groq:llama-3.3-70b-versatile',
+    capabilities=[NativeOrLocalTool(native=WebSearchTool(), local=intranet_search)],
+)
+```
+
+`native=` also accepts a callable `(RunContext) -> tool | None`, so the native tool's settings can depend on the run's deps.
+
+## `ImageGeneration` — native image output with a fallback
+
+The `ImageGeneration` capability uses the model's native `ImageGenerationTool` where it exists (OpenAI Responses, Gemini image models) and otherwise falls back to either a dedicated image model (`fallback_image_model=`) or a sub-agent on an image-capable chat model (`fallback_subagent_model=`). It accepts the `ImageGenerationTool` fields above plus portable `dimensions` / `aspect_ratio`.
+
+```python
+from pathlib import Path
+
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ImageGeneration
+
+agent = Agent(
+    'anthropic:claude-sonnet-4-6',                     # no native image generation…
+    capabilities=[ImageGeneration(
+        fallback_subagent_model='openai-responses:gpt-5.2',   # …so a sub-agent draws it
+        quality='high',
+        aspect_ratio='16:9',
+    )],
+)
+
+result = agent.run_sync('Draw a lighthouse at dusk for a blog header.')
+for image in result.response.images:                   # BinaryImage parts of the final response
+    Path('header.png').write_bytes(image.data)
+```
+
+The lower-level `pydantic_ai.common_tools.image_generation.image_generation_tool(model, native_tool)` builds the same sub-agent as an ordinary function tool (it is what `fallback_subagent_model=` uses).
+
 ## Inspecting native tool traffic
 
 Native tool calls appear as `NativeToolCallPart` and `NativeToolReturnPart` in the message history, distinct from `ToolCallPart` / `ToolReturnPart` (which are for your function tools). There are no dedicated streaming events for them: since 2.0 they surface only through the standard `PartStartEvent` / `PartDeltaEvent` (the V1 `BuiltinToolCallEvent` / `BuiltinToolResultEvent` were removed).

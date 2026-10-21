@@ -221,6 +221,17 @@ print(result.interrupts)   # tuple[Interrupt, ...]
 
 For back-compat, `result["key"]` still works on a `GraphOutput` but emits `DeprecationWarning`; prefer `result.value["key"]`.
 
+A paused run returns normally, so check `result.interrupts` before you treat `result.value` as final. Each `Interrupt` carries the `id` to resume with (and the `response_schema`, if the node passed one):
+
+```python
+result = graph.invoke({"draft": "Hello", "approved": None}, cfg, version="v2")
+if result.interrupts:
+    pending = result.interrupts[0]
+    print(pending.value)             # the payload the node passed to interrupt()
+    result = graph.invoke(Command(resume={pending.id: "yes"}), cfg, version="v2")
+print(result.value, result.interrupts)   # final state, ()
+```
+
 ## Stream mode details
 
 ### `"values"`
