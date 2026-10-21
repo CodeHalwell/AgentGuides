@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.9.2** · September 2026 · Python 3.10+
+    **v2.11.0** · October 2026 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     GCP-native workloads, Gemini-first agents, Vertex AI Agent Engine.
@@ -51,6 +51,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="16 · Class deep dives — v2.8.0" href="./google_adk_class_deep_dives_v2_8/" description="10 source-verified deep dives for 2.8.0: LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, exit_loop + get_user_choice_tool" />
   <LinkCard title="17 · Class deep dives Vol. 3 — v2.8.0" href="./google_adk_class_deep_dives_vol3/" description="10 more source-verified deep dives: RunConfig, BuiltInPlanner, PlanReActPlanner, BasePlugin, ReflectAndRetryToolPlugin, ContextFilterPlugin, VertexAiMemoryBankService, VertexAiCodeExecutor, ConversationScenarios + LlmBackedUserSimulatorConfig, SaveFilesAsArtifactsPlugin" />
   <LinkCard title="18 · Class deep dives Vol. 4 — v2.9.2" href="./google_adk_class_deep_dives_vol4/" description="10 source-verified deep dives: SimplePromptOptimizer, GEPARootAgentOptimizer, Sampler, LocalEvalSampler, TelemetryConfig, UrlContextTool, Skill, SkillRegistry, SkillToolset, VertexAiRagMemoryService" />
+  <LinkCard title="19 · Class deep dives Vol. 5 — v2.11.0" href="./google_adk_class_deep_dives_vol5/" description="10 source-verified deep dives: Event, EventActions, Context (unified CallbackContext/ToolContext), FunctionTool, LongRunningFunctionTool, AuthConfig, DatabaseSessionService, SqliteSessionService, VertexAiSessionService, VertexAiSearchTool" />
+  <LinkCard title="20 · Class deep dives Vol. 6 — v2.11.0" href="./google_adk_class_deep_dives_vol6/" description="10 source-verified deep dives: Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App (compaction + resumability), LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, ToolboxToolset" />
 </CardGrid>
 
 ## Jump to a topic
@@ -88,6 +90,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Class deep dives v2.8.0" href="./google_adk_class_deep_dives_v2_8/" description="LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, exit_loop + get_user_choice_tool" />
   <LinkCard title="Class deep dives Vol. 3 v2.8.0" href="./google_adk_class_deep_dives_vol3/" description="RunConfig, BuiltInPlanner, PlanReActPlanner, BasePlugin, ReflectAndRetryToolPlugin, ContextFilterPlugin, VertexAiMemoryBankService, VertexAiCodeExecutor, ConversationScenarios + LlmBackedUserSimulatorConfig, SaveFilesAsArtifactsPlugin" />
   <LinkCard title="Class deep dives Vol. 4 v2.9.2" href="./google_adk_class_deep_dives_vol4/" description="SimplePromptOptimizer, GEPARootAgentOptimizer, Sampler, LocalEvalSampler, TelemetryConfig, UrlContextTool, Skill, SkillRegistry, SkillToolset, VertexAiRagMemoryService" />
+  <LinkCard title="Class deep dives Vol. 5 v2.11.0" href="./google_adk_class_deep_dives_vol5/" description="Event, EventActions, Context (unified CallbackContext/ToolContext), FunctionTool, LongRunningFunctionTool, AuthConfig, DatabaseSessionService, SqliteSessionService, VertexAiSessionService, VertexAiSearchTool" />
+  <LinkCard title="Class deep dives Vol. 6 v2.11.0" href="./google_adk_class_deep_dives_vol6/" description="Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App (compaction + resumability), LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, ToolboxToolset" />
 </CardGrid>
 
 ## Install, minimal example
@@ -133,5 +137,6 @@ Compact, version-level history. Per-symbol details for the current release live 
 | 2.6.1 – 2.6.3 | Aug 2026 | `App`/`EventsCompactionConfig`/`ResumabilityConfig` refinements, `ToolConfirmation`, `McpInstructionProvider`, comprehensive `RunConfig`/`StreamingMode`/`ToolThreadPoolConfig`, `SpannerToolset`, `CachePerformanceAnalyzer`. |
 | 2.7.1 | Aug 21, 2026 | **Documentation consolidation.** The 48 sequential "class deep dive" volumes (covering versions 2.1.0 → 2.6.3) have been merged, deduplicated, and re-verified as one [Class & API Reference](./google_adk_comprehensive_guide/#class--api-reference) section on the comprehensive guide, organized into 12 subject areas. Notable import-path corrections confirmed against the installed `2.7.1` package: `EventsCompactionConfig` moved to the private `google.adk.apps._configs` (no longer re-exported from `google.adk.apps`); every `google.adk.a2a` class requires a private submodule import; GCS/Firestore session, memory, and artifact integrations relocated to `google.adk.integrations.*`; `LoopAgent`/`ParallelAgent`/`SequentialAgent` remain functional but are confirmed `@deprecated` in favor of `Workflow`. |
 | **2.8.0** | Aug 31, 2026 | **New deep-dive page** covering 10 source-verified classes: `LiveRequestQueue` (bidirectional streaming), `ExecuteBashTool`/`BashToolPolicy` (secure bash with HITL gate), `ToolConfirmation` (human-in-the-loop protocol), `App` (top-level container), `EventsCompactionConfig` (token-threshold + sliding-window), `LlmEventSummarizer` (LLM-driven session summarizer), `PreloadMemoryTool` (proactive memory injection), `ToolboxToolset` (Cloud Toolbox / MCP Toolbox), `GcsArtifactService` (GCS artifact storage), and `exit_loop`/`get_user_choice_tool` (control-flow built-ins). |
+| **2.11.0 (Vol. 6)** | Oct 2026 | **New deep-dive page Vol. 6** covering 10 more source-verified classes: `Workflow`/`Graph` (DAG orchestrator internals), `BaseNode`/`FunctionNode` (parameter_binding modes, auth_config, type coercions), `RetryConfig` (exponential back-off with per-exception filtering), `App`/`EventsCompactionConfig`/`ResumabilityConfig` (compaction trigger pairs, pause/resume), `LlmAgent` advanced fields (`static_instruction`, `mode`, `parallel_worker`, `output_schema`, `output_key`), `OpenAPIToolset` (header_provider, httpx_client_factory, preserve_property_names), `RemoteA2aAgent` (card URL/file/object, task mode), `GcsArtifactService` (blob naming scheme, user vs session scope), `PubSubToolset` (experimental publish/pull/ack tools), and `ToolboxToolset` (bound_params, auth_token_getters). |
 
 **Note:** Other languages: [Go](/google-adk-guide/go/) · [TypeScript](/google-adk-guide/typescript/).
