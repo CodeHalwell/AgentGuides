@@ -44,11 +44,13 @@ For everything else — tool decoration, middleware, sessions, MCP, A2A, declara
 import asyncio
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from azure.identity import AzureCliCredential
 
 async def main():
     client = FoundryChatClient(
-        endpoint="https://myresource.services.ai.azure.com",
-        subscription_id="...",
+        project_endpoint="https://myresource.services.ai.azure.com/api/projects/my-project",
+        model="gpt-4o-mini",
+        credential=AzureCliCredential(),
     )
     agent = Agent(client=client, instructions="You are a helpful assistant.")
     response = await agent.run("hello")
