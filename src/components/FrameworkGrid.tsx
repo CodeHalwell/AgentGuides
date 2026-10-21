@@ -9,8 +9,8 @@ type Category = (typeof categories)[number];
 type Language = (typeof languages)[number];
 type Difficulty = (typeof difficulties)[number];
 
-// Four hues only (Ink → Oxide → Verdigris → Sulfur); the category label disambiguates.
-const groupOf: Record<Framework['category'], string> = {
+// Four hues only (Ink → Oxide → Verdigris → Sulfur); the category chip text disambiguates.
+export const groupOf: Record<Framework['category'], string> = {
   'Multi-Agent': 'oxide',
   'Data & RAG': 'verdigris',
   'Cloud-Native': 'ink',
@@ -19,26 +19,30 @@ const groupOf: Record<Framework['category'], string> = {
   Lightweight: 'sulfur',
 };
 
-const shortLabel: Record<Framework['category'], string> = {
-  'Multi-Agent': 'Multi',
-  'Data & RAG': 'RAG',
-  'Cloud-Native': 'Cloud',
-  Enterprise: 'Ent.',
-  'Model-Specific': 'Model',
-  Lightweight: 'Lite',
+const langChip: Record<Framework['languages'][number], string> = {
+  Python: 'Py',
+  TypeScript: 'Ts',
+  '.NET': 'C#',
+  Go: 'Go',
 };
 
-export function ElementTile({ f, n }: { f: Framework; n: number }) {
+/** Element chips: the framework's symbol in its group colour, then one ink chip per language. */
+export function Chips({ f }: { f: Framework }) {
   return (
-    <span className="ag-tile" data-group={groupOf[f.category]} aria-hidden="true">
-      <span>{String(n).padStart(2, '0')}</span>
-      <span className="sym">{f.symbol}</span>
-      <span className="lab">{shortLabel[f.category]}</span>
-    </span>
+    <div className="flex flex-wrap gap-1.5" aria-label={`${f.category}; ${f.languages.join(', ')}`}>
+      <span className="chip" data-group={groupOf[f.category]} title={f.category}>
+        {f.symbol}
+      </span>
+      {f.languages.map((l) => (
+        <span key={l} className="chip" data-group="ink" title={l}>
+          {langChip[l]}
+        </span>
+      ))}
+    </div>
   );
 }
 
-function withBase(href: string) {
+export function withBase(href: string) {
   const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
   if (href.startsWith('http')) return href;
   return `${base}${href}`;
@@ -71,49 +75,46 @@ export default function FrameworkGrid() {
 
   return (
     <div className="not-content">
+      <div className="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Category">
+        {categories.map((c) => (
+          <button key={c} type="button" className="ag-chip" aria-pressed={category === c} onClick={() => setCategory(c)}>
+            {c}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search frameworks, tags, or use cases…"
+          aria-label="Search frameworks"
           className="ag-input flex-1"
         />
-        <Select label="Category" value={category} onChange={(v) => setCategory(v as Category)} options={categories} />
         <Select label="Language" value={language} onChange={(v) => setLanguage(v as Language)} options={languages} />
         <Select label="Level" value={difficulty} onChange={(v) => setDifficulty(v as Difficulty)} options={difficulties} />
       </div>
 
-      <p className="brand-label mb-4 text-[var(--sl-color-gray-3)]">
+      <p className="brand-label mb-3">
         {filtered.length} of {frameworks.length} frameworks
       </p>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="ag-cells">
         {filtered.map((f) => (
-          <a key={f.id} href={withBase(f.href)} className="ag-card group">
-            <div className="flex items-start gap-3">
-              <ElementTile f={f} n={frameworks.indexOf(f) + 1} />
-              <div className="min-w-0">
-                <h3 className="m-0 text-lg leading-tight">{f.name}</h3>
-                {f.version && <div className="ag-version mt-1">{f.version}</div>}
-              </div>
-            </div>
-            <p className="m-0 text-sm leading-relaxed">{f.tagline}</p>
-            <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
-              <span className="ag-tag">{f.category}</span>
-              <span className="ag-tag">{f.difficulty}</span>
-              {f.languages.map((lang) => (
-                <span key={lang} className="ag-tag">
-                  {lang}
-                </span>
-              ))}
-            </div>
+          <a key={f.id} href={withBase(f.href)} className="ag-cell">
+            <Chips f={f} />
+            <h3>{f.name}</h3>
+            <p>{f.tagline}</p>
+            <span className="ag-metric">
+              {f.version ?? 'managed service'} · {f.difficulty.toLowerCase()}
+            </span>
           </a>
         ))}
       </div>
 
       {filtered.length === 0 && (
-        <div className="mt-6 border border-dashed border-[var(--sl-color-gray-5)] p-8 text-center text-[var(--sl-color-gray-3)]">
+        <div className="brand-annotation mt-6 border border-dashed border-[var(--rl)] p-8 text-center">
           No frameworks match those filters. Try broadening them.
         </div>
       )}
@@ -133,13 +134,9 @@ function Select({
   options: readonly string[];
 }) {
   return (
-    <label className="brand-label flex items-center gap-2 text-[var(--sl-color-gray-3)]">
+    <label className="brand-label flex items-center gap-2">
       <span className="sr-only sm:not-sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="ag-input"
-      >
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="ag-input">
         {options.map((o) => (
           <option key={o} value={o}>
             {o}

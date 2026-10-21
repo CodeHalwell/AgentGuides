@@ -1,0 +1,35 @@
+{
+  "name": "atoms-to-agents",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#16181D",
+    "editor.foreground": "#F4F1EA",
+    "editor.selectionBackground": "#33363D",
+    "editorLineNumber.foreground": "#5D6067",
+    "terminal.background": "#16181D",
+    "terminal.foreground": "#F4F1EA",
+    "titleBar.activeBackground": "#16181D",
+    "titleBar.activeForeground": "#A9ACB2",
+    "tab.activeBackground": "#16181D",
+    "tab.activeForeground": "#F4F1EA",
+    "tab.inactiveBackground": "#16181D",
+    "editorGroupHeader.tabsBackground": "#16181D",
+    "focusBorder": "#E0602F"
+  },
+  "tokenColors": [
+    { "scope": ["comment", "punctuation.definition.comment"], "settings": { "foreground": "#A9ACB2", "fontStyle": "italic" } },
+    { "scope": ["keyword", "storage", "storage.type", "storage.modifier", "keyword.control", "keyword.operator.new", "keyword.operator.expression", "keyword.operator.logical.python"], "settings": { "foreground": "#E3B23C" } },
+    { "scope": ["string", "string.quoted", "string.template", "punctuation.definition.string"], "settings": { "foreground": "#7FC4B9" } },
+    { "scope": ["constant.numeric", "constant.language", "constant.character", "support.constant"], "settings": { "foreground": "#7FC4B9" } },
+    { "scope": ["entity.name.function", "support.function", "meta.function-call.generic", "variable.function"], "settings": { "foreground": "#F4F1EA", "fontStyle": "" } },
+    { "scope": ["entity.name.type", "entity.name.class", "support.type", "support.class", "entity.other.inherited-class", "storage.type.cs", "entity.name.type.go"], "settings": { "foreground": "#E0602F" } },
+    { "scope": ["variable.parameter", "meta.parameter"], "settings": { "foreground": "#E6E1D6" } },
+    { "scope": ["entity.name.tag", "meta.tag"], "settings": { "foreground": "#E0602F" } },
+    { "scope": ["entity.other.attribute-name", "support.type.property-name", "meta.object-literal.key"], "settings": { "foreground": "#CFC9BD" } },
+    { "scope": ["meta.decorator", "entity.name.function.decorator", "punctuation.definition.decorator"], "settings": { "foreground": "#E0602F" } },
+    { "scope": ["punctuation", "meta.brace", "keyword.operator"], "settings": { "foreground": "#A9ACB2" } },
+    { "scope": ["markup.inserted", "markup.inserted.diff"], "settings": { "foreground": "#7FC4B9" } },
+    { "scope": ["markup.deleted", "markup.deleted.diff"], "settings": { "foreground": "#E0602F" } },
+    { "scope": ["markup.heading", "markup.bold"], "settings": { "foreground": "#F4F1EA", "fontStyle": "bold" } }
+  ]
+}

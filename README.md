@@ -26,7 +26,7 @@ Frameworks covered: OpenAI Agents SDK, CrewAI, AutoGen / AG2, LangGraph, LlamaIn
 - **[React](https://react.dev/)** 19 — interactive islands (framework filter, use-case picker)
 - **[Pagefind](https://pagefind.app/)** — client-side search (bundled by Starlight)
 
-The look follows the Daniel Halwell brand guidelines: paper and ink with a single oxide accent, Newsreader / Hanken Grotesk / JetBrains Mono (self-hosted via `@fontsource`), square corners and hard offset shadows. Tokens live at the top of `src/styles/global.css`; the header mark is `src/components/SiteTitle.astro`.
+The look follows the "Atoms to agents" brand guidelines and UI mockups: flat paper or ink ground, hairline rules, a single oxide accent, Newsreader / Hanken Grotesk / JetBrains Mono (self-hosted via `@fontsource`). Light and dark tokens live at the top of `src/styles/global.css`; code panels use `src/styles/code-theme.json`; the header mark and article header are `src/components/SiteTitle.astro` and `src/components/PageTitle.astro`.
 
 ## Local development
 

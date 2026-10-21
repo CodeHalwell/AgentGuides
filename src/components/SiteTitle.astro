@@ -13,7 +13,7 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
     align-items: center;
     gap: 0.75rem;
     font-size: var(--sl-text-h4);
-    color: var(--sl-color-white);
+    color: var(--tx);
     text-decoration: none;
     white-space: nowrap;
     min-width: 0;
@@ -24,17 +24,20 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
     width: 2rem;
     height: 2rem;
     flex: none;
-    background: var(--brand-paper);
-    color: var(--brand-ink);
-    border: 2px solid var(--brand-ink);
-    box-shadow: 3px 3px 0 var(--brand-oxide);
+    background: var(--bg);
+    color: var(--tx);
+    border: 2px solid var(--tx);
+    box-shadow: 3px 3px 0 var(--ac);
     font-family: var(--brand-font-display);
     font-size: 1.05rem;
     line-height: 1;
   }
   .title-text {
     overflow: hidden;
-    font-family: var(--brand-font-display);
-    font-weight: 400;
+    font-family: var(--sl-font-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 </style>

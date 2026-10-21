@@ -5,6 +5,31 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import remarkBasePath from './src/plugins/remark-base-path.mjs';
 import remarkVersions from './src/plugins/remark-versions.mjs';
+import { readFileSync } from 'node:fs';
+import { ExpressiveCodeTheme } from '@astrojs/starlight/expressive-code';
+
+// Code panels are ink in both themes, so one dark theme serves both.
+const codeTheme = ExpressiveCodeTheme.fromJSONString(
+  readFileSync(new URL('./src/styles/code-theme.json', import.meta.url), 'utf8'),
+);
+
+// 3px reading-progress bar under the header on article pages.
+const readingProgress = `
+document.addEventListener('DOMContentLoaded', () => {
+  if (!document.querySelector('.sl-markdown-content') || document.querySelector('.hero')) return;
+  const bar = document.createElement('div');
+  bar.id = 'reading-progress';
+  bar.setAttribute('aria-hidden', 'true');
+  const fill = document.createElement('span');
+  bar.append(fill);
+  document.body.append(bar);
+  const update = () => {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    fill.style.width = (max > 0 ? Math.min(100, (scrollY / max) * 100) : 0) + '%';
+  };
+  addEventListener('scroll', update, { passive: true });
+  update();
+});`;
 
 const base = '/AgentGuides';
 
@@ -55,7 +80,9 @@ export default defineConfig({
       favicon: '/favicon.svg',
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
+        PageTitle: './src/components/PageTitle.astro',
       },
+      head: [{ tag: 'script', content: readingProgress }],
       social: [
         {
           icon: 'github',
@@ -73,15 +100,23 @@ export default defineConfig({
         './src/styles/global.css',
       ],
       expressiveCode: {
+        themes: [codeTheme],
+        useStarlightUiThemeColors: false,
+        useStarlightDarkModeSwitch: false,
         styleOverrides: {
           borderRadius: '0',
           borderWidth: '1px',
-          borderColor: 'var(--sl-color-hairline-light)',
+          borderColor: 'var(--rl)',
+          codeBackground: 'var(--code)',
           codeFontFamily: 'var(--sl-font-mono)',
           uiFontFamily: 'var(--sl-font-mono)',
           frames: {
             frameBoxShadowCssValue: 'none',
-            editorActiveTabIndicatorTopColor: 'var(--brand-oxide)',
+            editorActiveTabIndicatorTopColor: '#E0602F',
+            editorTabBarBackground: 'var(--code)',
+            editorActiveTabBackground: 'var(--code)',
+            terminalTitlebarBackground: 'var(--code)',
+            terminalBackground: 'var(--code)',
             terminalTitlebarDotsOpacity: '0',
           },
         },

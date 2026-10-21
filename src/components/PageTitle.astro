@@ -1,0 +1,84 @@
+---
+// Article header, after the brand's notebook-article layout: element chips,
+// the title in Newsreader, the description as a muted lead. Starlight's panel
+// border supplies the hairline beneath.
+import { frameworks } from '../data/frameworks';
+
+// Starlight's PAGE_TITLE_ID (not a public export); skip links and the TOC target it.
+const PAGE_TITLE_ID = '_top';
+const { entry, id } = Astro.locals.starlightRoute;
+const path = `/${id}/`;
+
+// The framework whose guide this page belongs to: the longest matching href,
+// falling back to the guide folder for pages outside a language subfolder.
+const longest = (list: typeof frameworks) => list.sort((a, b) => b.href.length - a.href.length)[0];
+const framework =
+  longest(frameworks.filter((f) => path.startsWith(f.href))) ??
+  frameworks.find((f) => path.startsWith(f.href.replace(/(python|typescript)\/$/, '')));
+
+const langChip: Record<string, string> = { python: 'Py', typescript: 'Ts', dotnet: 'C#', go: 'Go' };
+const segment = id.split('/')[1];
+const singleLanguage = framework?.languages.length === 1 ? framework.languages[0] : undefined;
+const language =
+  langChip[segment] ??
+  (singleLanguage ? { Python: 'Py', TypeScript: 'Ts', '.NET': 'C#', Go: 'Go' }[singleLanguage] : undefined);
+
+const groupOf: Record<string, string> = {
+  'Multi-Agent': 'oxide',
+  'Data & RAG': 'verdigris',
+  'Cloud-Native': 'ink',
+  Enterprise: 'ink',
+  'Model-Specific': 'sulfur',
+  Lightweight: 'sulfur',
+};
+---
+
+<div class="page-head">
+  {
+    framework && (
+      <div class="chips" aria-label={`${framework.name}${language ? `, ${language}` : ''}`}>
+        <span class="chip" data-group={groupOf[framework.category]} title={framework.name}>
+          {framework.symbol}
+        </span>
+        {language && (
+          <span class="chip" data-group="ink">
+            {language}
+          </span>
+        )}
+      </div>
+    )
+  }
+  <h1 id={PAGE_TITLE_ID}>{entry.data.title}</h1>
+  {entry.data.description && <p class="lead">{entry.data.description}</p>}
+</div>
+
+<style>
+  .page-head {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--brand-font-display);
+    font-weight: 400;
+    font-size: clamp(2.2rem, 4.5vw, 3.4rem);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+    color: var(--tx);
+  }
+  .lead {
+    margin: 0;
+    font-family: var(--brand-font-display);
+    font-size: clamp(1.15rem, 2vw, 1.4rem);
+    line-height: 1.4;
+    color: var(--mu);
+    max-width: 40em;
+  }
+  .chips {
+    display: flex;
+    gap: 6px;
+  }
+</style>
