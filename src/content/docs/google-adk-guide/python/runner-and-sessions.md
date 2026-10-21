@@ -7,7 +7,7 @@ sidebar:
   order: 50
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 

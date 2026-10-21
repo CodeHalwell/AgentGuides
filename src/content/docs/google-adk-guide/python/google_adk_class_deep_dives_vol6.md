@@ -532,7 +532,7 @@ runner = InMemoryRunner(app=app)
 
 **Module:** `google.adk.agents.llm_agent`
 
-The [agents guide](./agents.md) covers `LlmAgent` broadly.  This section dives into five advanced fields that are often under-used: `static_instruction`, `mode`, `parallel_worker`, `output_schema`, and `output_key`.
+The [agents guide](./agents/) covers `LlmAgent` broadly.  This section dives into five advanced fields that are often under-used: `static_instruction`, `mode`, `parallel_worker`, `output_schema`, and `output_key`.
 
 ### `static_instruction`
 
@@ -840,7 +840,7 @@ create_tool = toolset.get_tool("create_pet")
 
 **Module:** `google.adk.a2a.agent._remote_a2a_agent` (re-exported from `google.adk.agents.remote_a2a_agent`)
 
-`RemoteA2aAgent` is a `BaseAgent` subclass that calls a remote service over the [A2A (Agent-to-Agent) protocol](./mcp-and-a2a.md).  The remote service may be another ADK agent, a LangGraph agent, or any A2A-compliant server.
+`RemoteA2aAgent` is a `BaseAgent` subclass that calls a remote service over the [A2A (Agent-to-Agent) protocol](./mcp-and-a2a/).  The remote service may be another ADK agent, a LangGraph agent, or any A2A-compliant server.
 
 ### Constructor reference
 

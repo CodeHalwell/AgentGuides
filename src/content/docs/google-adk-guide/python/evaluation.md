@@ -245,7 +245,7 @@ ToolTrajectoryCriterion(threshold=1.0, match_type=ToolTrajectoryCriterion.MatchT
 
 ## `AgentEvaluator`
 
-The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (first source-verified for 2.3.0; re-checked against %%version=google-adk%%).
+The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (first documented for 2.3.0; re-checked against %%version=google-adk%%).
 
 ### `evaluate_eval_set` — programmatic, in-memory
 

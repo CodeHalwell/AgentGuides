@@ -7,7 +7,7 @@ sidebar:
   order: 60
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 

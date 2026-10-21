@@ -7,7 +7,7 @@ sidebar:
   order: 40
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py`).
 
@@ -369,7 +369,7 @@ All are `async def`. All return `Optional[<relevant type>]` — non-`None` short
 
 ## Built-in plugins
 
-ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file; first listed for 2.3.0, re-checked against %%version=google-adk%%):
+ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file; first documented for 2.3.0, re-checked against %%version=google-adk%%):
 
 ### `LoggingPlugin`
 

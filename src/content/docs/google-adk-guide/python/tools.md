@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work on 2.3.0 and later; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 

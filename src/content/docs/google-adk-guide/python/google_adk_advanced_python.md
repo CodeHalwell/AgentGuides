@@ -7,7 +7,7 @@ sidebar:
   order: 80
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 ## Planners
 
