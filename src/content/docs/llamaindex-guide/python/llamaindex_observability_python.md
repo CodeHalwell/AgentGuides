@@ -3,6 +3,8 @@ title: "LlamaIndex Observability & Monitoring (Python)"
 description: "Tracing, token accounting, metrics and logging for LlamaIndex using the instrumentation module, OpenTelemetry and hosted tracing tools."
 framework: "llamaindex"
 language: "python"
+sidebar:
+  label: "Observability"
 ---
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Upstream: [releases](https://github.com/run-llama/llama_index/releases) · [PyPI](https://pypi.org/project/llama-index/)

@@ -3,6 +3,8 @@ title: "LlamaIndex TypeScript Recipes"
 description: "Practical recipes for the LlamaIndex.TS workflow API — RAG, multi-agent, streaming and analysis pipelines (project now deprecated upstream)."
 framework: "llamaindex"
 language: "typescript"
+sidebar:
+  label: "Recipes"
 ---
 
 **Practical patterns for `@llamaindex/workflow` 1.1.25** (the final release; umbrella package `llamaindex` %%version=llamaindex%%, checked %%versions-checked%%). All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.

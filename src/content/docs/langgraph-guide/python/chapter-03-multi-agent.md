@@ -688,7 +688,7 @@ r1 = parent_graph.invoke(
     {"messages": [HumanMessage("simple task")], "escalate": False, "final_answer": ""},
     config,
 )
-print(r1["final_answer"])   # "Task completed by specialist."
+print(r1["final_answer"])   # "Delegating to specialist..." (the specialist only added a message)
 
 # Complex task — child escalates to parent
 config2 = {"configurable": {"thread_id": "parent-cmd-demo-2"}}

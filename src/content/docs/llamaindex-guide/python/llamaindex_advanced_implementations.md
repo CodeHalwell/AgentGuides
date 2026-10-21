@@ -3,6 +3,8 @@ title: "LlamaIndex: Advanced Implementation Patterns"
 description: "Production-grade workflow patterns for LlamaIndex — parallel fan-out, agentic RAG with self-correction, retries, resilient tools and timing middleware."
 framework: "llamaindex"
 language: "python"
+sidebar:
+  label: "Workflow patterns"
 ---
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). For multi-agent routing and human-in-the-loop see [Advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).

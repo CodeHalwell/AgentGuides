@@ -205,12 +205,12 @@ Replace the generated `app/SalesAnalyst/main.py` with your own entrypoint (such 
 
 ```bash
 agentcore dev                                           # local server and agent inspector
-agentcore deploy                                        # CDK deploy to the account in aws-targets.json
+agentcore deploy                                        # CDK deploy to the target in agentcore/aws-targets.json
 agentcore invoke "Analyse monthly sales trends for Q4"  # call the deployed runtime
 agentcore invoke --session-id "$(uuidgen)-q4" "Now compare with Q3"
 ```
 
-`--memory shortTerm` or `--memory longAndShortTerm` also adds an AgentCore Memory resource to the project, and `--build Container` builds an ARM64 image with CodeBuild instead of a zip. `agentcore add memory|gateway|gateway-target|credential|runtime-endpoint` adds resources to an existing project, and `agentcore status` shows what is deployed.
+Deployment targets (account and Region) go in `agentcore/aws-targets.json`; see [Environments and CI/CD](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/#environments-and-cicd). `--memory shortTerm` or `--memory longAndShortTerm` also adds an AgentCore Memory resource to the project, and `--build Container` builds an ARM64 image with CodeBuild instead of a zip. `agentcore add memory|gateway|gateway-target|credential|runtime-endpoint` adds resources to an existing project, and `agentcore status` shows what is deployed.
 
 The older Python `bedrock-agentcore-starter-toolkit` (`agentcore configure` / `agentcore launch`) still exists. `agentcore import --source .bedrock_agentcore.yaml` brings one of its projects into the npm CLI.
 

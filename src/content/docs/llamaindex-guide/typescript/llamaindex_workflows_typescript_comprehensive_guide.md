@@ -3,6 +3,8 @@ title: "LlamaIndex TypeScript Workflows — Comprehensive Guide"
 description: "Technical reference for the (now deprecated) LlamaIndex.TS workflow API — functional events and handlers, stateful middleware, multi-agent coordination."
 framework: "llamaindex"
 language: "typescript"
+sidebar:
+  label: "Comprehensive guide"
 ---
 
 **Packages:** `@llamaindex/workflow` 1.1.25 (with `@llamaindex/workflow-core` 1.3.x) · umbrella package `llamaindex` %%version=llamaindex%% · Node 20+ · checked %%versions-checked%%

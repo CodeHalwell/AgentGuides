@@ -44,7 +44,7 @@ async def get_weather(city: str) -> str:
 
 
 async def main() -> None:
-    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # 0.7.5 knows models released before it; newer IDs need model_info=  # reads OPENAI_API_KEY
+    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # reads OPENAI_API_KEY; 0.7.5 only knows models released before it
     agent = AssistantAgent(
         "assistant",
         model_client=model_client,
@@ -269,7 +269,7 @@ from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 
 async def main() -> None:
-    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # 0.7.5 knows models released before it; newer IDs need model_info=
+    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # 0.7.5 only knows models released before it
 
     memory = ListMemory()
     await memory.add(MemoryContent(content="The user prefers metric units.", mime_type=MemoryMimeType.TEXT))
@@ -313,7 +313,18 @@ asyncio.run(main())
 | Ollama | `autogen_ext.models.ollama.OllamaChatCompletionClient` | `autogen-ext[ollama]` |
 | Tests | `autogen_ext.models.replay.ReplayChatCompletionClient` | none |
 
-For a model the client does not recognise, pass `model_info={...}` describing its capabilities (`function_calling`, `json_output`, `structured_output`, `vision`, `family`). Model clients are components: `client.dump_component()` and `ChatCompletionClient.load_component(config)` round-trip them through JSON, which is how AutoGen Studio stores configurations.
+AutoGen 0.7.5 was the final release, so its built-in model table stops at the models available in September 2025 (the examples on this page use `gpt-5-mini` for that reason). For any model the client does not recognise, including current ones, pass `model_info` describing its capabilities, or the constructor raises `ValueError: model_info is required`:
+
+```python
+from autogen_core.models import ModelInfo
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model_client = OpenAIChatCompletionClient(
+    model="%%model=openai-small%%",
+    model_info=ModelInfo(vision=True, function_calling=True, json_output=True, structured_output=True, family="unknown"),
+)
+```
+ Model clients are components: `client.dump_component()` and `ChatCompletionClient.load_component(config)` round-trip them through JSON, which is how AutoGen Studio stores configurations.
 
 ## Moving on: Microsoft Agent Framework
 
