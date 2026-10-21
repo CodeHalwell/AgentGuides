@@ -674,14 +674,19 @@ warnings.filterwarnings("error", category=FeatureStageWarning)
 
 The currently gated features (verified against `agent-framework` %%version=agent-framework%%):
 
-| Stage | Enum member | Covers |
+| Stage | Enum member | Covers (examples) |
 |---|---|---|
-| Experimental | `ExperimentalFeature.SKILLS` | `Skill`, `SkillResource`, `SkillScript`, `SkillsProvider` |
-| Experimental | `ExperimentalFeature.EVALS` | `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `@evaluator` |
+| Experimental | `ExperimentalFeature.EVALS` | `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `EvalItem`, `EvalResults` |
 | Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
 | Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
-| Experimental | `ExperimentalFeature.TOOLBOXES` | Toolbox APIs (preview) |
-| Release candidate | *(empty in 1.4.0)* | The enum exists but has no members in this release — features that previously sat at RC have either been promoted to stable or rolled back to experimental. |
+| Experimental | `ExperimentalFeature.HARNESS` | `MemoryContextProvider`, `MemoryStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider`, `AgentLoopMiddleware` |
+| Experimental | `ExperimentalFeature.FIDES` | `SecureAgentConfig`, `SecureMCPToolProxy`, label-tracking middleware |
+| Experimental | `ExperimentalFeature.SESSION_STORE` | `SessionStore`, `FileSessionStore` |
+| Experimental | `ExperimentalFeature.VECTOR_STORES` | `InMemoryStore`, `InMemoryCollection`, `Filter`, `FilterGroup` |
+| Experimental | `ExperimentalFeature.MCP_SKILLS`, `MCP_LONG_RUNNING_TASKS`, `AGENT_HOOKS`, `COMPUTER_USE`, ... | MCP-backed skills, MCP task options, AGENT-HOOKS middleware, computer-use safety checks |
+| Release candidate | *(empty)* | The enum exists but has no members in this release. |
+
+Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0. An earlier version of this table listed `ExperimentalFeature.SKILLS` and `TOOLBOXES`; neither member exists any more.
 
 Both enums are stage-scoped inventories, not stable introspection surfaces. Members move or disappear as features advance — the docstring on `ReleaseCandidateFeature` is explicit about this. Always enumerate at runtime when you need an authoritative list:
 
@@ -689,11 +694,12 @@ Both enums are stage-scoped inventories, not stable introspection surfaces. Memb
 from agent_framework import ExperimentalFeature, ReleaseCandidateFeature
 
 print([f.value for f in ExperimentalFeature])
-# ['EVALS', 'FILE_HISTORY', 'FUNCTIONAL_WORKFLOWS', 'SKILLS', 'TOOLBOXES']
+# ['AGENT_HOOKS', 'COMPUTER_USE', 'DECLARATIVE_AGENTS', 'EVALS', 'FILE_HISTORY', 'FIDES', ...]
 
 print([f.value for f in ReleaseCandidateFeature])
-# []  ← empty in 1.4.0; non-empty in releases that have RC features queued
+# []  ← non-empty only in releases that have RC features queued
 ```
+
 
 Inspect any class or callable at runtime to see what stage it belongs to:
 
@@ -1167,4 +1173,4 @@ agent = Agent(
 - Adding **cross-cutting behaviour** to an existing client (caching, request coalescing, shadow traffic) → wrap the client with a thin `BaseChatClient` subclass that delegates to `_inner_get_response`.
 - Injecting **domain context per run** (retrieved docs, tenant prefixes, entitlements) → subclass `ContextProvider`.
 - Switching **implementations at runtime** based on capability → `isinstance(client, Supports*)` guards.
-- Gating **in-development APIs** in CI → use `enable_experimental_feature` in a `conftest.py` and fail the build if a warning escapes.
+- Gating **in-development APIs** in CI → turn `FeatureStageWarning` into an error in `conftest.py` (`warnings.simplefilter("error", FeatureStageWarning)`) and silence only the specific staged APIs you have chosen to depend on.

@@ -338,7 +338,7 @@ def call_model(state: State):
     
     system_prompt = f"You're helping {state['user_name']}. Be concise."
     
-    response = model.invoke(state["messages"], system_prompt=system_prompt)
+    response = model.invoke([SystemMessage(content=system_prompt), *state["messages"]])  # from langchain_core.messages import SystemMessage
     return {"messages": [response]}
 
 def save_conversation(state: State):

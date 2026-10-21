@@ -218,9 +218,9 @@ builder.add_node(
 )
 ```
 
-### Pattern 5: Node-specific trace on/off via graph defaults
+### Pattern 5: A shared default policy with per-node overrides
 
-Use `set_node_defaults` to apply a policy to all nodes at once, then override per-node:
+`set_node_defaults` does not take a `trace_policy` (in %%version=langgraph%% it accepts `retry_policy`, `cache_policy`, `error_handler` and `timeout` only), so apply a shared policy object to each node and override where needed:
 
 ```python
 from langchain_core.runnables import RunnableLambda
@@ -229,13 +229,10 @@ from langgraph.types import TracePolicy, omit_payload
 
 builder = StateGraph(dict)
 
-# Default: silence all nodes
-builder.set_node_defaults(
-    trace_policy=TracePolicy(
-        process_inputs=omit_payload,
-        process_outputs=omit_payload,
-    )
-)
+# Default: silence nodes that use this policy
+SILENT = TracePolicy(process_inputs=omit_payload, process_outputs=omit_payload)
+builder.add_node("fetch", fetch_fn, trace_policy=SILENT)
+builder.add_node("transform", transform_fn, trace_policy=SILENT)
 
 def verbose_trace(v):
     return v  # pass through — records everything
@@ -399,5 +396,5 @@ omit_payload(value: Any) -> dict[str, Any]
 | Version | Change |
 |---|---|
 | 1.2.11 | `TracePolicy`, `omit_payload` production-stable |
-| 1.2.0 | `set_node_defaults(trace_policy=...)` support added |
+| 1.2.0 | (An earlier revision claimed `set_node_defaults(trace_policy=...)` support here; `set_node_defaults` has no `trace_policy` parameter.) |
 | 1.1.0 | `TracePolicy` first introduced |

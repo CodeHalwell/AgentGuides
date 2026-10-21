@@ -1018,7 +1018,7 @@ def chat_node(state: ConversationState) -> dict:
         {"role": "user", "content": state["message"]}
     ]
     
-    response = model.invoke(messages, system_prompt=system_prompt)
+    response = model.invoke([{"role": "system", "content": system_prompt}, *messages])
     
     return {
         "response": response.content,

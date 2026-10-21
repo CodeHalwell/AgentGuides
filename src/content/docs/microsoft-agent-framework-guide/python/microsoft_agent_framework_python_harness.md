@@ -7,7 +7,7 @@ language: python
 
 # HARNESS Providers — Python
 
-> **Experimental.** `TodoProvider`, `AgentModeProvider`, `MemoryContextProvider`, and their backing stores are marked `ExperimentalFeature.HARNESS`. The APIs are functional but may change between minor releases. Import warnings appear on first use.
+> **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore` and `TodoFileStore` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.
 >
 > Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.5.0). The tool names the providers expose were renamed in 1.7.0 (`add_todos` → `todos_add`, `set_mode` → `mode_set`, and so on); this page uses the current names.
 

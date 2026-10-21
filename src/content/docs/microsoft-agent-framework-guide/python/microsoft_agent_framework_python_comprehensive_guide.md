@@ -1815,7 +1815,7 @@ Same pattern works for `SupportsAgentRun`, `SupportsChatGetResponse`, and `Suppo
 
 ## Long-Term Memory — `MemoryStore` and `MemoryContextProvider`
 
-> **Experimental.** `MemoryStore` and `MemoryContextProvider` are marked `ExperimentalFeature` in 1.4.0. The API is functional but may change between minor releases.
+> **Experimental.** `MemoryStore` and `MemoryContextProvider` are still marked `ExperimentalFeature.HARNESS` in %%version=agent-framework%%. The API is functional but may change between minor releases.
 
 The memory system gives agents durable, cross-session recall. It works in two phases:
 
@@ -2038,7 +2038,7 @@ Wire it up exactly like `MemoryFileStore` — pass it as the `store=` argument t
 
 ## Agent Todo List — `TodoProvider` (Experimental HARNESS)
 
-> **Experimental.** `TodoProvider` and its backing stores are `ExperimentalFeature.HARNESS` in 1.4.0.
+> **Stable since 1.12.0.** `TodoProvider` and `TodoSessionStore` graduated from `ExperimentalFeature.HARNESS` in 1.12.0; `TodoFileStore` is still experimental in %%version=agent-framework%%.
 
 `TodoProvider` gives an agent a structured task list it can manage itself. The agent receives five tools — `todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, and `todos_get_all` — and a default system-prompt injection that tells it how to use them. The provider stores state in the session (in-memory by default) or on disk via `TodoFileStore`.
 
@@ -2200,7 +2200,7 @@ asyncio.run(main())
 
 ## Agent Mode Provider — `AgentModeProvider` (Experimental HARNESS)
 
-> **Experimental.** `AgentModeProvider`, `set_agent_mode`, and `get_agent_mode` are `ExperimentalFeature.HARNESS` in 1.4.0.
+> **Stable since 1.12.0.** `AgentModeProvider`, `set_agent_mode`, and `get_agent_mode` graduated from `ExperimentalFeature.HARNESS` in 1.12.0.
 
 `AgentModeProvider` lets an agent switch between named operating modes at runtime. Two modes ship out of the box — **plan** (interactive, ask questions) and **execute** (autonomous, minimise interruptions). You can define any set of modes and inject custom descriptions for each.
 
@@ -2302,7 +2302,7 @@ AgentModeProvider(
 
 ## Prompt Injection Defense — `SecureAgentConfig` (Experimental)
 
-> **Experimental.** `SecureAgentConfig` is `ExperimentalFeature.FIDES` in 1.4.0. The API is functional but may change between minor releases.
+> **Experimental.** `SecureAgentConfig` is still `ExperimentalFeature.FIDES` in %%version=agent-framework%%. The API is functional but may change between minor releases.
 
 `SecureAgentConfig` is a `ContextProvider` that defends against prompt injection attacks using **information-flow control**. It labels every tool result as either `TRUSTED` or `UNTRUSTED`, prevents untrusted content from calling privileged tools, and optionally logs policy violations. The approach is inspired by the FIDES research on taint tracking for LLM pipelines.
 

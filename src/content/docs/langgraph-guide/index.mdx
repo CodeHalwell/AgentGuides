@@ -11,18 +11,20 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 **Low-level orchestration for stateful, long-running LLM agents.** Explicit state, durable checkpoints, conditional routing, human-in-the-loop. Available in Python and TypeScript with identical mental models.
 
+**Current versions:** Python `langgraph` %%version=langgraph%% · TypeScript `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
+
 ## Choose your language
 
 <CardGrid>
   <LinkCard
     title="🐍 Python"
     href="/langgraph-guide/python/"
-    description="v1.2.12 · chaptered Zero → Hero tutorial with 10 paginated chapters plus v3 streaming, set_node_defaults, pre/post model hooks, tools_condition, MessagesState, RetryPolicy, TimeoutPolicy, CachePolicy."
+    description="Chaptered Zero → Hero tutorial in 10 paginated chapters, plus source-checked reference pages: v3 streaming, set_node_defaults, tools_condition, MessagesState, RetryPolicy, TimeoutPolicy, CachePolicy."
   />
   <LinkCard
     title="📘 TypeScript"
     href="/langgraph-guide/typescript/"
-    description="v1.3.5 · MessagesZodState, STREAM_EVENTS_V3_MODES, stream transformers, pushMessage."
+    description="StateGraph with Annotation, Zod or StateSchema state; createAgent from langchain; node caching, deferred nodes, timeouts and error handlers."
   />
 </CardGrid>
 
@@ -39,7 +41,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
     Checkpointers for short-term, Stores for cross-thread memory.
   </Card>
   <Card title="Middleware" icon="setting">
-    Pre/post model hooks for guardrails, rate limiting, logging.
+    Agent middleware and model hooks for guardrails, rate limiting, logging.
   </Card>
   <Card title="Human-in-the-loop" icon="approve-check">
     Interrupts, multi-stage approvals, time-travel debugging.
@@ -60,11 +62,12 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 | Date | Version | Changes |
 |------|---------|--------|
+| 2026-10-21 | Py 1.2.16 / TS 1.5.2 | Current versions now come from the site's version data. TypeScript guide brought up from 1.3.5 to 1.5.2 and its examples corrected (the `@langgraphjs/toolkit` recommendation removed; `createAgent` from `langchain` replaces `createReactAgent`). Python guide: invented production-patterns section replaced, `AgentExecutor` examples replaced, import paths and install advice corrected. |
 | 2026-09-14 | Py 1.2.11 / TS 1.3.5 | Source-verified rewrite: ch2 expanded to 6 patterns (MessagesState, create_react_agent, tools_condition, multi-mode streaming); ch8 completely rewritten — `langchain.agents.middleware` and `langchain.agents.create_agent` exist in the separate `langchain` package (not bundled with `langgraph`); ch8 documents the `pre_model_hook`/`post_model_hook` hooks available in `langgraph` standalone, plus per-node `error_handler`/`retry_policy`/`timeout`/`cache_policy`, `set_node_defaults`, and `ToolNode(handle_tool_errors=...)` — all verified against installed langgraph==1.2.11 source. Note: `create_react_agent` is deprecated per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent`. |
 | 2026-09-08 | Py 1.2.11 / TS 1.3.5 | Consistency sweep. TypeScript card corrected 1.3.0 → 1.3.5; the TypeScript observability and streaming pages moved off a stale `Latest: 1.0.2`; every `Latest:` stamp now names its package. Tables of contents on the TypeScript pages trimmed to sections that exist. No package installation or symbol verification performed. |
 | 2026-08-24 | Python 1.2.11 / TS 1.3.0 | Python updated to 1.2.11; ch1 version bump; ch4 added ToolInvocationError with interceptor example; ch6 added experimental v3 stream_events API (GraphRunStream, SubgraphRunStream, LifecyclePayload, StreamChannel); ch10 added set_node_defaults() with graph-wide policy defaults. |
 | 2026-06-22 | Python 1.2.6 / TS 1.3.0 | Python updated to 1.2.6; ch6 expanded with all 7 stream modes, typed StreamPart, GraphOutput; ch10 expanded with RetryPolicy, TimeoutPolicy, CachePolicy, Durability, IsLastStep, Topic channels, Send timeout. |
 | 2026-05-05 | Python 1.1.10 / TS 1.3.0 | TypeScript card updated to v1.3.0 with new description. |
 | 2026-04-21 | Python 1.1.8 / TS 1.2.9 | Parent index redesigned as language selector. |
-| April 16, 2026 | Python 1.1.6 / TS 1.2.8 | Python 3.9 dropped; type-safe v2 API; toolkit package. |
+| April 16, 2026 | Python 1.1.6 / TS 1.2.8 | Python 3.9 dropped; type-safe v2 API. |
 | November 2025 | Python 1.0.3 / TS 1.0.2 | Initial multi-language guide. |

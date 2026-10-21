@@ -585,13 +585,15 @@ def summarize(state: State) -> dict:
 builder = StateGraph(State)
 builder.add_node("crawl", crawl)
 builder.add_node("summarize", summarize)
-# then="summarize" ensures summarize runs once after ALL Send-spawned crawl tasks finish,
-# not after each individual one completes.
+# All Send-spawned crawl tasks run in the same superstep, so a plain edge
+# from "crawl" makes summarize run once, after every crawl task has finished.
+# (Older releases had a `then=` argument on add_conditional_edges; it no longer exists.)
 builder.add_conditional_edges(
     START,
     lambda s: [Send("crawl", {"url": u, "events": []}) for u in s["urls"]],
-    then="summarize",
+    ["crawl"],
 )
+builder.add_edge("crawl", "summarize")
 builder.add_edge("summarize", END)
 
 graph = builder.compile()
