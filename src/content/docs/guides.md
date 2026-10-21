@@ -78,7 +78,7 @@ Each framework section includes links to:
 
 ### LlamaIndex
 **Languages:** Python, TypeScript
-**Current:** Python `llama-index` %%version=llama-index%% · TypeScript `llamaindex` %%version=llamaindex%%
+**Current:** Python `llama-index` %%version=llama-index%% · TypeScript `llamaindex` %%version=llamaindex%% (deprecated upstream, no longer maintained)
 
 #### Python
 - [📂 Python Directory](/llamaindex-guide/python/)

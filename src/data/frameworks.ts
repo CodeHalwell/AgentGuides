@@ -124,7 +124,7 @@ export const frameworks: Framework[] = [
   {
     id: 'llamaindex-ts',
     name: 'LlamaIndex (TypeScript)',
-    tagline: 'Event-driven RAG for Node and edge runtimes.',
+    tagline: 'Deprecated upstream; final release 0.12.1. Kept for existing projects.',
     href: '/llamaindex-guide/typescript/',
     languages: ['TypeScript'],
     category: 'Data & RAG',
