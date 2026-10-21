@@ -254,16 +254,64 @@ asyncio.run(main())
 
 Handlers are routed by the message's type annotation. `publish_message(..., topic_id=...)` broadcasts to subscribers (`@default_subscription`, `TypeSubscription`); `autogen_ext.runtimes.grpc` provides a distributed host and worker runtime.
 
+## Memory, model context and code execution
+
+`memory=` adds retrieved content to the model context before each call. `model_context=` controls how much history the model sees. `CodeExecutorAgent` runs the code blocks in the messages it receives:
+
+```python
+import asyncio
+
+from autogen_agentchat.agents import AssistantAgent, CodeExecutorAgent
+from autogen_core.memory import ListMemory, MemoryContent, MemoryMimeType
+from autogen_core.model_context import BufferedChatCompletionContext
+from autogen_ext.code_executors.local import LocalCommandLineCodeExecutor
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="%%model=openai-small%%")
+
+    memory = ListMemory()
+    await memory.add(MemoryContent(content="The user prefers metric units.", mime_type=MemoryMimeType.TEXT))
+
+    agent = AssistantAgent(
+        "assistant",
+        model_client=model_client,
+        memory=[memory],
+        model_context=BufferedChatCompletionContext(buffer_size=10),   # last 10 messages only
+    )
+    result = await agent.run(task="How tall is Mont Blanc?")
+    print(result.messages[-1].content)
+
+    executor = CodeExecutorAgent("executor", code_executor=LocalCommandLineCodeExecutor(work_dir="coding"))
+    result = await executor.run(task="```python\nprint(6 * 7)\n```")
+    print(result.messages[-1].content)   # 42
+
+    await model_client.close()
+
+
+asyncio.run(main())
+```
+
+- Other contexts: `UnboundedChatCompletionContext` (default), `HeadAndTailChatCompletionContext`, `TokenLimitedChatCompletionContext`.
+- Vector memories live in `autogen_ext.memory` (for example `ChromaDBVectorMemory`, extra `autogen-ext[chromadb]`).
+- `LocalCommandLineCodeExecutor` runs code on the host. Use `autogen_ext.code_executors.docker.DockerCommandLineCodeExecutor` (extra `autogen-ext[docker]`) for model-written code. Passing `model_client=` to `CodeExecutorAgent` lets it write the code as well as run it.
+
+## Magentic-One and AutoGen Studio
+
+- **`MagenticOneGroupChat`** (`autogen_agentchat.teams`) is the orchestrator team from Microsoft's Magentic-One system. An orchestrator keeps a task ledger, picks the next agent and re-plans after `max_stalls` turns without progress: `MagenticOneGroupChat([researcher, writer], model_client=model_client, max_turns=20)`. The full Magentic-One agent set (web surfer, file surfer, coder) is `autogen_ext.teams.magentic_one.MagenticOne` (extra `autogen-ext[magentic-one]`, plus Playwright for the browser).
+- **AutoGen Studio** (`pip install autogenstudio`, then `autogenstudio ui --port 8080`) is a low-code web UI for building and testing teams from component JSON. It is a prototyping tool, not a deployment target. Its last release was 0.4.2.2 (May 2025), and it is archived along with the rest of the repository.
+
 ## Model clients
 
-| Client | Import |
-|---|---|
-| OpenAI / OpenAI-compatible | `autogen_ext.models.openai.OpenAIChatCompletionClient` |
-| Azure OpenAI | `autogen_ext.models.openai.AzureOpenAIChatCompletionClient` |
-| Azure AI Foundry models | `autogen_ext.models.azure.AzureAIChatCompletionClient` |
-| Anthropic | `autogen_ext.models.anthropic.AnthropicChatCompletionClient` |
-| Ollama | `autogen_ext.models.ollama.OllamaChatCompletionClient` |
-| Tests | `autogen_ext.models.replay.ReplayChatCompletionClient` |
+| Client | Import | Extra |
+|---|---|---|
+| OpenAI / OpenAI-compatible | `autogen_ext.models.openai.OpenAIChatCompletionClient` | `autogen-ext[openai]` |
+| Azure OpenAI | `autogen_ext.models.openai.AzureOpenAIChatCompletionClient` | `autogen-ext[openai,azure]` |
+| Azure AI Foundry models | `autogen_ext.models.azure.AzureAIChatCompletionClient` | `autogen-ext[azure]` |
+| Anthropic | `autogen_ext.models.anthropic.AnthropicChatCompletionClient` | `autogen-ext[anthropic]` |
+| Ollama | `autogen_ext.models.ollama.OllamaChatCompletionClient` | `autogen-ext[ollama]` |
+| Tests | `autogen_ext.models.replay.ReplayChatCompletionClient` | none |
 
 For a model the client does not recognise, pass `model_info={...}` describing its capabilities (`function_calling`, `json_output`, `structured_output`, `vision`, `family`). Model clients are components: `client.dump_component()` and `ChatCompletionClient.load_component(config)` round-trip them through JSON, which is how AutoGen Studio stores configurations.
 

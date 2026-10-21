@@ -129,7 +129,7 @@ Passed to each `run_async`/`run_live` call (`agents/run_config.py`). Notable fie
 | `output_audio_transcription` / `input_audio_transcription` | `AudioTranscriptionConfig()` | Live transcription |
 | `context_window_compression` | `None` | Live-mode server-side context compression |
 | `get_session_config` | `None` | Passes `num_recent_events` / `after_timestamp` through to the session service on load |
-| `support_cfc` | `False` | Experimental compositional function calling (requires Gemini 2.x + live API) |
+| `support_cfc` | `False` | Experimental compositional function calling over the Live API. Only `gemini-2*` model names are accepted; any other model raises `ValueError`, so it is of little use for new projects |
 | `tool_thread_pool_config` | `None` | Runs tools in a thread pool during live mode |
 | `save_live_blob` | `False` | Persist audio/video frames to artifact service |
 | `save_input_blobs_as_artifacts` | `False` | **Deprecated** → `SaveFilesAsArtifactsPlugin` |

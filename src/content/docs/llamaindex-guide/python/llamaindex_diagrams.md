@@ -1,6 +1,8 @@
 ---
 title: "LlamaIndex Architecture and System Diagrams"
-description: "Comprehensive visual documentation of LlamaIndex components, workflows, and patterns."
+description: "Text diagrams of LlamaIndex components, data flow, agent loops and retrieval patterns."
+sidebar:
+  label: "Diagrams"
 framework: "llamaindex"
 language: "python"
 ---
@@ -248,7 +250,7 @@ Query
   │  └─▶ Results Set A            └─▶ Results Set B
   │
   ├─ Merge Results
-  │  (Weighted Combination)
+  │  (reciprocal-rank fusion, QueryFusionRetriever)
   │
   ▼
 Unified Ranked Results
@@ -510,18 +512,6 @@ LLM Decomposition
 │ ├─ Memory: Moderate                                  │
 │ └─ Use: General RAG, semantic queries                │
 │                                                       │
-│ TreeIndex                                            │
-│ ├─ Hierarchical decomposition                        │
-│ ├─ Creates tree structure                            │
-│ ├─ Memory: Moderate-High                             │
-│ └─ Use: Complex documents, multi-level queries       │
-│                                                       │
-│ KeywordTableIndex                                    │
-│ ├─ Keyword-based lookup                              │
-│ ├─ Inverted index structure                          │
-│ ├─ Memory: Low-Moderate                              │
-│ └─ Use: Keyword-heavy queries, exact matches         │
-│                                                       │
 │ SummaryIndex (formerly ListIndex)                    │
 │ ├─ Stores nodes as a list; returns all of them       │
 │ ├─ No embeddings needed                              │
@@ -533,36 +523,14 @@ LLM Decomposition
 │ ├─ Graph + vector retrieval                          │
 │ └─ Use: relationship-heavy questions                 │
 │                                                       │
+│ MultiModalVectorStoreIndex                           │
+│ ├─ Separate text and image embeddings                │
+│ └─ Use: image + text retrieval (multimodal=True)     │
+│                                                       │
 └──────────────────────────────────────────────────────┘
 ```
 
-### Vector Store Integration
-
-```
-Index Creation
-    │
-    ├─▶ Document Processing
-    │   ├─ Chunking
-    │   └─ Embedding
-    │
-    ├─▶ Vector Generation
-    │   ├─ OpenAI Embeddings
-    │   ├─ HuggingFace Embeddings
-    │   └─ Local Models
-    │
-    ▼
-Vector Store Options
-    │
-    ├─ Chroma (Local/Vector DB)
-    ├─ Pinecone (Cloud)
-    ├─ Weaviate (Distributed)
-    ├─ Supabase (PostgreSQL+pgvector)
-    ├─ Milvus (Scalable)
-    └─ Many more...
-    │
-    ▼
-Index Ready for Queries
-```
+`TreeIndex` and `KeywordTableIndex` still exist but are rarely the right choice; for keyword matching combine a vector retriever with BM25 (above). Choosing a vector store is covered in the [production guide](/llamaindex-guide/python/llamaindex_production_guide/#2-index-persistence-and-vector-store-choice).
 
 ---
 
@@ -592,32 +560,6 @@ Index Ready for Queries
 ```
 
 `ChatMemoryBuffer` (a plain token-bounded buffer) still exists; `Memory` is the current default for agents.
-
-### Memory Types
-
-```
-                    Memory Systems
-                         │
-        ┌────────────────┼────────────────┐
-        │                │                │
-    ┌───▼──┐         ┌───▼──┐        ┌───▼──┐
-    │ Chat │         │Vector│        │Summary│
-    │Memory│         │Store │        │Memory │
-    │Buffer│         │Memory│        │      │
-    └──┬───┘         └──┬───┘        └──┬───┘
-       │                │                │
-       ├─ Last N       ├─ Semantic    ├─ Condensed
-       │  messages     │  search      │  history
-       │                │  over past   │
-       ├─ Fast         │  turns       ├─ Compact
-       │  retrieval    │              │  storage
-       │                ├─ Chroma,    │
-       └─ Limited      │  Pinecone,   └─ LLM
-         context       │  Weaviate    │  generated
-                       │              │
-                       └─ Flexible   └─ Summarized
-                          retention
-```
 
 ---
 
@@ -736,77 +678,6 @@ Final Result
                │
                ▼
             Response
-```
-
----
-
-## Performance Optimization
-
-### Retrieval Optimization
-
-Timings are illustrative; LLM generation usually dominates and is measured in seconds, not milliseconds.
-
-```
-Query
-  │
-  ▼
-Preprocessing (5ms)
-  │
-  ├─ Normalization
-  └─ Expansion
-  │
-  ▼
-Embedding (10ms)
-  │
-  ▼
-Vector Search (50ms)
-  │
-  ├─ Fast approximate search
-  ├─ Top-K candidates
-  └─ Initial ranking
-  │
-  ▼
-Reranking (20ms)
-  │
-  ├─ Semantic reranking
-  ├─ Relevance scoring
-  └─ Final ranking
-  │
-  ▼
-Generation (1–5 s)
-  │
-  ▼
-Total: dominated by generation
-```
-
-### Caching Strategy
-
-```
-Incoming Query
-    │
-    ▼
-┌─────────────────┐
-│ Cache Check     │
-│ (Fast)          │
-└────┬────────────┘
-     │
-  ┌──▼──┐
-  │Hit? │
-  └──┬──┘
-     │
-  ┌──┴──┐
-  │    │
- YES  NO
-  │    │
-  │    └─▶ Cache Miss
-  │       │
-  │       ├─ Retrieve
-  │       ├─ Generate
-  │       ├─ Store in Cache
-  │       │
-  ▼       ▼
-Return Cached   Return Generated
-Response        Response + Cache
 ```
 
 ---
