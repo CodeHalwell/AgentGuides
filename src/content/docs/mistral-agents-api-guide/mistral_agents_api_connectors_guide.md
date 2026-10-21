@@ -19,9 +19,9 @@ Mistral calls its server-side tools "connectors". They run on Mistral's infrastr
 | `document_library` | Retrieval over your Libraries | `library_ids` |
 | `connector` | A registered MCP server | `connector_id`, `authorization`, `tool_configuration` |
 
-`tool_configuration` has three optional lists: `include` and `exclude` (which of a connector's tools to expose) and `requires_confirmation` (tools that need human approval; see the [MCP guide](../mistral_agents_api_mcp_guide/#human-approval-for-tool-calls)). There are no other per-tool settings such as timeouts or result counts.
+`tool_configuration` has three optional lists: `include` and `exclude` (which of a connector's tools to expose) and `requires_confirmation` (tools that need human approval; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/#3-human-approval-for-tool-calls)). There are no other per-tool settings such as timeouts or result counts.
 
-The examples use this setup and the `text_of()` helper from the [comprehensive guide](../mistral_agents_api_comprehensive_guide/#5-conversations):
+The examples use this setup and the `text_of()` helper from the [comprehensive guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#5-conversations):
 
 ```python
 import os
@@ -235,7 +235,7 @@ result = client.beta.connectors.call_tool(
 )
 ```
 
-For MCP servers that should run inside your own process or network (local stdio servers, private services), use the client-side MCP support in `mistralai.extra` instead; see the [MCP guide](../mistral_agents_api_mcp_guide/).
+For MCP servers that should run inside your own process or network (local stdio servers, private services), use the client-side MCP support in `mistralai.extra` instead; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/).
 
 ---
 
@@ -286,7 +286,7 @@ print(text_of(response))
 ## Best practices
 
 - **Tell the agent when to use each tool.** Instructions such as "search before answering anything time-sensitive" are more reliable than hoping the model infers it.
-- **Give each agent few tools.** Several narrow agents connected with [handoffs](../mistral_agents_api_orchestration_guide/) are easier to test than one agent with everything.
+- **Give each agent few tools.** Several narrow agents connected with [handoffs](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/) are easier to test than one agent with everything.
 - **Inspect `outputs`.** `tool.execution` entries show what ran and with which arguments; log them.
 - **Check document processing.** Uploaded documents are not searchable until processing finishes.
 - **Watch usage.** `response.usage.connector_tokens` and `response.usage.connectors` report connector consumption separately from model tokens.

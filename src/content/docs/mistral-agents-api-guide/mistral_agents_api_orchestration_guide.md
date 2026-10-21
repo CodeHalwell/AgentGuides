@@ -236,7 +236,7 @@ Mistral's documentation describes `client` mode only as returning the handoff to
 
 ### Handoffs with function tools
 
-When an agent in the graph has a function tool, the run pauses with a `function.call` entry whichever agent made it; reply with a `FunctionResultEntry` as in the [function calling section](../mistral_agents_api_comprehensive_guide/#8-function-calling), and the conversation resumes with that agent.
+When an agent in the graph has a function tool, the run pauses with a `function.call` entry whichever agent made it; reply with a `FunctionResultEntry` as in the [function calling section](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#8-function-calling), and the conversation resumes with that agent.
 
 ---
 

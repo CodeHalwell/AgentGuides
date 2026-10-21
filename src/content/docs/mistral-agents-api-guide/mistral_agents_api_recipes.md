@@ -129,7 +129,7 @@ print([e.next_agent_name for e in response.outputs if e.type == "agent.handoff"]
 print(text_of(response))
 ```
 
-More patterns, including code-driven pipelines, are in the [orchestration guide](../mistral_agents_api_orchestration_guide/).
+More patterns, including code-driven pipelines, are in the [orchestration guide](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/).
 
 ---
 
@@ -167,7 +167,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-The manual equivalent (declare a `function` tool, answer `function.call` entries with `FunctionResultEntry`) is in the [comprehensive guide](../mistral_agents_api_comprehensive_guide/#8-function-calling).
+The manual equivalent (declare a `function` tool, answer `function.call` entries with `FunctionResultEntry`) is in the [comprehensive guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#8-function-calling).
 
 ---
 
@@ -284,7 +284,7 @@ def safe_append(conversation_id: str, inputs: str) -> str | None:
         raise
 ```
 
-The client also accepts a `RetryConfig` for automatic retries; see the [production guide](../mistral_agents_api_production_guide/#2-client-concurrency-and-retries).
+The client also accepts a `RetryConfig` for automatic retries; see the [production guide](/mistral-agents-api-guide/mistral_agents_api_production_guide/#2-client-concurrency-and-retries).
 
 ---
 

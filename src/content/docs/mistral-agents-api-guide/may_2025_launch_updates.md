@@ -6,7 +6,7 @@ framework: mistral-agents-api
 
 # Mistral Agents API - May 2025 Launch and What Changed Since
 
-This is a historical page. For current usage see the [comprehensive guide](../mistral_agents_api_comprehensive_guide/), which is verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).
+This is a historical page. For current usage see the [comprehensive guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/), which is verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).
 
 ## The launch (27 May 2025)
 
@@ -29,12 +29,12 @@ Mistral reported that enabling web search raised SimpleQA accuracy from 23% to 7
 | 2025–2026 | New tool types and fields: `document_library` with `library_ids`, MCP `connector` tools with stored credentials and OAuth, `tool_configuration` (`include`, `exclude`, `requires_confirmation`), agent versions and version aliases, guardrails, `handoff_execution` (`server` / `client`). |
 | March 2026 | Python SDK v2: all imports moved from `mistralai` to `mistralai.client`; Azure and GCP clients moved under `mistralai.azure` / `mistralai.gcp`; 42 request and response types renamed. |
 | Mid 2026 | `mistral-medium-2505` and `mistral-medium-2508` deprecated, then retired on 31 August 2026; replaced by Mistral Medium 3.5 (`mistral-medium-3-5`, alias `mistral-medium-latest`). `mistral-moderation-2411` retired 30 June 2026 in favour of `mistral-moderation-2603`. |
-| September 2026 | Python SDK v3.0.0: `httpx2` transport, `mcp` 2.2, service-account token support, built-in tools removed from chat and agents completions, connector and observability API changes. See [Changes in SDK v3](../mistral_agents_api_comprehensive_guide/#14-changes-in-sdk-v3). |
+| September 2026 | Python SDK v3.0.0: `httpx2` transport, `mcp` 2.2, service-account token support, built-in tools removed from chat and agents completions, connector and observability API changes. See [Changes in SDK v3](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#14-changes-in-sdk-v3). |
 
 ## Pages in this guide
 
-- [Connectors and built-in tools](../mistral_agents_api_connectors_guide/)
-- [Agent orchestration](../mistral_agents_api_orchestration_guide/)
-- [MCP](../mistral_agents_api_mcp_guide/)
-- [Recipes](../mistral_agents_api_recipes/)
-- [Production](../mistral_agents_api_production_guide/)
+- [Connectors and built-in tools](/mistral-agents-api-guide/mistral_agents_api_connectors_guide/)
+- [Agent orchestration](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/)
+- [MCP](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/)
+- [Recipes](/mistral-agents-api-guide/mistral_agents_api_recipes/)
+- [Production](/mistral-agents-api-guide/mistral_agents_api_production_guide/)

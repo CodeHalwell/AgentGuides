@@ -204,7 +204,7 @@ export const telemetry: Options = {
 
 Note that `env` replaces the child's environment, so spread `process.env` if the process still needs `PATH`, `HOME` and your API key.
 
-Alert on: result error rate by `subtype`; p95 cost and turns per run; rate-limit events; per-tool error rate. Hooks (`PreToolUse`, `PostToolUseFailure`) give an audit trail that includes subagent tool calls — see the [middleware page](../claude_agent_sdk_typescript_middleware/).
+Alert on: result error rate by `subtype`; p95 cost and turns per run; rate-limit events; per-tool error rate. Hooks (`PreToolUse`, `PostToolUseFailure`) give an audit trail that includes subagent tool calls — see the [middleware page](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/).
 
 ---
 

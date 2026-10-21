@@ -201,7 +201,7 @@ Pass `stderr=lambda line: log.debug("cli: %s", line)` in the options to capture 
 
 ### Hooks for policy-level auditing
 
-Logging in hooks catches tool calls made by subagents too, and runs before permission decisions. See [Recipe 13](../anthropic_claude_agent_sdk_recipes/#recipe-13-audit-log-with-hooks).
+Logging in hooks catches tool calls made by subagents too, and runs before permission decisions. See [Recipe 13](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_recipes/#recipe-13-audit-log-with-hooks).
 
 ### Tracing
 

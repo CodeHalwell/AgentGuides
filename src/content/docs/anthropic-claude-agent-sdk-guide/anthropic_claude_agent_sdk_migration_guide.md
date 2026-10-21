@@ -130,7 +130,7 @@ These arrived with 0.1.0 and are worth adopting while you are migrating:
 - **Session forking** via `ClaudeAgentOptions(resume=session_id, fork_session=True)`.
 - **`setting_sources`** for settings isolation.
 
-See the [comprehensive guide](../anthropic_claude_agent_sdk_comprehensive_guide/) for examples.
+See the [comprehensive guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/) for examples.
 
 ---
 

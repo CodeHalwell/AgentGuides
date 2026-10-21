@@ -39,7 +39,7 @@ The Python package has its own guide: [Claude Agent SDK (Python)](/anthropic-cla
 
 `@anthropic-ai/claude-agent-sdk` is Claude Code as a library. `query()` starts a Claude Code process (a platform-specific binary is installed as an optional dependency), streams typed messages back, and handles the agent loop, built-in tools, permissions, compaction and session persistence. Your code supplies a prompt, options, and optionally custom tools, hooks and permission callbacks.
 
-It was published as `@anthropic-ai/claude-code` until the rename; see the [migration guide](../claude_agent_sdk_typescript_migration_guide/).
+It was published as `@anthropic-ai/claude-code` until the rename; see the [migration guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_migration_guide/).
 
 Use it when you want an agent that reads and edits files, runs commands and calls tools on your own infrastructure. For a single model call, or a tool loop over tools you define yourself, the plain `@anthropic-ai/sdk` client is lighter.
 

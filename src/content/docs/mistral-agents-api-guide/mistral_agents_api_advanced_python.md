@@ -8,7 +8,7 @@ framework: mistral-agents-api
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Upstream: [client-python](https://github.com/mistralai/client-python) · [PyPI](https://pypi.org/project/mistralai/) · [docs](https://docs.mistral.ai).
 
-Not every agent needs the stateful Agents API. When you hold the conversation yourself (for example, inside an existing chat backend), `chat.complete()` with function tools is the lighter option. Since SDK v3 the built-in tools (`web_search`, `code_interpreter` and friends) are not accepted there; use [Conversations](../mistral_agents_api_comprehensive_guide/) for those.
+Not every agent needs the stateful Agents API. When you hold the conversation yourself (for example, inside an existing chat backend), `chat.complete()` with function tools is the lighter option. Since SDK v3 the built-in tools (`web_search`, `code_interpreter` and friends) are not accepted there; use [Conversations](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/) for those.
 
 ## Patterns
 

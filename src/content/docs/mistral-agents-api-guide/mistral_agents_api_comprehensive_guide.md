@@ -6,7 +6,7 @@ framework: mistral-agents-api
 
 # Mistral Agents API: Comprehensive Technical Guide
 
-**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Every method, parameter and tool shape on this page was checked against an installed copy of the SDK. The architecture diagrams that used to open this page now live on the [diagrams page](../mistral_agents_api_diagrams/).
+**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Every method, parameter and tool shape on this page was checked against an installed copy of the SDK. The architecture diagrams that used to open this page now live on the [diagrams page](/mistral-agents-api-guide/mistral_agents_api_diagrams/).
 
 ---
 
@@ -267,7 +267,7 @@ Event types: `conversation.response.started`, `message.output.delta`, `tool.exec
 | `connector` | A registered MCP connector | `connector_id`, `authorization`, `tool_configuration` |
 | `function` | Your own function | `function` |
 
-Since SDK v3 these tools are only accepted by the Conversations and Agents APIs: `chat.complete()` and `agents.complete()` no longer take `web_search`, `web_search_premium` or `code_interpreter`. See the [connectors guide](../mistral_agents_api_connectors_guide/) for each tool in detail.
+Since SDK v3 these tools are only accepted by the Conversations and Agents APIs: `chat.complete()` and `agents.complete()` no longer take `web_search`, `web_search_premium` or `code_interpreter`. See the [connectors guide](/mistral-agents-api-guide/mistral_agents_api_connectors_guide/) for each tool in detail.
 
 ---
 
@@ -347,7 +347,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`register_func(fn, requires_confirmation=True)` pauses the run with a `DeferredToolCallsException` so a human can approve the call; see the [MCP guide](../mistral_agents_api_mcp_guide/#human-approval-for-tool-calls). `RunContext(agent_id=...)` runs against a stored agent instead of a model.
+`register_func(fn, requires_confirmation=True)` pauses the run with a `DeferredToolCallsException` so a human can approve the call; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/#3-human-approval-for-tool-calls). `RunContext(agent_id=...)` runs against a stored agent instead of a model.
 
 ---
 
@@ -385,7 +385,7 @@ for entry in response.outputs:
 print(text_of(response))
 ```
 
-With `handoff_execution="client"` the response stops at the handoff so your code can log, check or modify state before continuing. The [orchestration guide](../mistral_agents_api_orchestration_guide/) covers handoff graphs and code-driven pipelines.
+With `handoff_execution="client"` the response stops at the handoff so your code can log, check or modify state before continuing. The [orchestration guide](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/) covers handoff graphs and code-driven pipelines.
 
 ---
 
