@@ -374,7 +374,7 @@ def test_validator_retries():
             agent.run_sync('go')
 ```
 
-After `output_retries` attempts, `ModelRetry` bubbles up as `UnexpectedModelBehavior`.
+Once the output retry budget (`retries={'output': N}`, default 1) is used up, `ModelRetry` bubbles up as `UnexpectedModelBehavior`.
 
 ### 5. Swap `deps` per test without rebuilding the agent
 

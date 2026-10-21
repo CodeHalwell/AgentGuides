@@ -7,7 +7,7 @@ language: python
 
 # Output Types & Validators
 
-Verified against **pydantic-ai==2.43.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
 
 The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. PydanticAI ships five "marker" wrappers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — plus a plain type / union shortcut. The right one depends on what the model natively supports.
 
@@ -70,14 +70,14 @@ print(repr(result.output))
 #> Fruit(name='banana', color='yellow')
 ```
 
-Arguments (`output.py` — verified against pydantic-ai 2.43.0):
+Arguments (`output.py`):
 
 | Arg | Type | Default | Notes |
 |-----|------|---------|-------|
 | `output` | `type \| callable` | required | Pydantic model, dataclass, or async callable |
 | `name` | `str \| None` | `None` | Tool name sent to the model; auto-derived if unset |
 | `description` | `str \| None` | `None` | Overrides the type's docstring as the tool description |
-| `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level `retries` / `output_retries` |
+| `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level output budget (`Agent(retries={'output': N})`) |
 | `strict` | `bool \| None` | `None` | Forwarded to providers that support strict JSON schema (OpenAI, Anthropic, Google) |
 | `sequential` | `bool` | `False` | Act as a barrier — run alone, not overlapping with other tool calls (only meaningful under `end_strategy='exhaustive'`) |
 
@@ -134,7 +134,7 @@ print(repr(result2.output))  # DetailedReport(title=..., sections=[...], citatio
 When `end_strategy='exhaustive'` the agent runs **all** tool calls the model emitted in a turn before stopping,
 including multiple output tools. Setting `sequential=True` on a `ToolOutput` makes it act as a
 barrier: function tools emitted before it finish first, then this output tool runs alone, then
-tools emitted after it start. Under `'early'` (the default) or `'graceful'`, output tools already run
+tools emitted after it start. Under `'graceful'` (the default since 2.0) or `'early'`, output tools already run
 sequentially, so `sequential=True` has no effect there.
 
 ```python
@@ -338,7 +338,7 @@ The validator may:
 - Raise `ModelRetry(msg)` to feed a retry prompt back to the model.
 - Raise `UnexpectedModelBehavior` to terminate the run.
 
-Up to `output_retries` (defaults to the agent `retries`) validator-triggered retries are allowed before the run fails.
+Up to the agent's output retry budget (`retries={'output': N}`; a bare `retries=N` sets both the tool and output budgets, default 1) validator-triggered retries are allowed before the run fails. The separate `output_retries=` argument from V1 no longer exists.
 
 ## Output streaming
 
@@ -349,7 +349,7 @@ See the [streaming guide](./pydantic_ai_streaming/). `StreamedRunResult.get_outp
 - **Union of bare types**: `output_type=[Fruit, Vehicle]` works but you lose per-type tool naming. Use `ToolOutput(...)` per branch when the model gets confused about which to emit.
 - **`strict=True`** (OpenAI): the model rejects any schema with `anyOf`/`oneOf` at the root without a discriminator. If you see "strict mode schema rejected" errors, drop `strict` or use `PromptedOutput`.
 - **`NativeOutput` on older OpenAI models** (pre-`gpt-4o-2024-08-06`): silently falls back to prompted mode; check `result.response.model_name` and the raw messages if you need to confirm.
-- **`TextOutput` and tools**: when you combine `TextOutput` with function tools, set `end_strategy='graceful'` on the agent so tool calls still run before the text is finalised.
+- **`TextOutput` and tools**: function tools emitted alongside the final text still run under the default `end_strategy='graceful'` (since 2.0); only `'early'` would skip them.
 - **`output_type` on `run()`**: the per-run override is only allowed when the agent has no `output_validator` — the validator's type wouldn't match.
 
 ## Patterns

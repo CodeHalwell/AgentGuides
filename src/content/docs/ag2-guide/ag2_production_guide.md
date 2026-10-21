@@ -39,7 +39,7 @@ CMD ["python", "-m", "app"]
 
 ### Serving an agent
 
-- **A2A** — `A2AServer(agent).build_jsonrpc(...)` returns an ASGI app; run it under uvicorn or any ASGI server. REST and gRPC transports can share one `task_store=`; for several replicas, back it with a shared store rather than the default in-memory one.
+- **A2A** — `A2AServer(agent).build_jsonrpc(...)` returns an ASGI app; run it under uvicorn or any ASGI server. REST and gRPC transports can share one `task_store=`. Since 1.2.0 `A2AServer` can run on several replicas: pass a versioned shared task store together with an `event_stream=` that carries task events between replicas (see the upstream A2A server docs).
 - **MCP** — `ag2.mcp.MCPServer(agent)` exposes an `Agent` as an MCP server for other clients.
 - **AG-UI / ACP** — adapters in `ag2.ag_ui` and `ag2.acp` (extras `ag-ui`, `acp`) connect agents to front-ends and editor clients.
 
@@ -60,7 +60,7 @@ CMD ["python", "-m", "app"]
 
 - **Code execution** — prefer `SandboxCodeTool` / container environments over `LocalEnvironment` and `ShellTool` for anything model-generated.
 - **MCP** — restrict exposed tools with `allowed_tools=` / `blocked_tools=`; prefer `MCPToolkit` (client-side) when credentials must stay inside your infrastructure.
-- **A2A push notifications** — if you enable them (`push_config_store=`), validate client-supplied webhook URLs in your `push_sender` so they cannot reach internal addresses (SSRF). Sign agent cards with `card_signer=` where clients need to verify them; clients check with `card_signature_verifier=` on `A2AConfig`.
+- **A2A push notifications** — if you enable them (`push_config_store=`), pass `push_url_validator=` (for example `a2a.utils.push_url_validator.validate_push_notification_url`, which allows only public http(s) hosts) so client-supplied webhook URLs cannot reach internal addresses (SSRF); available since 1.2.0. `validate_input_modes=True` rejects message parts whose media type the card does not declare. Sign agent cards with `card_signer=` where clients need to verify them; clients check with `card_signature_verifier=` on `A2AConfig`.
 - **Keys** — config classes read provider keys from the environment; keep them in a secrets manager, not in code.
 
 ## Observability

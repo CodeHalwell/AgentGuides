@@ -1,19 +1,15 @@
 ---
 title: "Google ADK for Go - Comprehensive Technical Guide"
-description: "Complete API Reference and Developer Guide"
+description: "Building agents with ADK for Go: LLM agents, workflow agents, function tools, MCP, A2A, sessions, plugins, telemetry and testing."
 framework: google-adk
 language: go
 ---
 
 # Google ADK for Go - Comprehensive Technical Guide
 
-**Complete API Reference and Developer Guide**
+**Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). Every complete program on this page was compiled with `go vet` against that release, and the testing example was run with `go test`. ADK for Go reached v1.0.0 in March 2026 and has kept its public API source-compatible since; see [What's new since v1.0.0](#whats-new-since-v100).
 
-> **GA Release**: Google ADK for Go reached v1.0.0 GA on April 8, 2026. The API is now stable with long-term support.
-
-Version: 1.0.0 GA
-Last Updated: April 2026
-License: Apache 2.0
+ADK for Go versions independently of the Python and TypeScript kits, so feature names match but release numbers do not.
 
 ---
 
@@ -28,13 +24,13 @@ License: Apache 2.0
 7. [Tools System](#tools-system)
 8. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
 9. [Agent2Agent (A2A) Protocol](#agent2agent-a2a-protocol)
-10. [Go Idioms and Patterns](#go-idioms-and-patterns) — context handling, error handling, goroutine patterns
+10. [Go Idioms and Patterns](#go-idioms-and-patterns)
 11. [Session Management](#session-management)
 12. [Testing](#testing)
 13. [Best Practices](#best-practices)
-14. [What's New in v1.0.0 GA](#whats-new-in-v100-ga)
+14. [What's new since v1.0.0](#whats-new-since-v100)
 
-For deployment, telemetry and Vertex AI Agent Engine, continue in the [production guide](/google-adk-guide/go/google_adk_go_production_guide/); for task-shaped examples see the [recipes](/google-adk-guide/go/google_adk_go_recipes/).
+For deployment, telemetry and serving, continue in the [production guide](/google-adk-guide/go/google_adk_go_production_guide/); for task-shaped examples see the [recipes](/google-adk-guide/go/google_adk_go_recipes/).
 
 ---
 
@@ -42,90 +38,114 @@ For deployment, telemetry and Vertex AI Agent Engine, continue in the [productio
 
 ### Prerequisites
 
-**Go Version**: 1.24.4 or later
-
-Verify your Go installation:
+ADK for Go needs **Go 1.25 or later** (its `go.mod` declares `go 1.25.0`).
 
 ```bash
 go version
-# go version go1.24.4 linux/amd64
 ```
 
 ### Install ADK Package
 
 ```bash
-# Initialize a new Go module
 mkdir my-agent && cd my-agent
-go mod init github.com/yourorg/my-agent
-
-# Install ADK for Go
-go get google.golang.org/adk@latest
+go mod init example.com/my-agent
+go get google.golang.org/adk@v%%version=google.golang.org/adk%%
 ```
+
+The Gemini client comes from `google.golang.org/genai`, which `go get` pulls in as a dependency.
 
 ### Environment Setup
 
-Create a `.env` file for configuration:
+For the Gemini API, set an API key from Google AI Studio and pass it in `genai.ClientConfig`:
 
 ```bash
-# .env
-GOOGLE_API_KEY=your_api_key_here
-GOOGLE_CLOUD_PROJECT=your-gcp-project
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+export GOOGLE_API_KEY=your_api_key_here
 ```
 
-Load environment variables:
+For Vertex AI, authenticate with Application Default Credentials (`gcloud auth application-default login`, or a service account on Cloud Run/GKE) and select the Vertex backend:
 
 ```go
-package main
-
-import (
-    "github.com/joho/godotenv"
-    "log"
-)
-
-func init() {
-    if err := godotenv.Load(); err != nil {
-        log.Printf("Warning: .env file not found")
-    }
-}
+model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+	Backend:  genai.BackendVertexAI,
+	Project:  "my-gcp-project",
+	Location: "us-central1",
+})
 ```
+
+The `genai` client also reads `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` when the corresponding fields are empty.
 
 ### Verify Installation
 
+A complete program: one agent, one turn, printed to the terminal.
+
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "log"
-    "os"
+	"context"
+	"fmt"
+	"log"
+	"os"
 
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/model/gemini"
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model/gemini"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
 )
 
 func main() {
-    ctx := context.Background()
+	ctx := context.Background()
 
-    // Initialize model
-    model, err := gemini.New(ctx, &gemini.Config{
-        APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.5-flash",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
+	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+		APIKey: os.Getenv("GOOGLE_API_KEY"),
+	})
+	if err != nil {
+		log.Fatalf("create model: %v", err)
+	}
 
-    // Create agent
-    agent := llmagent.New(&llmagent.Config{
-        Name:  "test_agent",
-        Model: model,
-    })
+	assistant, err := llmagent.New(llmagent.Config{
+		Name:        "assistant",
+		Model:       model,
+		Description: "A helpful assistant.",
+		Instruction: "You are a helpful assistant. Answer concisely.",
+	})
+	if err != nil {
+		log.Fatalf("create agent: %v", err)
+	}
 
-    fmt.Printf("Agent created successfully: %s\n", agent.Name())
+	r, err := runner.New(runner.Config{
+		AppName:           "quickstart",
+		Agent:             assistant,
+		SessionService:    session.InMemoryService(),
+		AutoCreateSession: true, // create "s1" on first use
+	})
+	if err != nil {
+		log.Fatalf("create runner: %v", err)
+	}
+
+	msg := genai.NewContentFromText("What is 15 + 27?", genai.RoleUser)
+	for event, err := range r.Run(ctx, "u1", "s1", msg, agent.RunConfig{}) {
+		if err != nil {
+			log.Fatalf("run: %v", err)
+		}
+		if event.IsFinalResponse() && event.Content != nil {
+			for _, p := range event.Content.Parts {
+				fmt.Print(p.Text)
+			}
+			fmt.Println()
+		}
+	}
 }
 ```
+
+```bash
+go run .
+```
+
+Note the two habits ADK for Go expects everywhere: constructors take a `Config` **value** and return `(value, error)`, and agents never run themselves — a `runner.Runner` drives them and yields events as an `iter.Seq2[*session.Event, error]`.
 
 ---
 
@@ -133,132 +153,68 @@ func main() {
 
 ### Design Philosophy
 
-ADK for Go follows these principles:
-
-1. **Idiomatic Go**: Embraces Go conventions and patterns
-2. **Explicit over Implicit**: Clear configuration and behavior
-3. **Composable**: Build complex agents from simple primitives
-4. **Type-Safe**: Leverage Go's type system for safety
-5. **Context-Aware**: Proper context propagation throughout
-6. **Error Transparent**: Clear error handling and reporting
+- **Code first.** Agents, tools and orchestration are ordinary Go values built from `Config` structs.
+- **Composable agents.** Every agent implements `agent.Agent`; LLM agents, workflow agents, remote A2A agents and custom agents nest freely as sub-agents.
+- **Events as the unit of work.** Each model response, tool call, tool result and state change is a `session.Event`. Runners stream them; session services persist them.
+- **Pluggable services.** Sessions, artifacts and memory are interfaces with in-memory, database and Vertex AI implementations.
 
 ### Architecture Layers
 
 ```
-┌─────────────────────────────────────────┐
-│         Application Layer                │
-│    (Your Agent Implementation)           │
-├─────────────────────────────────────────┤
-│         Agent Orchestration              │
-│   (Sequential, Parallel, Loop)           │
-├─────────────────────────────────────────┤
-│            Core Agent Layer              │
-│         (LLMAgent, Custom)               │
-├─────────────────────────────────────────┤
-│      Tools & Capabilities Layer          │
-│  (Function, Agent, MCP, Gemini)          │
-├─────────────────────────────────────────┤
-│          Model Integration               │
-│       (Gemini, Vertex AI)                │
-├─────────────────────────────────────────┤
-│       Session & Memory Layer             │
-│   (State, History, Persistence)          │
-├─────────────────────────────────────────┤
-│       Infrastructure Layer               │
-│ (Server, A2A, Telemetry, Artifacts)      │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│ Serving: cmd/launcher (console, web), server/adkrest (REST),   │
+│          server/adka2a/v2 (A2A), server/agentengine           │
+├───────────────────────────────────────────────────────────────┤
+│ runner.Runner — invocation loop, plugins, session bookkeeping  │
+├───────────────────────────────────────────────────────────────┤
+│ Agents: llmagent · workflowagents (sequential/parallel/loop) · │
+│         remoteagent/v2 · agent.New (custom)                    │
+├──────────────────────┬────────────────────────────────────────┤
+│ model.LLM            │ tool.Tool / tool.Toolset               │
+│ (gemini, apigee)     │ (functiontool, mcptoolset, geminitool, │
+│                      │  agenttool, skilltoolset, ...)         │
+├──────────────────────┴────────────────────────────────────────┤
+│ Services: session · artifact · memory  (in-memory, database,   │
+│           GCS, Vertex AI)                                     │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Request Flow
 
-```
-User Input
-    ↓
-Context Creation
-    ↓
-Session Load (if exists)
-    ↓
-Agent.Run()
-    ↓
-Model Request (with tools)
-    ↓
-Tool Execution (if needed)
-    ↓
-Response Generation
-    ↓
-Session Save
-    ↓
-Response to User
-```
+1. Your code calls `runner.Run(ctx, userID, sessionID, msg, runConfig)`.
+2. The runner loads (or, with `AutoCreateSession`, creates) the session, appends the user message, and picks the agent that should answer — the root, or the sub-agent the conversation was last transferred to.
+3. An LLM agent builds an `LLMRequest` (instruction with `{state}` placeholders filled, history, tool declarations), calls the model, runs any requested tools, and loops until it produces a final response or transfers control.
+4. Each step is yielded as a `*session.Event` and appended to the session, applying its `Actions.StateDelta`.
+5. You range over the iterator; `event.IsFinalResponse()` marks the answer to show the user.
 
 ---
 
 ## Package Overview
 
-### `google.golang.org/adk/agent`
+All packages live under `google.golang.org/adk`.
 
-Core agent implementations and interfaces.
-
-**Subpackages:**
-- `llmagent` - LLM-powered agents
-- `loopagent` - Iterative agent execution
-- `parallelagent` - Concurrent agent orchestration
-- `sequentialagent` - Sequential agent workflows
-- `remoteagent` - Remote agent communication via A2A
-
-### `google.golang.org/adk/model`
-
-LLM model integrations.
-
-**Subpackages:**
-- `gemini` - Google Gemini API integration
-
-### `google.golang.org/adk/tool`
-
-Tool system for extending agent capabilities.
-
-**Subpackages:**
-- `functiontool` - Go function-based tools
-- `agenttool` - Use agents as tools
-- `geminitool` - Native Gemini tools (Search, Code Execution)
-- `mcptoolset` - Model Context Protocol integration
-- `exitlooptool` - Loop termination control
-- `loadartifactstool` - Artifact loading
-
-### `google.golang.org/adk/session`
-
-Session and state management.
-
-**Subpackages:**
-- `database` - Persistent session storage
-
-### `google.golang.org/adk/memory`
-
-Long-term memory and knowledge storage.
-
-### `google.golang.org/adk/runner`
-
-Agent execution and lifecycle management.
-
-### `google.golang.org/adk/server`
-
-Server implementations for agent deployment.
-
-**Subpackages:**
-- `restapi` - REST API server
-- `adka2a` - Agent2Agent protocol server
-- `webui` - Web user interface
-
-### `google.golang.org/adk/artifact`
-
-Artifact storage and retrieval.
-
-**Subpackages:**
-- `gcs` - Google Cloud Storage integration
-
-### `google.golang.org/adk/telemetry`
-
-Observability, metrics, and tracing.
+| Package | What it provides |
+|---|---|
+| `agent` | `Agent`, `Config`, `New` (custom agents), contexts (`InvocationContext`, `CallbackContext`, `ToolContext`, `ReadonlyContext`), `RunConfig`, `Loader` |
+| `agent/llmagent` | The LLM-backed agent and its callback types |
+| `agent/workflowagents/sequentialagent`, `parallelagent`, `loopagent` | Deterministic orchestration of sub-agents |
+| `agent/remoteagent/v2` | An agent that delegates to a remote A2A agent (the v1 package is deprecated) |
+| `model` | `LLM` interface, `LLMRequest`, `LLMResponse` |
+| `model/gemini`, `model/apigee` | Gemini (API or Vertex AI) and Apigee-proxied model implementations |
+| `tool` | `Tool`, `Toolset`, predicates, `FilterToolset`, `WithConfirmation` |
+| `tool/functiontool` | Typed Go functions as tools (schemas inferred from structs) |
+| `tool/geminitool` | Gemini built-in tools (`GoogleSearch`, or any `genai.Tool`) |
+| `tool/agenttool` | Another agent wrapped as a tool |
+| `tool/mcptoolset` | Tools from an MCP server |
+| `tool/exitlooptool`, `loadartifactstool`, `loadmemorytool`, `preloadmemorytool`, `skilltoolset`, `toolconfirmation` | Built-in tools and HITL support |
+| `runner` | `Runner`, `Config`, `PluginConfig` |
+| `session`, `session/database`, `session/vertexai` | Session service interface, GORM-backed and Vertex AI implementations |
+| `artifact`, `artifact/gcsartifact` | Versioned file storage per session |
+| `memory`, `memory/vertexai` | Long-term memory search |
+| `plugin`, `plugin/loggingplugin`, `plugin/retryandreflect`, `plugin/functioncallmodifier` | Runner-wide callbacks |
+| `telemetry` | OpenTelemetry providers, with export to Google Cloud |
+| `server/adkrest`, `server/adka2a/v2`, `server/agentengine` | HTTP serving: ADK REST API, A2A, Vertex AI Agent Engine |
+| `cmd/launcher`, `cmd/launcher/full` | Ready-made `console` and `web` entry points (dev UI, REST, A2A) |
 
 ---
 
@@ -267,607 +223,567 @@ Observability, metrics, and tracing.
 ### Core Agent Interface
 
 ```go
-package agent
-
-// Agent is the fundamental interface all agents must implement
 type Agent interface {
-    // Name returns the agent's unique identifier
-    Name() string
-
-    // Description returns a human-readable description
-    Description() string
-
-    // Run executes the agent with the given input
-    Run(ctx context.Context, input string) (*Response, error)
-
-    // RunWithSession executes with session state
-    RunWithSession(ctx context.Context, sess *session.Session, input string) (*Response, error)
-
-    // Stream executes and streams responses
-    Stream(ctx context.Context, input string) (<-chan *StreamChunk, error)
-}
-
-// Response represents an agent's output
-type Response struct {
-    Text      string                 // Primary text response
-    Metadata  map[string]interface{} // Additional metadata
-    ToolCalls []ToolCall            // Tools invoked
-    Usage     *Usage                // Token usage
-}
-
-// StreamChunk represents a piece of streaming response
-type StreamChunk struct {
-    Text      string
-    Delta     string
-    Done      bool
-    Error     error
-}
-
-// Usage tracks token consumption
-type Usage struct {
-    InputTokens  int
-    OutputTokens int
-    TotalTokens  int
-}
-
-// ToolCall represents a tool invocation
-type ToolCall struct {
-    Name   string
-    Args   map[string]interface{}
-    Result interface{}
-    Error  error
+	Name() string
+	Description() string
+	Run(InvocationContext) iter.Seq2[*session.Event, error]
+	SubAgents() []Agent
+	FindAgent(name string) Agent
+	FindSubAgent(name string) Agent
+	// Has unexported methods.
 }
 ```
+
+The unexported methods mean you cannot implement `Agent` directly yet; build agents with the constructors (`llmagent.New`, the workflow agents, `remoteagent.NewA2A`) or, for custom logic, `agent.New` with a `Run` function (see [Custom agents](#custom-agents)).
 
 ### Tool Interface
 
 ```go
-package tool
-
-// Tool defines the interface for agent tools
 type Tool interface {
-    // Name returns the tool's identifier
-    Name() string
-
-    // Description returns what the tool does
-    Description() string
-
-    // Schema returns the input schema (JSON Schema)
-    Schema() *Schema
-
-    // Execute runs the tool with given arguments
-    Execute(ctx context.Context, args map[string]interface{}) (interface{}, error)
+	Name() string
+	Description() string
+	IsLongRunning() bool
 }
 
-// Schema defines tool input parameters
-type Schema struct {
-    Type       string                 `json:"type"`
-    Properties map[string]*Property   `json:"properties"`
-    Required   []string               `json:"required,omitempty"`
-}
-
-// Property defines a single parameter
-type Property struct {
-    Type        string   `json:"type"`
-    Description string   `json:"description"`
-    Enum        []string `json:"enum,omitempty"`
+type Toolset interface {
+	Name() string
+	Tools(ctx agent.ReadonlyContext) ([]Tool, error)
 }
 ```
+
+Tools are normally created with `functiontool.New`, `geminitool`, `agenttool.New` or `mcptoolset.New` rather than implemented by hand. A `Toolset` is the extension point for dynamic tool lists.
 
 ### Model Interface
 
 ```go
-package model
-
-// LLM defines the interface for language models
 type LLM interface {
-    // GenerateContent creates a response from a prompt
-    GenerateContent(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
-
-    // StreamContent streams response chunks
-    StreamContent(ctx context.Context, req *GenerateRequest) (<-chan *StreamChunk, error)
-
-    // CountTokens returns token count for given input
-    CountTokens(ctx context.Context, input string) (int, error)
-}
-
-// GenerateRequest contains generation parameters
-type GenerateRequest struct {
-    Messages    []*Message
-    Tools       []Tool
-    Temperature *float64
-    MaxTokens   *int
-    TopP        *float64
-    TopK        *int
-}
-
-// Message represents a conversation message
-type Message struct {
-    Role    string // "user", "model", "system"
-    Content string
-    Parts   []Part
-}
-
-// Part represents multimodal content
-type Part interface {
-    PartType() string
+	Name() string
+	GenerateContent(ctx context.Context, req *LLMRequest, stream bool) iter.Seq2[*LLMResponse, error]
 }
 ```
+
+`gemini.NewModel(ctx, modelName, *genai.ClientConfig)` returns one. Implementing `LLM` yourself is how you plug in another provider — or a fake for tests (see [Testing](#testing)).
 
 ### Session Interface
 
 ```go
-package session
-
-// Session manages conversation state
-type Session struct {
-    ID       string
-    UserID   string
-    Metadata map[string]interface{}
-    State    map[string]interface{}
-    History  []*Message
+type Session interface {
+	ID() string
+	AppName() string
+	UserID() string
+	State() State
+	Events() Events
+	LastUpdateTime() time.Time
 }
 
-// Store defines session persistence
-type Store interface {
-    // Save persists session data
-    Save(ctx context.Context, sess *Session) error
-
-    // Load retrieves session data
-    Load(ctx context.Context, id string) (*Session, error)
-
-    // Delete removes session data
-    Delete(ctx context.Context, id string) error
-
-    // List returns sessions for a user
-    List(ctx context.Context, userID string) ([]*Session, error)
+type State interface {
+	Get(string) (any, error)
+	Set(string, any) error
+	All() iter.Seq2[string, any]
 }
 ```
+
+A `session.Event` embeds `model.LLMResponse` (so `event.Content`, `event.ErrorMessage`, `event.Partial` are direct fields) and adds `Author`, `InvocationID`, `Branch`, `LongRunningToolIDs` and `Actions` (`StateDelta`, `ArtifactDelta`, `TransferToAgent`, `Escalate`, `SkipSummarization`, `RequestedToolConfirmations`).
 
 ---
 
 ## LLMAgent
 
-LLMAgent is the core agent type powered by language models.
-
 ### Basic Configuration
 
+The minimum is a name and a model; in practice you add an instruction and tools:
+
 ```go
-package main
-
-import (
-    "context"
-    "log"
-    "os"
-
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/model/gemini"
-)
-
-func main() {
-    ctx := context.Background()
-
-    // Initialize model
-    model, err := gemini.New(ctx, &gemini.Config{
-        APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.5-flash",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Create agent with minimal config
-    agent := llmagent.New(&llmagent.Config{
-        Name:        "assistant",
-        Description: "A helpful AI assistant",
-        Instruction: "You are a helpful AI assistant. Be concise and accurate.",
-        Model:       model,
-    })
-
-    // Run agent
-    response, err := agent.Run(ctx, "Hello, how can you help me?")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Response: %s\n", response.Text)
-}
+assistant, err := llmagent.New(llmagent.Config{
+	Name:        "assistant",
+	Model:       model,
+	Instruction: "You are a helpful assistant.",
+})
 ```
 
 ### Full Configuration Options
 
-```go
-type Config struct {
-    // Identity
-    Name        string // Required: unique agent identifier
-    Description string // Optional: human-readable description
-    Instruction string // Optional: system instruction/prompt
-
-    // Model
-    Model model.LLM // Required: language model instance
-
-    // Tools
-    Tools []tool.Tool // Optional: available tools
-
-    // Generation Settings
-    Temperature *float64 // Optional: 0.0-2.0, controls randomness
-    MaxTokens   *int     // Optional: max output tokens
-    TopP        *float64 // Optional: nucleus sampling
-    TopK        *int     // Optional: top-k sampling
-
-    // Input/Output
-    InputSchema  *Schema // Optional: validate input
-    OutputSchema *Schema // Optional: structured output
-
-    // Behavior
-    StopSequences []string // Optional: generation stop tokens
-    SafetySettings []*SafetySetting // Optional: content safety
-
-    // Advanced
-    ToolChoice    string // "auto", "none", "any", or specific tool
-    ParallelTools bool   // Allow parallel tool execution
-}
-```
+| Field | Purpose |
+|---|---|
+| `Name`, `Description` | Identity; the description is what a parent agent reads when deciding whether to transfer |
+| `Model` | A `model.LLM` |
+| `Instruction` | System instruction. `{key}` is filled from session state, `{key?}` is optional, `{artifact.name}` inserts an artifact's text |
+| `InstructionProvider` | Builds the instruction per call; no placeholder filling (use `instructionutil.InjectSessionState` if you need it) |
+| `GlobalInstruction`, `GlobalInstructionProvider` | Instruction applied to every agent in the tree |
+| `GenerateContentConfig` | `*genai.GenerateContentConfig`: temperature, max tokens, safety settings, thinking config |
+| `Tools`, `Toolsets` | Tools offered to the model |
+| `SubAgents` | Agents the model may transfer the conversation to |
+| `DisallowTransferToParent`, `DisallowTransferToPeers` | Restrict transfers |
+| `IncludeContents` | `IncludeContentsNone` sends no history (stateless helper agents) |
+| `InputSchema`, `OutputSchema` | `*genai.Schema` for structured input/output |
+| `OutputKey` | Save the final text (or JSON) to this state key |
+| `BeforeAgentCallbacks`, `AfterAgentCallbacks` | Run around the whole agent turn |
+| `BeforeModelCallbacks`, `AfterModelCallbacks`, `OnModelErrorCallbacks` | Inspect, replace or recover model calls |
+| `BeforeToolCallbacks`, `AfterToolCallbacks`, `OnToolErrorCallbacks` | Inspect, replace or recover tool calls |
 
 ### Advanced LLMAgent Example
 
-```go
-func createAdvancedAgent() *llmagent.Agent {
-    ctx := context.Background()
-
-    model, _ := gemini.New(ctx, &gemini.Config{
-        APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.5-flash",
-    })
-
-    temp := 0.7
-    maxTokens := 2048
-    topP := 0.95
-    topK := 40
-
-    agent := llmagent.New(&llmagent.Config{
-        Name: "advanced_assistant",
-        Description: "An advanced AI assistant with custom settings",
-        Instruction: `You are an expert AI assistant specializing in:
-        - Technical explanations
-        - Code generation
-        - Problem solving
-
-        Always:
-        - Provide clear, concise answers
-        - Use examples when helpful
-        - Cite sources when available
-        - Admit when uncertain`,
-
-        Model:       model,
-        Temperature: &temp,
-        MaxTokens:   &maxTokens,
-        TopP:        &topP,
-        TopK:        &topK,
-
-        StopSequences: []string{"END", "STOP"},
-
-        SafetySettings: []*SafetySetting{
-            {
-                Category:  "HARM_CATEGORY_HATE_SPEECH",
-                Threshold: "BLOCK_MEDIUM_AND_ABOVE",
-            },
-        },
-
-        ToolChoice:    "auto",
-        ParallelTools: true,
-    })
-
-    return agent
-}
-```
-
-### Structured Output
-
-Generate type-safe responses with JSON schema:
+Callbacks, state templating, generation settings and `OutputKey` together:
 
 ```go
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "log"
+	"context"
+	"log"
+	"os"
 
-    "google.golang.org/adk/agent/llmagent"
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/model/gemini"
+	"google.golang.org/adk/tool"
 )
 
-// Define output structure
-type WeatherReport struct {
-    Location    string  `json:"location"`
-    Temperature float64 `json:"temperature"`
-    Conditions  string  `json:"conditions"`
-    Humidity    int     `json:"humidity"`
-    WindSpeed   float64 `json:"wind_speed"`
-    Forecast    string  `json:"forecast"`
+// logRequest runs before every model call. Returning a non-nil response
+// skips the model and uses that response instead.
+func logRequest(ctx agent.CallbackContext, req *model.LLMRequest) (*model.LLMResponse, error) {
+	log.Printf("[%s] calling model with %d content(s)", ctx.AgentName(), len(req.Contents))
+	return nil, nil
 }
 
-func structuredOutputExample() {
-    ctx := context.Background()
-    model := createModel()
+// redactResult runs after every tool call and may replace the result.
+func redactResult(ctx agent.ToolContext, t tool.Tool, args, result map[string]any, err error) (map[string]any, error) {
+	if err != nil {
+		return nil, err
+	}
+	delete(result, "internal_id")
+	return result, nil
+}
 
-    // Define schema from struct
-    schema := &llmagent.Schema{
-        Type: "object",
-        Properties: map[string]*llmagent.Property{
-            "location":    {Type: "string", Description: "City name"},
-            "temperature": {Type: "number", Description: "Temperature in Celsius"},
-            "conditions":  {Type: "string", Description: "Weather conditions"},
-            "humidity":    {Type: "integer", Description: "Humidity percentage"},
-            "wind_speed":  {Type: "number", Description: "Wind speed in km/h"},
-            "forecast":    {Type: "string", Description: "Weather forecast"},
-        },
-        Required: []string{"location", "temperature", "conditions"},
-    }
+func newSupportAgent(ctx context.Context) (agent.Agent, error) {
+	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+		APIKey: os.Getenv("GOOGLE_API_KEY"),
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    agent := llmagent.New(&llmagent.Config{
-        Name:         "weather_reporter",
-        Model:        model,
-        OutputSchema: schema,
-    })
+	return llmagent.New(llmagent.Config{
+		Name:        "support_agent",
+		Description: "Answers customer questions about orders.",
+		Model:       m,
+		// {customer_name} is filled from session state at call time.
+		Instruction: "You help {customer_name} with questions about their orders. Be brief.",
+		GenerateContentConfig: &genai.GenerateContentConfig{
+			Temperature:     genai.Ptr[float32](0.2),
+			MaxOutputTokens: 1024,
+		},
+		BeforeModelCallbacks: []llmagent.BeforeModelCallback{logRequest},
+		AfterToolCallbacks:   []llmagent.AfterToolCallback{redactResult},
+		OutputKey:            "last_answer", // final text is also saved to state
+	})
+}
 
-    response, err := agent.Run(ctx, "What's the weather in Tokyo?")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Parse structured output
-    var weather WeatherReport
-    if err := json.Unmarshal([]byte(response.Text), &weather); err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Weather in %s: %.1f°C, %s\n",
-        weather.Location, weather.Temperature, weather.Conditions)
+func main() {
+	if _, err := newSupportAgent(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+A before-callback that returns a non-nil response (or content, for agent callbacks) short-circuits the step: the model or agent is skipped and your value is used. That is the hook for caching, guardrails and canned answers.
+
+### Structured Output
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model/gemini"
+)
+
+func newClassifier(ctx context.Context) (agent.Agent, error) {
+	m, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+		APIKey: os.Getenv("GOOGLE_API_KEY"),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ticketSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"category": {Type: genai.TypeString, Enum: []string{"billing", "technical", "other"}},
+			"priority": {Type: genai.TypeInteger, Description: "1 (low) to 5 (urgent)"},
+			"summary":  {Type: genai.TypeString},
+		},
+		Required: []string{"category", "priority", "summary"},
+	}
+
+	return llmagent.New(llmagent.Config{
+		Name:         "ticket_classifier",
+		Model:        m,
+		Instruction:  "Classify the support ticket in the user's message.",
+		OutputSchema: ticketSchema, // the reply is JSON matching this schema
+		OutputKey:    "ticket",     // and is stored in session state under "ticket"
+	})
+}
+
+func main() {
+	if _, err := newClassifier(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+With `OutputSchema` set the model replies with JSON only; downstream agents can read it from state (`{ticket}`) and Go code can `json.Unmarshal` the final event's text.
 
 ---
 
 ## Agent Orchestration
 
-Build complex multi-agent systems with orchestration primitives.
+Workflow agents run sub-agents in a fixed pattern without asking a model what to do next. They share session state, so the usual hand-off is `OutputKey` on one agent and a `{placeholder}` in the next agent's instruction.
 
 ### SequentialAgent
-
-Execute agents in a defined order, passing output from one to the next.
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"context"
+	"log"
+	"os"
 
-    "google.golang.org/adk/agent/workflowagents/sequentialagent"
-    "google.golang.org/adk/agent/llmagent"
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/agent/workflowagents/sequentialagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/model/gemini"
 )
 
-func sequentialExample() {
-    ctx := context.Background()
-    model := createModel()
+func newModel(ctx context.Context) (model.LLM, error) {
+	return gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+		APIKey: os.Getenv("GOOGLE_API_KEY"),
+	})
+}
 
-    // Research agent
-    researcher := llmagent.New(&llmagent.Config{
-        Name:        "researcher",
-        Instruction: "Research the given topic and provide key facts.",
-        Model:       model,
-    })
+func newArticlePipeline(ctx context.Context) (agent.Agent, error) {
+	m, err := newModel(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-    // Analysis agent
-    analyzer := llmagent.New(&llmagent.Config{
-        Name:        "analyzer",
-        Instruction: "Analyze the research and identify main themes.",
-        Model:       model,
-    })
+	researcher, err := llmagent.New(llmagent.Config{
+		Name:        "researcher",
+		Model:       m,
+		Instruction: "List the five most important facts about the user's topic.",
+		OutputKey:   "facts",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Writer agent
-    writer := llmagent.New(&llmagent.Config{
-        Name:        "writer",
-        Instruction: "Write a concise summary based on the analysis.",
-        Model:       model,
-    })
+	writer, err := llmagent.New(llmagent.Config{
+		Name:        "writer",
+		Model:       m,
+		Instruction: "Write a 150-word article using only these facts:\n{facts}",
+		OutputKey:   "draft",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Create sequential workflow
-    workflow := sequentialagent.New(&sequentialagent.Config{
-        Name:        "research_workflow",
-        Description: "Research, analyze, and write",
-        Agents:      []agent.Agent{researcher, analyzer, writer},
-    })
+	editor, err := llmagent.New(llmagent.Config{
+		Name:        "editor",
+		Model:       m,
+		Instruction: "Tighten this draft and fix any errors. Return only the final text:\n{draft}",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Execute workflow
-    response, err := workflow.Run(ctx, "Explain quantum computing")
-    if err != nil {
-        log.Fatal(err)
-    }
+	return sequentialagent.New(sequentialagent.Config{
+		AgentConfig: agent.Config{
+			Name:        "article_pipeline",
+			Description: "Researches, drafts and edits a short article.",
+			SubAgents:   []agent.Agent{researcher, writer, editor},
+		},
+	})
+}
 
-    log.Printf("Final output: %s\n", response.Text)
+func main() {
+	if _, err := newArticlePipeline(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
 ### ParallelAgent
 
-Run multiple agents concurrently and aggregate results.
+Parallel sub-agents run concurrently on separate branches of the same session. Give each its own `OutputKey`, then merge in a following step:
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
 
-    "google.golang.org/adk/agent/workflowagents/parallelagent"
-    "google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/agent/workflowagents/parallelagent"
+	"google.golang.org/adk/agent/workflowagents/sequentialagent"
+	"google.golang.org/adk/model"
 )
 
-func parallelExample() {
-    ctx := context.Background()
-    model := createModel()
+// newReviewPipeline fans out to three reviewers, then merges their notes.
+func newReviewPipeline(m model.LLM) (agent.Agent, error) {
+	reviewer := func(name, focus, key string) (agent.Agent, error) {
+		return llmagent.New(llmagent.Config{
+			Name:        name,
+			Model:       m,
+			Instruction: "Review the user's code for " + focus + " only. List concrete issues.",
+			OutputKey:   key,
+		})
+	}
 
-    // Create specialized agents
-    techAgent := llmagent.New(&llmagent.Config{
-        Name:        "tech_expert",
-        Instruction: "Provide technical analysis",
-        Model:       model,
-    })
+	security, err := reviewer("security_reviewer", "security problems", "security_notes")
+	if err != nil {
+		return nil, err
+	}
+	performance, err := reviewer("performance_reviewer", "performance problems", "performance_notes")
+	if err != nil {
+		return nil, err
+	}
+	style, err := reviewer("style_reviewer", "readability and style", "style_notes")
+	if err != nil {
+		return nil, err
+	}
 
-    businessAgent := llmagent.New(&llmagent.Config{
-        Name:        "business_expert",
-        Instruction: "Provide business analysis",
-        Model:       model,
-    })
+	fanOut, err := parallelagent.New(parallelagent.Config{
+		AgentConfig: agent.Config{
+			Name:      "reviews",
+			SubAgents: []agent.Agent{security, performance, style},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    marketAgent := llmagent.New(&llmagent.Config{
-        Name:        "market_expert",
-        Instruction: "Provide market analysis",
-        Model:       model,
-    })
+	merger, err := llmagent.New(llmagent.Config{
+		Name:  "merger",
+		Model: m,
+		Instruction: "Combine these reviews into one prioritised list.\n" +
+			"Security: {security_notes}\nPerformance: {performance_notes}\nStyle: {style_notes}",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Create parallel execution
-    parallel := parallelagent.New(&parallelagent.Config{
-        Name:        "multi_perspective",
-        Description: "Get multiple perspectives simultaneously",
-        Agents:      []agent.Agent{techAgent, businessAgent, marketAgent},
-        Aggregator:  aggregateResponses, // Custom aggregation function
-    })
-
-    response, err := parallel.Run(ctx, "Analyze the AI industry")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Aggregated analysis: %s\n", response.Text)
+	return sequentialagent.New(sequentialagent.Config{
+		AgentConfig: agent.Config{
+			Name:      "code_review",
+			SubAgents: []agent.Agent{fanOut, merger},
+		},
+	})
 }
 
-// Custom aggregation function
-func aggregateResponses(responses []*agent.Response) (*agent.Response, error) {
-    combined := "# Multi-Perspective Analysis\n\n"
-
-    for i, resp := range responses {
-        combined += fmt.Sprintf("## Perspective %d\n%s\n\n", i+1, resp.Text)
-    }
-
-    return &agent.Response{
-        Text: combined,
-    }, nil
+func main() {
+	var m model.LLM // e.g. from gemini.NewModel
+	if _, err := newReviewPipeline(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
 ### LoopAgent
 
-Iterate over data or repeat execution until a condition is met.
+A loop runs its sub-agents repeatedly until one of them escalates — the `exit_loop` tool does exactly that — or `MaxIterations` is reached:
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
 
-    "google.golang.org/adk/agent/workflowagents/loopagent"
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/tool/exitlooptool"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/agent/workflowagents/loopagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/exitlooptool"
 )
 
-func loopExample() {
-    ctx := context.Background()
-    model := createModel()
+func newRefinementLoop(m model.LLM) (agent.Agent, error) {
+	exitLoop, err := exitlooptool.New()
+	if err != nil {
+		return nil, err
+	}
 
-    // Agent that processes items
-    processor := llmagent.New(&llmagent.Config{
-        Name:        "processor",
-        Instruction: "Process the given item. Call exit_loop when done with all items.",
-        Model:       model,
-        Tools:       []tool.Tool{exitlooptool.New()},
-    })
+	drafter, err := llmagent.New(llmagent.Config{
+		Name:        "drafter",
+		Model:       m,
+		Instruction: "Improve the slogan in {slogan?} (or write one for the user's product). Reply with the slogan only.",
+		OutputKey:   "slogan",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Create loop agent
-    loop := loopagent.New(&loopagent.Config{
-        Name:        "item_processor",
-        Description: "Process items until completion",
-        Agent:       processor,
-        MaxIterations: 10, // Safety limit
-    })
+	critic, err := llmagent.New(llmagent.Config{
+		Name:  "critic",
+		Model: m,
+		Instruction: "Judge this slogan: {slogan}. If it is under eight words and memorable, " +
+			"call exit_loop. Otherwise explain what to fix.",
+		Tools: []tool.Tool{exitLoop},
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Execute loop
-    response, err := loop.Run(ctx, "Process items: A, B, C")
-    if err != nil {
-        log.Fatal(err)
-    }
+	return loopagent.New(loopagent.Config{
+		MaxIterations: 5, // hard stop if the critic never calls exit_loop
+		AgentConfig: agent.Config{
+			Name:      "slogan_loop",
+			SubAgents: []agent.Agent{drafter, critic},
+		},
+	})
+}
 
-    log.Printf("Processing complete: %s\n", response.Text)
+func main() {
+	var m model.LLM
+	if _, err := newRefinementLoop(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
 ### Hierarchical Multi-Agent System
 
-Build supervisor-worker patterns:
+Two ways to combine LLM agents:
+
+- **Sub-agents (transfer).** The parent's model may hand the conversation to a sub-agent, which then answers the user directly and keeps the conversation until it transfers back.
+- **Agent as a tool (`agenttool`).** The parent calls the other agent like a function and gets its answer back, staying in control.
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
 
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/tool/agenttool"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/agenttool"
 )
 
-func hierarchicalExample() {
-    ctx := context.Background()
-    model := createModel()
+func newHelpDesk(m model.LLM) (agent.Agent, error) {
+	billing, err := llmagent.New(llmagent.Config{
+		Name:        "billing",
+		Description: "Handles invoices, refunds and payment questions.",
+		Model:       m,
+		Instruction: "You resolve billing questions.",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Worker agents
-    coder := llmagent.New(&llmagent.Config{
-        Name:        "coder",
-        Instruction: "Write clean, efficient code",
-        Model:       model,
-    })
+	technical, err := llmagent.New(llmagent.Config{
+		Name:        "technical",
+		Description: "Handles errors, outages and configuration problems.",
+		Model:       m,
+		Instruction: "You resolve technical problems step by step.",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    reviewer := llmagent.New(&llmagent.Config{
-        Name:        "reviewer",
-        Instruction: "Review code for bugs and improvements",
-        Model:       model,
-    })
+	// A translator used as a tool: the coordinator calls it and keeps control.
+	translator, err := llmagent.New(llmagent.Config{
+		Name:        "translator",
+		Description: "Translates text into English.",
+		Model:       m,
+		Instruction: "Translate the input into plain English. Reply with the translation only.",
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    documenter := llmagent.New(&llmagent.Config{
-        Name:        "documenter",
-        Instruction: "Write clear documentation",
-        Model:       model,
-    })
+	return llmagent.New(llmagent.Config{
+		Name:  "help_desk",
+		Model: m,
+		Instruction: "Route the customer to the right specialist. " +
+			"If the message is not in English, translate it first.",
+		// Sub-agents: the model can transfer the conversation to them.
+		SubAgents: []agent.Agent{billing, technical},
+		// Agent as tool: called like a function, result returned to help_desk.
+		Tools: []tool.Tool{agenttool.New(translator, nil)},
+	})
+}
 
-    // Convert agents to tools
-    coderTool := agenttool.New(coder)
-    reviewerTool := agenttool.New(reviewer)
-    documenterTool := agenttool.New(documenter)
+func main() {
+	var m model.LLM
+	if _, err := newHelpDesk(m); err != nil {
+		log.Fatal(err)
+	}
+}
+```
 
-    // Supervisor agent
-    supervisor := llmagent.New(&llmagent.Config{
-        Name: "supervisor",
-        Instruction: `You are a software development supervisor.
-        Delegate tasks to your team:
-        - Use 'coder' for writing code
-        - Use 'reviewer' for code review
-        - Use 'documenter' for documentation
-        Coordinate their work to complete the task.`,
-        Model: model,
-        Tools: []tool.Tool{coderTool, reviewerTool, documenterTool},
-    })
+### Custom agents
 
-    // Execute hierarchical workflow
-    response, err := supervisor.Run(ctx,
-        "Create a function to calculate fibonacci numbers")
-    if err != nil {
-        log.Fatal(err)
-    }
+For deterministic steps that need no model, `agent.New` takes a `Run` function that yields events:
 
-    log.Printf("Project complete: %s\n", response.Text)
+```go
+package main
+
+import (
+	"iter"
+	"log"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/session"
+)
+
+// greet is a non-LLM agent: it yields one event and finishes.
+func greet(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+	return func(yield func(*session.Event, error) bool) {
+		name := "there"
+		if v, err := ctx.Session().State().Get("customer_name"); err == nil {
+			if s, ok := v.(string); ok {
+				name = s
+			}
+		}
+		event := session.NewEvent(ctx.InvocationID())
+		event.Author = ctx.Agent().Name()
+		event.LLMResponse = model.LLMResponse{
+			Content: genai.NewContentFromText("Hello, "+name+"!", genai.RoleModel),
+		}
+		event.Actions.StateDelta = map[string]any{"greeted": true}
+		yield(event, nil)
+	}
+}
+
+func main() {
+	greeter, err := agent.New(agent.Config{
+		Name:        "greeter",
+		Description: "Greets the customer by name.",
+		Run:         greet,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = greeter // use as a root agent or as a sub-agent of a workflow agent
 }
 ```
 
@@ -875,428 +791,289 @@ func hierarchicalExample() {
 
 ## Tools System
 
-Tools extend agent capabilities with external functions, APIs, and services.
-
 ### Function Tool
 
-Convert Go functions into agent tools:
+`functiontool.New` turns a typed Go function into a tool. The argument and result types are reflected into JSON schemas (use `json` and `jsonschema` struct tags); returning an error reports it to the model rather than crashing the run.
 
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "time"
+	"fmt"
+	"log"
+	"strings"
 
-    "google.golang.org/adk/tool/functiontool"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
 )
 
-// Simple function tool
-func getCurrentTime(ctx context.Context) (string, error) {
-    return time.Now().Format(time.RFC3339), nil
+// The argument and result types define the tool's JSON schema.
+// `jsonschema` tags become parameter descriptions for the model.
+type weatherArgs struct {
+	City  string `json:"city" jsonschema:"City name, for example Leeds"`
+	Units string `json:"units,omitempty" jsonschema:"celsius or fahrenheit (default celsius)"`
 }
 
-// Function with parameters
-func getWeather(ctx context.Context, location string, units string) (map[string]interface{}, error) {
-    // In real implementation, call weather API
-    return map[string]interface{}{
-        "location":    location,
-        "temperature": 22.5,
-        "units":       units,
-        "conditions":  "Partly cloudy",
-    }, nil
+type weatherResult struct {
+	City     string  `json:"city"`
+	Forecast string  `json:"forecast"`
+	Temp     float64 `json:"temp"`
 }
 
-// Complex function with struct return
-type CalculationResult struct {
-    Input  float64 `json:"input"`
-    Result float64 `json:"result"`
-    Method string  `json:"method"`
+func getWeather(ctx agent.ToolContext, args weatherArgs) (weatherResult, error) {
+	if strings.TrimSpace(args.City) == "" {
+		return weatherResult{}, fmt.Errorf("city is required")
+	}
+	// Tools can read and write session state through the context.
+	if err := ctx.State().Set("last_city", args.City); err != nil {
+		return weatherResult{}, err
+	}
+	return weatherResult{City: args.City, Forecast: "light rain", Temp: 12}, nil
 }
 
-func calculate(ctx context.Context, operation string, value float64) (*CalculationResult, error) {
-    var result float64
-
-    switch operation {
-    case "square":
-        result = value * value
-    case "sqrt":
-        result = math.Sqrt(value)
-    case "double":
-        result = value * 2
-    default:
-        return nil, fmt.Errorf("unknown operation: %s", operation)
-    }
-
-    return &CalculationResult{
-        Input:  value,
-        Result: result,
-        Method: operation,
-    }, nil
+type refundArgs struct {
+	OrderID string  `json:"order_id"`
+	Amount  float64 `json:"amount"`
 }
 
-func functionToolExample() {
-    ctx := context.Background()
-    model := createModel()
+func issueRefund(ctx agent.ToolContext, args refundArgs) (map[string]any, error) {
+	return map[string]any{"status": "refunded", "order_id": args.OrderID}, nil
+}
 
-    // Create tools from functions
-    timeTool := functiontool.New(getCurrentTime, &functiontool.Config{
-        Name:        "get_current_time",
-        Description: "Get the current time in RFC3339 format",
-    })
+func newTools() ([]tool.Tool, error) {
+	weather, err := functiontool.New(functiontool.Config{
+		Name:        "get_weather",
+		Description: "Returns the current weather for a city.",
+	}, getWeather)
+	if err != nil {
+		return nil, err
+	}
 
-    weatherTool := functiontool.New(getWeather, &functiontool.Config{
-        Name:        "get_weather",
-        Description: "Get weather for a location",
-        Parameters: map[string]*functiontool.Parameter{
-            "location": {
-                Type:        "string",
-                Description: "City name",
-                Required:    true,
-            },
-            "units": {
-                Type:        "string",
-                Description: "Temperature units: celsius or fahrenheit",
-                Required:    false,
-                Default:     "celsius",
-            },
-        },
-    })
+	refund, err := functiontool.New(functiontool.Config{
+		Name:        "issue_refund",
+		Description: "Refunds an order.",
+		// Ask a human before refunds over 100.
+		RequireConfirmationProvider: func(args refundArgs) bool { return args.Amount > 100 },
+	}, issueRefund)
+	if err != nil {
+		return nil, err
+	}
+	return []tool.Tool{weather, refund}, nil
+}
 
-    calcTool := functiontool.New(calculate, &functiontool.Config{
-        Name:        "calculate",
-        Description: "Perform mathematical calculations",
-        Parameters: map[string]*functiontool.Parameter{
-            "operation": {
-                Type:        "string",
-                Description: "Operation to perform",
-                Required:    true,
-                Enum:        []string{"square", "sqrt", "double"},
-            },
-            "value": {
-                Type:        "number",
-                Description: "Input value",
-                Required:    true,
-            },
-        },
-    })
+func newAgent(m model.LLM) (agent.Agent, error) {
+	tools, err := newTools()
+	if err != nil {
+		return nil, err
+	}
+	return llmagent.New(llmagent.Config{
+		Name:        "concierge",
+		Model:       m,
+		Instruction: "Use get_weather for weather and issue_refund for refunds.",
+		Tools:       tools,
+	})
+}
 
-    // Create agent with tools
-    agent := llmagent.New(&llmagent.Config{
-        Name:        "assistant",
-        Instruction: "Use available tools to help the user",
-        Model:       model,
-        Tools:       []tool.Tool{timeTool, weatherTool, calcTool},
-    })
-
-    response, _ := agent.Run(ctx, "What's the time and weather in Tokyo?")
-    log.Printf("Response: %s\n", response.Text)
+func main() {
+	var m model.LLM
+	if _, err := newAgent(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+`RequireConfirmation: true` (always) or `RequireConfirmationProvider` (per call, typed on your argument struct) pauses the run and emits an `adk_request_confirmation` function call; the client answers with a function response and the tool runs or is rejected. Inside a tool you can also call `ctx.RequestConfirmation(hint, payload)` and read `ctx.ToolConfirmation()` yourself. Set `IsLongRunning: true` for tools that start work and finish later.
 
 ### Custom Tool Implementation
 
-Implement the Tool interface for full control:
+You rarely implement `tool.Tool` directly. To control *which* tools are offered on each turn, implement `tool.Toolset`:
 
 ```go
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "net/http"
+	"log"
 
-    "google.golang.org/adk/tool"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
 )
 
-// Custom database query tool
-type DatabaseTool struct {
-    name        string
-    description string
-    connString  string
+type sumArgs struct {
+	Numbers []float64 `json:"numbers"`
 }
 
-func NewDatabaseTool(connString string) *DatabaseTool {
-    return &DatabaseTool{
-        name:        "query_database",
-        description: "Execute SQL queries on the database",
-        connString:  connString,
-    }
+func sum(_ agent.ToolContext, a sumArgs) (float64, error) {
+	total := 0.0
+	for _, n := range a.Numbers {
+		total += n
+	}
+	return total, nil
 }
 
-func (t *DatabaseTool) Name() string {
-    return t.name
+// adminToolset offers its tools only to users whose session state marks them as admins.
+type adminToolset struct {
+	tools []tool.Tool
 }
 
-func (t *DatabaseTool) Description() string {
-    return t.description
+func (t adminToolset) Name() string { return "admin_tools" }
+
+func (t adminToolset) Tools(ctx agent.ReadonlyContext) ([]tool.Tool, error) {
+	if v, err := ctx.ReadonlyState().Get("user:is_admin"); err == nil && v == true {
+		return t.tools, nil
+	}
+	return nil, nil
 }
 
-func (t *DatabaseTool) Schema() *tool.Schema {
-    return &tool.Schema{
-        Type: "object",
-        Properties: map[string]*tool.Property{
-            "query": {
-                Type:        "string",
-                Description: "SQL query to execute",
-            },
-            "limit": {
-                Type:        "integer",
-                Description: "Maximum number of rows to return",
-            },
-        },
-        Required: []string{"query"},
-    }
+func newAgent(m model.LLM) (agent.Agent, error) {
+	sumTool, err := functiontool.New(functiontool.Config{Name: "sum", Description: "Adds numbers."}, sum)
+	if err != nil {
+		return nil, err
+	}
+
+	// Built-in wrappers: filter a toolset by name, or require confirmation for all of it.
+	admin := tool.FilterToolset(adminToolset{tools: []tool.Tool{sumTool}}, tool.StringPredicate([]string{"sum"}))
+
+	return llmagent.New(llmagent.Config{
+		Name:     "ops_agent",
+		Model:    m,
+		Toolsets: []tool.Toolset{admin},
+	})
 }
 
-func (t *DatabaseTool) Execute(ctx context.Context, args map[string]interface{}) (interface{}, error) {
-    query, ok := args["query"].(string)
-    if !ok {
-        return nil, fmt.Errorf("query parameter required")
-    }
-
-    limit := 100
-    if l, ok := args["limit"].(float64); ok {
-        limit = int(l)
-    }
-
-    // Execute query (simplified)
-    results, err := t.executeQuery(ctx, query, limit)
-    if err != nil {
-        return nil, fmt.Errorf("query failed: %w", err)
-    }
-
-    return results, nil
-}
-
-func (t *DatabaseTool) executeQuery(ctx context.Context, query string, limit int) ([]map[string]interface{}, error) {
-    // Implement actual database query logic
-    return []map[string]interface{}{
-        {"id": 1, "name": "Example"},
-    }, nil
-}
-
-// Custom API tool
-type APICaller struct {
-    baseURL string
-    apiKey  string
-}
-
-func NewAPICaller(baseURL, apiKey string) *APICaller {
-    return &APICaller{
-        baseURL: baseURL,
-        apiKey:  apiKey,
-    }
-}
-
-func (a *APICaller) Name() string {
-    return "call_api"
-}
-
-func (a *APICaller) Description() string {
-    return "Make HTTP API calls"
-}
-
-func (a *APICaller) Schema() *tool.Schema {
-    return &tool.Schema{
-        Type: "object",
-        Properties: map[string]*tool.Property{
-            "endpoint": {
-                Type:        "string",
-                Description: "API endpoint path",
-            },
-            "method": {
-                Type:        "string",
-                Description: "HTTP method",
-                Enum:        []string{"GET", "POST", "PUT", "DELETE"},
-            },
-            "body": {
-                Type:        "object",
-                Description: "Request body (for POST/PUT)",
-            },
-        },
-        Required: []string{"endpoint", "method"},
-    }
-}
-
-func (a *APICaller) Execute(ctx context.Context, args map[string]interface{}) (interface{}, error) {
-    endpoint := args["endpoint"].(string)
-    method := args["method"].(string)
-
-    url := a.baseURL + endpoint
-    var req *http.Request
-    var err error
-
-    if method == "POST" || method == "PUT" {
-        body, _ := json.Marshal(args["body"])
-        req, err = http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(body))
-    } else {
-        req, err = http.NewRequestWithContext(ctx, method, url, nil)
-    }
-
-    if err != nil {
-        return nil, err
-    }
-
-    req.Header.Set("Authorization", "Bearer "+a.apiKey)
-    req.Header.Set("Content-Type", "application/json")
-
-    client := &http.Client{Timeout: 30 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    var result map[string]interface{}
-    json.NewDecoder(resp.Body).Decode(&result)
-
-    return result, nil
+func main() {
+	var m model.LLM
+	if _, err := newAgent(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+`tool.WithConfirmation(ts, true, nil)` wraps any toolset so every tool in it needs approval (marked experimental; model-side built-ins such as `geminitool` cannot be confirmed and pass through unchanged).
 
 ### Gemini Native Tools
 
-Use Google Search and Code Execution built into Gemini:
+Gemini's server-side tools run inside the model call:
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
 
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/tool/geminitool"
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/geminitool"
 )
 
-func geminiToolsExample() {
-    ctx := context.Background()
-    model := createModel()
+func newResearchAgent(m model.LLM) (agent.Agent, error) {
+	codeExecution := geminitool.New("code_execution", "Runs Python in Gemini's sandbox.",
+		&genai.Tool{CodeExecution: &genai.ToolCodeExecution{}})
 
-    // Create agent with Google Search
-    searchAgent := llmagent.New(&llmagent.Config{
-        Name:        "search_assistant",
-        Instruction: "Help users find information using Google Search",
-        Model:       model,
-        Tools:       []tool.Tool{geminitool.GoogleSearch()},
-    })
+	return llmagent.New(llmagent.Config{
+		Name:        "researcher",
+		Model:       m,
+		Instruction: "Search the web for current facts and run code for calculations.",
+		Tools:       []tool.Tool{geminitool.GoogleSearch{}, codeExecution},
+	})
+}
 
-    response, err := searchAgent.Run(ctx, "What are the latest AI developments?")
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Printf("Search results: %s\n", response.Text)
-
-    // Create agent with code execution
-    coderAgent := llmagent.New(&llmagent.Config{
-        Name:        "code_runner",
-        Instruction: "Execute Python code to solve problems",
-        Model:       model,
-        Tools:       []tool.Tool{geminitool.CodeExecution()},
-    })
-
-    response, err = coderAgent.Run(ctx, "Calculate the first 10 Fibonacci numbers")
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Printf("Code result: %s\n", response.Text)
+func main() {
+	var m model.LLM
+	if _, err := newResearchAgent(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+Gemini does not allow every built-in tool to be combined with function tools in a single request. If you hit that limit, put the built-in tool on its own agent and expose that agent with `agenttool.New`.
 
 ---
 
 ## Model Context Protocol (MCP)
 
-MCP enables standardized integration with external tools and services.
-
 ### Using MCP Tools
+
+`mcptoolset.New` connects to an MCP server through any transport from the official Go SDK (`github.com/modelcontextprotocol/go-sdk/mcp`) and exposes its tools as a `tool.Toolset`:
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
+	"net/http"
+	"os/exec"
 
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/tool/mcptoolset"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/mcptoolset"
 )
 
-func mcpExample() {
-    ctx := context.Background()
-    model := createModel()
+func newFileAgent(m model.LLM) (agent.Agent, error) {
+	// Local MCP server over stdio.
+	files, err := mcptoolset.New(mcptoolset.Config{
+		Transport: &mcp.CommandTransport{
+			Command: exec.Command("npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp/workspace"),
+		},
+		// Offer only read-only tools to the model.
+		ToolFilter: tool.StringPredicate([]string{"read_file", "list_directory"}),
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Connect to MCP server
-    mcpTools, err := mcptoolset.New(ctx, &mcptoolset.Config{
-        ServerURL: "mcp://localhost:8080/tools",
-        Transport: "stdio", // or "http"
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
+	// Remote MCP server over Streamable HTTP.
+	remote, err := mcptoolset.New(mcptoolset.Config{
+		Transport: &mcp.StreamableClientTransport{
+			Endpoint:   "https://mcp.example.com/mcp",
+			HTTPClient: http.DefaultClient, // add auth with an oauth2 client or custom RoundTripper
+		},
+		RequireConfirmation: true, // ask a human before any remote tool runs
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Create agent with MCP tools
-    agent := llmagent.New(&llmagent.Config{
-        Name:        "mcp_agent",
-        Instruction: "Use MCP tools to help the user",
-        Model:       model,
-        Tools:       mcpTools.GetTools(),
-    })
+	return llmagent.New(llmagent.Config{
+		Name:        "file_assistant",
+		Model:       m,
+		Instruction: "Help the user inspect files in the workspace.",
+		Toolsets:    []tool.Toolset{files, remote},
+	})
+}
 
-    response, err := agent.Run(ctx, "Query the database for user information")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Response: %s\n", response.Text)
+func main() {
+	var m model.LLM
+	if _, err := newFileAgent(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+You can also pass a pre-configured `*mcp.Client` in `Config.Client`. For tests, `mcp.NewInMemoryTransports()` gives a client/server pair in one process.
 
 ### Exposing ADK Tools via MCP
 
-```go
-package main
-
-import (
-    "context"
-    "log"
-
-    "google.golang.org/adk/server/mcp"
-    "google.golang.org/adk/tool/functiontool"
-)
-
-func exposeMCPTools() {
-    ctx := context.Background()
-
-    // Create tools
-    tools := []tool.Tool{
-        functiontool.New(getWeather, nil),
-        functiontool.New(getCurrentTime, nil),
-    }
-
-    // Create MCP server
-    server := mcp.NewServer(&mcp.Config{
-        Name:        "my-tools",
-        Description: "My custom tools exposed via MCP",
-        Tools:       tools,
-        Transport:   "stdio",
-    })
-
-    // Start server
-    if err := server.Serve(ctx); err != nil {
-        log.Fatal(err)
-    }
-}
-```
+ADK for Go has no MCP *server* helper. To publish tools to MCP hosts, write an MCP server with the Go SDK (`mcp.NewServer`, `mcp.AddTool`) and call your Go functions from the handlers; to expose a whole agent to other agents, use A2A (next section).
 
 ---
 
 ## Agent2Agent (A2A) Protocol
 
-A2A enables agents to communicate across services and frameworks.
+The A2A packages moved to `/v2` (built on `github.com/a2aproject/a2a-go/v2`); the original `server/adka2a` and `agent/remoteagent` packages still build but are deprecated.
 
 ### Exposing Agent via A2A
 
@@ -1304,143 +1081,104 @@ A2A enables agents to communicate across services and frameworks.
 package main
 
 import (
-    "context"
-    "log"
-    "net/http"
+	"log"
+	"net/http"
 
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/server/adka2a"
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/server/adka2a/v2"
+	"google.golang.org/adk/session"
 )
 
-func exposeA2AAgent() {
-    ctx := context.Background()
-    model := createModel()
+// serveA2A exposes an ADK agent at baseURL+"/invoke" with an agent card at
+// the well-known path.
+func serveA2A(a agent.Agent, baseURL, addr string) error {
+	card := &a2a.AgentCard{
+		Name:        a.Name(),
+		Description: a.Description(),
+		SupportedInterfaces: []*a2a.AgentInterface{{
+			URL:             baseURL + "/invoke",
+			ProtocolBinding: a2a.TransportProtocolJSONRPC,
+			ProtocolVersion: a2a.Version,
+		}},
+		Version:            "1.0.0",
+		DefaultInputModes:  []string{"text/plain"},
+		DefaultOutputModes: []string{"text/plain"},
+		Skills:             adka2a.BuildAgentSkills(a),
+		Capabilities:       a2a.AgentCapabilities{Streaming: true},
+	}
 
-    // Create agent to expose
-    agent := llmagent.New(&llmagent.Config{
-        Name:        "specialist_agent",
-        Description: "Specialized agent for data analysis",
-        Instruction: "Perform detailed data analysis",
-        Model:       model,
-    })
+	executor := adka2a.NewExecutor(adka2a.ExecutorConfig{
+		RunnerConfig: runner.Config{
+			AppName:        a.Name(),
+			Agent:          a,
+			SessionService: session.InMemoryService(),
+		},
+	})
 
-    // Create A2A server
-    server := adka2a.NewServer(&adka2a.Config{
-        Agent:       agent,
-        Port:        8080,
-        AuthEnabled: true,
-        APIKey:      "your-secure-api-key",
-    })
+	mux := http.NewServeMux()
+	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(card))
+	mux.Handle("/invoke", a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(executor)))
+	return http.ListenAndServe(addr, mux)
+}
 
-    // Start A2A server
-    log.Println("A2A server listening on :8080")
-    if err := server.ListenAndServe(ctx); err != nil && err != http.ErrServerClosed {
-        log.Fatal(err)
-    }
+func main() {
+	var weatherAgent agent.Agent // build with llmagent.New
+	log.Fatal(serveA2A(weatherAgent, "http://localhost:8001", ":8001"))
 }
 ```
 
+The `full` launcher can do this for you: `go run . web a2a` serves the root agent at `/a2a/v1/invoke`.
+
 ### Consuming Remote A2A Agent
+
+A remote agent is an ordinary `agent.Agent`, so it can be a sub-agent, a workflow step or wrapped with `agenttool`:
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
 
-    "google.golang.org/adk/agent/remoteagent"
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/tool/agenttool"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/agent/remoteagent/v2"
+	"google.golang.org/adk/model"
 )
 
-func consumeA2AAgent() {
-    ctx := context.Background()
-    model := createModel()
+func newTravelPlanner(m model.LLM) (agent.Agent, error) {
+	// The agent card is fetched from http://localhost:8001/.well-known/agent-card.json.
+	weather, err := remoteagent.NewA2A(remoteagent.A2AConfig{
+		Name:              "weather",
+		Description:       "Remote agent that answers weather questions.",
+		AgentCardProvider: remoteagent.NewAgentCardProvider("http://localhost:8001"),
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    // Connect to remote A2A agent
-    remoteAgent, err := remoteagent.New(&remoteagent.Config{
-        URL:    "https://specialist.example.com/a2a",
-        APIKey: "remote-api-key",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
+	return llmagent.New(llmagent.Config{
+		Name:        "travel_planner",
+		Model:       m,
+		Instruction: "Plan trips. Transfer weather questions to the weather agent.",
+		SubAgents:   []agent.Agent{weather},
+	})
+}
 
-    // Use remote agent as a tool
-    remoteTool := agenttool.New(remoteAgent)
-
-    // Create orchestrator agent
-    orchestrator := llmagent.New(&llmagent.Config{
-        Name: "orchestrator",
-        Instruction: "Delegate complex analysis to the specialist agent",
-        Model:       model,
-        Tools:       []tool.Tool{remoteTool},
-    })
-
-    response, err := orchestrator.Run(ctx, "Analyze this dataset")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Analysis: %s\n", response.Text)
+func main() {
+	var m model.LLM
+	if _, err := newTravelPlanner(m); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
 ### Multi-Agent A2A System
 
-```go
-package main
-
-import (
-    "context"
-    "log"
-
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/agent/remoteagent"
-    "google.golang.org/adk/tool/agenttool"
-)
-
-func multiAgentA2A() {
-    ctx := context.Background()
-    model := createModel()
-
-    // Connect to multiple remote agents
-    dataAgent, _ := remoteagent.New(&remoteagent.Config{
-        URL: "https://data-agent.example.com/a2a",
-    })
-
-    analysisAgent, _ := remoteagent.New(&remoteagent.Config{
-        URL: "https://analysis-agent.example.com/a2a",
-    })
-
-    reportAgent, _ := remoteagent.New(&remoteagent.Config{
-        URL: "https://report-agent.example.com/a2a",
-    })
-
-    // Create coordinator with remote agents
-    coordinator := llmagent.New(&llmagent.Config{
-        Name: "coordinator",
-        Instruction: `Coordinate multiple specialist agents:
-        - data_agent: for data retrieval
-        - analysis_agent: for analysis
-        - report_agent: for report generation`,
-        Model: model,
-        Tools: []tool.Tool{
-            agenttool.New(dataAgent),
-            agenttool.New(analysisAgent),
-            agenttool.New(reportAgent),
-        },
-    })
-
-    response, err := coordinator.Run(ctx, "Generate quarterly report")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Report: %s\n", response.Text)
-}
-```
+Run each specialist as its own service (its own deployment, scaling and credentials) and compose them in a coordinator with `remoteagent.NewA2A`. The agent card is resolved when the remote agent is invoked rather than at construction, so the coordinator starts even if a peer is briefly unavailable; use `BeforeRequestCallbacks` to add authentication headers or trace IDs to outgoing requests.
 
 ---
 
@@ -1448,363 +1186,92 @@ func multiAgentA2A() {
 
 ### Idiomatic Error Handling
 
-```go
-package main
-
-import (
-    "context"
-    "errors"
-    "fmt"
-    "log"
-
-    "google.golang.org/adk/agent"
-)
-
-// Custom error types
-var (
-    ErrAgentNotFound    = errors.New("agent not found")
-    ErrInvalidInput     = errors.New("invalid input")
-    ErrToolExecutionFailed = errors.New("tool execution failed")
-)
-
-// Wrapped errors
-type AgentError struct {
-    Agent string
-    Op    string
-    Err   error
-}
-
-func (e *AgentError) Error() string {
-    return fmt.Sprintf("agent %s: %s: %v", e.Agent, e.Op, e.Err)
-}
-
-func (e *AgentError) Unwrap() error {
-    return e.Err
-}
-
-// Error handling in agent execution
-func runAgentSafely(ctx context.Context, ag agent.Agent, input string) (response *agent.Response, err error) {
-    // Defer for panic recovery
-    defer func() {
-        if r := recover(); r != nil {
-            err = fmt.Errorf("panic in agent %s: %v", ag.Name(), r)
-        }
-    }()
-
-    // Validate input
-    if input == "" {
-        return nil, &AgentError{
-            Agent: ag.Name(),
-            Op:    "validate",
-            Err:   ErrInvalidInput,
-        }
-    }
-
-    // Execute with context
-    response, err = ag.Run(ctx, input)
-    if err != nil {
-        return nil, &AgentError{
-            Agent: ag.Name(),
-            Op:    "run",
-            Err:   err,
-        }
-    }
-
-    return response, nil
-}
-
-// Using errors.Is and errors.As
-func handleAgentError(err error) {
-    if err == nil {
-        return
-    }
-
-    // Check for specific error
-    if errors.Is(err, ErrInvalidInput) {
-        log.Println("Input validation failed")
-        return
-    }
-
-    // Unwrap custom error
-    var agentErr *AgentError
-    if errors.As(err, &agentErr) {
-        log.Printf("Agent %s failed during %s: %v",
-            agentErr.Agent, agentErr.Op, agentErr.Err)
-        return
-    }
-
-    log.Printf("Unknown error: %v", err)
-}
-```
+- Constructors return `(value, error)`: check every one at start-up and fail fast.
+- `runner.Run` yields `(event, err)` pairs; an error ends that invocation. Wrap it with the user and session IDs for logs.
+- Tool functions return `error` for expected failures (bad input, upstream 404). The model sees the message and can recover; reserve panics for programmer errors.
+- `session.ErrNotFound` is returned by session services for unknown sessions — check it with `errors.Is`.
 
 ### Context Handling
 
-```go
-package main
-
-import (
-    "context"
-    "log"
-    "time"
-
-    "google.golang.org/adk/agent"
-)
-
-// Context with timeout
-func runWithTimeout(ag agent.Agent, input string, timeout time.Duration) (*agent.Response, error) {
-    ctx, cancel := context.WithTimeout(context.Background(), timeout)
-    defer cancel()
-
-    response, err := ag.Run(ctx, input)
-    if err != nil {
-        if ctx.Err() == context.DeadlineExceeded {
-            return nil, fmt.Errorf("agent timed out after %v", timeout)
-        }
-        return nil, err
-    }
-
-    return response, nil
-}
-
-// Context with cancellation
-func runWithCancel(ag agent.Agent, input string) (*agent.Response, context.CancelFunc, error) {
-    ctx, cancel := context.WithCancel(context.Background())
-
-    response, err := ag.Run(ctx, input)
-    return response, cancel, err
-}
-
-// Context with values
-type contextKey string
-
-const (
-    userIDKey    contextKey = "user_id"
-    requestIDKey contextKey = "request_id"
-    sessionIDKey contextKey = "session_id"
-)
-
-func runWithMetadata(ag agent.Agent, input string, userID, requestID string) (*agent.Response, error) {
-    ctx := context.Background()
-    ctx = context.WithValue(ctx, userIDKey, userID)
-    ctx = context.WithValue(ctx, requestIDKey, requestID)
-
-    return ag.Run(ctx, input)
-}
-
-// Extract context values in tools
-func toolWithContext(ctx context.Context) (interface{}, error) {
-    userID, ok := ctx.Value(userIDKey).(string)
-    if !ok {
-        return nil, errors.New("user ID not found in context")
-    }
-
-    log.Printf("Tool called by user: %s", userID)
-
-    // Use userID for authorization, logging, etc.
-    return processForUser(userID)
-}
-```
+Every context in ADK embeds `context.Context`. Cancelling the context passed to `runner.Run` stops the invocation, including in-flight model calls; tools receive the same context through `agent.ToolContext`, so pass it to HTTP clients and database calls.
 
 ### Goroutine Patterns
 
+A `Runner` can be shared across goroutines; run concurrent turns on *different* sessions:
+
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "sync"
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
 
-    "google.golang.org/adk/agent"
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/runner"
 )
 
-// Concurrent agent execution with WaitGroup
-func runAgentsConcurrently(ctx context.Context, agents []agent.Agent, input string) ([]*agent.Response, error) {
-    var wg sync.WaitGroup
-    responses := make([]*agent.Response, len(agents))
-    errors := make([]error, len(agents))
+// ask runs one turn and returns the final text. The context bounds the whole
+// invocation: cancelling it stops the model call and any running tools.
+func ask(ctx context.Context, r *runner.Runner, userID, sessionID, text string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 
-    for i, ag := range agents {
-        wg.Add(1)
-        go func(index int, agent agent.Agent) {
-            defer wg.Done()
-            resp, err := agent.Run(ctx, input)
-            responses[index] = resp
-            errors[index] = err
-        }(i, ag)
-    }
-
-    wg.Wait()
-
-    // Check for errors
-    for _, err := range errors {
-        if err != nil {
-            return nil, fmt.Errorf("agent execution failed: %w", err)
-        }
-    }
-
-    return responses, nil
+	var out strings.Builder
+	msg := genai.NewContentFromText(text, genai.RoleUser)
+	for event, err := range r.Run(ctx, userID, sessionID, msg, agent.RunConfig{}) {
+		if err != nil {
+			return "", fmt.Errorf("run %s/%s: %w", userID, sessionID, err)
+		}
+		if event.IsFinalResponse() && event.Content != nil {
+			for _, p := range event.Content.Parts {
+				out.WriteString(p.Text)
+			}
+		}
+	}
+	return out.String(), nil
 }
 
-// Worker pool pattern
-func workerPool(ctx context.Context, ag agent.Agent, inputs <-chan string, results chan<- *agent.Response, numWorkers int) {
-    var wg sync.WaitGroup
+// askAll fans questions out across goroutines, one session per question.
+// A Runner is safe to share; keep concurrent turns on *different* sessions.
+func askAll(ctx context.Context, r *runner.Runner, questions []string) ([]string, error) {
+	answers := make([]string, len(questions))
+	errs := make([]error, len(questions))
+	sem := make(chan struct{}, 4) // at most four model calls in flight
 
-    // Start workers
-    for i := 0; i < numWorkers; i++ {
-        wg.Add(1)
-        go func(workerID int) {
-            defer wg.Done()
-            for input := range inputs {
-                select {
-                case <-ctx.Done():
-                    return
-                default:
-                    resp, err := ag.Run(ctx, input)
-                    if err != nil {
-                        log.Printf("Worker %d error: %v", workerID, err)
-                        continue
-                    }
-                    results <- resp
-                }
-            }
-        }(i)
-    }
+	var wg sync.WaitGroup
+	for i, q := range questions {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			answers[i], errs[i] = ask(ctx, r, "batch", fmt.Sprintf("q-%d", i), q)
+		}()
+	}
+	wg.Wait()
 
-    wg.Wait()
-    close(results)
+	for _, err := range errs {
+		if err != nil {
+			return answers, err
+		}
+	}
+	return answers, nil
 }
 
-// Fan-out, fan-in pattern
-func fanOutFanIn(ctx context.Context, agents []agent.Agent, input string) (*agent.Response, error) {
-    // Fan-out: distribute to multiple agents
-    responses := make(chan *agent.Response, len(agents))
-    errors := make(chan error, len(agents))
-
-    for _, ag := range agents {
-        go func(agent agent.Agent) {
-            resp, err := agent.Run(ctx, input)
-            if err != nil {
-                errors <- err
-                return
-            }
-            responses <- resp
-        }(ag)
-    }
-
-    // Fan-in: collect results
-    var collectedResponses []*agent.Response
-    for i := 0; i < len(agents); i++ {
-        select {
-        case resp := <-responses:
-            collectedResponses = append(collectedResponses, resp)
-        case err := <-errors:
-            return nil, err
-        case <-ctx.Done():
-            return nil, ctx.Err()
-        }
-    }
-
-    // Aggregate responses
-    return aggregateResponses(collectedResponses)
-}
-
-// Pipeline pattern
-func pipeline(ctx context.Context, stages ...func(context.Context, string) (string, error)) func(string) (string, error) {
-    return func(input string) (string, error) {
-        var err error
-        result := input
-
-        for _, stage := range stages {
-            select {
-            case <-ctx.Done():
-                return "", ctx.Err()
-            default:
-                result, err = stage(ctx, result)
-                if err != nil {
-                    return "", err
-                }
-            }
-        }
-
-        return result, nil
-    }
+func main() {
+	var r *runner.Runner // runner.New(runner.Config{..., AutoCreateSession: true})
+	_, _ = askAll(context.Background(), r, []string{"a", "b"})
 }
 ```
 
 ### Interface-Based Design
 
-```go
-package main
-
-import (
-    "context"
-)
-
-// Define custom interfaces
-type Analyzer interface {
-    Analyze(ctx context.Context, data string) (*Analysis, error)
-}
-
-type Validator interface {
-    Validate(ctx context.Context, input string) error
-}
-
-type Enricher interface {
-    Enrich(ctx context.Context, data string) (string, error)
-}
-
-// Compose interfaces
-type SmartAgent interface {
-    agent.Agent
-    Analyzer
-    Validator
-}
-
-// Implementation
-type customAgent struct {
-    *llmagent.Agent
-}
-
-func (a *customAgent) Analyze(ctx context.Context, data string) (*Analysis, error) {
-    response, err := a.Run(ctx, "Analyze: "+data)
-    if err != nil {
-        return nil, err
-    }
-
-    return parseAnalysis(response.Text)
-}
-
-func (a *customAgent) Validate(ctx context.Context, input string) error {
-    if len(input) == 0 {
-        return ErrInvalidInput
-    }
-
-    response, err := a.Run(ctx, "Validate: "+input)
-    if err != nil {
-        return err
-    }
-
-    return checkValidation(response.Text)
-}
-
-// Use interface composition
-func processWithInterfaces(ctx context.Context, ag SmartAgent, input string) error {
-    // Validate
-    if err := ag.Validate(ctx, input); err != nil {
-        return fmt.Errorf("validation failed: %w", err)
-    }
-
-    // Analyze
-    analysis, err := ag.Analyze(ctx, input)
-    if err != nil {
-        return fmt.Errorf("analysis failed: %w", err)
-    }
-
-    log.Printf("Analysis: %+v", analysis)
-    return nil
-}
-```
+Accept `model.LLM`, `session.Service` and `agent.Agent` as parameters instead of constructing them inside your functions. Production code passes `gemini.NewModel(...)` and `database.NewSessionService(...)`; tests pass fakes. Every snippet on this page that takes `m model.LLM` follows that pattern.
 
 ---
 
@@ -1816,137 +1283,100 @@ func processWithInterfaces(ctx context.Context, ag SmartAgent, input string) err
 package main
 
 import (
-    "context"
-    "log"
+	"context"
+	"fmt"
+	"log"
 
-    "google.golang.org/adk/agent"
-    "google.golang.org/adk/session"
+	"google.golang.org/adk/session"
 )
 
-func sessionExample() {
-    ctx := context.Background()
-    ag := createAgent()
+func main() {
+	ctx := context.Background()
+	svc := session.InMemoryService()
 
-    // Create session
-    sess := session.New(&session.Config{
-        ID:     "user-123-conv-456",
-        UserID: "user-123",
-        Metadata: map[string]interface{}{
-            "source": "web",
-            "lang":   "en",
-        },
-    })
+	created, err := svc.Create(ctx, &session.CreateRequest{
+		AppName: "shop",
+		UserID:  "u42",
+		State: map[string]any{
+			"customer_name":  "Priya",          // session scope
+			"user:tier":      "gold",           // shared by all of u42's sessions
+			"app:promo_code": "AUTUMN",         // shared by every user of "shop"
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	id := created.Session.ID()
 
-    // Multi-turn conversation
-    turn1, err := ag.RunWithSession(ctx, sess, "Hello, who are you?")
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Printf("Turn 1: %s\n", turn1.Text)
+	// ... run turns with runner.Run(ctx, "u42", id, msg, agent.RunConfig{}) ...
 
-    turn2, err := ag.RunWithSession(ctx, sess, "What did I just ask you?")
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Printf("Turn 2: %s\n", turn2.Text)
-
-    // Session maintains history
-    log.Printf("History length: %d\n", len(sess.History))
+	got, err := svc.Get(ctx, &session.GetRequest{AppName: "shop", UserID: "u42", SessionID: id})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for key, value := range got.Session.State().All() {
+		fmt.Printf("%s = %v\n", key, value)
+	}
+	fmt.Println("events so far:", got.Session.Events().Len())
 }
 ```
+
+State keys are scoped by prefix: no prefix is per session, `user:` is shared by all of a user's sessions, `app:` by every user of the app, and `temp:` lasts only for the current invocation.
 
 ### Persistent Sessions
 
+`session/database` stores sessions through GORM, so any GORM dialector works (PostgreSQL, SQLite, Spanner, MySQL):
+
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"log"
 
-    "google.golang.org/adk/session"
-    "google.golang.org/adk/session/database"
+	"github.com/glebarez/sqlite" // pure-Go SQLite driver for GORM
+	"gorm.io/driver/postgres"
+
+	"google.golang.org/adk/session"
+	"google.golang.org/adk/session/database"
 )
 
-func persistentSessionExample() {
-    ctx := context.Background()
-    ag := createAgent()
+func newSessionService(postgresDSN string) (session.Service, error) {
+	var svc session.Service
+	var err error
+	if postgresDSN != "" {
+		svc, err = database.NewSessionService(postgres.Open(postgresDSN))
+	} else {
+		svc, err = database.NewSessionService(sqlite.Open("sessions.db"))
+	}
+	if err != nil {
+		return nil, err
+	}
+	// The service never creates or alters tables itself: migrate on every start.
+	if err := database.AutoMigrate(svc); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
 
-    // Create database session store
-    store, err := database.New(ctx, &database.Config{
-        Type:       "firestore",
-        ProjectID:  "my-project",
-        Collection: "agent_sessions",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    sessionID := "user-123-conv-456"
-
-    // Try to load existing session
-    sess, err := store.Load(ctx, sessionID)
-    if err != nil {
-        // Create new session if not found
-        sess = session.New(&session.Config{
-            ID:     sessionID,
-            UserID: "user-123",
-        })
-    }
-
-    // Run agent with session
-    response, err := ag.RunWithSession(ctx, sess, "Continue our conversation")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Save updated session
-    if err := store.Save(ctx, sess); err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Response: %s\n", response.Text)
+func main() {
+	if _, err := newSessionService(""); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+For managed storage on Google Cloud, `session/vertexai` uses Vertex AI Agent Engine sessions.
 
 ### Session State Management
 
-```go
-package main
+Write state through the context you are given rather than through the service:
 
-import (
-    "context"
-    "log"
+- In tools: `ctx.State().Set(key, value)` on `agent.ToolContext`.
+- In callbacks: `ctx.State()` on `agent.CallbackContext`.
+- In custom agents: put changes in `event.Actions.StateDelta` on the events you yield.
+- From the caller: `runner.Run(..., runner.WithStateDelta(map[string]any{...}))` applies a delta with the user message.
 
-    "google.golang.org/adk/session"
-)
-
-func sessionStateExample() {
-    ctx := context.Background()
-    ag := createAgent()
-
-    sess := session.New(&session.Config{
-        ID: "game-session-123",
-    })
-
-    // Initialize state
-    sess.State["player_name"] = "Alice"
-    sess.State["level"] = 1
-    sess.State["score"] = 0
-    sess.State["inventory"] = []string{"sword", "shield"}
-
-    // Use state in conversation
-    response1, _ := ag.RunWithSession(ctx, sess, "What's my current level?")
-    log.Printf("Response: %s\n", response1.Text)
-
-    // Update state
-    sess.State["score"] = 100
-    sess.State["level"] = 2
-
-    response2, _ := ag.RunWithSession(ctx, sess, "Did I level up?")
-    log.Printf("Response: %s\n", response2.Text)
-}
-```
+The runner applies these deltas when it appends the event, so state and history stay consistent.
 
 ---
 
@@ -1954,147 +1384,104 @@ func sessionStateExample() {
 
 ### Unit Testing Agents
 
-```go
-package main
-
-import (
-    "context"
-    "testing"
-
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/model/gemini"
-)
-
-func TestAgent(t *testing.T) {
-    ctx := context.Background()
-
-    model, err := gemini.New(ctx, &gemini.Config{
-        APIKey: "test-key",
-        Model:  "gemini-2.5-flash",
-    })
-    if err != nil {
-        t.Fatal(err)
-    }
-
-    agent := llmagent.New(&llmagent.Config{
-        Name:        "test_agent",
-        Instruction: "You are a test assistant",
-        Model:       model,
-    })
-
-    tests := []struct {
-        name    string
-        input   string
-        wantErr bool
-    }{
-        {
-            name:    "simple query",
-            input:   "Hello",
-            wantErr: false,
-        },
-        {
-            name:    "empty input",
-            input:   "",
-            wantErr: true,
-        },
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            resp, err := agent.Run(ctx, tt.input)
-            if (err != nil) != tt.wantErr {
-                t.Errorf("Run() error = %v, wantErr %v", err, tt.wantErr)
-                return
-            }
-            if !tt.wantErr && resp == nil {
-                t.Error("Expected response, got nil")
-            }
-        })
-    }
-}
-
-func TestToolExecution(t *testing.T) {
-    ctx := context.Background()
-
-    called := false
-    testTool := functiontool.New(func(ctx context.Context) string {
-        called = true
-        return "success"
-    }, &functiontool.Config{
-        Name: "test_tool",
-    })
-
-    agent := llmagent.New(&llmagent.Config{
-        Name:  "tool_tester",
-        Model: createMockModel(),
-        Tools: []tool.Tool{testTool},
-    })
-
-    _, err := agent.Run(ctx, "Use the test tool")
-    if err != nil {
-        t.Fatal(err)
-    }
-
-    if !called {
-        t.Error("Tool was not called")
-    }
-}
-```
+Keep agent construction in a function that takes the model as a parameter, then drive it through a real `Runner` with an in-memory session service:
 
 ### Mock Model for Testing
 
 ```go
-package main
+package support
 
 import (
-    "context"
-
-    "google.golang.org/adk/model"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
 )
 
-type mockModel struct {
-    responses []string
-    index     int
-}
-
-func createMockModel(responses ...string) model.LLM {
-    return &mockModel{
-        responses: responses,
-        index:     0,
-    }
-}
-
-func (m *mockModel) GenerateContent(ctx context.Context, req *model.GenerateRequest) (*model.GenerateResponse, error) {
-    if m.index >= len(m.responses) {
-        return &model.GenerateResponse{
-            Text: "Default response",
-        }, nil
-    }
-
-    resp := &model.GenerateResponse{
-        Text: m.responses[m.index],
-    }
-    m.index++
-
-    return resp, nil
-}
-
-func (m *mockModel) StreamContent(ctx context.Context, req *model.GenerateRequest) (<-chan *model.StreamChunk, error) {
-    ch := make(chan *model.StreamChunk)
-    go func() {
-        defer close(ch)
-        ch <- &model.StreamChunk{
-            Text: m.responses[0],
-            Done: true,
-        }
-    }()
-    return ch, nil
-}
-
-func (m *mockModel) CountTokens(ctx context.Context, input string) (int, error) {
-    return len(input) / 4, nil // rough estimate
+// NewAgent takes the model as a parameter so tests can pass a fake.
+func NewAgent(m model.LLM) (agent.Agent, error) {
+	return llmagent.New(llmagent.Config{
+		Name:        "support",
+		Model:       m,
+		Instruction: "Answer support questions.",
+	})
 }
 ```
+
+```go
+package support
+
+import (
+	"context"
+	"iter"
+	"testing"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
+)
+
+// fakeLLM implements model.LLM with a canned reply and records requests.
+type fakeLLM struct {
+	reply    string
+	requests []*model.LLMRequest
+}
+
+func (f *fakeLLM) Name() string { return "fake" }
+
+func (f *fakeLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	f.requests = append(f.requests, req)
+	return func(yield func(*model.LLMResponse, error) bool) {
+		yield(&model.LLMResponse{
+			Content: genai.NewContentFromText(f.reply, genai.RoleModel),
+		}, nil)
+	}
+}
+
+func TestAgentReplies(t *testing.T) {
+	fake := &fakeLLM{reply: "Have you tried turning it off and on again?"}
+	a, err := NewAgent(fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := runner.New(runner.Config{
+		AppName:           "test",
+		Agent:             a,
+		SessionService:    session.InMemoryService(),
+		AutoCreateSession: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got string
+	msg := genai.NewContentFromText("My router is broken", genai.RoleUser)
+	for event, err := range r.Run(t.Context(), "u1", "s1", msg, agent.RunConfig{}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.IsFinalResponse() && event.Content != nil {
+			got += event.Content.Parts[0].Text
+		}
+	}
+
+	if got != fake.reply {
+		t.Errorf("reply = %q, want %q", got, fake.reply)
+	}
+	if len(fake.requests) != 1 {
+		t.Errorf("model called %d times, want 1", len(fake.requests))
+	}
+}
+```
+
+```bash
+go test ./...
+```
+
+`session/sessiontestsuite` provides a shared conformance suite if you write your own `session.Service`.
 
 ---
 
@@ -2102,162 +1489,165 @@ func (m *mockModel) CountTokens(ctx context.Context, input string) (int, error) 
 
 ### 1. Context Propagation
 
-Always pass context through the call chain:
-
-```go
-func goodExample(ctx context.Context) error {
-    agent := createAgent()
-    response, err := agent.Run(ctx, "input")
-    // Process response
-    return err
-}
-
-// Don't create new contexts unnecessarily
-func badExample() error {
-    ctx := context.Background() // Creates context in function
-    // ...
-}
-```
+Pass the request context into `runner.Run` and on into tools; set a timeout per invocation so a stuck model call cannot hold a goroutine forever.
 
 ### 2. Error Handling
 
-Use explicit error handling:
-
-```go
-response, err := agent.Run(ctx, input)
-if err != nil {
-    // Handle or wrap error
-    return fmt.Errorf("agent execution failed: %w", err)
-}
-```
+Check every constructor error at start-up. In tools, return errors the model can act on ("order 123 not found") rather than opaque ones.
 
 ### 3. Resource Cleanup
 
-Use defer for cleanup:
-
-```go
-func processWithCleanup(ctx context.Context) error {
-    sess, err := store.Load(ctx, sessionID)
-    if err != nil {
-        return err
-    }
-    defer store.Save(ctx, sess) // Always save
-
-    // Process with session
-    return nil
-}
-```
+Build models, toolsets (especially MCP connections) and runners once and reuse them. Shut down telemetry providers with `Shutdown(ctx)` and give plugins a `CloseTimeout`.
 
 ### 4. Configuration
 
-Use struct configs, not variadic options when possible:
-
-```go
-// Good: explicit configuration
-agent := llmagent.New(&llmagent.Config{
-    Name:        "agent",
-    Model:       model,
-    Temperature: &temp,
-})
-
-// Avoid: long parameter lists
-```
+Read model names, project IDs and endpoints from the environment or flags. Pin the ADK module version in `go.mod` and upgrade deliberately.
 
 ### 5. Concurrent Execution
 
-Use goroutines with proper synchronization:
+One runner, many sessions. Bound concurrency with a semaphore or worker pool to stay inside model quotas, and never run two turns on the same session at once.
+
+### Observability
 
 ```go
-var wg sync.WaitGroup
-responses := make(chan *agent.Response, len(agents))
+package main
 
-for _, ag := range agents {
-    wg.Add(1)
-    go func(a agent.Agent) {
-        defer wg.Done()
-        resp, _ := a.Run(ctx, input)
-        responses <- resp
-    }(ag)
+import (
+	"context"
+	"log"
+
+	"google.golang.org/adk/telemetry"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// Exports traces and logs to Google Cloud (Cloud Trace / Cloud Logging).
+	providers, err := telemetry.New(ctx,
+		telemetry.WithOtelToCloud(true),
+		telemetry.WithGcpResourceProject("my-gcp-project"),
+		telemetry.WithGenAICaptureMessageContent(false), // keep prompts out of traces
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	providers.SetGlobalOtelProviders()
+	defer func() {
+		if err := providers.Shutdown(ctx); err != nil {
+			log.Printf("telemetry shutdown: %v", err)
+		}
+	}()
+
+	// ... build agents and runners as usual; ADK emits spans for invocations,
+	// agent runs, model calls and tool calls.
+}
+```
+
+### Plugins
+
+```go
+package main
+
+import (
+	"log"
+	"time"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/plugin"
+	"google.golang.org/adk/plugin/loggingplugin"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
+)
+
+func newRunner(root agent.Agent) (*runner.Runner, error) {
+	// A plugin applies to every agent, model call and tool call in the runner.
+	audit, err := plugin.New(plugin.Config{
+		Name: "audit",
+		BeforeRunCallback: func(ic agent.InvocationContext) (*genai.Content, error) {
+			log.Printf("invocation %s for user %s", ic.InvocationID(), ic.Session().UserID())
+			return nil, nil // non-nil content would end the run with that reply
+		},
+		OnEventCallback: func(ic agent.InvocationContext, e *session.Event) (*session.Event, error) {
+			if e.ErrorMessage != "" {
+				log.Printf("model error: %s", e.ErrorMessage)
+			}
+			return nil, nil // nil keeps the event unchanged
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return runner.New(runner.Config{
+		AppName:        "support",
+		Agent:          root,
+		SessionService: session.InMemoryService(),
+		PluginConfig: runner.PluginConfig{
+			Plugins:      []*plugin.Plugin{loggingplugin.MustNew("logging"), audit},
+			CloseTimeout: 5 * time.Second,
+		},
+	})
 }
 
-wg.Wait()
-close(responses)
+func main() {
+	var root agent.Agent
+	if _, err := newRunner(root); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+### Launcher
+
+The `full` launcher gives any agent a terminal chat, the ADK dev UI, a REST API and an A2A endpoint without writing server code:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/cmd/launcher"
+	"google.golang.org/adk/cmd/launcher/full"
+)
+
+func main() {
+	ctx := context.Background()
+	var root agent.Agent // build with llmagent.New
+
+	l := full.NewLauncher()
+	cfg := &launcher.Config{AgentLoader: agent.NewSingleLoader(root)}
+	// go run . console         -> chat in the terminal
+	// go run . web api webui   -> REST API plus the ADK dev UI
+	if err := l.Execute(ctx, cfg, os.Args[1:]); err != nil {
+		log.Fatalf("%v\n\n%s", err, l.CommandLineSyntax())
+	}
+}
 ```
 
 ---
 
-## What's New in v1.0.0 GA
+## What's new since v1.0.0
 
-### OpenTelemetry Integration
+Releases since v1.0.0 (March 2026) have been additive; code written for 1.0 still compiles. The changes worth knowing about:
 
-```go
-import (
-    "go.opentelemetry.io/otel"
-    "github.com/google/adk-go/observability"
-)
-
-// Set up OpenTelemetry tracing
-tp := observability.NewTracerProvider(
-    observability.WithExporter(jaegerExporter),
-)
-otel.SetTracerProvider(tp)
-
-// ADK automatically traces all agent runs
-agent, err := adk.NewAgent(
-    adk.WithName("my-agent"),
-    adk.WithTracing(true),
-)
-```
-
-### YAML Agent Configuration
-
-```yaml
-# agent.yaml
-name: research-agent
-model: gemini-2.5-flash
-instruction: |
-  You are a research assistant. Conduct thorough research
-  on the given topic and provide well-sourced answers.
-tools:
-  - type: google_search
-  - type: code_execution
-```
-
-```go
-agent, err := adk.LoadAgent("agent.yaml")
-```
-
-### Plugin System
-
-```go
-type LoggingPlugin struct{}
-
-func (p *LoggingPlugin) BeforeRun(ctx context.Context, req *adk.RunRequest) error {
-    log.Printf("Agent run started: %s", req.Prompt)
-    return nil
-}
-
-func (p *LoggingPlugin) AfterRun(ctx context.Context, resp *adk.RunResponse) error {
-    log.Printf("Agent run completed in %v", resp.Duration)
-    return nil
-}
-
-agent, err := adk.NewAgent(
-    adk.WithName("my-agent"),
-    adk.WithPlugins(&LoggingPlugin{}),
-)
-```
+- **A2A v2.** `server/adka2a/v2` and `agent/remoteagent/v2` target `a2a-go/v2`; the v1 packages are deprecated. Remote agents take an `AgentCardProvider` (for example `remoteagent.NewAgentCardProvider(url)`).
+- **Skills.** `tool/skilltoolset` loads skill folders (a `SKILL.md` plus resources) for an agent.
+- **Vertex AI services.** `memory/vertexai` (Memory Bank) alongside `session/vertexai`, and `server/agentengine` plus `cmd/launcher/agentengine` for deploying to Vertex AI Agent Engine.
+- **Triggers.** The web launcher gained `pubsub` and `eventarc` sub-launchers to run agents from Pub/Sub messages and Eventarc events.
+- **Context types.** `tool.Context` is now an alias of `agent.ToolContext`, so tool callbacks and function tools take `agent.ToolContext` (existing code using `tool.Context` still compiles).
+- **Testing.** `session/sessiontestsuite` for custom session services.
 
 ---
 
 ## Revision History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 GA | April 8, 2026 | **Stable GA release**; OpenTelemetry integration; A2A 1.0 full support; YAML-based agent configuration; Plugin system; Tool confirmation hooks |
-| 0.1.0 | November 2025 | Initial documented version |
-
----
-
-**This comprehensive guide covers the complete ADK for Go API. For production deployment, see [google_adk_go_production_guide.md](./google_adk_go_production_guide/). For copy-paste examples, see [google_adk_go_recipes.md](./google_adk_go_recipes/).**
-
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-21 | current | Rewritten against the current release. Earlier revisions used an API that ADK for Go never had (`gemini.New`, pointer `Config` arguments, single-value constructors, `agent.Response`, `tool.Schema`, `server/mcp`, `server/restapi`, `adk.NewAgent`); every example is now a program compiled with `go vet`, and the testing example runs under `go test`. Corrected the Go requirement to 1.25 and the workflow-agent import paths (`agent/workflowagents/...`). |
+| April 2026 | 1.0.0 | GA guide. |

@@ -316,7 +316,7 @@ remote = Agent("remote", config=A2AConfig(card_url="http://127.0.0.1:8000"))
 # reply = await remote.ask("What is 2 + 40?")
 ```
 
-The card is served at `/.well-known/agent-card.json`. `A2AServer` can also build REST and gRPC transports sharing one task store, and supports push notifications via `push_config_store=` / `push_sender=` (validate webhook URLs yourself to avoid SSRF).
+The card is served at `/.well-known/agent-card.json`. `A2AServer` can also build REST and gRPC transports sharing one task store, and supports push notifications via `push_config_store=`; pass `push_url_validator=` (added in 1.2.0) to guard against SSRF through client-supplied webhook URLs.
 
 ## Testing
 

@@ -1,6 +1,6 @@
 ---
 title: "Semantic Kernel (Python)"
-description: "Microsoft Semantic Kernel for Python — plugins, planners, vector stores, MCP, and A2A integration."
+description: "Microsoft Semantic Kernel for Python — plugins, function calling, agents, orchestrations, vector stores and MCP."
 framework: semantic-kernel
 language: python
 sidebar:
@@ -10,61 +10,58 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Microsoft's enterprise SDK** for integrating LLMs with plugins, planners, and vector stores. Deep Azure AI integration, MCP client/server, A2A protocol, and bridges into the newer Microsoft Agent Framework.
+**Microsoft's SDK for building AI apps and agents in Python** — a kernel that hosts AI services and plugins, native function calling, agents and multi-agent orchestrations, vector stores and MCP.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install --pre semantic-kernel
+    pip install semantic-kernel==%%version=semantic-kernel%%
     ```
-    v1.43.0 requires `--pre` (pip) or `--prerelease=allow` (uv) — see [What's new](#whats-new-in-v1430-june-2026).
   </Card>
   <Card title="Version" icon="information">
-    **v1.43.0** · June 2026 · Python 3.10+
+    **semantic-kernel %%version=semantic-kernel%%** · Python 3.10+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
-    Azure-native enterprise agents, plugin-based architectures, Microsoft 365 integrations.
+    Existing SK codebases, Azure-centric apps, plugin-based agents.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Agent Framework or Semantic Kernel?">
-  Microsoft Agent Framework unifies SK + AutoGen. For new projects, consider [Agent Framework](/microsoft-agent-framework-guide/python/). Semantic Kernel remains fully supported and has rich plugin/planner ecosystem.
+<Aside type="caution" title="Semantic Kernel or Agent Framework?">
+  [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/) is the successor to Semantic Kernel (same team) and has been generally available since April 2026. Semantic Kernel 1.x is still supported — critical bug and security fixes for at least a year after Agent Framework's GA — but most new features go to Agent Framework. Start new agent projects there; keep existing SK code and migrate gradually (`KernelFunction.as_agent_framework_tool()` bridges the two).
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Installation & setup" href="./semantic_kernel_comprehensive_python/#1-installation--setup" description="Install, auth, first kernel · 15 min" />
-  <LinkCard title="2 · Kernel initialization" href="./semantic_kernel_comprehensive_python/#2-kernel-initialization" description="Kernel builder, services · 15 min" />
-  <LinkCard title="3 · Service configuration" href="./semantic_kernel_comprehensive_python/#3-service-configuration" description="OpenAI, Azure OpenAI, HF · 15 min" />
-  <LinkCard title="4 · Semantic functions" href="./semantic_kernel_comprehensive_python/#4-semantic-functions" description="Prompt-based functions · 20 min" />
-  <LinkCard title="5 · Native functions" href="./semantic_kernel_comprehensive_python/#5-native-functions" description="Python-based functions · 15 min" />
-  <LinkCard title="6 · Plugin development" href="./semantic_kernel_comprehensive_python/#6-plugin-development" description="Custom plugins · 20 min" />
-  <LinkCard title="7 · Simple agents" href="./semantic_kernel_comprehensive_python/#7-simple-agents" description="ChatCompletionAgent · 15 min" />
-  <LinkCard title="8 · Memory systems" href="./semantic_kernel_comprehensive_python/#9-memory-systems" description="Short-term, long-term · 15 min" />
-  <LinkCard title="9 · Vector store v1.34" href="./semantic_kernel_comprehensive_python/#10-vector-store-v134-2025" description="New vector store API · 20 min" />
-  <LinkCard title="10 · Planners" href="./semantic_kernel_comprehensive_python/#12-sequential-planner" description="Sequential, Stepwise, Action · 25 min" />
-  <LinkCard title="11 · MCP integration" href="./semantic_kernel_comprehensive_python/#15-model-context-protocol-mcp---2025" description="Client + server (2025) · 25 min" />
-  <LinkCard title="12 · A2A protocol" href="./semantic_kernel_comprehensive_python/#18-google-a2a-protocol-integration---2025" description="Google A2A integration · 20 min" />
-  <LinkCard title="13 · Agent Framework bridge" href="./semantic_kernel_comprehensive_python/#19-microsoft-agent-framework-integration---2026" description="SK ↔ Agent Framework · 15 min" />
-  <LinkCard title="14 · Advanced multi-agent" href="./semantic_kernel_advanced_multi_agent_python/" description="Complex topologies · 30 min" />
-  <LinkCard title="15 · Middleware" href="./semantic_kernel_middleware_python/" description="Hooks, filters · 20 min" />
+  <LinkCard title="1 · Installation & setup" href="./semantic_kernel_comprehensive_python/#1-installation-and-setup" description="Install, configure, extras · 10 min" />
+  <LinkCard title="2 · The kernel" href="./semantic_kernel_comprehensive_python/#2-the-kernel" description="Services, plugins, filters · 10 min" />
+  <LinkCard title="3 · AI services" href="./semantic_kernel_comprehensive_python/#3-ai-services" description="OpenAI, Azure OpenAI, others · 15 min" />
+  <LinkCard title="4 · Prompt functions" href="./semantic_kernel_comprehensive_python/#4-prompt-functions" description="Templates and settings · 15 min" />
+  <LinkCard title="5 · Native functions" href="./semantic_kernel_comprehensive_python/#5-native-functions" description="@kernel_function · 15 min" />
+  <LinkCard title="6 · Plugins" href="./semantic_kernel_comprehensive_python/#6-plugins" description="Classes, prompts, OpenAPI · 15 min" />
+  <LinkCard title="7 · Function calling" href="./semantic_kernel_comprehensive_python/#7-function-calling-and-what-happened-to-planners" description="Replaces the removed planners · 15 min" />
+  <LinkCard title="8 · Agents" href="./semantic_kernel_comprehensive_python/#8-agents" description="ChatCompletionAgent, threads, streaming · 20 min" />
+  <LinkCard title="9 · Orchestrations" href="./semantic_kernel_comprehensive_python/#9-multi-agent-orchestration" description="Sequential, concurrent, group chat, hand-off · 25 min" />
+  <LinkCard title="10 · Vector stores" href="./semantic_kernel_comprehensive_python/#11-vector-stores" description="Records, collections, RAG search · 20 min" />
+  <LinkCard title="11 · MCP" href="./semantic_kernel_comprehensive_python/#13-model-context-protocol-mcp" description="MCP servers as plugins; kernel as MCP server · 15 min" />
+  <LinkCard title="12 · Filters" href="./semantic_kernel_comprehensive_python/#14-filters" description="Function, prompt and auto-invoke filters · 15 min" />
+  <LinkCard title="13 · Migrating to Agent Framework" href="./semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework" description="Mapping and bridge · 10 min" />
+  <LinkCard title="14 · Advanced multi-agent" href="./semantic_kernel_advanced_multi_agent_python/" description="Topologies in practice · 30 min" />
+  <LinkCard title="15 · Middleware" href="./semantic_kernel_middleware_python/" description="Filters as middleware · 20 min" />
   <LinkCard title="16 · Production" href="./semantic_kernel_production_python/" description="Deployment, scaling · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="Kernel initialization" href="./semantic_kernel_comprehensive_python/#2-kernel-initialization" />
-  <LinkCard title="Semantic functions" href="./semantic_kernel_comprehensive_python/#4-semantic-functions" />
-  <LinkCard title="Plugin development" href="./semantic_kernel_comprehensive_python/#6-plugin-development" />
-  <LinkCard title="ChatCompletionAgent" href="./semantic_kernel_comprehensive_python/#8-chatcompletionagent" />
-  <LinkCard title="Vector store v1.34" href="./semantic_kernel_comprehensive_python/#10-vector-store-v134-2025" />
-  <LinkCard title="Sequential planner" href="./semantic_kernel_comprehensive_python/#12-sequential-planner" />
-  <LinkCard title="Stepwise planner" href="./semantic_kernel_comprehensive_python/#13-stepwise-planner" />
-  <LinkCard title="MCP client" href="./semantic_kernel_comprehensive_python/#16-mcp-client-implementation" />
-  <LinkCard title="MCP server" href="./semantic_kernel_comprehensive_python/#17-mcp-server-creation" />
-  <LinkCard title="A2A integration" href="./semantic_kernel_comprehensive_python/#18-google-a2a-protocol-integration---2025" />
+  <LinkCard title="Kernel" href="./semantic_kernel_comprehensive_python/#2-the-kernel" />
+  <LinkCard title="Prompt functions" href="./semantic_kernel_comprehensive_python/#4-prompt-functions" />
+  <LinkCard title="Plugins" href="./semantic_kernel_comprehensive_python/#6-plugins" />
+  <LinkCard title="ChatCompletionAgent" href="./semantic_kernel_comprehensive_python/#8-agents" />
+  <LinkCard title="Structured output" href="./semantic_kernel_comprehensive_python/#12-structured-output" />
+  <LinkCard title="Vector stores" href="./semantic_kernel_comprehensive_python/#11-vector-stores" />
+  <LinkCard title="Process framework" href="./semantic_kernel_comprehensive_python/#15-process-framework" />
+  <LinkCard title="Removed APIs" href="./semantic_kernel_comprehensive_python/#17-removed-and-renamed-apis" />
   <LinkCard title="Middleware" href="./semantic_kernel_middleware_python/" />
   <LinkCard title="Streaming server" href="./semantic_kernel_streaming_server_fastapi/" />
 </CardGrid>
@@ -81,46 +78,34 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./semantic_kernel_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v1.43.0 (June 2026)
+## Recent releases
 
-- **v1.43.0 (June 2026)** — Minor release. `semantic-kernel==1.43.0` confirmed latest stable on PyPI (2026-06-04). Install with `pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel` as the `azure-ai-agents` pre-release dependency is expected to persist. Full symbol verification deferred (PyMeta3 build failure blocked install); non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`, `SelectionStrategy`, `TerminationStrategy`) are assumed stable but **unverified** — carry-forward for next run.
-- **v1.42.0 (May 14)** — Minor release. Requires `mcp>=1.26.0` (raised from 1.8) and `azure-ai-agents>=1.2.0b3` (pre-release dependency; plain `pip install semantic-kernel` will fail — use `pip install --pre semantic-kernel` or `uv pip install --prerelease=allow semantic-kernel`). Non-Azure core symbols (`Kernel`, `ChatCompletionAgent`, `AgentGroupChat`, `ChatHistory`, `kernel_function`, `SelectionStrategy`, `TerminationStrategy`) verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). **Known issue:** importing `semantic_kernel.connectors.ai.open_ai` (which includes `OpenAIChatCompletion`) emits `PydanticDeprecatedSince211` from `AzureAISearchDataSource` at `azure_chat_prompt_execution_settings.py:134` — an internal SK issue; the warning does not affect non-Azure connectors at runtime. See risk register in the 2026-05-14 run report.
-- **v1.41.3 (April 28)** — Patch release; stability improvements.
-- **Vector store v1.34** — new API for embedding and retrieval.
-- **MCP client + server** — full Model Context Protocol support.
-- **Google A2A protocol** integration.
-- **Microsoft Agent Framework** bridge for gradual migration.
+- **1.45.0 (October 2026)**, **1.44.x (July–August 2026)**, **1.43.0 (June 2026)**, **1.42.0 (May 2026)** — maintenance releases: connector and dependency updates and bug fixes. 1.42.0 raised the `mcp` requirement to 1.26 or later.
+- Earlier milestones still relevant today: planners removed (1.33.0); vector store API redesigned (1.34.0); `KernelFunction.as_agent_framework_tool()` added for Agent Framework interop (1.38.0).
+
+A plain `pip install semantic-kernel` works; `--pre` is not needed, even though one Azure dependency is a pre-release.
 
 ## Install, minimal example
 
-<Aside type="caution" title="PydanticDeprecatedSince211 warning">
-  In v1.42.0, importing `OpenAIChatCompletion` from `semantic_kernel.connectors.ai.open_ai` emits a `PydanticDeprecatedSince211` warning at module load time. This is an internal semantic-kernel bug; runtime behaviour is unaffected. Suppress with `warnings.filterwarnings("ignore", category=DeprecationWarning, module="semantic_kernel")` if needed.
-</Aside>
-
 ```python
 import asyncio
-from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 from semantic_kernel.agents import ChatCompletionAgent
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
+
+agent = ChatCompletionAgent(
+    service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),   # reads OPENAI_API_KEY
+    name="Assistant",
+    instructions="You are a helpful assistant.",
+)
 
 async def main():
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(service_id="chat", ai_model_id="gpt-4o"))
-
-    agent = ChatCompletionAgent(
-        service_id="chat",
-        kernel=kernel,
-        name="Assistant",
-        instructions="You are a helpful assistant.",
-    )
-
-    async for message in agent.invoke("What is 15 + 27?"):
-        print(message.content)
+    response = await agent.get_response(messages="What is 15 + 27?")
+    print(response.message.content)
 
 asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./semantic_kernel_comprehensive_python/#1-installation--setup)**
+Ready? **[Start Zero → Hero Step 1 →](./semantic_kernel_comprehensive_python/#1-installation-and-setup)**
 
 ---
 
@@ -128,11 +113,10 @@ Ready? **[Start Zero → Hero Step 1 →](./semantic_kernel_comprehensive_python
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
-| 2026-06-04 | semantic-kernel 1.43.0 | Version bumped 1.42.0 → 1.43.0 (minor release); version card updated to June 2026; "What's new" updated; install card anchor corrected; comprehensive guide header updated; revision history entry added. `semantic-kernel==1.43.0` confirmed latest stable on PyPI (2026-06-04); install with `--pre` flag (or `--prerelease=allow` in uv) expected to remain necessary due to `azure-ai-agents` pre-release transitive dep; full symbol verification blocked by env constraint (see risk register). | Claude routine |
-| 2026-05-14 | semantic-kernel 1.42.0 | Version bumped 1.41.3 → 1.42.0; version card updated to May 2026; "What's new" updated with mcp>=1.26.0 requirement and PydanticDeprecatedSince211 warning note; comprehensive guide header updated; revision history entry added. Non-Azure core symbols verified against installed `semantic-kernel==1.42.0` (`.routine-envs/check-0514-sk`). | Claude routine |
-| 2026-04-28 | semantic-kernel 1.41.3 | Version bumped 1.41.2 → 1.41.3 (patch release); version card and "What's new" heading updated. PyPI confirms 1.41.3 as latest stable. | Claude routine |
-| 2026-04-22 | semantic-kernel 1.41.2 | Version card corrected from stale v1.36.0 to v1.41.2 (confirmed against PyPI); frameworks.ts updated from `Python 1.36.0` to `Python 1.41.2`. | Claude routine |
+| 2026-10-21 | semantic-kernel 1.45.0 | Version now read from the site's version registry. Minimal example fixed (`ChatCompletionAgent` takes `service=`, not `service_id=`; `get_response(messages=...)`). Removed the incorrect `--pre` install requirement. Agent Framework relationship stated per Microsoft's support policy. Comprehensive guide rewritten and verified against an installed copy. | Claude |
+| 2026-06-04 | semantic-kernel 1.43.0 | Version bump (symbols unverified). | Claude routine |
+| 2026-05-14 | semantic-kernel 1.42.0 | Version bump; `mcp>=1.26.0` noted. | Claude routine |
+| 2026-04-22 | semantic-kernel 1.41.2 | Version corrected from a stale 1.36.0. | Claude routine |
 | 2026-04-21 | semantic-kernel 1.41.2 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
-| April 2026 | semantic-kernel 1.41.2 | Vector store v1.34; MCP; A2A; Agent Framework bridge. | — |
 
 **Other languages:** [.NET](/semantic-kernel-guide/dotnet/).

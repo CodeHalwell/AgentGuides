@@ -51,7 +51,8 @@ pip install "semantic-kernel[azure]"        # Azure AI Search, Cosmos DB, Azure 
 pip install "semantic-kernel[anthropic]"    # Anthropic connector
 pip install "semantic-kernel[google]"       # Google AI / Vertex AI connectors
 pip install "semantic-kernel[ollama]"       # Ollama connector
-pip install "semantic-kernel[qdrant]"       # Qdrant vector store (similarly: redis, chroma, postgres, ...)
+pip install "semantic-kernel[aws]"          # Amazon Bedrock
+pip install "semantic-kernel[qdrant]"       # Qdrant vector store (similarly: redis, chroma, postgres, pinecone, weaviate, mongo, faiss ...)
 ```
 
 The multi-agent orchestrations (section 9) use an in-process runtime that imports `protobuf`; if `from semantic_kernel.agents.runtime import InProcessRuntime` fails with `No module named 'google'`, run `pip install protobuf`.
@@ -659,7 +660,7 @@ The Process framework models a business process as steps connected by events, wi
 ```python
 from semantic_kernel.functions import kernel_function
 from semantic_kernel.processes import ProcessBuilder
-from semantic_kernel.processes.kernel_process import KernelProcessStep, KernelProcessStepContext
+from semantic_kernel.processes.kernel_process import KernelProcessEvent, KernelProcessStep, KernelProcessStepContext
 from semantic_kernel.processes.local_runtime.local_kernel_process import start
 
 class Intake(KernelProcessStep):
@@ -679,8 +680,12 @@ builder.on_input_event("NewOrder").send_event_to(target=intake, parameter_name="
 intake.on_event("Received").send_event_to(target=ship, parameter_name="order_id")
 
 async def run():
-    async with await start(process=builder.build(), kernel=Kernel(), initial_event="NewOrder", initial_data="A-42"):
-        pass
+    async with await start(
+        process=builder.build(),
+        kernel=Kernel(),
+        initial_event=KernelProcessEvent(id="NewOrder", data="A-42"),
+    ):
+        pass   # prints "Shipping A-42"
 ```
 
 For new workflow code, Microsoft Agent Framework's workflows are the supported successor.
@@ -692,9 +697,9 @@ For new workflow code, Microsoft Agent Framework's workflows are the supported s
 | Semantic Kernel | Agent Framework (Python) |
 |---|---|
 | `Kernel` + `add_service` | No kernel: create a chat client and an agent directly |
-| `ChatCompletionAgent(service=..., plugins=...)` | `chat_client.as_agent(instructions=..., tools=[...])` / `ChatAgent` |
+| `ChatCompletionAgent(service=..., plugins=...)` | `Agent(client=chat_client, instructions=..., tools=[...])` or `chat_client.as_agent(...)` |
 | `@kernel_function` methods in a plugin class | Plain functions (optionally `@tool`) passed in `tools=` |
-| `ChatHistoryAgentThread` | Agent threads/sessions |
+| `ChatHistoryAgentThread` | `AgentSession` |
 | Filters | Middleware |
 | Orchestrations / Process framework | Workflows (graph-based, with checkpointing and human-in-the-loop) |
 

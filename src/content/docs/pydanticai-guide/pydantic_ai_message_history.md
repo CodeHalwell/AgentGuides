@@ -7,7 +7,7 @@ language: python
 
 # Message History & Multi-Turn Conversations
 
-Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
 
 Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that list (or the serialised form) back into the next run to keep a multi-turn conversation. Message history is what makes chat applications possible on top of PydanticAI's otherwise stateless `Agent`.
 
@@ -35,12 +35,14 @@ print(result2.output)
 
 ## The message types
 
-`ModelMessage` is a discriminated union of `ModelRequest` and `ModelResponse` (`messages.py:2030`):
+`ModelMessage` is a discriminated union of `ModelRequest` and `ModelResponse` (`messages.py`):
 
 | Type            | Direction      | Notable parts inside                                      |
 | --------------- | -------------- | --------------------------------------------------------- |
-| `ModelRequest`  | client → model | `SystemPromptPart`, `UserPromptPart`, `ToolReturnPart`, `RetryPromptPart`, `InstructionPart` |
-| `ModelResponse` | model → client | `TextPart`, `ThinkingPart`, `ToolCallPart`, `BuiltinToolCallPart`, `BuiltinToolReturnPart`, `FilePart` |
+| `ModelRequest`  | client → model | `SystemPromptPart`, `UserPromptPart`, `ToolReturnPart`, `RetryPromptPart`, `InstructionDeltaPart` / `InstructionBaselinePart`, `ToolAvailabilityDeltaPart`, `SpeechPart` |
+| `ModelResponse` | model → client | `TextPart`, `ThinkingPart`, `ToolCallPart`, `NativeToolCallPart`, `NativeToolReturnPart`, `FilePart`, `CompactionPart`, `SpeechPart` |
+
+`NativeToolCallPart` / `NativeToolReturnPart` were called `BuiltinToolCallPart` / `BuiltinToolReturnPart` in V1; their serialised `part_kind` is still `'builtin-tool-call'` / `'builtin-tool-return'`, so histories stored under V1 load unchanged.
 
 Every part has a `part_kind` discriminator; delta events (`TextPartDelta`, `ThinkingPartDelta`, `ToolCallPartDelta`) exist for streaming and carry `part_delta_kind`.
 
@@ -55,7 +57,7 @@ Both return `list[ModelMessage]`. The difference is what counts as "this run":
 
 Use `all_messages()` as the next run's `message_history`; use `new_messages()` when you only want to persist what _this_ turn produced.
 
-There are JSON variants too (`run.py:151`): `all_messages_json()` and `new_messages_json()` return `bytes` you can store in a DB column.
+There are JSON variants too (`run.py`): `all_messages_json()` and `new_messages_json()` return `bytes` you can store in a DB column.
 
 ```python
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -366,14 +368,14 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 
 ## `CachePoint` — provider-native prompt caching
 
-`CachePoint` (`pydantic_ai.messages`, 2.33.0) is a marker part you drop into `UserPromptPart.content` to signal a cache boundary. Providers that don't support caching filter it out silently, so the same code works everywhere.
+`CachePoint` (`pydantic_ai.messages`) is a marker part you drop into `UserPromptPart.content` to signal a cache boundary. Providers that don't support caching filter it out silently, so the same code works everywhere.
 
 | Field  | Type / default                | Notes                                                              |
 | ------ | ----------------------------- | ------------------------------------------------------------------ |
 | `kind` | `Literal['cache-point']`      | Discriminator (all parts have one).                                |
 | `ttl`  | `Literal['5m', '1h']` (`'5m'`)| Anthropic / Bedrock honour per-marker TTL. OpenAI ignores it and uses `openai_prompt_cache_options['ttl']` instead. |
 
-Supported (2.33.0): Anthropic · Amazon Bedrock (Converse API) · OpenAI (GPT-5.6 models) · OpenRouter (Anthropic/Gemini models via `OpenRouterModel`, and OpenAI GPT-5.6 via `OpenAIChatModel`/`OpenAIResponsesModel` with `OpenRouterProvider`).
+Supported: Anthropic · Amazon Bedrock (Converse API) · OpenAI (GPT-5.6 models) · OpenRouter (Anthropic/Gemini models via `OpenRouterModel`, and OpenAI GPT-5.6 via `OpenAIChatModel`/`OpenAIResponsesModel` with `OpenRouterProvider`).
 
 ```python
 from pathlib import Path
@@ -415,10 +417,10 @@ Tips:
 ## Reference
 
 - `ModelMessage`, `ModelRequest`, `ModelResponse` — `messages.py`
-- `ModelMessagesTypeAdapter` — `messages.py:2034`
+- `ModelMessagesTypeAdapter` — `messages.py`
 - `AgentRunResult.all_messages()` / `.new_messages()` / `.all_messages_json()` — `run.py`
-- `capture_run_messages()` — `_agent_graph.py:1791`
-- `HistoryProcessorFunc` — `_history_processor.py:17`
+- `capture_run_messages()` — `_agent_graph.py` (since 2.0 it also captures the partial request/response of an interrupted run, marked `state='interrupted'`)
+- `HistoryProcessorFunc` — `_history_processor.py`
 - `ProcessHistory` — `pydantic_ai.capabilities`
 - `Agent(capabilities=[ProcessHistory(...)])` — `agent/__init__.py`
-- `CachePoint` — `messages.py` (2.33.0)
+- `CachePoint` — `messages.py`
