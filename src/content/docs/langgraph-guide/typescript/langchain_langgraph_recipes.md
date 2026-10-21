@@ -596,41 +596,38 @@ const AnalysisStateAnnotation = Annotation.Root({
   error: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const analysisGraph = new StateGraph(AnalysisStateAnnotation);
-
-analysisGraph
+const analysisGraph = new StateGraph(AnalysisStateAnnotation)
   .addNode('download', async (state) => {
-    // Simulate document download
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    return {
-      downloadStatus: `Downloaded from ${state.documentUrl}`,
-    };
-  })
+      // Simulate document download
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return {
+        downloadStatus: `Downloaded from ${state.documentUrl}`,
+      };
+    })
   .addNode('process', async (state) => {
-    // Simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return {
-      processStatus: 'Document processed successfully',
-    };
-  })
+      // Simulate processing
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return {
+        processStatus: 'Document processed successfully',
+      };
+    })
   .addNode('analyze', async (state) => {
-    const model = new ChatOpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const response = await model.invoke(
-      `Analyze this document: ${state.processStatus}`
-    );
-
-    return {
-      analysisResult: response.content as string,
-    };
-  });
-
-analysisGraph.addEdge(START, 'download');
-analysisGraph.addEdge('download', 'process');
-analysisGraph.addEdge('process', 'analyze');
-analysisGraph.addEdge('analyze', END);
+      const model = new ChatOpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+  
+      const response = await model.invoke(
+        `Analyze this document: ${state.processStatus}`
+      );
+  
+      return {
+        analysisResult: response.content as string,
+      };
+    })
+  .addEdge(START, 'download')
+  .addEdge('download', 'process')
+  .addEdge('process', 'analyze')
+  .addEdge('analyze', END);
 
 const analysisWorkflow = analysisGraph.compile();
 

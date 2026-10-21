@@ -339,7 +339,7 @@ console.log(response.content); // "To read a file in TypeScript, you can use..."
 // Streaming invocation
 const stream = await openaiModel.stream(messages);
 for await (const chunk of stream) {
-  process.stdout.write(chunk.content);
+  process.stdout.write(chunk.text);
 }
 ```
 
@@ -1297,12 +1297,31 @@ const advancedSearchTool = new DynamicStructuredTool({
 ### Custom Tool Creation with TypeScript
 
 ```typescript
-// Custom tool combining multiple operations
-class DataProcessingTool extends DynamicStructuredTool {
-  private cache: Map<string, any> = new Map();
-  
-  constructor() {
-    super({
+// Custom tool with private state: a factory function and a closure.
+// (Subclassing DynamicStructuredTool and passing this.execute to super() fails:
+// `this` does not exist until super() returns.)
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+function makeProcessingTool() {
+  const cache = new Map<string, number>();
+
+  return tool(
+    async ({ operation, data, useCache }) => {
+      const cacheKey = `${operation}_${JSON.stringify(data)}`;
+      const cached = cache.get(cacheKey);
+      if (useCache && cached !== undefined) return JSON.stringify(cached);
+
+      const sum = data.reduce((a, b) => a + b, 0);
+      const result =
+        operation === 'sum' ? sum
+        : operation === 'average' ? sum / data.length
+        : data.map((x) => x * 2).reduce((a, b) => a + b, 0);
+
+      if (useCache) cache.set(cacheKey, result);
+      return JSON.stringify(result);
+    },
+    {
       name: 'process_data',
       description: 'Process and transform data with caching',
       schema: z.object({
@@ -1310,46 +1329,12 @@ class DataProcessingTool extends DynamicStructuredTool {
         data: z.array(z.number()),
         useCache: z.boolean().default(true),
       }),
-      func: this.execute.bind(this),
-    });
-  }
-  
-  private async execute(input: {
-    operation: string;
-    data: number[];
-    useCache: boolean;
-  }): Promise<string> {
-    const cacheKey = `${input.operation}_${JSON.stringify(input.data)}`;
-    
-    if (input.useCache && this.cache.has(cacheKey)) {
-      console.log('Using cached result');
-      return JSON.stringify(this.cache.get(cacheKey));
-    }
-    
-    let result: number;
-    switch (input.operation) {
-      case 'sum':
-        result = input.data.reduce((a, b) => a + b, 0);
-        break;
-      case 'average':
-        result = input.data.reduce((a, b) => a + b, 0) / input.data.length;
-        break;
-      case 'transform':
-        result = input.data.map((x) => x * 2).reduce((a, b) => a + b, 0);
-        break;
-      default:
-        throw new Error(`Unknown operation: ${input.operation}`);
-    }
-    
-    if (input.useCache) {
-      this.cache.set(cacheKey, result);
-    }
-    
-    return JSON.stringify(result);
-  }
+    },
+  );
 }
 
-const processingTool = new DataProcessingTool();
+const processingTool = makeProcessingTool();
+console.log(await processingTool.invoke({ operation: 'average', data: [1, 2, 3] }));   // 2
 ```
 
 ### Zod Schemas for Validation
@@ -1455,14 +1440,17 @@ const robustAPITool = tool(
 
 ```typescript
 // Tools that handle long-running operations
+import { getWriter } from '@langchain/langgraph';
+
 const longRunningTool = tool(
-  async ({ jobId, priority }, config) => {
+  async ({ jobId, priority }) => {
     // Simulate async job execution with progress updates.
-    // When the tool runs inside a LangGraph graph, `config.writer` sends
-    // progress to callers streaming with streamMode: 'custom'.
+    // Inside a LangGraph graph, getWriter() returns a function that sends
+    // progress to callers streaming with streamMode: 'custom' (undefined elsewhere).
+    const write = getWriter();
     for (let i = 1; i <= 5; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      config?.writer?.({ jobId, priority, progress: i * 20 });
+      write?.({ jobId, priority, progress: i * 20 });
     }
     return `Job ${jobId} completed successfully`;
   },
@@ -1615,6 +1603,9 @@ console.log(result); // Record<string, any>; validate with analysisSchema.parse(
 ### Zod Schemas for Type Safety
 
 ```typescript
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
+import { z } from 'zod';
+
 // Comprehensive schema with validation
 const articleSchema = z.object({
   title: z.string().min(5).max(200),
@@ -2254,39 +2245,37 @@ const DataProcessingStateAnnotation = Annotation.Root({
   }),
 });
 
-const dataGraph = new StateGraph(DataProcessingStateAnnotation);
-
-dataGraph
+const dataGraph = new StateGraph(DataProcessingStateAnnotation)
   .addNode('clean', (state) => {
-    const cleaned = state.rawData.trim().toLowerCase();
-    return {
-      cleanedData: cleaned,
-    };
-  })
+      const cleaned = state.rawData.trim().toLowerCase();
+      return {
+        cleanedData: cleaned,
+      };
+    })
   .addNode('validate', (state) => {
-    const isValid = state.cleanedData && state.cleanedData.length > 0;
-
-    if (!isValid) {
+      const isValid = state.cleanedData && state.cleanedData.length > 0;
+  
+      if (!isValid) {
+        return {
+          errors: ['Validation failed: empty data'],
+        };
+      }
+  
       return {
-        errors: ['Validation failed: empty data'],
+        validatedData: state.cleanedData,
       };
-    }
-
-    return {
-      validatedData: state.cleanedData,
-    };
-  })
+    })
   .addNode('transform', (state) => {
-    if (!state.validatedData) {
+      if (!state.validatedData) {
+        return {
+          errors: ['Cannot transform invalid data'],
+        };
+      }
+  
       return {
-        errors: ['Cannot transform invalid data'],
+        transformedData: state.validatedData.toUpperCase(),
       };
-    }
-
-    return {
-      transformedData: state.validatedData.toUpperCase(),
-    };
-  })
+    })
   .addEdge(START, 'clean')
   .addEdge('clean', 'validate')
   .addEdge('validate', 'transform')
@@ -2307,6 +2296,7 @@ const PipelineStateAnnotation = Annotation.Root({
   stage3Result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
   finalOutput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
+type PipelineStateAnnotationUpdate = typeof PipelineStateAnnotation.Update;
 
 const pipelineGraph = new StateGraph(PipelineStateAnnotation)
   // Traditional approach: manually adding nodes and edges
@@ -2329,25 +2319,25 @@ const sequenceGraph = new StateGraph(PipelineStateAnnotation)
   .addSequence([
     [
       'stage1',
-      (state) => ({
+      (state): PipelineStateAnnotationUpdate => ({
         stage1Result: `Stage1: ${state.input}`,
       }),
     ],
     [
       'stage2',
-      (state) => ({
+      (state): PipelineStateAnnotationUpdate => ({
         stage2Result: `Stage2: ${state.stage1Result}`,
       }),
     ],
     [
       'stage3',
-      (state) => ({
+      (state): PipelineStateAnnotationUpdate => ({
         stage3Result: `Stage3: ${state.stage2Result}`,
       }),
     ],
     [
       'finalize',
-      (state) => ({
+      (state): PipelineStateAnnotationUpdate => ({
         finalOutput: state.stage3Result,
       }),
     ],
@@ -2387,18 +2377,17 @@ const DocStateAnnotation = Annotation.Root({
   }),
   finalReport: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
-
-const docGraph = new StateGraph(DocStateAnnotation);
+type DocStateAnnotationUpdate = typeof DocStateAnnotation.Update;
 
 const model = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.3,
 });
 
-docGraph.addSequence([
+const docGraph = new StateGraph(DocStateAnnotation).addSequence([
   [
     'chunk',
-    async (state) => {
+    async (state): Promise<DocStateAnnotationUpdate> => {
       // Split document into chunks
       const chunkSize = 1000;
       const chunks: string[] = [];
@@ -2412,7 +2401,7 @@ docGraph.addSequence([
   ],
   [
     'summarize',
-    async (state) => {
+    async (state): Promise<DocStateAnnotationUpdate> => {
       // Summarize each chunk
       const summaries: string[] = [];
 
@@ -2428,7 +2417,7 @@ docGraph.addSequence([
   ],
   [
     'extractKeywords',
-    async (state) => {
+    async (state): Promise<DocStateAnnotationUpdate> => {
       // Extract keywords from summaries
       const response = await model.invoke(
         `Extract 5 keywords from these summaries: ${state.summaries.join(' ')}`
@@ -2443,7 +2432,7 @@ docGraph.addSequence([
   ],
   [
     'generateReport',
-    async (state) => {
+    async (state): Promise<DocStateAnnotationUpdate> => {
       const report = `
 Document Analysis Report
 ========================
@@ -2460,10 +2449,9 @@ Keywords: ${state.keywords.join(', ')}
       return { finalReport: report };
     },
   ],
-]);
-
-docGraph.addEdge(START, 'chunk');
-docGraph.addEdge('generateReport', END);
+])
+  .addEdge(START, 'chunk')
+  .addEdge('generateReport', END);
 
 const docWorkflow = docGraph.compile();
 
@@ -2494,45 +2482,44 @@ const HybridStateAnnotation = Annotation.Root({
   validated: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
   output: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
+type HybridStateAnnotationUpdate = typeof HybridStateAnnotation.Update;
 
-const hybridGraph = new StateGraph(HybridStateAnnotation);
-
-// Add individual nodes with custom logic
-hybridGraph
+const hybridGraph = new StateGraph(HybridStateAnnotation)
+  // Add individual nodes with custom logic
   .addNode('preprocess', async (state) => {
-    // Complex preprocessing
-    const preprocessed = state.input.trim().toLowerCase();
-    return { preprocessed };
-  })
+      // Complex preprocessing
+      const preprocessed = state.input.trim().toLowerCase();
+      return { preprocessed };
+    })
   .addNode('validate', async (state) => {
-    // Validation logic
-    if (!state.enhanced || state.enhanced.length === 0) {
-      throw new Error('Invalid data');
-    }
-    return { validated: state.enhanced };
-  });
-
-// Add a sequence of simple transformations
-hybridGraph.addSequence([
-  [
-    'analyze',
-    async (state) => ({
-      analyzed: `Analyzed: ${state.preprocessed}`,
-    }),
-  ],
-  [
-    'enhance',
-    async (state) => ({
-      enhanced: `Enhanced: ${state.analyzed}`,
-    }),
-  ],
-]);
-
-// Connect everything
-hybridGraph.addEdge(START, 'preprocess');
-hybridGraph.addEdge('preprocess', 'analyze'); // Start of sequence
-hybridGraph.addEdge('enhance', 'validate'); // End of sequence to validate
-hybridGraph.addEdge('validate', END);
+      // Validation logic
+      if (!state.enhanced || state.enhanced.length === 0) {
+        throw new Error('Invalid data');
+      }
+      return { validated: state.enhanced };
+    })
+  // Add a sequence of simple transformations
+  .addSequence([
+    [
+      'analyze',
+      async (state): Promise<HybridStateAnnotationUpdate> => ({
+        analyzed: `Analyzed: ${state.preprocessed}`,
+      }),
+    ],
+    [
+      'enhance',
+      async (state): Promise<HybridStateAnnotationUpdate> => ({
+        enhanced: `Enhanced: ${state.analyzed}`,
+      }),
+    ],
+  ])
+  // Connect everything
+  .addEdge(START, 'preprocess')
+  .addEdge('preprocess', 'analyze')
+  // Start of sequence
+  .addEdge('enhance', 'validate')
+  // End of sequence to validate
+  .addEdge('validate', END);
 
 const hybridWorkflow = hybridGraph.compile();
 ```
@@ -2549,66 +2536,37 @@ const ConditionalStateAnnotation = Annotation.Root({
   result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const conditionalGraph = new StateGraph(ConditionalStateAnnotation);
+type ConditionalState = typeof ConditionalStateAnnotation.State;
+type ConditionalUpdate = typeof ConditionalStateAnnotation.Update;
 
-// Define separate sequences for different input types
-const textSequence: [string, (state: any) => Promise<any>][] = [
-  [
-    'processText',
-    async (state: any) => ({
+const conditionalGraph = new StateGraph(ConditionalStateAnnotation)
+  // A routing node that makes no update
+  .addNode('route', () => ({}))
+  // One sequence per input type (the record form keeps each step's type)
+  .addSequence({
+    processText: async (state: ConditionalState): Promise<ConditionalUpdate> => ({
       processed: `Text processed: ${state.input}`,
     }),
-  ],
-  [
-    'finalizeText',
-    async (state: any) => ({
+    finalizeText: async (state: ConditionalState): Promise<ConditionalUpdate> => ({
       result: `Text result: ${state.processed}`,
     }),
-  ],
-];
-
-const dataSequence: [string, (state: any) => Promise<any>][] = [
-  [
-    'processData',
-    async (state: any) => ({
+  })
+  .addSequence({
+    processData: async (state: ConditionalState): Promise<ConditionalUpdate> => ({
       processed: `Data processed: ${state.input}`,
     }),
-  ],
-  [
-    'finalizeData',
-    async (state: any) => ({
+    finalizeData: async (state: ConditionalState): Promise<ConditionalUpdate> => ({
       result: `Data result: ${state.processed}`,
     }),
-  ],
-];
-
-// Add a routing node (returns no update)
-conditionalGraph.addNode('route', () => ({}));
-
-// Add sequences
-conditionalGraph.addSequence(textSequence);
-conditionalGraph.addSequence(dataSequence);
-
-// Setup conditional edges
-conditionalGraph.addEdge(START, 'route');
-
-conditionalGraph.addConditionalEdges(
-  'route',
-  (state) => {
-    if (state.inputType === 'text') {
-      return 'processText';
-    } else {
-      return 'processData';
-    }
-  },
-  {
-    processText: 'processText',
-    processData: 'processData',
-  }
-);
-
-conditionalGraph.addEdge('finalizeText', END);
-conditionalGraph.addEdge('finalizeData', END);
+  })
+  .addEdge(START, 'route')
+  .addConditionalEdges(
+    'route',
+    (state) => (state.inputType === 'text' ? 'processText' : 'processData'),
+    ['processText', 'processData'],
+  )
+  .addEdge('finalizeText', END)
+  .addEdge('finalizeData', END);
 
 const conditionalWorkflow = conditionalGraph.compile();
 ```
@@ -2660,6 +2618,9 @@ console.log(computeCount); // 1
 `keyFunc` receives the node's input arguments as an array and returns a string. Use it to leave volatile fields (timestamps, request IDs) out of the key.
 
 ```typescript
+import { Annotation, StateGraph, START, END } from '@langchain/langgraph';
+import { InMemoryCache } from '@langchain/langgraph-checkpoint';
+
 const DataStateAnnotation = Annotation.Root({
   userId: Annotation<string>,
   timestamp: Annotation<number>,
@@ -2695,6 +2656,9 @@ await dataWorkflow.invoke({ userId: 'user123', timestamp: Date.now() + 1000, dat
 `ttl` is in **seconds**. Without it, entries never expire.
 
 ```typescript
+import { Annotation, StateGraph, START, END } from '@langchain/langgraph';
+import { InMemoryCache } from '@langchain/langgraph-checkpoint';
+
 const ApiStateAnnotation = Annotation.Root({
   endpoint: Annotation<string>,
   response: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
@@ -2719,305 +2683,9 @@ await apiWorkflow.invoke({ endpoint: 'https://api.example.com/data' }); // cache
 
 Graph-wide defaults can be set once with `graph.setNodeDefaults({ cachePolicy: { ttl: 300 } })`; a node can opt out with `cachePolicy: false`.
 
-### Application-Level Caching (Redis)
+### Shared caches
 
-The built-in node cache is the first thing to reach for. When you need explicit control — cross-service sharing, manual invalidation, caching only part of a node's work — cache inside the node yourself, as below.
-
-```typescript
-import Redis from 'ioredis';
-
-interface CacheConfig {
-  redis: Redis;
-  keyPrefix: string;
-  defaultTTL: number;
-}
-
-class RedisCacheManager {
-  constructor(private config: CacheConfig) {}
-
-  private generateKey(prefix: string, ...parts: string[]): string {
-    return `${this.config.keyPrefix}:${prefix}:${parts.join(':')}`;
-  }
-
-  async get<T>(cacheKey: string): Promise<T | null> {
-    const value = await this.config.redis.get(cacheKey);
-    return value ? JSON.parse(value) : null;
-  }
-
-  async set<T>(cacheKey: string, value: T, ttl?: number): Promise<void> {
-    const expiry = ttl || this.config.defaultTTL;
-    await this.config.redis.setex(
-      cacheKey,
-      Math.floor(expiry / 1000),
-      JSON.stringify(value)
-    );
-  }
-
-  async invalidate(pattern: string): Promise<void> {
-    const keys = await this.config.redis.keys(pattern);
-    if (keys.length > 0) {
-      await this.config.redis.del(...keys);
-    }
-  }
-}
-
-// Node with Redis caching
-interface MLState {
-  inputText: string;
-  embedding: number[] | null;
-}
-
-const MLStateAnnotation = Annotation.Root({
-  inputText: Annotation<string>,
-  embedding: Annotation<number[] | null>({ reducer: (_prev, next) => next, default: () => null }),
-});
-
-const mlGraph = new StateGraph(MLStateAnnotation);
-
-const cacheManager = new RedisCacheManager({
-  redis: new Redis(process.env.REDIS_URL),
-  keyPrefix: 'langgraph',
-  defaultTTL: 3600 * 1000, // 1 hour
-});
-
-mlGraph.addNode(
-  'generateEmbedding',
-  async (state) => {
-    const cacheKey = `embedding:${state.inputText}`;
-
-    // Check cache first
-    const cached = await cacheManager.get<number[]>(cacheKey);
-    if (cached) {
-      console.log('Using cached embedding');
-      return { embedding: cached };
-    }
-
-    console.log('Generating new embedding');
-
-    // Generate embedding (expensive operation)
-    const embedding = await generateEmbedding(state.inputText);
-
-    // Cache the result
-    await cacheManager.set(cacheKey, embedding);
-
-    return { embedding };
-  }
-);
-
-async function generateEmbedding(text: string): Promise<number[]> {
-  // Simulate expensive embedding generation
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  return Array.from({ length: 1536 }, () => Math.random());
-}
-
-mlGraph.addEdge(START, 'generateEmbedding');
-mlGraph.addEdge('generateEmbedding', END);
-
-const mlWorkflow = mlGraph.compile();
-```
-
-### Selective Cache Invalidation
-
-Invalidate cache entries based on specific conditions.
-
-```typescript
-interface UserDataState {
-  userId: string;
-  operation: 'read' | 'write' | 'delete';
-  data: Record<string, any> | null;
-  result: string | null;
-}
-
-const UserDataStateAnnotation = Annotation.Root({
-  userId: Annotation<string>,
-  operation: Annotation<'read' | 'write' | 'delete'>,
-  data: Annotation<Record<string, any> | null>({ reducer: (_prev, next) => next, default: () => null }),
-  result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
-});
-
-const userGraph = new StateGraph(UserDataStateAnnotation);
-
-class CacheInvalidationManager {
-  constructor(private cache: RedisCacheManager) {}
-
-  async invalidateUserCache(userId: string): Promise<void> {
-    // Invalidate all cache entries for this user
-    await this.cache.invalidate(`*:user:${userId}:*`);
-    console.log(`Invalidated cache for user: ${userId}`);
-  }
-
-  async invalidatePattern(pattern: string): Promise<void> {
-    await this.cache.invalidate(pattern);
-  }
-}
-
-const invalidationManager = new CacheInvalidationManager(cacheManager);
-
-userGraph
-  .addNode('processOperation', async (state) => {
-    const cacheKey = `user:${state.userId}:data`;
-
-    if (state.operation === 'read') {
-      // Try to read from cache
-      const cached = await cacheManager.get<Record<string, any>>(cacheKey);
-      if (cached) {
-        return { result: 'Data retrieved from cache', data: cached };
-      }
-
-      // Fetch from database
-      const data = await fetchUserData(state.userId);
-      await cacheManager.set(cacheKey, data);
-
-      return { result: 'Data retrieved from database', data };
-    } else if (state.operation === 'write') {
-      // Write to database
-      await writeUserData(state.userId, state.data!);
-
-      // Invalidate cache
-      await invalidationManager.invalidateUserCache(state.userId);
-
-      return { result: 'Data written, cache invalidated' };
-    } else if (state.operation === 'delete') {
-      // Delete from database
-      await deleteUserData(state.userId);
-
-      // Invalidate cache
-      await invalidationManager.invalidateUserCache(state.userId);
-
-      return { result: 'Data deleted, cache invalidated' };
-    }
-
-    return { result: 'Unknown operation' };
-  });
-
-async function fetchUserData(userId: string): Promise<Record<string, any>> {
-  // Simulate database fetch
-  return { userId, name: 'John Doe', email: 'john@example.com' };
-}
-
-async function writeUserData(
-  userId: string,
-  data: Record<string, any>
-): Promise<void> {
-  // Simulate database write
-  console.log('Writing to database:', userId, data);
-}
-
-async function deleteUserData(userId: string): Promise<void> {
-  // Simulate database delete
-  console.log('Deleting from database:', userId);
-}
-
-userGraph.addEdge(START, 'processOperation');
-userGraph.addEdge('processOperation', END);
-
-const userWorkflow = userGraph.compile();
-```
-
-### Cache Performance Monitoring
-
-Track cache hit/miss ratios and performance metrics.
-
-```typescript
-interface CacheMetrics {
-  hits: number;
-  misses: number;
-  totalRequests: number;
-  avgComputeTime: number;
-  avgCacheTime: number;
-}
-
-class CacheMonitor {
-  private metrics: CacheMetrics = {
-    hits: 0,
-    misses: 0,
-    totalRequests: 0,
-    avgComputeTime: 0,
-    avgCacheTime: 0,
-  };
-
-  recordHit(duration: number): void {
-    this.metrics.hits++;
-    this.metrics.totalRequests++;
-
-    // Update average cache retrieval time
-    this.metrics.avgCacheTime =
-      (this.metrics.avgCacheTime * (this.metrics.hits - 1) + duration) /
-      this.metrics.hits;
-  }
-
-  recordMiss(computeDuration: number): void {
-    this.metrics.misses++;
-    this.metrics.totalRequests++;
-
-    // Update average computation time
-    this.metrics.avgComputeTime =
-      (this.metrics.avgComputeTime * (this.metrics.misses - 1) + computeDuration) /
-      this.metrics.misses;
-  }
-
-  getMetrics(): CacheMetrics & { hitRate: number } {
-    const hitRate =
-      this.metrics.totalRequests > 0
-        ? this.metrics.hits / this.metrics.totalRequests
-        : 0;
-
-    return {
-      ...this.metrics,
-      hitRate,
-    };
-  }
-
-  logMetrics(): void {
-    const metrics = this.getMetrics();
-    console.log('=== Cache Performance Metrics ===');
-    console.log(`Total Requests: ${metrics.totalRequests}`);
-    console.log(`Cache Hits: ${metrics.hits}`);
-    console.log(`Cache Misses: ${metrics.misses}`);
-    console.log(`Hit Rate: ${(metrics.hitRate * 100).toFixed(2)}%`);
-    console.log(`Avg Cache Time: ${metrics.avgCacheTime.toFixed(2)}ms`);
-    console.log(`Avg Compute Time: ${metrics.avgComputeTime.toFixed(2)}ms`);
-    console.log(
-      `Time Saved: ${((metrics.avgComputeTime - metrics.avgCacheTime) * metrics.hits).toFixed(2)}ms`
-    );
-  }
-}
-
-const cacheMonitor = new CacheMonitor();
-
-// Use the monitor inside any node function
-async function monitoredComputation(state: { inputText: string }) {
-  const cacheKey = `computation:${state.inputText}`;
-  const startTime = Date.now();
-
-  const cached = await cacheManager.get<string>(cacheKey);
-
-  if (cached) {
-    const duration = Date.now() - startTime;
-    cacheMonitor.recordHit(duration);
-    return { result: cached };
-  }
-
-  // Perform computation
-  const result = await expensiveComputation(state.inputText);
-  const duration = Date.now() - startTime;
-
-  cacheMonitor.recordMiss(duration);
-  await cacheManager.set(cacheKey, result);
-
-  return { result };
-}
-
-async function expensiveComputation(input: string): Promise<string> {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return `Computed: ${input}`;
-}
-
-// Log metrics periodically
-setInterval(() => {
-  cacheMonitor.logMetrics();
-}, 60000); // Every minute
-```
+`InMemoryCache` is per process. To share cached node results between replicas, implement `BaseCache` (from `@langchain/langgraph-checkpoint`) over your store of choice and pass it to `compile({ cache })`. Hand-rolled caching inside a node (checking Redis before calling a model) also works, but it bypasses `cachePolicy` and is not covered here.
 
 ---
 
@@ -3050,61 +2718,55 @@ const ParallelStateAnnotation = Annotation.Root({
   aggregatedResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const graph = new StateGraph(ParallelStateAnnotation);
-
-// Define parallel processing branches
-graph
+const graph = new StateGraph(ParallelStateAnnotation)
+  // Define parallel processing branches
   .addNode('branchA', async (state) => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    return {
-      branchAResult: `Branch A processed: ${state.input}`,
-    };
-  })
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return {
+        branchAResult: `Branch A processed: ${state.input}`,
+      };
+    })
   .addNode('branchB', async (state) => {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    return {
-      branchBResult: `Branch B processed: ${state.input}`,
-    };
-  })
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return {
+        branchBResult: `Branch B processed: ${state.input}`,
+      };
+    })
   .addNode('branchC', async (state) => {
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    return {
-      branchCResult: `Branch C processed: ${state.input}`,
-    };
-  });
-
-// Deferred aggregation node - waits for all branches
-graph.addNode(
-  'aggregate',
-  async (state) => {
-    console.log('Aggregating results from all branches');
-
-    const allResults = [
-      state.branchAResult,
-      state.branchBResult,
-      state.branchCResult,
-    ].filter(Boolean);
-
-    return {
-      aggregatedResult: `Aggregated: ${allResults.join(' | ')}`,
-    };
-  },
-  {
-    // Run only after all other pending branches have finished
-    defer: true,
-  }
-);
-
-// Setup edges - all branches flow to aggregate
-graph.addEdge(START, 'branchA');
-graph.addEdge(START, 'branchB');
-graph.addEdge(START, 'branchC');
-
-graph.addEdge('branchA', 'aggregate');
-graph.addEdge('branchB', 'aggregate');
-graph.addEdge('branchC', 'aggregate');
-
-graph.addEdge('aggregate', END);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return {
+        branchCResult: `Branch C processed: ${state.input}`,
+      };
+    })
+  // Deferred aggregation node - waits for all branches
+  .addNode(
+    'aggregate',
+    async (state) => {
+      console.log('Aggregating results from all branches');
+  
+      const allResults = [
+        state.branchAResult,
+        state.branchBResult,
+        state.branchCResult,
+      ].filter(Boolean);
+  
+      return {
+        aggregatedResult: `Aggregated: ${allResults.join(' | ')}`,
+      };
+    },
+    {
+      // Run only after all other pending branches have finished
+      defer: true,
+    }
+  )
+  // Setup edges - all branches flow to aggregate
+  .addEdge(START, 'branchA')
+  .addEdge(START, 'branchB')
+  .addEdge(START, 'branchC')
+  .addEdge('branchA', 'aggregate')
+  .addEdge('branchB', 'aggregate')
+  .addEdge('branchC', 'aggregate')
+  .addEdge('aggregate', END);
 
 const workflow = graph.compile();
 
@@ -3150,61 +2812,55 @@ const AnalysisStateAnnotation = Annotation.Root({
   statistics: Annotation<DataAnalysisState['statistics']>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const analysisGraph = new StateGraph(AnalysisStateAnnotation);
-
-// Parallel analysis nodes
-analysisGraph
+const analysisGraph = new StateGraph(AnalysisStateAnnotation)
+  // Parallel analysis nodes
   .addNode('calculateSum', async (state) => {
-    const sum = state.dataset.reduce((a, b) => a + b, 0);
-    return { sumResult: sum };
-  })
+      const sum = state.dataset.reduce((a, b) => a + b, 0);
+      return { sumResult: sum };
+    })
   .addNode('calculateAvg', async (state) => {
-    const avg = state.dataset.reduce((a, b) => a + b, 0) / state.dataset.length;
-    return { avgResult: avg };
-  })
+      const avg = state.dataset.reduce((a, b) => a + b, 0) / state.dataset.length;
+      return { avgResult: avg };
+    })
   .addNode('calculateMax', async (state) => {
-    const max = Math.max(...state.dataset);
-    return { maxResult: max };
-  })
+      const max = Math.max(...state.dataset);
+      return { maxResult: max };
+    })
   .addNode('calculateMin', async (state) => {
-    const min = Math.min(...state.dataset);
-    return { minResult: min };
-  });
-
-// Deferred aggregation node
-analysisGraph.addNode(
-  'generateStatistics',
-  async (state) => {
-    console.log('Generating final statistics report');
-
-    return {
-      statistics: {
-        sum: state.sumResult!,
-        avg: state.avgResult!,
-        max: state.maxResult!,
-        min: state.minResult!,
-        count: state.dataset.length,
-      },
-    };
-  },
-  {
-    defer: true,
-  }
-);
-
-// Fan-out from START to all analysis nodes
-analysisGraph.addEdge(START, 'calculateSum');
-analysisGraph.addEdge(START, 'calculateAvg');
-analysisGraph.addEdge(START, 'calculateMax');
-analysisGraph.addEdge(START, 'calculateMin');
-
-// Fan-in from all analysis nodes to aggregation
-analysisGraph.addEdge('calculateSum', 'generateStatistics');
-analysisGraph.addEdge('calculateAvg', 'generateStatistics');
-analysisGraph.addEdge('calculateMax', 'generateStatistics');
-analysisGraph.addEdge('calculateMin', 'generateStatistics');
-
-analysisGraph.addEdge('generateStatistics', END);
+      const min = Math.min(...state.dataset);
+      return { minResult: min };
+    })
+  // Deferred aggregation node
+  .addNode(
+    'generateStatistics',
+    async (state) => {
+      console.log('Generating final statistics report');
+  
+      return {
+        statistics: {
+          sum: state.sumResult!,
+          avg: state.avgResult!,
+          max: state.maxResult!,
+          min: state.minResult!,
+          count: state.dataset.length,
+        },
+      };
+    },
+    {
+      defer: true,
+    }
+  )
+  // Fan-out from START to all analysis nodes
+  .addEdge(START, 'calculateSum')
+  .addEdge(START, 'calculateAvg')
+  .addEdge(START, 'calculateMax')
+  .addEdge(START, 'calculateMin')
+  // Fan-in from all analysis nodes to aggregation
+  .addEdge('calculateSum', 'generateStatistics')
+  .addEdge('calculateAvg', 'generateStatistics')
+  .addEdge('calculateMax', 'generateStatistics')
+  .addEdge('calculateMin', 'generateStatistics')
+  .addEdge('generateStatistics', END);
 
 const analysisWorkflow = analysisGraph.compile();
 

@@ -252,7 +252,7 @@ def risky_operation() -> str:
         return "Operation failed, trying alternative approach"
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#error-handling-and-resilience)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#bound-every-run)
 
 ---
 
@@ -267,7 +267,7 @@ docker run -p 8000:8000 my-agent
 aws ecs run-task --cluster my-cluster --task-definition my-agent
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#deployment-architectures)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/)
 
 ---
 
