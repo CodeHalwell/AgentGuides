@@ -939,7 +939,7 @@ Strands keeps the agent itself small — model, prompt, tools — and provides t
 
 | Version | Date | Changes |
 |---------|------|---------|
-| %%version=strands-agents%% | %%versions-checked%% | Guide rewritten against the real SDK: removed APIs that never existed in Strands (`as_tool` function, `aggregator`, `AgentGraph`, `Workflow`, `Context`, `ConversationMemory`, `PersistentState`, `S3Integration`, `deploy_to_lambda`, `CloudWatchLogger`, `Agent(instructions=…)`, `agent.run`); replaced with `Agent.as_tool`, `Swarm`, `GraphBuilder`, the `workflow` tool, `ToolContext`/`invocation_state`, session managers, `AgentCoreMemorySessionManager`, hooks and OTEL. Model IDs moved from Claude 3/3.5 to current Claude Bedrock IDs. |
+| 1.62.0 | 21 October 2026 | Guide rewritten against the real SDK: removed APIs that never existed in Strands (`as_tool` function, `aggregator`, `AgentGraph`, `Workflow`, `Context`, `ConversationMemory`, `PersistentState`, `S3Integration`, `deploy_to_lambda`, `CloudWatchLogger`, `Agent(instructions=…)`, `agent.run`); replaced with `Agent.as_tool`, `Swarm`, `GraphBuilder`, the `workflow` tool, `ToolContext`/`invocation_state`, session managers, `AgentCoreMemorySessionManager`, hooks and OTEL. Model IDs moved from Claude 3/3.5 to current Claude Bedrock IDs. |
 | 1.42.0 | 7 June 2026 | Version bump from 1.36.0; `__version__` replaced with `importlib.metadata.version`. |
 | 1.36.0 | 17 April 2026 | Multi-agent graph workflows; interrupt propagation through nested nodes; `AgentCoreMemorySessionManager` integration; steering hooks. |
 | 1.0 | March 2025 | Initial guide created. |
