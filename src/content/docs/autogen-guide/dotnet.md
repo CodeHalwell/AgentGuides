@@ -35,7 +35,7 @@ using AutoGen.OpenAI;
 
 var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
     ?? throw new Exception("Please set OPENAI_API_KEY environment variable.");
-var config = new OpenAIConfig(openAIKey, "gpt-3.5-turbo");   // model name as published upstream; long retired
+var config = new OpenAIConfig(openAIKey, "%%model=openai-small%%");
 
 var assistantAgent = new AssistantAgent(
     name: "assistant",
