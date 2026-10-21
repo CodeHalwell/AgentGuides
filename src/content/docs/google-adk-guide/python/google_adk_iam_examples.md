@@ -77,9 +77,9 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 ### Deploy to Cloud Run with the SA
 
 ```bash
-# Build and deploy — the SA runs the container, Workload Identity handles model calls
+# Deploy an image from Artifact Registry; the service runs as the SA, and ADC picks up its identity for model calls
 gcloud run deploy adk-agent \
-  --image="gcr.io/${PROJECT_ID}/adk-agent:latest" \
+  --image="us-central1-docker.pkg.dev/${PROJECT_ID}/agents/adk-agent:latest" \
   --region="us-central1" \
   --service-account="${SA_EMAIL}" \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=us-central1" \

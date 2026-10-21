@@ -806,7 +806,7 @@ A scenario-driven case is played out by a simulated user. Configure it with `Eva
 
 | Field | Default | Purpose |
 |---|---|---|
-| `model` | `"gemini-2.5-flash"` | LLM that plays the user |
+| `model` | `"gemini-2.5-flash"` | LLM that plays the user. The default is a Gemini 2.5 model, which new Gemini API projects cannot use; set `model="%%model=gemini%%"` or another model you have access to |
 | `model_configuration` | default `GenerateContentConfig` | Generation config for that LLM |
 | `max_allowed_invocations` | `20` | Turn cap before the simulation stops |
 | `include_function_calls` | `False` | Show the agent's tool calls to the simulated user |

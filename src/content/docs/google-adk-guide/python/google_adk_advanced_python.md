@@ -1,6 +1,6 @@
 ---
 title: "Google ADK Advanced (Python)"
-description: "Planners (BuiltInPlanner, PlanReActPlanner), custom BaseTool / BaseToolset, authenticated tools, and deployment."
+description: "Planners (BuiltInPlanner, PlanReActPlanner), custom BaseTool / BaseToolset, authenticated tools, multi-agent coordination, OpenTelemetry and alternative model providers."
 framework: "google-adk"
 language: "python"
 sidebar:
@@ -560,100 +560,9 @@ async for event in runner.run_async(
         print("Agent:", "".join(p.text or "" for p in event.content.parts or []))
 ```
 
-## Deployment — Cloud Run (FastAPI)
+## Deployment
 
-```python
-# main.py — FastAPI wrapper for Cloud Run
-import os
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from google.adk.agents import LlmAgent
-from google.adk.apps import App
-from google.adk.runners import Runner
-from google.adk.sessions import DatabaseSessionService
-from google.adk.plugins import LoggingPlugin
-from google.genai import types
-
-SESSION_DB = os.environ["SESSION_DB_URL"]
-
-agent = LlmAgent(
-    name="assistant",
-    model="%%model=gemini%%",
-    instruction="You are a helpful assistant.",
-)
-
-app_container = App(
-    name="assistant_app",
-    root_agent=agent,
-    plugins=[LoggingPlugin()],
-)
-
-runner: Runner | None = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global runner
-    runner = Runner(
-        app=app_container,
-        session_service=DatabaseSessionService(db_url=SESSION_DB),
-    )
-    yield
-    await runner.close()
-
-
-web_app = FastAPI(lifespan=lifespan)
-
-
-@web_app.post("/chat/{session_id}")
-async def chat(session_id: str, body: dict):
-    if runner is None:
-        raise HTTPException(status_code=503, detail="Service not ready")
-    user_id = body.get("user_id", "anonymous")
-    text = body.get("message", "")
-    if not text:
-        raise HTTPException(status_code=400, detail="message is required")
-
-    # Ensure session exists
-    svc = runner.session_service
-    if not await svc.get_session(app_name="assistant_app", user_id=user_id, session_id=session_id):
-        await svc.create_session(
-            app_name="assistant_app", user_id=user_id, session_id=session_id
-        )
-
-    response_text = ""
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session_id,
-        new_message=types.Content(role="user", parts=[types.Part(text=text)]),
-    ):
-        if event.is_final_response() and event.content:
-            response_text = "".join(p.text or "" for p in event.content.parts or [])
-    return {"reply": response_text}
-```
-
-**Cloud Run Dockerfile:**
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8080
-CMD ["uvicorn", "main:web_app", "--host", "0.0.0.0", "--port", "8080"]
-```
-
-**Deploy:**
-
-```bash
-gcloud run deploy adk-assistant \
-  --source . \
-  --region us-central1 \
-  --set-env-vars SESSION_DB_URL=postgresql+asyncpg://user:pass@host/db \
-  --set-secrets GOOGLE_API_KEY=adk-api-key:latest \
-  --allow-unauthenticated
-```
+Deployment (`adk deploy agent_engine | cloud_run | gke`, the Agent Platform SDK's `AdkApp`, and serving `get_fast_api_app()` behind your own authentication) is covered in the [production guide](/google-adk-guide/python/google_adk_production_guide/).
 
 ## Observability — OpenTelemetry
 

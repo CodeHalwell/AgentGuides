@@ -192,7 +192,7 @@ CrewAI can also send execution traces to CrewAI AMP, where `crewai eval` grades 
 
 - `Crew(tracing=True)` or `Flow(tracing=True)` in code;
 - `CREWAI_TRACING_ENABLED=true` in the environment;
-- `crewai traces enable` (stored in your local CLI settings; `crewai traces status` and `disable` also exist).
+- `crewai traces enable` (records your consent in CrewAI's per-user data; `crewai traces status` and `crewai traces disable` also exist).
 
 `tracing=False` or `CREWAI_TRACING_ENABLED=false` turns it off for a run. Traces contain prompts and outputs, so treat this as sending data to a third party.
 

@@ -127,14 +127,14 @@ agent = LlmAgent(
     ),
 )
 
-# Gemini 2.5 thinking mode
+# Thinking (Gemini 3 models take thinking_level; Gemini 2.5 models took thinking_budget)
 thinking_agent = LlmAgent(
     name="thoughtful",
     model="%%model=gemini-flagship%%",
     generate_content_config=types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(
             include_thoughts=True,
-            thinking_budget=8192,
+            thinking_level=types.ThinkingLevel.HIGH,
         )
     ),
 )
@@ -142,7 +142,7 @@ thinking_agent = LlmAgent(
 
 ### Model resolution
 
-A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("gemini-2.5-pro")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-3.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
+A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("%%model=gemini-flagship%%")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-3.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
 
 ```python
 from google.adk.models import Gemini, LiteLlm
@@ -983,9 +983,9 @@ Use `PlanReActPlanner` when:
 - You need to debug multi-step tool chains — the `/*REASONING*/` blocks reveal the model's intent at each step.
 
 Use `BuiltInPlanner` when:
-- You're using Gemini 2.5 Pro or Flash (supports `ThinkingConfig`).
+- You're using a Gemini thinking model (supports `ThinkingConfig`).
 - Latency matters — native thinking is faster than generating reasoning tokens.
-- You want to cap reasoning cost with `thinking_budget`.
+- You want to control reasoning effort with `thinking_level` (or `thinking_budget` on older models).
 
 ### 4 — Reflection loop
 `LoopAgent` (or the `Workflow` equivalent) with a single reflective `LlmAgent` that rewrites `state['draft']` each turn and escalates when satisfied. Use `include_contents="none"` on the reflective agent to avoid feeding the full history back each iteration.
