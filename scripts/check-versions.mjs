@@ -99,6 +99,7 @@ function scanDocs() {
         if (m[1] && !data.packages[m[1]]) errors.push(`${at}  unknown package in ${m[0]}`);
         if (m[2] && (!data.models?.[m[2]] || m[2].startsWith('$'))) errors.push(`${at}  unknown model role in ${m[0]}`);
         if (frontmatter) errors.push(`${at}  ${m[0]} in frontmatter is not substituted`);
+        else if (!inCode && /^#{1,6}\s/.test(line)) errors.push(`${at}  ${m[0]} in a heading changes its anchor on every bump`);
       }
       if (HISTORY_ROW.test(line)) return;
       for (const [name, pkg] of Object.entries(data.packages)) {
@@ -157,6 +158,7 @@ async function latest(name, registry) {
 
 async function checkLatest() {
   let behind = 0;
+  let failed = 0;
   for (const [name, pkg] of Object.entries(data.packages)) {
     try {
       const now = await latest(pkg.name ?? name, pkg.registry);
@@ -166,8 +168,14 @@ async function checkLatest() {
         if (args.has('--write')) pkg.version = now;
       }
     } catch (err) {
+      failed++;
       console.log(`${name.padEnd(32)} lookup failed: ${err.message}`);
     }
+  }
+  // A partial check must not stamp a new checked date or pass the job.
+  if (failed) {
+    console.log(`\n${failed} lookup(s) failed; versions.json not updated.`);
+    return false;
   }
   if (args.has('--write') && behind) {
     data.checked = new Date().toISOString().slice(0, 10);

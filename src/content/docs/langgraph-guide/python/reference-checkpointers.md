@@ -272,9 +272,9 @@ for intr in snapshot.interrupts:
 
 ---
 
-## `Interrupt` — struct reference (source-verified, %%version=langgraph%%)
+## `Interrupt` — struct reference
 
-`Interrupt` is the dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
+Checked against the langgraph %%version=langgraph%% source. `Interrupt` is the dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
 
 ```python
 # langgraph.types
@@ -360,9 +360,9 @@ print(result["approved"])  # True
 
 ---
 
-## `PregelTask` — task introspection (source-verified, %%version=langgraph%%)
+## `PregelTask` — task introspection
 
-`PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
+Checked against the langgraph %%version=langgraph%% source. `PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
 
 ```python
 # langgraph.types
