@@ -121,11 +121,25 @@ class Approver(Executor):
         await ctx.yield_output("approved" if approved else "rejected")
 ```
 
-When you mix the two modes the framework raises at registration — be explicit about which one you want. Explicit forward-reference example for a request type imported in another module:
+When you mix the two modes the framework raises at registration — be explicit about which one you want. Types can also be given as strings. They are evaluated against the module's globals when the decorator runs, so the name must already be defined or imported at that point (`"module:qualname"` paths are not accepted):
 
 ```python
-@response_handler(request="my_app.requests:BudgetCheck", response=bool)
-async def on_budget(self, original_request, approved, ctx): ...
+from dataclasses import dataclass
+from agent_framework import Executor, WorkflowContext, handler, response_handler
+
+
+@dataclass
+class BudgetCheck:
+    spend: float
+
+
+class BudgetGate(Executor):
+    @handler
+    async def check(self, spend: float, ctx: WorkflowContext) -> None:
+        await ctx.request_info(BudgetCheck(spend), response_type=bool)
+
+    @response_handler(request="BudgetCheck", response=bool)
+    async def on_budget(self, original_request, approved, ctx): ...
 ```
 
 Inspect what handlers are registered on an executor at runtime via the `is_request_supported(request_type, response_type)` method that `RequestInfoMixin` adds:
