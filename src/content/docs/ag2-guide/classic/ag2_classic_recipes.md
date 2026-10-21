@@ -1,13 +1,13 @@
 ---
-title: "AG2 Classic Recipes: Practical Tutorials and Working Examples"
-description: "Real-world Code Examples and Complete Project Templates"
-framework: "autogen"
+title: "AG2 Classic Recipes"
+description: "Self-contained AG2 Classic (import autogen) examples: two-agent pipelines, group chats, sequential chats, tool use and escalation."
+framework: "ag2"
 language: "python"
+sidebar:
+  label: "Recipes"
 ---
 
-> **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
-
-**Real-world Code Examples and Complete Project Templates**
+> **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. Every recipe was run with a stubbed model reply. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
 
 ## Table of Contents
 
@@ -83,7 +83,8 @@ Be professional, helpful, and concise.""",
     customer_input = UserProxyAgent(
         name="customer",
         human_input_mode="NEVER",
-        llm_config=False
+        llm_config=False,
+        code_execution_config=False,  # relays messages and runs registered tools only
     )
     
     return triage_agent, support_agent, customer_input
@@ -653,7 +654,8 @@ def make_decision_hierarchically(proposal: str) -> Dict:
     coordinator = UserProxyAgent(
         name="coordinator",
         human_input_mode="NEVER",
-        llm_config=False
+        llm_config=False,
+        code_execution_config=False,  # relays messages and runs registered tools only
     )
     
     # Level 1: Analyst review
@@ -778,7 +780,8 @@ def document_qa_system():
     executor = UserProxyAgent(
         name="executor",
         human_input_mode="NEVER",
-        llm_config=False
+        llm_config=False,
+        code_execution_config=False,  # relays messages and runs registered tools only
     )
     
     # Register retrieval function
@@ -882,10 +885,9 @@ Your approach:
     
     response = learner.initiate_chat(
         teacher,
-        message=f"Teach me about '{topic}'. I'm at a {difficulty} level."
+        message=f"Teach me about '{topic}'. I'm at a {difficulty} level.",
+        max_turns=4,
     )
-    
-    response.process()
     print(response.summary)
     
     return response.summary
@@ -953,7 +955,8 @@ def api_integration_example():
     executor = UserProxyAgent(
         name="executor",
         human_input_mode="NEVER",
-        llm_config=False
+        llm_config=False,
+        code_execution_config=False,  # relays messages and runs registered tools only
     )
     
     # Register API functions
@@ -1099,9 +1102,9 @@ python recipe_name.py
 
 **Customisation Tips:**
 - Replace `LLMConfig.from_json(path=...)` with an inline `LLMConfig({...})` that reads the key from the environment
-- Adjust `max_rounds` and `max_turns` for faster/slower execution
+- Adjust `max_round` (group chats) and `max_turns` (two-agent and sequential chats) to bound runs
 - Modify `system_message` to change agent behaviour
 - Add logging with `logging.basicConfig(level=logging.DEBUG)`
 
-Each recipe is self-contained. Mix and match patterns to build your own systems!
+Each recipe is self-contained. For tests that do not call a model, see [TestAgent](/ag2-guide/classic/ag2_classic_production_guide/#test-without-a-model).
 

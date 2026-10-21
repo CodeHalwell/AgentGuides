@@ -3,6 +3,9 @@ title: "PydanticAI: Testing with TestModel, FunctionModel & Overrides"
 description: "Deterministic testing of PydanticAI agents using TestModel, FunctionModel, capture_run_messages, agent.override(), and pytest fixtures."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Testing"
+  order: 10
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
@@ -160,7 +163,7 @@ asyncio.run(test_streaming())
 
 ### Streaming tool calls with `DeltaToolCalls`
 
-To simulate a streaming model that emits a tool call then returns text, use `DeltaToolCalls` — a `dict[int, DeltaToolCall]` keyed by a per-call index (verified in `models/function.py` source):
+To simulate a streaming model that emits a tool call then returns text, use `DeltaToolCalls` — a `dict[int, DeltaToolCall]` keyed by a per-call index:
 
 ```python
 import asyncio
@@ -224,7 +227,7 @@ async def test_stream():
 asyncio.run(test_stream())
 ```
 
-`AgentInfo` fields available inside any function/stream function (verified `models/function.py`):
+`AgentInfo` fields available inside any function/stream function:
 
 | Field | Type | Description |
 |---|---|---|

@@ -107,7 +107,7 @@ These are the values in the installed source. Several older pages and blog posts
 | Default `recursion_limit` | **10007** super-steps (override with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable, or per run with `config={"recursion_limit": 25}`). Older releases used 25. Set it explicitly for agent loops: the default is not a useful guard against a runaway loop. |
 | Default `durability` | `"async"`. Passed to `invoke`/`stream`/`ainvoke`/`astream`, not to `compile()`. Options: `"sync"`, `"async"`, `"exit"`. It has no effect without a checkpointer. |
 | Stream modes | Seven typed values in `StreamMode`: `values`, `updates`, `checkpoints`, `tasks`, `debug`, `messages`, `custom`. `"tools"` is also accepted at runtime but is not in the `Literal`. |
-| `invoke` default `stream_mode` | `"values"` (returns the final state). |
+| Default `stream_mode` | `invoke` uses `"values"` (returns the final state); `stream` uses the graph's own default, `"updates"`. |
 | Node timeouts | `add_node(..., timeout=...)` and `TimeoutPolicy` work on **async** nodes only. A sync node with a timeout is accepted by `add_node` and rejected by `compile()` with `ValueError`. |
 | `ToolNode` error handling | Default catches only argument-validation errors (`ToolInvocationError`) and returns them to the model; other exceptions propagate. Pass `handle_tool_errors=True` to catch everything. |
 | `interrupt()` without a checkpointer | `invoke` returns with an `__interrupt__` key, but the run cannot be resumed. Compile with a checkpointer and pass a `thread_id`. |

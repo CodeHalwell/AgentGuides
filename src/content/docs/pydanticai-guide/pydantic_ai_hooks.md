@@ -3,6 +3,9 @@ title: "PydanticAI: Hooks — Lifecycle Callbacks"
 description: "Decorator-based hook registration for agent run lifecycle, model requests, tool calls, and output validation using the Hooks capability."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Hooks"
+  order: 9
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.capabilities.hooks`.

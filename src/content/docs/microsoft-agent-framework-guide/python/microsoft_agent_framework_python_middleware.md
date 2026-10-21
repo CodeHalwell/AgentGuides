@@ -601,7 +601,7 @@ class AgentStreamingInstrumentor(AgentMiddleware):
                     "agent": context.agent.name,
                     "elapsed_ms": round(elapsed_ms, 1),
                     "output_words": word_count,
-                    "finish_reasons": response.finish_reasons,
+                    "finish_reason": response.finish_reason,
                 },
             )
             return response

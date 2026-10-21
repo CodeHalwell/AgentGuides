@@ -20,7 +20,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   </Card>
   <Card title="Version" icon="information">
     **pydantic-ai %%version=pydantic-ai%%** · Python 3.11+
-    _Every page in this guide is verified against this release (checked %%versions-checked%%)._
+    _Pages are checked against this release (%%versions-checked%%)._
   </Card>
   <Card title="Best for" icon="puzzle">
     Typed APIs, structured output, validated data pipelines, evals-driven agents.
@@ -28,85 +28,66 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  Coming from Pydantic/FastAPI? Skim **Philosophy & core concepts** then jump to **Structured output**. New to agents? Follow Zero → Hero.
+  Coming from Pydantic or FastAPI? Skim the **core concepts**, then jump to **output types**. New to agents? Follow Zero → Hero in order.
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Philosophy & core concepts" href="./pydantic_ai_comprehensive_guide/#philosophy--core-concepts" description="Why type safety, design principles · 10 min" />
-  <LinkCard title="2 · Installation & setup" href="./pydantic_ai_comprehensive_guide/#installation--setup" description="Install, first agent, LLM config · 15 min" />
-  <LinkCard title="3 · Core fundamentals" href="./pydantic_ai_comprehensive_guide/#core-fundamentals" description="Agent, Model, RunContext, tools · 20 min" />
-  <LinkCard title="4 · Your first agent" href="./pydantic_ai_comprehensive_guide/#simple-agents" description="Query/response, streaming, async · 20 min" />
-  <LinkCard title="5 · Type safety & validation" href="./pydantic_ai_comprehensive_guide/#type-safety--validation" description="Pydantic models for everything · 15 min" />
-  <LinkCard title="6 · Output types & validators" href="./pydantic_ai_output_types/" description="ToolOutput/NativeOutput/PromptedOutput/TextOutput/StructuredDict · 15 min" />
-  <LinkCard title="7 · Tools & function calling" href="./pydantic_ai_comprehensive_guide/#tools--function-calling" description="@agent.tool decorator, validation · 20 min" />
-  <LinkCard title="8 · Toolsets" href="./pydantic_ai_toolsets/" description="FunctionToolset, Prefixed, Filtered, Approval, Deferred · 15 min" />
-  <LinkCard title="9 · Built-in tools" href="./pydantic_ai_builtin_tools/" description="WebSearch, WebFetch, CodeExec, ImageGeneration, Advisor · 10 min" />
-  <LinkCard title="10 · Dependency injection" href="./pydantic_ai_comprehensive_guide/#dependency-injection" description="FastAPI-style deps, testing, mocking · 15 min" />
-  <LinkCard title="11 · Model providers & fallback" href="./pydantic_ai_model_providers/" description="Every provider prefix, FallbackModel, gateway · 20 min" />
-  <LinkCard title="12 · Message history & multi-turn" href="./pydantic_ai_message_history/" description="ModelMessagesTypeAdapter, HistoryProcessor · 15 min" />
-  <LinkCard title="13 · Streaming" href="./pydantic_ai_streaming/" description="run_stream, AgentStream, iter, events · 20 min" />
-  <LinkCard title="14 · Testing" href="./pydantic_ai_testing/" description="TestModel, FunctionModel, override, capture · 20 min" />
-  <LinkCard title="15 · Graph support" href="./pydantic_ai_graph_support/" description="Typed graphs with pydantic_graph · 25 min" />
-  <LinkCard title="16 · Durable execution" href="./pydantic_ai_durable_execution/" description="Temporal, DBOS, Prefect · 25 min" />
-  <LinkCard title="17 · Evals" href="./pydantic_ai_evals/" description="LLM-as-judge, regression testing · 20 min" />
-  <LinkCard title="18 · Production" href="./pydantic_ai_production_guide/" description="Deployment, observability, cost · 30 min" />
-  <LinkCard title="19 · Class & API reference" href="./pydantic_ai_comprehensive_guide/#class--api-reference" description="Agents, models, tools, streaming, capabilities, durable execution, testing, security & more · 60 min" />
+  <LinkCard title="1 · Core concepts" href="./pydantic_ai_comprehensive_guide/#core-concepts" description="What PydanticAI is for and how it is put together" />
+  <LinkCard title="2 · Installation & setup" href="./pydantic_ai_comprehensive_guide/#installation-and-setup" description="Install, API keys, first agent" />
+  <LinkCard title="3 · Core fundamentals" href="./pydantic_ai_comprehensive_guide/#core-fundamentals" description="Agent, RunContext, ModelRetry, tools, models" />
+  <LinkCard title="4 · Your first agent" href="./pydantic_ai_comprehensive_guide/#simple-agents" description="Running, instructions, streaming, validation" />
+  <LinkCard title="5 · Type safety & validation" href="./pydantic_ai_comprehensive_guide/#type-safety-and-validation" description="Pydantic models and typed dependencies" />
+  <LinkCard title="6 · Output types & validators" href="./pydantic_ai_output_types/" description="ToolOutput, NativeOutput, PromptedOutput, TextOutput, StructuredDict" />
+  <LinkCard title="7 · Tools & function calling" href="./pydantic_ai_comprehensive_guide/#tools-and-function-calling" description="@agent.tool, prepare, errors in tools" />
+  <LinkCard title="8 · Toolsets" href="./pydantic_ai_toolsets/" description="Combine, filter, prefix, approve and defer tools" />
+  <LinkCard title="9 · Built-in tools" href="./pydantic_ai_builtin_tools/" description="Provider-native search, fetch, code execution, images" />
+  <LinkCard title="10 · Dependency injection" href="./pydantic_ai_comprehensive_guide/#dependency-injection" description="deps_type, RunContext, per-run state" />
+  <LinkCard title="11 · Model providers & fallback" href="./pydantic_ai_model_providers/" description="Provider prefixes, settings, FallbackModel, gateway" />
+  <LinkCard title="12 · Message history & multi-turn" href="./pydantic_ai_message_history/" description="Storing, replaying and trimming conversations" />
+  <LinkCard title="13 · Streaming" href="./pydantic_ai_streaming/" description="run_stream, run_stream_events, iter" />
+  <LinkCard title="14 · Testing" href="./pydantic_ai_testing/" description="TestModel, FunctionModel, override, capture" />
+  <LinkCard title="15 · Graph support" href="./pydantic_ai_graph_support/" description="Typed multi-step workflows with pydantic_graph" />
+  <LinkCard title="16 · Durable execution" href="./pydantic_ai_durable_execution/" description="Temporal, DBOS and Prefect" />
+  <LinkCard title="17 · Evals" href="./pydantic_ai_evals/" description="Datasets, evaluators, regression checks" />
+  <LinkCard title="18 · Production" href="./pydantic_ai_production_guide/" description="Observability, limits, retries, concurrency, safety, CI" />
+  <LinkCard title="19 · API map" href="./pydantic_ai_comprehensive_guide/#api-map" description="Every public area of the API and the page that covers it" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="Agent primitive" href="./pydantic_ai_comprehensive_guide/#core-fundamentals" />
+  <LinkCard title="Agent reference" href="./pydantic_ai_comprehensive_guide/#agent-reference" />
   <LinkCard title="Output types" href="./pydantic_ai_output_types/" />
-  <LinkCard title="Tools (typed)" href="./pydantic_ai_comprehensive_guide/#tools--function-calling" />
   <LinkCard title="Toolsets" href="./pydantic_ai_toolsets/" />
   <LinkCard title="Built-in tools" href="./pydantic_ai_builtin_tools/" />
-  <LinkCard title="Dependency injection" href="./pydantic_ai_comprehensive_guide/#dependency-injection" />
   <LinkCard title="Model providers & fallback" href="./pydantic_ai_model_providers/" />
   <LinkCard title="Message history" href="./pydantic_ai_message_history/" />
   <LinkCard title="Streaming" href="./pydantic_ai_streaming/" />
+  <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
+  <LinkCard title="Hooks (lifecycle callbacks)" href="./pydantic_ai_hooks/" />
   <LinkCard title="Testing" href="./pydantic_ai_testing/" />
+  <LinkCard title="Error handling" href="./pydantic_ai_advanced_error_testing/" />
+  <LinkCard title="Concurrency limiting" href="./pydantic_ai_concurrency/" />
+  <LinkCard title="Embeddings" href="./pydantic_ai_embeddings/" />
+  <LinkCard title="Direct API (no agent)" href="./pydantic_ai_direct_api/" />
   <LinkCard title="Graph support" href="./pydantic_ai_graph_support/" />
   <LinkCard title="Durable execution" href="./pydantic_ai_durable_execution/" />
   <LinkCard title="Evals" href="./pydantic_ai_evals/" />
   <LinkCard title="Integrations (MCP, A2A, UI)" href="./pydantic_ai_integrations/" />
   <LinkCard title="Advanced patterns" href="./pydantic_ai_advanced_patterns/" />
-  <LinkCard title="Error handling & testing" href="./pydantic_ai_advanced_error_testing/" />
-  <LinkCard title="Hooks (lifecycle callbacks)" href="./pydantic_ai_hooks/" />
-  <LinkCard title="Concurrency limiting" href="./pydantic_ai_concurrency/" />
-  <LinkCard title="Embeddings" href="./pydantic_ai_embeddings/" />
-  <LinkCard title="Streaming server" href="./pydantic_ai_streaming_server_fastapi/" />
-  <LinkCard title="Class & API reference" href="./pydantic_ai_comprehensive_guide/#class--api-reference" />
+  <LinkCard title="Production" href="./pydantic_ai_production_guide/" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./pydantic_ai_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Output types & validators" href="./pydantic_ai_output_types/" description="ToolOutput / NativeOutput / PromptedOutput / TextOutput / StructuredDict." />
-  <LinkCard title="Message history & multi-turn" href="./pydantic_ai_message_history/" description="ModelMessagesTypeAdapter, HistoryProcessor, capture_run_messages." />
-  <LinkCard title="Streaming" href="./pydantic_ai_streaming/" description="run_stream, run_stream_events, iter, AgentStream." />
-  <LinkCard title="Testing" href="./pydantic_ai_testing/" description="TestModel, FunctionModel, agent.override()." />
-  <LinkCard title="Model providers & fallback" href="./pydantic_ai_model_providers/" description="Every provider prefix, FallbackModel, gateway routing." />
-  <LinkCard title="Toolsets" href="./pydantic_ai_toolsets/" description="FunctionToolset, Prefixed, Filtered, Approval, Deferred, External." />
-  <LinkCard title="Built-in tools" href="./pydantic_ai_builtin_tools/" description="WebSearch, WebFetch, CodeExecution, ImageGeneration, FileSearch, MCPServer, XSearch." />
-  <LinkCard title="Class & API reference" href="./pydantic_ai_comprehensive_guide/#class--api-reference" description="Consolidated reference to pydantic_ai, pydantic_graph and pydantic_evals classes and functions, grouped by topic." />
+  <LinkCard title="Comprehensive guide" href="./pydantic_ai_comprehensive_guide/" description="Tutorial, Agent reference and API map on one page." />
   <LinkCard title="Upgrading from V1" href="./pydantic_ai_comprehensive_guide/#upgrading-from-v1" description="The V2 breaking changes most likely to affect older code, old → new." />
-  <LinkCard title="Advanced patterns" href="./pydantic_ai_advanced_patterns/" />
-  <LinkCard title="Error handling & testing" href="./pydantic_ai_advanced_error_testing/" />
-  <LinkCard title="Hooks" href="./pydantic_ai_hooks/" description="Lifecycle callbacks: Hooks capability." />
-  <LinkCard title="Concurrency" href="./pydantic_ai_concurrency/" description="ConcurrencyLimiter, backpressure, distributed limiting." />
-  <LinkCard title="Embeddings" href="./pydantic_ai_embeddings/" description="Embedder, EmbeddingModel, similarity search." />
-  <LinkCard title="Durable execution" href="./pydantic_ai_durable_execution/" description="Temporal, DBOS and Prefect via durability capabilities." />
-  <LinkCard title="Graph support" href="./pydantic_ai_graph_support/" description="pydantic_graph: GraphBuilder, decisions, map/join, BaseNode." />
-  <LinkCard title="Integrations" href="./pydantic_ai_integrations/" description="MCP, A2A, AG-UI / Vercel AI adapters, web UI." />
-  <LinkCard title="Evals" href="./pydantic_ai_evals/" description="pydantic_evals datasets, evaluators, online evaluation." />
-  <LinkCard title="Recipes" href="./pydantic_ai_recipes/" />
-  <LinkCard title="Diagrams" href="./pydantic_ai_diagrams/" />
-  <LinkCard title="Production guide" href="./pydantic_ai_production_guide/" />
-  <LinkCard title="Streaming server (FastAPI)" href="./pydantic_ai_streaming_server_fastapi/" />
+  <LinkCard title="Direct API" href="./pydantic_ai_direct_api/" description="model_request and friends: one model call without an Agent." />
+  <LinkCard title="Recipes" href="./pydantic_ai_recipes/" description="Worked examples: support bots, RAG, research agents, batch jobs." />
+  <LinkCard title="Diagrams" href="./pydantic_ai_diagrams/" description="Run loop, tool calls, durability and deployment, drawn out." />
 </CardGrid>
 
 ## What's new
@@ -116,7 +97,7 @@ Condensed version history. The upstream [changelog](https://pydantic.dev/docs/ai
 | Version | Date | Highlights |
 |---------|------|-----------|
 | 1.0.0 | Sep 2025 | API stability commitment for the 1.x line. |
-| 1.84–1.88 | Apr 2026 | Embeddings API, AG-UI adapter, `ApprovalRequiredToolset`, `DeferredLoadingToolset`; capabilities system introduced (`Hooks`, `AbstractCapability`, `ModelProfile`). |
+| 1.84–1.88 | Apr 2026 | Embeddings API, AG-UI adapter, `ApprovalRequiredToolset`, `DeferredLoadingToolset`; capabilities system introduced (`Hooks`, `AbstractCapability`). |
 | 1.89–1.99 | May 2026 | `DeferredToolCalls` → `DeferredToolRequests`; `AgentRun` exported; `ConcurrencyLimiter`; `pydantic_ai.ui.ag_ui`; `common_tools`. |
 | 1.100–1.107 | May–Jun 2026 | Most V2 removals announced via deprecation warnings; `MCPToolset`; native tool suite; `GraphBuilder`; agent graph nodes public. |
 | **2.0.0** | **Jun 2026** | **Major version.** `openai:` means the Responses API; `builtin_tools=` → `capabilities=[NativeTool(...)]`; `MCPServer*` → `MCPToolset`; `result.usage` is a property; `run_stream_events()` is a context manager; default `end_strategy='graceful'`; `ModelProfile` is a `TypedDict`; slimmer default extras; graph persistence removed. See [Upgrading from V1](./pydantic_ai_comprehensive_guide/#upgrading-from-v1). |
@@ -141,7 +122,7 @@ result = agent.run_sync("What is 15 + 27?")
 print(result.output)  # Answer(value=42, reasoning='...')
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#philosophy--core-concepts)**
+Ready? **[Start Zero → Hero step 1 →](./pydantic_ai_comprehensive_guide/#core-concepts)**
 
 ---
 
@@ -149,7 +130,7 @@ Ready? **[Start Zero → Hero Step 1 →](./pydantic_ai_comprehensive_guide/#phi
 
 | Date | Summary |
 |------|---------|
-| 2026-10-21 | Whole guide re-verified against pydantic-ai %%version=pydantic-ai%%; V1-era examples migrated to the V2 API; the durable execution, graph, evals and integrations pages rewritten around the real `durable_exec`, `pydantic_graph`, `pydantic_evals`, MCP and A2A APIs; the standalone per-class pages folded into the topic pages and the comprehensive guide's class reference. |
+| 2026-10-21 | Comprehensive guide rewritten (class reference replaced by an Agent reference and API map); production page rewritten around PydanticAI's own production features; toolsets page de-duplicated; evals and integrations pages moved to undated URLs. Whole guide re-verified against pydantic-ai %%version=pydantic-ai%%; V1-era examples migrated to the V2 API; the durable execution, graph, evals and integrations pages rewritten around the real `durable_exec`, `pydantic_graph`, `pydantic_evals`, MCP and A2A APIs; the standalone per-class pages folded into the topic pages and the comprehensive guide's class reference. |
 | 2026-08-21 | Class & API Reference consolidated into the comprehensive guide. |
 | 2026-04 | Index redesigned with Zero → Hero and Jump-to-topic grids. |
 | 2025-11 | Initial guide (1.x). |

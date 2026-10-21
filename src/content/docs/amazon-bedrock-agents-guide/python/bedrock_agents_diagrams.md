@@ -1,766 +1,204 @@
 ---
-title: "Amazon Bedrock Agents: Architecture Diagrams and Visual References"
-description: "Comprehensive visual representations of Bedrock Agents architecture, data flows, and deployment patterns."
+title: "Amazon Bedrock Agents: Architecture Diagrams"
+description: "Diagrams of AgentCore Runtime, the managed harness, Memory, Gateway and Identity, Strands multi-agent patterns, and Bedrock Agents Classic orchestration, action groups and sessions."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "Diagrams"
+  order: 11
 ---
 
-Comprehensive visual representations of Bedrock Agents architecture, data flows, and deployment patterns.
+How the pieces fit together. Each diagram links to the page that covers it in detail.
 
-These diagrams describe **Bedrock Agents (Agents Classic)**, which has been in maintenance mode — closed to new customers — since 30 July 2026. For the AgentCore architecture that AWS recommends for new agents, see the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#agentcore-architecture).
+## AgentCore
 
----
+### Runtime request flow
 
-## 1. Core Agent Architecture
+One `runtimeSessionId` maps to one microVM. Reusing the ID returns to the same microVM and its in-process state until the idle timeout or maximum lifetime ends the session ([AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#secure-sandbox-runtime)).
 
-### Simple Agent Request Flow
-
-```
-User Input
-    ↓
-┌─────────────────────────────┐
-│  Bedrock Agent Runtime      │
-│  - Parse Input              │
-│  - Load Context             │
-│  - Initialize State         │
-└────────────┬────────────────┘
-             ↓
-┌─────────────────────────────┐
-│  Foundation Model           │
-│  - Claude Sonnet 5.5       │
-│  - Reasoning Phase          │
-│  - Action Selection         │
-│  - Code Interpretation      │
-└────────────┬────────────────┘
-             ↓
-       ┌─────┴─────┐
-       │           │
-       ↓           ↓
-  ┌────────┐  ┌────────┐
-  │ Action │  │Knowledge
-  │ Groups │  │ Bases  │
-  └────┬───┘  └────┬───┘
-       │           │
-       └─────┬─────┘
-             ↓
-┌─────────────────────────────┐
-│  Response Generation        │
-│  - Format Output            │
-│  - Apply Guardrails         │
-│  - Generate Citations       │
-└────────────┬────────────────┘
-             ↓
-        User Response
-```
-
-### Multi-Layer Bedrock Architecture
-
-```
+```text
+ caller (app, other agent, MCP/A2A client)
+   │  InvokeAgentRuntime(arn, qualifier, runtimeSessionId, payload)
+   │  auth: SigV4 (IAM)  or  Bearer JWT (customJWTAuthorizer)
+   ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                    Presentation Layer                         │
-│  Web UI | Mobile App | Chat Interface | API Gateway           │
-└──────────────────────┬───────────────────────────────────────┘
-                       │
-┌──────────────────────▼───────────────────────────────────────┐
-│            Agent Orchestration & Routing Layer (Bedrock)     │
-│  - Request Reception        - Session Management             │
-│  - Agent Selection          - State Tracking                 │
-│  - Multi-Agent Coordination - Error Handling                 │
-│  - Code Interpretation      - Agent Memory                   │
-└──────────────────────┬───────────────────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-        ↓              ↓              ↓
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│   Supervisor │ │ Specialist   │ │ Specialist   │
-│    Agent     │ │   Agent 1    │ │   Agent 2    │
-│              │ │ (Support)    │ │ (Billing)    │
-└──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-       │                │                │
-       └────────────────┼────────────────┘
-                        │
-       ┌────────────────┼────────────────┐
-       │                │                │
-       ↓                ↓                ↓
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  Foundation  │ │  Action      │ │  Knowledge   │
-│  Models      │ │  Groups      │ │  Bases       │
-│              │ │              │ │              │
-│ Claude 5.5   │ │ Lambda Funcs │ │ OpenSearch   │
-│ Llama        │ │ APIs         │ │ Pinecone     │
-│ Nova         │ │ Step Funcs   │ │ Kendra       │
-└──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-       │                │                │
-       └────────────────┼────────────────┘
-                        │
-       ┌────────────────┼────────────────┐
-       │                │                │
-       ↓                ↓                ↓
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  Guardrails  │ │  Prompt      │ │  Memory &    │
-│  - Content   │ │  Flows       │ │  State       │
-│  - PII       │ │              │ │              │
-│  - Topics    │ │              │ │  DynamoDB    │
-└──────────────┘ └──────────────┘ └──────────────┘
-```
-
----
-
-## 2. Multi-Agent Collaboration (MAS) Architecture
-
-### Supervisor-Specialist Pattern
-
-```
-                    ┌────────────────────┐
-                    │  User Query        │
-                    └─────────┬──────────┘
-                              │
-                    ┌─────────▼──────────┐
-                    │  Supervisor Agent  │
-                    │  - Intent Analysis │
-                    │  - Task Planning   │
-                    │  - Routing Logic   │
-                    │  (SUPERVISOR)      │
-                    └─────────┬──────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-        ↓                     ↓                     ↓
-    ┌────────────┐    ┌─────────────┐    ┌──────────────┐
-    │  Support   │    │   Billing   │    │   Technical  │
-    │  Agent     │    │   Agent     │    │   Agent      │
-    │            │    │             │    │              │
-    │ • Tickets  │    │ • Invoices  │    │ • Bugs       │
-    │ • Issues   │    │ • Payments  │    │ • Features   │
-    │ • FAQs     │    │ • Refunds   │    │ • API Status │
-    └────────────┘    └─────────────┘    └──────────────┘
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
-                              │
-                    ┌─────────▼──────────┐
-                    │  Response          │
-                    │  Consolidation     │
-                    │  - Merge Responses │
-                    │  - Format Output   │
-                    │  - Citations       │
-                    └─────────┬──────────┘
-                              │
-                    ┌─────────▼──────────┐
-                    │  User Response     │
-                    └────────────────────┘
-```
-
-### Task Decomposition Flow
-
-```
-User Task: "I want to know my account balance and update my contact information"
-
-          ┌──────────────────────────────────────┐
-          │  Supervisor Agent                    │
-          │  Analyzes: 2 distinct tasks          │
-          └──────────────────────┬───────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │                         │
-          Task 1: Get Account Balance    Task 2: Update Contact Info
-                    │                         │
-                    ↓                         ↓
-        ┌──────────────────────┐   ┌──────────────────────┐
-        │  Billing Agent       │   │  Support Agent       │
-        │  Action: GetBalance  │   │  Action: UpdateInfo  │
-        └──────────┬───────────┘   └──────────┬───────────┘
-                   │                          │
-                   ↓                          ↓
-        ┌──────────────────────┐   ┌──────────────────────┐
-        │ DynamoDB Query       │   │ Lambda Function      │
-        │ Result: $5,000.00    │   │ Result: Updated ✓    │
-        └──────────┬───────────┘   └──────────┬───────────┘
-                   │                          │
-                   └────────────┬─────────────┘
-                                │
-                    ┌───────────▼────────────┐
-                    │  Consolidate Results   │
-                    │  1. Account Balance    │
-                    │     $5,000.00          │
-                    │  2. Contact Info      │
-                    │     Updated ✓          │
-                    └───────────┬────────────┘
-                                │
-                         Final Response
-```
-
----
-
-## 3. Action Group Execution Patterns
-
-### Lambda Action Group Flow
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Agent Processing                          │
-│  Model Decides: "I need to get customer information"         │
-└──────────────────────┬───────────────────────────────────────┘
-                       │
-┌──────────────────────▼───────────────────────────────────────┐
-│            Action Group Selection                            │
-│  Action Group: "GetCustomerData"                             │
-│  Function: "GetCustomer"                                     │
-│  Parameters: {customerId: "CUST-12345"}                      │
-└──────────────────────┬───────────────────────────────────────┘
-                       │
-┌──────────────────────▼───────────────────────────────────────┐
-│       Lambda Function Invocation                             │
-│  Function: bedrock-get-customer                              │
-│  Runtime: Python 3.11                                        │
-└──────────────────────┬───────────────────────────────────────┘
-                       │
-       ┌───────────────┼───────────────┐
-       │               │               │
-       ↓               ↓               ↓
-   ┌────────┐   ┌──────────┐   ┌──────────┐
-   │Parse   │   │Query     │   │Format    │
-   │Params  │   │Database  │   │Response  │
-   └────┬───┘   └────┬─────┘   └────┬─────┘
-        │            │              │
-        └────────────┼──────────────┘
-                     │
-         ┌───────────▼────────────┐
-         │ Return to Agent        │
-         │ {                      │
-         │   customerId: "C12345" │
-         │   name: "John Doe"     │
-         │   email: "john@ex.com" │
-         │ }                      │
-         └───────────┬────────────┘
-                     │
-        Agent Continues Reasoning
-```
-
-### API Action Group Flow
-
-Bedrock Agents has no built-in HTTP executor: the HTTP call below runs inside the action group's Lambda function or, with return of control (`RETURN_CONTROL`), in your application, which sends the result back on the next `invoke_agent` call.
-
-```
-Agent Decision: "I need to check external system status"
-
-       ┌──────────────────────────────────────┐
-       │  Select API Action Group             │
-       │  API Endpoint: https://api.ext.com   │
-       └──────────────────┬───────────────────┘
-                          │
-       ┌──────────────────▼───────────────────┐
-       │  Construct HTTP Request              │
-       │  Method: GET                         │
-       │  Path: /status/system                │
-       │  Headers: {Auth: Bearer TOKEN}       │
-       └──────────────────┬───────────────────┘
-                          │
-       ┌──────────────────▼───────────────────┐
-       │  Execute HTTP Call                   │
-       │  With Retry Logic                    │
-       │  Timeout: 30 seconds                 │
-       └──────────────────┬───────────────────┘
-                          │
-         ┌────────────────┴────────────────┐
-         │                                 │
-    Success (200)                     Error/Retry
-         │                                 │
-         ↓                                 ↓
-   ┌──────────────┐            ┌──────────────────┐
-   │Parse Response│            │Retry with Backoff│
-   │  {           │            │Max 3 attempts    │
-   │  status:     │            └──────────┬───────┘
-   │  "HEALTHY"   │                       │
-   │  }           │            ┌──────────▼───────┐
-   └──────┬───────┘            │Success/Failure   │
-          │                    └──────────┬───────┘
-          └────────────┬─────────────────┘
-                       │
-              Return to Agent
-```
-
----
-
-## 4. Knowledge Base Integration Pattern
-
-### RAG (Retrieval-Augmented Generation) Flow
-
-```
-User: "What is our refund policy for damaged items?"
-
-       ┌────────────────────────────┐
-       │  Agent Input Processing    │
-       │  - Analyze Question        │
-       │  - Extract Intent          │
-       │  - Generate Query Vector   │
-       └────────────────┬───────────┘
-                        │
-       ┌────────────────▼───────────┐
-       │  Query Knowledge Base      │
-       │  - Embedding Generation    │
-       │  - Vector Search           │
-       │  - Semantic Matching       │
-       └────────────────┬───────────┘
-                        │
-       ┌────────────────▼──────────────────┐
-       │  Retrieved Documents               │
-       │  - Return Policy (Section 3.2)    │
-       │  - Damage Claims Process (5.1)    │
-       │  - Refund Timeline (4.3)          │
-       │  Relevance Score: 0.92, 0.87, 0.85│
-       └────────────────┬──────────────────┘
-                        │
-       ┌────────────────▼──────────────────┐
-       │  Augmented Context for Model      │
-       │  User Query + Retrieved Context   │
-       └────────────────┬──────────────────┘
-                        │
-       ┌────────────────▼──────────────────┐
-       │  Model Generation                 │
-       │  - Synthesise Answer             │
-       │  - Reference Sources             │
-       │  - Generate Citations            │
-       └────────────────┬──────────────────┘
-                        │
-       Final Response with:
-       - Answer
-       - Source References
-       - Confidence Score
-```
-
-### Knowledge Base Vector Storage
-
-```
-┌─────────────────────────────────────────────────────────┐
-│              Data Ingestion Pipeline                    │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-       ┌───────────────┴───────────────┐
-       │                               │
-       ↓                               ↓
-┌──────────────┐            ┌─────────────────┐
-│  Document    │            │  File Type      │
-│  Sources     │            │  - PDF          │
-│              │            │  - DOCX         │
-│ - S3 Bucket  │            │  - TXT          │
-│ - RDS        │            │  - JSON         │
-│ - Web URLs   │            │  - Websites     │
-└──────┬───────┘            └────────┬────────┘
-       │                            │
-       └────────────┬───────────────┘
-                    │
-       ┌────────────▼──────────────┐
-       │  Document Processing     │
-       │  - Text Extraction       │
-       │  - Preprocessing         │
-       │  - Cleaning              │
-       └────────────┬──────────────┘
-                    │
-       ┌────────────▼──────────────────────┐
-       │  Chunking Strategy                │
-       │  - Fixed Size (1000 tokens)      │
-       │  - Semantic (Sentence Boundary)  │
-       │  - Hierarchical (Section-aware)  │
-       └────────────┬───────────────────────┘
-                    │
-       ┌────────────▼──────────────┐
-       │  Embedding Generation    │
-       │  Model: Titan Embed      │
-       │  Dimension: 1536         │
-       └────────────┬──────────────┘
-                    │
-       ┌────────────▼──────────────┐
-       │  Vector Storage          │
-       │  OpenSearch Serverless   │
-       │  Vector Index            │
-       │  Metadata Attached       │
-       └────────────┬──────────────┘
-                    │
-          Ready for Retrieval
-```
-
----
-
-## 5. Guardrails Architecture
-
-### Multi-Layer Safety Architecture
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                 User Input                               │
-└────────────────────┬─────────────────────────────────────┘
-                     │
-┌────────────────────▼─────────────────────────────────────┐
-│  Layer 1: Input Guardrails                              │
-│  ✓ Content Filtering (Hate, Violence, Explicit)        │
-│  ✓ PII Detection (Names, Emails, Phone Numbers)        │
-│  ✓ Denied Topics Detection                             │
-│  ✓ Prompt Injection Prevention                         │
-└────────────────────┬─────────────────────────────────────┘
-                     │
-         ┌───────────┴──────────┐
-         │                      │
-    Block (Deny)         Continue
-         │                      │
-         ↓                      ↓
-    Return Error         Foundation Model
-                         Processing
-                              │
-                    ┌─────────▼─────────┐
-                    │ Generate Response │
-                    └─────────┬─────────┘
-                              │
-        ┌─────────────────────▼─────────────────────┐
-        │  Layer 2: Output Guardrails              │
-        │  ✓ Content Validation                   │
-        │  ✓ PII Redaction                        │
-        │  ✓ Denied Topic Filtering               │
-        │  ✓ Hallucination Detection              │
-        └─────────────────────┬─────────────────────┘
-                              │
-              ┌───────────────┴──────────────┐
-              │                              │
-         Blocked/Modified              Approved
-              │                              │
-              ↓                              ↓
-         Alert Log              Return to User
-```
-
-### Content Policy Categories
-
-```
-Bedrock Guardrails Coverage Matrix
-
-┌─────────────────┬──────────┬──────────┬──────────┬──────────┐
-│ Category        │ Input    │ Output   │ Severity │ Action   │
-├─────────────────┼──────────┼──────────┼──────────┼──────────┤
-│ Hate Speech     │ HIGH     │ HIGH     │ Critical │ BLOCK    │
-│ Violence        │ HIGH     │ HIGH     │ Critical │ BLOCK    │
-│ Sexual Content  │ HIGH     │ HIGH     │ Critical │ BLOCK    │
-│ Self-Harm       │ HIGH     │ HIGH     │ Critical │ BLOCK    │
-│ PII (Email)     │ MEDIUM   │ MEDIUM   │ High     │ ANON     │
-│ PII (Phone)     │ MEDIUM   │ MEDIUM   │ High     │ ANON     │
-│ PII (Name)      │ MEDIUM   │ MEDIUM   │ High     │ ANON     │
-│ Denied Topics   │ MEDIUM   │ MEDIUM   │ Medium   │ BLOCK    │
-│ Custom Keywords │ LOW      │ LOW      │ Custom   │ CUSTOM   │
-└─────────────────┴──────────┴──────────┴──────────┴──────────┘
-```
-
----
-
-## 6. Deployment Architecture Patterns
-
-### Single-Region Agent Deployment
-
-```
-┌────────────────────────────────────────────────────────┐
-│                    us-east-1 Region                    │
-├────────────────────────────────────────────────────────┤
-│                                                        │
-│  ┌──────────────────────────────────────┐             │
-│  │  Amazon Bedrock Agent                │             │
-│  │  - Agent ID: ag-12345                │             │
-│  │  - Foundation Model: Claude 5.5      │             │
-│  │  - Status: PREPARED                  │             │
-│  └──────────────────────────────────────┘             │
-│                                                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-│  │ Action   │  │Knowledge │  │Guardrails│            │
-│  │ Groups   │  │ Bases    │  │          │            │
-│  │          │  │          │  │          │            │
-│  │ Lambda   │  │OpenSearch│  │Content   │            │
-│  │ API      │  │Serverless│  │Filtering │            │
-│  └──────────┘  └──────────┘  └──────────┘            │
-│                                                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-│  │CloudWatch│  │CloudTrail│  │X-Ray     │            │
-│  │Logs      │  │Events    │  │Tracing   │            │
-│  └──────────┘  └──────────┘  └──────────┘            │
-│                                                        │
-│  ┌────────────────────────────────────┐              │
-│  │ IAM Roles & Policies                │              │
-│  │ - Agent Execution Role              │              │
-│  │ - Service Roles                     │              │
-│  └────────────────────────────────────┘              │
-│                                                        │
-└────────────────────────────────────────────────────────┘
-```
-
-### Multi-Region Agent Deployment
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 Global Agent Architecture                   │
-└──────────────┬──────────────────────────────┬───────────────┘
-               │                              │
-    ┌──────────▼──────────┐      ┌───────────▼────────────┐
-    │   us-east-1 Region  │      │  eu-west-1 Region     │
-    │                     │      │                        │
-    │ ┌────────────────┐  │      │ ┌────────────────┐    │
-    │ │Primary Agent   │  │      │ │Secondary Agent │    │
-    │ │(Active)        │  │      │ │(Standby)       │    │
-    │ │ID: ag-primary  │  │      │ │ID: ag-secondary    │
-    │ └────────────────┘  │      │ └────────────────┘    │
-    │                     │      │                        │
-    │ ┌────────────────┐  │      │ ┌────────────────┐    │
-    │ │Knowledge Base  │  │      │ │Knowledge Base  │    │
-    │ │(Replicated)    │  │      │ │(Replicated)    │    │
-    │ └────────────────┘  │      │ └────────────────┘    │
-    └──────────┬──────────┘      └──────────┬────────────┘
-               │                            │
-               └────────────┬───────────────┘
-                            │
-                ┌───────────▼──────────┐
-                │  Route 53 Failover   │
-                │  - Health Checks     │
-                │  - Automatic Routing │
-                │  - Latency Based     │
-                └──────────────────────┘
-```
-
----
-
-## 7. Prompt Flow Architecture
-
-### Complex Conditional Flow
-
-```
-Start User Input
-      │
-      ↓
-┌──────────────────────────────┐
-│ Classify Intent              │
-│ - Support Request            │
-│ - Sales Inquiry              │
-│ - Billing Question           │
-│ - Technical Issue            │
-└────────┬─────────────────────┘
-         │
-    ┌────┴──────────────────────────────────────┐
-    │                                           │
-    ↓                                           ↓
-┌──────────────────┐                ┌───────────────────┐
-│ Is Urgent?       │                │ Authentication    │
-│ Check Priority   │                │ Required?         │
-└─────┬────────────┘                └────────┬──────────┘
-      │                                      │
-  ┌───┴────┐                          ┌──────┴──────┐
-  │         │                          │             │
-  ↓         ↓                          ↓             ↓
-HIGH      NORMAL                    YES           NO
-  │         │                          │             │
-  ↓         ↓                          ↓             ↓
-Escalate  Route         ┌────────────────────┐  Direct
-Priority  Standard      │ Verify Identity    │  Routing
-Queue     Queue         │ - Check User DB    │
-                        │ - Verify Token     │
-                        └────────┬───────────┘
-                                 │
-                        ┌────────▼──────────┐
-                        │ Assign Agent      │
-                        │ Based on Capacity │
-                        └────────┬──────────┘
-                                 │
-                        ┌────────▼──────────┐
-                        │ Generate Response │
-                        │ - Process Request │
-                        │ - Format Output   │
-                        └────────┬──────────┘
-                                 │
-                              Response
-```
-
----
-
-## 8. State Management and Memory Architecture
-
-### Session State Management
-
-```
-┌─────────────────────────────────────────────────────┐
-│              Session Lifecycle                      │
-└──────────────────┬──────────────────────────────────┘
+│ AgentCore Runtime                                            │
+│   endpoint "prod" ──► v4        endpoint DEFAULT ──► latest  │
+│                                                              │
+│   ┌─ session microVM (one per runtimeSessionId) ───────────┐ │
+│   │  your code: BedrockAgentCoreApp on port 8080           │ │
+│   │    GET /ping          Healthy or HealthyBusy           │ │
+│   │    POST /invocations  @app.entrypoint(payload, context)│ │
+│   │  or an MCP server (/mcp) or A2A server (port 9000)     │ │
+│   └──────────────┬──────────────┬──────────────┬───────────┘ │
+└──────────────────┼──────────────┼──────────────┼─────────────┘
+                   ▼              ▼              ▼
+             Bedrock models   AgentCore      Gateway, Code
+             (InvokeModel)    Memory         Interpreter, Browser
                    │
-         ┌─────────▼─────────┐
-         │ Session Created   │
-         │ SessionID: s-xxxx │
-         └─────────┬─────────┘
-                   │
-    ┌──────────────┴──────────────┐
-    │ Store in DynamoDB           │
-    │ TTL: 24 hours               │
-    │ Attributes: {               │
-    │   sessionId                 │
-    │   userId                    │
-    │   conversationHistory       │
-    │   contextVariables          │
-    │   userPreferences           │
-    │   tempData                  │
-    │ }                           │
-    └──────────────┬──────────────┘
-                   │
-         ┌─────────▼──────────────┐
-         │ Agent Processing       │
-         │ - Read Context         │
-         │ - Process Request      │
-         │ - Update State         │
-         └─────────┬──────────────┘
-                   │
-    ┌──────────────┴──────────────┐
-    │ Persist Changes             │
-    │ - Append to History         │
-    │ - Update Variables          │
-    │ - Refresh TTL               │
-    └──────────────┬──────────────┘
-                   │
-         ┌─────────▼──────────────┐
-         │ Session Expiration     │
-         │ - Auto-cleanup         │
-         │ - Archive History      │
-         └───────────────────────┘
+                   └── spans, logs, metrics ──► CloudWatch (Observability)
 ```
 
-### Memory Architecture Layers
+### Harness or code-defined agent
 
-```
-┌────────────────────────────────────────────────────────┐
-│            Multi-Layer Memory System                   │
-├────────────────────────────────────────────────────────┤
-│                                                        │
-│  Layer 1: Short-Term Context                         │
-│  ┌──────────────────────────────────────────┐        │
-│  │ Current Request Context                  │        │
-│  │ - User Input                             │        │
-│  │ - Immediate Conversation History (5-10   │        │
-│  │   exchanges)                             │        │
-│  │ - Current State Variables                │        │
-│  │ Storage: Session Memory (In-Memory)      │        │
-│  └──────────────────────────────────────────┘        │
-│                                                        │
-│  Layer 2: Session Memory                             │
-│  ┌──────────────────────────────────────────┐        │
-│  │ Full Conversation in Current Session     │        │
-│  │ - All messages from session start        │        │
-│  │ - Action results                         │        │
-│  │ - Intermediate states                    │        │
-│  │ Storage: DynamoDB (24hr TTL)             │        │
-│  └──────────────────────────────────────────┘        │
-│                                                        │
-│  Layer 3: Long-Term User Memory                      │
-│  ┌──────────────────────────────────────────┐        │
-│  │ User Profile & Preferences               │        │
-│  │ - Past conversations (archived)          │        │
-│  │ - User preferences                       │        │
-│  │ - Account information                    │        │
-│  │ Storage: RDS/DynamoDB (Permanent)        │        │
-│  └──────────────────────────────────────────┘        │
-│                                                        │
-│  Layer 4: Knowledge Base Memory                      │
-│  ┌──────────────────────────────────────────┐        │
-│  │ Enterprise Knowledge & Context           │        │
-│  │ - Product documentation                  │        │
-│  │ - Historical patterns                    │        │
-│  │ - Best practices                         │        │
-│  │ Storage: OpenSearch, Vector DBs          │        │
-│  └──────────────────────────────────────────┘        │
-│                                                        │
-└────────────────────────────────────────────────────────┘
+```text
+                    ┌──────────────── AgentCore Runtime ─────────────────┐
+ InvokeHarness ───► │ managed harness                                    │
+  (messages,        │   harness.json: model, system prompt, tools,       │
+   per-call         │   skills, memory, limits, lifecycle hooks          │
+   overrides)       │   AWS runs the agent loop                          │
+                    │                                                    │
+ InvokeAgent   ───► │ code-defined agent                                 │
+  Runtime           │   your container or zip: Strands, LangGraph,       │
+  (payload)         │   CrewAI, OpenAI Agents SDK... you own the loop    │
+                    └────────────────────────────────────────────────────┘
+
+   agentcore create --defaults        ──► harness project
+   agentcore create --framework ...   ──► code project
+   agentcore export harness           ──► harness converted to Strands code
+   agentcore create --type import     ──► Agents Classic agent converted to code
 ```
 
----
+See [Managed harness](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#managed-harness).
 
-## 9. Integration Points Architecture
+### Memory
 
-### Comprehensive Integration Diagram
+Short-term memory is the raw event log. Long-term records are extracted from it asynchronously by the strategies you enable, and stored under namespaces scoped by actor (and optionally session).
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                      Bedrock Agent Hub                         │
-│                     (Central Orchestrator)                      │
-└──────────┬────────────────────────────────────────┬─────────────┘
-           │                                        │
-    ┌──────▼────────┐              ┌───────────────▼────────┐
-    │ AWS Services  │              │  External Integrations │
-    │               │              │                        │
-    ├─────────────┐ │         ┌────┴──────────────────┐   │
-    │ Lambda      │─┼─────────│ API Gateway           │   │
-    │             │ │         │ (Custom APIs)         │   │
-    ├─────────────┤ │         └───────────────────────┘   │
-    │ S3          │ │                                      │
-    │             │ │         ┌───────────────────────┐   │
-    ├─────────────┤ │────────│ Salesforce CRM        │   │
-    │ DynamoDB    │ │         │ (Customer Data)       │   │
-    │             │ │         └───────────────────────┘   │
-    ├─────────────┤ │                                      │
-    │ RDS         │ │         ┌───────────────────────┐   │
-    │             │ │────────│ Slack Integration     │   │
-    ├─────────────┤ │         │ (Notifications)       │   │
-    │ Step Funcs  │ │         └───────────────────────┘   │
-    │             │ │                                      │
-    ├─────────────┤ │         ┌───────────────────────┐   │
-    │ SNS/SQS     │ │────────│ ServiceNow ITSM       │   │
-    │             │ │         │ (Ticketing)           │   │
-    ├─────────────┤ │         └───────────────────────┘   │
-    │ EventBridge │ │                                      │
-    │             │ │         ┌───────────────────────┐   │
-    ├─────────────┤ │────────│ Datadog Monitoring    │   │
-    │ Secrets Mgr │ │         │ (Analytics)           │   │
-    │             │ │         └───────────────────────┘   │
-    ├─────────────┤ │                                      │
-    │ CloudWatch  │ │                                      │
-    │             │ │                                      │
-    └─────────────┘ │                                      │
-                    │                                      │
-    ┌───────────────▼─────────────────────────────────────┐
-    │  Knowledge Base Sources                            │
-    ├────────────────────────────────────────────────────┤
-    │ • S3 Documents        • Salesforce KB             │
-    │ • RDS Databases       • Confluence Wiki            │
-    │ • Web URLs            • SharePoint                 │
-    │ • OpenSearch          • Kendra                     │
-    └────────────────────────────────────────────────────┘
+```text
+ agent turn
+   │ create_event(memory_id, actor_id, session_id, messages)
+   ▼
+┌──────────────────────────┐   async extraction   ┌─────────────────────────────┐
+│ short-term: events       │ ───────────────────► │ long-term: memory records   │
+│ per actor + session      │   strategies:        │ /users/{actorId}/facts      │
+│ expire after N days      │   SEMANTIC           │ /users/{actorId}/...        │
+└──────────────────────────┘   USER_PREFERENCE    │ /summaries/{actorId}/{sid}  │
+   ▲  list_events             SUMMARIZATION       └──────────────┬──────────────┘
+   │  (recent turns)          EPISODIC                           │
+   │                                       retrieve_memories(namespace, query)
+   └──────────── agent context for next turn ◄───────────────────┘
 ```
 
----
+With Strands, `AgentCoreMemorySessionManager` makes these calls for you ([Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#agentcore-memory)).
 
-## 10. Monitoring and Observability Architecture
+### Gateway and Identity
 
-### Comprehensive Monitoring Stack
+```text
+                 inbound auth (JWT or IAM)
+ agent ──── MCP over HTTP ────► ┌──────────────────────────┐
+ (MCPClient(url=gatewayUrl))    │ AgentCore Gateway        │
+                                │  tools/list, tools/call  │
+                                │  semantic tool search    │
+                                │  optional Cedar policies │
+                                └───┬─────────┬─────────┬──┘
+                    outbound creds: │IAM role │ OAuth / │ API key
+                                    ▼         ▼         ▼
+                              Lambda fn   OpenAPI /   MCP server,
+                                          Smithy API  knowledge base
 
-```
-┌──────────────────────────────────────────────────────────┐
-│              Observability Stack                         │
-└─────────────────┬────────────────────────────────────────┘
-                  │
-        ┌─────────┼─────────┐
-        │         │         │
-        ↓         ↓         ↓
-   ┌─────────┐ ┌────────┐ ┌────────┐
-   │ Metrics │ │  Logs  │ │ Traces │
-   └────┬────┘ └────┬───┘ └────┬───┘
-        │           │          │
-        ↓           ↓          ↓
-   ┌──────────────────────────────────────┐
-   │    CloudWatch Central Repository     │
-   │  - Request Latency                  │
-   │  - Error Rates                      │
-   │  - Token Usage                      │
-   │  - Agent Invocations                │
-   │  - Action Group Performance         │
-   │  - Knowledge Base Queries           │
-   └─────────┬──────────────────────────┘
-             │
-    ┌────────┴────────┬────────────┬────────────┐
-    │                 │            │            │
-    ↓                 ↓            ↓            ↓
-┌──────────┐   ┌──────────┐  ┌──────────┐  ┌──────────┐
-│Dashboards│   │ Alarms   │  │  Logs    │  │Analytics │
-│          │   │          │  │  Insights│  │          │
-│- Real    │   │- Critical│  │- Errors  │  │- Trends  │
-│  Time    │   │- Warning │  │- Warnings   │- Patterns│
-│- KPIs    │   │- Info    │  │- Info    │  │- Anomaly │
-└──────────┘   └──────────┘  └──────────┘  └──────────┘
+ AgentCore Identity
+   inbound:  user JWT ──► Runtime/Gateway authorizer ──► workload access token
+   outbound: workload token ──► token vault ──► OAuth token or API key for a tool
+             (@requires_access_token, @requires_api_key)
 ```
 
+See [Integration patterns](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#integration-patterns) and [Identity](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/#identity).
 
+### Deployment with the CLI
+
+```text
+ agentcore/agentcore.json ─┐
+ agentcore/aws-targets.json├─► agentcore deploy --target prod
+ app/<Agent>/ (code)       ┘        │
+                                    ▼
+                         CDK app (agentcore/cdk) ──► CloudFormation stack
+                                    │
+          ┌─────────────┬───────────┼────────────┬──────────────┐
+          ▼             ▼           ▼            ▼              ▼
+     IAM execution   Runtime +   Memory     Gateway +     Online eval
+     role            endpoints              targets       configs
+     (CodeZip in S3, or ECR image built by CodeBuild)
+```
+
+See the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/).
+
+## Strands multi-agent patterns
+
+```text
+ agents as tools              swarm                        graph (GraphBuilder)
+ ───────────────              ─────                        ────────────────────
+     supervisor           ┌──────────┐ handoff ┌───────┐   collect ─► validate ─┬─► analyse ─► report
+     │       │            │researcher│────────►│analyst│      ▲                 │
+     ▼       ▼            └──────────┘         └───┬───┘      └── FAIL (bounded)┘
+  sales   billing              ▲     handoff       │
+  .as_tool() .as_tool()        └───────────── reviewer ──► answer
+  model decides           one agent active at a time;   edges with conditions; ready
+  which to call           shared context, handoff tool  nodes run in parallel
+```
+
+See the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#collaboration-pattern-1-agents-as-tools) and [multi-agent patterns](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/).
+
+## Bedrock Agents Classic
+
+These cover Agents Classic, which has been in maintenance mode since 30 July 2026.
+
+### Orchestration and action groups
+
+```text
+ invoke_agent(agentId, agentAliasId, sessionId, inputText, sessionState)
+   │
+   ▼
+┌─ Bedrock Agents (managed) ─────────────────────────────────────────┐
+│ pre-processing (optional) ─► orchestration loop ─► post-processing │
+│                               │  model reasons, picks an action    │
+│              ┌────────────────┼──────────────────┐                 │
+│              ▼                ▼                  ▼                 │
+│     action group:      action group:      knowledge base           │
+│     Lambda executor    RETURN_CONTROL     Retrieve (vector store)  │
+│        │                     │                                     │
+│        ▼                     │  guardrail on input and output      │
+│   your Lambda fn             │                                     │
+│   (messageVersion 1.0        │                                     │
+│    response envelope)        │                                     │
+└──────────────────────────────┼─────────────────────────────────────┘
+                               ▼
+              completion stream: returnControl event
+              your app runs the call, then invoke_agent again with
+              sessionState.returnControlInvocationResults
+```
+
+### Sessions and memory
+
+Agents Classic keeps the conversation **inside the service**. You don't provide a database for it.
+
+```text
+ sessionId ──► session context held by Bedrock Agents
+                 kept until idleSessionTTLInSeconds passes with no calls
+                 sessionAttributes        (passed to action-group Lambdas)
+                 promptSessionAttributes  (added to the prompt)
+
+ memoryConfiguration (optional, SESSION_SUMMARY)
+   at session end ──► summary stored per memoryId, kept storageDays
+   next session with the same memoryId ──► summaries added to context
+```
+
+See the [Classic reference](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/#sessions-and-memory).
+
+### Multi-agent collaboration
+
+```text
+                 ┌─────────────────────────────┐
+ user ─────────► │ supervisor agent            │
+                 │ agentCollaboration:         │
+                 │   SUPERVISOR (plans)        │
+                 │   SUPERVISOR_ROUTER (routes)│
+                 └───┬─────────────┬───────────┘
+                     │ associate_agent_collaborator (alias ARN, instruction)
+                     ▼             ▼
+               collaborator   collaborator
+               agent alias    agent alias
+               (own action groups and knowledge bases)
+```
+
+See [multi-agent collaboration](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/#4-multi-agent-collaboration-ga-march-2025).

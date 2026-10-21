@@ -3,6 +3,9 @@ title: "Semantic Kernel Middleware (Python)"
 description: "Guardrails, redaction, approval and telemetry in Semantic Kernel Python using kernel filters."
 framework: "semantic-kernel"
 language: "python"
+sidebar:
+  label: "Filters (middleware)"
+  order: 4
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%).
@@ -11,7 +14,7 @@ Semantic Kernel's middleware mechanism is **filters**: async functions that wrap
 
 | Filter type | Wraps | Typical uses |
 |---|---|---|
-| `FilterTypes.PROMPT_RENDERING` | Rendering a prompt template, before it is sent | Redaction, prompt-injection checks, adding policy text |
+| `FilterTypes.PROMPT_RENDERING` | Rendering a prompt template, before it is sent | Redaction, prompt-injection checks, adding policy text (variables are already HTML-encoded by the template; see [input encoding](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#45-input-encoding-and-prompt-injection)) |
 | `FilterTypes.FUNCTION_INVOCATION` | Every kernel function call (prompt or native) | Logging, timing, caching, input validation, output redaction |
 | `FilterTypes.AUTO_FUNCTION_INVOCATION` | Each function the model asks to call during function calling | Approval gates, blocking tools, stopping the tool loop |
 
@@ -93,7 +96,7 @@ Set `context.terminate = True` to stop the whole function-calling loop instead o
 
 ## Telemetry
 
-Semantic Kernel emits OpenTelemetry spans and metrics for function invocations and model calls. Configure a tracer provider and exporter as usual, then add attributes from a filter:
+Semantic Kernel emits OpenTelemetry spans for function invocations and model calls, and a duration histogram per function (Python has no token-usage metric; the [production guide](/semantic-kernel-guide/python/semantic_kernel_production_python/#3-telemetry-and-token-usage) records usage from a filter). Configure a tracer provider and exporter as usual, then add attributes from a filter:
 
 ```python
 from opentelemetry import trace
@@ -111,3 +114,11 @@ Set `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true` to emit Gen
 
 - Filters are plain async functions: call them directly with a hand-built context and a fake `next`.
 - For integration tests, register the filters on a kernel whose chat service is a stub and assert on what reaches the service.
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 1.45.0 | Rewritten on the current filter API; redaction, timing and the approval gate run against a stub chat service. |

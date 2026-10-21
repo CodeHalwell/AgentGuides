@@ -29,11 +29,13 @@ The Agent SDK runs the Claude Code CLI as a child process for every `query()` ca
 
 | Failure | How it surfaces |
 |---|---|
-| Model API error (overload, 5xx, rate limit) on one call | The CLI retries; if it gives up, `ResultMessage.is_error` and then `ResultError` with `terminal_reason == "api_error"` and `api_error_status` |
-| Turn or budget limit reached | `ResultMessage.subtype` of `"error_max_turns"` / `"error_max_budget_usd"`, then `ResultError` |
+| Model API error (overload, 5xx, rate limit, auth) | The CLI retries transient errors itself. If it gives up, the SDK yields a `ResultMessage` with `is_error=True`, `subtype="success"`, the error text in `result` and the HTTP status in `api_error_status`, then raises `ResultError` with the same fields |
+| Turn or budget limit reached | a `ResultMessage` with `subtype` `"error_max_turns"` / `"error_max_budget_usd"`, then `ResultError` |
 | CLI missing | `CLINotFoundError` before anything runs |
-| CLI crashed | `ProcessError` with `exit_code` and `stderr` |
+| CLI crashed without a result | `ProcessError` with `exit_code` and `stderr` |
 | Garbled output line | `CLIJSONDecodeError` |
+
+The order matters: the error `ResultMessage` comes **first** and the exception **after it**, when the CLI exits. A loop that returns on the first `ResultMessage` never sees the exception, and returns the error text as if it were the answer.
 
 ### Retry only what is worth retrying
 
@@ -45,29 +47,39 @@ from claude_agent_sdk import (
     CLINotFoundError, CLIConnectionError, ProcessError, ResultError,
 )
 
-RETRYABLE_STATUS = {408, 429, 500, 502, 503, 529}
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504, 529}
+LIMIT_SUBTYPES = {"error_max_turns", "error_max_budget_usd", "error_max_structured_output_retries"}
+
+def is_transient(e: ResultError) -> bool:
+    if e.subtype in LIMIT_SUBTYPES:
+        return False                                  # a limit you set: retrying hits it again
+    if e.api_error_status is not None:
+        return e.api_error_status in RETRYABLE_STATUS  # 400, 401, 403 ... will fail again
+    return e.terminal_reason == "api_error"            # e.g. a timeout with no HTTP status
 
 async def run_resilient(prompt: str, options: ClaudeAgentOptions, attempts: int = 4) -> ResultMessage:
     for attempt in range(1, attempts + 1):
         try:
+            result = None
             async for message in query(prompt=prompt, options=options):
                 if isinstance(message, ResultMessage):
-                    return message
-            raise RuntimeError("no result message")
+                    result = message    # do not return yet: a failed run raises ResultError next
+            if result is None:
+                raise RuntimeError("agent finished without a result")
+            return result
         except CLINotFoundError:
-            raise                                   # deployment problem
-        except ResultError as e:
-            if e.subtype in ("error_max_turns", "error_max_budget_usd"):
-                raise                               # a limit you set: do not retry blindly
-            if e.api_error_status not in RETRYABLE_STATUS and e.terminal_reason != "api_error":
+            raise                                     # deployment problem
+        except ResultError as e:                      # before ProcessError: it is a subclass
+            if not is_transient(e) or attempt == attempts:
                 raise
-            last = e
-        except (CLIConnectionError, ProcessError) as e:
-            last = e
-        if attempt < attempts:
-            await asyncio.sleep(min(30, 2 ** attempt) + random.random())
-    raise last
+        except (CLIConnectionError, ProcessError):    # the CLI died without reporting a result
+            if attempt == attempts:
+                raise
+        await asyncio.sleep(min(30, 2 ** attempt) + random.random())
+    raise AssertionError("unreachable")
 ```
+
+Behaviour, checked against a stub CLI that fails in each way: an overloaded API (529) is retried and the run succeeds once the stub recovers; a 401, `error_max_turns` and `error_max_budget_usd` each raise `ResultError` after a single attempt; a crash without a result is retried, then raised as `ProcessError`.
 
 Retrying an agent run is not free: it repeats tool calls, which may have side effects. For agents that write files or call external systems, prefer resuming the failed session (`resume=result.session_id`) with a prompt such as "continue from where you stopped", or make tools idempotent.
 
@@ -86,7 +98,7 @@ async def run_with_deadline(prompt: str, seconds: float = 300):
 
 ### Model fallback
 
-`fallback_model="claude-sonnet-5-5"` lets the CLI switch models when the primary is overloaded, rather than failing the run.
+`fallback_model="%%model=anthropic%%"` lets the CLI switch models when the primary is overloaded, rather than failing the run.
 
 ---
 
@@ -104,11 +116,11 @@ options = ClaudeAgentOptions(
 )
 ```
 
-`max_budget_usd` is enforced by the SDK; `task_budget` is advisory and helps the model finish gracefully before a hard limit cuts it off.
+`max_budget_usd` is enforced by Claude Code, which ends the run once the limit is passed; `task_budget` is advisory and helps the model finish gracefully before a hard limit cuts it off.
 
 ### Measure from `ResultMessage`
 
-Do not hard-code prices. Each run reports its own cost, and `model_usage` splits it by model:
+Do not hard-code prices. Each run reports its own cost, and `model_usage` splits it by model. Use `model_usage` rather than `usage` for accounting: `usage` covers only the main loop, not subagents or compaction.
 
 ```python
 from claude_agent_sdk import ResultMessage
@@ -128,7 +140,7 @@ def record_cost(result: ResultMessage, tenant: str) -> None:
 In rough order of impact:
 
 1. **Lower effort before changing model.** `effort="low"` or `"medium"` on a capable model often matches a cheaper model at higher effort, and keeps one cache namespace.
-2. **Use cheaper models for subagents.** Give `AgentDefinition(model="sonnet")` or `"haiku"` to reading-heavy or routine subagents and keep the main loop on `claude-opus-5-5`.
+2. **Use cheaper models for subagents.** Give `AgentDefinition(model="sonnet")` or `"haiku"` to reading-heavy or routine subagents and keep the main loop on `%%model=anthropic-flagship%%`.
 3. **Keep the system prompt stable.** Use `{"type": "preset", "preset": "claude_code", "exclude_dynamic_sections": True}` or a fixed string, so prompt caching works across runs. Timestamps or request IDs in the system prompt defeat it.
 4. **Trim the tool set.** Fewer tools means a smaller prompt; `tools=[]` for pure text tasks.
 5. **Cap turns.** Many runaway costs are loops; `max_turns` is the cheapest guard.
@@ -139,9 +151,9 @@ A simple routing helper:
 from claude_agent_sdk import ClaudeAgentOptions
 
 PROFILES = {
-    "simple":   dict(model="claude-haiku-5-5",  effort="low"),
-    "standard": dict(model="claude-sonnet-5-5", effort="medium"),
-    "complex":  dict(model="claude-opus-5-5",   effort="high"),
+    "simple":   dict(model="%%model=anthropic-small%%", effort="low"),
+    "standard": dict(model="%%model=anthropic%%", effort="medium"),
+    "complex":  dict(model="%%model=anthropic-flagship%%", effort="high"),
 }
 
 def options_for(kind: str, **overrides) -> ClaudeAgentOptions:
@@ -272,7 +284,7 @@ class Task(BaseModel):
 @app.post("/run")
 async def run(task: Task) -> dict:
     options = ClaudeAgentOptions(
-        model="claude-sonnet-5-5",
+        model="%%model=anthropic%%",
         cwd="/work",
         setting_sources=[],              # do not read settings from the image
         allowed_tools=["Read", "Glob", "Grep"],
@@ -299,6 +311,12 @@ async def healthz() -> dict:
 - Put `ANTHROPIC_API_KEY` in a `Secret` and expose it as an environment variable; never bake it into the image.
 - Use a `readOnlyRootFilesystem` with writable `emptyDir` volumes for `/work` and `$HOME`.
 - Set `terminationGracePeriodSeconds` longer than your longest expected run, and stop accepting work on `SIGTERM`.
+
+### Hosting patterns
+
+- **One run per job.** A worker takes a job, runs `query()` in a fresh working directory, stores the result and session ID, and deletes the directory. Simple, and nothing needs to survive the container.
+- **Ephemeral container per session.** For untrusted code or per-customer isolation, start a container (or sandbox VM) for each session and destroy it afterwards. Configure a `session_store` so a later request can resume the session in a new container.
+- **Long-lived conversations.** A chat UI holds a `ClaudeSDKClient` open per active conversation. Keep conversations sticky to one worker while they are active, and fall back to `resume=` (backed by a `session_store`) when a worker restarts or the conversation moves.
 
 ---
 
@@ -337,7 +355,7 @@ hardened = ClaudeAgentOptions(
 
 - **Concurrency is processes.** Bound it with an `asyncio.Semaphore` per worker and a queue (Celery, RQ, SQS, Pub/Sub) in front of the workers.
 - **Rate limits are per organisation and model.** Spread load across models where quality allows, and watch for `RateLimitEvent` in the stream.
-- **Sessions across hosts.** `session_store=` mirrors transcripts to shared storage so any worker can `resume` a session. Implement the `SessionStore` protocol over Redis, S3 or a database; `InMemorySessionStore` is for tests.
+- **Sessions across hosts.** `session_store=` mirrors transcripts to shared storage so any worker can `resume` a session. The comprehensive guide has a [SQLite/Postgres adapter and its conformance test](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#session-stores); `InMemorySessionStore` is for tests.
 - **Workspaces.** Give each run its own directory (`cwd`), and clean it up afterwards. Use `add_dirs` for read-only shared inputs.
 
 ---
@@ -350,8 +368,8 @@ hardened = ClaudeAgentOptions(
 
 **Runs hang after a background subagent finishes.** Fixed in 0.2.127 and 0.2.160; upgrade.
 
-**Hooks or `can_use_tool` never fire.** The tool is in `allowed_tools`, or the mode is `bypassPermissions`. The SDK logs `CanUseToolShadowedWarning` for this.
+**`can_use_tool` never fires.** The tool is in `allowed_tools`, or the mode is `bypassPermissions`; both approve the call before the callback is reached, and the SDK emits `CanUseToolShadowedWarning`. `PreToolUse` hooks still run for pre-approved tools (hooks are checked first), so gate those calls with a hook rather than the callback.
 
-**Different behaviour between laptop and server.** Filesystem settings differ. Set `setting_sources` explicitly.
+**Different behaviour between laptop and server.** With `setting_sources` omitted, the CLI loads user, project and local settings, so `~/.claude/settings.json` and `CLAUDE.md` differ between machines. Set `setting_sources` explicitly, or `[]`.
 
 **Results vary run to run.** Agents are not deterministic. Use `output_format` for machine-read results, pin the model ID, set `effort` explicitly, and test with assertions that tolerate wording changes.

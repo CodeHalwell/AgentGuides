@@ -1,5 +1,5 @@
 ---
-title: "Claude Agent SDK Advanced Multi-Agent (TypeScript)"
+title: "Claude Agent SDK (TypeScript) — Advanced Multi-Agent"
 description: "Routing, specialist subagents, guardrails and human-in-the-loop approval with the TypeScript Claude Agent SDK."
 framework: "claude-agent-sdk"
 language: "typescript"

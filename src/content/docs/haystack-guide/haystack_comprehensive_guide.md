@@ -3,6 +3,9 @@ title: "Haystack Comprehensive Technical Guide"
 description: "Components, pipelines, the Agent class, tools, state, hooks and multi-agent patterns in Haystack 3."
 framework: "haystack"
 language: "python"
+sidebar:
+  label: "Comprehensive guide"
+  order: 2
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). This guide was first written for Haystack 2.x; every example has been reworked for the 3.x API. If you are upgrading existing code, start with [Migrating from Haystack 2.x](#migrating-from-haystack-2x).
@@ -321,7 +324,7 @@ messages (+ rendered system_prompt / user_prompt)
 
 Key points:
 
-- The loop stops when the model replies with text and `"text"` is in `exit_conditions` (the default), when a tool listed in `exit_conditions` is called, or when `max_agent_steps` (default 100) is reached.
+- The loop stops when the model replies with text and `"text"` is in `exit_conditions` (the default), when a tool listed in `exit_conditions` is called, when a hook sets `stop_run`, or when `max_agent_steps` (default 100) is reached.
 - Everything the agent knows during a run lives in a `State` object. `messages`, `step_count`, `token_usage` and `tool_call_counts` are always present; you add your own keys with `state_schema`.
 - `Agent.run()` returns a dict with `messages`, `last_message`, `step_count`, `token_usage`, `tool_call_counts`, `exit_reason` and any custom state keys that were set during the run.
 

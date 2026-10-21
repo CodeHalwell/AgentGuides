@@ -219,7 +219,7 @@ What you get for free by subclassing:
 Every streaming chat client yields `ChatResponseUpdate` instances. The class is a thin dataclass-style container — pass `Content` items, optionally a role, and any of the optional metadata fields the framework propagates downstream (`response_id`, `message_id`, `conversation_id`, `model`, `created_at`, `finish_reason`, `continuation_token`, `additional_properties`).
 
 ```python
-from agent_framework import ChatResponseUpdate, Content, FinishReason
+from agent_framework import ChatResponseUpdate, Content
 
 # Plain text chunk — what most streaming clients emit per token batch.
 chunk = ChatResponseUpdate(
@@ -238,7 +238,7 @@ final = ChatResponseUpdate(
     role="assistant",
     response_id="resp_1",
     message_id="msg_1",
-    finish_reason=FinishReason.STOP,
+    finish_reason="stop",           # FinishReason is a NewType over str
 )
 ```
 
@@ -410,7 +410,7 @@ class TenantContextProvider(ContextProvider):
         self._tenant_prompts = tenant_prompts
 
     async def before_run(self, *, agent, session, context, state) -> None:
-        tenant_id = context.kwargs.get("tenant_id")
+        tenant_id = session.state.get("tenant_id")      # set by the caller on the session
         prefix = self._tenant_prompts.get(tenant_id)
         if prefix:
             context.extend_instructions(self.source_id, prefix)
@@ -431,11 +431,14 @@ agent = Agent(
     ],
 )
 
-await agent.run("What's the local weather?", tenant_id="acme")
+session = agent.create_session()
+session.state["tenant_id"] = "acme"
+await agent.run("What's the local weather?", session=session)
 ```
 
 Key points:
 
+- Per-request data reaches a provider through `session.state` (as here). `agent.run()` doesn't accept arbitrary keyword arguments; `function_invocation_kwargs=` is for tools, not providers.
 - `source_id` tags everything the provider adds (messages, tools, instructions) so other providers / the `HistoryProvider` can filter by source. Keep it unique per instance.
 - `state` is a **provider-scoped** dict (isolated from other providers). Full cross-provider state is still reachable via `session.state`.
 - `context.extend_messages(...)`, `context.extend_tools(...)`, `context.extend_middleware(...)`, and `context.extend_instructions(...)` are the mutation APIs — the framework merges everything before the model call.
@@ -452,7 +455,7 @@ class DocumentContextProvider(ContextProvider):
         self._retriever = retriever
 
     async def before_run(self, *, agent, session, context, state) -> None:
-        user_msgs = [m for m in session.messages if m.role == "user"]
+        user_msgs = [m for m in context.input_messages if m.role == "user"]
         if not user_msgs:
             return
         snippets = await self._retriever.search(user_msgs[-1].text, top_k=3)
@@ -490,7 +493,7 @@ class UserProfileProvider(ContextProvider):
         self._ttl = ttl
 
     async def before_run(self, *, agent, session, context, state) -> None:
-        user_id = context.kwargs.get("user_id")
+        user_id = session.state.get("user_id")
         if not user_id:
             return
 
@@ -510,7 +513,7 @@ class UserProfileProvider(ContextProvider):
 
     async def after_run(self, *, agent, session, context, state) -> None:
         # Tally turn count against this user's profile entry.
-        user_id = context.kwargs.get("user_id")
+        user_id = session.state.get("user_id")
         if user_id:
             cache = state.setdefault("cache", {})
             if user_id in cache:
@@ -524,11 +527,12 @@ agent = Agent(
 )
 
 session = agent.create_session(session_id="user-7")
-await agent.run("What's my plan?", session=session, user_id="user-7")
-await agent.run("Upgrade me.", session=session, user_id="user-7")  # cache hit
+session.state["user_id"] = "user-7"
+await agent.run("What's my plan?", session=session)
+await agent.run("Upgrade me.", session=session)  # cache hit
 ```
 
-Note that the comments above emphasize:
+Points to note:
 
 - `state` is a **provider-scoped** dict — distinct from `session.state` (cross-provider). Mutate it freely without coordinating with other providers.
 - `state` survives across `before_run` / `after_run` of the same session. The framework persists it through `session.to_dict()` if the values implement `SerializationProtocol`.
@@ -951,7 +955,7 @@ from agent_framework import Content
 text = Content.from_text("Hello world.")
 
 # Reasoning trace (for models that emit chain-of-thought tokens separately)
-reasoning = Content.from_text_reasoning("Let me think step by step…")
+reasoning = Content.from_text_reasoning(text="Let me think step by step…")   # keyword-only
 
 # Inline binary data (image, audio, file). Encoded into a data: URI internally.
 with open("chart.png", "rb") as f:

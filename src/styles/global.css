@@ -7,7 +7,8 @@
 /*
  * Brand: "Atoms to agents" (Daniel Halwell), tokens from the UI mockups.
  * Flat Paper or Ink ground; structure from hairline rules and 2px axes, never
- * textured fills. One oxide accent; verdigris and sulfur for data only.
+ * textured fills. One oxide accent; verdigris, sulfur, cobalt and permanganate code
+ * the periodic groups and carry data (series: ink, oxide, cobalt, verdigris, sulfur, permanganate).
  * Newsreader (display) · Hanken Grotesk (body) · JetBrains Mono (code, labels).
  */
 :root {
@@ -34,6 +35,11 @@
   --vd: #5fb3a7;
   --onvd: #16181d;
   --su: #e3b23c;
+  --su-tx: #e3b23c;
+  --co: #7d9be8;
+  --onco: #16181d;
+  --pm: #d27ab6;
+  --onpm: #16181d;
   --code: #0f1114;
   --link: #e0602f;
 
@@ -79,6 +85,11 @@
   --vd: #2f7f75;
   --onvd: #f4f1ea;
   --su: #e3b23c;
+  --su-tx: #b8860b; /* sulfur as text on paper */
+  --co: #2d4fa0;
+  --onco: #f4f1ea;
+  --pm: #8e2c6b;
+  --onpm: #f4f1ea;
   --code: #16181d;
   /* Oxide deepened a touch for running-text links only: 5.9:1 on paper (4.36:1 at #C4471C). */
   --link: #a8401a;
@@ -345,79 +356,220 @@ kbd {
 .chip[data-group='verdigris'] { background: var(--vd); color: var(--onvd); }
 .chip[data-group='sulfur'] { background: var(--su); color: var(--brand-ink); }
 .chip[data-group='ink'] { background: var(--tx); color: var(--bg); }
+.chip[data-group='cobalt'] { background: var(--co); color: var(--onco); }
+.chip[data-group='permanganate'] { background: var(--pm); color: var(--onpm); }
 
-/* ---------- The mark: element tile ---------- */
-.element-tile {
+/* ---------- Home: the periodic table of frameworks ---------- */
+.pt-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+  gap: 3rem;
+  padding: 3rem 0 1.5rem;
+}
+@media (max-width: 60rem) {
+  .pt-hero {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+.pt-intro {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  aspect-ratio: 1;
-  background: var(--bg);
-  color: var(--tx);
-  border: 3px solid var(--tx);
-  box-shadow: 12px 12px 0 var(--ac);
-  padding: 1.1rem 1.2rem;
+  gap: 1.4rem;
+}
+.pt-eyebrow {
   font-family: var(--sl-font-mono);
-}
-.element-tile .meta,
-.element-tile .foot {
-  display: flex;
-  justify-content: space-between;
-}
-.element-tile .meta {
-  font-size: 1.05rem;
-}
-.element-tile .symbol {
-  font-family: var(--brand-font-display);
-  font-weight: 400;
-  font-size: clamp(5.5rem, 12vw, 9rem);
-  line-height: 0.8;
-  letter-spacing: -0.04em;
-}
-.element-tile .foot {
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.element-tile .foot span:last-child {
-  color: var(--ac);
-}
-
-/* Hero: eyebrow, oversized Newsreader with the accent phrase in italic, hairline below. */
-.hero {
-  border-bottom: 1px solid var(--rl);
-  padding-bottom: 4rem !important;
-}
-.hero .hero-html {
-  width: min(19rem, 62vw);
-  margin-inline: auto;
-  margin-bottom: 1.5rem;
-}
-.hero h1 {
-  font-size: clamp(3rem, 7.5vw, 5.6rem);
-  line-height: 0.92;
-  letter-spacing: -0.035em;
-}
-.hero h1 em {
-  color: var(--ac);
-}
-.hero .copy::before {
-  content: 'Agent frameworks · verified against current releases';
-  display: block;
-  margin-bottom: 0.6rem;
-  font-family: var(--sl-font-mono);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ac);
 }
-.hero .tagline {
-  font-size: 1.2rem;
+.pt-title {
+  margin: 0;
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  font-size: clamp(3rem, 6vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--tx);
+}
+.pt-lead {
+  margin: 0;
+  font-size: 1.1rem;
   line-height: 1.55;
-  max-width: 34ch;
   color: var(--mu);
+}
+.pt-formula {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.2rem;
+  border: 2px solid var(--tx);
+  background: var(--sf);
+  box-shadow: 8px 8px 0 var(--ac);
+}
+.pt-formula-label,
+.pt-formula-note {
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  color: var(--mu);
+}
+.pt-formula-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pt-formula-value {
+  font-family: var(--brand-font-display);
+  font-size: 2.2rem;
+  line-height: 1.1;
+  color: var(--tx);
+  overflow-wrap: anywhere;
+}
+.pt-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-content: start;
+}
+@media (max-width: 80rem) {
+  .pt-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+@media (max-width: 34rem) {
+  .pt-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.pt-tile {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0.5rem 0.55rem;
+  border: 2px solid var(--rl);
+  background: transparent;
+  color: var(--tx);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 100ms ease,
+    box-shadow 100ms ease;
+}
+.pt-tile:hover {
+  border-color: var(--tx);
+}
+.pt-tile:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+.pt-n,
+.pt-label {
+  font-family: var(--sl-font-mono);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pt-sym {
+  font-family: var(--brand-font-display);
+  font-size: clamp(1.8rem, 3.6vw, 2.9rem);
+  line-height: 0.85;
+}
+.pt-key {
+  margin: 0.5rem 0 2rem;
+}
+.pt-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1.5rem 1.5rem;
+  padding-bottom: 1rem;
+}
+.pt-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--tx);
+  color: var(--tx);
+  text-decoration: none;
+}
+.pt-result:hover .pt-result-title {
+  color: var(--ac);
+}
+.pt-result-eyebrow {
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  color: var(--ac);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pt-result-title {
+  font-family: var(--brand-font-display);
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+.pt-result-text {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--mu);
+}
+.pt-result-meta {
+  margin-top: auto;
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  color: var(--mu);
+}
+
+/* Numbered rows, the notebook list pattern. */
+.start-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid var(--tx);
+}
+.start-rows a {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  gap: 1.25rem;
+  align-items: baseline;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--rl);
+  color: var(--tx);
+  text-decoration: none;
+}
+.start-rows a:hover .t {
+  color: var(--ac);
+}
+.start-rows .n {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  color: var(--ac);
+}
+.start-rows .t {
+  font-family: var(--brand-font-display);
+  font-size: 1.3rem;
+  line-height: 1.25;
+}
+.start-rows .m {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--mu);
+}
+@media (max-width: 40rem) {
+  .start-rows a {
+    grid-template-columns: 2.2rem 1fr;
+  }
+  .start-rows .m {
+    display: none;
+  }
 }
 
 /* ---------- Framework grid and use-case picker (ruled cells) ---------- */

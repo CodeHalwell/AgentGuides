@@ -151,7 +151,7 @@ This is the guide's canonical write-up of the per-node policies. Other pages lin
 | `RetryPolicy` | `retry_policy=` | Re-runs a failed attempt with exponential backoff |
 | `TimeoutPolicy` (or a number) | `timeout=` | Cancels an attempt that runs too long or goes quiet. **Async nodes only.** |
 | `CachePolicy` | `cache_policy=` | Skips the node when it has seen the same input before. Needs `compile(cache=...)`. |
-| error handler | `error_handler=` | A function that runs instead of failing the graph once retries are exhausted |
+| error handler | `error_handler=` | A function that runs instead of failing the graph once retries are exhausted (sequential nodes only) |
 
 `set_node_defaults(...)` applies any of these to every node; per-node values override the defaults. The order on failure is: timeout fires (raising `NodeTimeoutError`) → `retry_policy` decides whether to retry → when retries are exhausted, the error handler runs, if there is one; otherwise the exception propagates out of `invoke`.
 
@@ -255,7 +255,42 @@ print(asyncio.run(graph.ainvoke({"items": ["a", "b", "c"]})))   # {'items': [...
 
 An error handler is a function registered with `add_node(..., error_handler=fn)` (or as a default with `set_node_defaults`). It runs when the node has failed and retries are exhausted. LangGraph injects the failure into the parameter annotated `NodeError`; the annotation is what matters, so `error: Exception` does not work (the call fails with `TypeError: missing 1 required positional argument`).
 
-`NodeError` has two fields: `node` (the failed node's name) and `error` (the exception). The handler returns a state update (or a `Command`), and the graph continues along the failed node's outgoing edges.
+`NodeError` has two fields: `node` (the failed node's name) and `error` (the exception). Two behaviours to know, both checked against %%version=langgraph%%:
+
+- **The failed node's edges are not followed.** If the handler returns a plain state update, the update is applied and that branch stops there. To carry on, return a `Command`: `Command(update={...}, goto="next_node")`.
+- **Parallel failures are not caught.** When the failing node runs in the same super-step as other tasks (parallel branches, or several `Send` tasks), the exception propagates and fails the run even though a handler is set. In a fan-out, catch exceptions inside the worker and write them to state instead.
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START
+from langgraph.errors import NodeError
+from langgraph.types import Command
+
+
+class State(TypedDict, total=False):
+    result: str
+    error: str
+
+
+def charge_card(state: State) -> dict:
+    raise ConnectionError("payment provider unavailable")
+
+
+def recover(state: State, error: NodeError) -> Command:
+    return Command(update={"error": f"{error.node}: {error.error}"}, goto="queue_for_retry")
+
+
+graph = (
+    StateGraph(State)
+    .add_node("charge_card", charge_card, error_handler=recover)
+    .add_node("send_receipt", lambda s: {"result": "receipt sent"})
+    .add_node("queue_for_retry", lambda s: {"result": "queued"})
+    .add_edge(START, "charge_card")
+    .add_edge("charge_card", "send_receipt")
+    .compile()
+)
+print(graph.invoke({}))   # {'result': 'queued', 'error': 'charge_card: payment provider unavailable'}
+```
 
 ### `set_node_defaults`
 

@@ -1,13 +1,16 @@
 ---
-title: "Pydantic AI: Recipes & Real-World Examples"
-description: "Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
+title: "PydanticAI: Recipes"
+description: "Practical code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 20
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%); first written for 1.107.0 (June 2026) and updated for the V2 API.
 
-**Purpose:** Practical, production-tested code examples for common scenarios
+**Purpose:** Practical code examples for common scenarios
 
 ---
 

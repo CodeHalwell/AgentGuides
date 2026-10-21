@@ -1,5 +1,5 @@
 ---
-title: "Migration Guide: Claude Code SDK → Claude Agent SDK (Python)"
+title: "Claude Agent SDK (Python) — Migration Guide"
 description: "Moving from claude-code-sdk to claude-agent-sdk, and upgrading across 0.1.x and 0.2.x releases."
 framework: "claude-agent-sdk"
 language: "python"
@@ -27,7 +27,7 @@ The rename was mostly mechanical, with three behavioural changes that catch peop
 | Options class | `ClaudeCodeOptions` | `ClaudeAgentOptions` |
 | System prompt fields | `custom_system_prompt`, `append_system_prompt` | single `system_prompt` (string or preset dict) |
 | Default system prompt | Claude Code's prompt | a minimal prompt; ask for the preset explicitly |
-| Filesystem settings | loaded automatically | controlled by `setting_sources` |
+| Filesystem settings | loaded automatically | controlled by `setting_sources` (see Step 4) |
 
 Everything else you used — `query()`, `ClaudeSDKClient`, `@tool`, `create_sdk_mcp_server()`, the message and block classes, `can_use_tool`, hooks — kept its name and import location. Note that there has never been a `claude_agent_sdk.tools` submodule; import everything from the package root.
 
@@ -72,11 +72,15 @@ The old SDK silently used Claude Code's system prompt. The new one does not, so 
 
 ```python
 # Before
+from claude_code_sdk import ClaudeCodeOptions
+
 options = ClaudeCodeOptions(append_system_prompt="Prefer small, reviewable diffs.")
 ```
 
 ```python
 # After: keep Claude Code's prompt and append to it
+from claude_agent_sdk import ClaudeAgentOptions
+
 options = ClaudeAgentOptions(
     system_prompt={
         "type": "preset",
@@ -90,15 +94,17 @@ If you used `custom_system_prompt="..."`, pass the same string as `system_prompt
 
 ### Step 4: decide which settings files to load
 
-Code that relied on `CLAUDE.md`, `.claude/settings.json`, project slash commands or `.claude/agents/*.md` should name the sources it wants explicitly:
+The 0.1.0 release stopped loading `CLAUDE.md`, `.claude/settings.json`, project slash commands and `.claude/agents/*.md` by default. That is no longer the case: in current releases, leaving `setting_sources` unset (`None`) loads all sources (user, project and local), as the CLI does. So the question when migrating is usually the opposite one: what should your service *not* read?
 
 ```python
-options = ClaudeAgentOptions(setting_sources=["project"])     # CLAUDE.md, .claude/settings.json
-options = ClaudeAgentOptions(setting_sources=["user", "project", "local"])
-options = ClaudeAgentOptions(setting_sources=[])              # nothing from disk
+from claude_agent_sdk import ClaudeAgentOptions
+
+isolated = ClaudeAgentOptions(setting_sources=[])                # nothing from disk
+project_only = ClaudeAgentOptions(setting_sources=["project"])   # CLAUDE.md, .claude/settings.json
+everything = ClaudeAgentOptions()                                # user, project and local (the default)
 ```
 
-Being explicit is also the safest choice for CI and servers, where a stray `~/.claude/settings.json` should not change behaviour.
+Pass `[]` or an explicit list for CI and servers, where a stray `~/.claude/settings.json` should not change behaviour. (Before 0.1.60, `setting_sources=[]` was silently treated as unset; upgrade if you rely on isolation.)
 
 ### Step 5: run your tests
 
@@ -161,7 +167,7 @@ The move from 0.1.81 to 0.2.82 was not a breaking release; code written for late
 
 ### Model IDs
 
-Older examples often hard-code `claude-3-5-sonnet-20241022` or `claude-sonnet-4-5`. Those models are retired or superseded; use the current family (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, or `claude-fable-5-1`) or an alias such as `"sonnet"`. Two behavioural differences on the current models:
+Older examples often hard-code `claude-3-5-sonnet-20241022` or `claude-sonnet-4-5`. Those models are retired or superseded; use a current model such as `%%model=anthropic%%` or `%%model=anthropic-flagship%%`, or an alias such as `"sonnet"`. Two behavioural differences on the current models:
 
 - Fixed thinking budgets (`{"type": "enabled", "budget_tokens": N}`) are rejected. Use adaptive thinking and `effort`.
 - Claude Opus 5.5 defaults to `medium` effort. Set `effort="high"` (or `"xhigh"` for long agentic tasks) if your agent was tuned on a model that defaulted higher.
@@ -178,7 +184,7 @@ Older examples often hard-code `claude-3-5-sonnet-20241022` or `claude-sonnet-4-
 
 **`TypeError: ClaudeAgentOptions.__init__() got an unexpected keyword argument ...`** — options such as `temperature`, `enable_subagents`, `api_provider` or `checkpoint_dir` have never existed. Subagents are enabled by defining `agents=`; providers are chosen with `CLAUDE_CODE_USE_BEDROCK` / `CLAUDE_CODE_USE_VERTEX`; checkpointing is `enable_file_checkpointing=True`.
 
-**The agent no longer follows `CLAUDE.md`** — add `setting_sources=["project"]`.
+**The agent no longer follows `CLAUDE.md`** — you pass a `setting_sources` list without `"project"` (or `[]`). Add `"project"`, or omit the option to load all sources.
 
 **The agent's coding behaviour got worse after migrating** — you lost Claude Code's system prompt; use the `claude_code` preset.
 
@@ -191,7 +197,7 @@ Older examples often hard-code `claude-3-5-sonnet-20241022` or `claude-sonnet-4-
 - [ ] `claude-code-sdk` removed; `claude-agent-sdk` pinned in requirements
 - [ ] `claude_code_sdk` → `claude_agent_sdk`, `ClaudeCodeOptions` → `ClaudeAgentOptions`
 - [ ] `custom_system_prompt` / `append_system_prompt` replaced by `system_prompt`
-- [ ] `setting_sources` set explicitly
+- [ ] `setting_sources` set explicitly (`[]` for isolation; omitted loads everything)
 - [ ] `max_thinking_tokens` replaced by `thinking` + `effort`
 - [ ] Model IDs updated to the current family
 - [ ] Tests pass, including permission callbacks and hooks

@@ -3,6 +3,9 @@ title: "Haystack Streaming Server (FastAPI)"
 description: "Stream agent tokens and tool events over server-sent events with Haystack 3 and FastAPI."
 framework: "haystack"
 language: "python"
+sidebar:
+  label: "Streaming server"
+  order: 8
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%).
@@ -82,45 +85,9 @@ To stream a whole pipeline rather than a single agent, use `handle = pipeline.st
 
 ## Deployment
 
-### Dockerfile
+Package it like any other ASGI app; the [production guide](/haystack-guide/haystack_production_guide/#containers-and-kubernetes) has a container image and the start-up and shutdown calls to add. Two points are specific to streaming:
 
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt   # haystack-ai==%%version=haystack-ai%%, fastapi, uvicorn
-COPY . .
-EXPOSE 8080
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
-```
+- **Proxies must not buffer.** With NGINX ingress set `nginx.ingress.kubernetes.io/proxy-buffering: "off"`, and raise `proxy-read-timeout` above your longest agent run.
+- **Bound each request.** Cap `max_agent_steps` and add a [`TokenBudgetHook`](/haystack-guide/haystack_advanced_agents_python/#token-budgets) so one request cannot run indefinitely, and authenticate clients at your gateway.
 
-### Kubernetes
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: haystack-stream }
-spec:
-  replicas: 2
-  selector: { matchLabels: { app: haystack-stream } }
-  template:
-    metadata: { labels: { app: haystack-stream } }
-    spec:
-      containers:
-        - name: app
-          image: ghcr.io/yourorg/haystack-stream:1.0.0
-          ports: [{ containerPort: 8080 }]
-          envFrom: [{ secretRef: { name: openai-credentials } }]
----
-apiVersion: v1
-kind: Service
-metadata: { name: haystack-stream }
-spec: { selector: { app: haystack-stream }, ports: [{ port: 80, targetPort: 8080 }] }
-```
-
-SSE needs proxies that do not buffer: with NGINX ingress set `nginx.ingress.kubernetes.io/proxy-buffering: "off"` and raise `proxy-read-timeout` above your longest agent run.
-
-### Security Best Practices
-- Authenticate clients, limit burst traffic, set server timeouts.
-- Cap `max_agent_steps` so one request cannot run indefinitely.
-- Avoid logging full prompts and responses; mask PII.
+If you would rather not maintain the endpoint yourself, [Hayhooks](/haystack-guide/haystack_production_guide/#serving-with-hayhooks) streams agent tokens and tool calls over an OpenAI-compatible endpoint.

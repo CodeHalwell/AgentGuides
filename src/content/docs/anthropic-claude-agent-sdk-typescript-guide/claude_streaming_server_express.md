@@ -1,5 +1,5 @@
 ---
-title: "Claude Streaming Server (Express)"
+title: "Claude Agent SDK (TypeScript) — Streaming Server (Express)"
 description: "Stream Claude Agent SDK runs to browsers over Server-Sent Events with Express."
 framework: "claude-agent-sdk"
 language: "typescript"

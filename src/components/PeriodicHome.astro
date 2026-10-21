@@ -1,0 +1,16 @@
+---
+// Counts each guide's pages at build time, then renders the periodic table.
+import { getCollection } from 'astro:content';
+import { frameworks } from '../data/frameworks';
+import PeriodicTable from './PeriodicTable';
+
+const docs = await getCollection('docs');
+const ids = docs.map((d) => `/${d.id}/`);
+// A guide's pages are those under its href; a guide sharing a folder with a sibling
+// language guide (LangGraph, LlamaIndex) counts only its own language subfolder.
+const pages = Object.fromEntries(
+  frameworks.map((f) => [f.id, ids.filter((id) => id.startsWith(f.href) || `${id}` === f.href).length]),
+);
+---
+
+<PeriodicTable client:load pages={pages} />

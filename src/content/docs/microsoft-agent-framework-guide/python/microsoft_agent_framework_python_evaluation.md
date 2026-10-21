@@ -235,10 +235,14 @@ conversation = [
     Message(role="assistant", contents=["16"]),
 ]
 
-# Default strategy — last_turn. Query = everything up to the last user msg; response = after.
+# Default strategy, LAST_TURN: the query messages are everything up to and including the
+# last user message, the response is what follows. item.query joins the text of the
+# *user* messages in that prefix, so it contains both questions.
 item = EvalItem(conversation=conversation)
-assert item.query == "Square that."
+assert item.query == "What's 2+2? Square that."
 assert item.response == "16"
+query_msgs, response_msgs = item.split_messages()
+assert [m.text for m in response_msgs] == ["16"]
 
 # FULL strategy — evaluate the whole trajectory against the first user msg.
 item_full = EvalItem(conversation=conversation, split_strategy=ConversationSplit.FULL)

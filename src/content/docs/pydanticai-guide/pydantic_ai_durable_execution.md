@@ -1,15 +1,14 @@
 ---
-title: "Pydantic AI: Durable Execution Guide"
+title: "PydanticAI: Durable Execution"
 description: "Make Pydantic AI agents survive crashes, restarts and long waits with Temporal, DBOS or Prefect, using the TemporalDurability, DBOSDurability and PrefectDurability capabilities."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Durable execution"
+  order: 16
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source package: `pydantic_ai.durable_exec`. The Temporal, DBOS and Prefect examples below were run against temporalio 1.34, dbos 3.3 and prefect 3.9.
-
-> **This page was rewritten for V2.** Earlier editions described a `pydantic_ai.durable` module with `DurableAgent`, checkpoint/resume-token APIs and pluggable "durable backends". That module never existed in Pydantic AI; the real integration is the `pydantic_ai.durable_exec` package shown here.
-
----
 
 ## What durable execution gives you
 

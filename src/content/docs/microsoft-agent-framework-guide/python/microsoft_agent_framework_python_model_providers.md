@@ -176,15 +176,16 @@ agent = Agent(
 )
 ```
 
-Use the Claude Agent SDK instead of a chat client when you want Claude to drive its own tool loop, subagents, and session continuity:
+Use `ClaudeAgent` (package `agent-framework-claude`, built on the Claude Agent SDK and the Claude Code CLI) instead of a chat client when you want Claude to drive its own tool loop, subagents and session continuity. `ClaudeAgentOptions.model` takes the CLI's aliases (`"sonnet"`, `"opus"`, `"haiku"`):
 
 ```python
 from agent_framework.anthropic import ClaudeAgent, ClaudeAgentOptions
 
-claude = ClaudeAgent(
-    options=ClaudeAgentOptions(model="%%model=anthropic%%", permission_mode="default"),
-)
-response = await claude.run("Refactor utils.py to use dataclasses.")
+async with ClaudeAgent(
+    instructions="You are a careful Python reviewer.",
+    default_options=ClaudeAgentOptions(model="sonnet", permission_mode="default"),
+) as claude:
+    response = await claude.run("Refactor utils.py to use dataclasses.")
 ```
 
 ## Ollama

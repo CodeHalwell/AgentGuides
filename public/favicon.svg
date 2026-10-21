@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Compact element tile: symbol only below 64px, oxide offset bottom-right. -->
+  <!-- Bonded tile, compact: D and H joined by an oxide bond, oxide offset bottom-right. -->
   <rect x="5" y="5" width="25" height="25" fill="#C4471C"/>
   <rect x="2" y="2" width="25" height="25" fill="#F4F1EA" stroke="#16181D" stroke-width="2"/>
-  <text x="14.5" y="20.5" text-anchor="middle" font-family="Newsreader, Georgia, 'Times New Roman', serif" font-size="14" fill="#16181D">Ag</text>
+  <text x="8.6" y="19.5" text-anchor="middle" font-family="Newsreader, Georgia, 'Times New Roman', serif" font-size="11" fill="#16181D">D</text>
+  <rect x="13" y="15" width="3.2" height="1.6" fill="#C4471C"/>
+  <text x="20.6" y="19.5" text-anchor="middle" font-family="Newsreader, Georgia, 'Times New Roman', serif" font-size="11" fill="#16181D">H</text>
 </svg>

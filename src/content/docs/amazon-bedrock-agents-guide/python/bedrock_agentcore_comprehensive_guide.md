@@ -23,14 +23,15 @@ A technical reference for Amazon Bedrock AgentCore, AWS's platform for deploying
 2. [Core Features](#core-features)
 3. [AgentCore Architecture](#agentcore-architecture)
 4. [Getting Started](#getting-started)
-5. [Secure Sandbox Runtime](#secure-sandbox-runtime)
-6. [Supported Frameworks](#supported-frameworks)
-7. [Data Analysis and Workflow Automation](#data-analysis-and-workflow-automation)
-8. [AgentCore APIs](#agentcore-apis)
-9. [Integration Patterns](#integration-patterns)
-10. [Security and Compliance](#security-and-compliance)
-11. [Best Practices](#best-practices)
-12. [Production Deployment](#production-deployment)
+5. [Managed Harness](#managed-harness)
+6. [Secure Sandbox Runtime](#secure-sandbox-runtime)
+7. [Supported Frameworks](#supported-frameworks)
+8. [Data Analysis and Memory](#data-analysis-and-memory)
+9. [AgentCore APIs](#agentcore-apis)
+10. [Integration Patterns](#integration-patterns)
+11. [Migrating from Bedrock Agents Classic](#migrating-from-bedrock-agents-classic)
+12. [Security and Compliance](#security-and-compliance)
+13. [Best Practices](#best-practices)
 
 ---
 
@@ -231,6 +232,96 @@ print(json.loads(response["response"].read()))
 ```
 
 Reuse the same `runtimeSessionId` to keep talking to the same session microVM (and its in-memory state); use a new one for a fresh, isolated session.
+
+---
+
+## Managed Harness
+
+A harness is an AgentCore-managed agent loop declared as configuration: model, system prompt, tools, skills, memory, limits and lifecycle hooks. AgentCore runs it on Runtime, in the same session-isolated microVMs as code-defined agents, so there is no agent code to build or deploy. AWS recommends it as the starting point for new agents and as the first migration target for Agents Classic. Use a code-defined agent on Runtime instead when you need custom orchestration, multi-agent collaboration, stage-specific prompt overrides or a framework you already use.
+
+### With the CLI
+
+```bash
+agentcore create --name ResearchAgent --defaults --model-id us.anthropic.%%model=anthropic%%
+cd ResearchAgent
+agentcore add tool --harness ResearchAgent --type agentcore_code_interpreter --name code-interpreter
+agentcore deploy
+agentcore invoke --harness ResearchAgent --session-id "$(uuidgen)" "Compare three CRM vendors for a 40-person team"
+```
+
+The harness lives in `app/ResearchAgent/harness.json` (model, tools, skills, memory) with its prompt in `system-prompt.md`. `agentcore add harness` adds another harness with every setting as a flag: `--memory-mode managed --memory-strategies SEMANTIC`, `--max-iterations`, `--timeout`, `--network-mode VPC`, `--authorizer-type CUSTOM_JWT` and more. `agentcore invoke --harness` accepts per-call overrides such as `--model-id`, `--system-prompt`, `--tools` and `--actor-id`, without a redeploy.
+
+### With boto3
+
+```python
+import time
+import uuid
+
+import boto3
+
+control = boto3.client("bedrock-agentcore-control", region_name="us-west-2")
+data = boto3.client("bedrock-agentcore", region_name="us-west-2")
+
+harness = control.create_harness(
+    harnessName="ResearchAgent",
+    executionRoleArn="arn:aws:iam::111122223333:role/ResearchHarnessRole",
+    model={"bedrockModelConfig": {"modelId": "us.anthropic.%%model=anthropic%%", "maxTokens": 4096}},
+    systemPrompt=[{"text": "You are a careful research assistant. Cite your sources."}],
+    tools=[
+        {"type": "agentcore_code_interpreter", "name": "code-interpreter"},
+        {
+            "type": "agentcore_gateway",
+            "name": "orders",
+            "config": {"agentCoreGateway": {"gatewayArn": "arn:aws:bedrock-agentcore:us-west-2:111122223333:gateway/orders-gw"}},
+        },
+    ],
+    truncation={"strategy": "sliding_window", "config": {"slidingWindow": {"messagesCount": 40}}},
+    maxIterations=20,
+    timeoutSeconds=600,
+)["harness"]
+
+# Wait until the harness (and the Runtime behind it) is ready
+while True:
+    current = control.get_harness(harnessId=harness["harnessId"])["harness"]
+    if current["status"] == "READY":
+        break
+    if current["status"].endswith("FAILED"):
+        raise RuntimeError(current.get("failureReason"))
+    time.sleep(10)
+
+response = data.invoke_harness(
+    harnessArn=harness["arn"],
+    runtimeSessionId=str(uuid.uuid4()),  # at least 33 characters; reuse it to continue the session
+    messages=[{"role": "user", "content": [{"text": "Compare three CRM vendors for a 40-person team"}]}],
+)
+
+for event in response["stream"]:
+    if "contentBlockDelta" in event:
+        text = event["contentBlockDelta"]["delta"].get("text")
+        if text:
+            print(text, end="", flush=True)
+    elif "messageStop" in event:
+        stop = event["messageStop"]["stopReason"]  # end_turn, tool_use, max_iterations_exceeded, ...
+    elif "runtimeClientError" in event:
+        raise RuntimeError(event["runtimeClientError"].get("message"))
+```
+
+The execution role trusts `bedrock-agentcore.amazonaws.com` and needs model invocation, logs, X-Ray and access to any tools it uses. The [IAM page](/amazon-bedrock-agents-guide/python/bedrock_security_iam_examples/#agentcore-harness) has a scoped version. Callers need `bedrock-agentcore:InvokeHarness` **and** `bedrock-agentcore:InvokeAgentRuntime` on the harness ARN.
+
+**Tool types:** `agentcore_code_interpreter`, `agentcore_browser`, `agentcore_gateway` (Gateway targets as MCP tools), `remote_mcp` (any streamable-HTTP MCP server) and `inline_function`. An inline function is the harness's return of control: the harness stops with `stopReason` `tool_use` and returns the call to your code. You run it and send a `toolResult` block in the next `invoke_harness` call on the same session.
+
+**Security notes.** Anyone who can call `invoke_harness` can also override the model, tools, skills and `additionalParams` for that call. If you forward end-user input, strip or allowlist those fields in your own application layer. With SigV4 callers, the harness does not pass per-user identity to tools. Configure a JWT authorizer (`authorizerConfiguration.customJWTAuthorizer`) when tools need user-scoped OAuth tokens.
+
+### Exporting a harness to code
+
+When the harness stops being enough, `agentcore export harness` generates an equivalent Python Strands agent as a new runtime in the same project. Its tools, gateway connections and system prompt are carried over:
+
+```bash
+agentcore export harness --name ResearchAgent    # writes app/ResearchAgentAgent/ and EXPORT_NOTES.md
+agentcore deploy
+```
+
+Use `--arn` to export a harness created outside the project, and `--target-agent-name` to choose the name.
 
 ---
 
@@ -435,7 +526,7 @@ serve_a2a(StrandsA2AExecutor(agent))
 
 ---
 
-## Data Analysis and Workflow Automation
+## Data Analysis and Memory
 
 ### Code Interpretation
 
@@ -483,7 +574,7 @@ analyst("Load sales.csv and report month-on-month growth.")
 ci.stop()
 ```
 
-### Workflow Automation Examples
+### Workflows and Memory
 
 AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
 
@@ -646,7 +737,20 @@ control.create_gateway_target(
 )
 ```
 
-A Strands agent consumes the gateway like any other MCP server, via `strands.tools.mcp.MCPClient` (with SigV4 or a bearer token, depending on the authorizer).
+A Strands agent consumes the gateway like any other streamable-HTTP MCP server. With a `CUSTOM_JWT` authorizer, pass the caller's bearer token:
+
+```python
+from strands import Agent
+from strands.tools.mcp import MCPClient
+
+
+def gateway_agent(gateway_url: str, access_token: str) -> Agent:
+    """gateway_url is create_gateway()["gatewayUrl"], ending in /mcp."""
+    gateway = MCPClient(url=gateway_url, headers={"Authorization": f"Bearer {access_token}"})
+    return Agent(model="us.anthropic.%%model=anthropic%%", tools=[gateway])  # the agent manages the MCP session
+```
+
+Gateway target tools are named `<target>___<tool>` (for example `orders-lambda___get_order`). With the `AWS_IAM` authorizer, requests must be SigV4-signed for the `bedrock-agentcore` service: pass an `httpx.Auth` implementation as `auth_provider=` instead of headers. Gateway targets also include Bedrock knowledge bases (`agentcore add gateway-target --type connector --connector bedrock-knowledge-bases`), which is how harnesses and migrated Classic agents reach a knowledge base.
 
 ### Pattern 2: AgentCore + Step Functions
 
@@ -717,9 +821,48 @@ def handler(event, context):
     return json.loads(response["response"].read())
 ```
 
-### Pattern 4: Migrating from Bedrock Agents Classic
+---
 
-AWS's migration guidance maps Classic concepts onto AgentCore: action groups become MCP tools behind Gateway, knowledge bases are reached through Gateway, return-of-control becomes inline function tools, and session state moves to AgentCore Memory. Start from the managed harness when the Classic agent was purely declarative; use code-defined agents on Runtime when you relied on prompt overrides, custom orchestration or multi-agent collaboration.
+## Migrating from Bedrock Agents Classic
+
+Agents Classic closed to new customers on 30 July 2026. Existing agents keep working with no announced end date, but no new features or models will be added. AWS's [migration guidance](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html) maps Classic concepts to AgentCore like this:
+
+| Agents Classic | AgentCore |
+|----------------|-----------|
+| Managed orchestration loop | [Managed harness](#managed-harness) |
+| Action groups (OpenAPI or function schema, Lambda executor) | Gateway targets exposed as MCP tools, or `@tool` functions in code |
+| Associated knowledge bases | Gateway knowledge-base connector, or a retrieval tool in code |
+| Return of control, `AMAZON.UserInput` | Harness `inline_function` tools (the harness pauses and returns `tool_use`) |
+| `AMAZON.CodeInterpreter` | AgentCore Code Interpreter |
+| Session TTL and `memoryConfiguration` | AgentCore Memory (short- and long-term strategies) |
+| Guardrails on the agent | Bedrock Guardrails on the model call, Gateway policies |
+| Prompt overrides per orchestration stage | No direct equivalent in the harness; use a code-defined agent |
+| Multi-agent collaboration | Agents as tools in a harness, or Strands multi-agent code on Runtime |
+
+**Start with the CLI import.** `agentcore create --type import` generates a code-defined runtime project in Strands or LangGraph from an existing agent alias. It reads the agent, the alias, action groups, associated knowledge bases and collaborators through the Bedrock Agents APIs, so it needs credentials with `bedrock:GetAgent*` and `bedrock:ListAgent*` permissions in the agent's account:
+
+```bash
+agentcore create --name OrdersAgent --type import \
+  --agent-id ABCDEFGHIJ --agent-alias-id TSTALIASID --region us-east-1 \
+  --framework Strands
+cd OrdersAgent
+agentcore dev        # try it locally against the same Lambda functions and knowledge bases
+agentcore deploy
+```
+
+Review the generated `app/OrdersAgent/` code before deploying. Whatever the Classic agent reached through action groups and knowledge bases (Lambda functions, `bedrock:Retrieve`) needs matching permissions on the new runtime's execution role.
+
+**Or rebuild as a harness** when the Classic agent was purely declarative. Create a harness project, set the model with `--model-id`, copy the instruction into `system-prompt.md`, put the action groups behind a gateway, and add it as a tool:
+
+```bash
+agentcore create --name OrdersAgent --defaults --model-id us.anthropic.%%model=anthropic%%
+cd OrdersAgent
+agentcore add tool --harness OrdersAgent --type agentcore_gateway --name orders \
+  --gateway-arn arn:aws:bedrock-agentcore:us-east-1:111122223333:gateway/orders-gw
+agentcore deploy
+```
+
+AWS also publishes a migration skill for coding agents in the [agent toolkit for AWS](https://github.com/aws/agent-toolkit-for-aws). It inspects a Classic agent, checks whether it can move to a harness and drives the same CLI. Run the old and new agents side by side on recorded conversations (with `agentcore run eval`, see the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/#evaluations)) before switching callers over.
 
 ---
 
@@ -877,66 +1020,13 @@ def invoke_with_retry(runtime_arn: str, session_id: str, prompt: str, attempts: 
 
 ### 4. Monitoring
 
-AgentCore Observability uses OpenTelemetry. For Python agents, add the AWS Distro for OpenTelemetry and run the agent under `opentelemetry-instrument`; Strands emits spans for model calls, tool calls and agent loops automatically.
-
-```dockerfile
-RUN pip install aws-opentelemetry-distro
-CMD ["opentelemetry-instrument", "python", "main.py"]
-```
-
-Custom business metrics can still go straight to CloudWatch with `boto3.client("cloudwatch").put_metric_data(...)`.
+AgentCore Observability uses OpenTelemetry: Strands emits spans for agent loops, model calls and tool calls, and CLI-generated projects include the AWS Distro for OpenTelemetry. Setup, custom spans and metrics are on the [observability page](/amazon-bedrock-agents-guide/python/bedrock_agents_observability_python/).
 
 ---
 
 ## Production Deployment
 
-### Deployment Checklist
-
-- [ ] Agent tested locally against `POST /invocations`
-- [ ] Execution role scoped to the specific models, memories and gateways used
-- [ ] Inbound auth chosen (IAM or JWT) and tested
-- [ ] Lifecycle timeouts set to match the workload
-- [ ] VPC networking configured if the agent reaches private resources
-- [ ] Observability (Transaction Search, OTEL) enabled
-- [ ] Memory expiry and KMS settings reviewed
-- [ ] Load test against concurrent-session quotas
-
-### Versions and Endpoints (blue/green)
-
-Every create or update produces an immutable runtime version. Endpoints are named pointers to versions, so blue/green is a matter of moving an endpoint:
-
-```python
-control = boto3.client("bedrock-agentcore-control")
-
-# Stage the new version behind its own endpoint
-control.create_agent_runtime_endpoint(
-    agentRuntimeId=runtime_id,
-    name="canary",
-    agentRuntimeVersion="7",
-)
-
-# ... run tests against qualifier="canary" ...
-
-# Promote: point the (previously created) production endpoint at the tested version
-control.update_agent_runtime_endpoint(
-    agentRuntimeId=runtime_id,
-    endpointName="production",
-    agentRuntimeVersion="7",
-)
-
-# Roll back by pointing it at the previous version again
-```
-
-Callers select an endpoint with the `qualifier` argument of `invoke_agent_runtime`.
-
-### Cost Optimization
-
-AgentCore has no cost-analysis API of its own. Use Cost Explorer (filter on the Amazon Bedrock AgentCore service) and these levers:
-
-- Runtime bills for active CPU and memory per session; short idle timeouts stop idle sessions accruing charges.
-- Pick the smallest model that holds quality for each step; Claude Haiku-class models suit routing and extraction.
-- Memory long-term strategies run extraction on every event — enable only the strategies you query.
-- Code Interpreter and Browser sessions bill while open; always `stop()` them (the `code_session` / `browser_session` context managers do this).
+Runtime versions and endpoints, CI/CD with the CLI, evaluations, quotas, IAM and cost are covered in the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/).
 
 ---
 

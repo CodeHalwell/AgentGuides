@@ -20,6 +20,26 @@ export type Framework = {
   version?: string;
 };
 
+/**
+ * Periodic groups. Five hues plus ink, per the brand: each category has its own
+ * colour, and cobalt is reserved for languages.
+ */
+export const categoryGroup: Record<Framework['category'], 'oxide' | 'verdigris' | 'ink' | 'permanganate' | 'sulfur'> = {
+  'Multi-Agent': 'oxide',
+  'Data & RAG': 'verdigris',
+  'Cloud-Native': 'ink',
+  Enterprise: 'ink',
+  'Model-Specific': 'permanganate',
+  Lightweight: 'sulfur',
+};
+
+export const languageSymbol: Record<Framework['languages'][number], string> = {
+  Python: 'Py',
+  TypeScript: 'Ts',
+  '.NET': 'C#',
+  Go: 'Go',
+};
+
 /** Current version of a package, from versions.json (the single source of truth). */
 const v = (pkg: keyof typeof versions.packages): string => `v${versions.packages[pkg].version}`;
 
@@ -28,7 +48,7 @@ export const frameworks: Framework[] = [
     id: 'smolagents',
     symbol: 'Sa',
     name: 'SmolAgents',
-    tagline: 'Minimalist, code-centric agents in ~1,000 lines.',
+    tagline: 'Minimalist, code-first agents.',
     href: '/smolagents-guide/',
     languages: ['Python'],
     category: 'Lightweight',
@@ -148,7 +168,7 @@ export const frameworks: Framework[] = [
     id: 'haystack',
     symbol: 'Hs',
     name: 'Haystack',
-    tagline: 'Production search + multi-agent pipelines, Deepset Studio.',
+    tagline: 'Pipelines and agents for production RAG and search.',
     href: '/haystack-guide/',
     languages: ['Python'],
     category: 'Data & RAG',
@@ -220,7 +240,7 @@ export const frameworks: Framework[] = [
     id: 'mistral',
     symbol: 'Mi',
     name: 'Mistral Agents API',
-    tagline: 'Mistral-native agents with 5 built-in connectors.',
+    tagline: 'Hosted agents with built-in tools, MCP connectors and handoffs.',
     href: '/mistral-agents-api-guide/',
     languages: ['Python', 'TypeScript'],
     category: 'Model-Specific',

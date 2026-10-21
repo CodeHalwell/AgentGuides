@@ -3,6 +3,9 @@ title: "Amazon Bedrock Agents: Recipes and Common Patterns"
 description: "Practical recipes for Amazon Bedrock Agents (Agents Classic) and AgentCore: support agents, supervisor multi-agent systems, A2A, financial analytics, code interpretation and document processing."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 9
 ---
 
 Practical recipes for common Bedrock agent scenarios.
@@ -29,18 +32,27 @@ HAIKU = "us.anthropic.claude-haiku-5-5"
 OPUS = "us.anthropic.claude-opus-5-5"
 
 
-def wait_for_agent(client, agent_id: str, wanted=("NOT_PREPARED", "PREPARED")) -> None:
-    while client.get_agent(agentId=agent_id)["agent"]["agentStatus"] not in wanted:
+def wait_for_agent(client, agent_id: str) -> str:
+    """Wait until the agent is no longer CREATING, UPDATING or PREPARING; return its status."""
+    while True:
+        status = client.get_agent(agentId=agent_id)["agent"]["agentStatus"]
+        if status not in ("CREATING", "UPDATING", "PREPARING"):
+            return status
         time.sleep(2)
 
 
 def prepare_and_alias(client, agent_id: str, alias_name: str = "live") -> str:
     """Prepare the DRAFT version and create an alias pointing at a new numbered version."""
     wait_for_agent(client, agent_id)
-    client.prepare_agent(agentId=agent_id)
-    wait_for_agent(client, agent_id, wanted=("PREPARED",))
-    alias = client.create_agent_alias(agentId=agent_id, agentAliasName=alias_name)
-    return alias["agentAlias"]["agentAliasId"]
+    client.prepare_agent(agentId=agent_id)  # status becomes PREPARING straight away
+    if wait_for_agent(client, agent_id) != "PREPARED":
+        raise RuntimeError(f"agent {agent_id} failed to prepare")
+    alias_id = client.create_agent_alias(agentId=agent_id, agentAliasName=alias_name)["agentAlias"]["agentAliasId"]
+    while (status := client.get_agent_alias(agentId=agent_id, agentAliasId=alias_id)["agentAlias"]["agentAliasStatus"]) != "PREPARED":
+        if status == "FAILED":
+            raise RuntimeError(f"alias {alias_id} failed")
+        time.sleep(2)
+    return alias_id
 
 
 def read_completion(response) -> str:
@@ -581,6 +593,8 @@ For new work, the same capability on AgentCore is the [Code Interpreter](/amazon
 Textract extracts the text; the agent classifies and validates it.
 
 ```python
+import hashlib
+
 import boto3
 
 
@@ -615,7 +629,7 @@ class DocumentProcessingAgent:
         response = self.runtime.invoke_agent(
             agentId=agent["agent_id"],
             agentAliasId=agent["alias_id"],
-            sessionId=f"doc-{key.replace('/', '-')}",
+            sessionId="doc-" + hashlib.sha256(f"{bucket}/{key}".encode()).hexdigest()[:32],  # [0-9a-zA-Z._:-] only
             inputText=f"Process this document (s3://{bucket}/{key}):\n\n{text[:20000]}",
         )
         return read_completion(response)

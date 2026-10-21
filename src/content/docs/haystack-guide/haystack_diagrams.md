@@ -1,899 +1,247 @@
 ---
 title: "Haystack Architecture and Pattern Diagrams"
-description: "Architecture diagrams for Haystack 3 — components, pipeline execution, the agent loop, multi-agent coordination and memory/retrieval."
+description: "Diagrams of how Haystack 3 works: pipelines, the Agent loop and its hooks, wrapping pipelines as components and tools, multi-agent composition and tracing spans."
 framework: "haystack"
 language: "python"
+sidebar:
+  label: "Diagrams"
+  order: 9
 ---
 
-> Reflects `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Component names follow Haystack 3: ChatGenerators only, tools executed by `Agent`, a single `Pipeline` class with `run`, `run_async` and `stream`.
+> Reflects `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Every box is a real Haystack class, socket or hook point; the linked sections have the code.
 
-## Table of Contents
+## Contents
 
-1. [Haystack 3 Core Architecture](#haystack-3-core-architecture)
-2. [Component Types and Interactions](#component-types-and-interactions)
-3. [Pipeline Execution Flow](#pipeline-execution-flow)
-4. [Agent Loop Architecture](#agent-loop-architecture)
-5. [Multi-Agent Coordination Patterns](#multi-agent-coordination-patterns)
-6. [Memory and Retrieval Systems](#memory-and-retrieval-systems)
-7. [Document Store Integration](#document-store-integration)
-8. [RAG Pipeline Architecture](#rag-pipeline-architecture)
-9. [Observability Stack](#observability-stack)
-10. [Production Deployment Architecture](#production-deployment-architecture)
-
----
-
-## Haystack 3 Core Architecture
-
-### System Layers
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Application Layer                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │    Agents    │  │ RAG Systems  │  │   Pipelines  │        │
-│  └──────────────┘  └──────────────┘  └──────────────┘        │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-┌──────────────────┴───────────────────────────────────────────┐
-│                  Pipeline Orchestration Layer                 │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │  DAG Execution Engine                                  │   │
-│  │  - Component Registration  - Data Flow  - Routing     │   │
-│  │  - Branching Logic        - Error Handling             │   │
-│  └────────────────────────────────────────────────────────┘   │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-┌──────────────────┴───────────────────────────────────────────┐
-│                  Component Layer                              │
-│  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐   │
-│  │  Retrievers    │ │ ChatGenerators │ │     Tools      │   │
-│  └────────────────┘ └────────────────┘ └────────────────┘   │
-│  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐   │
-│  │ PromptBuilders │ │    Routers     │ │  Validators    │   │
-│  └────────────────┘ └────────────────┘ └────────────────┘   │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-┌──────────────────┴───────────────────────────────────────────┐
-│                 Integration Layer                             │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         │
-│  │ LLM Providers│ │ Vector Stores│ │  APIs/Tools  │         │
-│  └──────────────┘ └──────────────┘ └──────────────┘         │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         │
-│  │ OpenAI       │ │ Elasticsearch│ │ HTTP Clients │         │
-│  │ Anthropic    │ │ Weaviate     │ │ DB Connectors│         │
-│  │ Hugging Face │ │ Pinecone     │ │ File Systems │         │
-│  └──────────────┘ └──────────────┘ └──────────────┘         │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-┌──────────────────┴───────────────────────────────────────────┐
-│                  Data Layer                                   │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         │
-│  │  Documents   │ │  Embeddings  │ │  Indexes     │         │
-│  └──────────────┘ └──────────────┘ └──────────────┘         │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Component Anatomy
-
-```
-┌─────────────────────────────────────────────┐
-│           Haystack Component                 │
-├─────────────────────────────────────────────┤
-│  @component                                 │
-│  class MyComponent:                         │
-│      def __init__(self, ...):               │
-│          # Initialization                  │
-│          # Validation                      │
-│          # State Setup                     │
-│                                             │
-│      @component.output_types(              │
-│          output1=type,                     │
-│          output2=type                      │
-│      )                                      │
-│      def run(self, input1, input2) -> dict:│
-│          # Processing Logic                │
-│          return {                          │
-│              "output1": value1,            │
-│              "output2": value2             │
-│          }                                  │
-├─────────────────────────────────────────────┤
-│  Inputs:     [input1, input2, ...]         │
-│  Outputs:    [output1, output2, ...]       │
-│  State:      [internal_state]              │
-│  Metadata:   [name, type, version]         │
-└─────────────────────────────────────────────┘
-```
+1. [Components and pipelines](#components-and-pipelines)
+2. [RAG: indexing and querying](#rag-indexing-and-querying)
+3. [Routing and loops](#routing-and-loops)
+4. [The Agent loop](#the-agent-loop)
+5. [Hooks timeline](#hooks-timeline)
+6. [Pipelines as components and tools](#pipelines-as-components-and-tools)
+7. [Multi-agent composition](#multi-agent-composition)
+8. [Tracing spans](#tracing-spans)
 
 ---
 
-## Component Types and Interactions
+## Components and pipelines
 
-### Component Hierarchy
-
-```
-┌────────────────────────────────────────────────────────┐
-│                Haystack Component                       │
-│                  (Base Class)                           │
-└─────────────────┬──────────────────────────────────────┘
-                  │
-    ┌─────────────┼──────────────┬───────────────┐
-    │             │              │               │
-    ▼             ▼              ▼               ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-│Retrievers│ │  Chat    │ │  Routers │ │ Builders &   │
-│          │ │Generators│ │          │ │ Joiners      │
-└──────────┘ └──────────┘ └──────────┘ └──────────────┘
-    │             │              │               │
-    ├─────────────┼──────────────┼───────────────┤
-    │             │              │               │
-    ▼             ▼              ▼               ▼
-┌──────────┐ ┌──────────┐ ┌───────────┐ ┌──────────────┐
-│BM25      │ │OpenAI    │ │Conditional│ │PromptBuilder │
-│Embedding │ │Anthropic*│ │LLMMessages│ │ChatPrompt-   │
-│MultiQuery│ │Fallback  │ │Metadata   │ │ Builder      │
-│          │ │Mock      │ │FileType   │ │DocumentJoiner│
-└──────────┘ └──────────┘ └───────────┘ └──────────────┘
-  * integration package (haystack_integrations.*)
-└──────────┘ └──────────┘ └──────────┘ └──────────────┘
-```
-
-### Data Flow Between Components
+A component declares typed inputs (the parameters of `run()`) and typed outputs (`@component.output_types`). `pipeline.connect("a.out", "b.in")` checks that the types match. `Pipeline.run()` returns the outputs of leaf components only, unless you pass `include_outputs_from`. See [Components and Pipelines](/haystack-guide/haystack_comprehensive_guide/#components-and-pipelines).
 
 ```
-Component A                    Component B
-┌─────────────────┐          ┌─────────────────┐
-│                 │          │                 │
-│  @output_types( │          │  def run(self,  │
-│    result=str   │          │    input: str   │
-│  )              │          │  ):             │
-│  def run():     │          │      ...        │
-│    ...          │          │                 │
-│    return {     │          │  @output_types( │
-│      "result":  ├─────────►│    output=int   │
-│        "text"   │          │  )              │
-│    }            │          │                 │
-│                 │          │                 │
-└─────────────────┘          └─────────────────┘
-     ▲                                │
-     │                                │
-     │ Connection definition in       │
-     │ pipeline.connect(              │
-     │ "A.result", "B.input")         │
-     │                                ▼
-     │                          ┌─────────────────┐
-     │                          │ Component C     │
-     │                          │                 │
-     │                          │  def run(self,  │
-     └──────────────────────────┤    data: int    │
-                                │  ):             │
-                                │      ...        │
-                                └─────────────────┘
+           pipeline.run({"stats": {"text": "..."}})
+                          │
+                          ▼
+              ┌──────────────────────────┐
+              │ stats: TextStats         │
+              │  in:  text: str          │
+              │  out: text: str          │
+              │       word_count: int    │
+              │       char_count: int ───┼──► (unconnected, not returned)
+              └─────┬──────────┬─────────┘
+          stats.text│          │stats.word_count
+                    ▼          ▼
+              ┌──────────────────────────┐
+              │ formatter: Formatter     │
+              │  in:  text, word_count   │
+              │  out: formatted: str ────┼──► result["formatter"]["formatted"]
+              └──────────────────────────┘
 ```
 
----
+The same graph runs three ways: `run()` (sequential), `await run_async()` (independent branches concurrently, bounded by `concurrency_limit`) and `stream()` (an async iterator of `StreamingChunk`s, with `handle.result` at the end).
 
-## Pipeline Execution Flow
+## RAG: indexing and querying
 
-### Simple Linear Pipeline
-
-```
-Input Query
-    │
-    ▼
-┌────────────────────┐
-│   Validator        │  ✓ Validates input format
-│   Component        │  ✓ Checks for empty values
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
-│   Transformer      │  ✓ Normalises text
-│   Component        │  ✓ Preprocesses data
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
-│   Processor        │  ✓ Main processing logic
-│   Component        │  ✓ Complex transformations
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
-│   Formatter        │  ✓ Structures output
-│   Component        │  ✓ Adds metadata
-└────────┬───────────┘
-         │
-         ▼
-    Output
-```
-
-### Branching Pipeline with Conditional Routing
+The components from the [knowledge-base recipe](/haystack-guide/haystack_recipes/#knowledge-base-question-answering-system). Indexing and querying are separate pipelines that share a document store.
 
 ```
-          Input
-            │
-            ▼
-      ┌─────────────┐
-      │  Classifier │  ← Routes based on input type
-      └─────┬───────┘
-            │
-       ┌────┴────────┐
-       │             │
-    Type A         Type B
-       │             │
-       ▼             ▼
-  ┌─────────┐   ┌─────────┐
-  │Handler A│   │Handler B│
-  └────┬────┘   └────┬────┘
-       │             │
-       └────┬────────┘
-            │
-            ▼
-       ┌──────────────┐
-       │ Aggregator   │  ← Combines results
-       │ Component    │
-       └──────┬───────┘
-              │
-              ▼
-          Output
+INDEXING                                        QUERYING
+
+list[Document]                                  question
+     │                                              │
+     ▼                                              ▼
+DocumentCleaner                             InMemoryBM25Retriever ──documents──┐
+     │ documents                                    │ documents                │
+     ▼                                              ▼                          │
+DocumentSplitter                            ChatPromptBuilder                  │
+     │ documents                                    │ prompt                   │
+     ▼                                              ▼                          │
+DocumentWriter ──► InMemoryDocumentStore ◄── OpenAIChatGenerator              │
+                   (or Elasticsearch,               │ replies                  │
+                    Qdrant, ...)                    ▼                          │
+                                              AnswerBuilder ◄──────────────────┘
+                                                    │ answers: list[GeneratedAnswer]
+                                                    ▼
 ```
 
-### Parallel Execution Pipeline
+For dense or hybrid retrieval, add `OpenAIDocumentEmbedder` before the writer, `OpenAITextEmbedder` before an embedding retriever, and join the two retrievers' results with `DocumentJoiner(join_mode="reciprocal_rank_fusion")`.
+
+## Routing and loops
+
+Only the branch that receives input runs. `BranchJoiner` merges branches (and closes loops); its output socket is `value`. See [Branching with ConditionalRouter](/haystack-guide/haystack_comprehensive_guide/#branching-with-conditionalrouter) and [Iterative refinement loop](/haystack-guide/haystack_comprehensive_guide/#iterative-refinement-loop).
 
 ```
-                Input
-                  │
-                  ▼
-        ┌─────────────────┐
-        │  Splitter       │  ← Distributes work
-        └────────┬────────┘
-                 │
-    ┌────────────┼────────────┐
-    │            │            │
-    ▼            ▼            ▼
- Worker 1     Worker 2     Worker 3
- ┌───────┐   ┌───────┐   ┌───────┐
- │Process│   │Process│   │Process│
- │Task 1 │   │Task 2 │   │Task 3 │
- └────┬──┘   └────┬──┘   └────┬──┘
-      │           │           │
-      └───────────┼───────────┘
-                  │
-                  ▼
-        ┌─────────────────┐
-        │  Aggregator     │  ← Combines results
-        │  Component      │
-        └────────┬────────┘
-                 │
-                 ▼
-             Output
+Routing                                    Loop (Pipeline(max_runs_per_component=3))
+
+        query                              ChatPromptBuilder
+          │                                      │ prompt
+          ▼                                      ▼
+  ConditionalRouter                        BranchJoiner ◄─────────────┐
+   │ billing    │ general                        │ value              │
+   ▼            ▼                                ▼                    │
+ Agent A      Agent B                     OpenAIChatGenerator         │
+   │ last_message │                              │ replies            │ feedback
+   └──────┬───────┘                              ▼                    │
+          ▼                                LengthValidator ───────────┘
+     BranchJoiner                                │ valid
+          │ value                                ▼
+          ▼
 ```
 
----
+A loop that never satisfies its validator raises `PipelineMaxComponentRuns` once a component exceeds `max_runs_per_component`.
 
-## Agent Loop Architecture
+## The Agent loop
 
-### Agent Execution Flow
+What `Agent.run()` does, with the hook points and state keys involved. See [Agent Concepts](/haystack-guide/haystack_comprehensive_guide/#agent-concepts-in-haystack).
 
 ```
-agent.run(messages=[...], **prompt_variables, **state_values)
+agent.run(messages=[...], **prompt_variables, **state_values, hook_context={...})
   │
   ▼
-┌──────────────────────────────────────┐
-│ before_run hooks                     │
-│ Render system_prompt / user_prompt   │
-│ Initialise State (messages, step_count,
-│   token_usage, tool_call_counts, ...)│
-└──────────────────┬───────────────────┘
-                   │
-      ┌────────────▼─────────────┐
-      │ before_llm hooks         │◄─────────────────────────┐
-      │ (a hook may set stop_run)│                          │
-      └────────────┬─────────────┘                          │
-                   ▼                                        │
-      ┌──────────────────────────┐                          │
-      │ chat_generator.run(      │                          │
-      │   messages, tools)       │                          │
-      └────────────┬─────────────┘                          │
-                   │                                        │
-         tool calls in reply?                               │
-          │ no               │ yes                          │
-          ▼                  ▼                              │
-   exit_reason="text"  ┌──────────────────────────┐         │
-          │            │ before_tool hooks        │         │
-          │            │ (e.g. ConfirmationHook)  │         │
-          │            │ run tools concurrently   │         │
-          │            │ (tool_concurrency_limit) │         │
-          │            │ outputs_to_state → State │         │
-          │            │ after_tool hooks         │         │
-          │            └────────────┬─────────────┘         │
-          │                         │                       │
-          │         tool in exit_conditions?                │
-          │            │ yes                │ no            │
-          │            ▼                    └─ step_count < │
-          │     exit_reason=<tool>             max_agent_steps
-          │            │                                    │
-          ▼            ▼                                    │
-      ┌──────────────────────────┐   continue_run=True      │
-      │ on_exit hooks            │──────────────────────────┘
-      └────────────┬─────────────┘
-                   ▼
-      ┌──────────────────────────┐
-      │ after_run hooks          │
-      │ return {messages,        │
-      │  last_message, step_count│
-      │  token_usage,            │
-      │  tool_call_counts,       │
-      │  exit_reason, ...state}  │
-      └──────────────────────────┘
-```
-
-### Agent State Transitions
-
-```
-            ┌─────────────────────────┐
-            │   IDLE STATE            │
-            │  (Awaiting input)       │
-            └────────────┬────────────┘
-                         │
-                    User provides query
-                         │
-                         ▼
-            ┌─────────────────────────┐
-            │ PROCESSING STATE        │
-            │ (Thinking & Planning)   │
-            └────────┬───────┬────────┘
-                     │       │
-           Tool Call │       │ Direct Answer
-                     │       │
-                     ▼       ▼
-            ┌──────────────────────────┐
-            │ TOOL_EXECUTION STATE     │
-            │ (Running tools)          │
-            └────────┬────────────────┘
-                     │
-              ┌──────▼──────┐
-              │ Tool Result │
-              └──────┬──────┘
-                     │
+┌────────────────────────────────────────────┐
+│ render system_prompt / user_prompt         │
+│ initialise State: messages, step_count,    │
+│   token_usage, tool_call_counts, your keys │
+│ before_run hooks                           │
+└────────────────────┬───────────────────────┘
                      ▼
-    ┌─────────────────────────────────┐
-    │ CHECK EXIT CONDITIONS           │
-    │ - max_agent_steps reached?      │
-    │ - exit-condition tool called?   │
-    │ - text reply (no tool calls)?   │
-    └──┬────────────────────────┬─────┘
-       │                        │
-    No │                        │ Yes
-       │                        │
-       ▼                        ▼
-    Loop Back      ┌─────────────────────┐
-                   │  COMPLETE STATE     │
-                   │  (Done)             │
-                   └─────────────────────┘
-```
-
----
-
-## Multi-Agent Coordination Patterns
-
-### Sequential Agent Pipeline
-
-```
-Query
-  │
-  ▼
-┌─────────────────┐
-│   Agent 1       │
-│  (Analyser)     │  ✓ Analyses problem
-│                 │  ✓ Outputs analysis
-└────────┬────────┘
-         │
-    (Output 1)
-         │
-         ▼
-┌─────────────────┐
-│   Agent 2       │
-│  (Planner)      │  ✓ Creates plan
-│                 │  ✓ Based on analysis
-└────────┬────────┘
-         │
-    (Output 2)
-         │
-         ▼
-┌─────────────────┐
-│   Agent 3       │
-│  (Executor)     │  ✓ Executes plan
-│                 │  ✓ Produces results
-└────────┬────────┘
-         │
-    (Output 3)
-         │
-         ▼
-      Result
-```
-
-### Parallel Agent Execution with Aggregation
-
-```
-                    Query
-                      │
-                      ▼
-              ┌───────────────────┐
-              │  Task Distributor │
-              └─────────┬─────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-        ▼               ▼               ▼
-    Task 1         Task 2         Task 3
-    [Agent A]      [Agent B]      [Agent C]
-    │              │              │
-    │ (Parallel    │ (Parallel    │ (Parallel
-    │  Execution)  │  Execution)  │  Execution)
-    │              │              │
-    ▼              ▼              ▼
-   Result A      Result B      Result C
-    │              │              │
-    └──────────────┼──────────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │  Result Aggregator   │
-        │  - Combine results   │
-        │  - Resolve conflicts │
-        │  - Format output     │
-        └──────────┬───────────┘
-                   │
-                   ▼
-               Final Result
-```
-
-### Master-Worker Agent Pattern
-
-```
-        ┌──────────────────────┐
-        │   Master Agent       │
-        │  - Orchestrates work │
-        │  - Monitors progress │
-        │  - Handles failures  │
-        └──────────┬───────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    │              │              │
-    ▼              ▼              ▼
-  Worker 1     Worker 2     Worker 3
-  ┌────────┐  ┌────────┐  ┌────────┐
-  │Task 1  │  │Task 2  │  │Task 3  │
-  │ Agent  │  │ Agent  │  │ Agent  │
-  │        │  │        │  │        │
-  │[Work]  │  │[Work]  │  │[Work]  │
-  │        │  │        │  │        │
-  └────┬───┘  └────┬───┘  └────┬───┘
-       │           │           │
-       └───────────┼───────────┘
-                   │
-                   ▼ (Results + Status)
-        ┌──────────────────────┐
-        │   Master Agent       │
-        │  - Aggregates results│
-        │  - Produces output   │
-        └──────────────────────┘
-```
-
----
-
-## Memory and Retrieval Systems
-
-### Conversation Memory Architecture
-
-```
-┌─────────────────────────────────────────┐
-│      Conversation Memory Buffer          │
-├─────────────────────────────────────────┤
-│                                          │
-│  Turn 1:                                 │
-│  User: "Hello, what's the time?"        │
-│  Assistant: "It's 2:30 PM"              │
-│                                          │
-│  Turn 2:                                 │
-│  User: "What did I just ask?"           │
-│  Assistant: "You asked what time it is"  │
-│                                          │
-│  Turn 3:                                 │
-│  User: "Can you remember my name?"      │
-│  Assistant: "I don't have your name"    │
-│                                          │
-│  [Maximum capacity: e.g., 100 messages] │
-│  [Oldest messages purged when exceeded]  │
-└─────────────────────────────────────────┘
-     │                          │
-     ▼                          ▼
-┌──────────────────┐  ┌──────────────────┐
-│Short-term Memory │  │Persistent Storage│
-│(In-Memory Store) │  │(Database/File)   │
-│                  │  │                  │
-│Fast Access       │  │Long-term Recall │
-│Limited Size      │  │Unlimited Size    │
-└──────────────────┘  └──────────────────┘
-```
-
-### Semantic Memory with Vector Database
-
-```
-Input Query
-    │
-    ▼
-┌─────────────────────┐
-│   Embedding Model   │  "Convert text to embeddings"
-└────────────┬────────┘
-             │
-             ▼ (Vector)
-┌──────────────────────────────┐
-│   Vector Database            │
-│  (e.g., Weaviate)            │
-│                              │
-│  ┌──────────────────────┐    │
-│  │ Document 1: [0.1, 0.2] │  │
-│  │ Document 2: [0.2, 0.3] │  │
-│  │ Document 3: [0.05, 0.25]│ │
-│  └──────────────────────┘    │
-└──────────┬───────────────────┘
-           │
-           ▼ (Similarity Search)
-┌──────────────────────┐
-│ Top K Similar Docs   │
-│                      │
-│ Doc 1 - Similarity 0.95
-│ Doc 3 - Similarity 0.87
-│ Doc 5 - Similarity 0.82
-└──────────┬───────────┘
-           │
-           ▼
-   Retrieved Documents
-```
-
----
-
-## Document Store Integration
-
-### Multi-Store Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│         Haystack Document Abstraction Layer         │
-└────────────┬────────────────┬──────────────┬────────┘
-             │                │              │
-       Write Documents    Query              Index Management
-             │                │              │
-    ┌────────▼────────┐   ┌────▼────┐   ┌──▼──────────┐
-    │Document Storage │   │Retrieval │   │Embedding    │
-    │Interface        │   │Interface │   │Management   │
-    └────────┬────────┘   └────┬────┘   └──┬──────────┘
-             │                │              │
-    ┌────────┴────────────────┴──────────────┴─────────┐
-    │                                                   │
-    ▼                           ▼                      ▼
-┌──────────────┐      ┌─────────────────┐     ┌──────────────┐
-│Elasticsearch │      │    Weaviate     │     │   Pinecone   │
-│              │      │                 │     │              │
-│- Full text   │      │- Vector DB      │     │- Vector DB   │
-│- Hybrid search│      │- Semantic search│     │- Semantic    │
-└──────────────┘      └─────────────────┘     └──────────────┘
-
-┌──────────────┐      ┌─────────────────┐     ┌──────────────┐
-│   Qdrant     │      │    Milvus       │     │    Chroma    │
-│              │      │                 │     │              │
-│- Vector DB   │      │- Vector DB      │     │- Local/Cloud │
-│- Filtering   │      │- Performance    │     │- Lightweight │
-└──────────────┘      └─────────────────┘     └──────────────┘
-```
-
----
-
-## RAG Pipeline Architecture
-
-### Complete RAG System
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  QUERY PROCESSING PATH                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  User Query: "What is the return policy?"                    │
-│         │                                                    │
-│         ▼                                                    │
-│   ┌─────────────────────┐                                   │
-│   │ Query Processor     │ - Normalise  - Expand             │
-│   └────────────┬────────┘                                   │
-│                │                                             │
-│                ▼                                             │
-│   ┌─────────────────────────────────┐                       │
-│   │  Embedding Model                │ - Convert to vector   │
-│   │  (text-embedding-3-small)       │                       │
-│   └────────────┬────────────────────┘                       │
-│                │                                             │
-│                ▼                                             │
-│   ┌─────────────────────────────────┐                       │
-│   │ Vector Search                   │ - Similarity search   │
-│   │ (Weaviate / Elasticsearch)      │ - Return top-k docs  │
-│   └────────────┬────────────────────┘                       │
-│                │                                             │
-│                ▼                                             │
-│   Retrieved Documents:                                      │
-│   1. "Returns accepted within 30 days"                      │
-│   2. "Full refund process"                                  │
-│   3. "Return shipping instructions"                         │
-│                │                                             │
-└────────────────┼──────────────────────────────────────────┘
-                 │
-┌────────────────┴──────────────────────────────────────────┐
-│              GENERATION PATH                               │
-├────────────────────────────────────────────────────────────┤
-│                                                              │
-│   ┌────────────────────────────────┐                       │
-│   │  Prompt Builder                │                       │
-│   │                                │  System Prompt:       │
-│   │  Format:                       │  "You are helpful"    │
-│   │  - System prompt               │                       │
-│   │  - Retrieved context           │  Context:             │
-│   │  - User query                  │  [Retrieved docs]     │
-│   └────────────┬────────────────────┘                       │
-│                │                                             │
-│                ▼                                             │
-│   ┌────────────────────────────────┐                       │
-│   │  ChatGenerator                 │  e.g. OpenAIChat-     │
-│   │  (Generate Response)           │  Generator            │
-│   └────────────┬────────────────────┘                       │
-│                │                                             │
-│                ▼                                             │
-│   Generated Answer:                                        │
-│   "We accept returns within 30 days for full refund..."    │
-│                │                                             │
-│                ▼                                             │
-│   ┌────────────────────────────────┐                       │
-│   │  Output Validator              │  - Check format       │
-│   │                                │  - Validate schema    │
-│   │  Optional:                     │  - Ensure completeness│
-│   │  - JSON Formatting             │                       │
-│   │  - Citation Extraction         │                       │
-│   └────────────┬────────────────────┘                       │
-│                │                                             │
-│                ▼                                             │
-│   Final Response (with citations)                          │
-│                                                              │
-└────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Observability Stack
-
-### Monitoring Architecture
-
-```
-┌──────────────────────────────────────────────────────────┐
-│          Haystack Application with Instrumentation       │
-├──────────────────────────────────────────────────────────┤
-│                                                           │
-│  tracing.enable_tracing(OpenTelemetryTracer(...))         │
-│  or a connector: OpenTelemetryConnector / Langfuse...    │
-│                                                           │
-│  Spans: haystack.pipeline.run                             │
-│           └ haystack.component.run                        │
-│         haystack.agent.run                                │
-│           └ haystack.agent.step                           │
-│               ├ haystack.agent.step.llm                   │
-│               └ haystack.agent.step.tool (one per call)   │
-│                    │                                     │
-└────────────────────┼──────────────────────────────────┘
-                     │
+        ┌──────────────────────────┐
+        │ before_llm hooks         │◄───────────────────────────────┐
+        │ (TokenBudgetHook,        │                                │
+        │  CompactionHook, ...)    │── stop_run set? ──► exit_reason │
+        └────────────┬─────────────┘    = that value               │
+                     ▼                                             │
+        ┌──────────────────────────┐                               │
+        │ chat_generator.run(      │                               │
+        │   messages, tools)       │                               │
+        └────────────┬─────────────┘                               │
+                     │                                             │
+           tool calls in reply?                                    │
+            │ no               │ yes                               │
+            ▼                  ▼                                   │
+   exit_reason = "text"  ┌──────────────────────────────┐          │
+   (or "length",         │ before_tool hooks            │          │
+    "content_filter")    │   (ConfirmationHook)         │          │
+            │            │ run tools concurrently       │          │
+            │            │   (tool_concurrency_limit)   │          │
+            │            │ outputs_to_state ──► State   │          │
+            │            │ after_tool hooks             │          │
+            │            │   (ToolResultOffloadHook)    │          │
+            │            └──────────────┬───────────────┘          │
+            │                           │                          │
+            │            exit-condition tool called?               │
+            │              │ yes                 │ no              │
+            │              ▼                     └─ step_count < ──┘
+            │       exit_reason = <tool name>       max_agent_steps
+            │              │                     (else exit_reason =
+            ▼              ▼                      "max_agent_steps")
+        ┌──────────────────────────┐   continue_run = True
+        │ on_exit hooks            │───────────────────────► back to before_llm
+        └────────────┬─────────────┘
                      ▼
-        ┌─────────────────────────────┐
-        │    Tracing Collector         │
-        │  (e.g., OpenTelemetry)       │
-        │                              │
-        │  Collects:                   │
-        │  - Event timestamps          │
-        │  - Component metrics         │
-        │  - Error information         │
-        └──────────┬────────────────┬──┘
-                   │                │
-        ┌──────────▼──┐    ┌────────▼──┐
-        │  Metrics    │    │  Traces   │
-        │  Storage    │    │  Storage  │
-        └──────────┬──┘    └────────┬──┘
-                   │                │
-    ┌──────────────▼────────────────▼──────┐
-    │  Observability Backend                │
-    │  - Prometheus (Metrics)               │
-    │  - Jaeger (Traces)                    │
-    │  - ELK Stack (Logs)                   │
-    └──────────────┬───────────────────────┘
-                   │
-    ┌──────────────▼────────────────────┐
-    │  Dashboards & Alerting             │
-    │  - Grafana (Metrics)               │
-    │  - Jaeger UI (Traces)              │
-    │  - Custom Alerts                   │
-    └────────────────────────────────────┘
+        ┌──────────────────────────┐
+        │ after_run hooks          │
+        │ return messages,         │
+        │   last_message,          │
+        │   step_count,            │
+        │   token_usage,           │
+        │   tool_call_counts,      │
+        │   exit_reason, your keys │
+        └──────────────────────────┘
 ```
 
----
+## Hooks timeline
 
-## Production Deployment Architecture
-
-### Container-Based Deployment
+One run with two tool-calling steps and a final text reply. Built-in hooks are shown at the only point each accepts. See [Hooks](/haystack-guide/haystack_comprehensive_guide/#hooks) and [Context Management](/haystack-guide/haystack_comprehensive_guide/#context-management).
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│             Kubernetes Cluster                            │
-├──────────────────────────────────────────────────────────┤
-│                                                           │
-│  ┌──────────────────────────────────────┐               │
-│  │  API Service (Load Balanced)         │               │
-│  │  - Ingress Controller                │               │
-│  │  - SSL/TLS                           │               │
-│  │  - Rate Limiting                     │               │
-│  └──────────┬───────────────────────────┘               │
-│             │                                            │
-│     ┌───────┴───────┬───────┬───────┐                   │
-│     │               │       │       │                   │
-│     ▼               ▼       ▼       ▼                   │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                │
-│  │ Pod 1   │  │ Pod 2   │  │ Pod 3   │ (Replicas)    │
-│  │Haystack │  │Haystack │  │Haystack │               │
-│  │Agent    │  │Agent    │  │Agent    │               │
-│  └────┬────┘  └────┬────┘  └────┬────┘               │
-│       │            │            │                     │
-│       └────────────┼────────────┘                     │
-│                    │                                  │
-├────────────────────┼──────────────────────────────────┤
-│  Storage Layer     │                                  │
-│                    ▼                                  │
-│  ┌──────────────────────────────┐                    │
-│  │ Redis Cache                  │                    │
-│  └──────────────────────────────┘                    │
-│                                                       │
-│  ┌──────────────────────────────┐                    │
-│  │ PostgreSQL / Database        │                    │
-│  └──────────────────────────────┘                    │
-│                                                       │
-│  ┌──────────────────────────────┐                    │
-│  │ Vector Store (Weaviate)      │                    │
-│  └──────────────────────────────┘                    │
-│                                                       │
-├──────────────────────────────────────────────────────┤
-│  External Services                                   │
-│                                                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
-│  │ OpenAI   │  │ Anthropic│  │ Hugging  │          │
-│  │ API      │  │ API      │  │ Face API │          │
-│  └──────────┘  └──────────┘  └──────────┘          │
-│                                                       │
-└──────────────────────────────────────────────────────┘
+before_run
+│
+├─ before_llm ── TokenBudgetHook, CompactionHook ── model call 1 ── tool calls
+│   ├─ before_tool ── ConfirmationHook (confirm / reject / modify)
+│   │     tools run
+│   └─ after_tool ── ToolResultOffloadHook
+│
+├─ before_llm ── model call 2 ── tool calls
+│   ├─ before_tool
+│   └─ after_tool
+│
+├─ before_llm ── model call 3 ── text reply
+│
+on_exit ── may set continue_run = True ──► another before_llm round
+│
+after_run
 ```
 
-### Microservices Architecture
+Every hook receives the live `State`. Hooks read request-scoped objects from `state.get("hook_context")` and end the run by setting `stop_run` (read before each model call).
+
+## Pipelines as components and tools
+
+`SuperComponent` gives a pipeline a component interface; `PipelineTool` gives it a tool interface for an agent. Both use `input_mapping` and `output_mapping`. See [Wrapping a pipeline as a component](/haystack-guide/haystack_comprehensive_guide/#wrapping-a-pipeline-as-a-component).
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│              API Gateway                                 │
-│         (Authentication & Routing)                       │
-└────────────┬────────────────────────────────────────────┘
-             │
-       ┌─────┴──────┬──────────┬───────────┐
-       │            │          │           │
-       ▼            ▼          ▼           ▼
-  ┌────────────┐┌────────┐┌─────────┐┌──────────┐
-  │ Agent      ││RAG     ││Search   ││Analytics │
-  │Service     ││Service ││Service  ││Service   │
-  │            ││        ││         ││          │
-  │- Process   ││- Index ││- Query  ││- Metrics │
-  │- Tools     ││- Embed ││- Score  ││- Logs    │
-  │- LLM calls ││- Store ││- Return ││- Traces  │
-  └─────┬──────┘└──┬─────┘└────┬────┘└──────────┘
-        │          │           │
-        └──────────┼───────────┘
-                   │
-        ┌──────────▼──────────┐
-        │ Message Queue       │
-        │ (RabbitMQ/Kafka)    │
-        │ - Event streaming   │
-        │ - Async processing  │
-        └─────────────────────┘
+                         SuperComponent / PipelineTool
+               ┌──────────────────────────────────────────────┐
+  query ───────┼─► input_mapping {"query": ["retriever.query", │
+               │                          "analyst.query"]}   │
+               │      │                         │             │
+               │      ▼                         ▼             │
+               │  retriever ──documents──► analyst (Agent)    │
+               │                                │last_message │
+               │  output_mapping {"analyst.last_message":     │
+               │                  "answer"} ◄───┘             │
+               └──────────────────────┬───────────────────────┘
+                                      ▼
+                                   answer
+
+  As a component: another pipeline connects to it like any component.
+  As a tool:      the agent sees one tool (name, description, "query" parameter);
+                  the result goes back to the model as text (outputs_to_string).
 ```
 
----
+`ComponentTool` does the same for a single component, and `AgentTool` for a whole agent.
 
-## Advanced Pattern Diagrams
+## Multi-agent composition
 
-### ReAct Loop with Self-Correction
-
-```
-                 Start
-                   │
-                   ▼
-          ┌────────────────────┐
-          │ 1. REASON          │
-          │ - Analyse problem  │
-          │ - Break into steps │
-          │ - Plan approach    │
-          └────────┬───────────┘
-                   │
-                   ▼
-          ┌────────────────────┐
-          │ 2. ACT             │
-          │ - Execute tools    │
-          │ - Collect results  │
-          │ - Gather feedback  │
-          └────────┬───────────┘
-                   │
-                   ▼
-          ┌────────────────────┐
-          │ 3. OBSERVE         │
-          │ - Analyse results  │
-          │ - Check correctness│
-          │ - Identify gaps    │
-          └────────┬───────────┘
-                   │
-              ┌────▼────┐
-              │Result   │
-              │Correct? │
-              └────┬────┘
-                   │
-            ┌──────┴───────┐
-            │              │
-          Yes              No
-            │              │
-            ▼              ▼
-         Return      Self-Correct
-         Result      (Adjust plan)
-            │              │
-            │         ┌────▼───────────┐
-            │         │ 4. REFLECT     │
-            │         │ - Review error │
-            │         │ - Adjust logic │
-            │         │ - Generate fix │
-            │         └─────┬──────────┘
-            │               │
-            │         (Loop back to 1)
-            │         (with corrections)
-            │
-            ▼
-           End
-```
-
-### Hierarchical Agent System
+The two main shapes, from the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/).
 
 ```
-                    ┌──────────────────┐
-                    │  Orchestrator     │
-                    │  Agent (Main)     │
-                    └────────┬──────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-              ▼              ▼              ▼
-    ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-    │ Strategist   │ │ Coordinator  │ │ Executor     │
-    │ Agent        │ │ Agent        │ │ Agent        │
-    └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-           │                │                │
-         Plans          Schedules        Executes
-           │                │                │
-           └────────────────┼────────────────┘
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-              ▼             ▼             ▼
-          ┌────────┐  ┌────────┐  ┌────────┐
-          │Worker  │  │Worker  │  │Worker  │
-          │Agent 1 │  │Agent 2 │  │Agent 3 │
-          └────────┘  └────────┘  └────────┘
+Coordinator (order decided at run time)       Pipeline stages (order fixed)
+
+ ┌──────────────────────────────┐             research (Agent, user_prompt "Topic: {{ topic }}")
+ │ coordinator: Agent           │                  │ last_message
+ │  tools = [AgentTool(...),    │                  ▼
+ │           AgentTool(...)]    │             write (Agent, user_prompt "...{{ notes.text }}")
+ └───┬──────────────────────┬───┘                  │ last_message
+     │ tool call            │ tool call            ▼
+     ▼                      ▼
+ AgentTool "researcher"  AgentTool "writer"
+   runs its own Agent      runs its own Agent
+   loop, returns final     loop, returns final
+   text (or copies keys    text
+   via outputs_to_state)
 ```
 
----
+Each sub-agent has its own loop, `max_agent_steps` and hooks. A coordinator's `token_usage` covers only its own model calls.
 
-This diagram document provides comprehensive visual representations of Haystack's architecture and patterns across all levels of complexity.
+## Tracing spans
 
+The spans Haystack emits once a tracer is enabled (`tracing.enable_tracing(...)` or a connector such as `LangfuseConnector`). Inputs and outputs are attached only with content tracing on. See [Observability](/haystack-guide/haystack_observability_python/#what-gets-traced).
+
+```
+haystack.pipeline.run            (tag haystack.pipeline.execution_mode = sync | async)
+└─ haystack.component.run        (one per component run)
+   └─ haystack.agent.run         (when the component is an Agent; also emitted for standalone runs)
+      └─ haystack.agent.step     (one per loop iteration)
+         ├─ haystack.agent.step.llm
+         └─ haystack.agent.step.tool   (one per tool call, tag haystack.tool.name)
+```

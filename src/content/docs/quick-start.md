@@ -18,22 +18,27 @@ pip install smolagents
 ```
 
 ```python
-from smolagents import CodeAgent, tool
+from smolagents import CodeAgent, InferenceClientModel, tool
 
 @tool
 def add_numbers(a: int, b: int) -> int:
-    """Add two numbers together."""
+    """Add two numbers together.
+
+    Args:
+        a: The first number.
+        b: The second number.
+    """
     return a + b
 
-agent = CodeAgent(tools=[add_numbers])
-result = agent.run("What is 15 + 27?")
-print(result)
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")   # needs HF_TOKEN
+agent = CodeAgent(tools=[add_numbers], model=model)
+print(agent.run("What is 15 + 27?"))
 ```
 
 **Next Steps**:
 1. Read [SmolAgents README](/smolagents-guide/)
 2. Try more [SmolAgents Recipes](/smolagents-guide/smolagents_recipes/)
-3. Deep dive: [SmolAgents Comprehensive Guide](/smolagents-guide/smolagents_comprehensive_guide/)
+3. Reference: [SmolAgents Comprehensive Guide](/smolagents-guide/smolagents_comprehensive_guide/)
 
 ---
 

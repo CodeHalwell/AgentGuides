@@ -1227,7 +1227,33 @@ agent = Agent(
 Two other ways to build the stop condition:
 
 - **LLM judge.** `AgentLoopMiddleware.with_judge(judge_client, criteria=[...], max_iterations=5)` asks a second model for a structured `JudgeVerdict(answered: bool, reasoning: str)` after every iteration, and feeds the reasoning back as the next prompt. The judge sees the request and every answer, so point it at a trusted endpoint.
-- **Ready-made predicates.** `todos_remaining(looping_modes=None)` keeps looping while the agent's `TodoProvider` has open items, and `background_tasks_running()` keeps looping while `BackgroundAgentsProvider` tasks are still running. Pair them with `next_message=todos_remaining_message` / `background_tasks_running_message`. `create_harness_agent(...)` wires all of the harness providers plus this loop in one call (see the [class reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#create_harness_agent)).
+- **Ready-made predicates.** `todos_remaining(looping_modes=None)` keeps looping while the agent's `TodoProvider` has open items, and `background_tasks_running()` keeps looping while `BackgroundAgentsProvider` tasks are still running. Pair them with `next_message=todos_remaining_message` / `background_tasks_running_message`. `create_harness_agent(...)` wires all of the harness providers plus this loop in one call (next section).
+
+## `create_harness_agent` — everything wired together
+
+`create_harness_agent(client, ...)` returns an ordinary `Agent` with function invocation, per-call history persistence, compaction (when you give it token budgets), `TodoProvider`, `AgentModeProvider`, `FileMemoryProvider`, `SkillsProvider`, standing tool approvals and OpenTelemetry already configured. Each piece can be switched off (`disable_todo=True`, `disable_mode=True`, `disable_file_memory=True`, `disable_compaction=True`, `disable_web_search=True`) or replaced (`todo_provider=`, `mode_provider=`, `history_provider=`, `skills_provider=`).
+
+```python
+from agent_framework import create_harness_agent, todos_remaining, todos_remaining_message
+from agent_framework.openai import OpenAIChatClient
+
+agent = create_harness_agent(
+    OpenAIChatClient(model="%%model=openai%%"),
+    name="research-agent",
+    agent_instructions="Focus on primary sources.",
+    max_context_window_tokens=200_000,     # enables context-window compaction
+    max_output_tokens=32_000,
+    skills_paths=["./skills"],
+    loop_should_continue=todos_remaining(), # keep going while todos are open
+    loop_next_message=todos_remaining_message,
+    loop_max_iterations=10,
+)
+
+session = agent.create_session()
+response = await agent.run("Compare three heat-pump designs and write a summary.", session=session)
+```
+
+The function itself is stable, but some features it can switch on are experimental and emit an `ExperimentalWarning` when used: background agents (`background_agents=`), file access (`file_access_store=`), looping (`loop_should_continue=`) and shell tools (`shell_executor=`, from the pre-release `agent-framework-tools` package).
 
 ---
 

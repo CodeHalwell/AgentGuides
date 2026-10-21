@@ -3,6 +3,9 @@ title: "PydanticAI: Streaming Output & Events"
 description: "run_stream, AgentStream, iter, stream_text, stream_output, stream_response, run_stream_events, event_stream_handler, partial validation, cancel, drain, and debounce."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Streaming"
+  order: 7
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.

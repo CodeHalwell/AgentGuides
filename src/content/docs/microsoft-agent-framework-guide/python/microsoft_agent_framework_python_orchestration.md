@@ -76,13 +76,13 @@ print(result.get_outputs()[-1].text)  # the last agent's AgentResponse
 Optional knobs:
 
 - `chain_only_agent_responses=True` — pass only assistant messages between agents (skip user history). Useful when the conversation would otherwise balloon.
-- `intermediate_outputs=True` — yield per-participant responses as events, not just the final one.
+- `intermediate_output_from="all_other"` (or a list of participants) — also surface per-participant responses, as `intermediate` events.
 - `checkpoint_storage=...` — persist state between runs; see the [HITL page](./microsoft_agent_framework_python_hitl/) for resuming from a checkpoint.
 - `.with_request_info(agents=[...])` — pause after each (or a subset of) participants for human review.
 
 ```python
 workflow = (
-    SequentialBuilder(participants=[researcher, analyst, writer], intermediate_outputs=True)
+    SequentialBuilder(participants=[researcher, analyst, writer], intermediate_output_from="all_other")
     .with_request_info(agents=[analyst])  # pause only after the analyst
     .build()
 )
@@ -163,9 +163,8 @@ A central orchestrator picks the next speaker on every turn. Two ways to drive i
 ```python
 from agent_framework_orchestrations import GroupChatBuilder, GroupChatState
 
-def pick_next_speaker(state: GroupChatState) -> str | None:
-    if state.current_round >= 3:
-        return None                        # None terminates the chat
+def pick_next_speaker(state: GroupChatState) -> str:
+    # Must return a participant name. Stopping is the job of max_rounds or termination_condition.
     last = state.conversation[-1].author_name if state.conversation else None
     return "writer" if last == "researcher" else "researcher"
 
@@ -173,7 +172,7 @@ workflow = (
     GroupChatBuilder(
         participants=[researcher, writer],
         selection_func=pick_next_speaker,
-        max_rounds=10,
+        max_rounds=4,
     )
     .build()
 )
@@ -508,10 +507,14 @@ Each reviewer receives the router's output concurrently. `merger` receives `list
 
 #### Switch-case routing
 
-Route a message to exactly one branch based on conditions evaluated in order. Use `Case` for conditions and `Default` as the fallback:
+Route a message to exactly one branch based on conditions evaluated in order. Use `Case` for conditions and `Default` as the fallback.
+
+Every target must accept the type the source sends. An agent node accepts `str`, `Message`, a list of these, or an upstream agent's response, so a dataclass such as `SupportTicket` can't be routed straight to an `Agent`: `build()` raises `TypeCompatibilityError`. Give each branch a small executor that takes the ticket and calls its agent:
 
 ```python
 from dataclasses import dataclass
+from typing_extensions import Never
+
 from agent_framework import (
     Agent,
     Case,
@@ -539,45 +542,53 @@ class TriageExecutor(Executor):
         await ctx.send_message(SupportTicket(category=category, text=text))
 
 
+class Specialist(Executor):
+    """Accepts a SupportTicket and answers it with its agent."""
+
+    def __init__(self, agent: Agent) -> None:
+        super().__init__(id=agent.name)
+        self.agent = agent
+
+    @handler
+    async def answer(self, ticket: SupportTicket, ctx: WorkflowContext[Never, str]) -> None:
+        response = await self.agent.run(ticket.text)
+        await ctx.yield_output(response.text)
+
+
 client = OpenAIChatClient()
 triage = TriageExecutor(id="triage")
-billing_agent = Agent(client=client, name="billing", instructions="You resolve billing questions.")
-technical_agent = Agent(client=client, name="technical", instructions="You resolve technical questions.")
-general_agent = Agent(client=client, name="general", instructions="You handle general inquiries.")
+billing = Specialist(Agent(client=client, name="billing", instructions="You resolve billing questions."))
+technical = Specialist(Agent(client=client, name="technical", instructions="You resolve technical questions."))
+general = Specialist(Agent(client=client, name="general", instructions="You handle general enquiries."))
 
 workflow = (
     WorkflowBuilder(start_executor=triage)
     .add_switch_case_edge_group(
-        source=triage,
-        cases=[
-            Case(condition=lambda msg: msg.category == "billing",   target=billing_agent),
-            Case(condition=lambda msg: msg.category == "technical", target=technical_agent),
-            Default(target=general_agent),
+        triage,
+        [
+            Case(condition=lambda ticket: ticket.category == "billing", target=billing),
+            Case(condition=lambda ticket: ticket.category == "technical", target=technical),
+            Default(target=general),
         ],
     )
     .build()
 )
 
 result = await workflow.run("I was charged twice on my last invoice.")
-print(result.get_outputs()[-1].text)
+print(result.get_outputs()[-1])
 ```
 
 Conditions are evaluated in declaration order; the first `Case` whose condition returns `True` wins. The `Default` case matches everything that falls through. Exactly one branch executes.
 
 #### Multi-selection edge group
 
-A `selection_func` receives the outgoing message and the list of candidate executor IDs, and returns the subset that should receive it. Unlike switch-case (exactly one branch), multi-selection can send to any number of targets — including all or none.
+A `selection_func` receives the outgoing message and the list of candidate executor IDs, and returns the subset that should receive it. Unlike switch-case (exactly one branch), multi-selection can send to any number of targets, including all or none. The same type rule applies, so the workers below are executors that unwrap the task for their agent:
 
 ```python
 from dataclasses import dataclass
-from agent_framework import (
-    Agent,
-    AgentExecutor,
-    Executor,
-    WorkflowBuilder,
-    WorkflowContext,
-    handler,
-)
+from typing_extensions import Never
+
+from agent_framework import Agent, Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.openai import OpenAIChatClient
 
 
@@ -594,29 +605,39 @@ class Dispatcher(Executor):
         await ctx.send_message(AnalysisTask(priority=priority, text=text))
 
 
+class Worker(Executor):
+    def __init__(self, id: str, agent: Agent) -> None:
+        super().__init__(id=id)
+        self.agent = agent
+
+    @handler
+    async def work(self, task: AnalysisTask, ctx: WorkflowContext[Never, str]) -> None:
+        response = await self.agent.run(task.text)
+        await ctx.yield_output(f"[{self.id}] {response.text}")
+
+
 def route_by_priority(task: AnalysisTask, candidate_ids: list[str]) -> list[str]:
     """High-priority tasks go to all workers; low-priority only to the fast worker."""
     if task.priority == "high":
-        return candidate_ids                # all workers
+        return candidate_ids
     return [cid for cid in candidate_ids if "fast" in cid]
 
 
-fast_agent = Agent(OpenAIChatClient(model="%%model=openai-small%%"), "Answer concisely.", id="fast_agent")
-thorough_agent = Agent(OpenAIChatClient(model="%%model=openai%%"), "Answer thoroughly.", id="thorough_agent")
-
+fast_worker = Worker("fast_worker", Agent(OpenAIChatClient(model="%%model=openai-small%%"), "Answer concisely."))
+thorough_worker = Worker("thorough_worker", Agent(OpenAIChatClient(model="%%model=openai%%"), "Answer thoroughly."))
 dispatcher = Dispatcher(id="dispatcher")
-fast_worker = AgentExecutor(id="fast_worker", agent=fast_agent)
-thorough_worker = AgentExecutor(id="thorough_worker", agent=thorough_agent)
 
 workflow = (
     WorkflowBuilder(start_executor=dispatcher)
     .add_multi_selection_edge_group(
-        source=dispatcher,
-        targets=[fast_worker, thorough_worker],
+        dispatcher,
+        [fast_worker, thorough_worker],
         selection_func=route_by_priority,
     )
     .build()
 )
+
+print((await workflow.run("Short question")).get_outputs())     # fast_worker only
 ```
 
 The selection function is synchronous; the framework calls it once per outgoing message, before dispatching to the chosen subset. Return an empty list to drop the message entirely.
@@ -709,11 +730,27 @@ If your start executor was written to accept a `dict` directly, either rewrite i
 
 `WorkflowExecutor` wraps a whole `Workflow` as a single node in a parent workflow. Great for reuse (a "document pipeline" sub-workflow called from many higher-level flows) and for isolating state between phases.
 
+The `WorkflowExecutor` node emits whatever the inner workflow outputs, here an `AgentResponse`. An agent node doesn't accept that type, so a one-line executor passes the response's messages on:
+
 ```python
-from agent_framework import AgentExecutor, WorkflowBuilder, WorkflowExecutor
+from agent_framework import (
+    AgentExecutor,
+    AgentResponse,
+    Message,
+    WorkflowBuilder,
+    WorkflowContext,
+    WorkflowExecutor,
+    executor,
+)
 
 # Inner workflow — turn a research prompt into a structured dossier.
 inner = SequentialBuilder(participants=[researcher, analyst]).build()
+
+
+@executor(id="dossier_to_messages")
+async def dossier_to_messages(response: AgentResponse, ctx: WorkflowContext[list[Message]]) -> None:
+    await ctx.send_message(response.messages)
+
 
 # Outer workflow — call the dossier producer, then the writer.
 dossier_node = WorkflowExecutor(inner, id="dossier")
@@ -721,7 +758,7 @@ writer_node = AgentExecutor(writer, id="writer")
 
 outer = (
     WorkflowBuilder(start_executor=dossier_node)
-    .add_edge(dossier_node, writer_node)
+    .add_chain([dossier_node, dossier_to_messages, writer_node])
     .build()
 )
 
@@ -769,7 +806,7 @@ class UserLookupExecutor(Executor):
 outer = (
     WorkflowBuilder(start_executor=dossier_node)
     .add_edge(dossier_node, UserLookupExecutor(user_db={"u-1": {"name": "Ada"}}))
-    .add_edge(dossier_node, writer_node)
+    .add_chain([dossier_node, dossier_to_messages, writer_node])
     .build()
 )
 ```
@@ -937,8 +974,8 @@ def handler_for(name: str):
     return handle
 
 
-# Minimal stand-ins — in a real workflow these would be AgentExecutors wrapping
-# named agents, or executors running your handler code.
+# Minimal stand-ins. An agent can't take a Ticket directly, so in a real workflow
+# each of these would be an executor that calls its agent with the ticket's text.
 vip_billing, billing, technical, dead_letter = (
     handler_for(n) for n in ("vip_billing", "billing", "technical", "dead_letter")
 )

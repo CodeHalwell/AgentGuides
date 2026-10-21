@@ -1,8 +1,11 @@
 ---
-title: "PydanticAI: Built-in / Native Tools & Common Tools"
+title: "PydanticAI: Built-in Native Tools & Common Tools"
 description: "Provider-native tools (WebSearchTool, CodeExecutionTool, ImageGenerationTool, …) and local common tools (web_fetch_tool, duckduckgo_search_tool) — what each does and which providers support it."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Built-in tools"
+  order: 4
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.native_tools`, `pydantic_ai.capabilities`, `pydantic_ai.common_tools`.

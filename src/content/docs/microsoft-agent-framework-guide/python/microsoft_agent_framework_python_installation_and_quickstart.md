@@ -194,7 +194,7 @@ Run `pip install agent-framework` in your active environment. For provider-speci
 
 ### `ModuleNotFoundError: No module named 'agent_framework.foundry'`
 
-Install the Azure AI Foundry provider: `pip install agent-framework-azure-ai`.
+Install the Microsoft Foundry provider: `pip install agent-framework-foundry`. (The older `agent-framework-azure-ai` package stopped at 1.0.0rc6 and does not provide `agent_framework.foundry`.)
 
 ### `AttributeError: 'Agent' object has no attribute 'run'`
 
@@ -204,9 +204,9 @@ You may have an old version of the package. Upgrade with `pip install --upgrade 
 
 ## Next Steps
 
-- [Core fundamentals](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals) — full architecture and installation reference
+- [Comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — configuration, agents, streaming, sessions, workflows and more on one page
 - [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) — all chat client constructors with real signatures
 - [Tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/) — `@tool`, `FunctionTool`, approval gates, schemas, runtime context
 - [MCP integration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) — `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`
 - [Multi-agent orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/) — `WorkflowBuilder`, sequential, concurrent, handoff, group chat
-- [Class & API Reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#class--api-reference) — source-verified reference covering `Agent`, `RawAgent`, `FunctionTool`, `WorkflowBuilder`, `RunContext`, `InlineSkill`, `MCPStdioTool`, and every other class across workflows, agents, memory, tools, security, skills, and more
+- [API map](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#api-map) — which page documents each class

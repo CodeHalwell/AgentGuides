@@ -1,15 +1,16 @@
 ---
-title: "Pydantic AI: Evals Guide"
+title: "PydanticAI: Evals"
 description: "Systematic evaluation of Pydantic AI agents with pydantic_evals: datasets and cases, built-in, custom, LLM-judge and agentic evaluators, YAML datasets, reports, Logfire, and online evaluation."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Evals"
+  order: 17
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%**, which pins the matching `pydantic-evals` release (checked %%versions-checked%%). The examples were run against that release.
 
-> **This page was rewritten for V2.** Earlier editions built evals from hand-rolled classes and imported things such as `pydantic_ai.eval`, `PostgreSQLDurableBackend` and `A2AAgentRegistry` that do not exist. Evaluation lives in the **`pydantic_evals`** package, installed with `pydantic-ai` (the `evals` extra is part of the default bundle).
-
----
+Evaluation lives in the **`pydantic_evals`** package, installed with `pydantic-ai` (the `evals` extra is part of the default bundle).
 
 ## Testing vs evaluating
 

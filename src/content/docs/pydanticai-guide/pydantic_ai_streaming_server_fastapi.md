@@ -1,8 +1,11 @@
 ---
-title: "PydanticAI Streaming Server (FastAPI)"
+title: "PydanticAI: Streaming Server with FastAPI"
 description: "Production-ready FastAPI SSE server using pydantic-ai run_stream, run_stream_events, structured output streaming, and the AG UI protocol adapter."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Streaming server (FastAPI)"
+  order: 8
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.agent`, `pydantic_ai.result`, `pydantic_ai.messages`, `pydantic_ai.ui.ag_ui`.

@@ -20,8 +20,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     pip install "smolagents[toolkit]==%%version=smolagents%%"
     ```
   </Card>
-  <Card title="Version" icon="information">
-    **%%version=smolagents%%** · Python 3.10+
+  <Card title="Source" icon="github">
+    [huggingface/smolagents](https://github.com/huggingface/smolagents) · Apache-2.0
   </Card>
   <Card title="Best for" icon="puzzle">
     Learning, prototyping, code-first automation, Hugging Face Hub workflows.
@@ -32,42 +32,42 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   `CodeAgent`'s default `LocalPythonExecutor` restricts imports but is not a security boundary. Use `executor_type="docker"`, `"e2b"`, `"modal"` or `"blaxel"` for untrusted input.
 </Aside>
 
-## Zero → Hero
+## Learning path
 
 <CardGrid>
-  <LinkCard title="1 · Introduction & philosophy" href="./smolagents_comprehensive_guide/#introduction--philosophy" description="Code actions vs JSON actions · 10 min" />
-  <LinkCard title="2 · Installation & setup" href="./smolagents_comprehensive_guide/#installation--setup" description="Extras, credentials, first check · 10 min" />
-  <LinkCard title="3 · Core concepts & architecture" href="./smolagents_comprehensive_guide/#core-concepts--architecture" description="Agents, tools, models, memory · 15 min" />
-  <LinkCard title="4 · Model configuration" href="./smolagents_comprehensive_guide/#model-configuration--selection" description="HF, LiteLLM, OpenAI, local · 15 min" />
-  <LinkCard title="5 · Simple agents fundamentals" href="./smolagents_comprehensive_guide/#simple-agents-fundamentals" description="run(), results, streaming, errors · 20 min" />
-  <LinkCard title="6 · Tools: building blocks" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" description="@tool, Tool subclasses, MCP, Hub · 20 min" />
-  <LinkCard title="7 · CodeAgent (code paradigm)" href="./smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" description="Execution, checks, callbacks · 25 min" />
-  <LinkCard title="8 · ToolCallingAgent" href="./smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" description="JSON tool-calling variant · 15 min" />
-  <LinkCard title="9 · Multi-agent & orchestration" href="./smolagents_comprehensive_guide/#multi-agent-systems--orchestration" description="Managed agents, delegation · 20 min" />
-  <LinkCard title="10 · Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" description="Validated answers, output schemas · 15 min" />
-  <LinkCard title="11 · Production" href="./smolagents_production_guide/" description="Sandboxing, cost, telemetry, deployment · 25 min" />
+  <LinkCard title="1 · Introduction & philosophy" href="/smolagents-guide/smolagents_comprehensive_guide/#introduction--philosophy" description="Code actions vs JSON actions · 10 min" />
+  <LinkCard title="2 · Installation & setup" href="/smolagents-guide/smolagents_comprehensive_guide/#installation--setup" description="Extras, credentials, first check · 10 min" />
+  <LinkCard title="3 · Core concepts & architecture" href="/smolagents-guide/smolagents_comprehensive_guide/#core-concepts--architecture" description="Agents, tools, models, memory · 15 min" />
+  <LinkCard title="4 · Model configuration" href="/smolagents-guide/smolagents_comprehensive_guide/#model-configuration--selection" description="HF, LiteLLM, OpenAI, local · 15 min" />
+  <LinkCard title="5 · Simple agents fundamentals" href="/smolagents-guide/smolagents_comprehensive_guide/#simple-agents-fundamentals" description="run(), results, streaming, errors · 20 min" />
+  <LinkCard title="6 · Tools: building blocks" href="/smolagents-guide/smolagents_comprehensive_guide/#tools-building-blocks-of-agents" description="@tool, Tool subclasses, MCP, Hub · 20 min" />
+  <LinkCard title="7 · CodeAgent (code paradigm)" href="/smolagents-guide/smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" description="Execution, checks, callbacks · 25 min" />
+  <LinkCard title="8 · ToolCallingAgent" href="/smolagents-guide/smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" description="JSON tool-calling variant · 15 min" />
+  <LinkCard title="9 · Multi-agent & orchestration" href="/smolagents-guide/smolagents_comprehensive_guide/#multi-agent-systems--orchestration" description="Managed agents, delegation · 20 min" />
+  <LinkCard title="10 · Structured outputs" href="/smolagents-guide/smolagents_comprehensive_guide/#structured-outputs--schema" description="Validated answers, output schemas · 15 min" />
+  <LinkCard title="11 · Production" href="/smolagents-guide/smolagents_production_guide/" description="Sandboxing, cost, telemetry, deployment · 25 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="CodeAgent" href="./smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" />
-  <LinkCard title="ToolCallingAgent" href="./smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" />
-  <LinkCard title="Custom tools" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" />
-  <LinkCard title="Multi-agent orchestration" href="./smolagents_comprehensive_guide/#multi-agent-systems--orchestration" />
-  <LinkCard title="Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" />
-  <LinkCard title="Sandboxes, Hub & multimodal" href="./smolagents_comprehensive_guide/#sandboxes-hub-sharing-and-multimodal-input" />
-  <LinkCard title="Model selection" href="./smolagents_comprehensive_guide/#model-configuration--selection" />
-  <LinkCard title="Version notes" href="./smolagents_comprehensive_guide/#version-notes" />
+  <LinkCard title="CodeAgent" href="/smolagents-guide/smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" />
+  <LinkCard title="ToolCallingAgent" href="/smolagents-guide/smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" />
+  <LinkCard title="Custom tools" href="/smolagents-guide/smolagents_comprehensive_guide/#tools-building-blocks-of-agents" />
+  <LinkCard title="Multi-agent orchestration" href="/smolagents-guide/smolagents_comprehensive_guide/#multi-agent-systems--orchestration" />
+  <LinkCard title="Structured outputs" href="/smolagents-guide/smolagents_comprehensive_guide/#structured-outputs--schema" />
+  <LinkCard title="Sandboxes, Hub & multimodal" href="/smolagents-guide/smolagents_comprehensive_guide/#sandboxes-hub-sharing-and-multimodal-input" />
+  <LinkCard title="Model selection" href="/smolagents-guide/smolagents_comprehensive_guide/#model-configuration--selection" />
+  <LinkCard title="Version notes" href="/smolagents-guide/smolagents_comprehensive_guide/#version-notes" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./smolagents_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Recipes" href="./smolagents_recipes/" />
-  <LinkCard title="Diagrams" href="./smolagents_diagrams/" />
-  <LinkCard title="Production guide" href="./smolagents_production_guide/" />
+  <LinkCard title="Comprehensive guide" href="/smolagents-guide/smolagents_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="/smolagents-guide/smolagents_recipes/" />
+  <LinkCard title="Diagrams" href="/smolagents-guide/smolagents_diagrams/" />
+  <LinkCard title="Production guide" href="/smolagents-guide/smolagents_production_guide/" />
 </CardGrid>
 
 ## Recent releases
@@ -93,11 +93,14 @@ def add_numbers(a: int, b: int) -> int:
     return a + b
 
 
-agent = CodeAgent(tools=[add_numbers], model=InferenceClientModel())   # needs HF_TOKEN
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")   # needs HF_TOKEN
+agent = CodeAgent(tools=[add_numbers], model=model)
 print(agent.run("What is 15 + 27?"))
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#introduction--philosophy)**
+Pass a `model_id`: the library's default model had no live Inference Provider when this was checked on 2026-10-21. See [model configuration](/smolagents-guide/smolagents_comprehensive_guide/#inferenceclientmodel-hugging-face-native) for how to check which providers serve a model.
+
+Next: **[Introduction & philosophy](/smolagents-guide/smolagents_comprehensive_guide/#introduction--philosophy)**, the first step of the learning path.
 
 ---
 
@@ -105,7 +108,8 @@ Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#intr
 
 | Date | Version | Changes |
 |------|---------|---------|
-| %%versions-checked%% | %%version=smolagents%% | All pages re-verified against the installed package; code rewritten where it used non-existent APIs; release notes corrected; version references now come from the site's version data. |
+| 2026-10-21 | 1.26.0 | Diagrams page cut to accurate diagrams; tools-in-sandbox, `LogLevel` and quantisation corrections; served model IDs; recipes for the browser agent, agentic RAG and plan review; streaming endpoint and in-flight autoscaling in the production guide. |
+| 2026-10-21 | 1.26.0 | All pages re-verified against the installed package; code rewritten where it used non-existent APIs; release notes corrected; version references now come from the site's version data. |
 | 2026-05-29 | 1.26.0 | Version bump. |
-| 2026-04-21 | 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| 2026-04-21 | 1.24.0 | Index redesigned with a learning path and topic grid. |
 | November 2025 | 1.23.0 | Initial documented version. |

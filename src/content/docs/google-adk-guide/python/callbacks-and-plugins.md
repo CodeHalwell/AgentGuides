@@ -352,20 +352,23 @@ app = App(
 
 `BasePlugin` methods default to `pass` (returning `None`). Only implement the hooks you need.
 
-Plugins can implement any subset of the hooks below (`plugins/base_plugin.py`):
+`BasePlugin` defines 14 hooks (`plugins/base_plugin.py`). A plugin can implement any subset:
 
 | Hook | Fires |
 |---|---|
 | `on_user_message_callback(*, invocation_context, user_message)` | When the runner receives the user message, before anything else |
 | `before_run_callback(*, invocation_context)` | Once per invocation, first hook after the user message is appended |
 | `on_event_callback(*, invocation_context, event)` | For every event before it is persisted and yielded |
-| `after_run_callback(*, invocation_context)` | Last hook — for cleanup/metrics |
+| `after_run_callback(*, invocation_context)` | Last hook, for clean-up and metrics |
+| `on_run_error_callback(*, invocation_context, error)` | When the invocation as a whole raises |
 | `before_agent_callback(*, agent, callback_context)` / `after_agent_callback` | Wraps each agent |
+| `on_agent_error_callback(*, agent, callback_context, error)` | When an agent raises |
 | `before_model_callback(*, callback_context, llm_request)` / `after_model_callback` / `on_model_error_callback` | Wraps each model call |
 | `before_tool_callback(*, tool, tool_args, tool_context)` / `after_tool_callback` / `on_tool_error_callback` | Wraps each tool call |
-| `close()` | When the runner is closed (`runner.close()`) |
 
-All are `async def`. All return `Optional[<relevant type>]` — non-`None` short-circuits the chain.
+`BasePlugin` also has a `close()` method, called by `runner.close()`; it is not a hook.
+
+All hooks are `async def`. Most return `Optional[<relevant type>]`, and a non-`None` value short-circuits the chain. `after_run_callback`, `on_run_error_callback` and `on_agent_error_callback` return `None`: they observe, they do not replace.
 
 ## Built-in plugins
 

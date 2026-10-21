@@ -3,11 +3,12 @@ title: "Semantic Kernel Advanced Multi‑Agent (Python)"
 description: "Advanced multi-agent patterns in Semantic Kernel (Python) — custom group-chat managers, hand-offs with human input, routing, structured results and resilience."
 framework: "semantic-kernel"
 language: "python"
+sidebar:
+  label: "Advanced multi-agent"
+  order: 3
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Orchestrations are experimental in Semantic Kernel; Microsoft Agent Framework's workflows are their supported successor — see the [comprehensive guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework).
-
-Earlier versions of this page used pre-1.0 APIs (`kernel.add_chat_service`, `ChatCompletionAgent(tools=...)`, `AgentGroupChat(execution_settings=...)`) that no longer exist. Everything below uses the orchestration API.
 
 ## Setup
 
@@ -44,10 +45,10 @@ reviewer = make_agent("Reviewer", "Checks drafts", "Review the draft. Reply 'APP
 
 ## 1. Group chat with a custom manager
 
-`RoundRobinGroupChatManager` just takes turns. Subclass `GroupChatManager` to decide who speaks next and when to stop — here: stop as soon as the reviewer approves.
+`RoundRobinGroupChatManager` just takes turns. Subclass it (or the abstract `GroupChatManager`) to change who speaks next and when to stop. Here the subclass keeps round-robin turn-taking and `max_rounds`, and also stops as soon as the reviewer approves.
 
 ```python
-from semantic_kernel.agents import GroupChatManager, BooleanResult, StringResult, MessageResult
+from semantic_kernel.agents import BooleanResult
 from semantic_kernel.contents import ChatHistory
 
 class ReviewLoopManager(RoundRobinGroupChatManager):
@@ -162,3 +163,11 @@ debate = ConcurrentOrchestration[str, Opinions](members=[optimist, sceptic], out
 - `agent_response_callback` gives every agent message — log agent name, length and latency with a request ID.
 - Semantic Kernel emits OpenTelemetry spans for agent invocations and function calls; see the [middleware page](/semantic-kernel-guide/python/semantic_kernel_middleware_python/) for filters that add your own attributes.
 - Test routers and managers as plain Python (they are deterministic); test agents against a stub chat service (subclass `ChatCompletionClientBase` and return canned messages).
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 1.45.0 | Rewritten on the orchestration API and run against a stub chat service. |

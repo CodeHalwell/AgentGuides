@@ -3,6 +3,9 @@ title: "PydanticAI: Output Types & Validators"
 description: "Typed outputs with ToolOutput, NativeOutput, PromptedOutput, TextOutput, StructuredDict, multi-type unions, and agent.output_validator."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Output types"
+  order: 2
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
@@ -254,7 +257,7 @@ Arguments (`pydantic_ai.output.NativeOutput`):
 - `strict` — forwarded to providers supporting strict JSON schema (OpenAI).
 - `template` — overrides the schema-injection template; pass `False` to skip.
 
-Availability by provider (verified in `models/<provider>.py`): OpenAI, Google, Anthropic (via tool adapter), Mistral, Groq. Older/local providers usually fall through to `PromptedOutput`.
+Availability by provider: OpenAI, Google, Anthropic (via tool adapter), Mistral, Groq. Older/local providers usually fall through to `PromptedOutput`.
 
 ## `PromptedOutput` — schema-in-prompt fallback
 
@@ -626,4 +629,4 @@ asyncio.run(main())
 - `@agent.output_validator` decorator — `pydantic_ai.Agent.output_validator`
 - `OutputSpec` type alias — `pydantic_ai.output`
 - `TextOutputFunc` — `pydantic_ai.output` — `Callable[[str], T] | Callable[[RunContext, str], T]`
-- Advanced patterns with `AgentSpec` and output — see [Class & API Reference](/pydanticai-guide/pydantic_ai_comprehensive_guide/#class--api-reference) in the comprehensive guide
+- Defining an agent, including its output, as data — see [Agents from a spec](/pydanticai-guide/pydantic_ai_comprehensive_guide/#agents-from-a-spec) in the comprehensive guide

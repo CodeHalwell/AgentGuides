@@ -27,36 +27,37 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Coming from the Claude Code SDK?">
-  `claude-code-sdk` was renamed to `claude-agent-sdk` in 0.1.0. See the [migration guide](./anthropic_claude_agent_sdk_migration_guide/).
+  `claude-code-sdk` was renamed to `claude-agent-sdk` in 0.1.0. See the [migration guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_migration_guide/).
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Introduction" href="./anthropic_claude_agent_sdk_comprehensive_guide/#introduction" description="What the SDK is and when to use it · 10 min" />
-  <LinkCard title="2 · Installation & authentication" href="./anthropic_claude_agent_sdk_comprehensive_guide/#installation--authentication" description="API key, Bedrock, Vertex · 10 min" />
-  <LinkCard title="3 · Core concepts" href="./anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" description="Options, messages, models · 15 min" />
-  <LinkCard title="4 · Your first agent" href="./anthropic_claude_agent_sdk_comprehensive_guide/#simple-agents" description="query(), ClaudeSDKClient, streaming · 20 min" />
-  <LinkCard title="5 · Tools" href="./anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" description="Built-in tools and @tool custom tools · 20 min" />
-  <LinkCard title="6 · Permissions" href="./anthropic_claude_agent_sdk_comprehensive_guide/#permissions" description="Modes, can_use_tool, sandboxing · 20 min" />
-  <LinkCard title="7 · Hooks" href="./anthropic_claude_agent_sdk_comprehensive_guide/#hooks" description="PreToolUse, PostToolUse and friends · 15 min" />
-  <LinkCard title="8 · Multi-agent systems" href="./anthropic_claude_agent_sdk_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
-  <LinkCard title="9 · MCP" href="./anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" description="stdio, HTTP, SSE and in-process servers · 15 min" />
-  <LinkCard title="10 · Structured output" href="./anthropic_claude_agent_sdk_comprehensive_guide/#structured-output" description="JSON schema results · 10 min" />
-  <LinkCard title="11 · Sessions" href="./anthropic_claude_agent_sdk_comprehensive_guide/#session-management" description="Resume, fork, session stores · 15 min" />
-  <LinkCard title="12 · Thinking and effort" href="./anthropic_claude_agent_sdk_comprehensive_guide/#thinking-and-effort" description="Adaptive thinking and effort levels · 10 min" />
-  <LinkCard title="13 · File checkpointing" href="./anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-rewind" description="Rewind file changes · 10 min" />
-  <LinkCard title="14 · Production" href="./anthropic_claude_agent_sdk_production_guide/" description="Resilience, cost, observability, security · 30 min" />
+  <LinkCard title="1 · Introduction" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#introduction" description="What the SDK is and when to use it · 10 min" />
+  <LinkCard title="2 · Installation & authentication" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#installation--authentication" description="API key, Bedrock, Vertex · 10 min" />
+  <LinkCard title="3 · Core concepts" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" description="Options, messages, models · 15 min" />
+  <LinkCard title="4 · Your first agent" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#simple-agents" description="query(), ClaudeSDKClient, streaming · 20 min" />
+  <LinkCard title="5 · Tools" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" description="Built-in tools and @tool custom tools · 20 min" />
+  <LinkCard title="6 · Permissions" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#permissions" description="Modes, can_use_tool, sandboxing · 20 min" />
+  <LinkCard title="7 · Hooks" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#hooks" description="PreToolUse, PostToolUse and friends · 15 min" />
+  <LinkCard title="8 · User input and approvals" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#user-input-and-approvals" description="AskUserQuestion, always-allow rules · 10 min" />
+  <LinkCard title="9 · Multi-agent systems" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
+  <LinkCard title="10 · MCP" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" description="stdio, HTTP, SSE and in-process servers · 15 min" />
+  <LinkCard title="11 · Structured output" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#structured-output" description="JSON schema results · 10 min" />
+  <LinkCard title="12 · Sessions" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#session-management" description="Resume, fork, a SQLite session store · 20 min" />
+  <LinkCard title="13 · Thinking and effort" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#thinking-and-effort" description="Adaptive thinking and effort levels · 10 min" />
+  <LinkCard title="14 · File checkpointing" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-rewind" description="Rewind file changes · 10 min" />
+  <LinkCard title="15 · Production" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_production_guide/" description="Resilience, cost, observability, security · 30 min" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./anthropic_claude_agent_sdk_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Recipes" href="./anthropic_claude_agent_sdk_recipes/" description="Fourteen copy-and-adapt examples." />
-  <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" description="Running agents as a service." />
-  <LinkCard title="Migration guide" href="./anthropic_claude_agent_sdk_migration_guide/" description="Code SDK → Agent SDK, and 0.1 → 0.2." />
-  <LinkCard title="Diagrams" href="./anthropic_claude_agent_sdk_diagrams/" description="Architecture and flow diagrams." />
+  <LinkCard title="Comprehensive guide" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_recipes/" description="Fifteen copy-and-adapt examples, including testing with a stub CLI and an SSE server." />
+  <LinkCard title="Production guide" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_production_guide/" description="Running agents as a service." />
+  <LinkCard title="Migration guide" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_migration_guide/" description="Code SDK → Agent SDK, and 0.1 → 0.2." />
+  <LinkCard title="Diagrams" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_diagrams/" description="Architecture and flow diagrams." />
 </CardGrid>
 
 ## Notable changes in the 0.2 series
@@ -71,7 +72,7 @@ Most releases only update the bundled Claude Code CLI. The ones that change the 
 - **0.2.129** — skill names are validated (breaking for `skills=["*"]`; use `skills="all"`).
 - **0.2.126** — `ResultMessage.terminal_reason`; typed `model_usage`.
 
-See the [migration guide](./anthropic_claude_agent_sdk_migration_guide/#part-2--upgrading-within-claude-agent-sdk) for what to change, and the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md) for everything else.
+See the [migration guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_migration_guide/#part-2--upgrading-within-claude-agent-sdk) for what to change, and the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md) for everything else.
 
 ## Minimal examples
 
@@ -85,7 +86,7 @@ from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
 
 async def main():
     options = ClaudeAgentOptions(
-        model="claude-opus-5-5",
+        model="%%model=anthropic-flagship%%",
         system_prompt="You are a helpful assistant.",
     )
     async for message in query(prompt="What is 15 + 27?", options=options):
@@ -114,7 +115,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero step 1 →](./anthropic_claude_agent_sdk_comprehensive_guide/#introduction)**
+Ready? **[Start Zero → Hero step 1 →](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#introduction)**
 
 ---
 
@@ -122,7 +123,8 @@ Ready? **[Start Zero → Hero step 1 →](./anthropic_claude_agent_sdk_comprehen
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-10-21 | %%version=claude-agent-sdk%% | Guide rewritten as Python-only and re-verified against the installed package: removed TypeScript duplicates and invented options (`api_provider`, `checkpoint_dir`, `enable_subagents`, `temperature`, `permission_prompt_tool_callback`), fixed `query()` keyword-only usage and `isinstance`-based message handling, added permissions, hooks, structured output, session stores and file checkpointing, updated models to the Claude 5 family. |
+| 2026-10-21 | %%version=claude-agent-sdk%% | Failure handling corrected: the SDK yields the error `ResultMessage` before raising `ResultError`, so the retry helpers now keep reading and decide from `subtype` / `api_error_status` (tested against a stub CLI). Corrected the `setting_sources` default (all sources), hooks vs pre-approved tools, `load_timeout_ms`, `usage` vs `model_usage`; replaced `TodoWrite` with the Task tools. Added user input and approvals, image prompts, a SQLite `SessionStore` with its conformance test, a stub-CLI testing recipe and a FastAPI SSE recipe; rewrote the diagrams page. |
+| 2026-10-21 | 0.2.170 | Guide rewritten as Python-only and re-verified against the installed package: removed TypeScript duplicates and invented options (`api_provider`, `checkpoint_dir`, `enable_subagents`, `temperature`, `permission_prompt_tool_callback`), fixed `query()` keyword-only usage and `isinstance`-based message handling, added permissions, hooks, structured output, session stores and file checkpointing, updated models to the Claude 5 family. |
 | 2026-05-19 | 0.2.82 | 0.1.x → 0.2.x series. |
 | 2026-04-16 | 0.1.60 | Thinking configuration and file checkpointing documented. |
 | 2025 | 0.1.0 | Renamed from Claude Code SDK to Claude Agent SDK. |

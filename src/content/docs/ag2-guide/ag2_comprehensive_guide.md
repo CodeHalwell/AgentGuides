@@ -1,11 +1,13 @@
 ---
 title: "AG2 Comprehensive Guide"
-description: "AG2 1.x reference — Agent, model configs, tools, structured output, human-in-the-loop, event streams, the multi-agent Network, MCP and A2A — plus AG2 Classic and migration from 0.x."
+description: "AG2 1.x reference: Agent, model configs, tools, dependency injection, code execution, structured output, multimodal input, human-in-the-loop, events, middleware, knowledge and compaction, the multi-agent Network, MCP, A2A and testing."
 framework: "ag2"
 language: "python"
+sidebar:
+  label: "Comprehensive guide"
 ---
 
-> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). Every 1.x example on this page was executed offline against the installed package using `ag2.testing.TestConfig` in place of a real model. The Classic section was checked against the `autogen` distribution (AG2 Classic) %%version=autogen%%.
+> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). Every 1.x example on this page was executed offline against the installed package using `ag2.testing.TestConfig` in place of a real model. For the Classic `import autogen` API, see [AG2 Classic](/ag2-guide/classic/).
 
 ## Overview
 
@@ -125,7 +127,93 @@ agent = Agent(
 - The docstring (or `description=`) and type hints become the tool schema. Sync and async functions both work.
 - AG2 runs the whole loop: the model requests a call, AG2 executes it and feeds the result back until the model produces a final answer.
 - A parameter typed `Context` is injected rather than exposed to the model; it gives tools access to `context.input(...)` (human input), variables and dependencies.
-- Built-in tools live in `ag2.tools`: web search and fetch (`WebSearchTool`, `WebFetchTool`, `TavilySearchTool`, `DuckDuckSearchTool`), code execution and shells (`CodeExecutionTool`, `SandboxCodeTool`, `ShellTool`), `FilesystemToolkit`, skills (`SkillsToolkit`) and MCP (`MCPToolkit`). Provider-hosted tools such as web search only work with providers that support them.
+- Built-in tools live in `ag2.tools`. They include web search and fetch (`WebSearchTool`, `WebFetchTool`, `TavilySearchTool`, `DuckDuckSearchTool`), local code and shell execution (`SandboxCodeTool`, `SandboxShellTool`; see [Code execution](#code-execution)), `FilesystemToolkit`, skills (`SkillsToolkit`) and MCP (`MCPToolkit`).
+- Some tools are **provider-hosted**: the model provider runs them on its own side. Examples are `WebSearchTool`, `CodeExecutionTool` (the provider's code sandbox) and `ShellTool` (OpenAI's hosted container via the Responses API; not supported on Anthropic). They only work with providers that support them.
+
+## Dependency injection and variables
+
+Tool parameters can be filled by AG2 instead of the model. Annotate them and they disappear from the tool schema:
+
+- `Annotated[T, Inject()]` takes the value from `dependencies=` (on the `Agent` or per `ask`), looked up by parameter name or by `Inject("name")`. Use it for database clients, HTTP sessions and settings.
+- `Annotated[T, Variable()]` takes the value from `variables=`, the per-conversation state that tools may also update.
+- `Annotated[T, Depends(factory)]` calls `factory()` (FastDepends-style) and passes the result.
+
+```python
+import asyncio
+from dataclasses import dataclass
+from typing import Annotated
+
+from ag2 import Agent, Depends, Inject, Variable, tool
+from ag2.config import OpenAIConfig
+
+
+@dataclass
+class Database:
+    balances: dict[str, float]
+
+
+def get_currency() -> str:
+    return "EUR"
+
+
+@tool
+def account_balance(
+    account_id: str,                                  # the only parameter the model sees
+    db: Annotated[Database, Inject()],
+    user_id: Annotated[str, Variable()],
+    currency: Annotated[str, Depends(get_currency)],
+) -> str:
+    """Return the balance of one of the current user's accounts."""
+    return f"{user_id}/{account_id}: {db.balances[account_id]:.2f} {currency}"
+
+
+agent = Agent(
+    "bank",
+    prompt="Answer balance questions with your tool.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),
+    tools=[account_balance],
+    dependencies={"db": Database({"current": 120.5})},
+)
+
+
+async def main() -> None:
+    reply = await agent.ask("What is in my current account?", variables={"user_id": "u-42"})
+    print(reply.body)
+
+
+asyncio.run(main())
+```
+
+A `Context` parameter gives the same access programmatically (`context.dependencies`, `context.variables`).
+
+## Code execution
+
+Two kinds of code tool exist, and they are not interchangeable:
+
+| Tool | Where code runs | Works with |
+|---|---|---|
+| `SandboxCodeTool(environment)`, `SandboxShellTool(environment)` | Client-side, in the environment you pass: `LocalEnvironment` (a subprocess on your machine, no isolation), `ag2.extensions.docker.DockerEnvironment` (needs the `docker` package and a daemon), `ag2.extensions.daytona.DaytonaEnvironment` | Every provider |
+| `CodeExecutionTool()`, `ShellTool()` | Server-side, in the model provider's sandbox | Only providers with native code execution or shell tools |
+
+```python
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.tools import LocalEnvironment, SandboxCodeTool, SandboxShellTool
+
+workspace = LocalEnvironment("./sandbox", timeout=30)   # trusted code only; use DockerEnvironment otherwise
+
+analyst = Agent(
+    "analyst",
+    prompt="Answer by running Python. Inspect files with the shell tool.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),
+    tools=[
+        SandboxCodeTool(workspace, languages=("python",)),               # exposes run_code(code, language)
+        SandboxShellTool(workspace, allowed=["ls", "cat"], readonly=True),  # exposes run_shell_command(command)
+    ],
+)
+```
+
+`SandboxCodeTool` has no default environment. It runs whatever the model writes, so you must choose the backend explicitly. `SandboxShellTool` takes `allowed=` / `blocked=` command lists and `readonly=True`.
 
 ## Structured output
 
@@ -155,6 +243,26 @@ async def classify(text: str) -> TicketTriage:
 ```
 
 `reply.body` is always the raw text; `await reply.content()` parses it against the schema in force for that turn. `response_schema` accepts a plain type (`int`, a dataclass, a Pydantic model), a `ResponseSchema(...)` with an explicit name and description, a function decorated with `@response_schema` for custom parsing, or `PromptedSchema(...)` for models without native structured output.
+
+## Multimodal input
+
+Pass inputs alongside the text in `ask(...)`. `ImageInput`, `DocumentInput`, `AudioInput` and `VideoInput` accept a URL, `path=`, raw `data=` with a `media_type=`, or a provider `file_id=`:
+
+```python
+from ag2 import Agent, DocumentInput, ImageInput
+from ag2.config import OpenAIConfig
+
+agent = Agent("analyst", prompt="Describe what you are shown.", config=OpenAIConfig(model="%%model=openai-small%%"))
+
+
+async def describe() -> None:
+    reply = await agent.ask("What does this chart show?", ImageInput(path="chart.png"))
+    print(reply.body)
+    reply = await reply.ask("Does the report agree?", DocumentInput(url="https://example.com/q3-report.pdf"))
+    print(reply.body)
+```
+
+Support depends on the provider and model. `ag2.FilesAPI` uploads files once and reuses them by `file_id`.
 
 ## Human in the loop
 
@@ -210,6 +318,70 @@ async def on_tool_call(event: ToolCallEvent) -> None:
 ```
 
 Events are typed (`ModelResponse`, `ModelMessageChunk` when `streaming=True`, `ToolCallEvent`, `ToolResultEvent`, `HumanInputRequest`, compaction events, …), so persistence, UIs and audit logs subscribe to exactly what they need. Longer-lived concerns — metrics, tracing, policies — are better expressed as `observers=` and `middleware=` on the agent.
+
+## Middleware and observers
+
+**Middleware** wraps the agent turn, each LLM call and each tool execution, and can change what passes through. **Observers** only watch events and raise alerts. Both are passed as lists on the `Agent` (or per `ask`), and the built-ins are in `ag2.middleware` and `ag2.observers`:
+
+```python
+import logging
+
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.middleware import HistoryLimiter, LoggingMiddleware, RetryMiddleware, approval_required
+from ag2.observers import LoopDetector, TokenMonitor
+
+agent = Agent(
+    "support",
+    prompt="You answer support questions.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),
+    middleware=[
+        RetryMiddleware(max_retries=2),            # retry failed LLM calls
+        HistoryLimiter(max_events=200),            # or TokenLimiter(max_tokens=...)
+        LoggingMiddleware(logging.getLogger("support")),
+    ],
+    observers=[
+        TokenMonitor(warn_threshold=50_000, alert_threshold=100_000),
+        LoopDetector(repeat_threshold=3),          # identical tool calls in a row
+    ],
+)
+```
+
+Other built-ins: `TelemetryMiddleware` (OpenTelemetry spans; see [production](/ag2-guide/ag2_production_guide/#observability)) and `MetricsMiddleware` (extra `metrics`). `approval_required` is tool middleware: wrap a tool with it to pause for human approval before the tool runs. Write your own by subclassing `BaseMiddleware` (or `ToolMiddleware`) or `BaseObserver`. A `Plugin(tools=..., middleware=..., observers=..., prompt=...)` bundles all of these so you can attach them with `plugins=[...]`.
+
+## Knowledge, memory and compaction
+
+`knowledge=KnowledgeConfig(...)` attaches a `KnowledgeStore` to an agent. By default the agent gets a `knowledge` tool for reading and writing the store, and each conversation's event log is persisted there. A compaction strategy keeps long histories inside the context window:
+
+```python
+from ag2 import Agent, KnowledgeConfig
+from ag2.compact import CompactTrigger, SummarizeCompact, TailWindowCompact
+from ag2.config import OpenAIConfig
+from ag2.knowledge import SqliteKnowledgeStore
+
+config = OpenAIConfig(model="%%model=openai-small%%")
+
+agent = Agent(
+    "assistant",
+    prompt="You are a long-running assistant.",
+    config=config,
+    knowledge=KnowledgeConfig(
+        store=SqliteKnowledgeStore("agent-memory.db"),
+        compact=TailWindowCompact(target=40),               # free: keep the last 40 events
+        # compact=SummarizeCompact(target=40, config=config),  # one LLM call: summarise the rest
+        compact_trigger=CompactTrigger(max_events=80),       # or max_tokens=...
+    ),
+)
+```
+
+- Stores: `MemoryKnowledgeStore` (tests), `SqliteKnowledgeStore`, `DiskKnowledgeStore` (needs `watchdog`), `RedisKnowledgeStore` (extra `redis`).
+- `expose_tool=False` hides the store from the model when only your own code should use it. `aggregate=` / `aggregate_trigger=` distil conversations into longer-term memory.
+- `assembly=[...]` on the `Agent` takes `AssemblyPolicy` objects that decide what goes into each LLM request (for example working or episodic memory read from the store).
+
+## Sub-tasks and evaluation
+
+- `tasks=TaskConfig(...)` gives an agent `run_subtask` / `run_subtasks` tools for delegating work to sub-agents. The sub-agents inherit its tools, narrowed with `include_tools=` / `exclude_tools=`, and cannot delegate further. `agent.task(...)` is the lifecycle handle for tracking a unit of work yourself.
+- `ag2.eval` runs agents offline against datasets with scorers (`Suite`, `Scorer`), replays model output deterministically with `TestConfig` cassettes, and saves run JSON for run-against-run diffs.
 
 ## Multi-agent: the Network
 
@@ -286,7 +458,7 @@ agent = Agent(
 )
 ```
 
-`MCPToolkit` connects from your process and exposes each MCP tool as an ordinary function tool, so it works with any provider; `allowed_tools=` / `blocked_tools=` / `tool_name_prefix=` on the server config narrow what the model sees. `MCPServerTool` instead forwards the server URL to providers that connect to MCP themselves (for example Anthropic). Requires `ag2[mcp]`.
+`MCPToolkit` connects from your process and exposes each MCP tool as an ordinary function tool, so it works with any provider. The stdio subprocess gets a minimal environment, so pass `env=dict(os.environ)` (or the variables it needs) to `MCPStdioServerConfig` if `npx` must reach a registry through a proxy.  `allowed_tools=` / `blocked_tools=` / `tool_name_prefix=` on the server config narrow what the model sees. `MCPServerTool` instead forwards the server URL to providers that connect to MCP themselves (for example Anthropic). Requires `ag2[mcp]`.
 
 ## A2A protocol
 
@@ -321,7 +493,7 @@ The card is served at `/.well-known/agent-card.json`. `A2AServer` can also build
 
 ## Testing
 
-`ag2.testing.TestConfig` replays scripted model outputs — strings for answers, `ToolCallEvent(...)` for tool calls — so agents can be unit-tested without network access:
+`ag2.testing.TestConfig` replays scripted model outputs (strings for answers, `ToolCallEvent(...)` for tool calls), so agents can be unit-tested without network access. The example uses `pytest-asyncio` (`pip install pytest pytest-asyncio`):
 
 ```python
 import pytest
@@ -349,53 +521,10 @@ async def test_lookup_flow() -> None:
 
 ## AG2 Classic and migrating from 0.x
 
-**AG2 Classic** is the `autogen.*` API that `ag2` shipped up to 0.14.0. It now lives in [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic), is published on PyPI as `autogen`, and is in **maintenance mode** (security and critical fixes only). Documentation: [classic.docs.ag2.ai](https://classic.docs.ag2.ai).
-
-To keep Classic code running, pin it explicitly:
-
-```bash
-pip install "autogen[openai]"   # AG2 Classic distribution
-# or keep the last Classic ag2 release
-pip install "ag2[openai]<1.0"
-```
-
-For reference, idiomatic Classic code looks like this (verified against `autogen` %%version=autogen%% — note it uses `ConversableAgent` and `register_function`, not a bare `Agent`):
-
-```python
-from autogen import ConversableAgent, GroupChat, GroupChatManager, LLMConfig, register_function
-
-llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"})
-
-coder = ConversableAgent("coder", system_message="You write Python.", llm_config=llm_config)
-reviewer = ConversableAgent("reviewer", system_message="You review Python.", llm_config=llm_config)
-user = ConversableAgent("user", human_input_mode="NEVER", llm_config=False)
-
-
-def get_weather(location: str) -> str:
-    return f"The weather in {location} is sunny."
-
-
-register_function(get_weather, caller=coder, executor=user, description="Get the weather.")
-
-groupchat = GroupChat(agents=[user, coder, reviewer], messages=[], max_round=6)
-manager = GroupChatManager(groupchat=groupchat, llm_config=llm_config)
-# user.initiate_chat(manager, message="Write a script that prints today's weather in Paris.")
-```
-
-Porting checklist:
-
-1. `ConversableAgent(name, system_message=..., llm_config=...)` → `Agent(name, prompt=..., config=OpenAIConfig(...))`.
-2. `LLMConfig` / `OAI_CONFIG_LIST` → one provider config object per model; keys come from environment variables.
-3. `register_function(...)` / `register_for_llm` → `@tool` functions passed in `tools=[...]`; executors disappear because AG2 runs tools itself.
-4. `initiate_chat` / `generate_reply` → `await agent.ask(...)`; wrap entry points in `asyncio.run`.
-5. `human_input_mode` → a tool that calls `context.input(...)` plus `hitl_hook=`.
-6. `GroupChat`, swarms and handoffs → a `workflow` channel with a `TransitionGraph` (upstream guide: "Migrating from Group Chat" on docs.ag2.ai).
-7. Code executors → `CodeExecutionTool` / `SandboxCodeTool` / `ShellTool` in `ag2.tools`.
-
-Code written against `autogen.beta` in 0.11–0.14 ports almost mechanically: the same names now import from `ag2`.
+The Classic `import autogen` API (`ConversableAgent`, `GroupChat`), which `ag2` shipped up to 0.14.0, now lives in [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic). It is published on PyPI as `autogen` and is in maintenance mode. It has its own section on this site: [AG2 Classic](/ag2-guide/classic/). To port Classic code to 1.x (or AutoGen 0.2 code to Classic), follow the [migration guide](/ag2-guide/classic/ag2_classic_migration_guide/).
 
 ## Resources
 
 - [AG2 documentation](https://docs.ag2.ai) · [GitHub: ag2ai/ag2](https://github.com/ag2ai/ag2)
 - [AG2 Classic documentation](https://classic.docs.ag2.ai) · [GitHub: ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic)
-- [Recipes](./ag2_recipes/) · [Production guide](./ag2_production_guide/) · [Diagrams](./ag2_diagrams/)
+- [Recipes](/ag2-guide/ag2_recipes/) · [Production guide](/ag2-guide/ag2_production_guide/) · [Diagrams](/ag2-guide/ag2_diagrams/) · [AG2 Classic](/ag2-guide/classic/)

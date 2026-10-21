@@ -1,11 +1,13 @@
 ---
 title: "OpenAI Agents SDK: Practical Recipes and Use Cases"
-description: "Production-ready implementations for common use cases and patterns with the OpenAI Agents SDK. Copy and adapt these recipes for your specific applications."
+description: "Worked Python examples for the OpenAI Agents SDK: customer service, research, financial analysis, code review, translation, moderation and document processing."
+sidebar:
+  label: "Recipes"
 framework: "openai-agents-sdk"
 language: "python"
 ---
 
-Production-ready implementations for common use cases and patterns with the OpenAI Agents SDK. Copy and adapt these recipes for your specific applications.
+Worked examples for common use cases. The tools return canned data so that each recipe runs as written; replace them with calls to your own systems.
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).
 
@@ -244,7 +246,7 @@ researcher = Agent(
     - Offer actionable recommendations""",
     tools=[
         WebSearchTool(),
-        FileSearchTool(max_num_results=5)
+        FileSearchTool(vector_store_ids=["vs_your_store_id"], max_num_results=5)
     ],
     output_type=ResearchFindings
 )
@@ -373,14 +375,22 @@ recommendation_agent = Agent(
     output_type=StockAnalysis
 )
 
+# The manager keeps control and calls the specialists as tools, so the run
+# always ends on the manager and its StockAnalysis output type. (With handoffs
+# the run could end on any specialist, and final_output would not be a StockAnalysis.)
 portfolio_manager = Agent(
     name="Portfolio Manager",
-    instructions="""Coordinate stock analysis workflow:
-    1. Use Data Collector to gather information
-    2. Use Financial Analyser for detailed analysis
-    3. Use Investment Advisor for recommendations
-    Synthesise into actionable investment decisions.""",
-    handoffs=[collector_agent, analyser_agent, recommendation_agent]
+    instructions="""Coordinate stock analysis:
+    1. Use collect_data to gather information
+    2. Use analyse_financials for detailed analysis
+    3. Use recommend for an investment view
+    Then return the final structured analysis.""",
+    tools=[
+        collector_agent.as_tool(tool_name="collect_data", tool_description="Gather market and financial data for a ticker"),
+        analyser_agent.as_tool(tool_name="analyse_financials", tool_description="Analyse collected financial data"),
+        recommendation_agent.as_tool(tool_name="recommend", tool_description="Produce an investment recommendation"),
+    ],
+    output_type=StockAnalysis,
 )
 
 async def analyse_stock(ticker: str) -> StockAnalysis:
@@ -961,10 +971,14 @@ from agents import Agent, Runner, FileSearchTool, function_tool
 from pydantic import BaseModel
 import asyncio
 
+class KeyTerm(BaseModel):
+    name: str
+    value: str
+
 class ContractAnalysis(BaseModel):
     document_name: str
     summary: str
-    key_terms: dict
+    key_terms: list[KeyTerm]  # strict output schemas cannot use a bare dict
     risks: list[str]
     recommendations: list[str]
     compliance_status: str
@@ -1027,5 +1041,5 @@ async def main():
 asyncio.run(main())
 ```
 
-These recipes provide production-ready implementations you can adapt for your specific use cases with the OpenAI Agents SDK.
+For limits, retries, approvals and testing around these recipes, see the [production guide](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/).
 

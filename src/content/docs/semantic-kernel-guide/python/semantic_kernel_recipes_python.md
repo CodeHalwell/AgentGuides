@@ -3,6 +3,9 @@ title: "Semantic Kernel Recipes (Python)"
 description: "Ready-to-use Python recipes for Semantic Kernel — Q&A, structured extraction, plugins, RAG with vector stores, multi-agent teams, resilient agents and MCP tools."
 framework: "semantic-kernel"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 2
 ---
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Each recipe uses only APIs checked against an installed copy. Model names are examples. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/), Semantic Kernel's successor.
@@ -168,7 +171,7 @@ rag_agent = ChatCompletionAgent(
 )
 ```
 
-Swap `InMemoryCollection` for `AzureAISearchCollection`, `QdrantCollection`, `PostgresCollection` and so on without changing `DocChunk`. The old `SemanticTextMemory` / `*MemoryStore` API used by earlier versions of this recipe is legacy.
+Swap `InMemoryCollection` for `AzureAISearchCollection`, `QdrantCollection`, `PostgresCollection` and so on without changing `DocChunk`. The `SemanticTextMemory` / `*MemoryStore` API is legacy.
 
 ---
 
@@ -206,6 +209,8 @@ For iterative review loops, see the custom group-chat manager in [advanced multi
 ---
 
 ## 6. Resilient agent with monitoring
+
+Needs `pip install tenacity` (not a Semantic Kernel dependency).
 
 ```python
 import logging, time
@@ -264,7 +269,7 @@ async def mcp_demo():
         print(await agent.get_response(messages="Summarise README.md"))
 ```
 
-`MCPStreamableHttpPlugin(name=..., url=...)` connects to remote servers. Earlier versions of this recipe used `MCPClient` / `MCPToolPlugin` classes, which do not exist.
+`MCPStreamableHttpPlugin(name=..., url=...)` connects to remote servers. Needs Node.js for `npx`.
 
 ---
 
@@ -280,5 +285,13 @@ async def search_billing_docs(query: str):
 The lambda is translated into each store's native filter syntax; only simple comparisons and boolean combinations are supported, so keep filters to equality and ranges on indexed fields (`is_indexed=True`).
 
 ---
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 1.45.0 | Rewritten against current APIs and run against a stub chat service (tool calls through a tool-calling stub). Extra dependencies stated. |
 
 **[Back to Python overview](/semantic-kernel-guide/python/)**

@@ -20,15 +20,16 @@ The Python package has its own guide: [Claude Agent SDK (Python)](/anthropic-cla
 5. [Tools integration](#tools-integration)
 6. [Permissions](#permissions)
 7. [Hooks](#hooks)
-8. [Multi-agent systems](#multi-agent-systems)
-9. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-10. [Structured output](#structured-output)
-11. [Session management](#session-management)
-12. [Thinking and effort](#thinking-and-effort)
-13. [File checkpointing](#file-checkpointing)
-14. [Limits, cost and context](#limits-cost-and-context)
-15. [Errors and cancellation](#errors-and-cancellation)
-16. [API reference](#api-reference)
+8. [User input and approvals](#user-input-and-approvals)
+9. [Multi-agent systems](#multi-agent-systems)
+10. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+11. [Structured output](#structured-output)
+12. [Session management](#session-management)
+13. [Thinking and effort](#thinking-and-effort)
+14. [File checkpointing](#file-checkpointing)
+15. [Limits, cost and context](#limits-cost-and-context)
+16. [Errors and cancellation](#errors-and-cancellation)
+17. [API reference](#api-reference)
 
 ---
 
@@ -84,17 +85,19 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 
 for await (const message of query({
   prompt: 'What is the capital of France?',
-  options: { model: 'claude-opus-5-5' },
+  options: { model: '%%model=anthropic-flagship%%' },
 })) {
   if (message.type === 'assistant') {
     for (const block of message.message.content) {
       if (block.type === 'text') console.log(block.text);
     }
-  } else if (message.type === 'result' && message.subtype === 'success') {
+  } else if (message.type === 'result' && !message.is_error) {
     console.log(`[${message.num_turns} turns, $${message.total_cost_usd.toFixed(4)}]`);
   }
 }
 ```
+
+If the run fails, the loop receives a `result` with `is_error: true` and then throws; see [Errors and cancellation](#errors-and-cancellation).
 
 Note `message.message.content`: an assistant message wraps the API's `BetaMessage`, so the content blocks are one level down.
 
@@ -123,14 +126,14 @@ All have a 1M-token context window. `fallbackModel` names a model to use if the 
 | `assistant` | — | `SDKAssistantMessage` | `message` (a `BetaMessage`), `parent_tool_use_id`, `agent_id` |
 | `user` | — | `SDKUserMessage` | tool results fed back to the model; `tool_use_result` |
 | `stream_event` | — | `SDKPartialAssistantMessage` | raw API stream event (with `includePartialMessages`) |
-| `result` | `success` or `error_*` | `SDKResultMessage` | `result`, `total_cost_usd`, `usage`, `modelUsage`, `num_turns`, `structured_output`, `errors` |
+| `result` | `success` or `error_*` | `SDKResultMessage` | `is_error`, `result`, `total_cost_usd`, `usage`, `modelUsage`, `num_turns`, `structured_output`, `errors`, `terminal_reason` |
 | `system` | `compact_boundary` | `SDKCompactBoundaryMessage` | compaction happened |
 | `system` | `task_started`, `task_progress`, `task_notification` | | background tasks and subagents |
 | `rate_limit_event` | — | `SDKRateLimitEvent` | rate-limit state changes |
 
-The result is always the last message of a turn. Its `subtype` is `'success'`, or one of `'error_during_execution'`, `'error_max_turns'`, `'error_max_budget_usd'`, `'error_max_structured_output_retries'`; only the success variant has `result` and `structured_output`.
+The result is the last message of a turn. Its `subtype` is `'success'`, or one of `'error_during_execution'`, `'error_max_turns'`, `'error_max_budget_usd'`, `'error_max_structured_output_retries'`; only the success variant has `result`, `structured_output` and `api_error_status`. Check `is_error` as well as `subtype`: when the last model call fails, the result has `subtype: 'success'`, `is_error: true` and the API error text in `result`.
 
-A helper that most examples below reuse:
+After an error result, the `query()` iterator **throws** (`Claude Code returned an error result: …`) when the process exits. A helper that most examples below reuse catches that, so callers always get the result to inspect:
 
 ```typescript
 // run.ts
@@ -138,8 +141,14 @@ import { query, type Options, type SDKResultMessage } from '@anthropic-ai/claude
 
 export async function run(prompt: string, options: Options = {}): Promise<SDKResultMessage> {
   let result: SDKResultMessage | undefined;
-  for await (const message of query({ prompt, options })) {
-    if (message.type === 'result') result = message;
+  try {
+    for await (const message of query({ prompt, options })) {
+      if (message.type === 'result') result = message;
+    }
+  } catch (err) {
+    // The iterator throws after an error result. Rethrow anything else
+    // (failed start, crash, abort).
+    if (!result?.is_error) throw err;
   }
   if (!result) throw new Error('agent finished without a result');
   return result;
@@ -149,6 +158,7 @@ export function text(result: SDKResultMessage): string {
   if (result.subtype !== 'success') {
     throw new Error(`agent failed: ${result.subtype} ${result.errors.join('; ')}`);
   }
+  if (result.is_error) throw new Error(`agent failed: ${result.result}`);
   return result.result;
 }
 ```
@@ -212,7 +222,7 @@ for await (const message of query({
 
 ### Token usage and cost
 
-The result message is authoritative; do not hard-code prices:
+The result message reports what the run cost; do not hard-code prices. Use `total_cost_usd` and `modelUsage` for accounting: they cover every model call (main loop, subagents, compaction) and are cumulative. `usage` covers the main loop only, and with streaming input only the latest turn.
 
 ```typescript
 import { run } from './run.js';
@@ -220,14 +230,16 @@ import { run } from './run.js';
 const result = await run('Summarise README.md in five bullet points.', {
   allowedTools: ['Read'],
 });
-console.log('cost   :', result.total_cost_usd);
-console.log('input  :', result.usage.input_tokens);
-console.log('output :', result.usage.output_tokens);
-console.log('cached :', result.usage.cache_read_input_tokens);
+console.log('cost:', result.total_cost_usd);
 for (const [model, usage] of Object.entries(result.modelUsage)) {
-  console.log(`  ${model}: $${usage.costUSD.toFixed(4)} (${usage.outputTokens} output tokens)`);
+  console.log(
+    `  ${model}: $${usage.costUSD.toFixed(4)} in=${usage.inputTokens} out=${usage.outputTokens} ` +
+      `cache_read=${usage.cacheReadInputTokens}`,
+  );
 }
 ```
+
+With streaming input, each result carries the running total so far: read the latest one rather than adding them up.
 
 ---
 
@@ -252,7 +264,7 @@ async function* conversation(): AsyncGenerator<SDKUserMessage> {
 
 for await (const message of query({
   prompt: conversation(),
-  options: { model: 'claude-sonnet-5-5' },
+  options: { model: '%%model=anthropic%%' },
 })) {
   if (message.type === 'assistant') {
     for (const block of message.message.content) {
@@ -262,7 +274,35 @@ for await (const message of query({
 }
 ```
 
+The process stays alive between turns, so a failed turn arrives as a `result` with `is_error: true`; check it on every result.
+
 Streaming input is also how you send images, and it is required for the control methods that act mid-session (`interrupt()`, `setModel()`, `setPermissionMode()`, `rewindFiles()`).
+
+Images go in as Messages API content blocks:
+
+```typescript
+import { readFile } from 'node:fs/promises';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+
+async function* withImage(path: string, question: string): AsyncGenerator<SDKUserMessage> {
+  const data = (await readFile(path)).toString('base64');
+  yield {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+        { type: 'text', text: question },
+      ],
+    },
+    parent_tool_use_id: null,
+  };
+}
+
+for await (const message of query({ prompt: withImage('chart.png', 'What trend does this chart show?') })) {
+  if (message.type === 'result' && message.subtype === 'success') console.log(message.result);
+}
+```
 
 **Resume.** Run separate `query()` calls and pass the previous `session_id` as `options.resume` (see [Session management](#session-management)).
 
@@ -282,6 +322,7 @@ The `unstable_v2_*` session API was removed in 0.3.142; use one of the two patte
 | `WebSearch`, `WebFetch` | The web |
 | `Agent` | Delegate to a subagent |
 | `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` | Task tracking (replaced `TodoWrite` for SDK sessions in 0.3.142) |
+| `AskUserQuestion` | Ask the user a multiple-choice question (see [User input and approvals](#user-input-and-approvals)) |
 | `Skill` | Skills; enable with the `skills` option |
 
 `BUILTIN_TOOL_NAMES` exports the full list. Three options shape what the agent may use:
@@ -389,7 +430,7 @@ export const canUseTool: CanUseTool = async (toolName, input, { toolUseID, agent
 };
 ```
 
-The third argument also carries `signal`, `suggestions` (permission updates to persist an "always allow"), `blockedPath`, `decisionReason`, `mcpServer` and display hints. A tool in `allowedTools`, or anything under `bypassPermissions`, never reaches the callback.
+The third argument also carries `signal`, `suggestions` (permission updates to persist an "always allow"), `blockedPath`, `decisionReason`, `mcpServer` and display hints. A tool in `allowedTools`, or anything under `bypassPermissions`, never reaches the callback; Node prints a `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` warning when that happens. `PreToolUse` hooks still run for those tools, because hooks come first, so use a hook when every call must be checked.
 
 For unattended sessions, `permissionPrompts: 'none'` auto-denies prompts without turning off the `auto` classifier.
 
@@ -450,7 +491,57 @@ export const options: Options = {
 };
 ```
 
-Common output fields: `continue` (set `false` to stop), `stopReason`, `systemMessage`, `decision`, `reason`, and `hookSpecificOutput`. For `PreToolUse`, `permissionDecision` is `'allow' | 'deny' | 'ask' | 'defer'` and `updatedInput` rewrites the input; for `PostToolUse`, `additionalContext` adds text for the model. All matchers for an event run concurrently.
+Common output fields: `continue` (set `false` to stop), `stopReason`, `systemMessage`, `decision`, `reason`, and `hookSpecificOutput`. For `PreToolUse`, `permissionDecision` is `'allow' | 'deny' | 'ask' | 'defer'` and `updatedInput` rewrites the input; for `PostToolUse`, `additionalContext` adds text for the model and `updatedToolOutput` replaces the tool's output before the model sees it (see [Middleware](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/#redacting-tool-output)). All matchers for an event run concurrently.
+
+---
+
+## User input and approvals
+
+Two things reach your code when the agent needs a person: permission prompts for tools that are not pre-approved, and questions the model asks with the built-in `AskUserQuestion` tool. Both arrive through `canUseTool`.
+
+For `AskUserQuestion`, the input holds up to four `questions`, each with a `question`, a short `header`, two to four `options` (`label`, `description`) and `multiSelect`. Collect the answers, put them in the input under `answers` (question text → chosen label; join several labels with `', '` for multi-select), and allow the call. The model receives the answers as the tool result.
+
+For other tools, `suggestions` holds the permission rules Claude Code proposes for an "always allow" choice. Returning them as `updatedPermissions` applies them, so later matching calls no longer reach the callback.
+
+```typescript
+import { createInterface } from 'node:readline/promises';
+import type { CanUseTool, Options } from '@anthropic-ai/claude-agent-sdk';
+
+const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+interface Question {
+  question: string;
+  options: { label: string; description: string }[];
+  multiSelect: boolean;
+}
+
+export const approvals: CanUseTool = async (toolName, input, { suggestions }) => {
+  if (toolName === 'AskUserQuestion') {
+    const answers: Record<string, string> = {};
+    for (const q of input.questions as Question[]) {
+      const labels = q.options.map((option) => option.label);
+      const menu = labels.map((label, i) => `  ${i + 1}. ${label}`).join('\n');
+      const reply = (await rl.question(`${q.question}\n${menu}\n> `)).trim();
+      // A number picks an option; anything else is passed on as a free-text answer.
+      const choice = labels[Number(reply) - 1];
+      answers[q.question] = /^\d+$/.test(reply) && choice !== undefined ? choice : reply;
+    }
+    return { behavior: 'allow', updatedInput: { ...input, answers } };
+  }
+
+  const reply = (await rl.question(`Allow ${toolName} ${JSON.stringify(input)}? [y]es / [a]lways / [n]o `)).trim();
+  if (reply === 'a') return { behavior: 'allow', updatedInput: input, updatedPermissions: suggestions };
+  if (reply === 'y') return { behavior: 'allow', updatedInput: input };
+  return { behavior: 'deny', message: 'The user declined this action.' };
+};
+
+export const options: Options = {
+  canUseTool: approvals,
+  allowedTools: ['Read', 'Glob', 'Grep'],   // never prompt for these
+};
+```
+
+If you set `tools`, include `'AskUserQuestion'` in it, or the model cannot ask. In a web app, `canUseTool` is where you hand the question to the browser and await the reply; use the `signal` in the third argument and a timeout, and deny when it expires. For unattended jobs, `permissionMode: 'dontAsk'` or `permissionPrompts: 'none'` makes sure nothing waits for a person.
 
 ---
 
@@ -464,7 +555,7 @@ import { run, text } from './run.js';
 const result = await run(
   'Review src/auth/ for security problems, then add tests for anything you fix.',
   {
-    model: 'claude-opus-5-5',
+    model: '%%model=anthropic-flagship%%',
     allowedTools: ['Read', 'Glob', 'Grep', 'Agent'],
     agents: {
       'security-reviewer': {
@@ -477,7 +568,7 @@ const result = await run(
         description: 'Writes Vitest tests for a given module.',
         prompt: 'You write focused, deterministic Vitest tests.',
         tools: ['Read', 'Write', 'Bash'],
-        model: 'claude-sonnet-5-5',
+        model: '%%model=anthropic%%',
         maxTurns: 20,
       },
     },
@@ -498,7 +589,7 @@ import { run, text } from './run.js';
 async function reviewer(path: string, role: string): Promise<string> {
   return text(
     await run(`Review ${path} for ${role} issues.`, {
-      model: 'claude-sonnet-5-5',
+      model: '%%model=anthropic%%',
       systemPrompt: `You are a ${role} reviewer. Be specific: file, line, fix.`,
       allowedTools: ['Read', 'Glob', 'Grep'],
     }),
@@ -512,7 +603,7 @@ export async function review(path: string) {
   ]);
   const summary = text(
     await run(`Merge into one prioritised list:\n\n${security}\n\n${performance}`, {
-      model: 'claude-opus-5-5',
+      model: '%%model=anthropic-flagship%%',
       tools: [],
     }),
   );
@@ -570,7 +661,7 @@ const result = await run('Assess the risk of upgrading express in this repo.', {
   outputFormat: { type: 'json_schema', schema: z.toJSONSchema(Assessment) },
 });
 
-if (result.subtype === 'success') {
+if (result.subtype === 'success' && !result.is_error) {
   const assessment = Assessment.parse(result.structured_output);
   console.log(assessment.risk, assessment.files);
 }
@@ -616,7 +707,106 @@ await renameSession('SESSION_ID', 'Payments risk review');
 await tagSession('SESSION_ID', 'reviewed');
 ```
 
-`forkSession()`, `deleteSession()`, `getSessionInfo()`, `listSubagents()` and `getSubagentMessages()` are also exported. For multiple hosts, `sessionStore` mirrors transcripts to an external store (`InMemorySessionStore` is provided for tests), and `importSessionToStore()` copies a local session into one.
+`forkSession()`, `deleteSession()`, `getSessionInfo()`, `listSubagents()` and `getSubagentMessages()` are also exported.
+
+### Session stores
+
+For multiple hosts, `sessionStore` mirrors every transcript line to an external store, and `resume` rebuilds a session from it when the local file is missing (on another host, or in a fresh container). Claude Code still writes its local copy first; the store receives a second copy in batches, once per turn by default or after every frame with `sessionStoreFlush: 'eager'`. `InMemorySessionStore` is provided for tests, and `importSessionToStore()` copies an existing local session into a store.
+
+A store needs `append(key, entries)` and `load(key)`; `listSessions`, `listSessionSummaries`, `delete` and `listSubkeys` are optional. `key` has `projectKey` (derived from `cwd` by default), `sessionId` and, for subagent transcripts, `subpath`. Treat entries as opaque JSON, and use their `uuid` (when present) to ignore duplicates, because failed batches are retried. A SQLite version:
+
+```typescript
+// sqlite-store.ts — node:sqlite needs Node 22.13 or later; the same queries work on Postgres
+import { DatabaseSync } from 'node:sqlite';
+import type { SessionKey, SessionStore, SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk';
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS transcript (
+  seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_key TEXT NOT NULL,
+  session_id  TEXT NOT NULL,
+  subpath     TEXT NOT NULL,          -- '' for the main transcript
+  uuid        TEXT,                   -- idempotency key; NULL entries are never deduplicated
+  entry       TEXT NOT NULL,
+  written_ms  INTEGER NOT NULL,
+  UNIQUE (project_key, session_id, subpath, uuid)
+)`;
+
+export class SQLiteSessionStore implements SessionStore {
+  private db: DatabaseSync;
+
+  constructor(path: string) {
+    this.db = new DatabaseSync(path);
+    this.db.exec(SCHEMA);
+  }
+
+  async append(key: SessionKey, entries: SessionStoreEntry[]): Promise<void> {
+    const insert = this.db.prepare(
+      'INSERT OR IGNORE INTO transcript (project_key, session_id, subpath, uuid, entry, written_ms) ' +
+        'VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    const now = Date.now();
+    this.db.exec('BEGIN');
+    try {
+      for (const entry of entries) {
+        insert.run(key.projectKey, key.sessionId, key.subpath ?? '', entry.uuid ?? null, JSON.stringify(entry), now);
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  async load(key: SessionKey): Promise<SessionStoreEntry[] | null> {
+    const rows = this.db
+      .prepare('SELECT entry FROM transcript WHERE project_key = ? AND session_id = ? AND subpath = ? ORDER BY seq')
+      .all(key.projectKey, key.sessionId, key.subpath ?? '') as { entry: string }[];
+    return rows.length ? rows.map((row) => JSON.parse(row.entry) as SessionStoreEntry) : null;
+  }
+
+  async listSessions(projectKey: string): Promise<{ sessionId: string; mtime: number }[]> {
+    return this.db
+      .prepare(
+        "SELECT session_id AS sessionId, MAX(written_ms) AS mtime FROM transcript " +
+          "WHERE project_key = ? AND subpath = '' GROUP BY session_id",
+      )
+      .all(projectKey) as { sessionId: string; mtime: number }[];
+  }
+
+  async delete(key: SessionKey): Promise<void> {
+    if (key.subpath !== undefined) {   // one subagent transcript
+      this.db
+        .prepare('DELETE FROM transcript WHERE project_key = ? AND session_id = ? AND subpath = ?')
+        .run(key.projectKey, key.sessionId, key.subpath);
+    } else {                           // the session and everything under it
+      this.db
+        .prepare('DELETE FROM transcript WHERE project_key = ? AND session_id = ?')
+        .run(key.projectKey, key.sessionId);
+    }
+  }
+
+  async listSubkeys(key: { projectKey: string; sessionId: string }): Promise<string[]> {
+    const rows = this.db
+      .prepare("SELECT DISTINCT subpath FROM transcript WHERE project_key = ? AND session_id = ? AND subpath != ''")
+      .all(key.projectKey, key.sessionId) as { subpath: string }[];
+    return rows.map((row) => row.subpath);
+  }
+}
+```
+
+Use the same store on every host and resume by ID wherever the next request lands:
+
+```typescript
+import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import { SQLiteSessionStore } from './sqlite-store.js';
+
+const store = new SQLiteSessionStore('/data/sessions.db');
+
+export const optionsFor = (sessionId?: string): Options => ({ cwd: '/work', sessionStore: store, resume: sessionId });
+```
+
+`loadTimeoutMs` bounds each `load()` / `listSubkeys()` call during a store-backed resume, so a slow store fails the query instead of hanging it. Retention is up to you: the SDK only deletes from a store when you ask it to. The Python SDK ships a conformance suite for adapters (`claude_agent_sdk.testing.run_session_store_conformance`); a port of its append, load, ordering, isolation, delete and subkey checks passes against the TypeScript store above.
 
 ---
 
@@ -626,13 +816,13 @@ await tagSession('SESSION_ID', 'reviewed');
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
 
 export const options: Options = {
-  model: 'claude-opus-5-5',
+  model: '%%model=anthropic-flagship%%',
   thinking: { type: 'adaptive', display: 'summarized' },
   effort: 'high',     // 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 };
 ```
 
-On the Claude 5 family thinking is adaptive and `effort` is the main control. Fixed budgets (`{ type: 'enabled', budgetTokens }`) are rejected by Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1, and Opus 5.5 cannot have thinking disabled; lower the effort instead. Claude Opus 5.5 defaults to `medium` effort, so set it explicitly. `display: 'summarized'` makes thinking blocks readable; by default their text is empty. `maxThinkingTokens` is deprecated.
+On the Claude 5 family thinking is adaptive and `effort` is the main control. Fixed budgets (`{ type: 'enabled', budgetTokens }`) are rejected by Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1. Do not rely on disabling thinking either; to make a run cheaper, lower the effort. Claude Opus 5.5 defaults to `medium` effort, so set it explicitly. `display: 'summarized'` makes thinking blocks readable; by default their text is empty. `maxThinkingTokens` is deprecated.
 
 ---
 
@@ -702,33 +892,44 @@ export async function reportContext(q: Query): Promise<void> {
 
 ## Errors and cancellation
 
-Failures inside the agent loop arrive as a result message with an error subtype and `errors: string[]`, and `terminal_reason` says why the loop ended. A failure to start, or an aborted query, throws. Cancel with an `AbortController`, or call `interrupt()` on a streaming-input query to stop the current turn only:
+A failed run reaches you twice: the iterator first yields a `result` with `is_error: true`, then **throws** `Error('Claude Code returned an error result: …')` when the process exits. A failure to start, a crash and an abort throw without a result.
+
+| What failed | `result` fields |
+|---|---|
+| The model API, after Claude Code's own retries (overload, 5xx, auth) | `subtype: 'success'`, `is_error: true`, `result: 'API Error: …'`, `api_error_status` (e.g. 529, 401), `terminal_reason: 'api_error'` |
+| `maxTurns` reached | `subtype: 'error_max_turns'`, `terminal_reason: 'max_turns'` |
+| `maxBudgetUsd` reached | `subtype: 'error_max_budget_usd'` |
+| Structured output never validated | `subtype: 'error_max_structured_output_retries'` |
+
+So capture the result inside the loop and decide in `catch`. With streaming input the process keeps running after a failed turn, so check `is_error` on every result as well. Cancel with an `AbortController`, or call `interrupt()` on a streaming-input query to stop the current turn only:
 
 ```typescript
-import { query, AbortError } from '@anthropic-ai/claude-agent-sdk';
+import { query, AbortError, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 
 const controller = new AbortController();
 const timer = setTimeout(() => controller.abort(), 120_000);
+let result: SDKResultMessage | undefined;
 
 try {
   for await (const message of query({
     prompt: 'Audit every dependency in package.json.',
     options: { abortController: controller, maxTurns: 40 },
   })) {
-    if (message.type === 'result') {
-      if (message.subtype === 'success') console.log(message.result);
-      else console.error(message.subtype, message.terminal_reason, message.errors);
-    }
+    if (message.type === 'result') result = message;
   }
 } catch (err) {
   if (err instanceof AbortError) console.error('timed out');
-  else throw err;
+  else if (!result?.is_error) throw err;     // crashed or failed to start
 } finally {
   clearTimeout(timer);
 }
+
+if (result?.subtype === 'success' && !result.is_error) console.log(result.result);
+else if (result?.subtype === 'success') console.error('API error', result.api_error_status, result.result);
+else if (result) console.error(result.subtype, result.terminal_reason, result.errors);
 ```
 
-An assistant message can also carry an `error` field (for example `'rate_limit'`) when one model call fails but the loop continues.
+The [production guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/#error-handling) has a retry wrapper built on this, tested against each failure. An assistant message can also carry an `error` field (for example `'rate_limit'`) when one model call fails but the loop continues.
 
 ---
 
@@ -763,7 +964,7 @@ declare function query(params: {
 | `thinking`, `effort` | Reasoning |
 | `outputFormat` | `{ type: 'json_schema', schema }` |
 | `resume`, `continue`, `forkSession`, `sessionId`, `resumeSessionAt`, `resumeDropsTurn`, `persistSession` | Sessions |
-| `sessionStore`, `sessionStoreFlush` | External transcript mirror |
+| `sessionStore`, `sessionStoreFlush`, `loadTimeoutMs` | External transcript mirror; `loadTimeoutMs` bounds each store `load()` during resume |
 | `settingSources` | `('user' \| 'project' \| 'local')[]`; omitted loads all, `[]` loads none |
 | `skills`, `plugins` | Skills and local plugins |
 | `sandbox` | Bash sandboxing |

@@ -58,7 +58,7 @@ class Researcher(Executor):
         )
 
 
-workflow = WorkflowBuilder(start_executor=Researcher()).build()
+workflow = WorkflowBuilder(start_executor=Researcher(id="researcher")).build()
 ```
 
 ### Driving the loop from the caller
@@ -346,7 +346,7 @@ while response.user_input_requests:
 print(response.text)
 ```
 
-When streaming, each `AgentResponseUpdate` exposes the same `user_input_requests` property, and `await stream.get_final_response()` gives you the joined response to run the loop above on. There is no `stream.send_response()` — earlier drafts of this page showed one.
+When streaming, each `AgentResponseUpdate` exposes the same `user_input_requests` property, and `await stream.get_final_response()` gives you the joined response to run the loop above on. The stream itself has no method for answering a request; reply in a new `run()` on the same session.
 
 For MCP tools, combine `approval_mode="always_require"` (or the per-tool dict form) on the MCP tool constructor with the same loop — every MCP call surfaces as the same `function_approval_request` content.
 
@@ -368,7 +368,7 @@ Checkpointing and HITL compose:
 from agent_framework import FileCheckpointStorage, WorkflowBuilder
 
 storage = FileCheckpointStorage("/var/lib/agents/checkpoints")
-workflow = WorkflowBuilder(start_executor=Researcher(), checkpoint_storage=storage).build()
+workflow = WorkflowBuilder(start_executor=Researcher(id="researcher"), checkpoint_storage=storage).build()
 
 # First run — human walks away mid-flow.
 stream = workflow.run("topic", stream=True)

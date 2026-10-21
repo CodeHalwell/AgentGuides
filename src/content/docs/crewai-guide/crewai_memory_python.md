@@ -33,7 +33,7 @@ for m in matches:
 
 The default configuration picks up `OPENAI_API_KEY` for both analysis (`gpt-5.4-mini`) and embedding (`text-embedding-3-large`, 3072 dimensions). Both are pluggable — see below.
 
-> **Upgrading an old local store?** The default embedder used to be `text-embedding-3-small` (1536 dimensions). A LanceDB store written with the old default raises `EmbeddingDimensionMismatchError` under the new one. Either run `crewai reset-memories --memory`, or keep the old vectors by pinning `embedder={"provider": "openai", "config": {"model": "text-embedding-3-small"}}`.
+> **Upgrading an old local store?** The default embedder used to be `text-embedding-3-small` (1536 dimensions). A LanceDB store written with the old default raises `EmbeddingDimensionMismatchError` under the new one. Either run `crewai reset-memories --memory`, or keep the old vectors by pinning `embedder={"provider": "openai", "config": {"model_name": "text-embedding-3-small"}}`. The key is `model_name`; `model` raises `TypeError`.
 
 ## Constructor fields
 
@@ -61,7 +61,7 @@ The default configuration picks up `OPENAI_API_KEY` for both analysis (`gpt-5.4-
 |---|---|---|---|
 | LanceDB (default) | `"lancedb"` | included | File-backed; fast for up to ~100k records. |
 | LanceDB at a path | `"./some/dir"` | included | Any string without the special markers becomes a LanceDB path. |
-| Qdrant Edge | `"qdrant-edge"` | `pip install qdrant-client` | In-process Qdrant with payload indexing, better filtering. |
+| Qdrant Edge | `"qdrant-edge"` | `pip install "crewai[qdrant-edge]"` | In-process Qdrant Edge (`qdrant-edge-py`) with payload indexing, better filtering. |
 | Custom | `MyBackend()` | — | Any class implementing the `StorageBackend` protocol from `crewai.memory.storage.backend`. |
 
 ```python
@@ -228,7 +228,7 @@ from crewai.rag.embeddings.types import EmbedderConfig
 mem = Memory(embedder={"provider": "google-generativeai", "config": {"model_name": "gemini-embedding-001"}})
 ```
 
-Any provider config that `build_embedder` accepts works here.
+Any provider config that `build_embedder` accepts works here; provider SDKs are not installed by default (this one needs `google-generativeai`).
 
 ## Gotchas
 

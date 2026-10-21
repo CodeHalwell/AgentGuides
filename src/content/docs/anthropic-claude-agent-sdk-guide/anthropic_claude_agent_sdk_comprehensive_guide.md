@@ -260,6 +260,41 @@ async def stream(prompt: str) -> None:
 asyncio.run(stream("Explain the CAP theorem in three paragraphs."))
 ```
 
+### Images and multi-part prompts
+
+A string prompt is text only. To send an image, pass an async iterable of user-message dicts whose `content` is a list of Messages API blocks:
+
+```python
+import asyncio
+import base64
+from pathlib import Path
+from typing import Any, AsyncIterator
+from claude_agent_sdk import query, ResultMessage
+
+async def with_image(path: str, question: str) -> AsyncIterator[dict[str, Any]]:
+    data = base64.standard_b64encode(Path(path).read_bytes()).decode()
+    yield {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}},
+                {"type": "text", "text": question},
+            ],
+        },
+        "parent_tool_use_id": None,
+    }
+
+async def main() -> None:
+    async for message in query(prompt=with_image("chart.png", "What trend does this chart show?")):
+        if isinstance(message, ResultMessage):
+            print(message.result)
+
+asyncio.run(main())
+```
+
+The agent can also open image files itself with the `Read` tool.
+
 ### Interactive sessions with `ClaudeSDKClient`
 
 ```python
@@ -983,7 +1018,7 @@ async def report_context(client: ClaudeSDKClient) -> None:
 | `max_budget_usd` | Stop when the run's cost passes the limit (`"error_max_budget_usd"`) |
 | `task_budget={"total": N}` | Tell the model its token budget so it paces itself (advisory, not enforced) |
 
-`ResultMessage.terminal_reason` (0.2.126+) says why the loop ended: `"completed"`, `"max_turns"`, `"budget_exhausted"`, `"api_error"`, `"aborted_streaming"`, `"aborted_tools"` and so on.
+`ResultMessage.terminal_reason` (0.2.126+) says why the loop ended: `"completed"`, `"max_turns"`, `"api_error"`, `"aborted_streaming"`, `"aborted_tools"` and so on.
 
 ---
 
@@ -1007,7 +1042,7 @@ When a `query()` run fails, the SDK first **yields** the error `ResultMessage` a
 |---|---|
 | The model API, after the CLI's own retries (overload, 5xx, auth) | `subtype="success"`, `is_error=True`, `result="API Error: …"`, `api_error_status` (e.g. 529, 401), `terminal_reason="api_error"` |
 | `max_turns` reached | `subtype="error_max_turns"`, `terminal_reason="max_turns"` |
-| `max_budget_usd` reached | `subtype="error_max_budget_usd"`, `terminal_reason="budget_exhausted"` |
+| `max_budget_usd` reached | `subtype="error_max_budget_usd"` |
 | Structured output never validated | `subtype="error_max_structured_output_retries"` |
 
 Two consequences:
@@ -1049,7 +1084,7 @@ async def query(
 ) -> AsyncIterator[Message]: ...
 ```
 
-Passing an async iterable of message dicts as `prompt` streams input (for images or multi-part prompts).
+Passing an async iterable of message dicts as `prompt` streams input (see [Images and multi-part prompts](#images-and-multi-part-prompts)).
 
 ### `ClaudeSDKClient`
 
@@ -1090,8 +1125,8 @@ class ClaudeSDKClient:
 | `output_format` | `dict` | JSON schema output |
 | `resume`, `continue_conversation`, `fork_session`, `session_id` | | Sessions |
 | `resume_session_at`, `resume_drops_turn` | `str` | Truncating resume |
-| `session_store`, `session_store_flush` | | External transcript mirror |
-| `setting_sources` | `list["user" \| "project" \| "local"]` | Filesystem settings to load |
+| `session_store`, `session_store_flush`, `load_timeout_ms` | `SessionStore`; `"batched" \| "eager"`; `int` | External transcript mirror; `load_timeout_ms` (default 60 000) bounds each store `load()` during resume |
+| `setting_sources` | `list["user" \| "project" \| "local"]` | Filesystem settings to load; `None` loads all, `[]` none |
 | `skills` | `list[str] \| "all"` | Enable skills without hand-editing `allowed_tools` |
 | `plugins` | `list[SdkPluginConfig]` | Local plugins: `{"type": "local", "path": "..."}` |
 | `sandbox` | `SandboxSettings` | Bash sandboxing |
@@ -1101,7 +1136,6 @@ class ClaudeSDKClient:
 | `env`, `extra_args`, `cli_path`, `settings`, `user` | | Process-level configuration |
 | `stderr` | `Callable[[str], None]` | Receives CLI stderr lines |
 | `betas` | `list[str]` | e.g. `["context-1m-2025-08-07"]` |
-| `load_timeout_ms` | `int` | CLI start-up timeout (default 60 000) |
 
 ### What changed recently
 

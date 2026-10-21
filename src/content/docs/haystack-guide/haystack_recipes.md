@@ -3,6 +3,9 @@ title: "Haystack Recipes: Production-Ready Use Cases and Examples"
 description: "Haystack 3 recipes — knowledge-base Q&A, multi-tenant support, document summarisation, live-data agents, multi-agent collaboration, research agents and a conversational code assistant."
 framework: "haystack"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 5
 ---
 
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Each recipe runs as written with `OPENAI_API_KEY` set; to try one offline, replace `OpenAIChatGenerator(...)` with `MockChatGenerator()` from `haystack.components.generators.chat`.

@@ -76,16 +76,16 @@ async def main() -> None:
             print(update.text, end="", flush=True)
     print()
 
-    # The assembled final response — finish_reason, full text, tool calls.
+    # The assembled final response: full text, finish reason, usage.
     final = await stream.get_final_response()
-    print(f"\nfinish_reason={final.finish_reasons}")
+    print(f"\nfinish_reason={final.finish_reason} usage={final.usage_details}")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`stream.get_final_response()` waits until consumption finishes and returns the joined `AgentResponse`. For HITL approvals mid-stream use `await stream.send_response(approval)` instead of starting a new run.
+`stream.get_final_response()` waits until consumption finishes and returns the joined `AgentResponse`. Tool-approval requests can't be answered mid-stream: they arrive in `final.user_input_requests`, and you reply on the same session with the approval responses (see [Human in the loop](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/)).
 
 ### Recipe 3 — A tool with typed arguments and error handling
 
@@ -926,7 +926,7 @@ async def sse(stream) -> AsyncIterator[bytes]:
             payload = json.dumps({"text": update.text}).encode()
             yield b"data: " + payload + b"\n\n"
     final = await stream.get_final_response()
-    yield b"data: " + json.dumps({"done": True, "finish_reasons": list(final.finish_reasons or [])}).encode() + b"\n\n"
+    yield b"data: " + json.dumps({"done": True, "finish_reason": final.finish_reason}).encode() + b"\n\n"
 
 
 @app.post("/chat/stream")
@@ -935,7 +935,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
     return StreamingResponse(sse(stream), media_type="text/event-stream")
 ```
 
-`stream.get_final_response()` after iteration completes is the canonical place to access the joined response, finish reasons, and any HITL approval requests. For approval mid-stream, drop into `await stream.send_response(...)` before the loop returns.
+`stream.get_final_response()` after iteration is where you read the joined response, the finish reason and any approval requests (`final.user_input_requests`). To approve a tool call, send the approval responses back on the same session in a new request; the stream itself can't be answered.
 
 ---
 
@@ -982,7 +982,7 @@ async def main() -> None:
 
     print()
     final = await stream.get_final_response()
-    print(f"\nfinish_reasons={final.finish_reasons}")
+    print(f"\nfinish_reason={final.finish_reason}")
 
 
 if __name__ == "__main__":
@@ -1029,7 +1029,7 @@ if __name__ == "__main__":
 
 For custom types in `session.state`, register them once at module import via `register_state_type(...)` so cold-starts work even before the model is serialised. See the [sessions guide](./microsoft_agent_framework_python_sessions/) for the full contract.
 
-### Recipe 22 — Agent todo list with `TodoProvider` (Experimental)
+### Recipe 22 — Agent todo list with `TodoProvider`
 
 Give the agent a persistent task list. The provider exposes `todos_add`, `todos_complete`, `todos_get_remaining`, and `todos_remove` tools and injects usage instructions into the system prompt automatically.
 
@@ -1086,7 +1086,7 @@ Use `TodoProvider()` (no `store=`) for in-session todos that vanish at process e
 
 ---
 
-### Recipe 23 — Plan / execute mode with `AgentModeProvider` (Experimental)
+### Recipe 23 — Plan / execute mode with `AgentModeProvider`
 
 `AgentModeProvider` lets the agent switch between named operating modes. The default modes are **plan** (interactive, ask questions) and **execute** (autonomous, minimise interruptions). You can define any modes you need.
 
@@ -1228,7 +1228,7 @@ Key points:
 - It also registers two built-in security tools: `quarantined_llm` (runs a sub-prompt through an isolated model without privileged tool access) and `inspect_variable` (lets the agent examine labelled variables before acting).
 - This feature is `ExperimentalFeature.FIDES` — the API is functional but may change between minor releases.
 
-See the [comprehensive guide's SecureAgentConfig section](./microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defense--secureagentconfig-experimental) for the full constructor reference table.
+See the [comprehensive guide's FIDES section](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides) for the constructor reference table.
 
 ### Recipe 25 — `FunctionExecutor` data pipeline
 

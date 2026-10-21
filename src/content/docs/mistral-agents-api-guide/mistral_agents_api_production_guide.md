@@ -200,7 +200,9 @@ provider.add_span_processor(BatchSpanProcessor(
 ))
 trace.set_tracer_provider(provider)
 
-configure_telemetry(client, provider="global")   # SDK spans now use the global provider
+# SDK spans now use the global provider. redaction=False only silences the SDK's notice that
+# its own redaction does not apply in this mode; the exporter above does the redacting.
+configure_telemetry(client, provider="global", redaction=False)
 
 tracer = trace.get_tracer("support-service")
 with tracer.start_as_current_span("answer_support_question") as span:

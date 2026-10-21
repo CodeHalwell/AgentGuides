@@ -3,6 +3,9 @@ title: "Start Here: Haystack Reading Paths"
 description: "Which Haystack pages to read, in what order, depending on what you are building."
 framework: "haystack"
 language: "python"
+sidebar:
+  label: "Start here"
+  order: 1
 ---
 
 This section covers Haystack 3 (`haystack-ai` %%version=haystack-ai%%, checked %%versions-checked%%). Each path below lists pages in reading order.
@@ -35,7 +38,7 @@ This section covers Haystack 3 (`haystack-ai` %%version=haystack-ai%%, checked %
 
 ## I need to deploy to production
 
-1. [Production guide](/haystack-guide/haystack_production_guide/)
+1. [Production guide](/haystack-guide/haystack_production_guide/), including [security](/haystack-guide/haystack_production_guide/#security) and [testing and evaluation](/haystack-guide/haystack_production_guide/#testing-and-evaluation)
 2. [Streaming server (FastAPI)](/haystack-guide/haystack_streaming_server_fastapi/)
 3. [Observability](/haystack-guide/haystack_observability_python/)
 
@@ -44,12 +47,12 @@ This section covers Haystack 3 (`haystack-ai` %%version=haystack-ai%%, checked %
 | Page | Use it for |
 |------|------------|
 | [Comprehensive guide](/haystack-guide/haystack_comprehensive_guide/) | Core concepts, the Agent, tools, multi-agent basics, migration |
-| [Advanced agents](/haystack-guide/haystack_advanced_agents_python/) | Hooks, state handlers, custom components, async |
+| [Advanced agents](/haystack-guide/haystack_advanced_agents_python/) | Token budgets, hooks, state handlers, custom components, async |
 | [Multi-agent guide](/haystack-guide/haystack_multi_agent_guide/) | Coordinator, pipeline and routing patterns |
 | [Recipes](/haystack-guide/haystack_recipes/) | End-to-end examples to adapt |
-| [Diagrams](/haystack-guide/haystack_diagrams/) | Architecture pictures |
-| [Observability](/haystack-guide/haystack_observability_python/) | Tracing, logging, error recovery |
-| [Production guide](/haystack-guide/haystack_production_guide/) | Serving, serialisation, containers, scaling |
+| [Diagrams](/haystack-guide/haystack_diagrams/) | Pipelines, the agent loop and hooks, wrapping, multi-agent, spans |
+| [Observability](/haystack-guide/haystack_observability_python/) | Tracing, logging, retries, fallbacks, dead letters |
+| [Production guide](/haystack-guide/haystack_production_guide/) | Serving (FastAPI, Hayhooks), security, cost, testing and evaluation, scaling |
 | [Streaming server](/haystack-guide/haystack_streaming_server_fastapi/) | Server-sent events from an Agent |
 
 Code examples assume `OPENAI_API_KEY` is set. To try them without an API key, swap `OpenAIChatGenerator` for `MockChatGenerator` from `haystack.components.generators.chat`, which returns canned or echoed replies.

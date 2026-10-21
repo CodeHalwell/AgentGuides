@@ -1,8 +1,11 @@
 ---
-title: "PydanticAI: Advanced Error Handling & Testing"
+title: "PydanticAI: Error Handling & Testing Error Paths"
 description: "Comprehensive guide to ModelRetry, UnexpectedModelBehavior, UsageLimitExceeded, ConcurrencyLimitExceeded, AgentRunError, UserError, and testing error paths with FunctionModel and capture_run_messages."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Error handling"
+  order: 11
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.

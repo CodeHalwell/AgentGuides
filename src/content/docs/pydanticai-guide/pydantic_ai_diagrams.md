@@ -1,8 +1,11 @@
 ---
-title: "Pydantic AI: Architecture & Flow Diagrams"
+title: "PydanticAI: Architecture & Flow Diagrams"
 description: "Visual representations of Pydantic AI patterns, architectures, and workflows."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Diagrams"
+  order: 22
 ---
 
 Visual representations of Pydantic AI patterns, architectures, and workflows. The diagrams are conceptual; API names in them match **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%).

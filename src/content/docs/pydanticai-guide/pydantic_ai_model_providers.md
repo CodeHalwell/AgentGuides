@@ -1,8 +1,11 @@
 ---
-title: "PydanticAI: Model Providers, FallbackModel & InstrumentationSettings"
+title: "PydanticAI: Model Providers, FallbackModel & Instrumentation"
 description: "Every supported provider, provider prefixes, FallbackModel with exception and response handlers, FallbackExceptionGroup, InstrumentedModel, InstrumentationSettings versions 2-6, OTel token/cost histograms, gateway routing, and local models."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Model providers"
+  order: 5
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.
@@ -388,7 +391,7 @@ agent = Agent(
 Agent.instrument_all(InstrumentationSettings())
 ```
 
-### `InstrumentationSettings` constructor (source-verified)
+### `InstrumentationSettings` constructor
 
 ```python
 InstrumentationSettings(

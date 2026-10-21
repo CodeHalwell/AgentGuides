@@ -13,53 +13,58 @@ Each `query()` starts a Claude Code process. Plan capacity in processes, give ev
 
 ## Error handling
 
-Three kinds of failure:
-
 | Failure | Surfaces as |
 |---|---|
-| Loop ends unsuccessfully (API errors after retries, turn or budget limit, structured-output retries exhausted) | `result` message with `subtype` `'error_during_execution'`, `'error_max_turns'`, `'error_max_budget_usd'` or `'error_max_structured_output_retries'`, plus `errors` and `terminal_reason` |
-| One model call fails but the loop continues | `assistant` message with an `error` field |
-| Process cannot start, or the query is aborted | the async iterator throws (`AbortError` on abort) |
+| Model API error after Claude Code's retries (overload, 5xx, auth) | a `result` with `subtype: 'success'`, `is_error: true`, the error text in `result` and `api_error_status`, **then the iterator throws** |
+| Turn, budget or structured-output limit | a `result` with `subtype` `'error_max_turns'`, `'error_max_budget_usd'` or `'error_max_structured_output_retries'`, `errors` and `terminal_reason`, **then the iterator throws** |
+| One model call fails but the loop continues | an `assistant` message with an `error` field |
+| Process cannot start, crashes, or the query is aborted | the iterator throws with no result (`AbortError` on abort) |
 
-A wrapper that retries transient failures with jittered back-off and leaves limit errors alone:
+The thrown error after a failed run is a plain `Error` (`Claude Code returned an error result: …`), so decide what to do from the `result` you captured, not from the exception. A wrapper that retries transient API errors with jittered back-off and returns everything else to the caller:
 
 ```typescript
 import { query, AbortError, type Options, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 
-const LIMIT_SUBTYPES = new Set(['error_max_turns', 'error_max_budget_usd']);
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504, 529]);
+const LIMITS = new Set(['error_max_turns', 'error_max_budget_usd', 'error_max_structured_output_retries']);
+
+/** A failed result worth retrying: a transient API error, not a limit you set or a 4xx. */
+export function isTransient(result: SDKResultMessage): boolean {
+  if (!result.is_error || LIMITS.has(result.subtype)) return false;
+  const status = result.subtype === 'success' ? result.api_error_status : undefined;
+  return status != null ? RETRYABLE_STATUS.has(status) : result.terminal_reason === 'api_error';
+}
 
 export async function runResilient(
   prompt: string,
   options: Options,
   { attempts = 4, timeoutMs = 300_000 } = {},
 ): Promise<SDKResultMessage> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let result: SDKResultMessage | undefined;
     try {
-      let result: SDKResultMessage | undefined;
       for await (const message of query({ prompt, options: { ...options, abortController: controller } })) {
         if (message.type === 'result') result = message;
       }
-      if (!result) throw new Error('no result message');
-      if (result.subtype === 'success' || LIMIT_SUBTYPES.has(result.subtype)) return result;
-      lastError = new Error(`${result.subtype}: ${result.errors.join('; ')}`);
+      if (!result) throw new Error('agent finished without a result');
+      return result;
     } catch (err) {
-      if (err instanceof AbortError) throw err;   // our own timeout: do not retry blindly
-      lastError = err;
+      if (err instanceof AbortError) throw err;          // our own timeout: do not retry blindly
+      if (result && !isTransient(result)) return result; // limits, 4xx: the caller decides
+      if (attempt >= attempts) throw err;                // transient failure or crash, out of attempts
     } finally {
       clearTimeout(timer);
     }
-    if (attempt < attempts) {
-      await new Promise((r) => setTimeout(r, Math.min(30_000, 1000 * 2 ** attempt) + Math.random() * 1000));
-    }
+    await new Promise((r) => setTimeout(r, Math.min(30_000, 1000 * 2 ** attempt) + Math.random() * 1000));
   }
-  throw lastError;
 }
 ```
 
-Retrying repeats tool calls. For agents with side effects, resume the failed session (`resume: result.session_id`) rather than starting again, or make tools idempotent. `fallbackModel: 'claude-sonnet-5-5'` lets Claude Code switch model on overload instead of failing.
+Behaviour, checked against a stub Claude Code executable that fails in each way: a 529 is retried and the run succeeds once the stub recovers; persistent 529s throw after four attempts; a 401, `error_max_turns` and `error_max_budget_usd` come back as the error result after one attempt; a crash without a result is retried.
+
+Retrying repeats tool calls. For agents with side effects, resume the failed session (`resume: result.session_id`) rather than starting again, or make tools idempotent. `fallbackModel: '%%model=anthropic%%'` lets Claude Code switch model on overload instead of failing.
 
 ---
 
@@ -123,7 +128,7 @@ export function costRecord(result: SDKResultMessage, tenant: string) {
   return {
     tenant,
     session: result.session_id,
-    ok: result.subtype === 'success',
+    ok: !result.is_error,
     costUsd: result.total_cost_usd,
     turns: result.num_turns,
     byModel: Object.fromEntries(
@@ -171,6 +176,7 @@ export async function runLogged(prompt: string, options: Options, requestId: str
       case 'result':
         log('result', {
           requestId,
+          ok: !message.is_error,
           subtype: message.subtype,
           terminalReason: message.terminal_reason,
           turns: message.num_turns,
@@ -178,7 +184,7 @@ export async function runLogged(prompt: string, options: Options, requestId: str
           durationMs: message.duration_ms,
           wallMs: Date.now() - started,
         });
-        return message;
+        return message;   // returning early is safe; an error result is returned, not thrown
     }
   }
   return undefined;
@@ -214,16 +220,21 @@ Alert on: result error rate by `subtype`; p95 cost and turns per run; rate-limit
 The platform binary is installed as an optional npm dependency, so install on the same OS and architecture you run on (build inside the image, not on your laptop).
 
 ```dockerfile
-FROM node:22-slim
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package*.json tsconfig.json ./
+RUN npm ci                    # package.json pins @anthropic-ai/claude-agent-sdk
+COPY src ./src
+RUN npx tsc --outDir dist
 
+FROM node:22-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home agent
-
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev        # package.json pins @anthropic-ai/claude-agent-sdk
-COPY --chown=agent:agent dist ./dist
+RUN npm ci --omit=dev         # installs the platform's Claude Code binary for this image
+COPY --from=build --chown=agent:agent /app/dist ./dist
 
 USER agent
 ENV HOME=/home/agent NODE_ENV=production
@@ -231,7 +242,7 @@ EXPOSE 8080
 CMD ["node", "dist/server.js"]
 ```
 
-Transcripts go to `$HOME/.claude/projects/`. Mount a volume there if sessions must survive restarts, set `persistSession: false` if you never resume, or mirror to shared storage with `sessionStore`.
+Transcripts go to `$HOME/.claude/projects/`. Mount a volume there if sessions must survive restarts, set `persistSession: false` if you never resume, or mirror to shared storage with a [`sessionStore`](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#session-stores).
 
 ### Kubernetes
 
@@ -239,6 +250,12 @@ Transcripts go to `$HOME/.claude/projects/`. Mount a volume there if sessions mu
 - Mount `ANTHROPIC_API_KEY` from a `Secret`.
 - Use a read-only root filesystem with writable `emptyDir` volumes for the work directory and `$HOME`.
 - Set `terminationGracePeriodSeconds` above your longest expected run; on `SIGTERM` stop taking work and let in-flight runs finish or abort them.
+
+### Hosting patterns
+
+- **One run per job.** A worker takes a job, runs `query()` in a fresh working directory, stores the result and session ID, and deletes the directory.
+- **Ephemeral container per session.** For untrusted code or per-customer isolation, start a container or sandbox for each session and destroy it afterwards; configure a `sessionStore` so a later request can resume in a new container.
+- **Long-lived conversations.** Keep a streaming-input `query()` open per active conversation, sticky to one worker, and fall back to `resume` (backed by a `sessionStore`) when the worker restarts.
 
 ---
 
@@ -251,7 +268,7 @@ import { z } from 'zod';
 
 const Env = z.object({
   ANTHROPIC_API_KEY: z.string().startsWith('sk-ant-'),
-  AGENT_MODEL: z.string().default('claude-sonnet-5-5'),
+  AGENT_MODEL: z.string().default('%%model=anthropic%%'),
   AGENT_MAX_BUDGET_USD: z.coerce.number().positive().default(2),
   AGENT_CONCURRENCY: z.coerce.number().int().positive().default(4),
 });
@@ -319,11 +336,11 @@ export function toRow(id: string, result: SDKResultMessage): AgentRunRow {
   return {
     id,
     sessionId: result.session_id,
-    status: result.subtype === 'success' ? 'success' : 'error',
+    status: result.is_error ? 'error' : 'success',
     subtype: result.subtype,
     costUsd: result.total_cost_usd,
     turns: result.num_turns,
-    output: result.subtype === 'success' ? result.result : null,
+    output: result.subtype === 'success' && !result.is_error ? result.result : null,
     createdAt: new Date(),
   };
 }

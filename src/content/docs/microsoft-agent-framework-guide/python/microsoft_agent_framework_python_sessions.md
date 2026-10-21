@@ -275,7 +275,7 @@ Two operational notes:
 
 ## `VectorStoreHistoryProvider` — history in a vector store
 
-`VectorStoreHistoryProvider` (experimental, added in 1.19.0) keeps the transcript in a vector collection that the provider owns, on any `BaseVectorStore`: [`InMemoryStore`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#vector-stores--collections-search-and-filters) for tests, or a connector package in production. It works like the other history providers (load before the run, save after), and it can optionally embed every message and give the agent a `search_history` tool over the *full* transcript, even when compaction keeps only a slice in context.
+`VectorStoreHistoryProvider` (experimental, added in 1.19.0) keeps the transcript in a vector collection that the provider owns, on any `BaseVectorStore`: [`InMemoryStore`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#vector-stores) for tests, or a connector package in production. It works like the other history providers (load before the run, save after), and it can optionally embed every message and give the agent a `search_history` tool over the *full* transcript, even when compaction keeps only a slice in context.
 
 ```python
 from agent_framework import Agent, InMemoryStore, SlidingWindowStrategy, VectorStoreHistoryProvider

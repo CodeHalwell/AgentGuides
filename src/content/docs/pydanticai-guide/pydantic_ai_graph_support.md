@@ -1,15 +1,16 @@
 ---
-title: "Pydantic AI: Graph Support Guide"
+title: "PydanticAI: Graph Support"
 description: "Typed, multi-step workflows with pydantic_graph: GraphBuilder steps, decisions, parallel map/join, BaseNode classes, iteration and Mermaid rendering — combined with Pydantic AI agents."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Graphs"
+  order: 15
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%**, which pins the matching `pydantic-graph` release (checked %%versions-checked%%). Every example on this page was run against that release.
 
-> **This page was rewritten for V2.** Earlier editions described a `pydantic_ai.graph` module with `@graph`/`@node` decorators, `StateMachine`, `conditional_edge` and automatic parallel scheduling. None of that existed. Graphs live in the separate **`pydantic_graph`** package, installed with `pydantic-ai`.
-
----
+Graphs live in the separate **`pydantic_graph`** package, installed with `pydantic-ai`.
 
 ## When to use a graph
 
@@ -281,4 +282,4 @@ A step is plain async code, so an agent call is just `await agent.run(...)` (exa
 - `GraphBuilder`, `Graph`, `GraphRun`, `GraphTask`, `StepContext`, `BaseNode`, `End`, `GraphRunContext`, reducers — `pydantic_graph` (top-level exports)
 - Edge-path builders and markers — `pydantic_graph.paths`
 - Decisions — `pydantic_graph.decision`; joins and reducers — `pydantic_graph.join`
-- The comprehensive guide's [graph reference section](/pydanticai-guide/pydantic_ai_comprehensive_guide/#persistence--graph-support) lists the lower-level types (`Path`, `Fork`, `Join`, ID types)
+- Lower-level types (`Path`, `Fork`, `Join`, ID types) are in the [upstream graph docs](https://pydantic.dev/docs/ai/graph/graph/) and the `pydantic_graph` docstrings

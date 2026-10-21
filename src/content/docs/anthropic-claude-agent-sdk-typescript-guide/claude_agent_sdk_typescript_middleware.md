@@ -1,5 +1,5 @@
 ---
-title: "Claude Agent SDK Middleware (TypeScript)"
+title: "Claude Agent SDK (TypeScript) — Middleware"
 description: "Guardrails, redaction, auditing and tracing for the TypeScript Claude Agent SDK, built from hooks, canUseTool and stream wrappers."
 framework: "claude-agent-sdk"
 language: "typescript"

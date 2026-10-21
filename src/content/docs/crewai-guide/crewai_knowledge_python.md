@@ -10,7 +10,7 @@ sidebar:
 
 > **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/knowledge/knowledge.py`, `crewai/knowledge/source/*.py`, `crewai/knowledge/knowledge_config.py`).
 
-Knowledge is a read-mostly vector store attached to an `Agent` or `Crew`. Unlike [Memory](./crewai_memory_python/) it's populated ahead of time and isn't automatically written to during a run.
+Knowledge is a read-mostly vector store attached to an `Agent` or `Crew`. Unlike [Memory](/crewai-guide/crewai_memory_python/) it's populated ahead of time and isn't automatically written to during a run.
 
 ## Minimal runnable example
 
@@ -119,7 +119,7 @@ Accepted formats per source: `MD`, `ASCIIDOC`, `PDF`, `DOCX`, `HTML`, images. If
 
 ## Custom sources
 
-Subclass `BaseKnowledgeSource` (or `BaseFileKnowledgeSource` for file I/O). Two methods to implement:
+Subclass `BaseKnowledgeSource` (or `BaseFileKnowledgeSource` for file I/O). Three methods are abstract: `validate_content`, `add` and its async twin `aadd`.
 
 ```python
 from crewai.knowledge.source.base_knowledge_source import BaseKnowledgeSource
@@ -136,7 +136,12 @@ class NotionSource(BaseKnowledgeSource):
         for p in pages:
             self.chunks.extend(self._chunk_text(p.text))
         self._save_documents()
+
+    async def aadd(self) -> None:
+        self.add()             # or an async fetch + await self._asave_documents()
 ```
+
+Leaving out `aadd` makes the class abstract: instantiating it raises `TypeError: Can't instantiate abstract class`.
 
 `_chunk_text` and `_save_documents` are inherited — you rarely need to override them.
 
@@ -164,7 +169,7 @@ crew = Crew(
     agents=[a, b],
     tasks=[t1, t2],
     knowledge_sources=[pdfs],            # shared across all agents
-    embedder={"provider": "openai", "config": {"model": "text-embedding-3-large"}},
+    embedder={"provider": "openai", "config": {"model_name": "text-embedding-3-large"}},
 )
 ```
 

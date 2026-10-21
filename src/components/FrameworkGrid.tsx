@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { frameworks, type Framework } from '../data/frameworks';
+import { frameworks, categoryGroup, languageSymbol, type Framework } from '../data/frameworks';
 
 const categories = ['All', 'Multi-Agent', 'Data & RAG', 'Cloud-Native', 'Model-Specific', 'Enterprise', 'Lightweight'] as const;
 const languages = ['All', 'Python', 'TypeScript', '.NET', 'Go'] as const;
@@ -9,33 +9,16 @@ type Category = (typeof categories)[number];
 type Language = (typeof languages)[number];
 type Difficulty = (typeof difficulties)[number];
 
-// Four hues only (Ink → Oxide → Verdigris → Sulfur); the category chip text disambiguates.
-export const groupOf: Record<Framework['category'], string> = {
-  'Multi-Agent': 'oxide',
-  'Data & RAG': 'verdigris',
-  'Cloud-Native': 'ink',
-  Enterprise: 'ink',
-  'Model-Specific': 'sulfur',
-  Lightweight: 'sulfur',
-};
-
-const langChip: Record<Framework['languages'][number], string> = {
-  Python: 'Py',
-  TypeScript: 'Ts',
-  '.NET': 'C#',
-  Go: 'Go',
-};
-
 /** Element chips: the framework's symbol in its group colour, then one ink chip per language. */
 export function Chips({ f }: { f: Framework }) {
   return (
     <div className="flex flex-wrap gap-1.5" aria-label={`${f.category}; ${f.languages.join(', ')}`}>
-      <span className="chip" data-group={groupOf[f.category]} title={f.category}>
+      <span className="chip" data-group={categoryGroup[f.category]} title={f.category}>
         {f.symbol}
       </span>
       {f.languages.map((l) => (
-        <span key={l} className="chip" data-group="ink" title={l}>
-          {langChip[l]}
+        <span key={l} className="chip" data-group="cobalt" title={l}>
+          {languageSymbol[l]}
         </span>
       ))}
     </div>

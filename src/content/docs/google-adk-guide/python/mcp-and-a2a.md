@@ -119,17 +119,22 @@ app = to_a2a(agent, host="0.0.0.0", port=8000, protocol="http")
 
 Signature:
 
-```python
+```text
 to_a2a(
-    agent: BaseAgent,
+    agent: BaseAgent | Workflow,
     *,
     host: str = "localhost",
     port: int = 8000,
     protocol: str = "http",
-    agent_card: AgentCard | str | None = None,    # or path to JSON
+    rpc_path: str = "",
+    agent_card: AgentCard | str | None = None,    # or a path to a JSON card
     push_config_store: PushNotificationConfigStore | None = None,
+    task_store: TaskStore | None = None,
     runner: Runner | None = None,
-    lifespan: Callable | None = None,
+    lifespan: Callable[[Starlette], AbstractAsyncContextManager[None]] | None = None,
+    agent_executor_factory: Callable[[Runner], A2aAgentExecutor] | None = None,
+    security_schemes: dict[str, SecurityScheme] | None = None,
+    default_skill_security: list[dict[str, list[str]]] | None = None,
 ) -> Starlette
 ```
 

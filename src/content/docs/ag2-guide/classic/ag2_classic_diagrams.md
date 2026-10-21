@@ -1,13 +1,13 @@
 ---
-title: "AG2 Classic Architecture and Design Diagrams"
-description: "Visual Representations of AG2 Patterns and Workflows"
-framework: "autogen"
+title: "AG2 Classic Diagrams"
+description: "Diagrams of AG2 Classic (import autogen) agents, message flow, group chat, nested and sequential chats, tools, code execution and A2A serving."
+framework: "ag2"
 language: "python"
+sidebar:
+  label: "Diagrams"
 ---
 
 > **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
-
-**Visual Representations of AG2 Patterns and Workflows**
 
 ## Table of Contents
 
@@ -20,17 +20,17 @@ language: "python"
 7. [Tool Integration Flow](#tool-integration-flow)
 8. [Code Execution Models](#code-execution-models)
 9. [State Management Architecture](#state-management-architecture)
-10. [Production Deployment Patterns](#production-deployment-patterns)
+10. [Serving over A2A](#serving-over-a2a)
 
 ---
 
 ## Core Architecture
 
-### AG2 Framework Components
+### AG2 Classic components
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      AG2 Framework                              │
+│                      AG2 Classic                                │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐   │
@@ -69,7 +69,7 @@ language: "python"
 │  ├─────────────────────────────────────────────────────────┤   │
 │  │                                                         │   │
 │  │  Function Registry  |  A2A Protocol  |  RAG System     │   │
-│  │  (Tool calling)     |  (REST APIs)   |  (Documents)    │   │
+│  │  (Tool calling)     |  (JSON-RPC)    |  (Documents)    │   │
 │  │                                                         │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
@@ -232,9 +232,15 @@ Speaker Selection Loop:
 │                                                  │
 │  MANUAL                                          │
 │  ┌─────────────────────────────────────┐        │
-│  │ Custom function selects speaker     │        │
-│  │ Full programmatic control           │        │
-│  │ Complex orchestration logic         │        │
+│  │ A human picks each next speaker     │        │
+│  └─────────────────────────────────────┘        │
+│          ↓                                       │
+│  Next Speaker: Human choice                     │
+│                                                  │
+│  CALLABLE (your function)                        │
+│  ┌─────────────────────────────────────┐        │
+│  │ f(last_speaker, groupchat) returns  │        │
+│  │ an Agent, a method name or None     │        │
 │  └─────────────────────────────────────┘        │
 │          ↓                                       │
 │  Next Speaker: Custom logic result              │
@@ -560,7 +566,7 @@ B) Executor = different agent (specialised executor)
 
 ```
 ┌─────────────────────────────────────────────┐
-│         State Management in AG2             │
+│      State Management in AG2 Classic        │
 ├─────────────────────────────────────────────┤
 │                                             │
 │  ┌──────────────────────────────────────┐  │
@@ -591,78 +597,23 @@ Access: Thread-safe dictionary operations
 
 ---
 
-## Production Deployment Patterns
+## Serving over A2A
 
-### REST API Deployment (A2A Protocol)
-
-```
-┌──────────────────────────────────────────────────┐
-│         REST API Deployment Architecture         │
-├──────────────────────────────────────────────────┤
-│                                                  │
-│  ┌──────────────────────────────────────────┐   │
-│  │        Client Application                │   │
-│  │  (External service, web app, etc.)       │   │
-│  └──────────────────────────────────────────┘   │
-│              │                                   │
-│              │ HTTP/REST Calls                   │
-│              │ POST /message                     │
-│              │ GET /status                       │
-│              ↓                                   │
-│  ┌──────────────────────────────────────────┐   │
-│  │      A2A Server                          │   │
-│  │  (REST API wrapper)                      │   │
-│  │  • Parse HTTP requests                   │   │
-│  │  • Route to agent                        │   │
-│  │  • Return JSON responses                 │   │
-│  └──────────────────────────────────────────┘   │
-│              │                                   │
-│              ↓                                   │
-│  ┌──────────────────────────────────────────┐   │
-│  │      AG2 Agent                           │   │
-│  │  • Process messages                      │   │
-│  │  • Generate responses                    │   │
-│  │  • Maintain state                        │   │
-│  └──────────────────────────────────────────┘   │
-│              │                                   │
-│              ↓                                   │
-│  ┌──────────────────────────────────────────┐   │
-│  │    External Resources                    │   │
-│  │  • APIs, databases, tools                │   │
-│  └──────────────────────────────────────────┘   │
-│                                                  │
-└──────────────────────────────────────────────────┘
-```
-
-### Docker Deployment Stack
+`autogen.a2a.A2aAgentServer(agent, url=...).build()` returns a Starlette app; `A2aRemoteAgent` is the client side. See the [production guide](/ag2-guide/classic/ag2_classic_production_guide/#serving-an-agent-over-a2a).
 
 ```
-┌────────────────────────────────────────────────────┐
-│           Docker Deployment Stack                  │
-├────────────────────────────────────────────────────┤
-│                                                    │
-│  Load Balancer (nginx/HAProxy)                     │
-│          │                                         │
-│  ┌───────┴───────────────────────┐                │
-│  │                               │                │
-│  ↓                               ↓                │
-│ ┌──────────────────┐  ┌──────────────────┐       │
-│ │  AG2 Container 1 │  │  AG2 Container 2 │  ...  │
-│ │  (Port 8000)     │  │  (Port 8001)     │       │
-│ │  • Agent A       │  │  • Agent B       │       │
-│ │  • Agent B       │  │  • Tools         │       │
-│ │  • Tools         │  │                  │       │
-│ └──────────────────┘  └──────────────────┘       │
-│        │                      │                   │
-│  ┌─────┴──────────────────────┴─────┐            │
-│  │      Shared Services              │            │
-│  ├───────────────────────────────────┤            │
-│  │ • Redis (cache/sessions)          │            │
-│  │ • PostgreSQL (persistence)        │            │
-│  │ • Message Queue (async tasks)     │            │
-│  └───────────────────────────────────┘            │
-│                                                    │
-└────────────────────────────────────────────────────┘
+ Client process                               Server process (uvicorn)
+┌────────────────────────────┐               ┌──────────────────────────────┐
+│ user (ConversableAgent)    │               │ A2aAgentServer(...).build()  │
+│   a_initiate_chat(remote)  │               │                              │
+│            │               │  GET /.well-known/agent-card.json             │
+│            ↓               │ ────────────→ │  agent card (name, skills)   │
+│ A2aRemoteAgent(url=...)    │               │                              │
+│                            │  JSON-RPC POST /                              │
+│                            │ ────────────→ │  AutogenAgentExecutor        │
+│                            │ ←──────────── │    → ConversableAgent reply  │
+│  reply added to the chat   │  task events  │                              │
+└────────────────────────────┘               └──────────────────────────────┘
 ```
 
 ---
@@ -710,7 +661,7 @@ Phase 4: Editing
          ↓
    Final Blog Post
 
-Carryover pattern allows context from each phase to inform the next!
+Each phase's summary is carried over into the next phase's message.
 ```
 
 ---
@@ -720,12 +671,12 @@ Carryover pattern allows context from each phase to inform the next!
 | Component | Role | Examples |
 |-----------|------|----------|
 | **Agents** | Communication endpoints | ConversableAgent, AssistantAgent |
-| **Orchestrators** | Multi-agent coordination | GroupChat, GroupChatManager |
-| **Execution** | Task processing | LocalExecutor, DockerExecutor |
+| **Orchestrators** | Multi-agent coordination | GroupChat, GroupChatManager, group-chat patterns |
+| **Execution** | Running generated code | LocalCommandLineCodeExecutor, DockerCommandLineCodeExecutor |
 | **LLM Layer** | Intelligence | OpenAI, Anthropic, Gemini, Ollama |
 | **Tools** | Extended capabilities | Functions, APIs, external services |
 | **State** | Shared context | ContextVariables, chat history |
-| **Deployment** | Production readiness | REST API, Docker, async patterns |
+| **Serving** | Exposing agents | A2aAgentServer, async chats |
 
-This architectural flexibility allows AG2 to scale from simple two-agent conversations to complex enterprise systems with dozens of specialised agents, multiple orchestration layers, and integrated external systems.
+
 

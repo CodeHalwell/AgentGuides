@@ -3,6 +3,9 @@ title: "PydanticAI: Concurrency Limiting"
 description: "ConcurrencyLimiter, ConcurrencyLimit, and AbstractConcurrencyLimiter — cap parallel model requests with optional backpressure and OpenTelemetry observability."
 framework: "pydanticai"
 language: "python"
+sidebar:
+  label: "Concurrency"
+  order: 12
 ---
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.concurrency`.
