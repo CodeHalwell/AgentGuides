@@ -1,623 +1,202 @@
 ---
-title: "CrewAI Architecture and Workflow Diagrams"
-description: "Architecture and flow diagrams for CrewAI — agent lifecycle, process flows, task execution, collaboration, memory and tools."
+title: "CrewAI diagrams"
+description: "Text diagrams of CrewAI's moving parts — crew components, the agent loop, sequential and hierarchical processes, delegation, flows, unified memory, events and hooks, and checkpoints."
 framework: "crewai"
 language: "python"
+sidebar:
+  label: "Diagrams"
+  order: 60
 ---
 
-## Visual Guide to Multi-Agent Systems
+> **Checked against `crewai` %%version=crewai%%** (checked %%versions-checked%%). These diagrams describe behaviour verified on the linked pages; they simplify, and the pages are the reference.
 
----
+## Components of a crew
 
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Agent Lifecycle](#agent-lifecycle)
-3. [Process Flows](#process-flows)
-4. [Task Execution Patterns](#task-execution-patterns)
-5. [Collaboration Patterns](#collaboration-patterns)
-6. [Memory Systems](#memory-systems)
-7. [Tool Integration](#tool-integration)
-
----
-
-## Architecture Overview
-
-### CrewAI Core Components Diagram
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                          CREWAI SYSTEM                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │                        CREW                          │   │
-│  │  ┌──────────────────────────────────────────────┐   │   │
-│  │  │         Process (Sequential/Hierarchical)    │   │   │
-│  │  └──────────────────────────────────────────────┘   │   │
-│  │                                                      │   │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐   │   │
-│  │  │   Agent 1  │  │   Agent 2  │  │   Agent N  │   │   │
-│  │  └────────────┘  └────────────┘  └────────────┘   │   │
-│  │                                                      │   │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐   │   │
-│  │  │  Task 1    │  │  Task 2    │  │  Task N    │   │   │
-│  │  └────────────┘  └────────────┘  └────────────┘   │   │
-│  │                                                      │   │
-│  │  ┌──────────────────────────────────────────────┐   │   │
-│  │  │      Memory (Short & Long-term)             │   │   │
-│  │  └──────────────────────────────────────────────┘   │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
+```text
+                          Crew
+   process · memory · knowledge_sources · max_rpm · checkpoint · tracing
+                            │
+         ┌──────────────────┼──────────────────┐
+         ▼                  ▼                  ▼
+      Agents              Tasks          manager_llm / manager_agent
+                                         (hierarchical crews only)
+         │                  │
+         │                  ├─ description, expected_output   (required)
+         │                  ├─ agent, context, async_execution
+         │                  └─ output_pydantic / response_model, guardrail
+         │
+         ├─ role, goal, backstory   (required)
+         ├─ llm ──────────────► LLM: native SDK (openai, anthropic, gemini, …) or LiteLLM
+         ├─ tools, mcps, apps
+         ├─ knowledge_sources ───► vector store (ChromaDB by default)
+         └─ memory ──────────────► Memory (falls back to the crew's)
 ```
 
-### Agent Internal Architecture
+Reference: [Agent API](/crewai-guide/crewai_agent_api_python/), [Task API](/crewai-guide/crewai_task_api_python/), [LLM providers](/crewai-guide/crewai_llm_providers_python/).
 
-```
-┌──────────────────────────────────────────────────────┐
-│                     AGENT                             │
-├──────────────────────────────────────────────────────┤
-│                                                       │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Role, Goal, Backstory                        │  │
-│  │  (Define Agent Identity & Specialisation)    │  │
-│  └───────────────────────────────────────────────┘  │
-│                        ↓                             │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Language Model Instance (LLM)               │  │
-│  │  (Provides reasoning capability)             │  │
-│  └───────────────────────────────────────────────┘  │
-│                        ↓                             │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Tools Array                                  │  │
-│  │  (Enables external actions)                  │  │
-│  └───────────────────────────────────────────────┘  │
-│                        ↓                             │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Memory System                                │  │
-│  │  (Stores context & learning)                │  │
-│  └───────────────────────────────────────────────┘  │
-│                        ↓                             │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Decision Engine                              │  │
-│  │  (Determines actions based on context)       │  │
-│  └───────────────────────────────────────────────┘  │
-│                                                       │
-└──────────────────────────────────────────────────────┘
+## One task, inside the agent
+
+```text
+  task description + expected_output
+  + context (earlier task outputs)
+  + recalled memory / knowledge chunks
+              │
+              ▼
+      ┌──────────────┐   tool call    ┌──────────────┐
+      │     LLM      │ ─────────────► │     tool     │
+      │              │ ◄───────────── │ (cached by   │
+      └──────────────┘  observation   │  default)    │
+              │                       └──────────────┘
+              │ final answer           loop ends at the final answer,
+              ▼                        max_iter or max_execution_time
+      ┌──────────────┐
+      │  guardrail   │── fails ──► reason sent back, task retried
+      └──────────────┘             (up to guardrail_max_retries)
+              │ passes
+              ▼
+         TaskOutput (raw, pydantic, json_dict)
 ```
 
----
+## Sequential process
 
-## Agent Lifecycle
-
-### Agent Creation and Task Execution Flow
-
-```
-START
-  ↓
-┌─────────────────────────────┐
-│ 1. Define Agent             │
-│    - role                   │
-│    - goal                   │
-│    - backstory              │
-│    - llm (model)            │
-│    - tools                  │
-└─────────────────────────────┘
-  ↓
-┌─────────────────────────────┐
-│ 2. Define Tasks             │
-│    - description            │
-│    - expected_output        │
-│    - agent assignment       │
-└─────────────────────────────┘
-  ↓
-┌─────────────────────────────┐
-│ 3. Create Crew              │
-│    - agents                 │
-│    - tasks                  │
-│    - process (seq/hier)     │
-│    - settings               │
-└─────────────────────────────┘
-  ↓
-┌─────────────────────────────┐
-│ 4. Kickoff Execution        │
-│    crew.kickoff()           │
-└─────────────────────────────┘
-  ↓
-┌─────────────────────────────┐
-│ 5. Task Processing          │
-│    ├─ Agent receives task   │
-│    ├─ Reviews context       │
-│    ├─ Makes decisions       │
-│    └─ Uses tools if needed  │
-└─────────────────────────────┘
-  ↓
-┌─────────────────────────────┐
-│ 6. Output Generation        │
-│    ├─ Format output         │
-│    ├─ Validate result       │
-│    └─ Store in memory       │
-└─────────────────────────────┘
-  ↓
-END (Return Result)
+```text
+  kickoff(inputs={...})
+        │
+        ▼
+   ┌─────────┐      ┌─────────┐      ┌─────────┐
+   │ Task 1  │ ───► │ Task 2  │ ───► │ Task 3  │ ───► CrewOutput
+   └─────────┘      └─────────┘      └─────────┘      (.raw = Task 3's output,
+        │                │                ▲            .tasks_output = all three)
+        └────────────────┴── outputs ─────┘
+             without context=[...], each task sees ALL earlier outputs
 ```
 
----
+Async tasks (`async_execution=True`) that follow each other run together; the next synchronous task waits for them:
 
-## Process Flows
-
-### Sequential Process
-
-```
-Task 1 (Agent A)
-    ↓
-    └─→ Output 1
-        ↓
-        ├─→ Task 2 (Agent B)
-        │       ↓
-        │       └─→ Output 2
-        │           ↓
-        │           ├─→ Task 3 (Agent C)
-        │           │       ↓
-        │           │       └─→ Output 3
-        │           │           ↓
-        │           │           END
-        ↓
-        Memory (Shared Context)
+```text
+   ┌─────────┐
+   │ Task A  │ async ─┐
+   └─────────┘        │      ┌───────────┐
+   ┌─────────┐        ├────► │ Summary   │  (sync: waits for A and B)
+   │ Task B  │ async ─┘      └───────────┘
+   └─────────┘
 ```
 
-**Characteristics:**
-- Linear execution
-- Each task uses previous output
-- Suitable for dependent tasks
-- Context naturally flows between agents
+## Hierarchical process
 
-### Hierarchical Process
-
-```
-                    ┌──────────────┐
-                    │   MANAGER    │
-                    │   (LLM)      │
-                    └──────────────┘
-                          ↓
-                ┌─────────┼─────────┐
-                ↓         ↓         ↓
-        ┌────────────┐ ┌──────────┐ ┌────────────┐
-        │  Agent 1   │ │ Agent 2  │ │  Agent 3   │
-        │  Task 1    │ │ Task 2   │ │  Task 3    │
-        └────────────┘ └──────────┘ └────────────┘
-                ↓         ↓         ↓
-                └─────────┼─────────┘
-                          ↓
-            ┌─────────────────────────┐
-            │ Manager Reviews Results │
-            │ & Coordinates Response  │
-            └─────────────────────────┘
-                          ↓
-                        END
+```text
+                 ┌──────────────────────────┐
+  tasks ───────► │ Manager                  │  manager_llm (generic manager)
+                 │ plans, assigns, reviews  │  or manager_agent (your own)
+                 └──────────────────────────┘
+                    │ delegate        ▲ result
+          ┌─────────┴────────┬────────┴─────────┐
+          ▼                  ▼                  ▼
+     ┌──────────┐      ┌──────────┐      ┌──────────┐
+     │ Worker 1 │      │ Worker 2 │      │ Worker 3 │   agents=[...]
+     └──────────┘      └──────────┘      └──────────┘   (manager not listed)
 ```
 
-**Characteristics:**
-- Manager agent orchestrates
-- Parallel/flexible execution
-- Manager decides task order
-- Better for complex workflows
+## Delegation between agents
 
----
-
-## Task Execution Patterns
-
-### Pattern 1: Sequential Analysis & Synthesis
-
-```
-┌─────────────┐
-│ Researcher  │  ← Gathers information
-│ Agent       │
-└─────────────┘
-       ↓
-    [Output: Research findings]
-       ↓
-┌─────────────┐
-│ Analyst     │  ← Analyses findings
-│ Agent       │
-└─────────────┘
-       ↓
-    [Output: Analytical insights]
-       ↓
-┌─────────────┐
-│ Writer      │  ← Synthesises into report
-│ Agent       │
-└─────────────┘
-       ↓
-    [Final Output: Comprehensive report]
+```text
+   Agent(allow_delegation=True)
+        │
+        │ gets two tools whose targets are the other agents in the crew
+        ├──► "Delegate work to coworker"  ──► coworker runs a full sub-task
+        └──► "Ask question to coworker"   ──► coworker answers one question
 ```
 
-### Pattern 2: Parallel Specialisation
+## A flow
 
-```
-                    Task Distribution
-                           ↓
-        ┌──────────────────┼──────────────────┐
-        ↓                  ↓                  ↓
-   ┌─────────┐        ┌─────────┐       ┌─────────┐
-   │Financial│        │ Market  │       │Operational│
-   │ Analyst │        │ Analyst │       │ Analyst  │
-   └─────────┘        └─────────┘       └─────────┘
-        ↓                  ↓                  ↓
-   [Financial         [Market            [Operations
-    Analysis]         Analysis]           Analysis]
-        ↓                  ↓                  ↓
-        └──────────────────┼──────────────────┘
-                           ↓
-                    ┌─────────────┐
-                    │  Synthesiser│
-                    │  Agent      │
-                    └─────────────┘
-                           ↓
-                    [Final Report]
-```
+```text
+  kickoff(inputs={...}) ──► state (Pydantic model or dict, with an id)
+        │
+        ▼
+  ┌──────────────┐  ┌──────────────┐
+  │ @start()     │  │ @start()     │      several start methods are allowed
+  │ fetch_news   │  │ fetch_filings│
+  └──────┬───────┘  └──────┬───────┘
+         └────────┬────────┘
+                  ▼
+        @listen(and_(fetch_news, fetch_filings))      or_(...) fires on the first
+        ┌──────────────┐
+        │ analyse      │
+        └──────┬───────┘
+               ▼
+        @router(analyse) -> Literal["publish", "review"]
+               │
+       "publish"│"review"           labels must not equal a listener's own name
+        ┌──────┴───────┐
+        ▼              ▼
+   @listen("publish")  @listen("review") + @human_feedback ──► pause / resume
+        │
+        ▼
+   return value of the last method = kickoff() result
 
-### Pattern 3: Escalation & Review
-
-```
-┌──────────────┐
-│ Junior Agent │  ← Initial attempt
-└──────────────┘
-       ↓
-    [Initial output]
-       ↓
-┌──────────────────┐
-│ Quality Check?   │
-└──────────────────┘
-   ↙ (Pass)     ↖ (Needs improvement)
-  ↓                        ↓
-END              ┌─────────────────┐
-                 │ Senior Agent    │
-                 │ (Review/refine) │
-                 └─────────────────┘
-                        ↓
-                    [Refined output]
-                        ↓
-                 ┌──────────────────┐
-                 │ Final Approval?  │
-                 └──────────────────┘
-                   ↙ (Yes)  ↖ (No)
-                  ↓            ↓
-                END    [Escalate further]
+   @persist ──► state saved after each method (SQLite by default);
+                kickoff(inputs={"id": ...}) restores it
 ```
 
----
+Reference: [Flows](/crewai-guide/crewai_flows_guide/).
 
-## Collaboration Patterns
+## Unified memory
 
-### Pattern 1: Researcher → Writer → Editor Flow
-
-```
-Researcher Agent
-│
-├─ Role: Research Specialist
-├─ Goal: Gather comprehensive information
-├─ Tools: Search, Scrape, File access
-│
-└─ Output: Research findings with citations
-   │
-   ↓
-Writer Agent
-│
-├─ Role: Content Writer
-├─ Goal: Create engaging narrative
-├─ Uses: Research output as input
-├─ Tools: Writing templates, formatting
-│
-└─ Output: Drafted article
-   │
-   ↓
-Editor Agent
-│
-├─ Role: Editorial Director
-├─ Goal: Ensure quality and accuracy
-├─ Uses: Article + original research
-├─ Tools: Grammar check, fact verification
-│
-└─ Output: Publication-ready article
+```text
+                      Memory(storage=..., embedder=..., llm=...)
+                                    │
+             ┌──────────────────────┼───────────────────────┐
+             ▼                      ▼                       ▼
+     mem.scope("/users/ada")   mem.slice(scopes=[...])   Crew(memory=mem)
+     read and write under      read-only view across     agents remember and
+     one path                  several paths             recall during tasks
+                                    │
+                                    ▼
+          remember()  ──► LLM infers scope, categories, importance;
+                          near-duplicates consolidated
+          recall()    ──► depth="shallow": embed + vector search
+                          depth="deep":    LLM plans sub-queries first
+                          score = semantic · recency · importance weights
+                                    │
+                                    ▼
+                    storage: LanceDB (default) · Qdrant Edge · custom backend
 ```
 
-### Pattern 2: Manager-Worker Coordination
+The separate short-term, long-term and entity memories of older releases no longer exist; scopes and categories replace them. Reference: [Memory](/crewai-guide/crewai_memory_python/).
 
-```
-Workers Report Progress
-    │
-    ↓
-┌─────────────────────┐
-│    Manager Agent    │
-│                     │
-│  Decision Logic:    │
-│  • Receives updates │
-│  • Analyses status  │
-│  • Coordinates flow │
-│  • Escalates issues │
-└─────────────────────┘
-    │
-    └─ Coordinate next steps
-       ↓
-Workers Execute Coordination
-```
+## Events and hooks
 
----
-
-## Memory Systems
-
-### Memory Architecture
-
-```
-┌─────────────────────────────────────────────┐
-│        MEMORY SYSTEM                         │
-├─────────────────────────────────────────────┤
-│                                              │
-│  ┌──────────────────────────────────────┐  │
-│  │ SHORT-TERM MEMORY                    │  │
-│  │ (Current session context)            │  │
-│  │                                      │  │
-│  │ • Current task information           │  │
-│  │ • Recent agent outputs               │  │
-│  │ • Intermediate results               │  │
-│  │ • Contextual data                    │  │
-│  └──────────────────────────────────────┘  │
-│                 ↑                            │
-│                 │                            │
-│  ┌──────────────────────────────────────┐  │
-│  │ LONG-TERM MEMORY                     │  │
-│  │ (Persistent storage)                 │  │
-│  │                                      │  │
-│  │ • Previous interactions              │  │
-│  │ • Learned patterns                   │  │
-│  │ • Historical data                    │  │
-│  │ • Entity relationships               │  │
-│  └──────────────────────────────────────┘  │
-│                 ↑                            │
-│                 │                            │
-│  ┌──────────────────────────────────────┐  │
-│  │ ENTITY MEMORY                        │  │
-│  │ (Knowledge graph)                    │  │
-│  │                                      │  │
-│  │ • People entities                    │  │
-│  │ • Place entities                     │  │
-│  │ • Concept entities                   │  │
-│  │ • Relationship mapping               │  │
-│  └──────────────────────────────────────┘  │
-│                                              │
-└─────────────────────────────────────────────┘
+```text
+   crew / task / agent / LLM / tool / flow / memory
+                    │
+        ┌───────────┴─────────────────────────────┐
+        │ hooks (in the call path, synchronous)   │  before_llm_call / before_tool_call:
+        │ can block or rewrite                    │    return False to block
+        └───────────┬─────────────────────────────┘  after_llm_call / after_tool_call:
+                    │                                   return a replacement string
+                    ▼
+        crewai_event_bus.emit(event)
+                    │
+        ┌───────────┴─────────────────────────────┐
+        │ listeners (observe only, thread pool)   │──► logs, metrics, OpenTelemetry spans,
+        │ BaseEventListener / @bus.on(EventType)  │    CrewAI AMP traces
+        └─────────────────────────────────────────┘
 ```
 
----
+Reference: [Production](/crewai-guide/crewai_production_guide/#event-listeners).
 
-## Tool Integration
+## Checkpoints and resume
 
-### Tool Interaction Flow
+```text
+   Crew(checkpoint=CheckpointConfig(on_events=["task_completed"]))
 
-```
-Agent Task
-    │
-    ↓
-┌─────────────────────────────┐
-│ Tool Selection              │
-│ (Based on task need)        │
-└─────────────────────────────┘
-    │
-    ├─ File Operations?
-    │  ├─→ FileReadTool
-    │  ├─→ FileWriteTool
-    │  └─→ DirectoryReadTool
-    │
-    ├─ Web Operations?
-    │  ├─→ ScrapeWebsiteTool
-    │  └─→ SerperDevTool
-    │
-    ├─ Custom Logic?
-    │  └─→ Custom BaseTool
-    │
-    └─ Async Operations?
-       └─→ AsyncTool
-           │
-           ↓
-┌─────────────────────────────┐
-│ Tool Execution              │
-│ (With error handling)       │
-└─────────────────────────────┘
-           │
-           ↓
-┌─────────────────────────────┐
-│ Result Processing           │
-│ (Parse & validate)          │
-└─────────────────────────────┘
-           │
-           ↓
-       Return to Agent
+   Task 1 ✓ ──► .checkpoints/main/<time>_<id>_p-none.json
+   Task 2 ✓ ──► .checkpoints/main/<time>_<id>_p-<parent>.json
+   Task 3 ✗  (process dies)
+
+   crewai checkpoint list ./.checkpoints
+   crew.kickoff(from_checkpoint=CheckpointConfig(restore_from="<file>"))
+        └──► restores the run and continues
 ```
 
-### Multi-Tool Coordination
-
-```
-Single Agent with Multiple Tools
-
-Agent Instance
-│
-├─ Tool 1: Research (Search)
-│  └─ For: Information gathering
-│
-├─ Tool 2: Web Scraping
-│  └─ For: Content extraction
-│
-├─ Tool 3: File Operations
-│  └─ For: Data persistence
-│
-└─ Tool 4: Custom Analysis
-   └─ For: Specialised processing
-
-Agent Decision: Which tool to use based on task requirements
-```
-
----
-
-## Common Workflow Architectures
-
-### Research & Content Creation Workflow
-
-```
-Input: Topic
-  ↓
-┌─────────────────────────┐
-│ Research Phase          │
-│ (1-3 researchers)       │
-└─────────────────────────┘
-  ↓
-[Research findings]
-  ↓
-┌─────────────────────────┐
-│ Content Creation Phase  │
-│ (1-2 writers)           │
-└─────────────────────────┘
-  ↓
-[Draft content]
-  ↓
-┌─────────────────────────┐
-│ Review & Polish Phase   │
-│ (1-2 editors)           │
-└─────────────────────────┘
-  ↓
-[Final content]
-  ↓
-┌─────────────────────────┐
-│ Distribution Phase      │
-│ (Social media manager)  │
-└─────────────────────────┘
-  ↓
-Output: Published & shared
-```
-
-### Data Analysis Workflow
-
-```
-Input: Raw data
-  ↓
-┌─────────────────────────┐
-│ Data Cleaning           │
-│ (Data Engineer)         │
-└─────────────────────────┘
-  ↓
-[Cleaned data]
-  ↓
-┌─────────────────────────┐
-│ Exploratory Analysis    │
-│ (Data Scientist)        │
-└─────────────────────────┘
-  ↓
-[Insights & patterns]
-  ↓
-┌─────────────────────────┐
-│ Statistical Analysis    │
-│ (Statistician)          │
-└─────────────────────────┘
-  ↓
-[Statistical findings]
-  ↓
-┌─────────────────────────┐
-│ Business Translation    │
-│ (Business Analyst)      │
-└─────────────────────────┘
-  ↓
-Output: Business recommendations
-```
-
----
-
-## LLM Interaction Model
-
-```
-Agent Decision Making Process
-
-┌──────────────────────────────────────┐
-│ Task Input                           │
-│ (Description + context)              │
-└──────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────┐
-│ Construct Prompt                     │
-│ • Agent role & backstory             │
-│ • Task description                   │
-│ • Available tools                    │
-│ • Previous context/memory            │
-└──────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────┐
-│ Call LLM                             │
-│ (Language Model)                     │
-└──────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────┐
-│ Parse LLM Response                   │
-│ • Identify intent                    │
-│ • Extract action/tool                │
-│ • Get parameters                     │
-└──────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────┐
-│ Execute Action                       │
-│ • Use tool if needed                 │
-│ • Process result                     │
-│ • Update memory                      │
-└──────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────┐
-│ Iterate or Return Result             │
-│ • More steps needed?                 │
-│ • Task complete?                     │
-└──────────────────────────────────────┘
-```
-
----
-
-## System Scaling Diagram
-
-```
-SINGLE AGENT
-Simple task execution
-┌────────────┐
-│   Agent    │
-│   +        │
-│   Task     │
-└────────────┘
-     ↓ (Scale)
-
-MULTI-AGENT (SEQUENTIAL)
-Tasks flow through agents
-┌────────┐   ┌────────┐   ┌────────┐
-│Agent A │→→→│Agent B │→→→│Agent C │
-└────────┘   └────────┘   └────────┘
-     ↓ (Scale)
-
-MULTI-AGENT (HIERARCHICAL)
-Manager coordinates agents
-        ┌─────────┐
-        │Manager  │
-        └─────────┘
-      ↙   ↓   ↘
- ┌────┐ ┌────┐ ┌────┐
- │ A  │ │ B  │ │ C  │
- └────┘ └────┘ └────┘
-     ↓ (Scale)
-
-ENTERPRISE SYSTEM
-Multiple crews, complex workflows
-┌──────────────────────────────┐
-│ Crew 1 │ Crew 2 │ Crew 3 ...│
-├────────────────────────────┤
-│ Shared Memory & Resources  │
-│ Orchestration Layer        │
-└──────────────────────────────┘
-```
-
-This visual guide provides clarity on CrewAI's architecture and communication patterns for building effective multi-agent systems.
-
-
+Reference: [Production → Recovery with checkpoints](/crewai-guide/crewai_production_guide/#recovery-with-checkpoints).

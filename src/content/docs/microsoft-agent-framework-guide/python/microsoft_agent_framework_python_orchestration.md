@@ -279,7 +279,7 @@ while pending := result.get_request_info_events():
 print(result.get_outputs()[-1])
 ```
 
-There is no `.require_plan_signoff()`, `.add_participant()` or `workflow.add_request_info_handler()` — earlier drafts of this page used all three.
+
 
 ### Observability
 

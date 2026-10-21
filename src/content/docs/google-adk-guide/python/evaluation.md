@@ -63,6 +63,23 @@ async def test_arithmetic():
     )
 ```
 
+## From the command line
+
+`adk eval` runs eval set files against an agent folder (one whose `agent.py` defines `root_agent`) and prints a pass/fail summary per set. Results are also written under the agent's `.adk/eval_history/`.
+
+```bash
+pip install "google-adk[eval]"
+
+# Pass thresholds per metric
+echo '{"criteria": {"tool_trajectory_avg_score": 1.0, "response_match_score": 0.8}}' > my_agent/test_config.json
+
+adk eval my_agent my_agent/tests/arithmetic_suite.evalset.json --config_file_path my_agent/test_config.json
+adk eval my_agent my_agent/tests/arithmetic_suite.evalset.json:add_two_numbers   # one case only
+adk eval my_agent my_agent/tests/*.evalset.json --print_detailed_results
+```
+
+`adk eval_set create my_agent regression` creates an empty `regression.evalset.json` in the agent folder, and `adk eval_set add_eval_case` / `generate_eval_cases` add cases from conversation scenarios. In the Dev UI (`adk web`), the Eval tab saves a live session as an eval case and runs sets interactively. Without `--config_file_path`, and with a single eval set file, ADK looks for a `test_config.json` next to that file; otherwise it uses its default criteria.
+
 ## `EvalCase`
 
 The atomic unit. Defined in `evaluation/eval_case.py`.
@@ -647,26 +664,26 @@ pytest tests/test_agent.py -v
 
 ## File-based eval format
 
-For tooling compatibility, save eval cases as JSON. The recommended format (new schema) is an `EvalSet` JSON:
+For tooling compatibility, save eval cases as JSON: an `EvalSet` serialised with snake_case field names (`EvalSet.model_dump_json()` produces this; camelCase keys such as `evalSetId` fail validation):
 
 ```json
 {
-  "evalSetId": "arithmetic_suite",
-  "evalCases": [
+  "eval_set_id": "arithmetic_suite",
+  "eval_cases": [
     {
-      "evalId": "add_two_numbers",
+      "eval_id": "add_two_numbers",
       "conversation": [
         {
-          "userContent": {
+          "user_content": {
             "role": "user",
             "parts": [{ "text": "What is 15 + 27?" }]
           },
-          "finalResponse": {
+          "final_response": {
             "role": "model",
             "parts": [{ "text": "42" }]
           },
-          "intermediateData": {
-            "toolUses": []
+          "intermediate_data": {
+            "tool_uses": []
           }
         }
       ]

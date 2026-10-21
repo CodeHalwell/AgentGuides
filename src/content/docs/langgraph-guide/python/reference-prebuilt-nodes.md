@@ -72,7 +72,7 @@ The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condit
 
 ### Constructor
 
-```python
+```text
 ToolNode(
     tools: Sequence[BaseTool | Callable],
     *,
@@ -198,7 +198,7 @@ result = execute(modified)
 
 ## `tools_condition`
 
-```python
+```text
 from langgraph.prebuilt import tools_condition
 
 def tools_condition(
@@ -326,7 +326,7 @@ Fields:
 
 ### `emit_output_delta`
 
-```python
+```text
 runtime.emit_output_delta(delta: Any) -> None
 ```
 

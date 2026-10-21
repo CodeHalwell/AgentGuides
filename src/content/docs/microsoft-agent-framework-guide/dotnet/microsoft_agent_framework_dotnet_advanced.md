@@ -43,7 +43,7 @@ var response = await agent.RunAsync("Draft a summary of LangGraph.", session);
 Console.WriteLine(response.Text);
 ```
 
-An earlier draft of this page used an `AgentsClient` / `CreateAgentOptions` surface from a pre-release Azure SDK; the current client is `PersistentAgentsClient`.
+
 ## Resilience & Telemetry
 - Wrap client calls with Polly (retry + circuit-breaker)
 - Add OpenTelemetry spans: agent.create, thread.create, run.create, messages.get

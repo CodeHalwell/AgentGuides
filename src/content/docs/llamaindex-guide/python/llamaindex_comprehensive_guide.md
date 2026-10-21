@@ -918,7 +918,7 @@ For logging and tracing rather than UI updates, use the instrumentation module i
 
 ## 12. Multi-agent systems with AgentWorkflow
 
-Earlier editions of this guide described the 2024 `llama-agents` package (`ControlPlaneServer`, `AgentService`, message queues). That package was retired; its successor `llama-deploy` has in turn been folded into **LlamaAgents** and the `llamactl` CLI (see [section 14](#14-deploying-workflows-llamaagents)). In-process multi-agent orchestration is done with `AgentWorkflow`.
+Earlier editions of this guide described the 2024 `llama-agents` package (`ControlPlaneServer`, `AgentService`, message queues). That package was retired; its successor `llama-deploy` has in turn been folded into **LlamaAgents** and the `llamactl` CLI (see [section 14](#14-serving-and-deploying-workflows-llamaagents)). In-process multi-agent orchestration is done with `AgentWorkflow`.
 
 ### 12.1 Hand-off between specialists
 

@@ -19,11 +19,11 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    npm install @llamaindex/workflow@1.1.25 @llamaindex/openai zod
+    npm install @llamaindex/workflow @llamaindex/openai zod
     ```
   </Card>
   <Card title="Version" icon="information">
-    **`llamaindex` %%version=llamaindex%%** (umbrella, final release) · **`@llamaindex/workflow` 1.1.25** (final release) · Node 20+ · checked %%versions-checked%%
+    Final releases, listed [below](#final-releases) · Node 22+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
     Maintaining existing LlamaIndex.TS code; typed event-driven flows.
@@ -31,8 +31,27 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="note" title="Package layout">
-  The old single `llamaindex` package was split into scoped packages: `@llamaindex/workflow` (workflows and agents), `@llamaindex/core` (LLM, tool and memory interfaces), and one package per provider (`@llamaindex/openai`, `@llamaindex/anthropic`, ...). `llamaindex` itself now mainly re-exports these plus indexes, readers and node parsers. Both the umbrella and the scoped packages are part of the deprecated project.
+  The old single `llamaindex` package was split into scoped packages: `@llamaindex/workflow` (workflows and agents), `@llamaindex/core` (LLM, tool and memory interfaces), and one package per provider (`@llamaindex/openai`, `@llamaindex/anthropic`, ...). `llamaindex` itself provides indexes, readers, node parsers and query engines; it does not re-export the workflow API (`createWorkflow`, `agent`), so import that from `@llamaindex/workflow`. Both the umbrella and the scoped packages are part of the deprecated project.
 </Aside>
+
+## Final releases
+
+No further versions will be published, so these are the versions the guides document:
+
+| Package | Final release | Contents |
+|---|---|---|
+| `@llamaindex/workflow` | 1.1.25 | Workflow runtime (`createWorkflow`, `workflowEvent`, `run`) and agents (`agent`, `multiAgent`), built on `@llamaindex/workflow-core` 1.3.x |
+| `@llamaindex/core` | 0.6.23 | LLM, tool, memory and schema interfaces |
+| `@llamaindex/openai` | 0.4.23 | OpenAI LLM and embeddings (other providers have their own package) |
+| `llamaindex` | %%version=llamaindex%% | Indexes, readers, node parsers, query and chat engines |
+
+`llamaindex` %%version=llamaindex%% pins exact, slightly older versions of its dependencies: `@llamaindex/workflow` 1.1.24 and `@llamaindex/core` 0.6.22. A project that uses only workflows and agents can install the latest of each scoped package. A project that also uses `llamaindex` should install `@llamaindex/workflow@1.1.24`, so npm resolves a single copy of `@llamaindex/core` (and a matching `@llamaindex/openai`):
+
+```bash
+npm install llamaindex @llamaindex/openai @llamaindex/workflow@1.1.24 zod
+```
+
+With two copies installed, `llamaindex` prints *"llamaindex was already imported"*, and `Settings.llm` set through one copy is not seen by agents created from the other.
 
 ## Zero → Hero
 
@@ -43,7 +62,8 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="4 · Event handling & routing" href="./llamaindex_workflows_typescript_comprehensive_guide/#4-event-handling-and-routing" description="Typed event handlers · 20 min" />
   <LinkCard title="5 · Complete RAG workflow" href="./llamaindex_workflows_typescript_comprehensive_guide/#5-complete-rag-workflow-example" description="Full end-to-end RAG agent · 30 min" />
   <LinkCard title="6 · Agent coordination" href="./llamaindex_workflows_typescript_comprehensive_guide/#6-agent-coordination" description="Multi-agent workflows · 25 min" />
-  <LinkCard title="7 · Production" href="./llamaindex_typescript_production_guide/" description="Deployment, scaling · 30 min" />
+  <LinkCard title="7 · RAG with VectorStoreIndex" href="./llamaindex_typescript_recipes/#recipe-1-rag-with-vectorstoreindex" description="Index, retriever, query engine, agent tool · 15 min" />
+  <LinkCard title="8 · Production" href="./llamaindex_typescript_production_guide/" description="Express service, caching, metrics, tests, CI · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -106,8 +126,9 @@ Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/typescript/llamainde
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-10-21 | final releases | Final package versions now listed once, in [Final releases](#final-releases), with the note that `llamaindex` pins `@llamaindex/workflow` 1.1.24. Corrected the claim that `llamaindex` re-exports the workflow API. Node 22+ (Node 20 reached end of life in April 2026). Added a real `VectorStoreIndex` RAG recipe; production guide rebuilt to compile under its own config. |
 | 2026-10-21 | llamaindex 0.12.1 / @llamaindex/workflow 1.1.25 | Added the upstream deprecation notice (repository and npm packages deprecated). Minimal example fixed — it passed a Zod schema as `workflowEvent({ data })`, which is not a valid option and does not type-check. Version card now reads from the site's version registry. Comprehensive guide, recipes and production guide re-checked with `tsc`. |
-| 2026-05-04 | @llamaindex/workflow 1.1.25 | Bumped 1.1.24 → 1.1.25. Fixed broken minimal example: corrected handler signature to `(ctx, start)` (was incorrectly `({ data })`); removed unsupported chaining on `handle()`; replaced deprecated `runWorkflow()` with `run().until().toArray()`. Added "What's new in 1.1.25" section documenting `runWorkflow` deprecation and `handle()` void-return behaviour. Snippet executed against installed 1.1.25 in `.routine-envs/check-0504-node`. | Claude routine |
+| 2026-05-04 | @llamaindex/workflow 1.1.25 | Bumped 1.1.24 → 1.1.25. Fixed broken minimal example: corrected handler signature to `(ctx, start)` (was incorrectly `({ data })`); removed unsupported chaining on `handle()`; replaced deprecated `runWorkflow()` with `run().until().toArray()`. Added "What's new in 1.1.25" section documenting `runWorkflow` deprecation and `handle()` void-return behaviour. Snippet executed against installed 1.1.25 in `.routine-envs/check-0504-node`. |
 | 2026-04-21 | 1.1.24 | Minimal example rewritten against functional API (`createWorkflow`/`workflowEvent`/`runWorkflow`) after pkg introspection — class + `@step` pattern documented earlier does not exist. |
 | April 2026 | 1.1.24 | Scoped package migration; typed event handlers stabilised. |
 

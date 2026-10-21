@@ -98,7 +98,7 @@ dotnet add package Microsoft.Agents.AI.Workflows --version %%version=Microsoft.A
 - **Microsoft Foundry / Azure OpenAI** — model hosting, Foundry Agent Service (server-side agents and hosted tools), evaluation. Python: `agent_framework.foundry.FoundryChatClient`; .NET: `Microsoft.Agents.AI.Foundry` and `Azure.AI.OpenAI`.
 - **Azure AI Search** — retrieval through context providers (`agent_framework.azure.AzureAISearchContextProvider`; .NET `TextSearchProvider`).
 - **Copilot Studio** — call a Copilot Studio agent as a framework agent (`agent_framework.microsoft.CopilotStudioAgent`; .NET `Microsoft.Agents.AI.CopilotStudio`), or expose your tools to Copilot Studio as an MCP server.
-- **Semantic Kernel** — the framework is SK's successor for agents; SK plugins convert to framework tools (`KernelFunction.AsAIFunction()` in .NET). See the [migration notice](/microsoft-agent-framework-guide/migration_notice/).
+- **Semantic Kernel** — the framework is SK's successor for agents; SK plugins convert to framework tools (`KernelFunction.AsAIFunction()` in .NET). See Microsoft's [Semantic Kernel migration guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/).
 
 ### Authentication
 

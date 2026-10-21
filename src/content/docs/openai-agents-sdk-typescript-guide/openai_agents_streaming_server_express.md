@@ -1,6 +1,9 @@
 ---
 title: "OpenAI Agents Streaming Server (Express)"
 description: "Stream Agents SDK runs (and raw model output) to clients over SSE from Node/Express."
+sidebar:
+  label: "Streaming server (Express)"
+  order: 6
 framework: "openai-agents-sdk"
 language: "typescript"
 ---
@@ -44,7 +47,7 @@ app.listen(8080, () => console.log("listening on 8080"));
 
 ## Raw model streaming without an agent loop
 
-For a single model call, the base `openai` SDK (v7, a dependency of the Agents SDK) is enough:
+For a single model call, the base `openai` SDK (v7, a dependency of the Agents SDK) is enough. Mount the route on the same app as above, so one port serves both:
 
 ```ts
 import express from "express";
@@ -67,7 +70,7 @@ app.get("/raw", async (req, res) => {
   res.end();
 });
 
-app.listen(8081);
+app.listen(8080);
 ```
 
 ## Deployment
@@ -75,13 +78,23 @@ app.listen(8081);
 ### Dockerfile
 
 ```dockerfile
+# Build stage: compile TypeScript (assumes "build": "tsc" and outDir "dist")
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package*.json tsconfig.json ./
+RUN npm ci
+COPY src ./src
+RUN npm run build
+
+# Runtime stage: production dependencies and compiled JavaScript only
 FROM node:22-slim
 WORKDIR /app
+ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY . .
+COPY --from=build /app/dist ./dist
 EXPOSE 8080
-CMD ["node", "server.js"]
+CMD ["node", "dist/server.js"]
 ```
 
 ### Kubernetes (deployment.yaml)

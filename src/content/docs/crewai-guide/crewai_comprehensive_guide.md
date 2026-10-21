@@ -41,7 +41,7 @@ The `crewai` command comes from the `crewai-cli` distribution, which is installe
 
 ### Versions
 
-This guide tracks `crewai` %%version=crewai%%. When pinning an older release, note that **1.10.0, 1.12.0 and 1.14.0 were yanked from PyPI** (1.14.0 for a broken Anthropic dependency); use 1.10.1, 1.12.1 or 1.14.1 and later instead. The [overview](/crewai-guide/#whats-new-in-the-115-line-junesoctober-2026) lists the changes in the 1.14 and 1.15 lines.
+This guide tracks `crewai` %%version=crewai%%. When pinning an older release, note that **1.10.0, 1.12.0 and 1.14.0 were yanked from PyPI** (1.14.0 for a broken Anthropic dependency); use 1.10.1, 1.12.1 or 1.14.1 and later instead. The [overview](/crewai-guide/) lists the changes in the 1.14 and 1.15 lines.
 
 ### Models
 
@@ -56,7 +56,7 @@ gemini = LLM(model="gemini/%%model=gemini%%")                   # needs crewai[g
 local = LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434")
 ```
 
-API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
+API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
 
 ## Simple agents
 
@@ -194,7 +194,7 @@ crew = Crew(
 print(crew.kickoff(inputs={"topic": "heat pumps"}).raw)
 ```
 
-- A hierarchical crew **requires** `manager_llm` or `manager_agent`; without either, `Crew(...)` raises `ValidationError: manager_llm or manager_agent is required`. A `manager_agent` must not also appear in `agents`.
+- A hierarchical crew **requires** `manager_llm` or `manager_agent`; without either, `Crew(...)` raises a `ValidationError` ("Attribute `manager_llm` or `manager_agent` is required when using hierarchical process"). A `manager_agent` must not also appear in `agents`.
 - Tasks in a hierarchical crew may omit `agent`; the manager assigns and delegates them.
 - `planning=True` adds a planning step before the tasks run; `planning_llm` chooses its model.
 - Delegation between agents (`allow_delegation=True`), manager design and A2A are on [Multi-agent patterns](/crewai-guide/crewai_advanced_multi_agent_python/).

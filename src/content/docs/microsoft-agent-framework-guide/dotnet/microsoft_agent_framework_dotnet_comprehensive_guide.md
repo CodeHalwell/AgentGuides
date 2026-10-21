@@ -8,7 +8,7 @@ language: "dotnet"
 **Framework version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%; first written for the October 2025 preview). Every C# block on this page was compiled against that release.
 **Target platform:** .NET 8.0+ (the core packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
 
-Earlier drafts of this page used an `AgentFactory` / `AddAgentFactory` / `UseAzureOpenAI` registration model, `IAgentMemory`, `AddCosmosDBState`, `MapAgents` and a `Workflow.AddAgent` / `AddConditionalEdge` graph API. None of those exist. The page below uses only the shipped surface: agents built from an `IChatClient`, hosting through `Microsoft.Agents.AI.Hosting`, graphs through `Microsoft.Agents.AI.Workflows`.
+The building blocks: agents built from an `IChatClient`, hosting through `Microsoft.Agents.AI.Hosting`, graphs through `Microsoft.Agents.AI.Workflows`.
 
 ---
 
@@ -773,4 +773,4 @@ public static class SkInterop
 - **Orchestration:** SK planners and `AgentGroupChat` → `Microsoft.Agents.AI.Workflows` (sequential, concurrent, handoff, group chat, Magentic, or a custom graph).
 - **History:** move stored chat history to a `ChatHistoryProvider` (in-memory, Cosmos DB, or your own).
 
-The [migration notice](/microsoft-agent-framework-guide/migration_notice/) has the full mapping.
+Microsoft's [Semantic Kernel migration guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/) has the full mapping.

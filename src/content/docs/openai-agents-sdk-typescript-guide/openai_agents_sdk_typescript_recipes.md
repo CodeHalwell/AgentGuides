@@ -1,13 +1,16 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Practical Recipes & Code Examples"
-description: "Ready-to-use implementations and real-world patterns for the OpenAI Agents SDK in TypeScript."
+description: "Worked TypeScript examples for the OpenAI Agents SDK: Q&A, translation, classification, routing, data validation, scheduling, webhooks and refinement loops."
+sidebar:
+  label: "Recipes"
+  order: 4
 framework: "openai-agents-sdk"
 language: "typescript"
 ---
 
-> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Every block compiles under `tsc --strict` and was run with `ScriptedModel` in place of a live model.
 
-**Focus:** Ready-to-use implementations, real-world patterns, copy-paste recipes
+Short, self-contained examples. Tools return canned data so each recipe runs as written; replace them with calls to your own systems. For limits, retries, approvals and testing, see the [production guide](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_production_guide/).
 
 ---
 
@@ -148,13 +151,14 @@ async function researchAndSummariseWorkflow(topic: string) {
   // Step 1: Research
   console.log('Step 1: Researching...');
   const researchResult = await run(researcher, `Research: ${topic}`);
-  console.log('Research findings:', researchResult.finalOutput.substring(0, 200) + '...');
+  const findings = researchResult.finalOutput ?? '';
+  console.log('Research findings:', findings.substring(0, 200) + '...');
 
   // Step 2: Summarise
   console.log('\nStep 2: Summarising...');
   const summaryResult = await run(
     summariser,
-    `Summarise these research findings about ${topic}:\n${researchResult.finalOutput}`
+    `Summarise these research findings about ${topic}:\n${findings}`
   );
   console.log('Summary:', summaryResult.finalOutput);
 
@@ -654,7 +658,7 @@ app.post('/webhook', async (req, res) => {
       response: result.finalOutput,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -693,94 +697,85 @@ cron.schedule('0 * * * *', async () => {
 
 ### Recipe 17: Complex Workflow with Conditions
 
+Route in code on a structured verdict rather than on keywords in free text:
+
 ```typescript
 import { Agent, run } from '@openai/agents';
+import { z } from 'zod';
 
-async function complexWorkflow(input: string) {
-  const analyserAgent = new Agent({
-    name: 'Analyser',
-    instructions: 'Analyse input and determine next steps.',
-  });
+const Triage = z.object({
+  urgency: z.enum(['urgent', 'routine']),
+  reason: z.string(),
+});
 
-  const escalationAgent = new Agent({
-    name: 'Escalator',
-    instructions: 'Handle urgent matters.',
-  });
+const analyserAgent = new Agent({
+  name: 'Analyser',
+  instructions: 'Classify the request as urgent (outage, data loss, security) or routine.',
+  outputType: Triage,
+});
 
-  const routineAgent = new Agent({
-    name: 'Routine Handler',
-    instructions: 'Handle routine tasks.',
-  });
+const escalationAgent = new Agent({ name: 'Escalator', instructions: 'Handle urgent matters.' });
+const routineAgent = new Agent({ name: 'Routine Handler', instructions: 'Handle routine tasks.' });
 
-  // Step 1: Analyse
-  const analysis = await run(analyserAgent, `Analyse: ${input}`);
-
-  // Step 2: Route based on analysis
-  let result;
-  if (analysis.finalOutput.includes('urgent') || analysis.finalOutput.includes('critical')) {
-    result = await run(escalationAgent, input);
-  } else {
-    result = await run(routineAgent, input);
-  }
-
-  return result.finalOutput;
+async function complexWorkflow(input: string): Promise<string> {
+  const analysis = await run(analyserAgent, input);
+  const verdict = analysis.finalOutput;
+  const next = verdict?.urgency === 'urgent' ? escalationAgent : routineAgent;
+  const result = await run(next, input);
+  return result.finalOutput ?? '';
 }
 
-// Usage
-await complexWorkflow('Server is down!');
-await complexWorkflow('Update documentation');
+console.log(await complexWorkflow('Server is down!'));
+console.log(await complexWorkflow('Update documentation'));
 ```
 
 ### Recipe 18: Feedback Loop with Refinement
 
+A writer and a critic in a loop, with the critic returning a typed verdict so the loop ends on a field, not on a phrase:
+
 ```typescript
 import { Agent, run } from '@openai/agents';
+import { z } from 'zod';
 
-async function refinementWorkflow(initialQuery: string, maxIterations = 3) {
-  const analyser = new Agent({
-    name: 'Analyser',
-    instructions: 'Analyse and critique responses.',
-  });
+const Critique = z.object({
+  approved: z.boolean(),
+  feedback: z.string(),
+});
 
-  const writer = new Agent({
-    name: 'Writer',
-    instructions: 'Create and refine content.',
-  });
+const critic = new Agent({
+  name: 'Critic',
+  instructions: 'Critique the draft. Approve it only if it is clear, accurate and under 150 words.',
+  outputType: Critique,
+});
 
-  let current = initialQuery;
-  let iteration = 0;
+const writer = new Agent({
+  name: 'Writer',
+  instructions: 'Write or revise the requested text.',
+});
 
-  while (iteration < maxIterations) {
-    iteration++;
-    console.log(`Iteration ${iteration}`);
+async function refinementWorkflow(task: string, maxIterations = 3): Promise<string> {
+  let prompt = task;
+  let draft = '';
 
-    // Generate content
-    const writeResult = await run(writer, current);
-    console.log('Content:', writeResult.finalOutput.substring(0, 100) + '...');
+  for (let iteration = 1; iteration <= maxIterations; iteration++) {
+    const written = await run(writer, prompt);
+    draft = written.finalOutput ?? '';
+    console.log(`Iteration ${iteration}:`, draft.substring(0, 100));
 
-    // Get feedback
-    const feedback = await run(
-      analyser,
-      `Critique this response and suggest improvements:\n${writeResult.finalOutput}`
-    );
+    const review = await run(critic, draft);
+    const critique = review.finalOutput;
+    if (!critique || critique.approved) break;
 
-    if (feedback.finalOutput.includes('excellent') || feedback.finalOutput.includes('perfect')) {
-      console.log('Content approved!');
-      return writeResult.finalOutput;
-    }
-
-    // Prepare for next iteration
-    current = `Improve based on this feedback:\n${feedback.finalOutput}`;
+    prompt = `${task}\n\nPrevious draft:\n${draft}\n\nRevise it to address: ${critique.feedback}`;
   }
 
-  return 'Final version after refinement';
+  return draft;
 }
 
-// Usage
-await refinementWorkflow('Write an introduction to machine learning');
+console.log(await refinementWorkflow('Write an introduction to machine learning'));
 ```
 
 ---
 
-These recipes provide practical, copy-paste implementations for common use cases with the OpenAI Agents SDK.
+More patterns: [agents as tools](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_comprehensive_guide/#agents-as-tools), [approvals](/openai-agents-sdk-typescript-guide/openai_agents_sdk_middleware_typescript/#human-in-the-loop-approvals) and [streaming over HTTP](/openai-agents-sdk-typescript-guide/openai_agents_streaming_server_express/).
 

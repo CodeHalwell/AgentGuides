@@ -7,11 +7,11 @@ sidebar:
   label: "Comprehensive guide"
 ---
 
-**Packages:** `@llamaindex/workflow` 1.1.25 (with `@llamaindex/workflow-core` 1.3.x) · umbrella package `llamaindex` %%version=llamaindex%% · Node 20+ · checked %%versions-checked%%
+**Packages:** the final releases of `@llamaindex/workflow`, `@llamaindex/core` and the provider packages ([versions](/llamaindex-guide/typescript/#final-releases)) · Node 22+ · checked %%versions-checked%%
 
-> **Deprecated upstream.** LlamaIndex.TS is no longer maintained. The repository README says *"This project is deprecated and no longer maintained"*, and npm marks `@llamaindex/workflow`, `@llamaindex/workflow-core`, `@llamaindex/core` and the provider packages (`@llamaindex/openai`, ...) as deprecated. `@llamaindex/workflow-core` points users to **LlamaAgents (Python Workflows)** instead. The final releases (`llamaindex` %%version=llamaindex%%, `@llamaindex/workflow` 1.1.25) still install and work, and this guide documents them accurately, but expect no fixes. For new TypeScript projects consider a maintained framework — for example [LangGraph.js](/langgraph-guide/typescript/) or the [OpenAI Agents SDK for TypeScript](/openai-agents-sdk-typescript-guide/) — or run LlamaIndex in Python behind an API.
+> **Deprecated upstream.** LlamaIndex.TS is no longer maintained. The repository README says *"This project is deprecated and no longer maintained"*, and npm marks `@llamaindex/workflow`, `@llamaindex/workflow-core`, `@llamaindex/core` and the provider packages (`@llamaindex/openai`, ...) as deprecated. `@llamaindex/workflow-core` points users to **LlamaAgents (Python Workflows)** instead. The final releases still install and work, and this guide documents them accurately, but expect no fixes. For new TypeScript projects consider a maintained framework — for example [LangGraph.js](/langgraph-guide/typescript/) or the [OpenAI Agents SDK for TypeScript](/openai-agents-sdk-typescript-guide/) — or run LlamaIndex in Python behind an API.
 
-> **API note.** This guide documents the **functional API**: `createWorkflow()`, `workflowEvent()`, `workflow.handle()` and `run()`. A class-based `extends Workflow` + `@step()` pattern that appears in some tutorials was never part of the published TypeScript package (it is the *Python* API). Examples were type-checked against `@llamaindex/workflow` 1.1.25.
+> **API note.** This guide documents the **functional API**: `createWorkflow()`, `workflowEvent()`, `workflow.handle()` and `run()`. A class-based `extends Workflow` + `@step()` pattern that appears in some tutorials was never part of the published TypeScript package (it is the *Python* API). Examples were type-checked with `tsc --strict` against the final releases.
 
 ---
 
@@ -30,7 +30,7 @@ sidebar:
 
 ### Package installation
 
-`@llamaindex/workflow` holds the event-driven workflow runtime and the agent helpers. The `llamaindex` umbrella package (%%version=llamaindex%%) re-exports it alongside indexes, readers and node parsers; install it instead if you also want the RAG primitives. (`llama-index-workflows` is the name of the *Python* workflows package, not an npm package.)
+`@llamaindex/workflow` holds the event-driven workflow runtime and the agent helpers. The `llamaindex` umbrella package (%%version=llamaindex%%) adds indexes, readers, node parsers and query engines, but does not re-export the workflow API; if you use both, install the versions it pins (see [final releases](/llamaindex-guide/typescript/#final-releases)) and read the [RAG recipe](/llamaindex-guide/typescript/llamaindex_typescript_recipes/#recipe-1-rag-with-vectorstoreindex). (`llama-index-workflows` is the name of the *Python* workflows package, not an npm package.)
 
 ```bash
 npm install @llamaindex/workflow @llamaindex/core zod
@@ -716,12 +716,10 @@ const { withState } = createStatefulMiddleware<OrchestratorState>(() => ({
 const base = createWorkflow();
 const workflow = withState(base);
 
-workflow.handle([orchestratorEv], async (ctx, ev) => {
-  // Decide which specialist to invoke
-  if (ev.data.priority === 'high') {
-    ctx.sendEvent(researchTaskEv.with({ task: ev.data.task }));
-  }
-  return researchTaskEv.with({ task: ev.data.task });
+workflow.handle([orchestratorEv], async (_ctx, ev) => {
+  // Route to the research specialist; flag urgent work in the payload
+  const task = ev.data.priority === 'high' ? `[urgent] ${ev.data.task}` : ev.data.task;
+  return researchTaskEv.with({ task });
 });
 
 workflow.handle([researchTaskEv], async (ctx, ev) => {
@@ -773,8 +771,7 @@ Stateful workflows also expose `ctx.snapshot()` and `workflow.resume(snapshot)` 
 
 - Official docs: [ts.llamaindex.ai](https://ts.llamaindex.ai) (archived with the project)
 - Deprecation notice: [LlamaIndexTS README](https://github.com/run-llama/LlamaIndexTS)
-- Package source: `node_modules/@llamaindex/workflow-core/dist/index.d.ts`
-- CHANGELOG: `node_modules/@llamaindex/workflow/CHANGELOG.md`
+- Package source: [LlamaIndexTS on GitHub](https://github.com/run-llama/LlamaIndexTS) (`packages/workflow`), and the type declarations shipped in `@llamaindex/workflow-core` on [npm](https://www.npmjs.com/package/@llamaindex/workflow-core)
 - npm: [npmjs.com/package/@llamaindex/workflow](https://www.npmjs.com/package/@llamaindex/workflow)
 
 ---
@@ -783,7 +780,8 @@ Stateful workflows also expose `ctx.snapshot()` and `workflow.resume(snapshot)` 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | final releases | Versions now listed once on the overview; corrected the claim that `llamaindex` re-exports the workflow API; Node 22+; the orchestrator example no longer sends the research event twice. |
 | 2026-10-21 | @llamaindex/workflow 1.1.25 | Added the upstream deprecation notice. Fixed examples that failed type-checking: tool schemas now use Zod, `multiAgent(...).run()` / `agent(...).run()` corrected (they return a Promise; streaming is `runStream()`), RAG example no longer relies on a two-event join that never fires, fan-out example now actually fans out, broken snapshot example replaced with a note. |
-| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous guide documented a fictional `llama-index-workflows` class-based API (`extends Workflow`, `@step()`, `new StartEvent`, etc.) that does not exist in the published package. Rewritten entirely against the functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`, `or`, `createStatefulMiddleware`. All six code examples executed against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node` — PASS. API surface verified from `node_modules/@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24). | Claude routine |
+| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous guide documented a fictional `llama-index-workflows` class-based API (`extends Workflow`, `@step()`, `new StartEvent`, etc.) that does not exist in the published package. Rewritten entirely against the functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`, `or`, `createStatefulMiddleware`. All six code examples executed against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node` — PASS. API surface verified from `node_modules/@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24). |
 | 2026-05-04 | @llamaindex/workflow 1.1.25 | Previous guide carried over (not yet remediated). |
 | 2026-04-21 | @llamaindex/workflow 1.1.24 | First attempt to document functional API; minimal example rewritten. |

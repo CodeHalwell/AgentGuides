@@ -156,7 +156,7 @@ Equality is structural (`node` + `arg` + `timeout`), and `Send` is hashable.
 
 ### Per-task timeout on `Send`
 
-The `timeout` parameter overrides the target node's default timeout for this specific dispatched task. Pass a `float` (seconds), `timedelta`, or `TimeoutPolicy` directly. Timeouts use cooperative asyncio cancellation, so the target node must be `async def` (a sync target raises `ValueError: Node timeouts are only supported for async nodes`), and a branch that overruns raises `NodeTimeoutError`, which the node's `retry_policy` or `error_handler` can catch:
+The `timeout` parameter overrides the target node's default timeout for this specific dispatched task. Pass a `float` (seconds), `timedelta`, or `TimeoutPolicy` directly. Timeouts use cooperative asyncio cancellation, so the target node must be `async def` (a sync target raises `ValueError: Node timeouts are only supported for async nodes`), and a branch that overruns raises `NodeTimeoutError`, which the node's `retry_policy` retries by default. (A node `error_handler` does not catch failures in parallel `Send` tasks; see [Error handlers](/langgraph-guide/python/reference-state-graph/#error-handlers).)
 
 ```python
 import operator
@@ -426,22 +426,23 @@ graph.invoke(Command(resume="yes"), cfg)                # continues into "execut
 Pass a `timeout=` to `Send` to cap how long an individual parallel task may run. A plain `float` is a hard wall-clock limit (`run_timeout`); pass a `TimeoutPolicy` for idle-based cancellation.
 
 ```python
+import asyncio
 import operator
 from typing import Annotated
 from typing_extensions import TypedDict
+from langgraph.errors import NodeTimeoutError
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send, TimeoutPolicy, RetryPolicy
+from langgraph.types import Send, RetryPolicy
 
 class Scrape(TypedDict):
     urls: list[str]
     results: Annotated[list[str], operator.add]
 
 
-def scrape_page(state: dict) -> dict:
-    """Scrape one URL — runs per-Send with its own timeout."""
-    url = state["url"]
-    # ... real HTTP fetch here ...
-    return {"results": [f"content:{url}"]}
+async def scrape_page(state: dict) -> dict:
+    """Scrape one URL — runs per-Send with its own timeout (async: timeouts need it)."""
+    await asyncio.sleep(0.05)          # real HTTP fetch here
+    return {"results": [f"content:{state['url']}"]}
 
 
 def dispatch(state: Scrape) -> list[Send]:
@@ -460,14 +461,14 @@ builder = StateGraph(Scrape)
 builder.add_node(
     "scrape_page",
     scrape_page,
-    retry_policy=RetryPolicy(max_attempts=3, retry_on=TimeoutError),
+    retry_policy=RetryPolicy(max_attempts=3, retry_on=NodeTimeoutError),   # not the built-in TimeoutError
 )
 builder.add_conditional_edges(START, dispatch)
 builder.add_edge("scrape_page", END)
 
 graph = builder.compile()
-result = graph.invoke({"urls": ["https://a.com", "https://b.com"], "results": []})
-print(result["results"])
+result = asyncio.run(graph.ainvoke({"urls": ["https://a.com", "https://b.com"], "results": []}))
+print(result["results"])   # ['content:https://a.com', 'content:https://b.com']
 ```
 
 ### 7. Complete multi-agent handoff with `Command.PARENT`

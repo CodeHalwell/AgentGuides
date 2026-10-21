@@ -1035,12 +1035,6 @@ from agent_framework import (
 
 
 async def main() -> None:
-    messages = [
-        Message(role="user",      contents=[Content.from_text(f"Question {i}")]),
-        Message(role="assistant", contents=[Content.from_text(f"Answer {i}")])
-        for i in range(10)
-    ]
-    # Flatten the list comprehension (above produces nested lists)
     flat: list[Message] = []
     for i in range(10):
         flat.append(Message(role="user",      contents=[Content.from_text(f"Q{i}")]))

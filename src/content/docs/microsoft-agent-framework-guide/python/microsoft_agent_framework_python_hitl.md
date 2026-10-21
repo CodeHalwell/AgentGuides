@@ -181,7 +181,7 @@ workflow = (
 )
 ```
 
-With plan review enabled, the workflow emits a `request_info` event whose data is a `MagenticPlanReviewRequest` (fields `plan`, `current_progress`, `is_stalled`) — once after the initial plan and again whenever a stall forces a replan (`is_stalled=True`). Reply with `request.approve()` to continue or `request.revise(feedback)` to send the manager back with guidance. Earlier drafts of this page described a `with_human_input_on_stall()` builder method and `MagenticHumanInterventionRequest` / `Reply` types; none of those exist.
+With plan review enabled, the workflow emits a `request_info` event whose data is a `MagenticPlanReviewRequest` (fields `plan`, `current_progress`, `is_stalled`) — once after the initial plan and again whenever a stall forces a replan (`is_stalled=True`). Reply with `request.approve()` to continue or `request.revise(feedback)` to send the manager back with guidance.
 
 #### Driving plan review end-to-end
 

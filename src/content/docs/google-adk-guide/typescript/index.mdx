@@ -20,7 +20,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v%%version=@google/adk%%** · Node.js 20.19+ (checked %%versions-checked%%)
+    **v%%version=@google/adk%%** (checked %%versions-checked%%)
   </Card>
   <Card title="Best for" icon="puzzle">
     Full-stack Gemini agents, Node backends, browser-hosted agents.
@@ -65,9 +65,165 @@ for await (const event of runner.runEphemeral({
 }
 ```
 
-Set `GOOGLE_GENAI_API_KEY` (or `GOOGLE_GENAI_USE_VERTEXAI=1` with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`) before running. For multi-turn conversations, create a session with `runner.sessionService.createSession(...)` and call `runner.runAsync({userId, sessionId, newMessage})`.
+Set `GOOGLE_GENAI_API_KEY` (`GOOGLE_API_KEY` and `GEMINI_API_KEY` also work), or use Vertex AI with `GOOGLE_GENAI_USE_VERTEXAI=1` (or `GOOGLE_GENAI_USE_ENTERPRISE=1`) plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`, before running. For multi-turn conversations, create a session with `runner.sessionService.createSession(...)` and call `runner.runAsync({userId, sessionId, newMessage})`.
 
 Export the agent as `rootAgent` from `agent.ts` and you can drive it with the dev tools: `npx @google/adk-devtools run agent.ts` or `npx @google/adk-devtools web`. Always name the package — a bare `npx adk` fetches an unrelated package from the registry.
+
+## Tools
+
+A `FunctionTool` takes a Zod schema for its parameters; the second argument to `execute` is the `ToolContext`, which gives access to session state. `AgentTool` lets one agent call another and get its answer back, and `GOOGLE_SEARCH` is Gemini's built-in search grounding.
+
+```typescript
+import {AgentTool, FunctionTool, GOOGLE_SEARCH, LlmAgent, ToolContext} from '@google/adk';
+import {z} from 'zod';
+
+const addToBasket = new FunctionTool({
+  name: 'add_to_basket',
+  description: "Add an item to the customer's basket.",
+  parameters: z.object({
+    sku: z.string().describe('The product SKU'),
+    quantity: z.number().int().min(1).describe('How many to add'),
+  }),
+  execute: async ({sku, quantity}, toolContext?: ToolContext) => {
+    const basket = toolContext?.state.get<Record<string, number>>('basket', {}) ?? {};
+    basket[sku] = (basket[sku] ?? 0) + quantity;
+    toolContext?.state.set('basket', basket); // saved with the session
+    return {basket};
+  },
+});
+
+const researcher = new LlmAgent({
+  name: 'researcher',
+  model: '%%model=gemini%%',
+  description: 'Searches the web and summarises what it finds.',
+  instruction: 'Answer using Google Search. Cite sources.',
+  tools: [GOOGLE_SEARCH],
+});
+
+export const shopAssistant = new LlmAgent({
+  name: 'shop_assistant',
+  model: '%%model=gemini%%',
+  instruction: 'Help customers shop. Use the researcher for product questions.',
+  tools: [addToBasket, new AgentTool({agent: researcher})],
+});
+```
+
+Built-in Gemini tools such as `GOOGLE_SEARCH` run on the model side; wrapping the searching agent in `AgentTool`, as here, is the way to combine them with your own function tools.
+
+## Sessions and the runner
+
+`Runner` takes the services explicitly; `InMemoryRunner` is the same with in-memory services built in. A session holds the conversation and its state, so the second turn below sees the first:
+
+```typescript
+import {InMemorySessionService, LlmAgent, Runner, isFinalResponse, stringifyContent} from '@google/adk';
+
+const agent = new LlmAgent({
+  name: 'assistant',
+  model: '%%model=gemini%%',
+  instruction: 'You are a helpful assistant. The customer is called {user:name?}.',
+});
+
+const sessionService = new InMemorySessionService();
+const runner = new Runner({appName: 'support', agent, sessionService});
+
+// Sessions must exist before runAsync, unless the runner has autoCreateSession: true.
+const session = await sessionService.createSession({
+  appName: 'support',
+  userId: 'u1',
+  state: {'user:name': 'Sam'}, // the user: prefix shares this value across the user's sessions
+});
+
+for (const text of ['My order number is A123.', 'What was my order number?']) {
+  for await (const event of runner.runAsync({
+    userId: 'u1',
+    sessionId: session.id,
+    newMessage: {role: 'user', parts: [{text}]},
+  })) {
+    if (isFinalResponse(event)) {
+      console.log(stringifyContent(event));
+    }
+  }
+}
+
+const saved = await sessionService.getSession({appName: 'support', userId: 'u1', sessionId: session.id});
+console.log(saved?.events.length, 'events stored');
+```
+
+State keys follow the Python rules: no prefix for this session, `user:` for all of a user's sessions, `app:` for the whole app and `temp:` for the current invocation only. `{key}` and `{key?}` in an instruction insert state values. Swap `InMemorySessionService` for `DatabaseSessionService` or `VertexAiSessionService` to persist sessions.
+
+## Multi-agent systems
+
+Give an `LlmAgent` `subAgents` and it can transfer the conversation to whichever one's `description` fits:
+
+```typescript
+import {LlmAgent} from '@google/adk';
+
+const billing = new LlmAgent({
+  name: 'billing',
+  model: '%%model=gemini%%',
+  description: 'Handles invoices, refunds and payment problems.',
+  instruction: 'Resolve billing questions. Ask for the invoice number.',
+});
+
+const technical = new LlmAgent({
+  name: 'technical',
+  model: '%%model=gemini%%',
+  description: 'Handles bugs, errors and how-to questions about the product.',
+  instruction: 'Diagnose technical problems step by step.',
+});
+
+// The coordinator transfers the conversation to whichever specialist fits.
+export const coordinator = new LlmAgent({
+  name: 'coordinator',
+  model: '%%model=gemini-small%%',
+  instruction: 'Work out what the customer needs and transfer to the right specialist.',
+  subAgents: [billing, technical],
+});
+```
+
+For fixed pipelines use a `Workflow`. An edge is an array: a chain of nodes, with a nested array for a parallel fan-out. Agents, tools and functions can all be nodes:
+
+```typescript
+import {App, FunctionNode, InMemoryRunner, JoinNode, LlmAgent, START, Workflow} from '@google/adk';
+
+const security = new LlmAgent({
+  name: 'security',
+  model: '%%model=gemini%%',
+  instruction: 'List security issues in the code. Bullet points only.',
+});
+const style = new LlmAgent({
+  name: 'style',
+  model: '%%model=gemini-small%%',
+  instruction: 'List readability issues in the code. Bullet points only.',
+});
+
+// A JoinNode passes {branchName: output} to the next node.
+const report = new FunctionNode('report', (_ctx, input: Record<string, unknown>) =>
+  Object.entries(input)
+    .map(([name, text]) => `## ${name}\n${String(text)}`)
+    .join('\n\n'),
+);
+
+const review = new Workflow({
+  name: 'code_review',
+  edges: [[START, [security, style], new JoinNode({name: 'join'}), report]],
+});
+
+const runner = new InMemoryRunner({app: new App({name: 'review_app', rootAgent: review})});
+
+let result: unknown;
+for await (const event of runner.runEphemeral({
+  userId: 'u1',
+  newMessage: {role: 'user', parts: [{text: "def f(q): return db.execute(f'SELECT {q}')"}]},
+})) {
+  if (event.output !== undefined) {
+    result = event.output; // each node reports its output; the last one is the report
+  }
+}
+console.log(result);
+```
+
+`Workflow` is still marked experimental in the TypeScript kit. The concepts (routing maps, loops, retries, human-in-the-loop pauses) match the [Python Workflows page](/google-adk-guide/python/workflows/).
 
 ## What changed in 2.x
 
@@ -94,7 +250,8 @@ Later 2.x releases added `Runner.autoCreateSession` (opt-in), `DebugLoggingPlugi
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-10-21 | current | Re-verified against the current npm release. Replaced the minimal example, which called a non-existent `agent.run()`, with a type-checked `InMemoryRunner.runEphemeral` example; added the 2.x changes and the Node.js 20.19 requirement; version now read from the site's version data. |
+| 2026-10-21 | current | Added tools, sessions, multi-agent and workflow examples, each type-checked with `tsc --strict` and run against a stub model. Dropped the unsupported Node.js version claim. |
+| 2026-10-21 | 2.3.0 | Re-verified against the current npm release. Replaced the minimal example, which called a non-existent `agent.run()`, with a type-checked `InMemoryRunner.runEphemeral` example; added the 2.x changes; version now read from the site's version data. |
 | 2026-04-21 | 1.0.0 | Bumped to installed v1.0.0 GA after npm introspection; LLMAgent → LlmAgent (matches Python casing). |
 | 2026-04-21 | 0.6.1 | Index redesigned with language-selector style. |
 | April 4, 2026 | 0.6.1 | Active development release. |

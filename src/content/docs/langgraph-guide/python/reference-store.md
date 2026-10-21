@@ -48,7 +48,7 @@ graph = (
 
 | Backend | Import | Persists? | Vector search | TTL |
 |---|---|---|---|---|
-| `InMemoryStore` | `langgraph.store.memory` | No | Yes (numpy if installed) | Optional |
+| `InMemoryStore` | `langgraph.store.memory` | No | Yes (numpy if installed) | No (`supports_ttl` is `False`) |
 | `PostgresStore` | `langgraph.store.postgres`<sup>1</sup> | Yes | Yes (pgvector) | Yes |
 | `AsyncPostgresStore` | `langgraph.store.postgres.aio`<sup>1</sup> | Yes | Yes (pgvector) | Yes |
 | `AsyncBatchedBaseStore` | `langgraph.store.base.batch` | Adapter | Same as wrapped | Same as wrapped |
@@ -69,7 +69,7 @@ Any of these operations can raise `InvalidNamespaceError` (e.g., empty tuple, em
 
 All methods have sync and `a`-prefixed async variants.
 
-```python
+```text
 # Sync
 store.get(namespace, key, *, refresh_ttl=None) -> Item | None
 store.put(namespace, key, value, index=None, *, ttl=NOT_PROVIDED) -> None
@@ -97,7 +97,7 @@ Under the hood, every single-item method funnels through `batch`/`abatch`. Submi
 
 ## `put()` — details
 
-```python
+```text
 store.put(
     namespace: tuple[str, ...],
     key: str,
@@ -120,7 +120,7 @@ store.put(
 # Store a regular item (uses store's default index config)
 store.put(("docs",), "d1", {"text": "Python tutorial", "lang": "python"})
 
-# TTL: item expires after 30 minutes of inactivity
+# TTL (PostgresStore only): item expires after 30 minutes of inactivity
 store.put(("cache",), "result-xyz", {"data": "..."}, ttl=30)
 
 # Skip embedding for this item even if the store has vector search
@@ -137,7 +137,7 @@ await store.aput(("docs",), "draft", {"text": "WIP..."}, index=False)
 
 ## `get()` — details
 
-```python
+```text
 store.get(
     namespace: tuple[str, ...],
     key: str,
@@ -328,7 +328,6 @@ Common model dimensions (from source docstring):
 |---|---|
 | `openai:text-embedding-3-large` | 3072 |
 | `openai:text-embedding-3-small` | 1536 |
-| `openai:text-embedding-ada-002` | 1536 |
 | `cohere:embed-english-v3.0` | 1024 |
 | `cohere:embed-english-light-v3.0` | 384 |
 | `cohere:embed-multilingual-v3.0` | 1024 |
@@ -345,13 +344,13 @@ class TTLConfig(TypedDict, total=False):
 
 - `refresh_on_read` — if `True`, every `get()` or `search()` that returns an item resets its TTL. Can be overridden per-call with `refresh_ttl=` on `get`/`search`.
 - `default_ttl` — applied to all `put()` calls that do not specify their own `ttl=`.
-- `sweep_interval_minutes` — how often the backend actively deletes expired items. `InMemoryStore` evicts lazily (no background sweeper).
+- `sweep_interval_minutes` — how often `start_ttl_sweeper()` deletes expired items (`PostgresStore`; call `sweep_ttl()` for a single pass).
 
-Only set `ttl=...` on `put()` if the backend supports TTL. `InMemoryStore` accepts the kwarg (`supports_ttl = True`) but does not run a background sweeper.
+Only set `ttl=...` on `put()` if the backend supports TTL. `InMemoryStore` does not (`supports_ttl` is `False`, and `put(..., ttl=...)` raises `NotImplementedError`).
 
 ## `InMemoryStore`
 
-```python
+```text
 from langgraph.store.memory import InMemoryStore
 
 store = InMemoryStore(*, index: IndexConfig | None = None)
@@ -593,6 +592,7 @@ def remember(
     text: str,
     store: Annotated[BaseStore, InjectedStore()],
 ) -> str:
+    """Save a note for the user."""
     store.put(("mem", user_id), f"note-{text[:16]}", {"text": text})
     return "ok"
 
@@ -602,10 +602,13 @@ def recall(
     topic: str,
     store: Annotated[BaseStore, InjectedStore()],
 ) -> list[str]:
+    """Find the user's notes about a topic."""
     return [i.value["text"] for i in store.search(("mem", user_id), query=topic, limit=5)]
 ```
 
 ### 5. TTL-bounded cache
+
+Needs a store with TTL support (`PostgresStore` with a `ttl` config); `InMemoryStore.put(..., ttl=...)` raises `NotImplementedError`.
 
 ```python
 # Store result with a 30-minute TTL

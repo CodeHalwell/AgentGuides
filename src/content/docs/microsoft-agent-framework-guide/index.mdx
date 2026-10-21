@@ -1,25 +1,25 @@
 ---
 title: "Microsoft Agent Framework"
-description: "Unified agent SDK that merges Semantic Kernel and AutoGen — pick your language, plus cross-cutting protocol guides."
+description: "Microsoft's agent SDK, the successor to Semantic Kernel's agents and AutoGen, for Python, .NET and Go: pick your language, plus cross-language guides."
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Overview"
   order: 0
 ---
 
-import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-**Unified SDK that consolidates Semantic Kernel's plugin/tool system and AutoGen's multi-agent orchestration.** First-party service connectors, Azure-native observability, and A2A protocol support — across .NET and Python, with Go in public preview. The core is stable in .NET and Python; several integration packages are still in public beta or preview (on Python: A2A, Copilot Studio, Bedrock, Anthropic, Ollama, Redis, Durable Task; on .NET: A2A, Foundry, hosting).
+**Microsoft Agent Framework** brings together Semantic Kernel's enterprise foundations and AutoGen's multi-agent patterns in one SDK: agents over any chat model, tools and MCP, sessions and memory, graph workflows with checkpointing and human-in-the-loop, prebuilt orchestrations, A2A, and OpenTelemetry. The core is stable in Python and .NET; Go is in public preview. Several integration packages are still in beta or preview (in Python, for example, A2A, Anthropic, Bedrock, Ollama, Redis and Durable Task; in .NET, Foundry hosting, A2A and Azure Functions hosting).
 
 <CardGrid>
   <Card title="Status" icon="approve-check">
-    Current releases: Python `agent-framework` **%%version=agent-framework%%** · .NET `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** — the two are versioned independently. Checked %%versions-checked%%.
+    Python `agent-framework` **%%version=agent-framework%%** · .NET `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** · Go `agent-framework-go` **v%%version=github.com/microsoft/agent-framework-go%%** (preview). Each is versioned independently. Checked %%versions-checked%%.
   </Card>
   <Card title="Languages" icon="puzzle">
-    Python 3.10+ · .NET 8.0+ (packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
+    Python 3.10+ · .NET 8.0+ (packages also target .NET Standard 2.0 / .NET Framework 4.7.2) · Go
   </Card>
   <Card title="Best for" icon="rocket">
-    Azure-native agents, enterprise multi-agent orchestration, A2A.
+    Azure-native agents, multi-agent workflows that must survive restarts and wait for people, A2A interop.
   </Card>
 </CardGrid>
 
@@ -27,93 +27,81 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard
-    title="🐍 Python"
+    title="Python"
     href="/microsoft-agent-framework-guide/python/"
-    description="agent-framework · asyncio-first, Pydantic types, FastAPI integration."
+    description="agent-framework · asyncio-first, Pydantic types, harness providers, FIDES prompt-injection defence."
   />
   <LinkCard
-    title="C# .NET"
+    title=".NET"
     href="/microsoft-agent-framework-guide/dotnet/"
-    description="Microsoft.Agents.AI · DI, ChatClientAgent, Azure RBAC, ASP.NET Core integration."
+    description="Microsoft.Agents.AI · Microsoft.Extensions.AI, dependency injection, ASP.NET Core and Azure Functions hosting."
   />
   <LinkCard
     title="Go (preview)"
     href="/microsoft-agent-framework-guide/go/"
-    description="github.com/microsoft/agent-framework-go · public preview · agents, tools, Foundry/OpenAI/Azure providers, MCP, A2A, graph workflows."
+    description="github.com/microsoft/agent-framework-go · agents, tools, Foundry/OpenAI/Azure providers, MCP, A2A, graph workflows."
   />
 </CardGrid>
 
-## Cross-cutting protocol guides
-
-These apply across languages and cover protocols/features that span the framework.
+## Cross-language guides
 
 <CardGrid>
   <LinkCard
-    title="A2A protocol"
-    href="./microsoft_agent_framework_a2a_protocol/"
-    description="Cross-framework agent interop — OpenAI SDK, Claude SDK, LangGraph, Google ADK."
+    title="Concepts"
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_comprehensive_guide/"
+    description="Architecture and core concepts, with Python and .NET side by side."
   />
   <LinkCard
-    title="Graph workflows & declarative agents"
-    href="./microsoft_agent_framework_graphs_declarative/"
-    description="Directed graphs, YAML/JSON agent configs, time-travel debugging."
+    title="A2A protocol"
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/"
+    description="Call remote A2A agents and serve your own agents over A2A."
+  />
+  <LinkCard
+    title="Workflows and declarative agents"
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/"
+    description="WorkflowBuilder graphs, WorkflowContext, visualisation, YAML agents and workflows."
   />
   <LinkCard
     title="Enterprise patterns"
-    href="./microsoft_agent_framework_enterprise_2025/"
-    description="OpenTelemetry, Entra ID, Content Safety, PII redaction, Purview, governance and audit — built from the framework's middleware and the Azure SDKs."
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/"
+    description="OpenTelemetry, Entra ID, Content Safety, PII redaction, Purview, governance and audit."
   />
   <LinkCard
-    title="Comprehensive (language-agnostic)"
-    href="./microsoft_agent_framework_comprehensive_guide/"
-    description="Architecture + concepts reference — applies to both Python and .NET."
-  />
-  <LinkCard
-    title="Production (language-agnostic)"
-    href="./microsoft_agent_framework_production_guide/"
-    description="Deployment strategies, cost optimisation, disaster recovery."
-  />
-  <LinkCard
-    title="Diagrams"
-    href="./microsoft_agent_framework_diagrams/"
-    description="Architecture + flow diagrams."
+    title="Production"
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_production_guide/"
+    description="Hosting options (Foundry hosted agents, Azure Functions, Container Apps), security, evaluation in CI."
   />
   <LinkCard
     title="Recipes"
-    href="./microsoft_agent_framework_recipes/"
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_recipes/"
     description="Copy-paste patterns for common scenarios."
   />
   <LinkCard
-    title="Guide split notice"
-    href="./migration_notice/"
-    description="How the original combined guide was split into Python and .NET guides (November 2025)."
+    title="Diagrams"
+    href="/microsoft-agent-framework-guide/microsoft_agent_framework_diagrams/"
+    description="Architecture and flow diagrams."
   />
 </CardGrid>
 
-## What's new in GA 1.0 (April 2026)
+## Release history
 
-- **Stable APIs** with LTS commitment — no more `--prerelease` flag.
-- **First-party service connectors** via `IChatClient`: Azure OpenAI, OpenAI, Anthropic Claude, Amazon Bedrock, Google Gemini, Ollama.
-- **Unified orchestration** — sequential, concurrent, handoff, group chat, and Magentic-One patterns built in.
-- **Azure App Service support** for multi-agent deployment.
-- **A2A Protocol**, **Graph-based Workflows**, **Declarative YAML/JSON**, **OpenTelemetry** — full enterprise feature set.
+Dates are from PyPI, NuGet and the Go module proxy.
 
-<Aside type="caution" title="Migrating from Preview to GA">
-  - `ChatClientAgentOptions.Instructions` removed — pass instructions directly to the `ChatClientAgent` constructor.
-  - Package names: `agent-framework`, `agent-framework-core`, `agent-framework-openai` (no preview suffix).
-  - Dependency floor: `>=1.0.0,<2` — release-candidate installs are incompatible. Minor 1.x releases since GA have still shipped breaking changes in experimental areas; see each language guide's breaking-changes notes.
-  - From standalone Semantic Kernel or AutoGen? See the [official migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-semantic-kernel/) (~2–4 hours).
-</Aside>
+| Date | Release |
+|---|---|
+| 2025-10-01 | First public previews: `agent-framework` 1.0.0b251001 on PyPI, `Microsoft.Agents.AI` 1.0.0-preview.251001.1 on NuGet |
+| 2026-02-20 | Python release candidates begin (1.0.0rc1) |
+| 2026-04-02 | 1.0.0 GA on PyPI and NuGet |
+| 2026-04-10 | Python 1.0.1; .NET 1.1.0 |
+| 2026-09-01 | Go SDK v0.1.0 (public preview) |
+| 2026-10-20 | Go SDK v0.2.0 |
 
----
+Since GA, Python and .NET have shipped frequent minor releases, and some of them changed experimental APIs. Each language guide lists the breaking changes that affect its examples. Coming from Semantic Kernel or AutoGen? See Microsoft's [migration guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/).
 
 ## Revision history
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-10-21 | Py 1.22.0 / .NET 1.25.0 | Version sweep. The status card now reads both current versions from the site's version data rather than hard-coding them. Python examples across the guide re-checked against an installed `agent-framework` 1.22.0; .NET examples checked against the `Microsoft.Agents.AI` 1.25.0 assemblies (thread API → `AgentSession` / `CreateSessionAsync`, `CreateAIAgent` → `AsAIAgent`). Enterprise, comprehensive, recipes and production pages rewritten against the real APIs (Python examples run against a stub chat client; C# compiled). |
-| 2026-09-08 | Py 1.17.0 / .NET 1.1.0 | Consistency sweep. Status card corrected from a stale `Core 1.4.0` to the versions the language guides actually document (`agent-framework` 1.17.0, `Microsoft.Agents.AI` 1.1.0); language cards now name their package and version. Table of contents on the language-neutral comprehensive guide trimmed to the sections that exist, with per-language pointers for the rest. No package installation or symbol verification performed. |
-| 2026-04-21 | 1.0.1 | Parent index redesigned as language selector + cross-cutting guides. |
-| April 10, 2026 | 1.0.1 | Patch release. |
-| April 3-7, 2026 | 1.0 GA | Graduated from Preview; first-party connectors; Azure App Service. |
-| November 2025 | 1.0 Preview | Initial unified SDK. |
+| Date | Changes |
+|---|---|
+| 2026-10-21 | Release history corrected from the package registries (GA was 2026-04-02). Removed the obsolete guide-split notice. Added the Go release dates. |
+| 2026-10-21 | Version sweep: status card reads current versions from the site's version data; Python examples re-checked against `agent-framework` 1.22.0 and .NET examples compiled against `Microsoft.Agents.AI` 1.25.0. |
+| 2026-04-21 | Overview reorganised as a language selector plus cross-language guides. |

@@ -353,7 +353,7 @@ print(result["embedding"])  # [0.1, 0.2, 0.3, 0.4]
 
 ### `omit_payload` reference
 
-```python
+```text
 omit_payload(value: Any) -> dict[str, Any]
 # Always returns {}
 # Use as process_inputs or process_outputs to record nothing

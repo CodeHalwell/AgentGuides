@@ -7,20 +7,20 @@ sidebar:
   label: "Recipes"
 ---
 
-**Practical patterns for `@llamaindex/workflow` 1.1.25** (the final release; umbrella package `llamaindex` %%version=llamaindex%%, checked %%versions-checked%%). All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.
+**Practical patterns for the final LlamaIndex.TS releases** ([versions](/llamaindex-guide/typescript/#final-releases), checked %%versions-checked%%). All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.
 
 > **Deprecated upstream.** LlamaIndex.TS is no longer maintained and its npm packages are marked deprecated. These recipes still work with the final releases; see the [overview](/llamaindex-guide/typescript/) before starting a new project on it.
 
 **Install:**
 ```bash
-npm install @llamaindex/workflow@1.1.25 @llamaindex/core @llamaindex/openai zod
+npm install @llamaindex/workflow @llamaindex/core @llamaindex/openai zod     # Recipe 1 has its own install line
 ```
 
 ---
 
 ## Table of Contents
 
-1. [Basic RAG Chatbot](#recipe-1-basic-rag-chatbot)
+1. [RAG with VectorStoreIndex](#recipe-1-rag-with-vectorstoreindex)
 2. [Research Paper Analyser](#recipe-2-research-paper-analyser)
 3. [Code Documentation Generator](#recipe-3-code-documentation-generator)
 4. [Multi-Step Analysis Pipeline](#recipe-4-multi-step-analysis-pipeline)
@@ -33,65 +33,60 @@ npm install @llamaindex/workflow@1.1.25 @llamaindex/core @llamaindex/openai zod
 
 ---
 
-## Recipe 1: Basic RAG Chatbot
+## Recipe 1: RAG with VectorStoreIndex
 
-A minimal RAG pipeline using `createWorkflow` and `@llamaindex/openai`.
+Retrieval, answer synthesis and an agent tool from the `llamaindex` package. Because `llamaindex` pins its own versions of the scoped packages, install the matching `@llamaindex/workflow` (see [final releases](/llamaindex-guide/typescript/#final-releases)):
+
+```bash
+npm install llamaindex @llamaindex/openai @llamaindex/workflow@1.1.24
+```
 
 ```typescript
-import {
-  createWorkflow,
-  workflowEvent,
-  run,
-} from '@llamaindex/workflow';
-import { OpenAI } from '@llamaindex/openai';
-
-// Events
-const queryEv     = workflowEvent<{ query: string; topK?: number }>();
-const retrievedEv = workflowEvent<{ query: string; docs: string[]; scores: number[] }>();
-const stopEv      = workflowEvent<{ answer: string; docsUsed: number }>();
+import { Document, Settings, VectorStoreIndex, storageContextFromDefaults } from 'llamaindex';
+import { OpenAI, OpenAIEmbedding } from '@llamaindex/openai';
+import { agent } from '@llamaindex/workflow';
 
 const llm = new OpenAI({ model: '%%model=openai-small%%' });
+Settings.llm = llm;
+Settings.embedModel = new OpenAIEmbedding({ model: 'text-embedding-3-small' });
 
-// Build workflow
-const ragWorkflow = createWorkflow();
+// Build once and persist; later runs load the same directory instead of re-embedding
+const storageContext = await storageContextFromDefaults({ persistDir: './storage' });
+const index = await VectorStoreIndex.fromDocuments(
+  [
+    new Document({ text: 'Holiday allowance is 25 days a year.', metadata: { file: 'leave.md' } }),
+    new Document({ text: 'Expenses are reimbursed within 30 days.', metadata: { file: 'expenses.md' } }),
+  ],
+  { storageContext },
+);
 
-ragWorkflow.handle([queryEv], async (ctx, ev) => {
-  // Replace with your vector store retriever
-  const docs = await retrieveDocuments(ev.data.query, ev.data.topK ?? 5);
-  return retrievedEv.with({ query: ev.data.query, docs: docs.texts, scores: docs.scores });
-});
-
-ragWorkflow.handle([retrievedEv], async (ctx, ev) => {
-  const context = ev.data.docs
-    .map((d, i) => `[${i + 1}] ${d}`)
-    .join('\n');
-
-  const resp = await llm.complete({
-    prompt: `Answer using only the context below.\n\nContext:\n${context}\n\nQuestion: ${ev.data.query}`,
-  });
-
-  return stopEv.with({ answer: resp.text, docsUsed: ev.data.docs.length });
-});
-
-// Usage
-export async function askQuestion(query: string): Promise<string> {
-  const events = await run(ragWorkflow, queryEv.with({ query }))
-    .until(stopEv)
-    .toArray();
-  return events.find(e => stopEv.include(e))?.data.answer ?? '';
+// Retrieval only
+const retriever = index.asRetriever({ similarityTopK: 2 });
+for (const hit of await retriever.retrieve({ query: 'How much holiday do I get?' })) {
+  console.log(hit.score?.toFixed(3), hit.node.metadata.file);
 }
 
-// Stub
-async function retrieveDocuments(
-  query: string,
-  topK: number,
-): Promise<{ texts: string[]; scores: number[] }> {
-  return {
-    texts: [`Result for: ${query}`],
-    scores: [0.9],
-  };
-}
+// Retrieval + answer synthesis
+const queryEngine = index.asQueryEngine({ similarityTopK: 2 });
+const response = await queryEngine.query({ query: 'How much holiday do I get?' });
+console.log(response.toString(), response.sourceNodes?.length);
+
+// As a tool for a workflow agent
+const handbookAgent = agent({
+  llm,
+  tools: [
+    index.queryTool({
+      metadata: { name: 'handbook', description: 'Answers questions about the staff handbook.' },
+    }),
+  ],
+});
+const result = await handbookAgent.run('How long do expense claims take?');
+console.log(result.data.result);
 ```
+
+`storageContextFromDefaults({ persistDir })` writes the docstore, index store and vectors to JSON files. On later runs, build the same storage context and call `VectorStoreIndex.init({ storageContext })` to load the index without re-embedding. For larger corpora use one of the vector store integrations instead of the file store.
+
+The other recipes use only `@llamaindex/workflow`; replace their placeholder retrieval functions with `retriever.retrieve(...)` from this recipe.
 
 ---
 
@@ -162,7 +157,7 @@ export async function analysePaper(text: string) {
 
 ## Recipe 3: Code Documentation Generator
 
-Reads TypeScript source files and generates JSDoc-style documentation.
+Reads TypeScript source files and generates JSDoc-style documentation. It parses the files with the TypeScript compiler API, which is in `typescript` 5.x (`npm install typescript@5`); TypeScript 7 does not ship that JavaScript API.
 
 ```typescript
 import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
@@ -383,7 +378,6 @@ import {
   createWorkflow,
   workflowEvent,
   run,
-  or,
 } from '@llamaindex/workflow';
 import { createHash } from 'node:crypto';
 
@@ -591,7 +585,6 @@ import {
   createWorkflow,
   workflowEvent,
   run,
-  or,
 } from '@llamaindex/workflow';
 import { OpenAI } from '@llamaindex/openai';
 
@@ -660,6 +653,7 @@ export async function triageTicket(id: string, body: string) {
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | final releases | Recipe 1 replaced: it stubbed retrieval; it now builds a real `VectorStoreIndex` with a retriever, a query engine and an agent tool (run with fake models). Unused `or` imports removed. |
 | 2026-10-21 | @llamaindex/workflow 1.1.25 | Deprecation notice added. Recipe 7 tools switched to Zod schemas and `run()` usage corrected; Recipe 8 rewritten (state middleware does not persist between runs, and `ChatMessage` is exported from `@llamaindex/core/llms`, not `@llamaindex/openai`). Model names updated. |
-| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous recipes used `llama-index-workflows` (non-existent package), `extends Workflow`, `@step()`, `new StartEvent`, `new StopEvent`, `workflow.run()`. All replaced with functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`. 10 recipes rewritten, API verified against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node`. | Claude routine |
+| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous recipes used `llama-index-workflows` (non-existent package), `extends Workflow`, `@step()`, `new StartEvent`, `new StopEvent`, `workflow.run()`. All replaced with functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`. 10 recipes rewritten, API verified against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node`. |
 | April 2026 | 1.1.24 | Initial recipes using incorrect class-based API. |

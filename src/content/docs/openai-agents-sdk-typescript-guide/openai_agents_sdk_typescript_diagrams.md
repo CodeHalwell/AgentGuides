@@ -1,13 +1,16 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Architecture Diagrams & Visual Guides"
-description: "Architecture patterns, component relationships and flow diagrams for the OpenAI Agents SDK in TypeScript."
+description: "Text diagrams of how the TypeScript OpenAI Agents SDK works: the run loop, handoffs, sessions, tools, retries, structured output and approvals."
+sidebar:
+  label: "Diagrams"
+  order: 8
 framework: "openai-agents-sdk"
 language: "typescript"
 ---
 
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
 
-**Focus:** Architecture patterns, component relationships, flow diagrams
+Text diagrams of what happens inside a run. Code for each step is in the [comprehensive guide](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_comprehensive_guide/).
 
 ---
 
@@ -56,9 +59,9 @@ language: "typescript"
                    ┌──────────────────┐
                    │   Model Layer    │
                    ├──────────────────┤
-                   │ • GPT-4/GPT-3.5  │
-                   │ • Custom Models  │
-                   │ • Third-party    │
+                   │ • OpenAI models  │
+                   │ • aisdk() models │
+                   │ • Custom Model   │
                    └──────────────────┘
 ```
 
@@ -75,8 +78,8 @@ language: "typescript"
       │
       ▼
   ┌─────────────────┐
-  │  Input Guard    │ ◄──── Validate input
-  │  (Guardrail)    │
+  │  Input Guard    │ ◄──── First agent only. Runs alongside the
+  │  (Guardrail)    │       first model call unless runInParallel: false
   └────────┬────────┘
            │
            ▼
@@ -157,55 +160,25 @@ Routing Logic:
 ## Session & Memory Management
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│          Session Lifecycle & Memory Management             │
-└─────────────────────────────────────────────────────────────┘
+run(agent, input, { session })
+   │
+   ▼
+session.getItems()  ──► prior history + new input ──► agent loop
+                                                        │
+                                                        ▼
+                                            new items (messages, tool calls,
+                                            tool results, handoffs)
+                                                        │
+                                                        ▼
+                                              session.addItems(newItems)
 
-  Session Created
-      │
-      ▼
-  ┌──────────────┐
-  │ Session ID   │
-  │ Generated    │
-  │ (Unique)     │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────────────────┐
-  │  Turn 1                  │
-  │  ├─ User message         │
-  │  ├─ Agent response       │
-  │  └─ Token count          │
-  └──────┬───────────────────┘
-         │
-         ▼
-  ┌──────────────────────────┐
-  │  Turn 2                  │
-  │  ├─ User message         │
-  │  ├─ Agent response       │
-  │  └─ Context included     │
-  └──────┬───────────────────┘
-         │
-         ▼
-  ┌──────────────────────────┐
-  │  Turn N                  │
-  │  ├─ Full history         │
-  │  ├─ Token tracking       │
-  │  └─ State preservation   │
-  └──────┬───────────────────┘
-         │
-         ▼
-  ┌──────────────────────────┐
-  │  Session End             │
-  │  ├─ Archive history      │
-  │  ├─ Save statistics      │
-  │  └─ Cleanup resources    │
-  └──────────────────────────┘
+Next run with the same session id starts from the stored history.
 
-Storage Options:
-  ├─ In-Memory (Development)
-  ├─ Redis (Production)
-  └─ Database (Long-term)
+Session implementations:
+  ├─ MemorySession                     (in process; tests, single instance)
+  ├─ OpenAIConversationsSession        (stored by OpenAI)
+  ├─ OpenAIResponsesCompactionSession  (wraps another session, compacts history)
+  └─ your class implementing Session   (Redis, Postgres, DynamoDB...)
 ```
 
 ---
@@ -266,126 +239,69 @@ Storage Options:
 ## Error Handling & Resilience Pattern
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│           Error Handling & Recovery Flow                  │
-└────────────────────────────────────────────────────────────┘
-
-     Error Occurs
-           │
-           ▼
-    ┌────────────────┐
-    │ Classify Error │
-    │ ├─ Retriable   │
-    │ ├─ Circuit     │
-    │ ├─ Rate limit  │
-    │ └─ Fatal       │
-    └────────┬───────┘
-             │
-      ┌──────┴──────┬──────────┬───────┐
-      │             │          │       │
-   Retriable   Rate Limited  Circuit  Fatal
-      │             │          │       │
-      ▼             ▼          ▼       ▼
-    Retry      Backoff       OPEN    Return
-    Attempt    &Wait         State   Error
-      │
-   ┌──┴───┬────┐
-   │      │    │
-Attempt1 Attempt2 AttempN
-   │      │    │
-   └──┬───┴────┘
-      │
-      ▼
-   Success/Fail
-
-Backoff Strategy:
-  Attempt 1: 1s
-  Attempt 2: 2s
-  Attempt 3: 4s
-  Attempt 4: 8s
+Model call
+   │
+   ├─ fails (network, timeout, 429/5xx)
+   │      │
+   │      ▼
+   │   modelSettings.retry.policy decides (retryPolicies.*)
+   │      ├─ retry ──► wait (backoff, or the server's Retry-After) ──► call again
+   │      └─ give up ──► error thrown from run()
+   │
+   ├─ tool throws ──► errorFunction formats it ──► returned to the model as the tool result
+   │
+   ├─ maxTurns reached ──► errorHandlers.maxTurns, else MaxTurnsExceededError
+   │
+   ├─ guardrail tripwire ──► Input/OutputGuardrailTripwireTriggered
+   │
+   └─ signal aborted ──► run rejects; in-flight request cancelled
 ```
+
+Retries happen inside one `run()` and only when replaying the request is safe.
 
 ---
 
 ## Structured Output Processing
 
 ```
-┌────────────────────────────────────────────────────────┐
-│     Structured Output Validation Pipeline            │
-└────────────────────────────────────────────────────────┘
-
-   Agent Generates Output
-           │
-           ▼
-   ┌──────────────────────┐
-   │ Parse JSON/Format    │
-   └──────┬───────────────┘
-          │
-          ▼
-   ┌──────────────────────┐
-   │ Validate Schema      │
-   │ (Zod validation)     │
-   └──────┬───────────────┘
-          │
-     ┌────┴────┐
-     │         │
-   Valid    Invalid
-     │         │
-     ▼         ▼
-   Type      Retry/
-   Guard     Fallback
-     │         │
-     └────┬────┘
-          │
-          ▼
-   Typed Output ◄───── Type-safe return
+Agent with outputType: z.object(...)
+   │
+   ▼
+Zod schema ──► JSON Schema (strict) sent with the request
+   │
+   ▼
+Model returns JSON constrained to the schema
+   │
+   ▼
+SDK parses and validates with Zod
+   │
+   ├─ valid   ──► result.finalOutput typed as z.infer<typeof schema>
+   └─ invalid ──► ModelBehaviorError, or errorHandlers.invalidFinalOutput
 ```
 
 ---
 
-## Deployment Architecture
+## Approvals
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│            Production Deployment Architecture             │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                    Load Balancer                           │
-│                  (HTTPS/Routing)                           │
-└────────┬────────────────────────────────────────────────────┘
-         │
-    ┌────┴─────┬──────────┬──────────┐
-    │           │          │          │
-    ▼           ▼          ▼          ▼
-┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-│Container│ │Container│ │Container│ │Container│
-│Instance │ │Instance │ │Instance │ │Instance │
-│  (Pod)  │ │  (Pod)  │ │  (Pod)  │ │  (Pod)  │
-└────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
-     │           │          │          │
-     └───────────┼──────────┼──────────┘
-                 │
-                 ▼
-    ┌──────────────────────────────┐
-    │    Shared Services           │
-    ├──────────────────────────────┤
-    │ ├─ Redis (Sessions)          │
-    │ ├─ Database (Persistence)    │
-    │ ├─ Message Queue (Jobs)      │
-    │ ├─ Logging (Observability)   │
-    │ ├─ Metrics (Prometheus)      │
-    │ └─ Tracing (Jaeger)          │
-    └──────────────────────────────┘
-            │
-            ▼
-    ┌──────────────────────────────┐
-    │  External Services           │
-    ├──────────────────────────────┤
-    │ ├─ OpenAI API                │
-    │ ├─ Third-party APIs          │
-    │ └─ Data sources              │
-    └──────────────────────────────┘
+run(agent, input)
+   │
+   ▼
+Model calls a tool with needsApproval
+   │
+   ▼
+Run stops: result.interruptions = [RunToolApprovalItem, ...]
+   │
+   ▼
+result.state.toString() ──► your database
+   │
+   │   (later, any process)
+   ▼
+RunState.fromString(agent, saved)
+state.approve(item)  or  state.reject(item, { message })
+   │
+   ▼
+run(agent, state) ──► tool runs (or the model hears it was rejected) ──► final output
 ```
 
 ---
@@ -472,5 +388,5 @@ Type Layers:
 
 ---
 
-These diagrams provide visual reference for understanding the OpenAI Agents SDK architecture, execution flows, and integration patterns.
+The Python guide has the same flows for the Python SDK: [Python diagrams](/openai-agents-sdk-guides/openai_agents_sdk_diagrams/).
 

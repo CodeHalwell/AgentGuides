@@ -660,7 +660,7 @@ from langgraph.graph.message import push_message
 
 **Signature:**
 
-```python
+```text
 push_message(
     message: MessageLikeRepresentation | BaseMessageChunk,
     *,

@@ -115,7 +115,7 @@ Console.WriteLine(response.Text);
 If you already have an `IChatClient` (from `Microsoft.Extensions.AI`), construct the agent directly: `new ChatClientAgent(chatClient, instructions: "...")`. Earlier previews used `AgentThread` / `GetNewThread()` and `CreateAIAgent(...)`; the GA names are `AgentSession` / `CreateSessionAsync()` and `AsAIAgent(...)`.
 
 <Aside type="note" title="Compiled against the current packages">
-  The comprehensive guide, recipes and feature tour were rewritten on %%versions-checked%% so that every C# example compiles against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% and its companion packages. Earlier drafts used helpers that never shipped (`AddAgentFactory`, `UseAzureOpenAI`, `AddCosmosDBState`, `MapAgents`, `AddConditionalEdge`, `AgentGraph`); the real building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `WorkflowBuilder` / `AgentWorkflowBuilder` / `InProcessExecution` (workflows) and `MapA2AJsonRpc` (A2A hosting).
+  The comprehensive guide, recipes and feature tour were rewritten on %%versions-checked%% so that every C# example compiles against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% and its companion packages. The building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `WorkflowBuilder` / `AgentWorkflowBuilder` / `InProcessExecution` (workflows) and `MapA2AJsonRpc` (A2A hosting).
 </Aside>
 
 Ready? **[Start Zero → Hero Step 1 →](./microsoft_agent_framework_dotnet_comprehensive_guide/#introduction)**

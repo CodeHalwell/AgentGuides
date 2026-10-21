@@ -222,7 +222,6 @@ auth_url = await gcs.get_authenticated_url(
 
 **GCS IAM requirements:** `storage.objects.create` (save), `storage.objects.get` (load), `storage.objects.list` (list/versions), `storage.objects.delete` (delete). The `roles/storage.objectAdmin` role covers all four.
 
-> For more detailed `GcsArtifactService` examples — binary artifacts, user-scoped files, listing version metadata — see the [Class & API Reference — Memory, Sessions & Artifacts](./google_adk_comprehensive_guide/#memory-sessions--artifacts) section.
 
 ### Saving and loading from tools
 

@@ -1,15 +1,9 @@
 ---
-title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
+title: "Microsoft Agent Framework (Python) — Feature Tour"
 description: "Verified feature set across agent-framework-core and its stable and beta sub-packages: A2A, graph workflows, declarative agents, MCP, Magentic orchestration and custom executors."
 framework: "microsoft-agent-framework"
 language: "python"
 ---
-
-> **Errata (April 2026).** An earlier draft of this page documented `from agent_framework.a2a import A2AProtocolAdapter, A2AClient, A2AMessage` and `from agent_framework.graphs import AgentGraph, GraphNode, CheckpointConfig, HITLConfig` — **none of those classes exist**. This page has been rewritten after direct introspection of the installed packages.
->
-> For the real graph/workflow API and A2A integration, see the dedicated pages:
-> - [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/)
-> - [A2A Protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/)
 
 ## Package status
 
@@ -38,7 +32,7 @@ The `agent-framework` meta package installs core plus the provider packages abov
 
 ## Agent2Agent (A2A) protocol
 
-`agent-framework-a2a` exposes exactly one class — `A2AAgent` — which wraps a remote A2A-compliant agent as a local framework `Agent`. Full detail on the [A2A protocol page](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/).
+`agent-framework-a2a` works in both directions: `A2AAgent` wraps a remote A2A agent as a local agent, and `A2AExecutor` serves a framework agent (or workflow agent) over A2A. `A2AAgentSession` and `A2AServiceSessionId` carry the conversation state. Serving and auth examples are on the [A2A protocol page](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/).
 
 ```python
 from agent_framework.a2a import A2AAgent
@@ -52,10 +46,19 @@ response = await remote.run("Summarise Q3")
 The real workflow API is `WorkflowBuilder` + `Executor`/`FunctionExecutor` + `Edge` groups, all exported from top-level `agent_framework`. See [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) for the full reference. One-glance example:
 
 ```python
-from agent_framework import WorkflowBuilder, FunctionExecutor
+from typing_extensions import Never
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
-research = FunctionExecutor(lambda q: {"data": q}, id="research")
-write    = FunctionExecutor(lambda d: f"report: {d['data']}", id="write")
+
+@executor(id="research")
+async def research(query: str, ctx: WorkflowContext[dict]) -> None:
+    await ctx.send_message({"data": query})
+
+
+@executor(id="write")
+async def write(d: dict, ctx: WorkflowContext[Never, str]) -> None:
+    await ctx.yield_output(f"report: {d['data']}")
+
 
 workflow = (
     WorkflowBuilder(start_executor=research, name="ContentPipeline")
@@ -392,7 +395,7 @@ workflow = MagenticBuilder(
 ).build()
 ```
 
-To tune the ledger prompts, pass `StandardMagenticManager(agent=manager, ...)` as `manager=` instead of `manager_agent=`. There is no `with_human_input_on_stall()` method — an earlier draft of this page showed one; stall handling is `max_stall_count` / `max_reset_count` and the manager's replanning.
+To tune the ledger prompts, pass `StandardMagenticManager(agent=manager, ...)` as `manager=` instead of `manager_agent=`. Stall handling is `max_stall_count` / `max_reset_count` and the manager's replanning.
 
 The plan-review HITL event is durable — combined with checkpointing, a user can come back hours later in a different pod and approve the plan, and the workflow resumes from the exact superstep that paused.
 

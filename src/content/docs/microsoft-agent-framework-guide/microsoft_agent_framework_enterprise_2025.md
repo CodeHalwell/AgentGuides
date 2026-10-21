@@ -16,7 +16,7 @@ The framework itself is deliberately small. It gives you four extension points, 
 | Context providers | `ContextProvider`, `SecureAgentConfig` | `AIContextProvider`, `ChatHistoryProvider` |
 | Telemetry | `agent_framework.observability` | `.UseOpenTelemetry()` on the agent builder |
 
-There is **no** compliance, governance, audit or content-safety module in the framework — no `HIPAAConfig`, `PolicyEngine`, `AuditConfig`, `ContentSafetyConfig` or `Agent(content_safety=...)`. Earlier drafts of this page described such objects; they never shipped. What follows shows how to get each outcome with the APIs that do exist, plus the relevant Azure SDKs. Where the honest answer is "this is platform configuration, not agent code", the page says so.
+There is **no** compliance, governance, audit or content-safety module in the framework — no `HIPAAConfig`, `PolicyEngine`, `AuditConfig`, `ContentSafetyConfig` or `Agent(content_safety=...)`. What follows shows how to get each outcome with the APIs that do exist, plus the relevant Azure SDKs. Where the honest answer is "this is platform configuration, not agent code", the page says so.
 
 ---
 
@@ -560,14 +560,14 @@ For desktop tools or CLIs where the model call should run as the signed-in user 
 ```python
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
-from azure.identity.aio import DeviceCodeCredential
+from azure.identity import DeviceCodeCredential   # sync: azure.identity.aio has no device-code credential
 
 
 async def user_delegated_agent() -> str:
-    # InteractiveBrowserCredential from azure.identity (sync) works similarly on a desktop.
-    async with DeviceCodeCredential(tenant_id="<tenant-id>") as credential:
-        agent = Agent(client=FoundryChatClient(credential=credential), instructions="User-scoped agent")
-        return (await agent.run("Summarise my project's open issues")).text
+    # InteractiveBrowserCredential (also sync-only) works similarly on a desktop.
+    credential = DeviceCodeCredential(tenant_id="<tenant-id>")
+    agent = Agent(client=FoundryChatClient(credential=credential), instructions="User-scoped agent")
+    return (await agent.run("Summarise my project's open issues")).text
 ```
 
 For a web API acting on behalf of a signed-in user against *downstream* resources (Graph, SharePoint), use the on-behalf-of flow (`OnBehalfOfCredential`) inside the tools that call those resources; the model call itself normally stays on the service's managed identity.

@@ -1,835 +1,359 @@
 ---
-title: "CrewAI Recipes"
-description: "Ten end-to-end CrewAI crews — research, data analysis, customer service, BI, marketing, finance, legal, science and project management."
+title: "CrewAI recipes"
+description: "Six worked CrewAI examples — a research-to-article crew, a report from CSV data, manager-led support triage, parallel code review, batch processing with kickoff_for_each, and a lead-qualification flow."
 framework: "crewai"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 45
 ---
 
-## Practical Implementation Examples and Real-World Solutions
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%). Each recipe was run end to end against that release with a stub LLM, so the wiring is checked; the quality of the output depends on the model you use.
 
----
+Each recipe is a complete script. They all set the model explicitly; swap in any provider from [LLM providers](/crewai-guide/crewai_llm_providers_python/).
 
-## Table of Contents
+## 1. Research, write, edit
 
-1. [Research and Content Creation](#recipe-1-research-and-content-creation)
-2. [Data Analysis and Reporting](#recipe-2-data-analysis-and-reporting)
-3. [Customer Service and Support](#recipe-3-customer-service-and-support)
-4. [Software Development Assistance](#recipe-4-software-development-assistance)
-5. [Business Intelligence](#recipe-5-business-intelligence)
-6. [Marketing Campaign Planning](#recipe-6-marketing-campaign-planning)
-7. [Financial Analysis](#recipe-7-financial-analysis)
-8. [Legal Document Review](#recipe-8-legal-document-review)
-9. [Scientific Research](#recipe-9-scientific-research)
-10. [Project Management](#recipe-10-project-management)
-
----
-
-## Recipe 1: Research and Content Creation
-
-### Complete Blog Post Generation System
+Three agents in sequence, a typed final result and a Markdown file on disk.
 
 ```python
-from crewai import Agent, Task, Crew, Process, LLM
-from crewai_tools import ScrapeWebsiteTool, SerperDevTool
-from pydantic import BaseModel, Field
-from typing import List
+from pydantic import BaseModel
+from crewai import Agent, Crew, Process, Task, LLM
 
-# Define output schema
-class BlogArticle(BaseModel):
-    title: str = Field(..., description="Article title")
-    introduction: str = Field(..., description="Compelling introduction")
-    sections: List[dict] = Field(..., description="Article sections with headers and content")
-    conclusion: str = Field(..., description="Conclusion summarising key points")
-    call_to_action: str = Field(..., description="Clear CTA for readers")
-    seo_keywords: List[str] = Field(..., description="Relevant keywords")
+llm = LLM(model="openai/%%model=openai-small%%")
 
-# Initialise LLM
-llm = LLM(model="openai/%%model=openai%%", temperature=0.7)
 
-# Create agents
+class Article(BaseModel):
+    title: str
+    summary: str
+    body_markdown: str
+
+
 researcher = Agent(
-    role="Senior Research Specialist",
-    goal="Conduct comprehensive research on topics using current sources",
-    backstory="""You are an exceptional researcher with 12 years of experience 
-    gathering and synthesising information from multiple authoritative sources. 
-    You excel at identifying credible sources, extracting key insights, and 
-    providing well-sourced, factually accurate information. Your research 
-    methodology is rigorous and your findings are always properly cited.""",
-    tools=[ScrapeWebsiteTool(), SerperDevTool()],
+    role="Researcher",
+    goal="Find accurate, current information about {topic}",
+    backstory="Research librarian who always notes where a fact came from.",
     llm=llm,
-    verbose=True
 )
-
 writer = Agent(
-    role="Award-Winning Content Writer",
-    goal="Create engaging, SEO-optimised articles that resonate with readers",
-    backstory="""You are a celebrated content writer with numerous published 
-    articles in major publications. Your writing style is engaging, informative, 
-    and optimised for search engines. You excel at structuring content for 
-    readability, crafting compelling headlines, and including relevant calls 
-    to action. Your articles consistently achieve high engagement rates.""",
+    role="Writer",
+    goal="Turn research into a clear article for {audience}",
+    backstory="Technical journalist who avoids jargon.",
     llm=llm,
-    verbose=True
 )
-
 editor = Agent(
-    role="Editorial Director",
-    goal="Ensure content quality, accuracy, and brand alignment",
-    backstory="""As an editorial director with 15 years of experience, you ensure 
-    all published content meets highest quality standards. You verify factual 
-    accuracy, improve clarity, enhance SEO optimisation, and guarantee brand 
-    consistency. Your editorial eye has improved countless publications.""",
+    role="Editor",
+    goal="Make the article correct, concise and consistent",
+    backstory="Sub-editor with a red pen and a style guide.",
     llm=llm,
-    verbose=True
 )
 
-# Define tasks
-research_task = Task(
-    description="""Research the topic: {topic}
-    
-    Provide:
-    1. Current trends and developments
-    2. Expert opinions and perspectives
-    3. Real-world examples and case studies
-    4. Statistical data and findings
-    5. Industry best practices
-    
-    Focus on finding credible, recent sources.""",
-    expected_output="Comprehensive research findings with citations and key insights",
-    agent=researcher
+research = Task(
+    description="Research {topic}. List the key facts, open questions and sources.",
+    expected_output="A bulleted list of facts, each with a source.",
+    agent=researcher,
 )
-
-writing_task = Task(
-    description="""Create a blog article based on the research findings.
-    
-    Requirements:
-    1. Engaging title with primary keyword
-    2. Compelling introduction (100-150 words)
-    3. 4-5 well-structured sections with subheadings
-    4. Real-world examples and case studies
-    5. Actionable advice for readers
-    6. Strong conclusion
-    7. Clear call to action
-    
-    Target length: 2000-2500 words
-    Tone: Professional but conversational""",
-    expected_output="Well-structured blog article ready for editing",
-    agent=writer
+draft = Task(
+    description="Write an article on {topic} for {audience} from the research.",
+    expected_output="An article of about 600 words in Markdown.",
+    agent=writer,
 )
-
-editorial_task = Task(
-    description="""Review and optimise the article for publication.
-    
-    Tasks:
-    1. Verify all facts and citations
-    2. Improve clarity and readability
-    3. Enhance SEO optimisation
-    4. Ensure consistent brand voice
-    5. Check grammar and formatting
-    6. Suggest headline variations
-    
-    Provide feedback and final recommendation.""",
-    expected_output="Editorial notes and publication recommendation",
+final = Task(
+    description="Edit the draft. Fix errors, cut repetition and add a one-sentence summary.",
+    expected_output="The edited article with a title and a one-sentence summary.",
     agent=editor,
-    output_pydantic=BlogArticle
+    output_pydantic=Article,
+    output_file="output/{topic}.md",
 )
 
-# Create and execute crew
-crew = Crew(
-    agents=[researcher, writer, editor],
-    tasks=[research_task, writing_task, editorial_task],
-    process=Process.sequential,
-    verbose=True,
-    memory=True
-)
+crew = Crew(agents=[researcher, writer, editor], tasks=[research, draft, final], process=Process.sequential)
+result = crew.kickoff(inputs={"topic": "heat pumps", "audience": "homeowners"})
 
-def generate_blog_post(topic: str) -> dict:
-    """Generate complete blog post."""
-    result = crew.kickoff(inputs={"topic": topic})
-    return result
-
-# Usage
-if __name__ == "__main__":
-    blog = generate_blog_post("Artificial Intelligence in Healthcare")
-    print(blog)
+article: Article = result.pydantic
+print(article.title)
+print(result.token_usage.total_tokens, "tokens")
 ```
 
----
+`output_file` accepts the same `{placeholders}` as descriptions, and its folder is created if missing.
 
-## Recipe 2: Data Analysis and Reporting
+## 2. A report from CSV data
 
-### Comprehensive Business Analytics System
+Load and aggregate the data in Python, pass the figures in as an input, and ask the crew for a typed report. Agents are better at interpreting numbers than at computing them.
 
 ```python
-from crewai import Agent, Task, Crew, Process, LLM
-from pydantic import BaseModel, Field
-from typing import List, Dict
-import json
+import csv
+from collections import defaultdict
+from pydantic import BaseModel
+from crewai import Agent, Crew, Task, LLM
 
-# Output schemas
-class DataInsight(BaseModel):
-    area: str
-    finding: str
-    importance: str  # high, medium, low
-    supporting_data: str
+llm = LLM(model="openai/%%model=openai-small%%")
 
-class AnalyticsReport(BaseModel):
-    executive_summary: str
-    key_insights: List[DataInsight]
-    trends: List[str]
-    recommendations: List[str]
-    risk_areas: List[str]
-    opportunity_areas: List[str]
 
-# Create specialised agents
-data_engineer = Agent(
-    role="Data Engineer",
-    goal="Clean, transform, and prepare data for analysis",
-    backstory="Expert data engineer with 10 years experience in data pipeline development"
-)
+class SalesReport(BaseModel):
+    headline: str
+    findings: list[str]
+    recommendations: list[str]
+
+
+def summarise_csv(path: str) -> str:
+    totals: dict[str, float] = defaultdict(float)
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):          # columns: region, month, revenue
+            totals[row["region"]] += float(row["revenue"])
+    return "\n".join(f"{region}: {revenue:,.0f}" for region, revenue in sorted(totals.items()))
+
 
 analyst = Agent(
-    role="Business Analyst",
-    goal="Analyse data and extract meaningful business insights",
-    backstory="Senior analyst with expertise in business intelligence and KPI interpretation"
+    role="Sales Analyst",
+    goal="Explain what the sales figures mean for the business",
+    backstory="Commercial analyst who reports to the sales director every month.",
+    llm=llm,
+)
+report = Task(
+    description=(
+        "These are revenue totals by region for {period}, computed from {data_path}:\n"
+        "{figures}\n\n"
+        "Identify the main patterns and recommend actions."
+    ),
+    expected_output="A headline, three to five findings and two or three recommendations.",
+    agent=analyst,
+    output_pydantic=SalesReport,
 )
 
-data_scientist = Agent(
-    role="Data Scientist",
-    goal="Conduct advanced statistical analysis and identify patterns",
-    backstory="PhD Data Scientist with specialisation in machine learning and statistical modelling"
+path = "sales.csv"
+result = Crew(agents=[analyst], tasks=[report]).kickoff(
+    inputs={"period": "Q3", "data_path": path, "figures": summarise_csv(path)}
 )
-
-strategist = Agent(
-    role="Strategy Consultant",
-    goal="Translate insights into actionable business recommendations",
-    backstory="Senior consultant with 15 years advising C-level executives"
-)
-
-# Define workflow
-llm = LLM(model="openai/%%model=openai%%")
-
-data_prep_task = Task(
-    description="Prepare data for analysis: clean, validate, and transform dataset",
-    expected_output="Cleaned and validated dataset ready for analysis",
-    agent=data_engineer
-)
-
-analysis_task = Task(
-    description="Conduct thorough business analysis: trends, patterns, KPIs",
-    expected_output="Detailed analytical findings with supporting metrics",
-    agent=analyst
-)
-
-modeling_task = Task(
-    description="Perform advanced statistical analysis and identify predictive patterns",
-    expected_output="Statistical findings, correlations, and predictive insights",
-    agent=data_scientist
-)
-
-strategy_task = Task(
-    description="Synthesise all analyses into strategic recommendations",
-    expected_output="Executive summary with actionable recommendations",
-    agent=strategist,
-    output_pydantic=AnalyticsReport
-)
-
-# Create crew
-analytics_crew = Crew(
-    agents=[data_engineer, analyst, data_scientist, strategist],
-    tasks=[data_prep_task, analysis_task, modeling_task, strategy_task],
-    process=Process.sequential,
-    verbose=True,
-    memory=True,
-    max_rpm=20
-)
-
-def generate_analytics_report(data_path: str) -> AnalyticsReport:
-    """Generate comprehensive analytics report."""
-    result = analytics_crew.kickoff(inputs={"data_path": data_path})
-    return result
+sales_report: SalesReport = result.pydantic
+print(sales_report.headline)
 ```
 
----
+For larger datasets, give the agent a tool that runs specific queries rather than pasting rows into the prompt.
 
-## Recipe 3: Customer Service and Support
+## 3. Manager-led support triage
 
-### Multi-Tier Support System
+A hierarchical crew: the manager reads the ticket and decides which specialists to involve.
 
 ```python
-from crewai import Agent, Task, Crew, Process, LLM
+from crewai import Agent, Crew, Process, Task, LLM
 
-# Tier 1: Initial support
-tier1_agent = Agent(
-    role="Support Specialist",
-    goal="Handle common customer queries and provide immediate solutions",
-    backstory="Friendly support specialist with comprehensive product knowledge",
-    tools=[],
-    verbose=False
+llm = LLM(model="openai/%%model=openai-small%%")
+
+billing = Agent(
+    role="Billing Specialist",
+    goal="Resolve invoice, refund and payment questions",
+    backstory="Five years on the billing desk; knows the refund policy by heart.",
+    llm=llm,
 )
-
-# Tier 2: Technical support
-tier2_agent = Agent(
+technical = Agent(
     role="Technical Support Engineer",
-    goal="Resolve technical issues with detailed troubleshooting",
-    backstory="Senior technical engineer with 8 years troubleshooting experience",
-    verbose=False
+    goal="Diagnose and fix product problems",
+    backstory="Support engineer who reproduces issues before answering.",
+    llm=llm,
+)
+writer = Agent(
+    role="Customer Communications",
+    goal="Write clear, friendly replies to customers",
+    backstory="Writes every customer-facing message the team sends.",
+    llm=llm,
 )
 
-# Tier 3: Escalation
-tier3_agent = Agent(
-    role="Support Manager",
-    goal="Handle escalated complex cases and ensure resolution",
-    backstory="Manager with authority to make decisions and implement solutions",
-    verbose=False
+triage = Task(
+    description="Work out what this ticket needs and get it resolved:\n{ticket}",
+    expected_output="The resolution, with the facts it relies on.",
+)
+reply = Task(
+    description="Write the reply to the customer based on the resolution.",
+    expected_output="A reply email under 150 words.",
 )
 
-# Support workflow
-def handle_support_ticket(issue_description: str) -> dict:
-    """Route and handle customer support ticket."""
-    
-    # Initial assessment task
-    assessment_task = Task(
-        description=f"Assess customer issue: {issue_description}",
-        expected_output="Assessment and initial solution if applicable",
-        agent=tier1_agent
-    )
-    
-    # Technical resolution task
-    resolution_task = Task(
-        description="Perform detailed troubleshooting and provide comprehensive resolution",
-        expected_output="Detailed resolution steps and preventive measures",
-        agent=tier2_agent
-    )
-    
-    # Escalation task
-    escalation_task = Task(
-        description="Review issue and make management decisions if needed",
-        expected_output="Final resolution or escalation plan",
-        agent=tier3_agent
-    )
-    
-    crew = Crew(
-        agents=[tier1_agent, tier2_agent, tier3_agent],
-        tasks=[assessment_task, resolution_task, escalation_task],
-        process=Process.hierarchical,
-        verbose=False
-    )
-    
-    return crew.kickoff(inputs={"issue": issue_description})
-
-# Usage
-ticket_result = handle_support_ticket(
-    "My software keeps crashing when I try to upload large files"
+crew = Crew(
+    agents=[billing, technical, writer],
+    tasks=[triage, reply],
+    process=Process.hierarchical,
+    manager_llm=LLM(model="openai/%%model=openai%%"),   # required for hierarchical crews
 )
+ticket = "I was charged twice this month and now the dashboard won't load."
+print(crew.kickoff(inputs={"ticket": ticket}).raw)
 ```
 
----
+The tasks have no `agent`; the manager assigns and delegates them. Use a `manager_agent` instead of `manager_llm` when you want to write the manager's role and instructions yourself (see [Multi-agent patterns](/crewai-guide/crewai_advanced_multi_agent_python/#manager-led-crews)).
 
-## Recipe 4: Software Development Assistance
+## 4. Parallel code review
 
-### Code Review and Documentation System
+Two reviewers look at the same diff at the same time; a lead merges their findings.
 
 ```python
-from crewai import Agent, Task, Crew, Process, LLM
+from pydantic import BaseModel
+from crewai import Agent, Crew, Task, LLM
 
-code_reviewer = Agent(
-    role="Code Reviewer",
-    goal="Conduct thorough code reviews focusing on quality and best practices",
-    backstory="Senior developer with 12 years experience and expertise in clean code principles"
+llm = LLM(model="openai/%%model=openai-small%%")
+
+
+class Review(BaseModel):
+    verdict: str                  # "approve" or "request_changes"
+    blocking: list[str]
+    suggestions: list[str]
+
+
+security = Agent(
+    role="Security Reviewer",
+    goal="Find security problems in code changes",
+    backstory="Application security engineer who has seen every injection bug.",
+    llm=llm,
+)
+maintainability = Agent(
+    role="Maintainability Reviewer",
+    goal="Find code that will be hard to change later",
+    backstory="Staff engineer who owns the team's style guide.",
+    llm=llm,
+)
+lead = Agent(
+    role="Review Lead",
+    goal="Give the author one clear, prioritised review",
+    backstory="Tech lead who decides whether a change can merge.",
+    llm=llm,
 )
 
-security_expert = Agent(
-    role="Security Specialist",
-    goal="Identify security vulnerabilities and recommend fixes",
-    backstory="Cybersecurity expert with specialisation in application security"
+security_review = Task(
+    description="Review this diff for security issues:\n{diff}",
+    expected_output="A list of issues with line references, or 'none'.",
+    agent=security,
+    async_execution=True,
+)
+style_review = Task(
+    description="Review this diff for maintainability issues:\n{diff}",
+    expected_output="A list of issues with line references, or 'none'.",
+    agent=maintainability,
+    async_execution=True,
+)
+summary = Task(
+    description="Merge both reviews into one. Separate blocking issues from suggestions.",
+    expected_output="A verdict, blocking issues and suggestions.",
+    agent=lead,
+    context=[security_review, style_review],
+    output_pydantic=Review,
 )
 
-documentation_writer = Agent(
-    role="Technical Documentation Writer",
-    goal="Create comprehensive API documentation",
-    backstory="Expert technical writer who makes complex code understandable"
+diff = '''+ query = f"SELECT * FROM users WHERE name = '{name}'"
++ cursor.execute(query)'''
+result = Crew(agents=[security, maintainability, lead], tasks=[security_review, style_review, summary]).kickoff(
+    inputs={"diff": diff}
 )
-
-# Code review workflow
-def review_code(code_snippet: str) -> dict:
-    """Comprehensive code review."""
-    
-    review_task = Task(
-        description=f"""Review this code for:
-        1. Code quality and best practices
-        2. Performance optimisations
-        3. Readability and maintainability
-        4. Potential improvements
-        
-        Code:
-        {code_snippet}""",
-        expected_output="Detailed code review with improvement suggestions",
-        agent=code_reviewer
-    )
-    
-    security_task = Task(
-        description="Identify security vulnerabilities and risks",
-        expected_output="Security assessment and recommendations",
-        agent=security_expert
-    )
-    
-    docs_task = Task(
-        description="Create comprehensive documentation for the code",
-        expected_output="Well-structured code documentation with examples",
-        agent=documentation_writer
-    )
-    
-    crew = Crew(
-        agents=[code_reviewer, security_expert, documentation_writer],
-        tasks=[review_task, security_task, docs_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={"code": code_snippet})
+print(result.pydantic.verdict)
 ```
 
----
+## 5. Batch processing
 
-## Recipe 5: Business Intelligence
-
-### Competitive Analysis System
+`kickoff_for_each` runs the same crew once per input and returns one `CrewOutput` per item. `akickoff_for_each` does the same concurrently inside an event loop.
 
 ```python
-from crewai import Agent, Task, Crew, Process, LLM
-from crewai_tools import ScrapeWebsiteTool, SerperDevTool
+import asyncio
+from typing import Literal
+from pydantic import BaseModel
+from crewai import Agent, Crew, Task, LLM
 
-market_researcher = Agent(
-    role="Market Researcher",
-    goal="Analyse competitor offerings and market positioning",
-    backstory="Experienced market researcher with 10 years analysing competitive landscapes",
-    tools=[ScrapeWebsiteTool(), SerperDevTool()]
+llm = LLM(model="openai/%%model=openai-small%%")
+
+
+class TicketLabel(BaseModel):
+    category: Literal["billing", "bug", "feature_request", "other"]
+    urgency: Literal["low", "medium", "high"]
+
+
+classifier = Agent(
+    role="Ticket Classifier",
+    goal="Label support tickets consistently",
+    backstory="Support operations analyst who maintains the ticket taxonomy.",
+    llm=llm,
 )
-
-financial_analyst = Agent(
-    role="Financial Analyst",
-    goal="Analyse competitor financial performance",
-    backstory="CFA with expertise in financial statement analysis"
+label = Task(
+    description="Classify this support ticket:\n{ticket}",
+    expected_output="A category and an urgency.",
+    agent=classifier,
+    output_pydantic=TicketLabel,
 )
+crew = Crew(agents=[classifier], tasks=[label])
 
-strategy_consultant = Agent(
-    role="Strategy Consultant",
-    goal="Develop competitive strategy recommendations",
-    backstory="Senior consultant who has advised Fortune 500 companies"
-)
+tickets = [
+    "The invoice for March is wrong.",
+    "Export to CSV crashes the app.",
+    "Could you add dark mode?",
+]
 
-def competitive_analysis(company_name: str, competitors: list) -> dict:
-    """Analyse company position versus competitors."""
-    
-    market_task = Task(
-        description=f"""Analyse {company_name} market positioning against competitors: {', '.join(competitors)}
-        
-        Research:
-        1. Product/service offerings
-        2. Target markets
-        3. Marketing strategies
-        4. Unique value propositions
-        5. Market positioning""",
-        expected_output="Comprehensive market analysis",
-        agent=market_researcher
-    )
-    
-    financial_task = Task(
-        description="Analyse financial performance and metrics",
-        expected_output="Financial comparison and analysis",
-        agent=financial_analyst
-    )
-    
-    strategy_task = Task(
-        description="Develop competitive strategy recommendations",
-        expected_output="Strategic recommendations for competitive advantage",
-        agent=strategy_consultant
-    )
-    
-    crew = Crew(
-        agents=[market_researcher, financial_analyst, strategy_consultant],
-        tasks=[market_task, financial_task, strategy_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={
-        "company": company_name,
-        "competitors": competitors
-    })
+results = crew.kickoff_for_each(inputs=[{"ticket": t} for t in tickets])
+for ticket, result in zip(tickets, results):
+    print(result.pydantic.category, result.pydantic.urgency, "-", ticket)
 
-# Usage
-analysis = competitive_analysis(
-    "TechCorp",
-    ["CompetitorA", "CompetitorB", "CompetitorC"]
-)
+
+async def label_all() -> list:
+    return await crew.akickoff_for_each(inputs=[{"ticket": t} for t in tickets])
+
+print(len(asyncio.run(label_all())))
 ```
 
----
+Concurrency multiplies request rate: set `Crew(max_rpm=...)` to stay under your provider's limits.
 
-## Recipe 6: Marketing Campaign Planning
+## 6. Lead qualification flow
 
-### Full Campaign Development System
+A flow scores a lead with one agent, routes on the score in plain Python, and only spends a second LLM call on leads worth contacting.
 
 ```python
-from crewai import Agent, Task, Crew, Process, LLM
+from typing import Literal
+from pydantic import BaseModel, Field
+from crewai import Agent, LLM
+from crewai.flow import Flow, start, listen, router
 
-marketing_strategist = Agent(
-    role="Marketing Strategist",
-    goal="Develop comprehensive marketing strategies",
-    backstory="Senior marketing strategist with 15 years experience launching successful campaigns"
-)
+llm = LLM(model="openai/%%model=openai-small%%")
 
-content_creator = Agent(
-    role="Content Creator",
-    goal="Create compelling marketing content",
-    backstory="Award-winning content creator with expertise in multiple formats"
-)
 
-social_media_manager = Agent(
-    role="Social Media Manager",
-    goal="Plan and optimise social media strategy",
-    backstory="Expert in social media marketing with proven track record of viral campaigns"
-)
+class LeadScore(BaseModel):
+    score: int = Field(ge=0, le=100)
+    reason: str
 
-analytics_specialist = Agent(
-    role="Marketing Analytics Specialist",
-    goal="Define metrics and measurement strategy",
-    backstory="Data analyst specialising in marketing ROI and performance measurement"
-)
 
-def plan_marketing_campaign(product: str, target_audience: str, budget: str) -> dict:
-    """Plan complete marketing campaign."""
-    
-    strategy_task = Task(
-        description=f"""Develop marketing strategy for {product} targeting {target_audience} with budget {budget}
-        
-        Include:
-        1. Target audience analysis
-        2. Key messaging
-        3. Channel strategy
-        4. Timeline
-        5. Budget allocation""",
-        expected_output="Comprehensive marketing strategy",
-        agent=marketing_strategist
-    )
-    
-    content_task = Task(
-        description="Create marketing content for all channels",
-        expected_output="Content calendar with copy for all channels",
-        agent=content_creator
-    )
-    
-    social_task = Task(
-        description="Plan social media strategy and content",
-        expected_output="Social media strategy with posting schedule",
-        agent=social_media_manager
-    )
-    
-    analytics_task = Task(
-        description="Define success metrics and measurement strategy",
-        expected_output="KPI framework and measurement plan",
-        agent=analytics_specialist
-    )
-    
-    crew = Crew(
-        agents=[marketing_strategist, content_creator, social_media_manager, analytics_specialist],
-        tasks=[strategy_task, content_task, social_task, analytics_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={
-        "product": product,
-        "audience": target_audience,
-        "budget": budget
-    })
+class LeadState(BaseModel):
+    lead: str = ""
+    score: int = 0
+    reason: str = ""
+    email: str = ""
+
+
+class LeadFlow(Flow[LeadState]):
+    @start()
+    def score_lead(self):
+        scorer = Agent(
+            role="Sales Development Rep",
+            goal="Judge how well a lead fits our ideal customer profile",
+            backstory="SDR at a B2B analytics company selling to mid-sized retailers.",
+            llm=llm,
+        )
+        out = scorer.kickoff(f"Score this lead from 0 to 100:\n{self.state.lead}", response_format=LeadScore)
+        self.state.score, self.state.reason = out.pydantic.score, out.pydantic.reason
+
+    @router(score_lead)
+    def qualify(self) -> Literal["hot", "cold"]:
+        return "hot" if self.state.score >= 70 else "cold"
+
+    @listen("hot")
+    def write_email(self):
+        writer = Agent(
+            role="Account Executive",
+            goal="Write short, specific first-contact emails",
+            backstory="AE who never sends a template unchanged.",
+            llm=llm,
+        )
+        self.state.email = writer.kickoff(
+            f"Write a first email to this lead. Why they fit: {self.state.reason}\n{self.state.lead}"
+        ).raw
+        return self.state.email
+
+    @listen("cold")
+    def archive(self):
+        return f"Archived (score {self.state.score}): {self.state.reason}"
+
+
+print(LeadFlow().kickoff(inputs={"lead": "Head of Data at a 40-store grocery chain, asked for pricing."}))
 ```
 
----
-
-## Recipe 7: Financial Analysis
-
-### Investment Analysis System
-
-```python
-from crewai import Agent, Task, Crew, Process, LLM
-
-fundamental_analyst = Agent(
-    role="Fundamental Analyst",
-    goal="Analyse company fundamentals and financial health",
-    backstory="CFA with 12 years analysing financial statements"
-)
-
-technical_analyst = Agent(
-    role="Technical Analyst",
-    goal="Analyse price trends and technical indicators",
-    backstory="Chartered technical analyst with expertise in market patterns"
-)
-
-risk_manager = Agent(
-    role="Risk Manager",
-    goal="Identify and quantify risks",
-    backstory="Senior risk manager with expertise in portfolio risk management"
-)
-
-investment_advisor = Agent(
-    role="Investment Advisor",
-    goal="Provide investment recommendations",
-    backstory="Senior advisor with fiduciary responsibility and proven track record"
-)
-
-def investment_analysis(company_ticker: str) -> dict:
-    """Comprehensive investment analysis."""
-    
-    fundamental_task = Task(
-        description=f"Analyse fundamentals of {company_ticker}",
-        expected_output="Fundamental analysis report",
-        agent=fundamental_analyst
-    )
-    
-    technical_task = Task(
-        description="Analyse technical trends and indicators",
-        expected_output="Technical analysis report",
-        agent=technical_analyst
-    )
-    
-    risk_task = Task(
-        description="Identify and quantify investment risks",
-        expected_output="Risk assessment report",
-        agent=risk_manager
-    )
-    
-    recommendation_task = Task(
-        description="Provide investment recommendation based on all analyses",
-        expected_output="Investment recommendation with rationale",
-        agent=investment_advisor
-    )
-    
-    crew = Crew(
-        agents=[fundamental_analyst, technical_analyst, risk_manager, investment_advisor],
-        tasks=[fundamental_task, technical_task, risk_task, recommendation_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={"ticker": company_ticker})
-
-# Usage
-analysis = investment_analysis("AAPL")
-```
-
----
-
-## Recipe 8: Legal Document Review
-
-### Contract Analysis System
-
-```python
-from crewai import Agent, Task, Crew, Process, LLM
-from crewai_tools import FileReadTool
-
-contract_specialist = Agent(
-    role="Contract Specialist",
-    goal="Review contracts for completeness and fairness",
-    backstory="Senior legal counsel with 15 years contract law experience"
-)
-
-compliance_expert = Agent(
-    role="Compliance Expert",
-    goal="Ensure compliance with relevant regulations",
-    backstory="Compliance specialist with expertise in regulatory requirements"
-)
-
-risk_attorney = Agent(
-    role="Risk Attorney",
-    goal="Identify legal risks and liabilities",
-    backstory="Experienced attorney focusing on risk mitigation"
-)
-
-def review_contract(contract_path: str) -> dict:
-    """Comprehensive contract review."""
-    
-    review_task = Task(
-        description=f"""Review contract at {contract_path} for:
-        1. Terms and conditions appropriateness
-        2. Missing important clauses
-        3. Favourable vs unfavourable terms
-        4. Negotiation opportunities""",
-        expected_output="Detailed contract review",
-        agent=contract_specialist,
-        tools=[FileReadTool(file_path=contract_path)]
-    )
-    
-    compliance_task = Task(
-        description="Verify compliance with applicable laws and regulations",
-        expected_output="Compliance assessment",
-        agent=compliance_expert
-    )
-    
-    risk_task = Task(
-        description="Identify legal risks and liability concerns",
-        expected_output="Risk assessment and mitigation strategies",
-        agent=risk_attorney
-    )
-    
-    crew = Crew(
-        agents=[contract_specialist, compliance_expert, risk_attorney],
-        tasks=[review_task, compliance_task, risk_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={"contract_path": contract_path})
-```
-
----
-
-## Recipe 9: Scientific Research
-
-### Literature Review System
-
-```python
-from crewai import Agent, Task, Crew, Process, LLM
-
-literature_researcher = Agent(
-    role="Literature Researcher",
-    goal="Conduct comprehensive literature searches",
-    backstory="PhD researcher with expertise in academic research methodology"
-)
-
-methodologist = Agent(
-    role="Research Methodologist",
-    goal="Analyse research methodologies and quality",
-    backstory="Experienced methodologist evaluating research quality"
-)
-
-synthesiser = Agent(
-    role="Research Synthesiser",
-    goal="Synthesise findings across multiple studies",
-    backstory="Expert at identifying patterns and synthesising complex information"
-)
-
-def literature_review(topic: str, scope: str) -> dict:
-    """Comprehensive literature review."""
-    
-    search_task = Task(
-        description=f"Search literature on {topic} within {scope} scope",
-        expected_output="Comprehensive literature findings",
-        agent=literature_researcher
-    )
-    
-    methodology_task = Task(
-        description="Analyse research methodologies and quality across studies",
-        expected_output="Methodology assessment",
-        agent=methodologist
-    )
-    
-    synthesis_task = Task(
-        description="Synthesise findings and identify research gaps",
-        expected_output="Synthesised literature review with research gaps identified",
-        agent=synthesiser
-    )
-    
-    crew = Crew(
-        agents=[literature_researcher, methodologist, synthesiser],
-        tasks=[search_task, methodology_task, synthesis_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={"topic": topic, "scope": scope})
-```
-
----
-
-## Recipe 10: Project Management
-
-### Project Planning and Oversight System
-
-```python
-from crewai import Agent, Task, Crew, Process, LLM
-
-project_manager = Agent(
-    role="Project Manager",
-    goal="Plan and oversee project delivery",
-    backstory="PMP certified project manager with 10 years experience"
-)
-
-resource_planner = Agent(
-    role="Resource Planner",
-    goal="Optimise resource allocation",
-    backstory="Expert in resource planning and capacity management"
-)
-
-risk_manager = Agent(
-    role="Risk Manager",
-    goal="Identify and mitigate project risks",
-    backstory="Senior risk management professional"
-)
-
-quality_manager = Agent(
-    role="Quality Assurance Manager",
-    goal="Ensure project quality standards",
-    backstory="Quality management expert with certification"
-)
-
-def plan_project(project_name: str, objectives: str, timeline: str, budget: str) -> dict:
-    """Comprehensive project planning."""
-    
-    planning_task = Task(
-        description=f"""Plan project: {project_name}
-        Objectives: {objectives}
-        Timeline: {timeline}
-        Budget: {budget}""",
-        expected_output="Detailed project plan with milestones",
-        agent=project_manager
-    )
-    
-    resource_task = Task(
-        description="Develop resource allocation and capacity plan",
-        expected_output="Resource plan and staffing requirements",
-        agent=resource_planner
-    )
-    
-    risk_task = Task(
-        description="Identify and assess project risks",
-        expected_output="Risk register with mitigation strategies",
-        agent=risk_manager
-    )
-    
-    quality_task = Task(
-        description="Define quality standards and assurance plan",
-        expected_output="Quality management plan",
-        agent=quality_manager
-    )
-    
-    crew = Crew(
-        agents=[project_manager, resource_planner, risk_manager, quality_manager],
-        tasks=[planning_task, resource_task, risk_task, quality_task],
-        process=Process.sequential,
-        verbose=True
-    )
-    
-    return crew.kickoff(inputs={
-        "project": project_name,
-        "objectives": objectives,
-        "timeline": timeline,
-        "budget": budget
-    })
-
-# Usage
-plan = plan_project(
-    "Mobile App Development",
-    "Develop iOS and Android native apps",
-    "6 months",
-    "$500,000"
-)
-```
-
----
-
-These recipes demonstrate CrewAI's versatility across diverse industries and use cases. Each recipe can be customised based on specific requirements and extended with additional agents, tools, and tasks as needed.
-
-
+To have a person approve the email before it is sent, add `@human_feedback` to `write_email` ([Flows → Human feedback](/crewai-guide/crewai_flows_guide/#human-feedback--human_feedback)).

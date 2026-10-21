@@ -12,7 +12,7 @@ Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.typ
 
 Every compiled graph (both `StateGraph` and `@entrypoint` workflows) exposes:
 
-```python
+```text
 graph.stream(input, config=None, *, stream_mode=..., version="v1" | "v2", ...)
 graph.astream(input, config=None, *, stream_mode=..., version="v1" | "v2", ...)
 graph.invoke(input, config=None, *, version="v1" | "v2", ...)
@@ -57,13 +57,15 @@ for part in graph.stream({"x": 0}, cfg, stream_mode="updates", version="v2"):
 # updates () {'step': {'x': 1}}
 ```
 
-## The seven stream modes
+## The stream modes
 
-`StreamMode` is a `Literal` union exported from `langgraph.types`:
+`StreamMode` is a `Literal` union exported from `langgraph.types` with seven values:
 
 ```python
-StreamMode = Literal["values", "updates", "checkpoints", "tasks", "debug", "messages", "custom", "tools"]
+StreamMode = Literal["values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"]
 ```
+
+`"tools"` is also accepted at runtime (it is not in the `Literal`, so type checkers flag it); it carries per-tool-call events.
 
 | Mode | Yields | Typical use |
 |---|---|---|
@@ -244,7 +246,7 @@ for s in graph.stream(inp, cfg, stream_mode="values"):
 
 v2 shape (`ValuesStreamPart`):
 
-```python
+```text
 {"type": "values", "ns": (), "data": <state>, "interrupts": (Interrupt(...),)}
 ```
 
@@ -575,7 +577,7 @@ Outside `stream_mode="custom"`, calls to the `StreamWriter` are no-ops — it's 
 
 Emits a `CheckpointPayload` each time a checkpoint is created:
 
-```python
+```text
 # CheckpointPayload shape
 {
     "config": {...},           # RunnableConfig pointer to this checkpoint
@@ -679,7 +681,7 @@ for chunk in graph.stream(inp, cfg, stream_mode=["tasks", "messages"], version="
 
 Emits `DebugPayload` wrappers — a discriminated union of three event types, all sharing a `step` (int) and `timestamp` (ISO 8601 str):
 
-```python
+```text
 # _DebugCheckpointPayload
 {"type": "checkpoint", "step": 1, "timestamp": "2026-05-24T12:00:00Z", "payload": <CheckpointPayload>}
 
@@ -783,7 +785,7 @@ from langgraph.prebuilt import ToolCallTransformer
 graph = builder.compile(transformers=[ToolCallTransformer])
 ```
 
-Then open the run with `stream_events(..., version="v3")` (experimental in 1.2.11) and iterate `run.tool_calls` to get `ToolCallStream` objects as tools start. Plain `graph.stream(..., stream_mode="tools")` is a generator of raw event dicts (above) even with the transformer registered, and cannot be used as a context manager:
+Then open the run with `stream_events(..., version="v3")` (experimental) and iterate `run.tool_calls` to get `ToolCallStream` objects as tools start. Plain `graph.stream(..., stream_mode="tools")` is a generator of raw event dicts (above) even with the transformer registered, and cannot be used as a context manager:
 
 ```python
 # Sync iteration
@@ -1041,7 +1043,6 @@ assert events == [{"event": "started"}, {"event": "finished", "output": ...}]
 
 | Version | Change |
 |---|---|
-| 1.2.1 | `get_stream_writer()` added to `langgraph.config` as the preferred context-var-based alternative to parameter injection. `StreamWriter` injection as a node keyword argument remains supported. |
 | 1.1 | `version="v2"` on `stream`/`astream` yields typed `StreamPart` dicts; `invoke`/`ainvoke` with `version="v2"` return `GraphOutput`. `GraphOutput[key]` indexing raises `DeprecationWarning`. With v2, multi-mode lists yield `StreamPart` dicts (not `(mode, data)` tuples). |
 | 1.0 | `stream_mode="tasks"` split from `"debug"`; `"checkpoints"` added as its own mode. `StreamMode` literal type (`"values" \| "updates" \| "checkpoints" \| "tasks" \| "debug" \| "messages" \| "custom"`) stabilized in `langgraph.types`. |
 | 0.6 | `interrupt_before` / `interrupt_after` on `invoke`/`stream` accept `"*"` for all nodes. |

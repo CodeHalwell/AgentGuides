@@ -255,7 +255,7 @@ agent = GitHubCopilotAgent(
 response = await agent.run("Explain this stack trace.")
 ```
 
-An earlier draft showed a `CopilotChatClient` class; it does not exist.
+
 
 ## Copilot Studio
 

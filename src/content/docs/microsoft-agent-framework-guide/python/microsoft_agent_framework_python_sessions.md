@@ -13,7 +13,7 @@ A **session** is one logical conversation with an agent. The framework splits re
 | `HistoryProvider` (subclass) | The actual messages — read/write to disk, Redis, in-memory, … | Process-long, attached to the agent |
 | `Agent` | Orchestrates providers, threads `state` through them on every run | Process-long |
 
-This page walks the moving parts in `agent_framework._sessions` and the patterns that fall out of them. The public surface (`AgentSession`, `HistoryProvider`, `InMemoryHistoryProvider`, `FileHistoryProvider`, `register_state_type`) has been stable since 1.5.0 and is verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%), which matches what the rest of this guide targets unless a section explicitly says otherwise.
+This page walks the moving parts in `agent_framework._sessions` and the patterns that fall out of them. `AgentSession`, `HistoryProvider`, `InMemoryHistoryProvider` and `register_state_type` are stable. `FileHistoryProvider` is experimental (`ExperimentalFeature.FILE_HISTORY`) and emits an `ExperimentalWarning` on first use, as do `FileSessionStore` (`SESSION_STORE`) and `VectorStoreHistoryProvider` (`VECTOR_STORES`). Examples are checked against `agent-framework` %%version=agent-framework%% (%%versions-checked%%).
 
 ## TL;DR
 

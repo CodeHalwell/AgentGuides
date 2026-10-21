@@ -619,7 +619,7 @@ while response.user_input_requests:
 print(response.text)
 ```
 
-When the agent tries to run a script, the run returns with a `function_approval_request` in `response.user_input_requests`. Reply on the same session with the approval responses to let the call proceed (an earlier draft of this page showed a `stream.send_response()` method — it does not exist).
+When the agent tries to run a script, the run returns with a `function_approval_request` in `response.user_input_requests`. Reply on the same session with the approval responses to let the call proceed.
 
 ## `ClassSkill` — reusable skill types
 

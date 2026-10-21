@@ -572,7 +572,7 @@ Calling `graph.invoke(input, {"configurable": {}})` on a graph with a checkpoint
 
 ## `BaseCheckpointSaver` methods you'll actually use
 
-```python
+```text
 saver.get_tuple(config) -> CheckpointTuple | None
 saver.list(config, *, filter=None, before=None, limit=None) -> Iterator[CheckpointTuple]
 saver.put(config, checkpoint, metadata, new_versions) -> RunnableConfig

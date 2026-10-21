@@ -338,7 +338,7 @@ class State(TypedDict):
 
 Full constructor signature:
 
-```python
+```text
 EphemeralValue(typ: Any, guard: bool = True)
 ```
 
@@ -363,14 +363,15 @@ def setter(state: S) -> dict:
 
 
 def reader(state: S) -> dict:
-    # flag is True here (set by the previous node in the same run)
-    print("flag:", state["flag"])
+    # flag is True here (written by setter in the previous step)
+    print("flag:", state.get("flag"))
     return {}
 
 
 def clearer_check(state: S) -> dict:
-    # flag is None here — cleared because no node wrote to it this step
-    print("flag after clear:", state["flag"])
+    # The channel was cleared because nothing wrote to it in the last step,
+    # so the key is absent from state: use .get(), not state["flag"].
+    print("flag after clear:", state.get("flag"))
     return {}
 
 
@@ -384,10 +385,10 @@ builder.add_edge("reader", "check")
 builder.add_edge("check", END)
 
 graph = builder.compile()
-graph.invoke({"msg": "", "flag": None})
+graph.invoke({"msg": ""})
 # Prints:
-#   flag: True      (setter → reader, same run)
-#   flag after clear: None  (second run, flag expired)
+#   flag: True
+#   flag after clear: None
 ```
 
 ---
@@ -429,7 +430,7 @@ Any write that is not in `names` raises `InvalidUpdateError` immediately.
 
 Full constructor:
 
-```python
+```text
 NamedBarrierValue(typ: type[str], names: set[str])
 ```
 
@@ -475,7 +476,8 @@ builder.add_edge(["worker_a", "worker_b"], "combiner")
 builder.add_edge("combiner", END)
 
 graph = builder.compile()
-graph.invoke({"result_a": "", "result_b": "", "done": None})
+# Do not seed the barrier key in the input: None is not one of the expected names.
+graph.invoke({"result_a": "", "result_b": ""})   # Both done: from_a from_b
 ```
 
 ---
@@ -711,14 +713,14 @@ def fetch(state: S) -> dict:
 
 def process(state: S) -> dict:
     # doc_ready is True here — set by fetch
-    if state["doc_ready"]:
+    if state.get("doc_ready"):
         return {"doc": state["doc"].upper()}
     return {}
 
 
 def save(state: S) -> dict:
-    # doc_ready is None here — ephemeral, cleared after process ran
-    assert state["doc_ready"] is None
+    # doc_ready has been cleared, so the key is absent from state
+    assert state.get("doc_ready") is None
     return {}
 
 
@@ -732,7 +734,7 @@ builder.add_edge("process", "save")
 builder.add_edge("save", END)
 
 graph = builder.compile()
-graph.invoke({"doc": "", "doc_ready": None})
+print(graph.invoke({"doc": ""}))   # {'doc': 'RAW CONTENT'}
 ```
 
 ### 4. `NamedBarrierValue` — explicit N-of-N fan-in
@@ -781,7 +783,7 @@ builder.add_node("combiner", combiner)
 builder.add_edge("combiner", END)
 
 graph = builder.compile()
-graph.invoke({"inputs": [], "outputs": {}, "barrier": None})
+graph.invoke({"inputs": [], "outputs": {}})   # do not seed the barrier key
 ```
 
 ### 5. `AnyValue` — parallel-safe shared configuration flag
@@ -847,7 +849,7 @@ class State(TypedDict):
 
 Full constructor signature:
 
-```python
+```text
 UntrackedValue(typ: Any, guard: bool = True)
 ```
 

@@ -718,7 +718,7 @@ Translate this question to SQL:
 
 Return only the SQL query."""
         
-        response = await self.llm.acomplete(prompt)
+        response = self.llm.complete(prompt)
         return str(response).strip()
     
     def create_agent(self):

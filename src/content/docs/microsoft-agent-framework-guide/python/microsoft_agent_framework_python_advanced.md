@@ -688,7 +688,7 @@ The currently gated features (verified against `agent-framework` %%version=agent
 | Experimental | `ExperimentalFeature.MCP_SKILLS`, `MCP_LONG_RUNNING_TASKS`, `AGENT_HOOKS`, `COMPUTER_USE`, ... | MCP-backed skills, MCP task options, AGENT-HOOKS middleware, computer-use safety checks |
 | Release candidate | *(empty)* | The enum exists but has no members in this release. |
 
-Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0. An earlier version of this table listed `ExperimentalFeature.SKILLS` and `TOOLBOXES`; neither member exists any more.
+Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0.
 
 Both enums are stage-scoped inventories, not stable introspection surfaces. Members move or disappear as features advance — the docstring on `ReleaseCandidateFeature` is explicit about this. Always enumerate at runtime when you need an authoritative list:
 

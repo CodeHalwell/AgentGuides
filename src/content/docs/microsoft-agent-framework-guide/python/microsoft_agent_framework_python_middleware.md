@@ -985,4 +985,4 @@ Put the bundle **first** (outermost) and install exactly one per agent; stacked 
 - `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
 - `AggregateContextProvider` removed — compose providers directly.
 
-The `context_providers` parameter on `Agent` is still **plural** (checked again in %%version=agent-framework%%), contrary to earlier drafts of this guide.
+The `context_providers` parameter on `Agent` is plural.

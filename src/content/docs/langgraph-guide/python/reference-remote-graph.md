@@ -50,7 +50,7 @@ from langgraph.pregel.remote import RemoteGraph
 
 ## Constructor
 
-```python
+```text
 RemoteGraph(
     assistant_id: str,           # graph_id or assistant UUID on the server
     /,

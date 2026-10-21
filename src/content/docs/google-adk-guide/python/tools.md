@@ -1410,8 +1410,6 @@ bq_tools = BigQueryToolset(
 
 Pass `external_access_token_key="my_token"` to `BigQueryCredentialsConfig` instead of `credentials` if you want the agent to inject a short-lived token from session state at query time.
 
-> Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
-
 ## PubSubToolset (experimental)
 
 `PubSubToolset` exposes three Google Cloud Pub/Sub operations as ADK tools: `publish_message`, `pull_messages`, and `acknowledge_messages`. Install prerequisite: `pip install google-cloud-pubsub`.
@@ -1442,8 +1440,6 @@ agent = LlmAgent(
 
 Failures come back as `{"status": "ERROR", ...}`. `tool_filter=None` exposes all three; `tool_filter=[]` exposes none. Credentials default to ADC; pass `credentials_config=PubSubCredentialsConfig(credentials=...)` (`google.adk.tools.pubsub.pubsub_credentials`) to override. Tell the model to acknowledge what it has processed, or messages are redelivered.
 
-> Full constructor reference, message tool signatures, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
-
 ## SpannerToolset (experimental)
 
 `SpannerToolset` exposes Cloud Spanner schema inspection and SQL execution. Provides `spanner_list_table_names`, `spanner_get_table_schema`, `spanner_execute_sql`, `spanner_similarity_search`, and more. Requires `pip install google-cloud-spanner`.
@@ -1471,7 +1467,7 @@ agent = LlmAgent(
 )
 ```
 
-> Full constructor reference, vector similarity search setup, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
+The schema tools are always present. `spanner_execute_sql` and `spanner_similarity_search` are added only while `Capabilities.DATA_READ` is in `SpannerToolSettings.capabilities` (the default), and `spanner_vector_store_similarity_search` needs `vector_store_settings=SpannerVectorStoreSettings(...)` (table, content and embedding columns, vector length and the Vertex AI embedding model). `database_role` runs queries under a fine-grained access role. `SpannerAdminToolset` (same package) manages instances and databases; give it to an agent only if it should be able to change them.
 
 ## SkillToolset (experimental)
 
@@ -1562,7 +1558,7 @@ toolset = SkillToolset(skills=all_skills)
 
 Async (`*_async`) and GCS (`load_skill_from_gcs_dir`, `list_skills_in_gcs_dir`) variants are exported from `google.adk.skills` too.
 
-**Custom registries.** Implement `SkillRegistry` when skills live in a database or bucket. Both abstract methods are keyword-only; raising from `get_skill` reaches the model as `REGISTRY_ERROR`, a falsy return as `SKILL_NOT_FOUND`. Override `search_tool_description()` to describe your search to the model. (`GCPSkillRegistry` is the built-in Vertex AI implementation; see the [Class & API Reference](/google-adk-guide/python/google_adk_comprehensive_guide/#gcpskillregistry--apiregistry--agentregistry).)
+**Custom registries.** Implement `SkillRegistry` when skills live in a database or bucket. Both abstract methods are keyword-only; raising from `get_skill` reaches the model as `REGISTRY_ERROR`, a falsy return as `SKILL_NOT_FOUND`. Override `search_tool_description()` to describe your search to the model. (`GCPSkillRegistry`, in `google.adk.integrations.skill_registry`, is the built-in Vertex AI implementation.)
 
 ```python
 from google.adk.skills import Frontmatter, Skill, SkillRegistry
@@ -1715,4 +1711,4 @@ Spin up `McpToolset` at runtime (e.g. per-tenant filesystem); pass `tool_name_pr
 - `FunctionTool` treats the first sentence of the docstring as the tool description. Keep it focused — the model obeys it.
 - Built-in Gemini tools (`google_search`, `url_context`, `google_maps_grounding`) cannot coexist freely. ADK tries to wrap them, but if you hit `400 INVALID_ARGUMENT` try `bypass_multi_tools_limit=True` where available.
 - `LongRunningFunctionTool` is just a `FunctionTool` with `is_long_running=True`. The model is separately instructed not to re-call it while pending.
-- Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](./runner-and-sessions/).
+- Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](/google-adk-guide/python/runner-and-sessions/).
